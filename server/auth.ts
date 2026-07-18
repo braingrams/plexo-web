@@ -17,14 +17,14 @@ function buildVerificationEmail(actionUrl: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Verify your Plexo account</title>
 </head>
-<body style="margin:0;padding:0;background:#08090f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#08090f;padding:40px 16px;">
+<body style="margin:0;padding:0;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;padding:40px 16px;">
     <tr>
       <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#0d0f1a;border-radius:16px;border:1px solid rgba(252,6,148,0.15);overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.5);">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#f8fafc;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,0.05);">
           <!-- Header -->
           <tr>
-            <td style="background:linear-gradient(135deg,#0d0f1a 0%,#121524 100%);padding:32px 40px 24px;border-bottom:1px solid rgba(252,6,148,0.12);">
+            <td style="background:#f1f5f9;padding:32px 40px 24px;border-bottom:1px solid #e2e8f0;">
               <table cellpadding="0" cellspacing="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:12px;">
@@ -38,7 +38,7 @@ function buildVerificationEmail(actionUrl: string): string {
                     </table>
                   </td>
                   <td style="vertical-align:middle;">
-                    <span style="color:#f0f2ff;font-size:20px;font-weight:800;letter-spacing:-0.3px;font-family:'Space Grotesk',-apple-system,sans-serif;">Plexo</span>
+                    <span style="color:#0f172a;font-size:20px;font-weight:800;letter-spacing:-0.3px;font-family:'Space Grotesk',-apple-system,sans-serif;">Plexo</span>
                   </td>
                 </tr>
               </table>
@@ -47,11 +47,11 @@ function buildVerificationEmail(actionUrl: string): string {
           <!-- Body -->
           <tr>
             <td style="padding:40px 40px 32px;">
-              <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;color:#f0f2ff;letter-spacing:-0.3px;font-family:'Space Grotesk',-apple-system,sans-serif;">Verify your email address</h1>
-              <p style="margin:0 0 20px;font-size:15px;color:#7b83a6;line-height:1.6;">
+              <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;font-family:'Space Grotesk',-apple-system,sans-serif;">Verify your email address</h1>
+              <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
                 Welcome to Plexo — the visual email &amp; template builder. Before your first login, please confirm your email address so we can keep your account secure.
               </p>
-              <p style="margin:0 0 28px;font-size:14px;color:#7b83a6;line-height:1.6;">
+              <p style="margin:0 0 28px;font-size:14px;color:#475569;line-height:1.6;">
                 Click the button below to verify your account. This link is valid for <strong style="color:#fc0694;">60 minutes</strong>.
               </p>
               <!-- CTA Button -->
@@ -64,18 +64,18 @@ function buildVerificationEmail(actionUrl: string): string {
                   </td>
                 </tr>
               </table>
-              <p style="margin:0 0 8px;font-size:12px;color:#4a5068;line-height:1.5;">
+              <p style="margin:0 0 8px;font-size:12px;color:#64748b;line-height:1.5;">
                 If the button doesn't work, copy and paste this link into your browser:
               </p>
-              <p style="margin:0;font-size:11px;color:#4a5068;word-break:break-all;line-height:1.4;">
+              <p style="margin:0;font-size:11px;color:#64748b;word-break:break-all;line-height:1.4;">
                 <a href="${actionUrl}" style="color:#fc0694;text-decoration:none;">${actionUrl}</a>
               </p>
             </td>
           </tr>
           <!-- Footer -->
           <tr>
-            <td style="background:#08090f;border-top:1px solid rgba(252,6,148,0.08);padding:20px 40px;">
-              <p style="margin:0;font-size:12px;color:#4a5068;line-height:1.5;">
+            <td style="background:#f1f5f9;border-top:1px solid #e2e8f0;padding:20px 40px;">
+              <p style="margin:0;font-size:12px;color:#64748b;line-height:1.5;">
                 If you didn't create a Plexo account, you can safely ignore this email — no action is needed.<br/>
                 &copy; ${new Date().getFullYear()} Plexo. All rights reserved.
               </p>
@@ -97,14 +97,14 @@ function buildPasswordResetEmail(actionUrl: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Reset your Plexo password</title>
 </head>
-<body style="margin:0;padding:0;background:#08090f;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#08090f;padding:40px 16px;">
+<body style="margin:0;padding:0;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;padding:40px 16px;">
     <tr>
       <td align="center">
-        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#0d0f1a;border-radius:16px;border:1px solid rgba(252,6,148,0.15);overflow:hidden;box-shadow:0 20px 40px rgba(0,0,0,0.5);">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#f8fafc;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,0.05);">
           <!-- Header -->
           <tr>
-            <td style="background:linear-gradient(135deg,#0d0f1a 0%,#121524 100%);padding:32px 40px 24px;border-bottom:1px solid rgba(252,6,148,0.12);">
+            <td style="background:#f1f5f9;padding:32px 40px 24px;border-bottom:1px solid #e2e8f0;">
               <table cellpadding="0" cellspacing="0">
                 <tr>
                   <td style="vertical-align:middle;padding-right:12px;">
@@ -118,7 +118,7 @@ function buildPasswordResetEmail(actionUrl: string): string {
                     </table>
                   </td>
                   <td style="vertical-align:middle;">
-                    <span style="color:#f0f2ff;font-size:20px;font-weight:800;letter-spacing:-0.3px;font-family:'Space Grotesk',-apple-system,sans-serif;">Plexo</span>
+                    <span style="color:#0f172a;font-size:20px;font-weight:800;letter-spacing:-0.3px;font-family:'Space Grotesk',-apple-system,sans-serif;">Plexo</span>
                   </td>
                 </tr>
               </table>
@@ -127,14 +127,14 @@ function buildPasswordResetEmail(actionUrl: string): string {
           <!-- Body -->
           <tr>
             <td style="padding:40px 40px 32px;">
-              <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;color:#f0f2ff;letter-spacing:-0.3px;font-family:'Space Grotesk',-apple-system,sans-serif;">Reset your password</h1>
-              <p style="margin:0 0 20px;font-size:15px;color:#7b83a6;line-height:1.6;">
+              <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;font-family:'Space Grotesk',-apple-system,sans-serif;">Reset your password</h1>
+              <p style="margin:0 0 20px;font-size:15px;color:#334155;line-height:1.6;">
                 We received a request to reset the password for your Plexo account. If this was you, click the button below to set a new password.
               </p>
               <p style="margin:0 0 8px;font-size:14px;color:#f87171;font-weight:600;line-height:1.6;">
                 ⚠️ If you did not request this, please ignore this email. Your account remains secure.
               </p>
-              <p style="margin:0 0 28px;font-size:14px;color:#7b83a6;line-height:1.6;">
+              <p style="margin:0 0 28px;font-size:14px;color:#475569;line-height:1.6;">
                 This link expires in <strong style="color:#fc0694;">15 minutes</strong>.
               </p>
               <!-- CTA Button -->
@@ -147,18 +147,18 @@ function buildPasswordResetEmail(actionUrl: string): string {
                   </td>
                 </tr>
               </table>
-              <p style="margin:0 0 8px;font-size:12px;color:#4a5068;line-height:1.5;">
+              <p style="margin:0 0 8px;font-size:12px;color:#64748b;line-height:1.5;">
                 If the button doesn't work, copy and paste this link into your browser:
               </p>
-              <p style="margin:0;font-size:11px;color:#4a5068;word-break:break-all;line-height:1.4;">
+              <p style="margin:0;font-size:11px;color:#64748b;word-break:break-all;line-height:1.4;">
                 <a href="${actionUrl}" style="color:#fc0694;text-decoration:none;">${actionUrl}</a>
               </p>
             </td>
           </tr>
           <!-- Footer -->
           <tr>
-            <td style="background:#08090f;border-top:1px solid rgba(252,6,148,0.08);padding:20px 40px;">
-              <p style="margin:0;font-size:12px;color:#4a5068;line-height:1.5;">
+            <td style="background:#f1f5f9;border-top:1px solid #e2e8f0;padding:20px 40px;">
+              <p style="margin:0;font-size:12px;color:#64748b;line-height:1.5;">
                 If you didn't request a password reset, no action is needed — your account remains secure.<br/>
                 &copy; ${new Date().getFullYear()} Plexo. All rights reserved.
               </p>
