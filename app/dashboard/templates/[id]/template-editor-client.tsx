@@ -120,7 +120,7 @@ export function TemplateEditorClient({
             useAi={useAi}
             aiModel={aiModel}
             aiTier={aiTier}
-            subscriptionPlan={subscriptionPlan}
+            {...({ __internalPlan: subscriptionPlan } as any)}
           />
         </div>
       </section>
