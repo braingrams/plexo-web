@@ -101,7 +101,7 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
   }
 
   return (
-    <div style={{ padding: "2rem 1.75rem", maxWidth: 760, margin: "0 auto" }}>
+    <div style={{ padding: "2rem 1.75rem", maxWidth: 1500, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ marginBottom: "2rem" }}>
         <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#fc0694", marginBottom: "0.35rem" }}>
