@@ -1,0 +1,22 @@
+node_modules
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# next.js
+/.next/
+/out/
+*.tsbuildinfo
+
+# production
+/build
+
+# prisma
+/generated/prisma
+/prisma/migrations
+
+# misc
+.DS_Store
+*.pem

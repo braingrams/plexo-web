@@ -1,0 +1,33 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "outputDirectory": ".next",
+  "regions": ["iad1"],
+  "env": {
+    "DATABASE_URL": "@database-url",
+    "BETTER_AUTH_SECRET": "@better-auth-secret",
+    "BETTER_AUTH_URL": "@better-auth-url",
+    "MAILDRIP_API_KEY": "@maildrip-api-key",
+    "MAILDRIP_API_URL": "@maildrip-api-url"
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization, x-api-key"
+        }
+      ]
+    }
+  ]
+}

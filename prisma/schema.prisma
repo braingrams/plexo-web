@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TemplateKind {
+  EMAIL
+  LANDING_PAGE
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  ULTRA
+}
+
+enum AiTier {
+  AUTO
+  BASIC
+  MEDIUM
+  HIGH
+}
+
+model User {
+  id               String           @id @default(uuid()) @db.Uuid
+  name             String           @default("Plexo User")
+  image            String?
+  email            String           @unique
+  passwordHash     String           @default("")
+  isConfirmed      Boolean          @default(false)
+  subscriptionPlan SubscriptionPlan @default(ULTRA)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  apiKeys          ApiKey[]
+  templates        Template[]
+  accounts         Account[]
+  sessions         Session[]
+}
+
+model ApiKey {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  name      String
+  hashedKey String
+  maskedKey String
+  useAi     Boolean   @default(false)
+  aiModel   String    @default("gpt-4o")
+  aiTier    AiTier    @default(AUTO)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Template {
+  id           String       @id @default(uuid()) @db.Uuid
+  userId       String       @db.Uuid
+  name         String
+  kind         TemplateKind
+  designJson   Json
+  compiledHtml String       @db.Text
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String    @db.Uuid
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String   @db.Uuid
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@index([value])
+}
