@@ -73,6 +73,119 @@ function IconX() {
   );
 }
 
+function IconChevronDown() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9"/>
+    </svg>
+  );
+}
+
+function CustomSelect({
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  options: Array<{ label: string; value: string }>;
+  disabled?: boolean;
+  onChange: (val: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+  return (
+    <div style={{ position: "relative" }}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((o) => !o)}
+        style={{
+          width: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "0.5rem",
+          padding: "0.6rem 0.875rem",
+          borderRadius: 9,
+          border: open ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.1)",
+          background: open ? "rgba(139,92,246,0.08)" : "rgba(255,255,255,0.05)",
+          color: disabled ? "rgba(240,242,255,0.3)" : "rgba(240,242,255,0.9)",
+          fontFamily: "inherit",
+          fontSize: "0.875rem",
+          fontWeight: 500,
+          cursor: disabled ? "not-allowed" : "pointer",
+          transition: "border-color 0.15s, background 0.15s",
+          boxShadow: open ? "0 0 0 2px rgba(139,92,246,0.15)" : "none",
+        }}
+      >
+        <span>{selected?.label ?? value}</span>
+        <span style={{ color: "rgba(240,242,255,0.4)", transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s", display: "inline-flex" }}>
+          <IconChevronDown />
+        </span>
+      </button>
+
+      {open && (
+        <>
+          {/* Backdrop */}
+          <div
+            style={{ position: "fixed", inset: 0, zIndex: 99 }}
+            onClick={() => setOpen(false)}
+          />
+          {/* Dropdown panel */}
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 6px)",
+              left: 0, right: 0,
+              zIndex: 100,
+              background: "rgba(18,16,36,0.95)",
+              backdropFilter: "blur(16px)",
+              border: "1px solid rgba(139,92,246,0.3)",
+              borderRadius: 10,
+              overflow: "hidden",
+              boxShadow: "0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(139,92,246,0.15)",
+            }}
+          >
+            {options.map((opt) => {
+              const isActive = opt.value === value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => { onChange(opt.value); setOpen(false); }}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "0.625rem 0.875rem",
+                    background: isActive ? "rgba(139,92,246,0.12)" : "transparent",
+                    border: "none",
+                    borderBottom: "1px solid rgba(255,255,255,0.05)",
+                    color: isActive ? "#c4b5fd" : "rgba(240,242,255,0.75)",
+                    fontFamily: "inherit",
+                    fontSize: "0.875rem",
+                    fontWeight: isActive ? 600 : 400,
+                    cursor: "pointer",
+                    textAlign: "left",
+                    transition: "background 0.1s, color 0.1s",
+                  }}
+                  onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; }}
+                  onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                >
+                  <span>{opt.label}</span>
+                  {isActive && <span style={{ color: "#8b5cf6", display: "inline-flex" }}><IconCheck /></span>}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function SettingsClient({ initialApiKeys }: Props) {
   const [apiKeys, setApiKeys] = useState<SettingsApiKey[]>(initialApiKeys);
   const [activeKeyId, setActiveKeyId] = useState<string | null>(
@@ -431,27 +544,22 @@ export function SettingsClient({ initialApiKeys }: Props) {
                 </div>
 
                 {/* Provider */}
-                <label style={{ display: "block" }}>
+                <div>
                   <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
                     AI Provider
                   </span>
-                  <select
-                    id="ai-provider-select"
+                  <CustomSelect
                     value={draftAiProvider}
+                    options={PROVIDER_OPTIONS}
                     disabled={!activeKey.isActive}
-                    onChange={(e) => {
-                      const next = e.target.value as Provider;
-                      setDraftAiProvider(next);
+                    onChange={(next) => {
+                      const v = next as Provider;
+                      setDraftAiProvider(v);
                       setDraftDirty(true);
-                      setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiProvider: next } : item)));
+                      setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiProvider: v } : item)));
                     }}
-                    className="field-select"
-                  >
-                    {PROVIDER_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </label>
+                  />
+                </div>
 
                 {/* Tier */}
                 <div>
@@ -475,16 +583,16 @@ export function SettingsClient({ initialApiKeys }: Props) {
                           style={{
                             padding: "0.65rem 0.75rem",
                             borderRadius: 9,
-                            border: active ? "1.5px solid rgba(252,6,148,0.4)" : "1px solid rgba(255,255,255,0.08)",
-                            background: active ? "rgba(252,6,148,0.1)" : "rgba(255,255,255,0.03)",
-                            color: active ? "#fc0694" : "rgba(240,242,255,0.55)",
+                            border: active ? "1.5px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                            background: active ? "rgba(139,92,246,0.1)" : "rgba(255,255,255,0.03)",
+                            color: active ? "#c4b5fd" : "rgba(240,242,255,0.55)",
                             cursor: activeKey.isActive ? "pointer" : "not-allowed",
                             fontFamily: "inherit", textAlign: "left",
                             transition: "all 0.15s",
                           }}
                         >
                           <p style={{ fontSize: "0.8rem", fontWeight: active ? 700 : 600 }}>{tier.label}</p>
-                          <p style={{ fontSize: "0.68rem", color: active ? "rgba(252,6,148,0.7)" : "rgba(240,242,255,0.3)" }}>{tier.desc}</p>
+                          <p style={{ fontSize: "0.68rem", color: active ? "rgba(196,181,253,0.7)" : "rgba(240,242,255,0.3)" }}>{tier.desc}</p>
                         </button>
                       );
                     })}

@@ -79,9 +79,9 @@ function PlexoLogo() {
     <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", textDecoration: "none" }}>
       <div style={{
         width: 34, height: 34, borderRadius: 9,
-        background: "linear-gradient(135deg, #fc0694, #d4057d)",
+        background: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
         display: "grid", placeItems: "center",
-        boxShadow: "0 0 20px rgba(252,6,148,0.45)",
+        boxShadow: "0 0 20px rgba(139,92,246,0.45)",
         flexShrink: 0,
       }}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -104,7 +104,7 @@ const features = [
     icon: <IconMail />,
     title: "Email Builder",
     description: "Design pixel-perfect email campaigns with drag-and-drop precision. Export battle-tested HTML.",
-    color: "#fc0694",
+    color: "#8b5cf6",
   },
   {
     icon: <IconLayout />,
@@ -270,7 +270,7 @@ export default function HomePage() {
           <div aria-hidden style={{
             position: "absolute", top: "10%", left: "15%",
             width: 500, height: 500, borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(252,6,148,0.18) 0%, transparent 70%)",
+            background: "radial-gradient(circle, rgba(139,92,246,0.18) 0%, transparent 70%)",
             filter: "blur(40px)",
             animation: "orb-float 12s ease-in-out infinite",
             pointerEvents: "none",
@@ -288,18 +288,18 @@ export default function HomePage() {
             {/* Eyebrow */}
             <div className="animate-fade-up" style={{
               display: "inline-flex", alignItems: "center", gap: "0.5rem",
-              background: "rgba(252,6,148,0.1)", border: "1px solid rgba(252,6,148,0.25)",
+              background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.25)",
               borderRadius: 999, padding: "0.3rem 0.9rem 0.3rem 0.5rem",
               marginBottom: "1.75rem",
             }}>
               <span style={{
-                background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
                 borderRadius: 999, width: 18, height: 18,
                 display: "grid", placeItems: "center",
               }}>
                 <IconSparkles />
               </span>
-              <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#fc0694" }}>
+              <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#8b5cf6" }}>
                 AI-Powered Template Builder
               </span>
             </div>
@@ -317,7 +317,7 @@ export default function HomePage() {
             }}>
               Build beautiful emails{" "}
               <span style={{
-                background: "linear-gradient(135deg,#fc0694 0%,#d4057d 50%,#818cf8 100%)",
+                background: "linear-gradient(135deg,#8b5cf6 0%,#7c3aed 50%,#818cf8 100%)",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
                 backgroundClip: "text",
@@ -517,7 +517,7 @@ export default function HomePage() {
         }}>
           <div className="landing-container">
             <div style={{ textAlign: "center", marginBottom: "3.5rem" }}>
-              <p style={{ fontSize: "0.8rem", fontWeight: 700, letterSpacing: "0.12em", color: "#fc0694", textTransform: "uppercase", marginBottom: "0.75rem" }}>
+              <p style={{ fontSize: "0.8rem", fontWeight: 700, letterSpacing: "0.12em", color: "#8b5cf6", textTransform: "uppercase", marginBottom: "0.75rem" }}>
                 How It Works
               </p>
               <h2 style={{
@@ -540,11 +540,11 @@ export default function HomePage() {
                 <div key={step.number} style={{ textAlign: "center", padding: "0 1rem" }}>
                   <div style={{
                     width: 60, height: 60, borderRadius: 16,
-                    background: i === 1 ? "linear-gradient(135deg,#fc0694,#d4057d)" : "rgba(255,255,255,0.05)",
+                    background: i === 1 ? "linear-gradient(135deg,#8b5cf6,#7c3aed)" : "rgba(255,255,255,0.05)",
                     border: i === 1 ? "none" : "1px solid rgba(255,255,255,0.1)",
                     display: "grid", placeItems: "center",
                     margin: "0 auto 1.25rem",
-                    boxShadow: i === 1 ? "0 8px 32px rgba(252,6,148,0.4)" : "none",
+                    boxShadow: i === 1 ? "0 8px 32px rgba(139,92,246,0.4)" : "none",
                   }}>
                     <span style={{
                       fontFamily: "var(--font-heading), sans-serif",
@@ -586,7 +586,7 @@ export default function HomePage() {
               alignItems: "center",
             }}>
               <div>
-                <p style={{ fontSize: "0.8rem", fontWeight: 700, letterSpacing: "0.12em", color: "#fc0694", textTransform: "uppercase", marginBottom: "0.75rem" }}>
+                <p style={{ fontSize: "0.8rem", fontWeight: 700, letterSpacing: "0.12em", color: "#8b5cf6", textTransform: "uppercase", marginBottom: "0.75rem" }}>
                   Developer First
                 </p>
                 <h2 style={{
@@ -609,7 +609,7 @@ export default function HomePage() {
                     "Configure AI provider routing using API keys",
                   ].map((item, index) => (
                     <div key={index} style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span style={{ color: "#fc0694", display: "inline-flex" }}>
+                      <span style={{ color: "#8b5cf6", display: "inline-flex" }}>
                         <IconCheck />
                       </span>
                       <span style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.75)" }}>{item}</span>
@@ -661,7 +661,7 @@ export default function Editor() {
     <PlexoBuilder
       apiKey="pk_live_yourkey..."
       mode="email"
-      themeBgColor="#fc0694"
+      themeBgColor="#8b5cf6"
       useAi={true}
     />
   );
@@ -676,7 +676,7 @@ export default function Editor() {
         <section id="pricing" className="landing-section">
           <div className="landing-container">
             <div style={{ textAlign: "center", marginBottom: "3.5rem" }}>
-              <p style={{ fontSize: "0.8rem", fontWeight: 700, letterSpacing: "0.12em", color: "#fc0694", textTransform: "uppercase", marginBottom: "0.75rem" }}>
+              <p style={{ fontSize: "0.8rem", fontWeight: 700, letterSpacing: "0.12em", color: "#8b5cf6", textTransform: "uppercase", marginBottom: "0.75rem" }}>
                 Pricing
               </p>
               <h2 style={{
@@ -702,23 +702,23 @@ export default function Editor() {
                 <div
                   key={plan.name}
                   style={{
-                    background: plan.highlight ? "rgba(252,6,148,0.06)" : "rgba(255,255,255,0.03)",
-                    border: plan.highlight ? "1px solid rgba(252,6,148,0.35)" : "1px solid rgba(255,255,255,0.08)",
+                    background: plan.highlight ? "rgba(139,92,246,0.06)" : "rgba(255,255,255,0.03)",
+                    border: plan.highlight ? "1px solid rgba(139,92,246,0.35)" : "1px solid rgba(255,255,255,0.08)",
                     borderRadius: 18,
                     padding: "2rem",
                     position: "relative",
-                    boxShadow: plan.highlight ? "0 0 50px rgba(252,6,148,0.12), 0 20px 60px rgba(0,0,0,0.4)" : "0 10px 40px rgba(0,0,0,0.3)",
+                    boxShadow: plan.highlight ? "0 0 50px rgba(139,92,246,0.12), 0 20px 60px rgba(0,0,0,0.4)" : "0 10px 40px rgba(0,0,0,0.3)",
                   }}
                 >
                   {plan.highlight && (
                     <div style={{
                       position: "absolute", top: -14, left: "50%",
                       transform: "translateX(-50%)",
-                      background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                      background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
                       borderRadius: 999, padding: "0.25rem 1rem",
                       fontSize: "0.75rem", fontWeight: 700, color: "#fff",
                       letterSpacing: "0.05em", whiteSpace: "nowrap",
-                      boxShadow: "0 4px 16px rgba(252,6,148,0.4)",
+                      boxShadow: "0 4px 16px rgba(139,92,246,0.4)",
                     }}>
                       MOST POPULAR
                     </div>
@@ -734,7 +734,7 @@ export default function Editor() {
                     <span style={{
                       fontFamily: "var(--font-heading), sans-serif",
                       fontSize: "2.5rem", fontWeight: 800,
-                      color: plan.highlight ? "#fc0694" : "#f0f2ff",
+                      color: plan.highlight ? "#8b5cf6" : "#f0f2ff",
                     }}>
                       {plan.price}
                     </span>
@@ -753,7 +753,7 @@ export default function Editor() {
                         fontSize: "0.875rem", color: "rgba(240,242,255,0.75)",
                         borderBottom: "1px solid rgba(255,255,255,0.04)",
                       }}>
-                        <span style={{ color: plan.highlight ? "#fc0694" : "#34d399", flexShrink: 0 }}>
+                        <span style={{ color: plan.highlight ? "#8b5cf6" : "#34d399", flexShrink: 0 }}>
                           <IconCheck />
                         </span>
                         {f}
@@ -768,10 +768,10 @@ export default function Editor() {
                       borderRadius: 11,
                       fontWeight: 700, fontSize: "0.875rem",
                       textDecoration: "none",
-                      background: plan.highlight ? "linear-gradient(135deg,#fc0694,#d4057d)" : "rgba(255,255,255,0.06)",
+                      background: plan.highlight ? "linear-gradient(135deg,#8b5cf6,#7c3aed)" : "rgba(255,255,255,0.06)",
                       color: plan.highlight ? "#fff" : "rgba(240,242,255,0.8)",
                       border: plan.highlight ? "none" : "1px solid rgba(255,255,255,0.1)",
-                      boxShadow: plan.highlight ? "0 4px 24px rgba(252,6,148,0.35)" : "none",
+                      boxShadow: plan.highlight ? "0 4px 24px rgba(139,92,246,0.35)" : "none",
                       transition: "opacity 0.15s, box-shadow 0.15s",
                     }}
                   >
@@ -787,9 +787,9 @@ export default function Editor() {
         <section style={{
           padding: "5rem 1.5rem",
           textAlign: "center",
-          background: "linear-gradient(135deg, rgba(252,6,148,0.08) 0%, rgba(100,50,255,0.06) 100%)",
-          borderTop: "1px solid rgba(252,6,148,0.15)",
-          borderBottom: "1px solid rgba(252,6,148,0.1)",
+          background: "linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(100,50,255,0.06) 100%)",
+          borderTop: "1px solid rgba(139,92,246,0.15)",
+          borderBottom: "1px solid rgba(139,92,246,0.1)",
         }}>
           <div className="landing-container">
             <h2 style={{

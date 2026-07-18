@@ -15,24 +15,24 @@
 /* ── Brand / Accent ─────────────────────────────────────── */
 export const BRAND = {
   /** Primary accent — used for CTAs, active indicators, glows */
-  500: "#fc0694",
+  500: "#8b5cf6",
   /** Darker shade — used for gradient endpoints & hover states */
-  600: "#d4057d",
+  600: "#7c3aed",
   /** Even deeper — active / pressed */
-  700: "#a8045f",
+  700: "#6d28d9",
   /** Lighter highlight */
-  400: "#fd3dab",
+  400: "#a78bfa",
   /** Very light tint */
-  300: "#fd7dcb",
+  300: "#c084fc",
 
   // Semantic aliases
-  primary:   "#fc0694",
-  deep:      "#d4057d",
+  primary:   "#8b5cf6",
+  deep:      "#7c3aed",
   /** rgba glow for box-shadow etc. */
-  glow:      "rgba(252, 6, 148, 0.35)",
+  glow:      "rgba(139, 92, 246, 0.35)",
   /** very transparent tint for backgrounds */
-  subtle:    "rgba(252, 6, 148, 0.10)",
-  subtleBorder: "rgba(252, 6, 148, 0.20)",
+  subtle:    "rgba(139, 92, 246, 0.10)",
+  subtleBorder: "rgba(139, 92, 246, 0.20)",
 } as const;
 
 /* ── Surfaces / Backgrounds ─────────────────────────────── */

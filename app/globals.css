@@ -22,12 +22,12 @@
    SYNC: mirrors BRAND.* from lib/theme.ts
    ───────────────────────────────────────── */
 @theme inline {
-  /* Brand accent — Vibrant Neon Pink */
-  --color-brand-300: #fd7dcb;   /* BRAND[300] */
-  --color-brand-400: #fd3dab;   /* BRAND[400] */
-  --color-brand-500: #fc0694;   /* BRAND.primary  ← primary CTA colour */
-  --color-brand-600: #d4057d;   /* BRAND.deep     ← gradient endpoint   */
-  --color-brand-700: #a8045f;   /* BRAND[700]                            */
+  /* Brand accent — Vibrant Neon Purple */
+  --color-brand-300: #c084fc;   /* BRAND[300] */
+  --color-brand-400: #a78bfa;   /* BRAND[400] */
+  --color-brand-500: #8b5cf6;   /* BRAND.primary  ← primary CTA colour */
+  --color-brand-600: #7c3aed;   /* BRAND.deep     ← gradient endpoint   */
+  --color-brand-700: #6d28d9;   /* BRAND[700]                            */
 
   /* Surfaces — SYNC: mirrors SURFACES.* from lib/theme.ts */
   --color-surface-0: #08090f;   /* SURFACES.bg     */
@@ -45,10 +45,10 @@
    ───────────────────────────────────────── */
 :root {
   /* ── Brand ── SYNC: BRAND.* in lib/theme.ts */
-  --brand:        #fc0694;                    /* BRAND.primary   */
-  --brand-deep:   #d4057d;                    /* BRAND.deep      */
-  --brand-glow:   rgba(252, 6, 148, 0.35);    /* BRAND.glow      */
-  --brand-subtle: rgba(252, 6, 148, 0.10);    /* BRAND.subtle    */
+  --brand:        #8b5cf6;                    /* BRAND.primary   */
+  --brand-deep:   #7c3aed;                    /* BRAND.deep      */
+  --brand-glow:   rgba(139, 92, 246, 0.35);   /* BRAND.glow      */
+  --brand-subtle: rgba(139, 92, 246, 0.10);   /* BRAND.subtle    */
 
   /* ── Surfaces ── SYNC: SURFACES.* in lib/theme.ts */
   --bg:             #08090f;                  /* SURFACES.bg     */
@@ -92,9 +92,9 @@ html, body {
 body {
   background-color: var(--bg);
   background-image:
-    radial-gradient(ellipse 900px 600px at 15% -5%, rgba(252, 6, 148, 0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 900px 600px at 15% -5%, rgba(139, 92, 246, 0.12) 0%, transparent 60%),
     radial-gradient(ellipse 700px 500px at 85% 5%, rgba(100, 50, 255, 0.08) 0%, transparent 55%),
-    radial-gradient(ellipse 1000px 400px at 50% 100%, rgba(252, 6, 148, 0.06) 0%, transparent 70%);
+    radial-gradient(ellipse 1000px 400px at 50% 100%, rgba(139, 92, 246, 0.06) 0%, transparent 70%);
   color: var(--text-main);
   font-family: var(--font-body), 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.6;
@@ -650,8 +650,8 @@ body {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(252, 6, 148, 0.3); }
-  50% { box-shadow: 0 0 40px rgba(252, 6, 148, 0.6); }
+  0%, 100% { box-shadow: 0 0 20px rgba(139, 92, 246, 0.3); }
+  50% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.6); }
 }
 
 @keyframes orb-float {
