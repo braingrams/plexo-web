@@ -67,7 +67,7 @@ export default async function TemplateEditorPage(
           select: {
             id: true,
             useAi: true,
-            aiModel: true,
+            aiProvider: true,
             aiTier: true,
           },
         },
@@ -94,7 +94,7 @@ export default async function TemplateEditorPage(
       initialDesignJson={initialDesignJson}
       subscriptionPlan={user?.subscriptionPlan ?? "ULTRA"}
       useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}
-      aiModel={activeApiKey?.aiModel ?? "openai"}
+      aiProvider={activeApiKey?.aiProvider ?? "openai"}
       aiTier={activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}
     />
   );

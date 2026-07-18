@@ -30,7 +30,7 @@ function serializeApiKey(record: {
   createdAt: Date;
   isActive: boolean;
   useAi: boolean;
-  aiModel: string;
+  aiProvider: string;
   aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 }) {
   return {
@@ -40,7 +40,7 @@ function serializeApiKey(record: {
     createdAt: record.createdAt.toISOString(),
     isActive: record.isActive,
     useAi: record.useAi,
-    aiModel: record.aiModel,
+    aiProvider: record.aiProvider,
     aiTier: record.aiTier,
   };
 }
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       hashedKey,
       maskedKey,
       useAi: false,
-      aiModel: "openai",
+      aiProvider: "openai",
       aiTier: "AUTO",
       isActive: true,
     },

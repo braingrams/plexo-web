@@ -33,7 +33,7 @@ async function main(): Promise<void> {
       data: {
         isActive: true,
         useAi: true,
-        aiModel: "anthropic_claude",
+        aiProvider: "claude",
         aiTier: "HIGH",
       },
     });
@@ -46,7 +46,7 @@ async function main(): Promise<void> {
         maskedKey: "pk_live_comp...0718",
         isActive: true,
         useAi: true,
-        aiModel: "anthropic_claude",
+        aiProvider: "claude",
         aiTier: "HIGH",
       },
     });

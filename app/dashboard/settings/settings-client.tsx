@@ -11,7 +11,7 @@ type SettingsApiKey = {
   createdAt: string;
   isActive: boolean;
   useAi: boolean;
-  aiModel: string;
+  aiProvider: string;
   aiTier: AiTier;
 };
 
@@ -62,8 +62,8 @@ export function SettingsClient({ initialApiKeys }: Props) {
   );
 
   const [draftUseAi, setDraftUseAi] = useState<boolean>(activeKey?.useAi ?? false);
-  const [draftAiModel, setDraftAiModel] = useState<Provider>(
-    normalizeProvider(activeKey?.aiModel ?? "openai"),
+  const [draftAiProvider, setDraftAiProvider] = useState<Provider>(
+    normalizeProvider(activeKey?.aiProvider ?? "openai"),
   );
   const [draftAiTier, setDraftAiTier] = useState<AiTier>(activeKey?.aiTier ?? "AUTO");
   const [draftDirty, setDraftDirty] = useState(false);
@@ -71,7 +71,7 @@ export function SettingsClient({ initialApiKeys }: Props) {
   useEffect(() => {
     if (!activeKeyId) {
       setDraftUseAi(false);
-      setDraftAiModel("openai");
+      setDraftAiProvider("openai");
       setDraftAiTier("AUTO");
       setDraftDirty(false);
       return;
@@ -80,14 +80,14 @@ export function SettingsClient({ initialApiKeys }: Props) {
     const selected = apiKeys.find((item) => item.id === activeKeyId);
     if (!selected) {
       setDraftUseAi(false);
-      setDraftAiModel("openai");
+      setDraftAiProvider("openai");
       setDraftAiTier("AUTO");
       setDraftDirty(false);
       return;
     }
 
     setDraftUseAi(selected.useAi);
-    setDraftAiModel(normalizeProvider(selected.aiModel));
+    setDraftAiProvider(normalizeProvider(selected.aiProvider));
     setDraftAiTier(selected.aiTier);
     setDraftDirty(false);
   }, [activeKeyId]);
@@ -110,7 +110,7 @@ export function SettingsClient({ initialApiKeys }: Props) {
           },
           body: JSON.stringify({
             useAi: draftUseAi,
-            aiModel: draftAiModel,
+            aiProvider: draftAiProvider,
             aiTier: draftAiTier,
           }),
         });
@@ -135,7 +135,7 @@ export function SettingsClient({ initialApiKeys }: Props) {
     }, 450);
 
     return () => window.clearTimeout(timer);
-  }, [activeKey, draftAiModel, draftAiTier, draftDirty, draftUseAi]);
+  }, [activeKey, draftAiProvider, draftAiTier, draftDirty, draftUseAi]);
 
   async function generateApiKey(): Promise<void> {
     setIsGenerating(true);
@@ -342,14 +342,14 @@ export function SettingsClient({ initialApiKeys }: Props) {
               <label className="block">
                 <span className="mb-1 block text-xs uppercase tracking-[0.12em] text-sky-200/90">Preferred AI Provider</span>
                 <select
-                  value={draftAiModel}
+                  value={draftAiProvider}
                   disabled={!activeKey.isActive}
                   onChange={(event) => {
                     const next = event.target.value as Provider;
-                    setDraftAiModel(next);
+                    setDraftAiProvider(next);
                     setDraftDirty(true);
                     setApiKeys((current) =>
-                      current.map((item) => (item.id === activeKey.id ? { ...item, aiModel: next } : item)),
+                      current.map((item) => (item.id === activeKey.id ? { ...item, aiProvider: next } : item)),
                     );
                   }}
                   className="w-full rounded-xl border border-sky-200/30 bg-[#06152a] px-3 py-2 text-sm text-sky-50 outline-none focus:border-sky-300"

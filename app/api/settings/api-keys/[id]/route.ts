@@ -15,7 +15,7 @@ function serializeApiKey(record: {
   createdAt: Date;
   isActive: boolean;
   useAi: boolean;
-  aiModel: string;
+  aiProvider: string;
   aiTier: AiTier;
 }) {
   return {
@@ -25,7 +25,7 @@ function serializeApiKey(record: {
     createdAt: record.createdAt.toISOString(),
     isActive: record.isActive,
     useAi: record.useAi,
-    aiModel: record.aiModel,
+    aiProvider: record.aiProvider,
     aiTier: record.aiTier,
   };
 }
@@ -48,7 +48,7 @@ export async function PATCH(
   const body = (await request.json().catch(() => ({}))) as {
     action?: "revoke";
     useAi?: boolean;
-    aiModel?: string;
+    aiProvider?: string;
     aiTier?: AiTier;
   };
 
@@ -73,10 +73,10 @@ export async function PATCH(
   }
 
   const useAi = typeof body.useAi === "boolean" ? body.useAi : existingKey.useAi;
-  const aiModel = typeof body.aiModel === "string" ? body.aiModel : existingKey.aiModel;
+  const aiProvider = typeof body.aiProvider === "string" ? body.aiProvider : existingKey.aiProvider;
   const aiTier = typeof body.aiTier === "string" ? body.aiTier : existingKey.aiTier;
 
-  if (!PROVIDER_VALUES.has(aiModel)) {
+  if (!PROVIDER_VALUES.has(aiProvider)) {
     return NextResponse.json({ error: "Invalid AI provider" }, { status: 400 });
   }
 
@@ -88,7 +88,7 @@ export async function PATCH(
     where: { id: existingKey.id },
     data: {
       useAi,
-      aiModel,
+      aiProvider,
       aiTier,
     },
   });

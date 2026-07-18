@@ -13,7 +13,7 @@ type Props = {
   initialDesignJson: TemplateJSON;
   subscriptionPlan: string;
   useAi: boolean;
-  aiModel: string;
+  aiProvider: string;
   aiTier: AiTier;
 };
 
@@ -24,7 +24,7 @@ export function TemplateEditorClient({
   initialDesignJson,
   subscriptionPlan,
   useAi,
-  aiModel,
+  aiProvider,
   aiTier,
 }: Props) {
   const router = useRouter();
@@ -118,7 +118,7 @@ export function TemplateEditorClient({
             textColor="#ecfeff"
             showSaveButton={false}
             useAi={useAi}
-            aiModel={aiModel}
+            aiProvider={aiProvider}
             aiTier={aiTier}
             {...({ __internalPlan: subscriptionPlan } as any)}
           />

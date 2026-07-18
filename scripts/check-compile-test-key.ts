@@ -15,7 +15,7 @@ async function main(): Promise<void> {
     select: {
       isActive: true,
       useAi: true,
-      aiModel: true,
+      aiProvider: true,
       aiTier: true,
       lastUsedAt: true,
     },

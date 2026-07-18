@@ -16,7 +16,7 @@ function sha256(value: string): string {
  *   x-api-key: <raw api key> | "workspace-internal"
  *
  * Responses:
- *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA", useAi: boolean, aiModel: string, aiTier: string }
+ *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA", useAi: boolean, aiProvider: string, aiTier: string }
  *   400 { valid: false, error: "API key is required." }
  *   401 { valid: false, error: "Invalid key or unauthorized." }
  *   500 { valid: false, error: "Internal server error." }
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     let subscriptionPlan = "ULTRA";
     let useAi = false;
-    let aiModel = "openai";
+    let aiProvider = "openai";
     let aiTier = "AUTO";
 
     if (rawKey === "workspace-internal") {
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             where: { isActive: true },
             orderBy: { createdAt: "desc" },
             take: 1,
-            select: { useAi: true, aiModel: true, aiTier: true },
+            select: { useAi: true, aiProvider: true, aiTier: true },
           },
         },
       });
@@ -71,7 +71,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       subscriptionPlan = user.subscriptionPlan ?? "ULTRA";
       if (user.apiKeys?.[0]) {
         useAi = user.apiKeys[0].useAi;
-        aiModel = user.apiKeys[0].aiModel;
+        aiProvider = user.apiKeys[0].aiProvider;
         aiTier = user.apiKeys[0].aiTier;
       }
     } else {
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           id: true,
           userId: true,
           useAi: true,
-          aiModel: true,
+          aiProvider: true,
           aiTier: true,
         },
       });
@@ -106,7 +106,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
       subscriptionPlan = user?.subscriptionPlan ?? "ULTRA";
       useAi = apiKey.useAi;
-      aiModel = apiKey.aiModel;
+      aiProvider = apiKey.aiProvider;
       aiTier = apiKey.aiTier;
 
       // Touch lastUsedAt so we can track active SDK sessions
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       valid: true,
       plan: subscriptionPlan,
       useAi,
-      aiModel,
+      aiProvider,
       aiTier,
     });
   } catch (err) {

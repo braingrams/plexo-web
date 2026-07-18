@@ -103,7 +103,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     select: {
       id: true,
       useAi: true,
-      aiModel: true,
+      aiProvider: true,
       aiTier: true,
     },
   });
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let compiledHtmlString = compileResult.html;
 
   if (apiKey.useAi) {
-    const signature = `<!-- Optimized via Plexo AI Proxy Provider: ${providerLabel(apiKey.aiModel)} | Tier: ${tierLabel(apiKey.aiTier)} -->`;
+    const signature = `<!-- Optimized via Plexo AI Proxy Provider: ${providerLabel(apiKey.aiProvider)} | Tier: ${tierLabel(apiKey.aiTier)} -->`;
     compiledHtmlString = `${compiledHtmlString}\n${signature}`;
   }
 
