@@ -57,7 +57,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     // Fetch the owner's subscription plan separately to avoid nested-select type issues
-    const user = await prisma.user.findUnique({
+    const user = await (prisma.user.findUnique as any)({
       where: { id: apiKey.userId },
       select: { subscriptionPlan: true },
     });
