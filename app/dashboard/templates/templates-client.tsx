@@ -21,7 +21,7 @@ type Props = {
   initialTemplates: TemplateSummary[];
 };
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function formatDate(iso: string): string {
   const date = new Date(iso);
@@ -31,46 +31,96 @@ function formatDate(iso: string): string {
   return `${day} ${month} ${year}`;
 }
 
+function IconMail() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="3"/>
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+    </svg>
+  );
+}
+
+function IconLayout() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="3"/>
+      <path d="M3 9h18M9 21V9"/>
+    </svg>
+  );
+}
+
+function IconPlus() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  );
+}
+
+function IconSearch() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+    </svg>
+  );
+}
+
+function IconArrow() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14M12 5l7 7-7 7"/>
+    </svg>
+  );
+}
+
+function IconX() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  );
+}
+
+type FilterKind = "ALL" | TemplateKind;
+
 export function TemplatesClient({ initialTemplates }: Props) {
   const router = useRouter();
   const [templates, setTemplates] = useState<TemplateSummary[]>(initialTemplates);
-  const [isRailCollapsed, setIsRailCollapsed] = useState(false);
+  const [filter, setFilter] = useState<FilterKind>("ALL");
+  const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [templateKind, setTemplateKind] = useState<TemplateKind>("EMAIL");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const activeLabel = useMemo(() => {
-    return templateKind === "EMAIL" ? "Email Template" : "Landing Page";
-  }, [templateKind]);
+  const filtered = useMemo(() => {
+    let list = templates;
+    if (filter !== "ALL") list = list.filter((t) => t.kind === filter);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((t) => t.name.toLowerCase().includes(q));
+    }
+    return list;
+  }, [templates, filter, search]);
 
-  async function handleCreateTemplate(): Promise<void> {
+  async function handleCreate(): Promise<void> {
     if (!templateName.trim()) {
       setError("Template name is required.");
       return;
     }
-
     setIsCreating(true);
     setError(null);
-
     try {
       const response = await fetch("/api/templates", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: templateName,
-          kind: templateKind,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: templateName, kind: templateKind }),
       });
-
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(payload.error ?? "Unable to create template.");
       }
-
       const payload = (await response.json()) as CreatePayload;
       setTemplates((current) => [payload.template, ...current]);
       setModalOpen(false);
@@ -84,165 +134,422 @@ export function TemplatesClient({ initialTemplates }: Props) {
     }
   }
 
+  function openModal() {
+    setModalOpen(true);
+    setError(null);
+    setTemplateName("");
+    setTemplateKind("EMAIL");
+  }
+
   return (
-    <div className="min-h-screen w-full bg-transparent p-3 md:p-6">
-      <section className="mx-auto grid min-h-[calc(100vh-1.5rem)] w-full max-w-[1400px] grid-cols-1 gap-4 rounded-3xl border border-sky-200/20 bg-[#051227]/70 p-2 shadow-[0_30px_120px_rgba(0,0,0,.45)] backdrop-blur md:grid-cols-[auto,1fr] md:p-4">
-        <aside
-          className={`relative overflow-hidden rounded-2xl border border-sky-200/20 bg-[#081a32]/85 transition-all duration-300 ${
-            isRailCollapsed ? "w-full md:w-20" : "w-full md:w-72"
-          }`}
-        >
-          <div className="flex items-center justify-between border-b border-sky-200/15 px-3 py-3">
-            <div className={`${isRailCollapsed ? "hidden" : "block"}`}>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-300/80">Workspace</p>
-              <h2 className="font-[var(--font-heading)] text-base text-sky-50">Template Hub</h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsRailCollapsed((prev) => !prev)}
-              className="rounded-lg border border-sky-300/30 bg-sky-400/10 px-2 py-1 text-xs text-sky-100 transition hover:bg-sky-400/20"
-            >
-              {isRailCollapsed ? "Expand" : "Collapse"}
-            </button>
-          </div>
+    <div style={{ padding: "2rem 1.75rem", maxWidth: 1200, margin: "0 auto" }}>
+      {/* Header */}
+      <div style={{ marginBottom: "2rem" }}>
+        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#fc0694", marginBottom: "0.35rem" }}>
+          Workspace
+        </p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+          <h1 style={{
+            fontFamily: "var(--font-heading), sans-serif",
+            fontSize: "clamp(1.6rem, 3vw, 2.1rem)",
+            fontWeight: 800, letterSpacing: "-0.025em",
+            color: "#f0f2ff",
+          }}>
+            Your Templates
+          </h1>
+          <button
+            id="create-template-btn"
+            type="button"
+            onClick={openModal}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: "0.5rem",
+              padding: "0.65rem 1.2rem",
+              borderRadius: 10, fontWeight: 700, fontSize: "0.875rem",
+              background: "linear-gradient(135deg,#fc0694,#d4057d)",
+              color: "#fff", border: "none", cursor: "pointer",
+              boxShadow: "0 4px 20px rgba(252,6,148,0.35)",
+              transition: "opacity 0.15s, box-shadow 0.15s",
+              fontFamily: "inherit",
+            }}
+          >
+            <IconPlus />
+            New Template
+          </button>
+        </div>
+      </div>
 
-          <div className="space-y-3 p-3">
-            <button
-              type="button"
-              onClick={() => setModalOpen(true)}
-              className="w-full rounded-xl bg-gradient-to-r from-cyan-300 via-sky-300 to-teal-200 px-3 py-2 text-sm font-bold text-slate-900 transition hover:brightness-110"
-            >
-              {isRailCollapsed ? "+ New" : "Create New Template"}
-            </button>
-
-            <nav className="space-y-2">
+      {/* Toolbar: filter tabs + search */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: "1rem", flexWrap: "wrap", marginBottom: "1.5rem",
+      }}>
+        {/* Filter tabs */}
+        <div style={{
+          display: "flex", gap: "0.25rem",
+          background: "rgba(255,255,255,0.04)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 10, padding: "0.25rem",
+        }}>
+          {(["ALL", "EMAIL", "LANDING_PAGE"] as const).map((tab) => {
+            const label = tab === "ALL" ? "All" : tab === "EMAIL" ? "Email" : "Landing Pages";
+            const active = filter === tab;
+            return (
               <button
+                key={tab}
                 type="button"
-                className="w-full rounded-xl border border-cyan-200/20 bg-cyan-400/10 px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-100"
+                onClick={() => setFilter(tab)}
+                style={{
+                  padding: "0.4rem 0.9rem",
+                  borderRadius: 8, border: "none", cursor: "pointer",
+                  fontSize: "0.8rem", fontWeight: active ? 700 : 500,
+                  background: active ? "rgba(252,6,148,0.15)" : "transparent",
+                  color: active ? "#fc0694" : "rgba(240,242,255,0.5)",
+                  transition: "background 0.15s, color 0.15s",
+                  fontFamily: "inherit",
+                }}
               >
-                Templates
+                {label}
               </button>
-              <button
-                type="button"
-                className="w-full rounded-xl border border-sky-200/15 bg-sky-300/5 px-3 py-2 text-left text-xs uppercase tracking-[0.12em] text-sky-200/80"
-              >
-                Launch Queue (Soon)
-              </button>
-            </nav>
-          </div>
-        </aside>
+            );
+          })}
+        </div>
+        {/* Search */}
+        <div style={{ position: "relative", maxWidth: 260, flex: 1 }}>
+          <span style={{
+            position: "absolute", left: "0.75rem", top: "50%",
+            transform: "translateY(-50%)", color: "rgba(240,242,255,0.3)",
+            display: "flex",
+          }}>
+            <IconSearch />
+          </span>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search templates…"
+            style={{
+              width: "100%",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 9,
+              color: "#f0f2ff",
+              padding: "0.5rem 0.75rem 0.5rem 2.25rem",
+              fontSize: "0.875rem",
+              outline: "none",
+              fontFamily: "inherit",
+            }}
+          />
+        </div>
+      </div>
 
-        <div className="rounded-2xl border border-sky-200/20 bg-[#091a30]/70 p-4 md:p-6">
-          <header className="mb-6 flex flex-col gap-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-300/80">Dashboard</p>
-            <h1 className="font-[var(--font-heading)] text-2xl text-sky-50 md:text-3xl">Digital Canvas Templates</h1>
-            <p className="text-sm text-sky-100/70">
-              Manage, launch, and re-edit your visual canvases. Active type selector: {activeLabel}.
-            </p>
-          </header>
-
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {templates.map((template) => (
+      {/* Grid */}
+      {filtered.length > 0 ? (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+          gap: "1.25rem",
+        }}>
+          {filtered.map((template) => {
+            const isEmail = template.kind === "EMAIL";
+            return (
               <article
                 key={template.id}
-                className="rounded-2xl border border-sky-200/20 bg-[#07172c]/80 p-4 shadow-[0_14px_38px_rgba(0,0,0,.35)]"
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 16,
+                  overflow: "hidden",
+                  transition: "border-color 0.2s, box-shadow 0.2s, transform 0.2s",
+                }}
+                onMouseEnter={(e) => {
+                  const el = e.currentTarget;
+                  el.style.borderColor = "rgba(252,6,148,0.3)";
+                  el.style.boxShadow = "0 8px 32px rgba(252,6,148,0.1)";
+                  el.style.transform = "translateY(-2px)";
+                }}
+                onMouseLeave={(e) => {
+                  const el = e.currentTarget;
+                  el.style.borderColor = "rgba(255,255,255,0.08)";
+                  el.style.boxShadow = "none";
+                  el.style.transform = "translateY(0)";
+                }}
               >
-                <p className="mb-2 inline-flex rounded-full border border-sky-200/30 bg-sky-300/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-100">
-                  {template.kind === "EMAIL" ? "Email Template" : "Landing Page"}
-                </p>
-                <h2 className="font-[var(--font-heading)] text-lg text-sky-50">{template.name}</h2>
-                <p className="mt-1 text-xs text-sky-200/70">Last updated: {formatDate(template.updatedAt)}</p>
-                <button
-                  type="button"
-                  onClick={() => router.push(`/dashboard/templates/${template.id}`)}
-                  className="mt-4 rounded-xl border border-cyan-200/40 bg-cyan-300/10 px-3 py-2 text-xs font-semibold text-cyan-50 transition hover:bg-cyan-300/20"
-                >
-                  Open Workspace
-                </button>
+                {/* Thumbnail */}
+                <div style={{
+                  height: 120,
+                  background: isEmail
+                    ? "linear-gradient(135deg,rgba(252,6,148,0.12) 0%,rgba(252,6,148,0.03) 100%)"
+                    : "linear-gradient(135deg,rgba(129,140,248,0.12) 0%,rgba(129,140,248,0.03) 100%)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  borderBottom: "1px solid rgba(255,255,255,0.05)",
+                  color: isEmail ? "#fc0694" : "#818cf8",
+                }}>
+                  {isEmail ? <IconMail /> : <IconLayout />}
+                  <div style={{
+                    position: "absolute", opacity: 0.08,
+                    fontSize: "5rem",
+                  }} aria-hidden />
+                </div>
+                {/* Body */}
+                <div style={{ padding: "1rem 1.1rem 1.1rem" }}>
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", gap: "0.3rem",
+                    padding: "0.18rem 0.6rem",
+                    borderRadius: 999,
+                    fontSize: "0.68rem", fontWeight: 700,
+                    letterSpacing: "0.06em", textTransform: "uppercase",
+                    background: isEmail ? "rgba(252,6,148,0.1)" : "rgba(129,140,248,0.1)",
+                    color: isEmail ? "#fc0694" : "#818cf8",
+                    border: `1px solid ${isEmail ? "rgba(252,6,148,0.2)" : "rgba(129,140,248,0.2)"}`,
+                    marginBottom: "0.6rem",
+                  }}>
+                    {isEmail ? <IconMail /> : <IconLayout />}
+                    {isEmail ? "Email" : "Landing Page"}
+                  </span>
+                  <h2 style={{
+                    fontFamily: "var(--font-heading), sans-serif",
+                    fontSize: "1rem", fontWeight: 700,
+                    color: "#f0f2ff", marginBottom: "0.3rem",
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>
+                    {template.name}
+                  </h2>
+                  <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)", marginBottom: "1rem" }}>
+                    Updated {formatDate(template.updatedAt)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/dashboard/templates/${template.id}`)}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                      padding: "0.5rem 1rem",
+                      borderRadius: 8, border: "none", cursor: "pointer",
+                      fontSize: "0.8rem", fontWeight: 600,
+                      background: "rgba(252,6,148,0.1)",
+                      color: "#fc0694",
+                      transition: "background 0.15s",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    Open Editor
+                    <IconArrow />
+                  </button>
+                </div>
               </article>
-            ))}
-          </div>
-
-          {templates.length === 0 ? (
-            <p className="mt-8 rounded-2xl border border-dashed border-sky-200/20 bg-[#061326]/50 p-6 text-sm text-sky-200/70">
-              No templates yet. Create your first canvas from the action rail.
-            </p>
-          ) : null}
+            );
+          })}
         </div>
-      </section>
+      ) : (
+        <div style={{
+          padding: "4rem 2rem",
+          textAlign: "center",
+          borderRadius: 16,
+          border: "1px dashed rgba(255,255,255,0.1)",
+          background: "rgba(255,255,255,0.015)",
+        }}>
+          <div style={{
+            width: 52, height: 52, borderRadius: 14,
+            background: "rgba(252,6,148,0.08)",
+            border: "1px solid rgba(252,6,148,0.15)",
+            display: "grid", placeItems: "center",
+            margin: "0 auto 1rem",
+            color: "#fc0694",
+          }}>
+            <IconMail />
+          </div>
+          <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.1rem", color: "#f0f2ff", marginBottom: "0.5rem" }}>
+            {search || filter !== "ALL" ? "No templates match your search." : "No templates yet."}
+          </h3>
+          <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.4)", marginBottom: "1.5rem" }}>
+            {search || filter !== "ALL" ? "Try a different search or filter." : "Create your first template to get started."}
+          </p>
+          {!search && filter === "ALL" && (
+            <button
+              type="button"
+              onClick={openModal}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                padding: "0.65rem 1.25rem",
+                borderRadius: 10, border: "none", cursor: "pointer",
+                fontSize: "0.875rem", fontWeight: 700,
+                background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                color: "#fff",
+                boxShadow: "0 4px 20px rgba(252,6,148,0.35)",
+                fontFamily: "inherit",
+              }}
+            >
+              <IconPlus />
+              Create First Template
+            </button>
+          )}
+        </div>
+      )}
 
-      {modalOpen ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-[#01050c]/75 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border border-sky-200/25 bg-[#081a33] p-5 shadow-[0_20px_80px_rgba(0,0,0,.5)] md:p-6">
-            <header className="mb-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-300/80">Template Config</p>
-              <h2 className="font-[var(--font-heading)] text-xl text-sky-50">Create New Template</h2>
-            </header>
+      {/* ── CREATE MODAL ────────────────────────── */}
+      {modalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-modal-title"
+          style={{
+            position: "fixed", inset: 0, zIndex: 50,
+            display: "grid", placeItems: "center",
+            background: "rgba(0,0,0,0.7)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            padding: "1rem",
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setModalOpen(false); } }}
+        >
+          <div style={{
+            width: "min(100%,480px)",
+            background: "#0d0f1a",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 20,
+            padding: "1.75rem",
+            boxShadow: "0 30px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(252,6,148,0.1)",
+          }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.25rem" }}>
+              <div>
+                <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#fc0694", marginBottom: "0.3rem" }}>
+                  New Template
+                </p>
+                <h2 id="create-modal-title" style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.35rem", fontWeight: 800, color: "#f0f2ff" }}>
+                  Configure your canvas
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalOpen(false)}
+                aria-label="Close modal"
+                style={{
+                  background: "rgba(255,255,255,0.06)", border: "none", cursor: "pointer",
+                  color: "rgba(240,242,255,0.5)",
+                  padding: "0.4rem", borderRadius: 8,
+                  display: "grid", placeItems: "center",
+                  transition: "background 0.15s",
+                }}
+              >
+                <IconX />
+              </button>
+            </div>
 
-            <label className="auth-field mt-0">
-              <span className="auth-label">Template Name</span>
+            {/* Name */}
+            <label style={{ display: "block", marginBottom: "1rem" }}>
+              <span style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.4rem" }}>
+                Template Name
+              </span>
               <input
+                id="modal-template-name"
                 type="text"
                 value={templateName}
-                onChange={(event) => setTemplateName(event.target.value)}
-                placeholder="Summer Campaign"
-                className="auth-input"
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="Summer Campaign 2025"
+                onKeyDown={(e) => { if (e.key === "Enter") void handleCreate(); }}
+                style={{
+                  width: "100%",
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 10,
+                  color: "#f0f2ff",
+                  padding: "0.7rem 0.9rem",
+                  fontSize: "0.9rem",
+                  outline: "none",
+                  fontFamily: "inherit",
+                }}
               />
             </label>
 
-            <div className="mt-4">
-              <p className="auth-label mb-2">Template Type</p>
-              <div className="grid grid-cols-2 gap-2 rounded-xl border border-sky-300/20 bg-[#051427] p-1">
-                <button
-                  type="button"
-                  onClick={() => setTemplateKind("EMAIL")}
-                  className={`rounded-lg px-2 py-2 text-xs font-semibold transition ${
-                    templateKind === "EMAIL"
-                      ? "bg-cyan-300 text-slate-900"
-                      : "bg-transparent text-sky-100 hover:bg-sky-500/20"
-                  }`}
-                >
-                  📧 Email Template
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTemplateKind("LANDING_PAGE")}
-                  className={`rounded-lg px-2 py-2 text-xs font-semibold transition ${
-                    templateKind === "LANDING_PAGE"
-                      ? "bg-cyan-300 text-slate-900"
-                      : "bg-transparent text-sky-100 hover:bg-sky-500/20"
-                  }`}
-                >
-                  📄 Landing Page
-                </button>
+            {/* Type selector */}
+            <div style={{ marginBottom: "1.25rem" }}>
+              <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.5rem" }}>
+                Template Type
+              </p>
+              <div style={{
+                display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem",
+              }}>
+                {(["EMAIL","LANDING_PAGE"] as const).map((kind) => {
+                  const label = kind === "EMAIL" ? "Email Template" : "Landing Page";
+                  const icon = kind === "EMAIL" ? <IconMail /> : <IconLayout />;
+                  const active = templateKind === kind;
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      id={`modal-kind-${kind.toLowerCase()}`}
+                      onClick={() => setTemplateKind(kind)}
+                      style={{
+                        display: "flex", alignItems: "center", gap: "0.6rem",
+                        padding: "0.75rem 1rem",
+                        borderRadius: 10,
+                        border: active ? "1.5px solid rgba(252,6,148,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                        background: active ? "rgba(252,6,148,0.1)" : "rgba(255,255,255,0.03)",
+                        color: active ? "#fc0694" : "rgba(240,242,255,0.55)",
+                        cursor: "pointer", fontFamily: "inherit",
+                        fontWeight: active ? 600 : 500, fontSize: "0.875rem",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      {icon}
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {error ? <p className="auth-error">{error}</p> : null}
+            {error && (
+              <p style={{
+                fontSize: "0.82rem", color: "#f87171",
+                marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.4rem",
+              }} role="alert">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                {error}
+              </p>
+            )}
 
-            <div className="mt-5 flex items-center justify-end gap-2">
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
               <button
                 type="button"
-                onClick={() => {
-                  setModalOpen(false);
-                  setError(null);
+                onClick={() => setModalOpen(false)}
+                style={{
+                  padding: "0.65rem 1.1rem",
+                  borderRadius: 9,
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  background: "transparent",
+                  color: "rgba(240,242,255,0.65)",
+                  cursor: "pointer", fontFamily: "inherit",
+                  fontSize: "0.875rem", fontWeight: 600,
                 }}
-                className="rounded-xl border border-sky-200/20 px-3 py-2 text-xs font-semibold text-sky-100/80"
               >
                 Cancel
               </button>
               <button
+                id="modal-create-btn"
                 type="button"
-                onClick={handleCreateTemplate}
+                onClick={() => void handleCreate()}
                 disabled={isCreating}
-                className="rounded-xl bg-gradient-to-r from-cyan-300 to-teal-200 px-4 py-2 text-xs font-bold text-slate-900 transition hover:brightness-110 disabled:opacity-65"
+                style={{
+                  padding: "0.65rem 1.4rem",
+                  borderRadius: 9,
+                  border: "none",
+                  background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                  color: "#fff",
+                  cursor: isCreating ? "not-allowed" : "pointer",
+                  opacity: isCreating ? 0.7 : 1,
+                  fontFamily: "inherit",
+                  fontSize: "0.875rem", fontWeight: 700,
+                  boxShadow: "0 4px 16px rgba(252,6,148,0.35)",
+                }}
               >
-                {isCreating ? "Creating..." : "Create"}
+                {isCreating ? "Creating…" : "Create Template"}
               </button>
             </div>
           </div>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }

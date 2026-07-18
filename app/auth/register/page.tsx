@@ -6,11 +6,43 @@ import { FormEvent, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
 
+function EyeIcon({ visible }: { visible: boolean }) {
+  if (visible) {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+        <line x1="1" y1="1" x2="23" y2="23"/>
+      </svg>
+    );
+  }
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  );
+}
+
+function PlexoLogoMark() {
+  return (
+    <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg,#fc0694,#d4057d)", display: "grid", placeItems: "center", boxShadow: "0 0 14px rgba(252,6,148,0.4)", flexShrink: 0 }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
+        <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  );
+}
+
 export default function RegisterPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +59,7 @@ export default function RegisterPage() {
 
     try {
       const result = await (authClient as any).signUp.email({
-        name: email.split("@")[0] || "Plexo User",
+        name: name.trim() || email.split("@")[0] || "Plexo User",
         email,
         password,
         callbackURL: "/dashboard/templates",
@@ -50,53 +82,109 @@ export default function RegisterPage() {
   return (
     <main className="auth-shell">
       <section className="auth-card">
-        <h1 className="auth-title">Create Plexo Account</h1>
-        <p className="auth-subtitle">Provision your account and verify email to continue.</p>
+        {/* Logo */}
+        <Link href="/" className="auth-logo">
+          <PlexoLogoMark />
+          <span className="auth-logo-text">Plexo</span>
+        </Link>
 
-        <form onSubmit={onSubmit}>
+        <h1 className="auth-title">Create your account</h1>
+        <p className="auth-subtitle">Start building beautiful templates today.</p>
+
+        <form onSubmit={onSubmit} noValidate>
+          {/* Name */}
           <label className="auth-field">
-            <span className="auth-label">Email</span>
+            <span className="auth-label">Display Name</span>
             <input
+              id="register-name"
+              className="auth-input"
+              type="text"
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Alex Johnson"
+            />
+          </label>
+
+          {/* Email */}
+          <label className="auth-field">
+            <span className="auth-label">Email address</span>
+            <input
+              id="register-email"
               className="auth-input"
               type="email"
               required
+              autoComplete="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="you@company.com"
             />
           </label>
 
-          <label className="auth-field">
+          {/* Password */}
+          <div className="auth-field">
             <span className="auth-label">Password</span>
-            <input
-              className="auth-input"
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="At least 8 characters"
-            />
-          </label>
+            <div className="auth-input-wrap">
+              <input
+                id="register-password"
+                className="auth-input auth-input-pr"
+                type={showPw ? "text" : "password"}
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 8 characters"
+              />
+              <button
+                type="button"
+                className="auth-eye-btn"
+                aria-label={showPw ? "Hide password" : "Show password"}
+                onClick={() => setShowPw((v) => !v)}
+              >
+                <EyeIcon visible={showPw} />
+              </button>
+            </div>
+          </div>
 
-          <label className="auth-field">
+          {/* Confirm Password */}
+          <div className="auth-field">
             <span className="auth-label">Confirm Password</span>
-            <input
-              className="auth-input"
-              type="password"
-              required
-              minLength={8}
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              placeholder="Retype your password"
-            />
-          </label>
+            <div className="auth-input-wrap">
+              <input
+                id="register-confirm-password"
+                className="auth-input auth-input-pr"
+                type={showConfirmPw ? "text" : "password"}
+                required
+                minLength={8}
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Retype your password"
+              />
+              <button
+                type="button"
+                className="auth-eye-btn"
+                aria-label={showConfirmPw ? "Hide confirm password" : "Show confirm password"}
+                onClick={() => setShowConfirmPw((v) => !v)}
+              >
+                <EyeIcon visible={showConfirmPw} />
+              </button>
+            </div>
+          </div>
 
-          {error ? <p className="auth-error">{error}</p> : null}
+          {error ? (
+            <p className="auth-error" role="alert">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              {error}
+            </p>
+          ) : null}
 
-          <button className="auth-button" type="submit" disabled={loading}>
+          <button className="auth-button" id="register-submit" type="submit" disabled={loading}>
             {loading ? <span className="auth-spinner" aria-hidden="true" /> : null}
-            {loading ? "Creating account..." : "Register"}
+            {loading ? "Creating account…" : "Create Account"}
           </button>
         </form>
 

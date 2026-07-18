@@ -53,8 +53,8 @@ export default async function DashboardSettingsPage() {
   });
 
   return (
-    <main className="auth-shell">
+    <div style={{ padding: "2rem 1.75rem", maxWidth: 1200, margin: "0 auto" }}>
       <SettingsClient initialApiKeys={apiKeys.map(serializeApiKey)} />
-    </main>
+    </div>
   );
 }

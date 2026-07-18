@@ -21,27 +21,56 @@ type Props = {
 
 const PROVIDER_OPTIONS: Array<{ label: string; value: Provider }> = [
   { label: "OpenAI", value: "openai" },
-  { label: "Anthropic/Claude", value: "anthropic_claude" },
+  { label: "Anthropic / Claude", value: "anthropic_claude" },
   { label: "Google Gemini", value: "google_gemini" },
 ];
 
-const TIER_OPTIONS: Array<{ label: string; value: AiTier }> = [
-  { label: "Base (Strict/Deterministic)", value: "BASIC" },
-  { label: "Medium (Balanced)", value: "MEDIUM" },
-  { label: "High (Creative)", value: "HIGH" },
-  { label: "Auto (System Default)", value: "AUTO" },
+const TIER_OPTIONS: Array<{ label: string; value: AiTier; desc: string }> = [
+  { label: "Base", value: "BASIC", desc: "Strict, deterministic outputs" },
+  { label: "Medium", value: "MEDIUM", desc: "Balanced creativity" },
+  { label: "High", value: "HIGH", desc: "Creative & exploratory" },
+  { label: "Auto", value: "AUTO", desc: "System default" },
 ];
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 function normalizeProvider(value: string): Provider {
-  if (value === "anthropic_claude" || value.toLowerCase().includes("claude")) {
-    return "anthropic_claude";
-  }
-  if (value === "google_gemini" || value.toLowerCase().includes("gemini")) {
-    return "google_gemini";
-  }
+  if (value === "anthropic_claude" || value.toLowerCase().includes("claude")) return "anthropic_claude";
+  if (value === "google_gemini" || value.toLowerCase().includes("gemini")) return "google_gemini";
   return "openai";
+}
+
+function IconKey() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7.5" cy="15.5" r="5.5"/>
+      <path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>
+    </svg>
+  );
+}
+
+function IconCopy() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  );
+}
+
+function IconX() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  );
 }
 
 export function SettingsClient({ initialApiKeys }: Props) {
@@ -70,102 +99,56 @@ export function SettingsClient({ initialApiKeys }: Props) {
 
   useEffect(() => {
     if (!activeKeyId) {
-      setDraftUseAi(false);
-      setDraftAiProvider("openai");
-      setDraftAiTier("AUTO");
-      setDraftDirty(false);
-      return;
+      setDraftUseAi(false); setDraftAiProvider("openai"); setDraftAiTier("AUTO"); setDraftDirty(false); return;
     }
-
     const selected = apiKeys.find((item) => item.id === activeKeyId);
     if (!selected) {
-      setDraftUseAi(false);
-      setDraftAiProvider("openai");
-      setDraftAiTier("AUTO");
-      setDraftDirty(false);
-      return;
+      setDraftUseAi(false); setDraftAiProvider("openai"); setDraftAiTier("AUTO"); setDraftDirty(false); return;
     }
-
     setDraftUseAi(selected.useAi);
     setDraftAiProvider(normalizeProvider(selected.aiProvider));
     setDraftAiTier(selected.aiTier);
     setDraftDirty(false);
-  }, [activeKeyId]);
+  }, [activeKeyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!draftDirty || !activeKey) {
-      return;
-    }
-
+    if (!draftDirty || !activeKey) return;
     const timer = window.setTimeout(async () => {
-      setSaving(true);
-      setSaveError(null);
-      setSaveNotice(null);
-
+      setSaving(true); setSaveError(null); setSaveNotice(null);
       try {
         const response = await fetch(`/api/settings/api-keys/${activeKey.id}`, {
           method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            useAi: draftUseAi,
-            aiProvider: draftAiProvider,
-            aiTier: draftAiTier,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ useAi: draftUseAi, aiProvider: draftAiProvider, aiTier: draftAiTier }),
         });
-
-        if (!response.ok) {
-          throw new Error("Unable to persist AI configuration.");
-        }
-
+        if (!response.ok) throw new Error("Unable to persist AI configuration.");
         const payload = (await response.json()) as { apiKey: SettingsApiKey };
-
-        setApiKeys((current) =>
-          current.map((item) => (item.id === payload.apiKey.id ? payload.apiKey : item)),
-        );
+        setApiKeys((current) => current.map((item) => (item.id === payload.apiKey.id ? payload.apiKey : item)));
         setSaveNotice("AI settings saved.");
         setDraftDirty(false);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Unable to persist AI configuration.";
-        setSaveError(message);
+        setSaveError(error instanceof Error ? error.message : "Unable to persist AI configuration.");
       } finally {
         setSaving(false);
       }
     }, 450);
-
     return () => window.clearTimeout(timer);
   }, [activeKey, draftAiProvider, draftAiTier, draftDirty, draftUseAi]);
 
   async function generateApiKey(): Promise<void> {
-    setIsGenerating(true);
-    setSaveError(null);
-
+    setIsGenerating(true); setSaveError(null);
     try {
       const response = await fetch("/api/settings/api-keys", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
       });
-
-      if (!response.ok) {
-        throw new Error("Unable to generate a new API key.");
-      }
-
-      const payload = (await response.json()) as {
-        apiKey: SettingsApiKey;
-        rawKey: string;
-      };
-
+      if (!response.ok) throw new Error("Unable to generate a new API key.");
+      const payload = (await response.json()) as { apiKey: SettingsApiKey; rawKey: string };
       setApiKeys((current) => [payload.apiKey, ...current]);
       setActiveKeyId(payload.apiKey.id);
       setGeneratedRawKey(payload.rawKey);
       setCopied(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to generate a new API key.";
-      setSaveError(message);
+      setSaveError(error instanceof Error ? error.message : "Unable to generate a new API key.");
     } finally {
       setIsGenerating(false);
     }
@@ -173,124 +156,189 @@ export function SettingsClient({ initialApiKeys }: Props) {
 
   async function revokeKey(keyId: string): Promise<void> {
     setSaveError(null);
-
     try {
       const response = await fetch(`/api/settings/api-keys/${keyId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "revoke" }),
       });
-
-      if (!response.ok) {
-        throw new Error("Unable to revoke API key.");
-      }
-
+      if (!response.ok) throw new Error("Unable to revoke API key.");
       const payload = (await response.json()) as { apiKey: SettingsApiKey };
-
       setApiKeys((current) => {
-        const nextState = current.map((item) =>
-          item.id === payload.apiKey.id ? payload.apiKey : item,
-        );
-
+        const nextState = current.map((item) => (item.id === payload.apiKey.id ? payload.apiKey : item));
         if (activeKeyId === payload.apiKey.id && !payload.apiKey.isActive) {
           const nextActive = nextState.find((item) => item.id !== payload.apiKey.id && item.isActive);
           setActiveKeyId(nextActive?.id ?? null);
         }
-
         return nextState;
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to revoke API key.";
-      setSaveError(message);
+      setSaveError(error instanceof Error ? error.message : "Unable to revoke API key.");
     }
   }
 
   async function copyRawKey(): Promise<void> {
-    if (!generatedRawKey) {
-      return;
-    }
+    if (!generatedRawKey) return;
     await navigator.clipboard.writeText(generatedRawKey);
     setCopied(true);
   }
 
-  function closeModal(): void {
-    setGeneratedRawKey(null);
-    setCopied(false);
-  }
-
   function formatDate(iso: string): string {
     const date = new Date(iso);
-    const day = String(date.getUTCDate()).padStart(2, "0");
-    const month = MONTHS[date.getUTCMonth()];
-    const year = date.getUTCFullYear();
-    return `${day} ${month} ${year}`;
+    return `${String(date.getUTCDate()).padStart(2, "0")} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
   }
 
   return (
-    <section className="w-full max-w-6xl rounded-3xl border border-sky-200/20 bg-[#081324]/70 p-4 shadow-[0_32px_120px_rgba(0,0,0,.45)] backdrop-blur md:p-7">
-      <header className="mb-6 flex flex-col gap-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-300/90">Plexo Control</p>
-        <h1 className="font-[var(--font-heading)] text-2xl text-sky-50 md:text-3xl">Developer Settings</h1>
-        <p className="text-sm text-sky-100/70">Manage API credentials and global AI proxy behavior for your active token.</p>
-      </header>
+    <>
+      {/* Header */}
+      <div style={{ marginBottom: "2rem" }}>
+        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#fc0694", marginBottom: "0.35rem" }}>
+          Developer
+        </p>
+        <h1 style={{
+          fontFamily: "var(--font-heading), sans-serif",
+          fontSize: "clamp(1.6rem, 3vw, 2.1rem)",
+          fontWeight: 800, letterSpacing: "-0.025em", color: "#f0f2ff",
+        }}>
+          Settings
+        </h1>
+        <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.45)", marginTop: "0.35rem" }}>
+          Manage API credentials and global AI proxy configuration.
+        </p>
+      </div>
 
-      <div className="grid gap-4 md:grid-cols-5">
-        <article className="rounded-2xl border border-sky-200/20 bg-[#0a1a30]/80 p-4 md:col-span-3">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="font-[var(--font-heading)] text-lg text-sky-50">API Key Management</h2>
+      <div style={{ display: "grid", gap: "1.5rem", gridTemplateColumns: "1fr" }}>
+
+        {/* ── API KEY MANAGEMENT ─────────────────── */}
+        <div style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 16, overflow: "hidden",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "1.25rem 1.5rem",
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+              <div style={{
+                width: 34, height: 34, borderRadius: 9,
+                background: "rgba(252,6,148,0.1)", border: "1px solid rgba(252,6,148,0.2)",
+                display: "grid", placeItems: "center", color: "#fc0694",
+              }}>
+                <IconKey />
+              </div>
+              <div>
+                <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff" }}>
+                  API Key Management
+                </h2>
+                <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)" }}>
+                  {apiKeys.length} key{apiKeys.length !== 1 ? "s" : ""} total
+                </p>
+              </div>
+            </div>
             <button
+              id="generate-api-key-btn"
               type="button"
-              onClick={generateApiKey}
+              onClick={() => void generateApiKey()}
               disabled={isGenerating}
-              className="rounded-xl bg-gradient-to-r from-sky-300 to-cyan-400 px-3 py-2 text-xs font-semibold text-slate-900 transition hover:brightness-110 disabled:opacity-60"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                padding: "0.55rem 1rem",
+                borderRadius: 9, border: "none", cursor: isGenerating ? "not-allowed" : "pointer",
+                fontSize: "0.8rem", fontWeight: 700,
+                background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                color: "#fff", opacity: isGenerating ? 0.7 : 1,
+                boxShadow: "0 3px 14px rgba(252,6,148,0.3)",
+                fontFamily: "inherit",
+              }}
             >
-              {isGenerating ? "Generating..." : "Generate New API Key"}
+              <IconKey />
+              {isGenerating ? "Generating…" : "Generate Key"}
             </button>
           </div>
 
-          <div className="overflow-x-auto rounded-xl border border-sky-200/15">
-            <table className="min-w-full text-sm">
-              <thead className="bg-sky-900/40 text-left text-xs uppercase tracking-[0.12em] text-sky-200/90">
-                <tr>
-                  <th className="px-3 py-3">Name</th>
-                  <th className="px-3 py-3">Masked Key</th>
-                  <th className="px-3 py-3">Created Date</th>
-                  <th className="px-3 py-3">Action</th>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  {["Name", "Masked Key", "Created", "Status", "Action"].map((h) => (
+                    <th key={h} style={{
+                      padding: "0.75rem 1.25rem",
+                      textAlign: "left", fontWeight: 600, fontSize: "0.72rem",
+                      letterSpacing: "0.08em", textTransform: "uppercase",
+                      color: "rgba(240,242,255,0.35)",
+                    }}>
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {apiKeys.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-3 py-8 text-center text-sky-200/70">
-                      No API keys yet. Generate your first key to activate AI settings.
+                    <td colSpan={5} style={{ padding: "2.5rem", textAlign: "center", color: "rgba(240,242,255,0.35)", fontSize: "0.875rem" }}>
+                      No API keys yet. Generate your first key to enable AI features.
                     </td>
                   </tr>
                 ) : (
                   apiKeys.map((item) => (
                     <tr
                       key={item.id}
-                      className={`border-t border-sky-200/10 ${activeKeyId === item.id ? "bg-sky-900/25" : "bg-transparent"}`}
+                      style={{
+                        borderBottom: "1px solid rgba(255,255,255,0.04)",
+                        background: activeKeyId === item.id ? "rgba(252,6,148,0.04)" : "transparent",
+                        transition: "background 0.15s",
+                      }}
                     >
-                      <td className="px-3 py-3">
+                      <td style={{ padding: "0.85rem 1.25rem" }}>
                         <button
                           type="button"
                           onClick={() => setActiveKeyId(item.id)}
-                          className="text-left text-sky-50 hover:text-white"
+                          style={{
+                            background: "none", border: "none", cursor: "pointer",
+                            fontFamily: "inherit", fontSize: "0.875rem",
+                            fontWeight: 600, color: activeKeyId === item.id ? "#fc0694" : "#f0f2ff",
+                            textAlign: "left", padding: 0,
+                          }}
                         >
                           {item.name}
-                          {!item.isActive ? <span className="ml-2 text-xs text-rose-300">Revoked</span> : null}
                         </button>
                       </td>
-                      <td className="px-3 py-3 font-mono text-sky-100/85">{item.maskedKey}</td>
-                      <td className="px-3 py-3 text-sky-100/85">{formatDate(item.createdAt)}</td>
-                      <td className="px-3 py-3">
+                      <td style={{ padding: "0.85rem 1.25rem", fontFamily: "monospace", fontSize: "0.8rem", color: "rgba(240,242,255,0.55)" }}>
+                        {item.maskedKey}
+                      </td>
+                      <td style={{ padding: "0.85rem 1.25rem", color: "rgba(240,242,255,0.45)", fontSize: "0.8rem" }}>
+                        {formatDate(item.createdAt)}
+                      </td>
+                      <td style={{ padding: "0.85rem 1.25rem" }}>
+                        <span style={{
+                          display: "inline-flex", alignItems: "center", gap: "0.3rem",
+                          padding: "0.2rem 0.6rem", borderRadius: 999,
+                          fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
+                          background: item.isActive ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)",
+                          color: item.isActive ? "#34d399" : "#f87171",
+                          border: `1px solid ${item.isActive ? "rgba(52,211,153,0.2)" : "rgba(248,113,113,0.2)"}`,
+                        }}>
+                          {item.isActive ? <IconCheck /> : <IconX />}
+                          {item.isActive ? "Active" : "Revoked"}
+                        </span>
+                      </td>
+                      <td style={{ padding: "0.85rem 1.25rem" }}>
                         <button
                           type="button"
                           disabled={!item.isActive}
                           onClick={() => void revokeKey(item.id)}
-                          className="rounded-lg border border-rose-300/45 px-2.5 py-1.5 text-xs font-semibold text-rose-200 transition hover:bg-rose-400/15 disabled:cursor-not-allowed disabled:opacity-45"
+                          style={{
+                            padding: "0.4rem 0.85rem",
+                            borderRadius: 7,
+                            border: "1px solid rgba(248,113,113,0.25)",
+                            background: "transparent",
+                            color: "#f87171", fontSize: "0.75rem", fontWeight: 600,
+                            cursor: item.isActive ? "pointer" : "not-allowed",
+                            opacity: item.isActive ? 1 : 0.4,
+                            fontFamily: "inherit",
+                            transition: "background 0.15s",
+                          }}
                         >
                           Revoke
                         </button>
@@ -301,129 +349,243 @@ export function SettingsClient({ initialApiKeys }: Props) {
               </tbody>
             </table>
           </div>
-        </article>
+        </div>
 
-        <article className="rounded-2xl border border-sky-200/20 bg-[#0a1a30]/80 p-4 md:col-span-2">
-          <h2 className="mb-1 font-[var(--font-heading)] text-lg text-sky-50">Global AI Configuration</h2>
-          <p className="mb-4 text-xs text-sky-100/65">Changes auto-save in the background for the selected API key.</p>
-
-          {!activeKey ? (
-            <p className="rounded-xl border border-sky-200/15 bg-sky-900/30 p-3 text-sm text-sky-100/75">
-              Select or generate an active API key to configure AI preferences.
+        {/* ── AI CONFIGURATION ───────────────────── */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: "1.5rem",
+        }}>
+          <div style={{
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 16, padding: "1.5rem",
+          }}>
+            <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.35rem" }}>
+              AI Configuration
+            </h2>
+            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.35)", marginBottom: "1.25rem" }}>
+              Changes auto-save for the selected API key.
             </p>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between rounded-xl border border-sky-200/20 bg-sky-900/20 p-3">
-                <div>
-                  <p className="text-sm font-semibold text-sky-50">Use AI</p>
-                  <p className="text-xs text-sky-100/65">Enable AI proxy routing for this token.</p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={draftUseAi}
-                  disabled={!activeKey.isActive}
-                  onClick={() => {
-                    const next = !draftUseAi;
-                    setDraftUseAi(next);
-                    setDraftDirty(true);
-                    setApiKeys((current) =>
-                      current.map((item) => (item.id === activeKey.id ? { ...item, useAi: next } : item)),
-                    );
-                  }}
-                  className={`relative h-7 w-12 rounded-full transition ${draftUseAi ? "bg-cyan-400" : "bg-slate-700"} ${!activeKey.isActive ? "opacity-50" : ""}`}
-                >
-                  <span
-                    className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${draftUseAi ? "left-6" : "left-1"}`}
-                  />
-                </button>
+
+            {!activeKey ? (
+              <div style={{
+                padding: "1.25rem",
+                borderRadius: 12,
+                background: "rgba(255,255,255,0.03)",
+                border: "1px dashed rgba(255,255,255,0.1)",
+                textAlign: "center",
+                color: "rgba(240,242,255,0.35)", fontSize: "0.875rem",
+              }}>
+                Select an active API key to configure AI settings.
               </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
+                {/* Use AI Toggle */}
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "0.9rem 1rem",
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  borderRadius: 11,
+                }}>
+                  <div>
+                    <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "#f0f2ff" }}>Use AI</p>
+                    <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)" }}>Enable AI proxy for this token</p>
+                  </div>
+                  {/* Custom Toggle */}
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={draftUseAi}
+                    id="toggle-use-ai"
+                    disabled={!activeKey.isActive}
+                    onClick={() => {
+                      const next = !draftUseAi;
+                      setDraftUseAi(next);
+                      setDraftDirty(true);
+                      setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, useAi: next } : item)));
+                    }}
+                    style={{
+                      position: "relative",
+                      width: 44, height: 24,
+                      borderRadius: 999,
+                      background: draftUseAi ? "#fc0694" : "rgba(255,255,255,0.1)",
+                      border: draftUseAi ? "1px solid #fc0694" : "1px solid rgba(255,255,255,0.12)",
+                      cursor: activeKey.isActive ? "pointer" : "not-allowed",
+                      opacity: activeKey.isActive ? 1 : 0.5,
+                      transition: "background 0.2s, border-color 0.2s",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <span style={{
+                      position: "absolute",
+                      top: 3, left: draftUseAi ? 22 : 3,
+                      width: 16, height: 16, borderRadius: "50%",
+                      background: "#fff",
+                      boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+                      transition: "left 0.2s cubic-bezier(0.4,0,0.2,1)",
+                    }} />
+                  </button>
+                </div>
 
-              <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-[0.12em] text-sky-200/90">Preferred AI Provider</span>
-                <select
-                  value={draftAiProvider}
-                  disabled={!activeKey.isActive}
-                  onChange={(event) => {
-                    const next = event.target.value as Provider;
-                    setDraftAiProvider(next);
-                    setDraftDirty(true);
-                    setApiKeys((current) =>
-                      current.map((item) => (item.id === activeKey.id ? { ...item, aiProvider: next } : item)),
-                    );
-                  }}
-                  className="w-full rounded-xl border border-sky-200/30 bg-[#06152a] px-3 py-2 text-sm text-sky-50 outline-none focus:border-sky-300"
-                >
-                  {PROVIDER_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                {/* Provider */}
+                <label style={{ display: "block" }}>
+                  <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
+                    AI Provider
+                  </span>
+                  <select
+                    id="ai-provider-select"
+                    value={draftAiProvider}
+                    disabled={!activeKey.isActive}
+                    onChange={(e) => {
+                      const next = e.target.value as Provider;
+                      setDraftAiProvider(next);
+                      setDraftDirty(true);
+                      setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiProvider: next } : item)));
+                    }}
+                    className="field-select"
+                  >
+                    {PROVIDER_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </label>
 
-              <label className="block">
-                <span className="mb-1 block text-xs uppercase tracking-[0.12em] text-sky-200/90">AI Creativity Tier</span>
-                <select
-                  value={draftAiTier}
-                  disabled={!activeKey.isActive}
-                  onChange={(event) => {
-                    const next = event.target.value as AiTier;
-                    setDraftAiTier(next);
-                    setDraftDirty(true);
-                    setApiKeys((current) =>
-                      current.map((item) => (item.id === activeKey.id ? { ...item, aiTier: next } : item)),
-                    );
-                  }}
-                  className="w-full rounded-xl border border-sky-200/30 bg-[#06152a] px-3 py-2 text-sm text-sky-50 outline-none focus:border-sky-300"
-                >
-                  {TIER_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                {/* Tier */}
+                <div>
+                  <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+                    Creativity Tier
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+                    {TIER_OPTIONS.map((tier) => {
+                      const active = draftAiTier === tier.value;
+                      return (
+                        <button
+                          key={tier.value}
+                          id={`tier-${tier.value.toLowerCase()}`}
+                          type="button"
+                          disabled={!activeKey.isActive}
+                          onClick={() => {
+                            setDraftAiTier(tier.value);
+                            setDraftDirty(true);
+                            setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiTier: tier.value } : item)));
+                          }}
+                          style={{
+                            padding: "0.65rem 0.75rem",
+                            borderRadius: 9,
+                            border: active ? "1.5px solid rgba(252,6,148,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                            background: active ? "rgba(252,6,148,0.1)" : "rgba(255,255,255,0.03)",
+                            color: active ? "#fc0694" : "rgba(240,242,255,0.55)",
+                            cursor: activeKey.isActive ? "pointer" : "not-allowed",
+                            fontFamily: "inherit", textAlign: "left",
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          <p style={{ fontSize: "0.8rem", fontWeight: active ? 700 : 600 }}>{tier.label}</p>
+                          <p style={{ fontSize: "0.68rem", color: active ? "rgba(252,6,148,0.7)" : "rgba(240,242,255,0.3)" }}>{tier.desc}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
 
-              {saving ? <p className="text-xs text-sky-300">Saving...</p> : null}
-              {saveNotice ? <p className="text-xs text-emerald-300">{saveNotice}</p> : null}
-              {saveError ? <p className="text-xs text-rose-300">{saveError}</p> : null}
-            </div>
-          )}
-        </article>
+                {/* Status */}
+                {saving && <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)" }}>Saving…</p>}
+                {saveNotice && <p style={{ fontSize: "0.78rem", color: "#34d399" }}>{saveNotice}</p>}
+                {saveError && <p style={{ fontSize: "0.78rem", color: "#f87171" }}>{saveError}</p>}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {generatedRawKey ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-[#02060fcc] p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-cyan-200/25 bg-[#061122] p-5 shadow-2xl">
-            <h3 className="font-[var(--font-heading)] text-xl text-sky-50">Secure API Key Reveal</h3>
-            <p className="mt-2 text-sm text-sky-100/75">
-              This is the only time the full key will be shown. Copy and store it securely now.
+      {/* ── RAW KEY MODAL ───────────────────────── */}
+      {generatedRawKey && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="key-modal-title"
+          style={{
+            position: "fixed", inset: 0, zIndex: 50,
+            display: "grid", placeItems: "center",
+            background: "rgba(0,0,0,0.75)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            padding: "1rem",
+          }}
+        >
+          <div style={{
+            width: "min(100%,480px)",
+            background: "#0d0f1a",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 20, padding: "1.75rem",
+            boxShadow: "0 30px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(252,6,148,0.08)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.5rem" }}>
+              <div style={{
+                width: 34, height: 34, borderRadius: 9,
+                background: "rgba(252,6,148,0.1)", border: "1px solid rgba(252,6,148,0.25)",
+                display: "grid", placeItems: "center", color: "#fc0694",
+              }}>
+                <IconKey />
+              </div>
+              <h3 id="key-modal-title" style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff" }}>
+                Your New API Key
+              </h3>
+            </div>
+            <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.45)", marginBottom: "1.25rem" }}>
+              This is the only time the full key will be shown. Copy and store it securely.
             </p>
 
-            <div className="mt-4 rounded-xl border border-cyan-300/30 bg-sky-950/70 px-3 py-3 font-mono text-sm text-cyan-200">
+            <div style={{
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(252,6,148,0.2)",
+              borderRadius: 10, padding: "0.9rem 1rem",
+              fontFamily: "monospace", fontSize: "0.82rem",
+              color: "#fc0694", wordBreak: "break-all",
+              marginBottom: "1.25rem",
+            }}>
               {generatedRawKey}
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div style={{ display: "flex", gap: "0.75rem" }}>
               <button
+                id="copy-key-btn"
                 type="button"
                 onClick={() => void copyRawKey()}
-                className="rounded-xl bg-cyan-300 px-3 py-2 text-sm font-semibold text-slate-900"
+                style={{
+                  flex: 1,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+                  padding: "0.7rem",
+                  borderRadius: 9, border: "none", cursor: "pointer",
+                  background: copied ? "rgba(52,211,153,0.15)" : "linear-gradient(135deg,#fc0694,#d4057d)",
+                  color: copied ? "#34d399" : "#fff",
+                  fontFamily: "inherit", fontSize: "0.875rem", fontWeight: 700,
+                  transition: "all 0.2s",
+                }}
               >
-                {copied ? "Copied" : "Copy to Clipboard"}
+                {copied ? <IconCheck /> : <IconCopy />}
+                {copied ? "Copied!" : "Copy to Clipboard"}
               </button>
               <button
                 type="button"
-                onClick={closeModal}
-                className="rounded-xl border border-sky-200/35 px-3 py-2 text-sm font-semibold text-sky-100"
+                onClick={() => { setGeneratedRawKey(null); setCopied(false); }}
+                style={{
+                  padding: "0.7rem 1.1rem",
+                  borderRadius: 9,
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  background: "transparent", color: "rgba(240,242,255,0.65)",
+                  cursor: "pointer", fontFamily: "inherit", fontSize: "0.875rem", fontWeight: 600,
+                }}
               >
                 Close
               </button>
             </div>
           </div>
         </div>
-      ) : null}
-    </section>
+      )}
+    </>
   );
 }
