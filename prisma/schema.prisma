@@ -47,7 +47,7 @@ model ApiKey {
   hashedKey String
   maskedKey String
   useAi     Boolean   @default(false)
-  aiModel   String    @default("gpt-4o")
+  aiModel   String    @default("openai")
   aiTier    AiTier    @default(AUTO)
   isActive  Boolean   @default(true)
   createdAt DateTime  @default(now())

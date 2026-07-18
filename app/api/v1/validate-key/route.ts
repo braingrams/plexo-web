@@ -34,7 +34,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     let subscriptionPlan = "ULTRA";
     let useAi = false;
-    let aiModel = "gpt-4o";
+    let aiModel = "openai";
     let aiTier = "AUTO";
 
     if (rawKey === "workspace-internal") {
