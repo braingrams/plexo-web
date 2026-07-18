@@ -42,14 +42,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       },
       select: {
         id: true,
+        userId: true,
         useAi: true,
         aiModel: true,
         aiTier: true,
-        user: {
-          select: {
-            subscriptionPlan: true,
-          },
-        },
       },
     });
 
@@ -60,6 +56,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
+    // Fetch the owner's subscription plan separately to avoid nested-select type issues
+    const user = await prisma.user.findUnique({
+      where: { id: apiKey.userId },
+      select: { subscriptionPlan: true },
+    });
+
     // Touch lastUsedAt so we can track active SDK sessions
     await prisma.apiKey.update({
       where: { id: apiKey.id },
@@ -68,7 +70,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({
       valid: true,
-      plan: apiKey.user.subscriptionPlan,  // "FREE" | "PRO" | "ULTRA"
+      plan: user?.subscriptionPlan ?? "ULTRA",  // "FREE" | "PRO" | "ULTRA"
       useAi: apiKey.useAi,
       aiModel: apiKey.aiModel,
       aiTier: apiKey.aiTier,
