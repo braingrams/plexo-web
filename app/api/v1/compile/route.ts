@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 
-import { compileToHTML, parseJsonToTargetFormat, type TemplateJSON } from "@plexobuilder/sdk";
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/server/prisma";
@@ -9,7 +8,7 @@ type CompileTargetType = "landing_page" | "email";
 
 type BuilderCompilePayload = {
   targetType?: CompileTargetType;
-  template?: TemplateJSON;
+  template?: any;
   source?: string;
   mjml?: string;
   payload?: string;
@@ -73,13 +72,13 @@ function tierLabel(tier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH"): string {
   }
 }
 
-function isTemplateJson(value: unknown): value is TemplateJSON {
+function isTemplateJson(value: unknown): boolean {
   return (
     typeof value === "object" &&
     value !== null &&
     "body" in value &&
-    typeof (value as TemplateJSON).body === "object" &&
-    (value as TemplateJSON).body !== null
+    typeof (value as any).body === "object" &&
+    (value as any).body !== null
   );
 }
 
@@ -99,12 +98,13 @@ async function parseCompileRequest(request: NextRequest): Promise<ParsedCompileR
 
     if (isTemplateJson(payload.template)) {
       const targetType = payload.targetType === "email" ? "email" : "landing_page";
+      const { compileToHTML, parseJsonToTargetFormat } = await import("@plexobuilder/sdk");
 
       if (targetType === "landing_page") {
-        return { kind: "html", html: compileToHTML(payload.template) };
+        return { kind: "html", html: compileToHTML(payload.template as any) };
       }
 
-      return { kind: "mjml", mjml: parseJsonToTargetFormat(payload.template, "email") };
+      return { kind: "mjml", mjml: parseJsonToTargetFormat(payload.template as any, "email") };
     }
 
     if (typeof payload.mjml === "string" && payload.mjml.trim()) {
