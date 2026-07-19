@@ -1,8 +1,23 @@
 import { createHash } from "node:crypto";
 
+import { compileToHTML, parseJsonToTargetFormat, type TemplateJSON } from "@plexobuilder/sdk";
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/server/prisma";
+
+type CompileTargetType = "landing_page" | "email";
+
+type BuilderCompilePayload = {
+  targetType?: CompileTargetType;
+  template?: TemplateJSON;
+  source?: string;
+  mjml?: string;
+  payload?: string;
+};
+
+type ParsedCompileRequest =
+  | { kind: "html"; html: string }
+  | { kind: "mjml"; mjml: string };
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -58,32 +73,63 @@ function tierLabel(tier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH"): string {
   }
 }
 
-async function parseMjmlBody(request: NextRequest): Promise<string | null> {
+function isTemplateJson(value: unknown): value is TemplateJSON {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "body" in value &&
+    typeof (value as TemplateJSON).body === "object" &&
+    (value as TemplateJSON).body !== null
+  );
+}
+
+async function parseCompileRequest(request: NextRequest): Promise<ParsedCompileRequest | null> {
   const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
 
   if (contentType.includes("application/json")) {
-    const payload = (await request.json().catch(() => null)) as
-      | { mjml?: string; payload?: string }
-      | string
-      | null;
+    const payload = (await request.json().catch(() => null)) as BuilderCompilePayload | string | null;
 
-    if (typeof payload === "string") {
-      return payload;
+    if (typeof payload === "string" && payload.trim()) {
+      return { kind: "mjml", mjml: payload };
     }
 
-    if (payload && typeof payload.mjml === "string") {
-      return payload.mjml;
+    if (!payload || typeof payload !== "object") {
+      return null;
     }
 
-    if (payload && typeof payload.payload === "string") {
-      return payload.payload;
+    if (isTemplateJson(payload.template)) {
+      const targetType = payload.targetType === "email" ? "email" : "landing_page";
+
+      if (targetType === "landing_page") {
+        return { kind: "html", html: compileToHTML(payload.template) };
+      }
+
+      return { kind: "mjml", mjml: parseJsonToTargetFormat(payload.template, "email") };
+    }
+
+    if (typeof payload.mjml === "string" && payload.mjml.trim()) {
+      return { kind: "mjml", mjml: payload.mjml };
+    }
+
+    if (typeof payload.payload === "string" && payload.payload.trim()) {
+      return { kind: "mjml", mjml: payload.payload };
     }
 
     return null;
   }
 
-  const rawText = await request.text().catch(() => "");
-  return rawText || null;
+  const rawText = (await request.text().catch(() => "")).trim();
+  return rawText ? { kind: "mjml", mjml: rawText } : null;
+}
+
+async function compileParsedRequest(parsed: ParsedCompileRequest): Promise<string> {
+  if (parsed.kind === "html") {
+    return parsed.html;
+  }
+
+  const { default: mjml2html } = await import("mjml");
+  const compileResult = mjml2html(parsed.mjml, { validationLevel: "soft" });
+  return compileResult.html;
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -99,13 +145,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     // Allow compile without a real API key record
-    const mjmlString = await parseMjmlBody(clonedRequest);
-    if (!mjmlString || !mjmlString.trim()) {
-      return NextResponse.json({ error: "MJML payload is required." }, { status: 400 });
+    const parsedRequest = await parseCompileRequest(clonedRequest);
+    if (!parsedRequest) {
+      return NextResponse.json(
+        { error: "Compile payload is required (MJML string or builder template JSON)." },
+        { status: 400 },
+      );
     }
-    const { default: mjml2html } = await import("mjml");
-    const compileResult = mjml2html(mjmlString, { validationLevel: "soft" });
-    return NextResponse.json({ html: compileResult.html, errors: [] });
+
+    const html = await compileParsedRequest(parsedRequest);
+    return NextResponse.json({ html, errors: [] });
   }
 
   // ── Path 2: API key via Bearer token ────────────────────────────────────
@@ -134,18 +183,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const mjmlString = await parseMjmlBody(clonedRequest);
-  if (!mjmlString || !mjmlString.trim()) {
-    return NextResponse.json({ error: "MJML payload is required." }, { status: 400 });
+  const parsedRequest = await parseCompileRequest(clonedRequest);
+  if (!parsedRequest) {
+    return NextResponse.json(
+      { error: "Compile payload is required (MJML string or builder template JSON)." },
+      { status: 400 },
+    );
   }
 
-  const { default: mjml2html } = await import("mjml");
-
-  const compileResult = mjml2html(mjmlString, {
-    validationLevel: "soft",
-  });
-
-  let compiledHtmlString = compileResult.html;
+  let compiledHtmlString = await compileParsedRequest(parsedRequest);
 
   if (apiKey.useAi) {
     const signature = `<!-- Optimized via Plexo AI Proxy Provider: ${providerLabel(apiKey.aiProvider)} | Tier: ${tierLabel(apiKey.aiTier)} -->`;
