@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -55,10 +55,10 @@ export function SdkClient({ initialKeys }: Props) {
   const selectedKey = initialKeys.find((k) => k.id === selectedKeyId);
   const keyValue = selectedKey ? `${selectedKey.maskedKey} (active)` : "YOUR_PLEXO_API_KEY";
 
-  const installCode = `npm install @plexo/sdk`;
+  const installCode = `npm install @plexobuilder/sdk`;
 
   const reactCode = `import React, { useRef } from 'react';
-import { PlexoBuilder, type PlexoBuilderRef } from '@plexo/sdk';
+import { PlexoBuilder, type PlexoBuilderRef } from '@plexobuilder/sdk';
 
 export default function MyBuilderPage() {
   const builderRef = useRef<PlexoBuilderRef>(null);
@@ -82,7 +82,7 @@ export default function MyBuilderPage() {
         ref={builderRef}
         apiKey="${keyValue}"
         mode="email" // or 'landing_page'
-        themeBgColor="#fc0694"
+        themeBgColor="var(--brand)"
         textColor="#ffffff"
         useAi={true}
       />
@@ -91,7 +91,7 @@ export default function MyBuilderPage() {
   );
 }`;
 
-  const nodeCode = `import { compileToHTML, compileToPlainText } from '@plexo/sdk';
+  const nodeCode = `import { compileToHTML, compileToPlainText } from '@plexobuilder/sdk';
 
 // 1. Fetch template JSON configuration from your db
 const template = await db.templates.findUnique({ where: { id: '...' } });
@@ -113,7 +113,7 @@ const text = compileToPlainText(template.designJson);
     <>
       {/* Header */}
       <div style={{ marginBottom: "2rem" }}>
-        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#fc0694", marginBottom: "0.35rem" }}>
+        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.35rem" }}>
           Integration
         </p>
         <h1 style={{
@@ -140,7 +140,7 @@ const text = compileToPlainText(template.designJson);
         {initialKeys.length === 0 ? (
           <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.45)" }}>
             No active API keys found. Visit the{" "}
-            <Link href="/dashboard/settings" style={{ color: "#fc0694", fontWeight: 600, textDecoration: "none" }}>
+            <Link href="/dashboard/settings" style={{ color: "var(--brand)", fontWeight: 600, textDecoration: "none" }}>
               Developer Settings
             </Link>
             {" "}page to generate a key first.
@@ -176,7 +176,7 @@ const text = compileToPlainText(template.designJson);
         }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
             <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <span style={{ color: "#fc0694" }}><IconTerminal /></span>
+              <span style={{ color: "var(--brand)" }}><IconTerminal /></span>
               Step 1: Install Package
             </h3>
             <button
@@ -195,7 +195,7 @@ const text = compileToPlainText(template.designJson);
           <pre style={{
             background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255,255,255,0.06)",
             borderRadius: 10, padding: "0.9rem 1.1rem", fontFamily: "monospace", fontSize: "0.85rem",
-            color: "#fc0694", overflowX: "auto",
+            color: "var(--brand)", overflowX: "auto",
           }}>
             {installCode}
           </pre>
@@ -267,8 +267,8 @@ const text = compileToPlainText(template.designJson);
 
         {/* Documentation links */}
         <div style={{
-          background: "linear-gradient(135deg, rgba(252,6,148,0.08) 0%, rgba(100,50,255,0.06) 100%)",
-          border: "1px solid rgba(252,6,148,0.15)", borderRadius: 16, padding: "1.5rem",
+          background: "linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(100,50,255,0.06) 100%)",
+          border: "1px solid rgba(139,92,246,0.15)", borderRadius: 16, padding: "1.5rem",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap",
         }}>
           <div>

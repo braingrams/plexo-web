@@ -87,6 +87,28 @@ async function parseMjmlBody(request: NextRequest): Promise<string | null> {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  // Clone request before consuming body (body can only be read once)
+  const clonedRequest = request.clone() as NextRequest;
+
+  // ── Path 1: workspace-internal (dashboard session) ──────────────────────
+  const xApiKey = request.headers.get("x-api-key")?.trim();
+  if (xApiKey === "workspace-internal") {
+    const { auth } = await import("@/server/auth");
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    // Allow compile without a real API key record
+    const mjmlString = await parseMjmlBody(clonedRequest);
+    if (!mjmlString || !mjmlString.trim()) {
+      return NextResponse.json({ error: "MJML payload is required." }, { status: 400 });
+    }
+    const { default: mjml2html } = await import("mjml");
+    const compileResult = mjml2html(mjmlString, { validationLevel: "soft" });
+    return NextResponse.json({ html: compileResult.html, errors: [] });
+  }
+
+  // ── Path 2: API key via Bearer token ────────────────────────────────────
   const bearerToken = parseBearerToken(request.headers.get("authorization"));
 
   if (!bearerToken) {
@@ -112,7 +134,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const mjmlString = await parseMjmlBody(request);
+  const mjmlString = await parseMjmlBody(clonedRequest);
   if (!mjmlString || !mjmlString.trim()) {
     return NextResponse.json({ error: "MJML payload is required." }, { status: 400 });
   }

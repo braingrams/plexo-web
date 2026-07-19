@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 
 function IconArrowLeft() {
   return (
@@ -38,7 +38,7 @@ function PlexoLogo() {
     <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", textDecoration: "none" }}>
       <div style={{
         width: 32, height: 32, borderRadius: 8,
-        background: "linear-gradient(135deg, #fc0694, #d4057d)",
+        background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
         display: "grid", placeItems: "center",
         boxShadow: "0 0 16px rgba(252,6,148,0.45)",
       }}>
@@ -101,14 +101,14 @@ export default function PublicSdkPage() {
           <div aria-hidden style={{
             position: "absolute", top: "-30%", left: "50%", transform: "translateX(-50%)",
             width: 700, height: 350, borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(252,6,148,0.1) 0%, transparent 70%)",
+            background: "radial-gradient(circle, var(--brand-subtle) 0%, transparent 70%)",
             filter: "blur(60px)", pointerEvents: "none", zIndex: -1,
           }} />
 
           <span style={{
-            background: "rgba(252,6,148,0.1)", border: "1px solid rgba(252,6,148,0.25)",
+            background: "var(--brand-subtle)", border: "1px solid rgba(139,92,246,0.25)",
             borderRadius: 999, padding: "0.35rem 1rem", fontSize: "0.73rem", fontWeight: 700,
-            color: "#fc0694", textTransform: "uppercase", letterSpacing: "0.1em", display: "inline-block",
+            color: "var(--brand)", textTransform: "uppercase", letterSpacing: "0.1em", display: "inline-block",
             marginBottom: "1.5rem",
           }}>
             Developer SDK Documentation
@@ -128,7 +128,7 @@ export default function PublicSdkPage() {
             maxWidth: 640, margin: "0 auto", lineHeight: 1.7,
           }}>
             The{" "}
-            <code style={{ fontFamily: "monospace", color: "#fc0694", fontSize: "0.95rem" }}>@plexo/sdk</code>
+            <code style={{ fontFamily: "monospace", color: "#8b5cf6", fontSize: "0.95rem" }}>@plexobuilder/sdk</code>
             {" "}npm package lets you embed the drag-and-drop builder directly in your React pages,
             compile templates to production-ready HTML, and configure AI provider routing.
           </p>
@@ -143,16 +143,16 @@ export default function PublicSdkPage() {
             fontFamily: "var(--font-heading), sans-serif", fontSize: "1.25rem", fontWeight: 700,
             color: "#f0f2ff", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem",
           }}>
-            <span style={{ color: "#fc0694" }}><IconTerminal /></span>
+            <span style={{ color: "var(--brand)" }}><IconTerminal /></span>
             1. Installation
           </h2>
           <div style={{
             background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255,255,255,0.06)",
             borderRadius: 10, padding: "1rem 1.25rem", fontFamily: "monospace", fontSize: "0.9rem",
-            color: "#fc0694", overflowX: "auto",
+            color: "var(--brand)", overflowX: "auto",
           }}>
             <span style={{ color: "rgba(240,242,255,0.4)" }}># Install the Plexo SDK package</span><br />
-            npm install @plexo/sdk
+            npm install @plexobuilder/sdk
           </div>
         </section>
 
@@ -172,7 +172,7 @@ export default function PublicSdkPage() {
             </h2>
             <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.5)", marginBottom: "1.25rem", lineHeight: 1.6 }}>
               Place the{" "}
-              <code style={{ fontFamily: "monospace", color: "#fc0694", fontSize: "0.82rem" }}>{"<PlexoBuilder />"}</code>
+              <code style={{ fontFamily: "monospace", color: "var(--brand)", fontSize: "0.82rem" }}>{"<PlexoBuilder />"}</code>
               {" "}component inside any React component page to give your users a premium visual editing workspace. Pass an API key to load their subscription tier settings automatically.
             </p>
             <pre style={{
@@ -181,7 +181,7 @@ export default function PublicSdkPage() {
               color: "rgba(240,242,255,0.85)", overflowX: "auto", lineHeight: 1.5,
             }}>
 {`import React, { useRef } from 'react';
-import { PlexoBuilder, type PlexoBuilderRef } from '@plexo/sdk';
+import { PlexoBuilder, type PlexoBuilderRef } from '@plexobuilder/sdk';
 
 export default function TemplateEditor() {
   const builderRef = useRef<PlexoBuilderRef>(null);
@@ -205,7 +205,7 @@ export default function TemplateEditor() {
         ref={builderRef}
         apiKey="YOUR_PLEXO_API_KEY"
         mode="email" // or 'landing_page'
-        themeBgColor="#fc0694"
+        themeBgColor="var(--brand)"
         textColor="#ffffff"
         useAi={true} // Enable AI copilot support
       />
@@ -235,7 +235,7 @@ export default function TemplateEditor() {
               borderRadius: 10, padding: "1.25rem", fontFamily: "monospace", fontSize: "0.82rem",
               color: "rgba(240,242,255,0.85)", overflowX: "auto", lineHeight: 1.5,
             }}>
-{`import { compileToHTML, compileToPlainText } from '@plexo/sdk';
+{`import { compileToHTML, compileToPlainText } from '@plexobuilder/sdk';
 
 // Fetch the saved JSON design configuration from your database
 const templateJson = await db.templates.findUnique({ where: { id: '...' } });
@@ -268,7 +268,7 @@ const plainText = compileToPlainText(templateJson.designJson);
               "Full TypeScript typing interfaces for all JSON models",
             ].map((cap, i) => (
               <div key={i} className="glass-card" style={{ padding: "1.25rem", display: "flex", gap: "0.75rem", alignItems: "flex-start" }}>
-                <span style={{ color: "#fc0694", flexShrink: 0, marginTop: 2 }}>
+                <span style={{ color: "var(--brand)", flexShrink: 0, marginTop: 2 }}>
                   <IconCheck />
                 </span>
                 <span style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.7)", lineHeight: 1.5 }}>
@@ -281,8 +281,8 @@ const plainText = compileToPlainText(templateJson.designJson);
 
         {/* CTA */}
         <section style={{
-          background: "linear-gradient(135deg, rgba(252,6,148,0.08) 0%, rgba(100,50,255,0.06) 100%)",
-          border: "1px solid rgba(252,6,148,0.15)", borderRadius: 20, padding: "3rem 1.5rem",
+          background: "linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(100,50,255,0.06) 100%)",
+          border: "1px solid rgba(139,92,246,0.15)", borderRadius: 20, padding: "3rem 1.5rem",
           textAlign: "center",
         }}>
           <h2 style={{
@@ -326,9 +326,9 @@ const plainText = compileToPlainText(templateJson.designJson);
             <div style={{ display: "flex", alignItems: "center", gap: "0.55rem" }}>
               <div style={{
                 width: 28, height: 28, borderRadius: 7,
-                background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
                 display: "grid", placeItems: "center",
-                boxShadow: "0 0 12px rgba(252,6,148,0.35)",
+                boxShadow: "0 0 12px var(--brand-glow)",
                 flexShrink: 0,
               }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none">

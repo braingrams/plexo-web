@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useState } from "react";
 
@@ -19,7 +19,7 @@ type Props = {
 
 const PLAN_COLORS: Record<string, { bg: string; color: string; border: string }> = {
   FREE: { bg: "rgba(255,255,255,0.06)", color: "rgba(240,242,255,0.55)", border: "rgba(255,255,255,0.1)" },
-  PRO: { bg: "rgba(252,6,148,0.1)", color: "#fc0694", border: "rgba(252,6,148,0.25)" },
+  PRO: { bg: "var(--brand-subtle)", color: "var(--brand)", border: "rgba(139,92,246,0.25)" },
   ULTRA: { bg: "rgba(129,140,248,0.1)", color: "#818cf8", border: "rgba(129,140,248,0.25)" },
 };
 
@@ -104,7 +104,7 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
     <div style={{ padding: "2rem 1.75rem", maxWidth: 1500, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ marginBottom: "2rem" }}>
-        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#fc0694", marginBottom: "0.35rem" }}>
+        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.35rem" }}>
           Account
         </p>
         <h1 style={{
@@ -130,11 +130,11 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
         {/* Avatar */}
         <div style={{
           width: 72, height: 72, borderRadius: "50%",
-          background: "linear-gradient(135deg,#fc0694,#d4057d)",
+          background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
           display: "grid", placeItems: "center",
           fontSize: "1.5rem", fontWeight: 800, color: "#fff",
           fontFamily: "var(--font-heading), sans-serif",
-          boxShadow: "0 0 28px rgba(252,6,148,0.4)",
+          boxShadow: "0 0 28px rgba(139,92,246,0.4)",
           flexShrink: 0,
           letterSpacing: "-0.02em",
         }}>
@@ -222,8 +222,8 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
                   transition: "border-color 0.15s, box-shadow 0.15s",
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = "rgba(252,6,148,0.5)";
-                  e.target.style.boxShadow = "0 0 0 3px rgba(252,6,148,0.12)";
+                  e.target.style.borderColor = "rgba(139,92,246,0.5)";
+                  e.target.style.boxShadow = "0 0 0 3px rgba(139,92,246,0.12)";
                 }}
                 onBlur={(e) => {
                   e.target.style.borderColor = "rgba(255,255,255,0.1)";
@@ -287,10 +287,10 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
                   borderRadius: 10, border: "none",
                   cursor: saving || draft.trim() === name ? "not-allowed" : "pointer",
                   fontSize: "0.875rem", fontWeight: 700,
-                  background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                  background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
                   color: "#fff",
                   opacity: saving || draft.trim() === name ? 0.6 : 1,
-                  boxShadow: saving || draft.trim() === name ? "none" : "0 4px 16px rgba(252,6,148,0.35)",
+                  boxShadow: saving || draft.trim() === name ? "none" : "0 4px 16px var(--brand-glow)",
                   fontFamily: "inherit",
                   transition: "opacity 0.15s, box-shadow 0.15s",
                 }}

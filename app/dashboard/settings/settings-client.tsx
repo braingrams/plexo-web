@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -304,7 +304,7 @@ export function SettingsClient({ initialApiKeys }: Props) {
     <>
       {/* Header */}
       <div style={{ marginBottom: "2rem" }}>
-        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#fc0694", marginBottom: "0.35rem" }}>
+        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.35rem" }}>
           Developer
         </p>
         <h1 style={{
@@ -335,8 +335,8 @@ export function SettingsClient({ initialApiKeys }: Props) {
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
               <div style={{
                 width: 34, height: 34, borderRadius: 9,
-                background: "rgba(252,6,148,0.1)", border: "1px solid rgba(252,6,148,0.2)",
-                display: "grid", placeItems: "center", color: "#fc0694",
+                background: "var(--brand-subtle)", border: "1px solid rgba(139,92,246,0.2)",
+                display: "grid", placeItems: "center", color: "var(--brand)",
               }}>
                 <IconKey />
               </div>
@@ -359,9 +359,9 @@ export function SettingsClient({ initialApiKeys }: Props) {
                 padding: "0.55rem 1rem",
                 borderRadius: 9, border: "none", cursor: isGenerating ? "not-allowed" : "pointer",
                 fontSize: "0.8rem", fontWeight: 700,
-                background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
                 color: "#fff", opacity: isGenerating ? 0.7 : 1,
-                boxShadow: "0 3px 14px rgba(252,6,148,0.3)",
+                boxShadow: "0 3px 14px var(--brand-glow)",
                 fontFamily: "inherit",
               }}
             >
@@ -399,7 +399,7 @@ export function SettingsClient({ initialApiKeys }: Props) {
                       key={item.id}
                       style={{
                         borderBottom: "1px solid rgba(255,255,255,0.04)",
-                        background: activeKeyId === item.id ? "rgba(252,6,148,0.04)" : "transparent",
+                        background: activeKeyId === item.id ? "var(--brand-subtle)" : "transparent",
                         transition: "background 0.15s",
                       }}
                     >
@@ -410,7 +410,7 @@ export function SettingsClient({ initialApiKeys }: Props) {
                           style={{
                             background: "none", border: "none", cursor: "pointer",
                             fontFamily: "inherit", fontSize: "0.875rem",
-                            fontWeight: 600, color: activeKeyId === item.id ? "#fc0694" : "#f0f2ff",
+                            fontWeight: 600, color: activeKeyId === item.id ? "var(--brand)" : "#f0f2ff",
                             textAlign: "left", padding: 0,
                           }}
                         >
@@ -524,8 +524,8 @@ export function SettingsClient({ initialApiKeys }: Props) {
                       position: "relative",
                       width: 44, height: 24,
                       borderRadius: 999,
-                      background: draftUseAi ? "#fc0694" : "rgba(255,255,255,0.1)",
-                      border: draftUseAi ? "1px solid #fc0694" : "1px solid rgba(255,255,255,0.12)",
+                      background: draftUseAi ? "var(--brand)" : "rgba(255,255,255,0.1)",
+                      border: draftUseAi ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.12)",
                       cursor: activeKey.isActive ? "pointer" : "not-allowed",
                       opacity: activeKey.isActive ? 1 : 0.5,
                       transition: "background 0.2s, border-color 0.2s",
@@ -629,13 +629,13 @@ export function SettingsClient({ initialApiKeys }: Props) {
             background: "#0d0f1a",
             border: "1px solid rgba(255,255,255,0.12)",
             borderRadius: 20, padding: "1.75rem",
-            boxShadow: "0 30px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(252,6,148,0.08)",
+            boxShadow: "0 30px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.08)",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.5rem" }}>
               <div style={{
                 width: 34, height: 34, borderRadius: 9,
-                background: "rgba(252,6,148,0.1)", border: "1px solid rgba(252,6,148,0.25)",
-                display: "grid", placeItems: "center", color: "#fc0694",
+                background: "var(--brand-subtle)", border: "1px solid rgba(139,92,246,0.25)",
+                display: "grid", placeItems: "center", color: "var(--brand)",
               }}>
                 <IconKey />
               </div>
@@ -649,10 +649,10 @@ export function SettingsClient({ initialApiKeys }: Props) {
 
             <div style={{
               background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(252,6,148,0.2)",
+              border: "1px solid rgba(139,92,246,0.2)",
               borderRadius: 10, padding: "0.9rem 1rem",
               fontFamily: "monospace", fontSize: "0.82rem",
-              color: "#fc0694", wordBreak: "break-all",
+              color: "var(--brand)", wordBreak: "break-all",
               marginBottom: "1.25rem",
             }}>
               {generatedRawKey}
@@ -668,7 +668,7 @@ export function SettingsClient({ initialApiKeys }: Props) {
                   display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
                   padding: "0.7rem",
                   borderRadius: 9, border: "none", cursor: "pointer",
-                  background: copied ? "rgba(52,211,153,0.15)" : "linear-gradient(135deg,#fc0694,#d4057d)",
+                  background: copied ? "rgba(52,211,153,0.15)" : "linear-gradient(135deg,var(--brand),var(--brand-deep))",
                   color: copied ? "#34d399" : "#fff",
                   fontFamily: "inherit", fontSize: "0.875rem", fontWeight: 700,
                   transition: "all 0.2s",

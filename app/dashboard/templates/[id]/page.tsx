@@ -1,12 +1,12 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import type { TemplateJSON } from "@plexo/sdk";
+import type { TemplateJSON } from "@plexobuilder/sdk";
 
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { getTierFeatures } from "@/lib/subscription";
 
-import { TemplateEditorClient } from "./template-editor-client";
+import { TemplateEditorDynamic } from "./template-editor-dynamic";
 
 function isTemplateJson(value: unknown): value is TemplateJSON {
   if (typeof value !== "object" || value === null) {
@@ -87,7 +87,7 @@ export default async function TemplateEditorPage(
   const tierFeatures = getTierFeatures(user?.subscriptionPlan);
 
   return (
-    <TemplateEditorClient
+    <TemplateEditorDynamic
       templateId={template.id}
       templateName={template.name}
       templateKind={template.kind}

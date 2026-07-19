@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -145,7 +145,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
     <div style={{ padding: "2rem 1.75rem", maxWidth: 1500, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ marginBottom: "2rem" }}>
-        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#fc0694", marginBottom: "0.35rem" }}>
+        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.35rem" }}>
           Workspace
         </p>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
@@ -165,9 +165,9 @@ export function TemplatesClient({ initialTemplates }: Props) {
               display: "inline-flex", alignItems: "center", gap: "0.5rem",
               padding: "0.65rem 1.2rem",
               borderRadius: 10, fontWeight: 700, fontSize: "0.875rem",
-              background: "linear-gradient(135deg,#fc0694,#d4057d)",
+              background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
               color: "#fff", border: "none", cursor: "pointer",
-              boxShadow: "0 4px 20px rgba(252,6,148,0.35)",
+              boxShadow: "0 4px 20px var(--brand-glow)",
               transition: "opacity 0.15s, box-shadow 0.15s",
               fontFamily: "inherit",
             }}
@@ -202,8 +202,8 @@ export function TemplatesClient({ initialTemplates }: Props) {
                   padding: "0.4rem 0.9rem",
                   borderRadius: 8, border: "none", cursor: "pointer",
                   fontSize: "0.8rem", fontWeight: active ? 700 : 500,
-                  background: active ? "rgba(252,6,148,0.15)" : "transparent",
-                  color: active ? "#fc0694" : "rgba(240,242,255,0.5)",
+                  background: active ? "rgba(139,92,246,0.15)" : "transparent",
+                  color: active ? "var(--brand)" : "rgba(240,242,255,0.5)",
                   transition: "background 0.15s, color 0.15s",
                   fontFamily: "inherit",
                 }}
@@ -263,8 +263,8 @@ export function TemplatesClient({ initialTemplates }: Props) {
                 }}
                 onMouseEnter={(e) => {
                   const el = e.currentTarget;
-                  el.style.borderColor = "rgba(252,6,148,0.3)";
-                  el.style.boxShadow = "0 8px 32px rgba(252,6,148,0.1)";
+                  el.style.borderColor = "var(--brand-glow)";
+                  el.style.boxShadow = "0 8px 32px var(--brand-subtle)";
                   el.style.transform = "translateY(-2px)";
                 }}
                 onMouseLeave={(e) => {
@@ -278,11 +278,11 @@ export function TemplatesClient({ initialTemplates }: Props) {
                 <div style={{
                   height: 120,
                   background: isEmail
-                    ? "linear-gradient(135deg,rgba(252,6,148,0.12) 0%,rgba(252,6,148,0.03) 100%)"
+                    ? "linear-gradient(135deg,rgba(139,92,246,0.12) 0%,rgba(252,6,148,0.03) 100%)"
                     : "linear-gradient(135deg,rgba(129,140,248,0.12) 0%,rgba(129,140,248,0.03) 100%)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   borderBottom: "1px solid rgba(255,255,255,0.05)",
-                  color: isEmail ? "#fc0694" : "#818cf8",
+                  color: isEmail ? "var(--brand)" : "#818cf8",
                 }}>
                   {isEmail ? <IconMail /> : <IconLayout />}
                   <div style={{
@@ -298,9 +298,9 @@ export function TemplatesClient({ initialTemplates }: Props) {
                     borderRadius: 999,
                     fontSize: "0.68rem", fontWeight: 700,
                     letterSpacing: "0.06em", textTransform: "uppercase",
-                    background: isEmail ? "rgba(252,6,148,0.1)" : "rgba(129,140,248,0.1)",
-                    color: isEmail ? "#fc0694" : "#818cf8",
-                    border: `1px solid ${isEmail ? "rgba(252,6,148,0.2)" : "rgba(129,140,248,0.2)"}`,
+                    background: isEmail ? "var(--brand-subtle)" : "rgba(129,140,248,0.1)",
+                    color: isEmail ? "var(--brand)" : "#818cf8",
+                    border: `1px solid ${isEmail ? "rgba(139,92,246,0.2)" : "rgba(129,140,248,0.2)"}`,
                     marginBottom: "0.6rem",
                   }}>
                     {isEmail ? <IconMail /> : <IconLayout />}
@@ -325,8 +325,8 @@ export function TemplatesClient({ initialTemplates }: Props) {
                       padding: "0.5rem 1rem",
                       borderRadius: 8, border: "none", cursor: "pointer",
                       fontSize: "0.8rem", fontWeight: 600,
-                      background: "rgba(252,6,148,0.1)",
-                      color: "#fc0694",
+                      background: "var(--brand-subtle)",
+                      color: "var(--brand)",
                       transition: "background 0.15s",
                       fontFamily: "inherit",
                     }}
@@ -349,11 +349,11 @@ export function TemplatesClient({ initialTemplates }: Props) {
         }}>
           <div style={{
             width: 52, height: 52, borderRadius: 14,
-            background: "rgba(252,6,148,0.08)",
-            border: "1px solid rgba(252,6,148,0.15)",
+            background: "rgba(139,92,246,0.08)",
+            border: "1px solid rgba(139,92,246,0.15)",
             display: "grid", placeItems: "center",
             margin: "0 auto 1rem",
-            color: "#fc0694",
+            color: "var(--brand)",
           }}>
             <IconMail />
           </div>
@@ -372,9 +372,9 @@ export function TemplatesClient({ initialTemplates }: Props) {
                 padding: "0.65rem 1.25rem",
                 borderRadius: 10, border: "none", cursor: "pointer",
                 fontSize: "0.875rem", fontWeight: 700,
-                background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
                 color: "#fff",
-                boxShadow: "0 4px 20px rgba(252,6,148,0.35)",
+                boxShadow: "0 4px 20px var(--brand-glow)",
                 fontFamily: "inherit",
               }}
             >
@@ -407,11 +407,11 @@ export function TemplatesClient({ initialTemplates }: Props) {
             border: "1px solid rgba(255,255,255,0.12)",
             borderRadius: 20,
             padding: "1.75rem",
-            boxShadow: "0 30px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(252,6,148,0.1)",
+            boxShadow: "0 30px 100px rgba(0,0,0,0.7), 0 0 0 1px var(--brand-subtle)",
           }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.25rem" }}>
               <div>
-                <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#fc0694", marginBottom: "0.3rem" }}>
+                <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.3rem" }}>
                   New Template
                 </p>
                 <h2 id="create-modal-title" style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.35rem", fontWeight: 800, color: "#f0f2ff" }}>
@@ -482,9 +482,9 @@ export function TemplatesClient({ initialTemplates }: Props) {
                         display: "flex", alignItems: "center", gap: "0.6rem",
                         padding: "0.75rem 1rem",
                         borderRadius: 10,
-                        border: active ? "1.5px solid rgba(252,6,148,0.5)" : "1px solid rgba(255,255,255,0.08)",
-                        background: active ? "rgba(252,6,148,0.1)" : "rgba(255,255,255,0.03)",
-                        color: active ? "#fc0694" : "rgba(240,242,255,0.55)",
+                        border: active ? "1.5px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                        background: active ? "var(--brand-subtle)" : "rgba(255,255,255,0.03)",
+                        color: active ? "var(--brand)" : "rgba(240,242,255,0.55)",
                         cursor: "pointer", fontFamily: "inherit",
                         fontWeight: active ? 600 : 500, fontSize: "0.875rem",
                         transition: "all 0.15s",
@@ -535,13 +535,13 @@ export function TemplatesClient({ initialTemplates }: Props) {
                   padding: "0.65rem 1.4rem",
                   borderRadius: 9,
                   border: "none",
-                  background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                  background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
                   color: "#fff",
                   cursor: isCreating ? "not-allowed" : "pointer",
                   opacity: isCreating ? 0.7 : 1,
                   fontFamily: "inherit",
                   fontSize: "0.875rem", fontWeight: 700,
-                  boxShadow: "0 4px 16px rgba(252,6,148,0.35)",
+                  boxShadow: "0 4px 16px var(--brand-glow)",
                 }}
               >
                 {isCreating ? "Creating…" : "Create Template"}

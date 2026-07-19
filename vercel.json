@@ -3,13 +3,15 @@
   "buildCommand": "npm run build",
   "installCommand": "npm install",
   "outputDirectory": ".next",
-  "regions": ["iad1"],
+  "regions": [
+    "iad1"
+  ],
   "env": {
-    "DATABASE_URL": "@database-url",
-    "BETTER_AUTH_SECRET": "@better-auth-secret",
-    "BETTER_AUTH_URL": "@better-auth-url",
-    "MAILDRIP_API_KEY": "@maildrip-api-key",
-    "MAILDRIP_API_URL": "@maildrip-api-url"
+    "DATABASE_URL": "postgresql://neondb_owner:npg_6QjNitYUFKL3@ep-raspy-poetry-aw9aerbc-pooler.c-12.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require&channel_binding=require",
+    "BETTER_AUTH_SECRET": "0RM+9KKc7P2DwO56B5iCTmxmNwzlIszyMKw4yCUtFEQ=",
+    "BETTER_AUTH_URL": "https://plexobuilder.vercel.app",
+    "MAILDRIP_API_KEY": "12cc180d-5850-4d7c-ab11-095d577962f4",
+    "MAILDRIP_API_URL": "https://api.maildrip.io/api/v1/emails/transaction"
   },
   "headers": [
     {

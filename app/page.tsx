@@ -375,7 +375,7 @@ export default function HomePage() {
               border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: 20,
               overflow: "hidden",
-              boxShadow: "0 40px 120px rgba(0,0,0,0.7), 0 0 0 1px rgba(252,6,148,0.08), 0 0 60px rgba(252,6,148,0.05)",
+              boxShadow: "0 40px 120px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.08), 0 0 60px rgba(139,92,246,0.05)",
               maxWidth: 900,
               margin: "4rem auto 0",
             }}>
@@ -407,23 +407,23 @@ export default function HomePage() {
                   background: "rgba(8,9,15,0.5)",
                 }}>
                   <div style={{ marginBottom: "1rem" }}>
-                    <div style={{ height: 8, borderRadius: 4, background: "rgba(252,6,148,0.3)", width: "60%", marginBottom: 6 }} />
+                    <div style={{ height: 8, borderRadius: 4, background: "rgba(139,92,246,0.3)", width: "60%", marginBottom: 6 }} />
                     <div style={{ height: 6, borderRadius: 4, background: "rgba(255,255,255,0.06)", width: "80%" }} />
                   </div>
                   {[...Array(5)].map((_, i) => (
                     <div key={i} style={{
                       display: "flex", alignItems: "center", gap: "0.5rem",
                       padding: "0.5rem 0.6rem", borderRadius: 8, marginBottom: 4,
-                      background: i === 0 ? "rgba(252,6,148,0.1)" : "transparent",
+                      background: i === 0 ? "rgba(139,92,246,0.1)" : "transparent",
                     }}>
                       <div style={{
                         width: 20, height: 20, borderRadius: 5,
-                        background: i === 0 ? "rgba(252,6,148,0.4)" : "rgba(255,255,255,0.06)",
+                        background: i === 0 ? "rgba(139,92,246,0.4)" : "rgba(255,255,255,0.06)",
                         flexShrink: 0,
                       }} />
                       <div style={{
                         height: 7, borderRadius: 4,
-                        background: i === 0 ? "rgba(252,6,148,0.5)" : "rgba(255,255,255,0.08)",
+                        background: i === 0 ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)",
                         width: `${[70,55,65,50,60][i]}%`,
                       }} />
                     </div>
@@ -439,10 +439,10 @@ export default function HomePage() {
                         borderRadius: 12, padding: "1rem",
                         height: 120,
                       }}>
-                        <div style={{ height: 8, borderRadius: 4, background: i % 3 === 0 ? "rgba(252,6,148,0.3)" : "rgba(255,255,255,0.06)", width: "40%", marginBottom: 8 }} />
+                        <div style={{ height: 8, borderRadius: 4, background: i % 3 === 0 ? "rgba(139,92,246,0.3)" : "rgba(255,255,255,0.06)", width: "40%", marginBottom: 8 }} />
                         <div style={{ height: 6, borderRadius: 4, background: "rgba(255,255,255,0.05)", width: "80%", marginBottom: 5 }} />
                         <div style={{ height: 6, borderRadius: 4, background: "rgba(255,255,255,0.04)", width: "60%", marginBottom: 16 }} />
-                        <div style={{ height: 28, borderRadius: 7, background: i % 2 === 0 ? "rgba(252,6,148,0.2)" : "rgba(255,255,255,0.04)", border: `1px solid ${i % 2 === 0 ? "rgba(252,6,148,0.2)" : "rgba(255,255,255,0.07)"}` }} />
+                        <div style={{ height: 28, borderRadius: 7, background: i % 2 === 0 ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.04)", border: `1px solid ${i % 2 === 0 ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.07)"}` }} />
                       </div>
                     ))}
                   </div>
@@ -456,7 +456,7 @@ export default function HomePage() {
         <section id="features" className="landing-section">
           <div className="landing-container">
             <div style={{ textAlign: "center", marginBottom: "3.5rem" }}>
-              <p style={{ fontSize: "0.8rem", fontWeight: 700, letterSpacing: "0.12em", color: "#fc0694", textTransform: "uppercase", marginBottom: "0.75rem" }}>
+              <p style={{ fontSize: "0.8rem", fontWeight: 700, letterSpacing: "0.12em", color: "#8b5cf6", textTransform: "uppercase", marginBottom: "0.75rem" }}>
                 Features
               </p>
               <h2 style={{
@@ -651,10 +651,10 @@ export default function HomePage() {
                   lineHeight: 1.5, background: "rgba(0,0,0,0.2)",
                 }}>
 {`// Install the visual builder engine
-npm install @plexo/sdk
+npm install @plexobuilder/sdk
 
 // Embed in any React page
-import { PlexoBuilder } from '@plexo/sdk';
+import { PlexoBuilder } from '@plexobuilder/sdk';
 
 export default function Editor() {
   return (

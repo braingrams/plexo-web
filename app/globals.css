@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+
 /*
  * ═══════════════════════════════════════════════════════════════
  *  PLEXO THEME — SWAP GUIDE
@@ -72,34 +73,39 @@
 }
 
 /* ─────────────────────────────────────────
-   Reset & Base
+   Reset & Base — must be inside @layer base
+   so it doesn't override @layer utilities
+   (unlayered rules win over any layered rule
+   per CSS Cascade Level 5).
    ───────────────────────────────────────── */
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-html {
-  scroll-behavior: smooth;
-  -webkit-text-size-adjust: 100%;
-}
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
 
-html, body {
-  min-height: 100%;
-}
+  html, body {
+    min-height: 100%;
+  }
 
-body {
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(ellipse 900px 600px at 15% -5%, rgba(139, 92, 246, 0.12) 0%, transparent 60%),
-    radial-gradient(ellipse 700px 500px at 85% 5%, rgba(100, 50, 255, 0.08) 0%, transparent 55%),
-    radial-gradient(ellipse 1000px 400px at 50% 100%, rgba(139, 92, 246, 0.06) 0%, transparent 70%);
-  color: var(--text-main);
-  font-family: var(--font-body), 'Inter', system-ui, -apple-system, sans-serif;
-  line-height: 1.6;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  body {
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(ellipse 900px 600px at 15% -5%, rgba(139, 92, 246, 0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 700px 500px at 85% 5%, rgba(100, 50, 255, 0.08) 0%, transparent 55%),
+      radial-gradient(ellipse 1000px 400px at 50% 100%, rgba(139, 92, 246, 0.06) 0%, transparent 70%);
+    color: var(--text-main);
+    font-family: var(--font-body), 'Inter', system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
 
 /* ─────────────────────────────────────────
@@ -119,7 +125,7 @@ body {
   position: fixed;
   inset: 0;
   background-image:
-    radial-gradient(ellipse 600px 400px at 10% 20%, rgba(252, 6, 148, 0.14) 0%, transparent 60%),
+    radial-gradient(ellipse 600px 400px at 10% 20%, rgba(139, 92, 246, 0.14) 0%, transparent 60%),
     radial-gradient(ellipse 500px 350px at 90% 70%, rgba(80, 30, 200, 0.1) 0%, transparent 60%);
   pointer-events: none;
   z-index: 0;
@@ -136,9 +142,9 @@ body {
   border-radius: 20px;
   padding: 2rem;
   box-shadow:
-    0 0 0 1px rgba(252, 6, 148, 0.08),
+    0 0 0 1px rgba(139, 92, 246, 0.08),
     0 24px 80px rgba(0, 0, 0, 0.6),
-    0 0 40px rgba(252, 6, 148, 0.06);
+    0 0 40px rgba(139, 92, 246, 0.06);
 }
 
 .auth-logo {
@@ -218,9 +224,9 @@ body {
 }
 
 .auth-input:focus {
-  border-color: rgba(252, 6, 148, 0.6);
-  box-shadow: 0 0 0 3px rgba(252, 6, 148, 0.15);
-  background: rgba(252, 6, 148, 0.04);
+  border-color: rgba(139, 92, 246, 0.6);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.15);
+  background: var(--brand-subtle);
 }
 
 .auth-input-pr {
@@ -264,13 +270,13 @@ body {
   gap: 0.5rem;
   letter-spacing: 0.01em;
   transition: opacity 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
-  box-shadow: 0 4px 24px rgba(252, 6, 148, 0.35);
+  box-shadow: 0 4px 24px var(--brand-glow);
   font-family: inherit;
 }
 
 .auth-button:hover:not(:disabled) {
   opacity: 0.92;
-  box-shadow: 0 6px 32px rgba(252, 6, 148, 0.5);
+  box-shadow: 0 6px 32px rgba(139, 92, 246, 0.5);
   transform: translateY(-1px);
 }
 
@@ -425,8 +431,8 @@ body {
 }
 
 .glass-card-hover:hover {
-  border-color: rgba(252, 6, 148, 0.25);
-  box-shadow: 0 8px 32px rgba(252, 6, 148, 0.1);
+  border-color: rgba(139, 92, 246, 0.25);
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.1);
   transform: translateY(-2px);
 }
 
@@ -447,14 +453,14 @@ body {
   border: none;
   cursor: pointer;
   text-decoration: none;
-  box-shadow: 0 4px 20px rgba(252, 6, 148, 0.3);
+  box-shadow: 0 4px 20px var(--brand-glow);
   transition: opacity 0.15s, box-shadow 0.15s, transform 0.1s;
   font-family: inherit;
 }
 
 .btn-brand:hover {
   opacity: 0.9;
-  box-shadow: 0 6px 28px rgba(252, 6, 148, 0.45);
+  box-shadow: 0 6px 28px rgba(139, 92, 246, 0.45);
   transform: translateY(-1px);
 }
 
@@ -498,8 +504,8 @@ body {
 }
 
 .field-input:focus {
-  border-color: rgba(252, 6, 148, 0.5);
-  box-shadow: 0 0 0 3px rgba(252, 6, 148, 0.12);
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
 }
 
 .field-select {
@@ -523,7 +529,7 @@ body {
 }
 
 .field-select:focus {
-  border-color: rgba(252, 6, 148, 0.5);
+  border-color: rgba(139, 92, 246, 0.5);
 }
 
 /* ─────────────────────────────────────────
@@ -543,7 +549,7 @@ body {
 .badge-brand {
   background: var(--brand-subtle);
   color: var(--brand);
-  border: 1px solid rgba(252, 6, 148, 0.2);
+  border: 1px solid rgba(139, 92, 246, 0.2);
 }
 
 .badge-muted {

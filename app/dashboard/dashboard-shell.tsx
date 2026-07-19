@@ -136,9 +136,9 @@ export function DashboardShell({ children, userName, userEmail }: Props) {
             <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.55rem", textDecoration: "none" }}>
               <div style={{
                 width: 30, height: 30, borderRadius: 8,
-                background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
                 display: "grid", placeItems: "center",
-                boxShadow: "0 0 14px rgba(252,6,148,0.4)",
+                boxShadow: "0 0 14px var(--brand-glow)",
                 flexShrink: 0,
               }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
@@ -159,9 +159,9 @@ export function DashboardShell({ children, userName, userEmail }: Props) {
           {collapsed && (
             <div style={{
               width: 30, height: 30, borderRadius: 8,
-              background: "linear-gradient(135deg,#fc0694,#d4057d)",
+              background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
               display: "grid", placeItems: "center",
-              boxShadow: "0 0 14px rgba(252,6,148,0.4)",
+              boxShadow: "0 0 14px var(--brand-glow)",
             }}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                 <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
@@ -231,10 +231,10 @@ export function DashboardShell({ children, userName, userEmail }: Props) {
                       justifyContent: collapsed ? "center" : "flex-start",
                       fontSize: "0.875rem",
                       fontWeight: isActive ? 600 : 500,
-                      color: isActive ? "#fc0694" : "rgba(240,242,255,0.55)",
+                      color: isActive ? "var(--brand)" : "rgba(240,242,255,0.55)",
                       textDecoration: "none",
-                      background: isActive ? "rgba(252,6,148,0.1)" : "transparent",
-                      borderLeft: isActive && !collapsed ? "2px solid #fc0694" : "2px solid transparent",
+                      background: isActive ? "var(--brand-subtle)" : "transparent",
+                      borderLeft: isActive && !collapsed ? "2px solid var(--brand)" : "2px solid transparent",
                       transition: "background 0.15s, color 0.15s",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
@@ -267,7 +267,7 @@ export function DashboardShell({ children, userName, userEmail }: Props) {
             }}>
               <div style={{
                 width: 30, height: 30, borderRadius: "50%",
-                background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
                 display: "grid", placeItems: "center",
                 fontSize: "0.7rem", fontWeight: 700, color: "#fff",
                 flexShrink: 0,
@@ -288,7 +288,7 @@ export function DashboardShell({ children, userName, userEmail }: Props) {
             <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.5rem" }}>
               <div style={{
                 width: 30, height: 30, borderRadius: "50%",
-                background: "linear-gradient(135deg,#fc0694,#d4057d)",
+                background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
                 display: "grid", placeItems: "center",
                 fontSize: "0.7rem", fontWeight: 700, color: "#fff",
               }}>

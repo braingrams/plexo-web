@@ -19,7 +19,7 @@
   "dependencies": {
     "@better-auth/prisma-adapter": "^1.6.23",
     "@neondatabase/serverless": "^1.1.0",
-    "@plexo/sdk": "file:../plexo-sdk",
+    "@plexobuilder/sdk": "latest",
     "@prisma/adapter-neon": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "better-auth": "^1.6.23",

@@ -1,8 +1,17 @@
 "use client";
 
+/**
+ * Template editor client.
+ *
+ * PlexoBuilder is a browser-only component (drag-and-drop, ResizeObserver).
+ * It must never be rendered on the server. This file is loaded exclusively
+ * via the next/dynamic wrapper in template-editor-dynamic.tsx (ssr: false).
+ */
+
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PlexoBuilder, type PlexoBuilderRef, type TemplateJSON } from "@plexo/sdk";
+import { PlexoBuilder, type PlexoBuilderRef, type TemplateJSON } from "@plexobuilder/sdk";
+import "@plexobuilder/sdk/dist/sdk.css";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 
@@ -20,7 +29,7 @@ type Props = {
 function IconArrowLeft() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M19 12H5M12 5l-7 7 7 7"/>
+      <path d="M19 12H5M12 5l-7 7 7 7" />
     </svg>
   );
 }
@@ -28,9 +37,9 @@ function IconArrowLeft() {
 function IconSave() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-      <polyline points="17 21 17 13 7 13 7 21"/>
-      <polyline points="7 3 7 8 15 8"/>
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <polyline points="17 21 17 13 7 13 7 21" />
+      <polyline points="7 3 7 8 15 8" />
     </svg>
   );
 }
@@ -38,8 +47,8 @@ function IconSave() {
 function IconMail() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="4" width="20" height="16" rx="3"/>
-      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+      <rect x="2" y="4" width="20" height="16" rx="3" />
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
     </svg>
   );
 }
@@ -47,8 +56,8 @@ function IconMail() {
 function IconLayout() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="3"/>
-      <path d="M3 9h18M9 21V9"/>
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="M3 9h18M9 21V9" />
     </svg>
   );
 }
@@ -92,7 +101,6 @@ export function TemplateEditorClient({
         throw new Error(payload.error ?? "Unable to save template.");
       }
       setSaveMessage("Design saved successfully.");
-      // Clear message after 3s
       setTimeout(() => setSaveMessage(null), 3000);
       router.refresh();
     } catch (error) {
@@ -152,9 +160,9 @@ export function TemplateEditorClient({
               borderRadius: 999,
               fontSize: "0.68rem", fontWeight: 700,
               letterSpacing: "0.06em", textTransform: "uppercase",
-              background: isEmail ? "rgba(252,6,148,0.1)" : "rgba(129,140,248,0.1)",
-              color: isEmail ? "#fc0694" : "#818cf8",
-              border: `1px solid ${isEmail ? "rgba(252,6,148,0.2)" : "rgba(129,140,248,0.2)"}`,
+              background: isEmail ? "var(--brand-subtle)" : "rgba(129,140,248,0.1)",
+              color: isEmail ? "var(--brand)" : "#818cf8",
+              border: `1px solid ${isEmail ? "rgba(139,92,246,0.25)" : "rgba(129,140,248,0.2)"}`,
               flexShrink: 0,
             }}>
               {isEmail ? <IconMail /> : <IconLayout />}
@@ -209,10 +217,10 @@ export function TemplateEditorClient({
               padding: "0.5rem 1rem",
               borderRadius: 9, border: "none", cursor: isSaving ? "not-allowed" : "pointer",
               fontSize: "0.85rem", fontWeight: 700,
-              background: "linear-gradient(135deg,#fc0694,#d4057d)",
+              background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
               color: "#fff",
               opacity: isSaving ? 0.7 : 1,
-              boxShadow: "0 3px 16px rgba(252,6,148,0.35)",
+              boxShadow: "0 3px 16px var(--brand-glow)",
               fontFamily: "inherit",
               transition: "opacity 0.15s, box-shadow 0.15s",
             }}
@@ -241,7 +249,7 @@ export function TemplateEditorClient({
           mode={isEmail ? "email" : "landing_page"}
           initialTemplate={initialDesignJson}
           backgroundColor="#0b1526"
-          themeBgColor="#fc0694"
+          themeBgColor="#8b5cf6"
           themeFgColor="#ffffff"
           textColor="#ecfeff"
           showSaveButton={false}
