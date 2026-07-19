@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -246,7 +246,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
       {filtered.length > 0 ? (
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))",
           gap: "1.25rem",
         }}>
           {filtered.map((template) => {
@@ -274,38 +274,78 @@ export function TemplatesClient({ initialTemplates }: Props) {
                   el.style.transform = "translateY(0)";
                 }}
               >
-                {/* Thumbnail */}
+                {/* Thumbnail / Snapshot Preview */}
                 <div style={{
-                  height: 120,
-                  background: isEmail
-                    ? "linear-gradient(135deg,rgba(139,92,246,0.12) 0%,rgba(252,6,148,0.03) 100%)"
-                    : "linear-gradient(135deg,rgba(129,140,248,0.12) 0%,rgba(129,140,248,0.03) 100%)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
+                  height: 180,
+                  position: "relative",
+                  background: "#080c14",
+                  overflow: "hidden",
                   borderBottom: "1px solid rgba(255,255,255,0.05)",
-                  color: isEmail ? "var(--brand)" : "#818cf8",
                 }}>
-                  {isEmail ? <IconMail /> : <IconLayout />}
-                  <div style={{
-                    position: "absolute", opacity: 0.08,
-                    fontSize: "5rem",
-                  }} aria-hidden />
-                </div>
-                {/* Body */}
-                <div style={{ padding: "1rem 1.1rem 1.1rem" }}>
+                  {template.compiledHtml ? (
+                    <div style={{
+                      width: "300%",
+                      height: "300%",
+                      transform: "scale(0.333333)",
+                      transformOrigin: "0 0",
+                      pointerEvents: "none",
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                    }}>
+                      <iframe
+                        srcDoc={template.compiledHtml}
+                        title={`Preview ${template.name}`}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          border: "none",
+                          background: "#ffffff",
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{
+                      width: "100%",
+                      height: "100%",
+                      background: isEmail
+                        ? "linear-gradient(135deg,rgba(139,92,246,0.12) 0%,rgba(252,6,148,0.03) 100%)"
+                        : "linear-gradient(135deg,rgba(129,140,248,0.12) 0%,rgba(129,140,248,0.03) 100%)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: isEmail ? "var(--brand)" : "#818cf8",
+                    }}>
+                      {isEmail ? <IconMail /> : <IconLayout />}
+                    </div>
+                  )}
+
+                  {/* Overlay Badge */}
                   <span style={{
-                    display: "inline-flex", alignItems: "center", gap: "0.3rem",
-                    padding: "0.18rem 0.6rem",
+                    position: "absolute",
+                    top: "0.75rem",
+                    right: "0.75rem",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "0.3rem",
+                    padding: "0.25rem 0.65rem",
                     borderRadius: 999,
-                    fontSize: "0.68rem", fontWeight: 700,
-                    letterSpacing: "0.06em", textTransform: "uppercase",
-                    background: isEmail ? "var(--brand-subtle)" : "rgba(129,140,248,0.1)",
-                    color: isEmail ? "var(--brand)" : "#818cf8",
-                    border: `1px solid ${isEmail ? "rgba(139,92,246,0.2)" : "rgba(129,140,248,0.2)"}`,
-                    marginBottom: "0.6rem",
+                    fontSize: "0.65rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    background: isEmail ? "var(--brand)" : "#818cf8",
+                    color: "#ffffff",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+                    zIndex: 2,
                   }}>
                     {isEmail ? <IconMail /> : <IconLayout />}
-                    {isEmail ? "Email" : "Landing Page"}
+                    {isEmail ? "Email" : "Page"}
                   </span>
+                </div>
+
+                {/* Body */}
+                <div style={{ padding: "1.1rem" }}>
                   <h2 style={{
                     fontFamily: "var(--font-heading), sans-serif",
                     fontSize: "1rem", fontWeight: 700,
