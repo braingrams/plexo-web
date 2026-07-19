@@ -9,6 +9,7 @@ type TemplateSummary = {
   id: string;
   name: string;
   kind: TemplateKind;
+  compiledHtml: string;
   createdAt: string;
   updatedAt: string;
 };

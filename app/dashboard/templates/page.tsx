@@ -11,6 +11,7 @@ type TemplateSummary = {
   id: string;
   name: string;
   kind: TemplateKind;
+  compiledHtml: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -19,6 +20,7 @@ function serializeTemplate(record: {
   id: string;
   name: string;
   kind: TemplateKind;
+  compiledHtml: string;
   createdAt: Date;
   updatedAt: Date;
 }): TemplateSummary {
@@ -26,6 +28,7 @@ function serializeTemplate(record: {
     id: record.id,
     name: record.name,
     kind: record.kind,
+    compiledHtml: record.compiledHtml,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -46,6 +49,7 @@ export default async function TemplatesDashboardPage() {
       id: true,
       name: true,
       kind: true,
+      compiledHtml: true,
       createdAt: true,
       updatedAt: true,
     },
