@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
+import { sanitizePlexoPayload } from "@/server/sanitizer";
 
 type UpdateTemplateBody = {
   designJson?: unknown;
@@ -12,23 +13,6 @@ type UpdateTemplateBody = {
 async function getSessionUser(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers });
   return session?.user ?? null;
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function looksLikeTemplateJson(value: unknown): boolean {
-  if (!isObject(value)) {
-    return false;
-  }
-
-  const body = value.body;
-  if (!isObject(body)) {
-    return false;
-  }
-
-  return Array.isArray(body.rows);
 }
 
 export async function POST(
@@ -43,12 +27,22 @@ export async function POST(
   const params = await context.params;
   const body = (await request.json().catch(() => ({}))) as UpdateTemplateBody;
 
-  if (!looksLikeTemplateJson(body.designJson)) {
-    return NextResponse.json({ error: "Invalid design JSON payload." }, { status: 400 });
+  let sanitizedPayload;
+  try {
+    sanitizedPayload = sanitizePlexoPayload({
+      designJson: body.designJson,
+      compiledHtml: body.compiledHtml,
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Security validation failed." },
+      { status: 400 }
+    );
   }
 
-  const compiledHtml = typeof body.compiledHtml === "string" ? body.compiledHtml : "";
-  const designJson = body.designJson as Prisma.InputJsonValue;
+  const compiledHtml = sanitizedPayload.compiledHtml;
+  const designJson = sanitizedPayload.designJson as Prisma.InputJsonValue;
+
 
   const existing = await prisma.template.findFirst({
     where: {

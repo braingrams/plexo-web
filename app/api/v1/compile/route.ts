@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/server/prisma";
+import { compileToHTML } from "@/lib/compiler";
+import { parseJsonToTargetFormat } from "@/lib/compilerClient";
 
 type CompileTargetType = "landing_page" | "email";
 
@@ -82,6 +84,11 @@ function isTemplateJson(value: unknown): boolean {
   );
 }
 
+function isMjml(text: string): boolean {
+  const trimmed = text.trim().toLowerCase();
+  return trimmed.includes("<mjml") || trimmed.includes("<mj-");
+}
+
 async function parseCompileRequest(request: NextRequest): Promise<ParsedCompileRequest | null> {
   const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
 
@@ -89,7 +96,7 @@ async function parseCompileRequest(request: NextRequest): Promise<ParsedCompileR
     const payload = (await request.json().catch(() => null)) as BuilderCompilePayload | string | null;
 
     if (typeof payload === "string" && payload.trim()) {
-      return { kind: "mjml", mjml: payload };
+      return isMjml(payload) ? { kind: "mjml", mjml: payload } : { kind: "html", html: payload };
     }
 
     if (!payload || typeof payload !== "object") {
@@ -98,7 +105,6 @@ async function parseCompileRequest(request: NextRequest): Promise<ParsedCompileR
 
     if (isTemplateJson(payload.template)) {
       const targetType = payload.targetType === "email" ? "email" : "landing_page";
-      const { compileToHTML, parseJsonToTargetFormat } = await import("@charisol/plexo-sdk");
 
       if (targetType === "landing_page") {
         return { kind: "html", html: compileToHTML(payload.template as any) };
@@ -108,18 +114,21 @@ async function parseCompileRequest(request: NextRequest): Promise<ParsedCompileR
     }
 
     if (typeof payload.mjml === "string" && payload.mjml.trim()) {
-      return { kind: "mjml", mjml: payload.mjml };
+      return isMjml(payload.mjml) ? { kind: "mjml", mjml: payload.mjml } : { kind: "html", html: payload.mjml };
     }
 
     if (typeof payload.payload === "string" && payload.payload.trim()) {
-      return { kind: "mjml", mjml: payload.payload };
+      return isMjml(payload.payload) ? { kind: "mjml", mjml: payload.payload } : { kind: "html", html: payload.payload };
     }
 
     return null;
   }
 
   const rawText = (await request.text().catch(() => "")).trim();
-  return rawText ? { kind: "mjml", mjml: rawText } : null;
+  if (rawText) {
+    return isMjml(rawText) ? { kind: "mjml", mjml: rawText } : { kind: "html", html: rawText };
+  }
+  return null;
 }
 
 async function compileParsedRequest(parsed: ParsedCompileRequest): Promise<string> {
@@ -153,8 +162,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const html = await compileParsedRequest(parsedRequest);
-    return NextResponse.json({ html, errors: [] });
+    try {
+      const html = await compileParsedRequest(parsedRequest);
+      return NextResponse.json({ html, errors: [] });
+    } catch (err) {
+      return NextResponse.json(
+        { error: `Compilation failed: ${err instanceof Error ? err.message : 'Malformed template structure'}` },
+        { status: 400 }
+      );
+    }
   }
 
   // ── Path 2: API key via Bearer token ────────────────────────────────────
@@ -191,7 +207,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  let compiledHtmlString = await compileParsedRequest(parsedRequest);
+  let compiledHtmlString;
+  try {
+    compiledHtmlString = await compileParsedRequest(parsedRequest);
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Compilation failed: ${err instanceof Error ? err.message : 'Malformed template structure'}` },
+      { status: 400 }
+    );
+  }
 
   if (apiKey.useAi) {
     const signature = `<!-- Optimized via Plexo AI Proxy Provider: ${providerLabel(apiKey.aiProvider)} | Tier: ${tierLabel(apiKey.aiTier)} -->`;
@@ -208,3 +232,4 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     errors: [],
   });
 }
+
