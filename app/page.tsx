@@ -651,10 +651,10 @@ export default function HomePage() {
                   lineHeight: 1.5, background: "rgba(0,0,0,0.2)",
                 }}>
 {`// Install the visual builder engine
-npm install @plexobuilder/sdk
+npm install @charisol/plexo-sdk
 
 // Embed in any React page
-import { PlexoBuilder } from '@plexobuilder/sdk';
+import { PlexoBuilder } from '@charisol/plexo-sdk';
 
 export default function Editor() {
   return (

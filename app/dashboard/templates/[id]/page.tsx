@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import type { TemplateJSON } from "@plexobuilder/sdk";
+import type { TemplateJSON } from "@charisol/plexo-sdk";
 
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";

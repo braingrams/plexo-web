@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -55,10 +55,10 @@ export function SdkClient({ initialKeys }: Props) {
   const selectedKey = initialKeys.find((k) => k.id === selectedKeyId);
   const keyValue = selectedKey ? `${selectedKey.maskedKey} (active)` : "YOUR_PLEXO_API_KEY";
 
-  const installCode = `npm install @plexobuilder/sdk`;
+  const installCode = `npm install @charisol/plexo-sdk`;
 
   const reactCode = `import React, { useRef } from 'react';
-import { PlexoBuilder, type PlexoBuilderRef } from '@plexobuilder/sdk';
+import { PlexoBuilder, type PlexoBuilderRef } from '@charisol/plexo-sdk';
 
 export default function MyBuilderPage() {
   const builderRef = useRef<PlexoBuilderRef>(null);
@@ -91,7 +91,7 @@ export default function MyBuilderPage() {
   );
 }`;
 
-  const nodeCode = `import { compileToHTML, compileToPlainText } from '@plexobuilder/sdk';
+  const nodeCode = `import { compileToHTML, compileToPlainText } from '@charisol/plexo-sdk';
 
 // 1. Fetch template JSON configuration from your db
 const template = await db.templates.findUnique({ where: { id: '...' } });

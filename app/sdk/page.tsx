@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 
 function IconArrowLeft() {
   return (
@@ -128,7 +128,7 @@ export default function PublicSdkPage() {
             maxWidth: 640, margin: "0 auto", lineHeight: 1.7,
           }}>
             The{" "}
-            <code style={{ fontFamily: "monospace", color: "#8b5cf6", fontSize: "0.95rem" }}>@plexobuilder/sdk</code>
+            <code style={{ fontFamily: "monospace", color: "#8b5cf6", fontSize: "0.95rem" }}>@charisol/plexo-sdk</code>
             {" "}npm package lets you embed the drag-and-drop builder directly in your React pages,
             compile templates to production-ready HTML, and configure AI provider routing.
           </p>
@@ -152,7 +152,7 @@ export default function PublicSdkPage() {
             color: "var(--brand)", overflowX: "auto",
           }}>
             <span style={{ color: "rgba(240,242,255,0.4)" }}># Install the Plexo SDK package</span><br />
-            npm install @plexobuilder/sdk
+            npm install @charisol/plexo-sdk
           </div>
         </section>
 
@@ -181,7 +181,7 @@ export default function PublicSdkPage() {
               color: "rgba(240,242,255,0.85)", overflowX: "auto", lineHeight: 1.5,
             }}>
 {`import React, { useRef } from 'react';
-import { PlexoBuilder, type PlexoBuilderRef } from '@plexobuilder/sdk';
+import { PlexoBuilder, type PlexoBuilderRef } from '@charisol/plexo-sdk';
 
 export default function TemplateEditor() {
   const builderRef = useRef<PlexoBuilderRef>(null);
@@ -235,7 +235,7 @@ export default function TemplateEditor() {
               borderRadius: 10, padding: "1.25rem", fontFamily: "monospace", fontSize: "0.82rem",
               color: "rgba(240,242,255,0.85)", overflowX: "auto", lineHeight: 1.5,
             }}>
-{`import { compileToHTML, compileToPlainText } from '@plexobuilder/sdk';
+{`import { compileToHTML, compileToPlainText } from '@charisol/plexo-sdk';
 
 // Fetch the saved JSON design configuration from your database
 const templateJson = await db.templates.findUnique({ where: { id: '...' } });

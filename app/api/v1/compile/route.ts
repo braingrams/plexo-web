@@ -98,7 +98,7 @@ async function parseCompileRequest(request: NextRequest): Promise<ParsedCompileR
 
     if (isTemplateJson(payload.template)) {
       const targetType = payload.targetType === "email" ? "email" : "landing_page";
-      const { compileToHTML, parseJsonToTargetFormat } = await import("@plexobuilder/sdk");
+      const { compileToHTML, parseJsonToTargetFormat } = await import("@charisol/plexo-sdk");
 
       if (targetType === "landing_page") {
         return { kind: "html", html: compileToHTML(payload.template as any) };

@@ -8,7 +8,7 @@
  * rendered on the server and avoids hydration mismatches.
  */
 import dynamic from "next/dynamic";
-import type { TemplateJSON } from "@plexobuilder/sdk";
+import type { TemplateJSON } from "@charisol/plexo-sdk";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 

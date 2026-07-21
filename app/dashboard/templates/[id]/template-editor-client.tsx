@@ -10,8 +10,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PlexoBuilder, type PlexoBuilderRef, type TemplateJSON } from "@plexobuilder/sdk";
-import "@plexobuilder/sdk/dist/sdk.css";
+import { PlexoBuilder, type PlexoBuilderRef, type TemplateJSON } from "@charisol/plexo-sdk";
+import "@charisol/plexo-sdk/dist/sdk.css";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 
