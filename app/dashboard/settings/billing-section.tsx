@@ -66,7 +66,7 @@ const secondaryButtonStyle: CSSProperties = {
 };
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
 function daysUntil(iso: string): number {
@@ -174,7 +174,7 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
               Monthly allowance
             </p>
             <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "rgba(240,242,255,0.75)" }}>{allowanceBalance.toLocaleString()} left</p>
-            <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)" }}>
+            <p suppressHydrationWarning style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)" }}>
               Resets in {daysUntil(allowanceResetAt)}d ({formatDate(allowanceResetAt)})
             </p>
           </div>
