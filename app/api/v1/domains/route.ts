@@ -13,6 +13,56 @@ const RESERVED_SUBDOMAINS = new Set([
   "profile", "domains", "account", "login", "register", "signup", "logout", "signin"
 ]);
 
+async function addVercelDomain(domain: string) {
+  const token = process.env.VERCEL_AUTH_TOKEN;
+  const projectId = process.env.VERCEL_PROJECT_ID;
+  const teamId = process.env.VERCEL_TEAM_ID;
+
+  if (!token || !projectId) {
+    console.warn("Vercel configurations missing. Skipping Vercel Domain registration in local development.");
+    return;
+  }
+
+  const url = `https://api.vercel.com/v10/projects/${projectId}/domains${teamId ? `?teamId=${teamId}` : ""}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name: domain }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    console.error("Failed to add domain to Vercel project:", data.error);
+    throw new Error(data.error?.message ?? "Failed to configure custom domain routing on the server.");
+  }
+}
+
+async function removeVercelDomain(domain: string) {
+  const token = process.env.VERCEL_AUTH_TOKEN;
+  const projectId = process.env.VERCEL_PROJECT_ID;
+  const teamId = process.env.VERCEL_TEAM_ID;
+
+  if (!token || !projectId) {
+    return;
+  }
+
+  const url = `https://api.vercel.com/v9/projects/${projectId}/domains/${domain}${teamId ? `?teamId=${teamId}` : ""}`;
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    console.error("Failed to remove domain from Vercel project:", data.error);
+  }
+}
+
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
@@ -237,6 +287,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }, { status: 403 });
   }
 
+  if (type === "CUSTOM") {
+    try {
+      await addVercelDomain(finalDomain);
+    } catch (err) {
+      return NextResponse.json({
+        error: err instanceof Error ? err.message : "Failed to register custom domain routing on the server."
+      }, { status: 500 });
+    }
+  }
+
   const created = await prisma.publishedDomain.create({
     data: {
       userId: resolved.userId,
@@ -271,6 +331,10 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
 
   if (!record) {
     return NextResponse.json({ error: "Published domain not found or unauthorized." }, { status: 404 });
+  }
+
+  if (record.type === "CUSTOM") {
+    await removeVercelDomain(record.domain);
   }
 
   await prisma.publishedDomain.delete({
