@@ -10,10 +10,11 @@ function sha256(value: string): string {
 }
 
 export default async function McpLoginPage(props: {
-  searchParams: Promise<{ callbackUrl?: string }>;
+  searchParams: Promise<{ callbackUrl?: string; state?: string }>;
 }) {
   const searchParams = await props.searchParams;
   const callbackUrl = searchParams.callbackUrl;
+  const state = searchParams.state;
 
   const reqHeaders = await headers();
   let session = null;
@@ -22,11 +23,11 @@ export default async function McpLoginPage(props: {
     session = await auth.api.getSession({ headers: reqHeaders });
   } catch (err) {
     console.warn("[mcp/login] Session retrieval failed, redirecting to login:", err);
-    redirect(`/auth/login?redirectTo=${encodeURIComponent(`/mcp/login${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`)}`);
+    redirect(`/auth/login?redirectTo=${encodeURIComponent(`/mcp/login${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}${state ? `&state=${encodeURIComponent(state)}` : ""}` : ""}`)}`);
   }
 
   if (!session?.user) {
-    redirect(`/auth/login?redirectTo=${encodeURIComponent(`/mcp/login${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`)}`);
+    redirect(`/auth/login?redirectTo=${encodeURIComponent(`/mcp/login${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}${state ? `&state=${encodeURIComponent(state)}` : ""}` : ""}`)}`);
   }
 
   // Find or create an MCP API key for this user
@@ -57,11 +58,20 @@ export default async function McpLoginPage(props: {
     rawKey = apiKeyRecord.maskedKey;
   }
 
-  if (callbackUrl && (callbackUrl.startsWith("http://localhost:") || callbackUrl.startsWith("http://127.0.0.1:"))) {
-    const redirectTarget = new URL(callbackUrl);
-    redirectTarget.searchParams.set("token", rawKey);
-    redirectTarget.searchParams.set("user", session.user.email);
-    redirect(redirectTarget.toString());
+  // If callbackUrl is provided (e.g. from ChatGPT, Claude Web, or Localhost), redirect back immediately
+  if (callbackUrl) {
+    try {
+      const redirectTarget = new URL(callbackUrl);
+      redirectTarget.searchParams.set("code", rawKey);
+      redirectTarget.searchParams.set("token", rawKey);
+      redirectTarget.searchParams.set("user", session.user.email);
+      if (state) {
+        redirectTarget.searchParams.set("state", state);
+      }
+      redirect(redirectTarget.toString());
+    } catch (e) {
+      console.warn("Invalid callbackUrl format:", callbackUrl, e);
+    }
   }
 
   return (
@@ -99,7 +109,7 @@ export default async function McpLoginPage(props: {
           </p>
 
           <div className="p-4 rounded-xl bg-[#090d16] border border-white/10 text-xs font-mono text-[#a78bfa] break-all select-all">
-            <span className="text-white/40 block mb-1 font-sans text-[11px] font-medium">YOUR AUTHORIZATION TOKEN:</span>
+            <span className="text-white/40 block mb-1 font-sans text-[11px] font-medium font-semibold">YOUR AUTHORIZATION TOKEN:</span>
             {rawKey}
           </div>
         </div>
