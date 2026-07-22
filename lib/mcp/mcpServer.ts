@@ -14,12 +14,19 @@ const RESERVED_SUBDOMAINS = new Set([
   "profile", "domains", "account", "login", "register", "signup", "logout", "signin"
 ]);
 
-export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): any {
+export function generateDefaultSaaSDesignJson(title: string = "SaaS Product", promptText: string = ""): any {
+  const isDark = !promptText.toLowerCase().includes("light");
+  const bg = isDark ? "#08090f" : "#ffffff";
+  const textColor = isDark ? "#f0f2ff" : "#0f172a";
+  const cardBg = isDark ? "#111827" : "#f8fafc";
+  const borderColor = isDark ? "rgba(255, 255, 255, 0.08)" : "#e2e8f0";
+  const primaryAccent = "#8b5cf6";
+
   return {
     body: {
       style: {
-        backgroundColor: "#08090f",
-        color: "#f0f2ff",
+        backgroundColor: bg,
+        color: textColor,
         fontFamily: "Inter, sans-serif",
         padding: "0px",
         margin: "0px",
@@ -31,7 +38,7 @@ export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): a
           style: {
             paddingTop: "24px",
             paddingBottom: "24px",
-            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+            borderBottom: `1px solid ${borderColor}`,
           },
           columns: [
             {
@@ -40,7 +47,7 @@ export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): a
               elements: [
                 {
                   type: "heading",
-                  style: { fontSize: "22px", color: "#8b5cf6", fontWeight: "bold" },
+                  style: { fontSize: "22px", color: primaryAccent, fontWeight: "bold" },
                   attributes: { text: title },
                 },
               ],
@@ -51,7 +58,7 @@ export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): a
               elements: [
                 {
                   type: "menu",
-                  style: { textAlign: "right", color: "#a78bfa" },
+                  style: { textAlign: "right", color: isDark ? "#a78bfa" : "#6d28d9" },
                   attributes: {
                     links: [
                       { label: "Features", href: "#features" },
@@ -82,7 +89,7 @@ export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): a
                   type: "heading",
                   style: {
                     fontSize: "48px",
-                    color: "#ffffff",
+                    color: textColor,
                     fontWeight: "800",
                     textAlign: "center",
                     marginBottom: "16px",
@@ -93,20 +100,20 @@ export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): a
                   type: "paragraph",
                   style: {
                     fontSize: "18px",
-                    color: "#94a3b8",
+                    color: isDark ? "#94a3b8" : "#475569",
                     textAlign: "center",
                     maxWidth: "700px",
                     margin: "0 auto 32px auto",
                   },
                   attributes: {
-                    text: "The AI-native platform built to generate landing pages, automate customer workflows, and scale your product with zero effort.",
+                    text: promptText || "The AI-native platform built to generate landing pages, automate customer workflows, and scale your product effortlessly.",
                   },
                 },
                 {
                   type: "button",
                   style: {
                     textAlign: "center",
-                    backgroundColor: "#8b5cf6",
+                    backgroundColor: primaryAccent,
                     color: "#ffffff",
                     borderRadius: "12px",
                     paddingTop: "14px",
@@ -124,10 +131,10 @@ export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): a
                 },
                 {
                   type: "image",
-                  style: { borderRadius: "16px", borderWidth: "1px", borderColor: "rgba(255, 255, 255, 0.1)" },
+                  style: { borderRadius: "16px", borderWidth: "1px", borderColor: borderColor },
                   attributes: {
                     src: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80",
-                    alt: "SaaS Dashboard Preview",
+                    alt: "Dashboard Preview",
                   },
                 },
               ],
@@ -149,11 +156,11 @@ export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): a
                 {
                   type: "card",
                   style: {
-                    backgroundColor: "#111827",
+                    backgroundColor: cardBg,
                     borderRadius: "16px",
                     padding: "24px",
                     borderWidth: "1px",
-                    borderColor: "rgba(255,255,255,0.08)",
+                    borderColor: borderColor,
                   },
                   attributes: {
                     title: "🚀 Lightning Fast Deployment",
@@ -169,11 +176,11 @@ export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): a
                 {
                   type: "card",
                   style: {
-                    backgroundColor: "#111827",
+                    backgroundColor: cardBg,
                     borderRadius: "16px",
                     padding: "24px",
                     borderWidth: "1px",
-                    borderColor: "rgba(255,255,255,0.08)",
+                    borderColor: borderColor,
                   },
                   attributes: {
                     title: "✨ AI Native Builder",
@@ -189,11 +196,11 @@ export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): a
                 {
                   type: "card",
                   style: {
-                    backgroundColor: "#111827",
+                    backgroundColor: cardBg,
                     borderRadius: "16px",
                     padding: "24px",
                     borderWidth: "1px",
-                    borderColor: "rgba(255,255,255,0.08)",
+                    borderColor: borderColor,
                   },
                   attributes: {
                     title: "📊 Real-Time Analytics",
@@ -208,7 +215,7 @@ export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): a
         {
           id: "row-cta",
           style: {
-            backgroundColor: "rgba(139, 92, 246, 0.12)",
+            backgroundColor: isDark ? "rgba(139, 92, 246, 0.12)" : "rgba(139, 92, 246, 0.08)",
             borderRadius: "24px",
             padding: "48px",
             textAlign: "center",
@@ -224,20 +231,20 @@ export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): a
               elements: [
                 {
                   type: "heading",
-                  style: { fontSize: "32px", color: "#ffffff", fontWeight: "700", textAlign: "center" },
+                  style: { fontSize: "32px", color: textColor, fontWeight: "700", textAlign: "center" },
                   attributes: { text: "Ready to Supercharge Your Growth?" },
                 },
                 {
                   type: "paragraph",
-                  style: { fontSize: "16px", color: "#a78bfa", textAlign: "center", marginBottom: "24px" },
+                  style: { fontSize: "16px", color: isDark ? "#a78bfa" : "#6d28d9", textAlign: "center", marginBottom: "24px" },
                   attributes: { text: "Join thousands of product teams building high-converting sites on Plexo." },
                 },
                 {
                   type: "button",
                   style: {
                     textAlign: "center",
-                    backgroundColor: "#ffffff",
-                    color: "#08090f",
+                    backgroundColor: primaryAccent,
+                    color: "#ffffff",
                     borderRadius: "12px",
                     paddingTop: "12px",
                     paddingBottom: "12px",
@@ -257,7 +264,7 @@ export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): a
           style: {
             paddingTop: "32px",
             paddingBottom: "32px",
-            borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+            borderTop: `1px solid ${borderColor}`,
           },
           columns: [
             {
@@ -307,9 +314,63 @@ export const PLEXO_MCP_TOOLS = [
           type: "string",
           description: "Title of the landing page (e.g. 'Bulum SaaS')",
         },
+        prompt: {
+          type: "string",
+          description: "Natural language description of the landing page layout, theme, features, and copywriting to generate.",
+        },
         designJson: {
           type: "object",
-          description: "Plexo layout schema containing body style and rows array. If omitted or empty, Plexo auto-generates a complete SaaS landing page layout.",
+          description: "Plexo layout schema containing body style and rows array.",
+          properties: {
+            body: {
+              type: "object",
+              properties: {
+                style: {
+                  type: "object",
+                  description: "Global CSS style properties (backgroundColor, color, fontFamily).",
+                },
+                rows: {
+                  type: "array",
+                  description: "Array of layout row objects.",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      style: { type: "object", description: "Row CSS properties." },
+                      columns: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            id: { type: "string" },
+                            width: { type: "string", description: "Width percentage (e.g. '100%', '50%', '33.33%')." },
+                            elements: {
+                              type: "array",
+                              items: {
+                                type: "object",
+                                properties: {
+                                  type: {
+                                    type: "string",
+                                    enum: ["heading", "paragraph", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "table", "timer", "video"],
+                                    description: "Type of component.",
+                                  },
+                                  style: { type: "object" },
+                                  attributes: {
+                                    type: "object",
+                                    description: "Component attributes (text, title, description, href, src, links, fields).",
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
         compiledHtml: {
           type: "string",
@@ -451,6 +512,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const name = args.name?.trim() || "AI Landing Page";
+          const promptText = args.prompt?.trim() || "";
           let designJson = args.designJson;
 
           if (typeof designJson === "string") {
@@ -463,7 +525,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
 
           const rows = designJson?.body?.rows || (Array.isArray(designJson?.rows) ? designJson.rows : []);
           if (!rows || rows.length === 0) {
-            designJson = generateDefaultSaaSDesignJson(name);
+            designJson = generateDefaultSaaSDesignJson(name, promptText);
           } else if (!designJson.body) {
             designJson = {
               body: {
