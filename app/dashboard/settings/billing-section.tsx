@@ -192,8 +192,8 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
           <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
             Plan
           </p>
-          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
-            {plan !== "PRO" && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+            {plan === "FREE" && (
               <button
                 type="button"
                 disabled={busyAction === "sub-PRO"}
@@ -212,6 +212,11 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
               >
                 {busyAction === "sub-ULTRA" ? "Redirecting…" : "Upgrade to ULTRA"}
               </button>
+            )}
+            {plan === "ULTRA" && (
+              <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#34d399", padding: "0.5rem 0.9rem", borderRadius: 9, background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)" }}>
+                Current Plan: ULTRA ✨
+              </span>
             )}
             <button
               type="button"

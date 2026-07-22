@@ -16,10 +16,17 @@ export default async function McpLoginPage(props: {
   const callbackUrl = searchParams.callbackUrl;
 
   const reqHeaders = await headers();
-  const session = await auth.api.getSession({ headers: reqHeaders });
+  let session = null;
+  
+  try {
+    session = await auth.api.getSession({ headers: reqHeaders });
+  } catch (err) {
+    console.warn("[mcp/login] Session retrieval failed, redirecting to login:", err);
+    redirect(`/auth/login?redirectTo=${encodeURIComponent(`/mcp/login${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`)}`);
+  }
 
   if (!session?.user) {
-    redirect(`/login?callbackUrl=${encodeURIComponent(`/mcp/login${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`)}`);
+    redirect(`/auth/login?redirectTo=${encodeURIComponent(`/mcp/login${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}` : ""}`)}`);
   }
 
   // Find or create an MCP API key for this user

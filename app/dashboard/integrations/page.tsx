@@ -6,13 +6,20 @@ import IntegrationsClient from "./integrations-client";
 
 export default async function IntegrationsPage() {
   const reqHeaders = await headers();
-  const session = await auth.api.getSession({ headers: reqHeaders });
-
-  if (!session?.user) {
-    redirect("/login?callbackUrl=/dashboard/integrations");
+  let session = null;
+  
+  try {
+    session = await auth.api.getSession({ headers: reqHeaders });
+  } catch (err) {
+    console.warn("[integrations] Session retrieval failed, redirecting to login:", err);
+    redirect("/auth/login?redirectTo=/dashboard/integrations");
   }
 
-  // Fetch or retrieve user's active API keys for easy 1-click copying
+  if (!session?.user) {
+    redirect("/auth/login?redirectTo=/dashboard/integrations");
+  }
+
+  // Fetch user's active API keys for easy 1-click copying
   const apiKeys = await prisma.apiKey.findMany({
     where: { userId: session.user.id, isActive: true },
     select: { id: true, name: true, maskedKey: true, createdAt: true },
