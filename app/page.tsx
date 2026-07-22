@@ -386,7 +386,7 @@ export default function HomePage() {
                 borderBottom: "1px solid rgba(255,255,255,0.07)",
                 background: "rgba(255,255,255,0.02)",
               }}>
-                {["#f87171","#fbbf24","#34d399"].map((c) => (
+                {["#f87171", "#fbbf24", "#34d399"].map((c) => (
                   <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c, opacity: 0.7 }} />
                 ))}
                 <div style={{
@@ -395,7 +395,7 @@ export default function HomePage() {
                   borderRadius: 6, height: 22,
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
-                  <span style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.3)" }}>app.plexo.dev/dashboard/templates</span>
+                  <span style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.3)" }}>plexo.charisol.io/dashboard/templates</span>
                 </div>
               </div>
               {/* Mock builder content */}
@@ -424,7 +424,7 @@ export default function HomePage() {
                       <div style={{
                         height: 7, borderRadius: 4,
                         background: i === 0 ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.08)",
-                        width: `${[70,55,65,50,60][i]}%`,
+                        width: `${[70, 55, 65, 50, 60][i]}%`,
                       }} />
                     </div>
                   ))}
@@ -601,7 +601,7 @@ export default function HomePage() {
                 <p style={{ color: "rgba(240,242,255,0.55)", fontSize: "1rem", lineHeight: 1.65, marginBottom: "1.5rem" }}>
                   Integrate Plexo's premium drag-and-drop template builder directly into your own SaaS dashboard. Give your users visual design tools without building them from scratch.
                 </p>
-                
+
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "2rem" }}>
                   {[
                     "React builder component with custom themes",
@@ -637,7 +637,7 @@ export default function HomePage() {
                   borderBottom: "1px solid rgba(255,255,255,0.06)",
                   background: "rgba(255,255,255,0.01)",
                 }}>
-                  {["#f87171","#fbbf24","#34d399"].map((c) => (
+                  {["#f87171", "#fbbf24", "#34d399"].map((c) => (
                     <div key={c} style={{ width: 8, height: 8, borderRadius: "50%", background: c, opacity: 0.6 }} />
                   ))}
                   <span style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.3)", marginLeft: "0.5rem", fontFamily: "monospace" }}>
@@ -650,7 +650,7 @@ export default function HomePage() {
                   color: "rgba(240,242,255,0.8)", overflowX: "auto",
                   lineHeight: 1.5, background: "rgba(0,0,0,0.2)",
                 }}>
-{`// Install the visual builder engine
+                  {`// Install the visual builder engine
 npm install @charisol/plexo-sdk
 
 // Embed in any React page
