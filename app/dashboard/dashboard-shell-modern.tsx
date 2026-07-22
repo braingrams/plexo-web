@@ -52,6 +52,13 @@ export function DashboardShellModern({ children, userName, userEmail }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
+  // The template editor needs its own full viewport below the desktop tier — there's no
+  // room for the floating topbar/padding chrome alongside the builder's own responsive
+  // layout. Above that breakpoint (see .dash-modern-editor-route rules in globals.css),
+  // nothing changes.
+  const isEditorRoute = pathname.startsWith("/dashboard/templates/") && pathname !== "/dashboard/templates";
+  const rootClassName = isEditorRoute ? "dash-modern-editor-route" : undefined;
+
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -73,7 +80,7 @@ export function DashboardShellModern({ children, userName, userEmail }: Props) {
   }
 
   return (
-    <div style={{ minHeight: "100vh" }}>
+    <div className={rootClassName} style={{ minHeight: "100vh" }}>
       {/* ── FLOATING TOPBAR ─────────────────────────── */}
       <header className="dash-topbar">
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none", flexShrink: 0 }}>
@@ -181,8 +188,10 @@ export function DashboardShellModern({ children, userName, userEmail }: Props) {
 
       {/* ── MAIN CONTENT ─────────────────────────── */}
       <div className="dash-main-modern">
-        <div style={{ maxWidth: 1500, margin: "0 auto" }}>
-          <LayoutSwitchBanner />
+        <div className="dash-main-modern-inner" style={{ maxWidth: 1500, margin: "0 auto" }}>
+          <div className="dash-modern-banner">
+            <LayoutSwitchBanner />
+          </div>
           {children}
         </div>
       </div>

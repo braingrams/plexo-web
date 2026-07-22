@@ -494,6 +494,36 @@
   }
 }
 
+/* Template editor (PlexoBuilder) needs its own full viewport below the desktop tier —
+   the builder's own chrome becomes responsive there, but only if the dashboard shell
+   around it gets out of the way. Above 1280px, both shells render exactly as before. */
+@media (max-width: 1279px) {
+  .dash-modern-editor-route .dash-topbar {
+    display: none;
+  }
+  .dash-modern-editor-route .dash-main-modern {
+    padding: 0;
+    min-height: 100vh;
+  }
+  .dash-modern-editor-route .dash-main-modern-inner {
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  .dash-modern-editor-route .dash-modern-banner {
+    display: none;
+  }
+
+  .dash-classic-editor-route .dash-classic-aside {
+    display: none;
+  }
+  .dash-classic-editor-route .dash-classic-main {
+    margin-left: 0 !important;
+  }
+  .dash-classic-editor-route .dash-classic-banner {
+    display: none;
+  }
+}
+
 /* ─────────────────────────────────────────
    Glassmorphism Cards
    ───────────────────────────────────────── */

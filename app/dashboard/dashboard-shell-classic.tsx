@@ -125,6 +125,12 @@ export function DashboardShellClassic({ children, userName, userEmail }: Props) 
   const [collapsed, setCollapsed] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
 
+  // The template editor needs its own full viewport below the desktop tier — there's no
+  // room for the fixed sidebar chrome alongside the builder's own responsive layout.
+  // Above that breakpoint (see .dash-classic-editor-route rules in globals.css), nothing changes.
+  const isEditorRoute = pathname.startsWith("/dashboard/templates/") && pathname !== "/dashboard/templates";
+  const rootClassName = isEditorRoute ? "dash-classic-editor-route" : undefined;
+
   const initials = userName
     .split(" ")
     .map((p) => p[0])
@@ -145,9 +151,10 @@ export function DashboardShellClassic({ children, userName, userEmail }: Props) 
   const sidebarWidth = collapsed ? 64 : 240;
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex" }}>
+    <div className={rootClassName} style={{ minHeight: "100vh", display: "flex" }}>
       {/* ── SIDEBAR ─────────────────────────────── */}
       <aside
+        className="dash-classic-aside"
         style={{
           position: "fixed",
           top: 0, left: 0, bottom: 0,
@@ -385,14 +392,17 @@ export function DashboardShellClassic({ children, userName, userEmail }: Props) 
       </aside>
 
       {/* ── MAIN CONTENT ─────────────────────────── */}
-      <div style={{
-        flex: 1,
-        marginLeft: sidebarWidth,
-        minHeight: "100vh",
-        transition: "margin-left 0.25s cubic-bezier(0.4,0,0.2,1)",
-        background: "var(--bg)",
-      }}>
-        <div style={{ padding: "2rem 2rem 0", maxWidth: 1500, margin: "0 auto" }}>
+      <div
+        className="dash-classic-main"
+        style={{
+          flex: 1,
+          marginLeft: sidebarWidth,
+          minHeight: "100vh",
+          transition: "margin-left 0.25s cubic-bezier(0.4,0,0.2,1)",
+          background: "var(--bg)",
+        }}
+      >
+        <div className="dash-classic-banner" style={{ padding: "2rem 2rem 0", maxWidth: 1500, margin: "0 auto" }}>
           <LayoutSwitchBanner />
         </div>
         {children}
