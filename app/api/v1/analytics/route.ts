@@ -13,30 +13,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const filter = searchParams.get("filter")?.trim() || "all"; // "all" | "published"
 
   try {
-    // 1. Build template filter matching the user
-    const templateFilter: any = {
-      userId: resolved.userId,
-    };
-
-    if (templateId) {
-      templateFilter.id = templateId;
-    } else if (filter === "published") {
-      // Filter for templates that have active domain mappings
-      templateFilter.publishedDomains = {
-        some: {},
-      };
-    }
-
-    // 2. Fetch templates that match the filters
+    // 1. Fetch all templates owned by the user matching the general status filter
     const templates = await prisma.template.findMany({
-      where: templateFilter,
+      where: {
+        userId: resolved.userId,
+        ...(filter === "published" ? { publishedDomains: { some: {} } } : {}),
+      },
       select: {
         id: true,
         name: true,
       },
+      orderBy: {
+        updatedAt: "desc",
+      },
     });
 
-    const templateIds = templates.map((t) => t.id);
+    // 2. Identify target template IDs to calculate analytics for
+    const targetTemplateIds = templateId ? [templateId] : templates.map((t) => t.id);
 
     // 3. Define analytics query range (last 7 days)
     const sevenDaysAgo = new Date();
@@ -46,7 +39,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // 4. Fetch page views in the last 7 days for these templates
     const pageViews = await prisma.pageView.findMany({
       where: {
-        templateId: { in: templateIds },
+        templateId: { in: targetTemplateIds },
         createdAt: { gte: sevenDaysAgo },
       },
       select: {

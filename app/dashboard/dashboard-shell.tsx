@@ -119,6 +119,7 @@ export function DashboardShell({ children, userName, userEmail }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   const initials = userName
     .split(" ")
@@ -128,7 +129,12 @@ export function DashboardShell({ children, userName, userEmail }: Props) {
     .slice(0, 2) || userEmail.slice(0, 2).toUpperCase();
 
   async function handleSignOut() {
-    await (authClient as any).signOut();
+    setIsSigningOut(true);
+    try {
+      await (authClient as any).signOut();
+    } catch (e) {
+      console.error("Sign out error:", e);
+    }
     router.push("/auth/login");
   }
 
@@ -332,6 +338,7 @@ export function DashboardShell({ children, userName, userEmail }: Props) {
           )}
           <button
             onClick={() => void handleSignOut()}
+            disabled={isSigningOut}
             title="Sign out"
             style={{
               width: "100%",
@@ -341,15 +348,34 @@ export function DashboardShell({ children, userName, userEmail }: Props) {
               gap: "0.6rem",
               padding: collapsed ? "0.6rem" : "0.6rem 0.75rem",
               borderRadius: 10,
-              background: "none", border: "none", cursor: "pointer",
-              color: "rgba(240,242,255,0.4)",
+              background: isSigningOut ? "rgba(255,255,255,0.02)" : "none",
+              border: "none",
+              cursor: isSigningOut ? "not-allowed" : "pointer",
+              color: isSigningOut ? "rgba(240,242,255,0.25)" : "rgba(240,242,255,0.4)",
               fontSize: "0.8rem", fontWeight: 500,
               transition: "background 0.15s, color 0.15s",
               whiteSpace: "nowrap",
             }}
           >
-            <IconLogout />
-            {!collapsed && <span>Sign Out</span>}
+            {isSigningOut ? (
+              <>
+                <style dangerouslySetInnerHTML={{ __html: `
+                  @keyframes logout-spin {
+                    to { transform: rotate(360deg); }
+                  }
+                ` }} />
+                <div style={{
+                  width: 14, height: 14, borderRadius: "50%",
+                  border: "2px solid rgba(255,255,255,0.1)",
+                  borderTopColor: "rgba(240,242,255,0.5)",
+                  animation: "logout-spin 0.6s linear infinite",
+                  flexShrink: 0,
+                }} />
+              </>
+            ) : (
+              <IconLogout />
+            )}
+            {!collapsed && <span>{isSigningOut ? "Signing Out..." : "Sign Out"}</span>}
           </button>
         </div>
       </aside>
