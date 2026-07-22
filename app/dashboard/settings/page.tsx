@@ -15,6 +15,7 @@ type SettingsApiKey = {
   useAi: boolean;
   aiProvider: string;
   aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
+  aiApiKey: string | null;
 };
 
 function serializeApiKey(record: {
@@ -26,6 +27,7 @@ function serializeApiKey(record: {
   useAi: boolean;
   aiProvider: string;
   aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
+  aiApiKey: string | null;
 }): SettingsApiKey {
   return {
     id: record.id,
@@ -36,6 +38,7 @@ function serializeApiKey(record: {
     useAi: record.useAi,
     aiProvider: record.aiProvider,
     aiTier: record.aiTier,
+    aiApiKey: record.aiApiKey,
   };
 }
 

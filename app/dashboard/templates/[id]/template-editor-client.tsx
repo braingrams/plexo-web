@@ -24,6 +24,7 @@ type Props = {
   useAi: boolean;
   aiProvider: string;
   aiTier: AiTier;
+  aiApiKey: string | null;
 };
 
 function IconArrowLeft() {
@@ -71,6 +72,7 @@ export function TemplateEditorClient({
   useAi,
   aiProvider,
   aiTier,
+  aiApiKey,
 }: Props) {
   const router = useRouter();
   const builderRef = useRef<PlexoBuilderRef>(null);
@@ -329,6 +331,7 @@ export function TemplateEditorClient({
           useAi={useAi}
           aiProvider={aiProvider}
           aiTier={aiTier}
+          aiApiKey={aiApiKey || undefined}
           allowPublishLandingPage={templateKind === "LANDING_PAGE"}
           templateId={templateId}
           {...({ __internalPlan: subscriptionPlan } as any)}

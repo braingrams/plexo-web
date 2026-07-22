@@ -99,7 +99,7 @@ function IconChevronDown() {
   );
 }
 
-function CustomSelect({
+export function CustomSelect({
   value,
   options,
   disabled,

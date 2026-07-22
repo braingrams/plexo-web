@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -13,6 +13,7 @@ type SettingsApiKey = {
   useAi: boolean;
   aiProvider: string;
   aiTier: AiTier;
+  aiApiKey: string | null;
 };
 
 type Props = {
@@ -208,19 +209,21 @@ export function SettingsClient({ initialApiKeys }: Props) {
     normalizeProvider(activeKey?.aiProvider ?? "openai"),
   );
   const [draftAiTier, setDraftAiTier] = useState<AiTier>(activeKey?.aiTier ?? "AUTO");
+  const [draftAiApiKey, setDraftAiApiKey] = useState<string>(activeKey?.aiApiKey ?? "");
   const [draftDirty, setDraftDirty] = useState(false);
 
   useEffect(() => {
     if (!activeKeyId) {
-      setDraftUseAi(false); setDraftAiProvider("openai"); setDraftAiTier("AUTO"); setDraftDirty(false); return;
+      setDraftUseAi(false); setDraftAiProvider("openai"); setDraftAiTier("AUTO"); setDraftAiApiKey(""); setDraftDirty(false); return;
     }
     const selected = apiKeys.find((item) => item.id === activeKeyId);
     if (!selected) {
-      setDraftUseAi(false); setDraftAiProvider("openai"); setDraftAiTier("AUTO"); setDraftDirty(false); return;
+      setDraftUseAi(false); setDraftAiProvider("openai"); setDraftAiTier("AUTO"); setDraftAiApiKey(""); setDraftDirty(false); return;
     }
     setDraftUseAi(selected.useAi);
     setDraftAiProvider(normalizeProvider(selected.aiProvider));
     setDraftAiTier(selected.aiTier);
+    setDraftAiApiKey(selected.aiApiKey ?? "");
     setDraftDirty(false);
   }, [activeKeyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -232,7 +235,12 @@ export function SettingsClient({ initialApiKeys }: Props) {
         const response = await fetch(`/api/settings/api-keys/${activeKey.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ useAi: draftUseAi, aiProvider: draftAiProvider, aiTier: draftAiTier }),
+          body: JSON.stringify({
+            useAi: draftUseAi,
+            aiProvider: draftAiProvider,
+            aiTier: draftAiTier,
+            aiApiKey: draftAiApiKey || null
+          }),
         });
         if (!response.ok) throw new Error("Unable to persist AI configuration.");
         const payload = (await response.json()) as { apiKey: SettingsApiKey };
@@ -246,7 +254,7 @@ export function SettingsClient({ initialApiKeys }: Props) {
       }
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [activeKey, draftAiProvider, draftAiTier, draftDirty, draftUseAi]);
+  }, [activeKey, draftAiProvider, draftAiTier, draftDirty, draftUseAi, draftAiApiKey]);
 
   async function generateApiKey(): Promise<void> {
     setIsGenerating(true); setSaveError(null);
@@ -543,61 +551,106 @@ export function SettingsClient({ initialApiKeys }: Props) {
                   </button>
                 </div>
 
-                {/* Provider */}
-                <div>
-                  <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
-                    AI Provider
-                  </span>
-                  <CustomSelect
-                    value={draftAiProvider}
-                    options={PROVIDER_OPTIONS}
-                    disabled={!activeKey.isActive}
-                    onChange={(next) => {
-                      const v = next as Provider;
-                      setDraftAiProvider(v);
-                      setDraftDirty(true);
-                      setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiProvider: v } : item)));
-                    }}
-                  />
-                </div>
+                {draftUseAi && (
+                  <>
+                    {/* Provider */}
+                    <div>
+                      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
+                        AI Provider
+                      </span>
+                      <CustomSelect
+                        value={draftAiProvider}
+                        options={PROVIDER_OPTIONS}
+                        disabled={!activeKey.isActive}
+                        onChange={(next) => {
+                          const v = next as Provider;
+                          setDraftAiProvider(v);
+                          setDraftDirty(true);
+                          setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiProvider: v } : item)));
+                        }}
+                      />
+                    </div>
 
-                {/* Tier */}
-                <div>
-                  <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
-                    Creativity Tier
-                  </p>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
-                    {TIER_OPTIONS.map((tier) => {
-                      const active = draftAiTier === tier.value;
-                      return (
-                        <button
-                          key={tier.value}
-                          id={`tier-${tier.value.toLowerCase()}`}
-                          type="button"
-                          disabled={!activeKey.isActive}
-                          onClick={() => {
-                            setDraftAiTier(tier.value);
-                            setDraftDirty(true);
-                            setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiTier: tier.value } : item)));
-                          }}
-                          style={{
-                            padding: "0.65rem 0.75rem",
-                            borderRadius: 9,
-                            border: active ? "1.5px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.08)",
-                            background: active ? "rgba(139,92,246,0.1)" : "rgba(255,255,255,0.03)",
-                            color: active ? "#c4b5fd" : "rgba(240,242,255,0.55)",
-                            cursor: activeKey.isActive ? "pointer" : "not-allowed",
-                            fontFamily: "inherit", textAlign: "left",
-                            transition: "all 0.15s",
-                          }}
-                        >
-                          <p style={{ fontSize: "0.8rem", fontWeight: active ? 700 : 600 }}>{tier.label}</p>
-                          <p style={{ fontSize: "0.68rem", color: active ? "rgba(196,181,253,0.7)" : "rgba(240,242,255,0.3)" }}>{tier.desc}</p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                    {/* Tier */}
+                    <div>
+                      <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+                        Creativity Tier
+                      </p>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+                        {TIER_OPTIONS.map((tier) => {
+                          const active = draftAiTier === tier.value;
+                          const isBtnDisabled = !activeKey.isActive;
+                          return (
+                            <button
+                              key={tier.value}
+                              id={`tier-${tier.value.toLowerCase()}`}
+                              type="button"
+                              disabled={isBtnDisabled}
+                              onClick={() => {
+                                setDraftAiTier(tier.value);
+                                setDraftDirty(true);
+                                setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiTier: tier.value } : item)));
+                              }}
+                              style={{
+                                padding: "0.65rem 0.75rem",
+                                borderRadius: 9,
+                                border: active ? "1.5px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                                background: active ? "rgba(139,92,246,0.1)" : "rgba(255,255,255,0.03)",
+                                color: active ? "#c4b5fd" : "rgba(240,242,255,0.55)",
+                                cursor: isBtnDisabled ? "not-allowed" : "pointer",
+                                fontFamily: "inherit", textAlign: "left",
+                                transition: "all 0.15s",
+                                opacity: isBtnDisabled && !active ? 0.5 : 1,
+                              }}
+                            >
+                              <p style={{ fontSize: "0.8rem", fontWeight: active ? 700 : 600 }}>{tier.label}</p>
+                              <p style={{ fontSize: "0.68rem", color: active ? "rgba(196,181,253,0.7)" : "rgba(240,242,255,0.3)" }}>{tier.desc}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* AI API Key Field */}
+                    <div>
+                      <span style={{
+                        display: "block", fontSize: "0.78rem", fontWeight: 600,
+                        letterSpacing: "0.06em", textTransform: "uppercase",
+                        color: "rgba(240,242,255,0.4)",
+                        marginBottom: "0.4rem"
+                      }}>
+                        AI API Key
+                      </span>
+                      <input
+                        type="password"
+                        placeholder="Enter your AI provider API key"
+                        value={draftAiApiKey}
+                        disabled={!activeKey.isActive}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setDraftAiApiKey(v);
+                          setDraftDirty(true);
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "0.6rem 0.875rem",
+                          borderRadius: 9,
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          background: "rgba(255,255,255,0.05)",
+                          color: "rgba(240,242,255,0.9)",
+                          fontFamily: "inherit",
+                          fontSize: "0.875rem",
+                          outline: "none",
+                          cursor: "text",
+                          transition: "border-color 0.15s",
+                        }}
+                      />
+                      <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.3)", marginTop: "0.3rem" }}>
+                        This API key will be used dynamically when querying the builder AI functions.
+                      </p>
+                    </div>
+                  </>
+                )}
 
                 {/* Status */}
                 {saving && <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)" }}>Saving…</p>}

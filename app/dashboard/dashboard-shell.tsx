@@ -88,7 +88,19 @@ function IconDomains() {
   );
 }
 
+function IconOverview() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="9" rx="1" />
+      <rect x="14" y="3" width="7" height="5" rx="1" />
+      <rect x="14" y="12" width="7" height="9" rx="1" />
+      <rect x="3" y="16" width="7" height="5" rx="1" />
+    </svg>
+  );
+}
+
 const NAV_ITEMS = [
+  { href: "/dashboard", label: "Overview", icon: <IconOverview /> },
   { href: "/dashboard/templates", label: "Templates", icon: <IconTemplates /> },
   { href: "/dashboard/compile", label: "Compile", icon: <IconCompile /> },
   { href: "/dashboard/sdk", label: "SDK Client", icon: <IconSdk /> },
@@ -236,7 +248,9 @@ export function DashboardShell({ children, userName, userEmail }: Props) {
           )}
           <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "0.2rem" }}>
             {NAV_ITEMS.map((item) => {
-              const isActive = pathname.startsWith(item.href);
+              const isActive = item.href === "/dashboard"
+                ? pathname === "/dashboard"
+                : pathname.startsWith(item.href);
               return (
                 <li key={item.href}>
                   <Link

@@ -51,6 +51,7 @@ model ApiKey {
   useAi     Boolean   @default(false)
   aiProvider String    @default("openai")
   aiTier    AiTier    @default(AUTO)
+  aiApiKey  String?
   isActive  Boolean   @default(true)
   createdAt DateTime  @default(now())
   lastUsedAt DateTime?
@@ -72,6 +73,7 @@ model Template {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   publishedDomains PublishedDomain[]
+  pageViews PageView[]
 
   @@index([userId])
 }
@@ -138,4 +140,18 @@ model PublishedDomain {
   @@index([userId])
   @@index([templateId])
   @@index([domain])
+}
+
+model PageView {
+  id         String   @id @default(uuid()) @db.Uuid
+  templateId String   @db.Uuid
+  domain     String?  // tracks which subdomain/custom domain was visited
+  ipHash     String?  // sha-256 hash of visitor IP for unique counting
+  userAgent  String?  // browser/device information
+  createdAt  DateTime @default(now())
+
+  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([createdAt])
 }

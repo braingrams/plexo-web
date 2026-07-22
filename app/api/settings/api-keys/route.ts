@@ -32,6 +32,7 @@ function serializeApiKey(record: {
   useAi: boolean;
   aiProvider: string;
   aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
+  aiApiKey: string | null;
 }) {
   return {
     id: record.id,
@@ -42,6 +43,7 @@ function serializeApiKey(record: {
     useAi: record.useAi,
     aiProvider: record.aiProvider,
     aiTier: record.aiTier,
+    aiApiKey: record.aiApiKey,
   };
 }
 

@@ -69,6 +69,7 @@ export default async function TemplateEditorPage(
             useAi: true,
             aiProvider: true,
             aiTier: true,
+            aiApiKey: true,
           },
         },
       },
@@ -96,6 +97,7 @@ export default async function TemplateEditorPage(
       useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}
       aiProvider={activeApiKey?.aiProvider ?? "openai"}
       aiTier={activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}
+      aiApiKey={activeApiKey?.aiApiKey ?? null}
     />
   );
 }

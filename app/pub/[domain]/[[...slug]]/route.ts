@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
 
@@ -54,6 +55,24 @@ export async function GET(
         },
       }
     );
+  }
+
+  // Record analytics view asynchronously (does not block client response)
+  try {
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || request.headers.get("x-real-ip") || "127.0.0.1";
+    const ipHash = createHash("sha256").update(ip).digest("hex");
+    const userAgent = request.headers.get("user-agent") || null;
+
+    void prisma.pageView.create({
+      data: {
+        templateId: published.templateId,
+        domain: rawDomain,
+        ipHash,
+        userAgent,
+      },
+    }).catch(err => console.error("Failed to log PageView:", err));
+  } catch (err) {
+    console.error("Error logging PageView:", err);
   }
 
   // Return the compiled HTML

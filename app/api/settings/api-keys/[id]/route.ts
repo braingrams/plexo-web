@@ -17,6 +17,7 @@ function serializeApiKey(record: {
   useAi: boolean;
   aiProvider: string;
   aiTier: AiTier;
+  aiApiKey: string | null;
 }) {
   return {
     id: record.id,
@@ -27,6 +28,7 @@ function serializeApiKey(record: {
     useAi: record.useAi,
     aiProvider: record.aiProvider,
     aiTier: record.aiTier,
+    aiApiKey: record.aiApiKey,
   };
 }
 
@@ -50,6 +52,7 @@ export async function PATCH(
     useAi?: boolean;
     aiProvider?: string;
     aiTier?: AiTier;
+    aiApiKey?: string;
   };
 
   const existingKey = await prisma.apiKey.findFirst({
@@ -75,6 +78,7 @@ export async function PATCH(
   const useAi = typeof body.useAi === "boolean" ? body.useAi : existingKey.useAi;
   const aiProvider = typeof body.aiProvider === "string" ? body.aiProvider : existingKey.aiProvider;
   const aiTier = typeof body.aiTier === "string" ? body.aiTier : existingKey.aiTier;
+  const aiApiKey = typeof body.aiApiKey === "string" ? body.aiApiKey : existingKey.aiApiKey;
 
   if (!PROVIDER_VALUES.has(aiProvider)) {
     return NextResponse.json({ error: "Invalid AI provider" }, { status: 400 });
@@ -90,6 +94,7 @@ export async function PATCH(
       useAi,
       aiProvider,
       aiTier,
+      aiApiKey,
     },
   });
 
