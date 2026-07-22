@@ -5,24 +5,22 @@ import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { sanitizePlexoPayload } from "@/server/sanitizer";
 
+import { resolveUser } from "@/app/api/v1/domains/route";
+
 type UpdateTemplateBody = {
   designJson?: unknown;
   compiledHtml?: string;
 };
 
-async function getSessionUser(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  return session?.user ?? null;
-}
-
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
-  const user = await getSessionUser(request);
-  if (!user) {
+  const resolved = await resolveUser(request);
+  if (!resolved) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const userId = resolved.userId;
 
   const params = await context.params;
   const body = (await request.json().catch(() => ({}))) as UpdateTemplateBody;
@@ -47,7 +45,7 @@ export async function POST(
   const existing = await prisma.template.findFirst({
     where: {
       id: params.id,
-      userId: user.id,
+      userId,
     },
     select: { id: true },
   });

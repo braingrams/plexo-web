@@ -19,7 +19,10 @@
   "type": "module",
   "dependencies": {
     "@better-auth/prisma-adapter": "^1.6.23",
-    "@charisol/plexo-sdk": "latest",
+    "@charisol/plexo-sdk": "^1.0.5",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@neondatabase/serverless": "^1.1.0",
     "@prisma/adapter-neon": "^7.8.0",
     "@prisma/client": "^7.8.0",
@@ -37,7 +40,8 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.2",
     "uglify-js": "^3.19.3",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@types/dompurify": "^3.0.5",

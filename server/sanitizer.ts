@@ -115,6 +115,10 @@ const BodyJSONSchema = z.object({
   rows: z.array(RowJSONSchema).max(200),
   strataConfig: StrataConfigSchema.optional(),
   uploadedImages: z.array(UploadedImageSchema).max(100).optional(),
+  publishedDomain: z.object({
+    domain: SafeStringSchema,
+    type: z.enum(['SUBDOMAIN', 'CUSTOM']),
+  }).optional(),
 });
 
 const TemplateJSONSchema = z.object({

@@ -77,6 +77,14 @@ export function TemplateEditorClient({
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [modalDomainType, setModalDomainType] = useState<"SUBDOMAIN" | "CUSTOM">("SUBDOMAIN");
+  const [modalSubdomainPrefix, setModalSubdomainPrefix] = useState("");
+  const [modalCustomDomain, setModalCustomDomain] = useState("");
+  const [modalIsSubmitting, setModalIsSubmitting] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [modalSuccess, setModalSuccess] = useState<string | null>(null);
+  const [baseDomain, setBaseDomain] = useState("plexo.charisol.io");
 
   const isEmail = templateKind === "EMAIL";
 
@@ -103,10 +111,75 @@ export function TemplateEditorClient({
       setSaveMessage("Design saved successfully.");
       setTimeout(() => setSaveMessage(null), 3000);
       router.refresh();
+
+      // Check if it's a landing page and doesn't have a linked domain
+      if (templateKind === "LANDING_PAGE") {
+        try {
+          const checkRes = await fetch(`/api/v1/domains?templateId=${templateId}`);
+          const checkData = await checkRes.json();
+          if (checkData.domains && checkData.domains.length === 0) {
+            if (checkData.baseDomain) {
+              setBaseDomain(checkData.baseDomain);
+            }
+            setShowPublishModal(true);
+          }
+        } catch (e) {
+          console.error("Failed to check domain status:", e);
+        }
+      }
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Unable to save template.");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleModalPublish(e: React.FormEvent) {
+    e.preventDefault();
+    setModalError(null);
+    setModalSuccess(null);
+
+    const inputDomain = modalDomainType === "SUBDOMAIN" ? modalSubdomainPrefix : modalCustomDomain;
+    if (!inputDomain.trim()) {
+      setModalError("Please enter a domain name.");
+      return;
+    }
+
+    setModalIsSubmitting(true);
+    try {
+      const response = await fetch("/api/v1/domains", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          templateId,
+          type: modalDomainType,
+          domain: inputDomain,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to publish domain.");
+      }
+      setModalSuccess("Landing page published successfully!");
+      
+      // Update local storage key domain mapping config to sync immediately
+      try {
+        const key = `plexo-published-domain-${templateId}`;
+        localStorage.setItem(key, JSON.stringify({ domain: data.domain.domain, type: modalDomainType }));
+      } catch (err) {
+        console.warn(err);
+      }
+
+      setTimeout(() => {
+        setShowPublishModal(false);
+        setModalSuccess(null);
+        setModalSubdomainPrefix("");
+        setModalCustomDomain("");
+      }, 2000);
+    } catch (err) {
+      setModalError(err instanceof Error ? err.message : "Publish failed.");
+    } finally {
+      setModalIsSubmitting(false);
     }
   }
 
@@ -256,9 +329,152 @@ export function TemplateEditorClient({
           useAi={useAi}
           aiProvider={aiProvider}
           aiTier={aiTier}
+          allowPublishLandingPage={templateKind === "LANDING_PAGE"}
+          templateId={templateId}
           {...({ __internalPlan: subscriptionPlan } as any)}
         />
       </div>
+
+      {/* ── Publish Modal Popup ──────────────────── */}
+      {showPublishModal && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(3, 7, 18, 0.85)", zIndex: 100,
+          display: "grid", placeItems: "center", backdropFilter: "blur(8px)",
+          animation: "fadeIn 0.2s ease-out"
+        }}>
+          <div style={{
+            background: "#0d1324", border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 16, width: "90%", maxWidth: 460, padding: "1.75rem",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.5)"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+              <h2 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#f0f2ff", fontFamily: "var(--font-heading)" }}>
+                🚀 Publish Landing Page
+              </h2>
+              <button
+                onClick={() => setShowPublishModal(false)}
+                style={{ background: "none", border: "none", color: "rgba(240,242,255,0.4)", cursor: "pointer", fontSize: "1.1rem" }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.6)", lineHeight: 1.5, marginBottom: "1.25rem" }}>
+              Your changes have been saved! Would you like to publish this landing page to a subdomain or custom domain?
+            </p>
+
+            <form onSubmit={handleModalPublish} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              {/* Type Switch */}
+              <div style={{ display: "flex", background: "rgba(255,255,255,0.04)", padding: 3, borderRadius: 8, gap: 2 }}>
+                <button
+                  type="button"
+                  onClick={() => setModalDomainType("SUBDOMAIN")}
+                  style={{
+                    flex: 1, padding: "0.35rem", fontSize: "0.78rem", fontWeight: 600, border: "none", cursor: "pointer", borderRadius: 6,
+                    background: modalDomainType === "SUBDOMAIN" ? "var(--brand)" : "transparent",
+                    color: modalDomainType === "SUBDOMAIN" ? "#fff" : "rgba(240,242,255,0.55)",
+                    transition: "all 0.15s"
+                  }}
+                >
+                  Subdomain
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalDomainType("CUSTOM")}
+                  style={{
+                    flex: 1, padding: "0.35rem", fontSize: "0.78rem", fontWeight: 600, border: "none", cursor: "pointer", borderRadius: 6,
+                    background: modalDomainType === "CUSTOM" ? "var(--brand)" : "transparent",
+                    color: modalDomainType === "CUSTOM" ? "#fff" : "rgba(240,242,255,0.55)",
+                    transition: "all 0.15s"
+                  }}
+                >
+                  Custom Domain
+                </button>
+              </div>
+
+              {/* Inputs */}
+              {modalDomainType === "SUBDOMAIN" ? (
+                <div>
+                  <label htmlFor="modal-subdomain" style={{ fontSize: "0.78rem", fontWeight: 600, color: "rgba(240,242,255,0.65)" }}>Configure Subdomain</label>
+                  <div style={{ display: "flex", marginTop: "0.35rem" }}>
+                    <input
+                      id="modal-subdomain"
+                      type="text"
+                      placeholder="my-landing-page"
+                      value={modalSubdomainPrefix}
+                      onChange={(e) => setModalSubdomainPrefix(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                      className="field-input"
+                      style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0, flex: 1 }}
+                    />
+                    <span style={{
+                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                      borderLeft: "none", borderTopRightRadius: 8, borderBottomRightRadius: 8,
+                      display: "flex", alignItems: "center", padding: "0 0.65rem", fontSize: "0.75rem",
+                      color: "rgba(240,242,255,0.45)", fontWeight: 550
+                    }}>
+                      .{baseDomain === "localhost" ? "localhost" : baseDomain}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label htmlFor="modal-custom" style={{ fontSize: "0.78rem", fontWeight: 600, color: "rgba(240,242,255,0.65)" }}>Custom Domain Name</label>
+                  <input
+                    id="modal-custom"
+                    type="text"
+                    placeholder="landing.mybrand.com"
+                    value={modalCustomDomain}
+                    onChange={(e) => setModalCustomDomain(e.target.value.toLowerCase().trim())}
+                    className="field-input"
+                    style={{ marginTop: "0.35rem" }}
+                  />
+                  <div style={{
+                    marginTop: "0.6rem", padding: "0.6rem", background: "rgba(139,92,246,0.04)",
+                    border: "1px solid rgba(139,92,246,0.12)", borderRadius: 8, fontSize: "0.72rem",
+                    color: "rgba(240,242,255,0.65)", lineHeight: 1.35
+                  }}>
+                    Configure a CNAME record mapping your domain to <code style={{ color: "var(--brand)" }}>{baseDomain}</code>.
+                  </div>
+                </div>
+              )}
+
+              {modalError && (
+                <p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0 }}>
+                  ⚠️ {modalError}
+                </p>
+              )}
+
+              {modalSuccess && (
+                <p style={{ fontSize: "0.78rem", color: "#34d399", margin: 0 }}>
+                  ✓ {modalSuccess}
+                </p>
+              )}
+
+              {/* Action buttons */}
+              <div style={{ display: "flex", gap: "0.6rem", marginTop: "0.5rem" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowPublishModal(false)}
+                  className="btn-secondary"
+                  style={{ flex: 1, padding: "0.6rem" }}
+                >
+                  Skip for now
+                </button>
+                <button
+                  type="submit"
+                  disabled={modalIsSubmitting}
+                  className="btn-primary"
+                  style={{ flex: 1, padding: "0.6rem", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.4rem" }}
+                >
+                  {modalIsSubmitting && <span className="spinner" style={{ width: 11, height: 11 }} />}
+                  {modalIsSubmitting ? "Publishing…" : "Publish Live"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

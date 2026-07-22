@@ -32,12 +32,14 @@ model User {
   passwordHash     String           @default("")
   isConfirmed      Boolean          @default(false)
   subscriptionPlan SubscriptionPlan @default(ULTRA)
+  customDomainLimit Int?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
   apiKeys          ApiKey[]
   templates        Template[]
   accounts         Account[]
   sessions         Session[]
+  publishedDomains PublishedDomain[]
 }
 
 model ApiKey {
@@ -69,6 +71,7 @@ model Template {
   updatedAt    DateTime     @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publishedDomains PublishedDomain[]
 
   @@index([userId])
 }
@@ -118,4 +121,21 @@ model Verification {
 
   @@index([identifier])
   @@index([value])
+}
+
+model PublishedDomain {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  templateId String   @db.Uuid
+  domain     String   @unique
+  type       String   // "SUBDOMAIN" | "CUSTOM"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([templateId])
+  @@index([domain])
 }

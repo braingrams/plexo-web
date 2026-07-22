@@ -36,24 +36,24 @@ const compileFormFields = (fields: Array<any>, defaultSharedStyles: string) => {
     .map((field) => {
       const resolved = field.inheritStylesFromPrevious && previousField
         ? {
-            ...field,
-            fontSize: previousField.fontSize,
-            borderRadius: previousField.borderRadius,
-            borderWidth: previousField.borderWidth,
-            borderColor: previousField.borderColor,
-            labelColor: previousField.labelColor,
-            inputTextColor: previousField.inputTextColor,
-            placeholderColor: previousField.placeholderColor,
-          }
+          ...field,
+          fontSize: previousField.fontSize,
+          borderRadius: previousField.borderRadius,
+          borderWidth: previousField.borderWidth,
+          borderColor: previousField.borderColor,
+          labelColor: previousField.labelColor,
+          inputTextColor: previousField.inputTextColor,
+          placeholderColor: previousField.placeholderColor,
+        }
         : field;
-      
+
       previousField = resolved;
-      
+
       const required = resolved.required ? 'required' : '';
       const labelColor = resolved.labelColor || '#94a3b8';
       const labelFontSize = resolved.fontSize || '12px';
       const label = `<label style="display:block;font-size:${labelFontSize};color:${labelColor};margin-bottom:4px;">${resolved.label || resolved.name || 'Field'}${resolved.required ? ' *' : ''}</label>`;
-      
+
       const fieldStyles = [
         `border-radius: ${resolved.borderRadius || '12px'}`,
         `border-width: ${resolved.borderWidth || '1px'}`,
@@ -61,7 +61,7 @@ const compileFormFields = (fields: Array<any>, defaultSharedStyles: string) => {
         `color: ${resolved.inputTextColor || '#1e293b'}`,
         `font-size: ${resolved.fontSize || '13px'}`,
       ].join(';');
-      
+
       const combinedStyles = `${defaultSharedStyles};${fieldStyles}`;
 
       if (resolved.kind === 'textarea') {
@@ -254,10 +254,10 @@ const compileElementToHTML = (elem: ElementJSON): string => {
         .map((l) => `<a href="${l.href || '#'}" style="color: inherit; text-decoration: none; padding: 0 12px;">${l.label}</a>`)
         .join('');
       return `<div style="display: flex; flex-wrap: wrap; justify-content: ${elem.style.textAlign === 'center'
-          ? 'center'
-          : elem.style.textAlign === 'right'
-            ? 'flex-end'
-            : 'flex-start'
+        ? 'center'
+        : elem.style.textAlign === 'right'
+          ? 'flex-end'
+          : 'flex-start'
         }; ${styles}">${linksHtml}</div>`;
     }
     case 'html':
@@ -324,17 +324,17 @@ const compileElementToHTML = (elem: ElementJSON): string => {
       const openInNewTab = !!attrs.openInNewTab;
       const align = elem.style.textAlign || 'center';
       const outerStyle = `text-align: ${align}; padding: ${elem.style.padding || '8px'}; margin: ${elem.style.margin || '0px'};`;
-      
+
       const iconUrl = `https://cdn.jsdelivr.net/npm/lucide-static@0.415.0/icons/${iconName}.svg`;
       const sizePx = parseInt(iconSize) || 48;
-      
+
       const imgStyle = `display: inline-block; vertical-align: middle; fill: ${iconColor}; color: ${iconColor}; width: ${sizePx}px; height: ${sizePx}px;`;
       const imgMarkup = `<img src="${iconUrl}" width="${sizePx}" height="${sizePx}" alt="${iconName}" style="${imgStyle}" />`;
-      
-      const nodeHtml = iconHref 
+
+      const nodeHtml = iconHref
         ? `<a href="${iconHref}" target="${openInNewTab ? '_blank' : '_self'}" style="text-decoration: none;">${imgMarkup}</a>`
         : imgMarkup;
-        
+
       return `<div style="${outerStyle}">${nodeHtml}</div>`;
     }
     default:
