@@ -246,13 +246,20 @@ export function LandingNav() {
         </div>
       )}
 
+      {/*
+        :global() here because these classes sit on a next/link <Link> (and the <nav>
+        wrapping the Link-based SDK/MCP items) — styled-jsx only auto-scopes native DOM
+        tags it can see directly in this component's JSX, not the elements a wrapped
+        component like <Link> renders internally, so a scoped selector would silently
+        never match them.
+      */}
       <style jsx>{`
         @media (max-width: 768px) {
-          .landing-nav-center,
-          .landing-nav-signin {
+          :global(.landing-nav-center),
+          :global(.landing-nav-signin) {
             display: none !important;
           }
-          .landing-nav-hamburger {
+          :global(.landing-nav-hamburger) {
             display: flex !important;
           }
         }
