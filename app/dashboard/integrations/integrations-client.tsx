@@ -72,7 +72,7 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
   );
 
   return (
-    <div className="max-w-[1200px] mx-auto p-6 md:p-8 space-y-8 font-sans">
+    <div className="max-w-[1500px] mx-auto p-6 md:p-8 space-y-8 font-sans">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-white/10">
         <div>
