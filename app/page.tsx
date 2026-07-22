@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LandingNav } from "./landing-nav";
 
 /* ─── Inline SVG Icons ─────────────────────── */
 function IconMail() {
@@ -195,87 +196,7 @@ const plans = [
 export default function HomePage() {
   return (
     <>
-      {/* ── NAVBAR ─────────────────────────────────── */}
-      <header style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-        padding: "0 1.5rem",
-        height: 64,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        background: "rgba(8,9,15,0.85)",
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-      }}>
-        <Link href="/" style={{ textDecoration: "none" }}>
-          <PlexoLogo />
-        </Link>
-
-        <nav style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-          {["Features", "How It Works", "Pricing"].map((item) => (
-            <a
-              key={item}
-              href={`#${item.toLowerCase().replace(/\s+/g, "-")}`}
-              style={{
-                padding: "0.4rem 0.85rem",
-                borderRadius: 8,
-                fontSize: "0.875rem",
-                fontWeight: 500,
-                color: "rgba(240,242,255,0.7)",
-                textDecoration: "none",
-                transition: "color 0.15s, background 0.15s",
-              }}
-            >
-              {item}
-            </a>
-          ))}
-          <Link
-            href="/sdk"
-            style={{
-              padding: "0.4rem 0.85rem",
-              borderRadius: 8,
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              color: "rgba(240,242,255,0.7)",
-              textDecoration: "none",
-              transition: "color 0.15s, background 0.15s",
-            }}
-          >
-            SDK
-          </Link>
-          <Link
-            href="/mcp"
-            style={{
-              padding: "0.4rem 0.85rem",
-              borderRadius: 8,
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "#a78bfa",
-              textDecoration: "none",
-              transition: "color 0.15s, background 0.15s",
-            }}
-          >
-            MCP & AI
-          </Link>
-        </nav>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <Link href="/auth/login" style={{
-            padding: "0.5rem 1rem",
-            borderRadius: 9,
-            fontSize: "0.875rem",
-            fontWeight: 600,
-            color: "rgba(240,242,255,0.8)",
-            textDecoration: "none",
-            border: "1px solid rgba(255,255,255,0.1)",
-            transition: "background 0.15s",
-          }}>
-            Sign In
-          </Link>
-          <Link href="/auth/register" className="btn-brand" style={{ padding: "0.5rem 1.1rem", fontSize: "0.875rem" }}>
-            Get Started
-          </Link>
-        </div>
-      </header>
+      <LandingNav />
 
       <main style={{ paddingTop: 64 }}>
 
@@ -421,7 +342,7 @@ export default function HomePage() {
               {/* Mock builder content */}
               <div style={{ display: "flex", height: 380 }}>
                 {/* Sidebar mock */}
-                <div style={{
+                <div className="hidden sm:block" style={{
                   width: 200, borderRight: "1px solid rgba(255,255,255,0.06)",
                   padding: "1rem 0.75rem",
                   background: "rgba(8,9,15,0.5)",
@@ -451,7 +372,7 @@ export default function HomePage() {
                 </div>
                 {/* Canvas mock */}
                 <div style={{ flex: 1, padding: "1.5rem", background: "rgba(10,11,20,0.4)" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem" }}>
+                  <div className="grid grid-cols-2 sm:grid-cols-3" style={{ gap: "0.75rem" }}>
                     {[...Array(6)].map((_, i) => (
                       <div key={i} style={{
                         background: "rgba(255,255,255,0.03)",

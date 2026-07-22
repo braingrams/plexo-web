@@ -120,6 +120,15 @@
   position: relative;
 }
 
+@media (max-width: 400px) {
+  .auth-shell {
+    padding: 1rem;
+  }
+  .auth-card {
+    padding: 1.5rem;
+  }
+}
+
 .auth-shell::before {
   content: '';
   position: fixed;
@@ -488,9 +497,16 @@
   background: var(--bg);
 }
 
-@media (max-width: 860px) {
-  .dash-pill-nav-label {
+.dash-mobile-nav-toggle {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .dash-pill-nav {
     display: none;
+  }
+  .dash-mobile-nav-toggle {
+    display: flex;
   }
 }
 
@@ -518,9 +534,72 @@
   }
   .dash-classic-editor-route .dash-classic-main {
     margin-left: 0 !important;
+    padding-top: 0 !important;
   }
   .dash-classic-editor-route .dash-classic-banner {
     display: none;
+  }
+  .dash-classic-editor-route .dash-classic-mobile-topbar {
+    display: none;
+  }
+}
+
+/* Classic shell: below 768px the fixed sidebar becomes an off-canvas drawer (hidden by
+   default, toggled via the mobile top bar's hamburger button) instead of a permanent
+   240/64px-wide column. At 768px and above, nothing here changes anything. */
+.dash-classic-mobile-topbar {
+  display: none;
+}
+.dash-mobile-nav-backdrop {
+  display: none;
+}
+.dash-classic-mobile-close-btn {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .dash-classic-mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 56px;
+    padding: 0 0.75rem;
+    background: rgba(13, 15, 26, 0.98);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 30;
+  }
+
+  .dash-mobile-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: rgba(2, 6, 23, 0.6);
+  }
+
+  .dash-classic-aside {
+    width: 240px !important;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .dash-classic-aside.dash-classic-aside-open {
+    transform: translateX(0);
+  }
+
+  .dash-classic-collapse-btn {
+    display: none !important;
+  }
+  .dash-classic-mobile-close-btn {
+    display: grid !important;
+  }
+
+  .dash-classic-main {
+    margin-left: 0 !important;
+    padding-top: 56px;
   }
 }
 

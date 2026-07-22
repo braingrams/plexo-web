@@ -39,6 +39,16 @@ function IconProfile() {
   );
 }
 
+function IconMenu() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  );
+}
+
 type Props = {
   children: React.ReactNode;
   userName: string;
@@ -51,6 +61,11 @@ export function DashboardShellModern({ children, userName, userEmail }: Props) {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Below 768px the horizontally-scrolling pill nav is replaced by a hamburger-triggered
+  // dropdown listing the same items (see .dash-pill-nav / .dash-mobile-nav-toggle rules
+  // in globals.css). Above that breakpoint nothing changes.
+  const [navMenuOpen, setNavMenuOpen] = useState(false);
+  const navMenuRef = useRef<HTMLDivElement>(null);
 
   // The template editor needs its own full viewport below the desktop tier — there's no
   // room for the floating topbar/padding chrome alongside the builder's own responsive
@@ -64,10 +79,18 @@ export function DashboardShellModern({ children, userName, userEmail }: Props) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
+      if (navMenuRef.current && !navMenuRef.current.contains(e.target as Node)) {
+        setNavMenuOpen(false);
+      }
     }
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
+
+  // Close the mobile nav dropdown whenever the route changes.
+  useEffect(() => {
+    setNavMenuOpen(false);
+  }, [pathname]);
 
   async function handleSignOut() {
     setIsSigningOut(true);
@@ -110,6 +133,61 @@ export function DashboardShellModern({ children, userName, userEmail }: Props) {
             );
           })}
         </nav>
+
+        <div ref={navMenuRef} className="dash-mobile-nav-toggle" style={{ position: "relative" }}>
+          <button
+            onClick={() => setNavMenuOpen((v) => !v)}
+            aria-label="Dashboard navigation"
+            aria-expanded={navMenuOpen}
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: "#f0f2ff", padding: "0.4rem", borderRadius: 8,
+              display: "flex", alignItems: "center",
+            }}
+          >
+            <IconMenu />
+          </button>
+
+          {navMenuOpen && (
+            <div
+              style={{
+                position: "absolute",
+                top: "calc(100% + 0.75rem)",
+                left: 0,
+                width: 220,
+                background: "rgba(13,15,26,0.98)",
+                border: "1px solid rgba(255,255,255,0.09)",
+                borderRadius: 16,
+                boxShadow: "0 24px 60px -12px rgba(0,0,0,0.6)",
+                backdropFilter: "blur(20px)",
+                WebkitBackdropFilter: "blur(20px)",
+                padding: "0.5rem",
+                zIndex: 50,
+              }}
+            >
+              {TOP_NAV_ITEMS.map((item) => {
+                const isActive = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setNavMenuOpen(false)}
+                    style={{
+                      display: "flex", alignItems: "center",
+                      padding: "0.6rem 0.65rem", borderRadius: 10,
+                      fontSize: "0.85rem", fontWeight: isActive ? 600 : 500,
+                      color: isActive ? "var(--brand)" : "rgba(240,242,255,0.7)",
+                      background: isActive ? "var(--brand-subtle)" : "transparent",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <div ref={menuRef} style={{ position: "relative", flexShrink: 0 }}>
           <button

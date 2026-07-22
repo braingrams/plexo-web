@@ -75,13 +75,13 @@ export default function PublicSdkPage() {
             transition: "color 0.15s, background 0.15s",
           }}>
             <IconArrowLeft />
-            Back
+            <span className="hidden sm:inline">Back</span>
           </Link>
           <PlexoLogo />
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <Link href="/auth/login" style={{
+          <Link href="/auth/login" className="hidden sm:inline-block" style={{
             padding: "0.5rem 1rem", borderRadius: 9, fontSize: "0.875rem", fontWeight: 600,
             color: "rgba(240,242,255,0.8)", textDecoration: "none", border: "1px solid rgba(255,255,255,0.1)",
           }}>

@@ -236,7 +236,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
 
       {/* Grid */}
       {filtered.length > 0 ? (
-        <div style={{
+        <div className="templates-grid" style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))",
           gap: "1.25rem",
@@ -582,6 +582,14 @@ export function TemplatesClient({ initialTemplates }: Props) {
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        @media (max-width: 480px) {
+          .templates-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

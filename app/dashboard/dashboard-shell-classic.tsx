@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { NAV_ITEMS as BASE_NAV_ITEMS } from "./nav-items";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
@@ -59,6 +59,25 @@ function IconChevronRight() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+function IconMenu() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  );
+}
+
+function IconClose() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
   );
 }
@@ -124,6 +143,10 @@ export function DashboardShellClassic({ children, userName, userEmail }: Props) 
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  // Below 768px the sidebar becomes an off-canvas drawer (see .dash-classic-aside rules
+  // in globals.css) triggered by the mobile top bar's hamburger button. Desktop's own
+  // collapse/expand chevron state (`collapsed`) is unrelated and unaffected.
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   // The template editor needs its own full viewport below the desktop tier — there's no
   // room for the fixed sidebar chrome alongside the builder's own responsive layout.
@@ -150,11 +173,49 @@ export function DashboardShellClassic({ children, userName, userEmail }: Props) 
 
   const sidebarWidth = collapsed ? 64 : 240;
 
+  // Close the mobile drawer whenever the route changes (navigating counts as "done").
+  useEffect(() => {
+    setIsMobileNavOpen(false);
+  }, [pathname]);
+
   return (
     <div className={rootClassName} style={{ minHeight: "100vh", display: "flex" }}>
+      {/* ── MOBILE TOP BAR (below 768px only) ─────── */}
+      <header className="dash-classic-mobile-topbar">
+        <button
+          type="button"
+          onClick={() => setIsMobileNavOpen(true)}
+          aria-label="Open navigation"
+          style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: "#f0f2ff", padding: "0.5rem",
+            borderRadius: 8, display: "grid", placeItems: "center",
+          }}
+        >
+          <IconMenu />
+        </button>
+        <span style={{
+          fontFamily: "var(--font-heading), sans-serif",
+          fontWeight: 700, fontSize: "0.95rem",
+          color: "#f0f2ff", letterSpacing: "-0.02em",
+        }}>
+          Plexo
+        </span>
+        <span style={{ width: 32 }} />
+      </header>
+
+      {/* ── MOBILE DRAWER BACKDROP ───────────────── */}
+      {isMobileNavOpen && (
+        <div
+          className="dash-mobile-nav-backdrop"
+          onClick={() => setIsMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* ── SIDEBAR ─────────────────────────────── */}
       <aside
-        className="dash-classic-aside"
+        className={`dash-classic-aside${isMobileNavOpen ? " dash-classic-aside-open" : ""}`}
         style={{
           position: "fixed",
           top: 0, left: 0, bottom: 0,
@@ -222,6 +283,7 @@ export function DashboardShellClassic({ children, userName, userEmail }: Props) 
             <button
               onClick={() => setCollapsed(true)}
               aria-label="Collapse sidebar"
+              className="dash-classic-collapse-btn"
               style={{
                 background: "none", border: "none", cursor: "pointer",
                 color: "rgba(240,242,255,0.4)", padding: "0.35rem",
@@ -232,11 +294,23 @@ export function DashboardShellClassic({ children, userName, userEmail }: Props) 
               <IconChevronLeft />
             </button>
           )}
+          <button
+            onClick={() => setIsMobileNavOpen(false)}
+            aria-label="Close navigation"
+            className="dash-classic-mobile-close-btn"
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: "rgba(240,242,255,0.6)", padding: "0.35rem",
+              borderRadius: 7, display: "none", placeItems: "center",
+            }}
+          >
+            <IconClose />
+          </button>
         </div>
 
         {/* Expand button when collapsed */}
         {collapsed && (
-          <div style={{ display: "flex", justifyContent: "center", padding: "0.5rem 0 0.25rem" }}>
+          <div className="dash-classic-collapse-btn" style={{ display: "flex", justifyContent: "center", padding: "0.5rem 0 0.25rem" }}>
             <button
               onClick={() => setCollapsed(false)}
               aria-label="Expand sidebar"

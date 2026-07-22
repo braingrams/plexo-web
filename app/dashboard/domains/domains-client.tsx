@@ -587,8 +587,8 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
               </button>
             </div>
           ) : (
-            <div style={{ width: "100%" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.875rem" }}>
+            <div style={{ width: "100%", overflowX: "auto" }}>
+              <table style={{ width: "100%", minWidth: 720, borderCollapse: "collapse", textAlign: "left", fontSize: "0.875rem" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.05)", color: "rgba(240,242,255,0.35)", fontWeight: 650 }}>
                     <th style={{ padding: "1rem 1.5rem", borderTopLeftRadius: 16 }}>Domain</th>
