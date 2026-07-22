@@ -21,6 +21,7 @@ import {
   Laptop,
   Cpu,
   Lock,
+  Info,
 } from "lucide-react";
 
 type McpLandingClientProps = {
@@ -36,6 +37,10 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
+
+  const serverMcpUrl = `${baseUrl}/api/v1/mcp`;
+  const authorizeUrl = `${baseUrl}/api/v1/auth/oauth/authorize`;
+  const tokenUrl = `${baseUrl}/api/v1/auth/oauth/token`;
 
   const samplePrompts = {
     prompt: {
@@ -149,10 +154,10 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
             </Link>
 
             <a
-              href="#use-cases"
+              href="#setup-guides"
               className="px-6 py-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-white/90 text-sm font-semibold transition"
             >
-              Explore Use Cases
+              View Connection Guides
             </a>
           </div>
         </section>
@@ -217,110 +222,66 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
           </div>
         </section>
 
-        {/* ── CORE USE CASES ───────────────────────────────────── */}
-        <section id="use-cases" className="space-y-8">
-          <div className="text-center max-w-2xl mx-auto space-y-2">
-            <h2 className="text-2xl font-bold text-white tracking-tight">4 Core Abilities for AI Workflows</h2>
-            <p className="text-xs text-white/60">
-              Transform natural language prompts into complete landing pages, analytics queries, and campaign templates.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Case 1 */}
-            <div className="bg-[#111827]/80 border border-white/10 rounded-2xl p-6 space-y-3 hover:border-[#8b5cf6]/40 transition">
-              <div className="w-10 h-10 rounded-xl bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 flex items-center justify-center text-[#8b5cf6]">
-                <Globe className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-white">1. Prompt to Published Domain</h3>
-              <p className="text-xs text-white/70 leading-relaxed">
-                Prompt the AI to construct a page for your brand. The MCP server generates the structured <code className="text-[#a78bfa]">designJson</code> layout (for visual drag-and-drop editing in Plexo) and auto-compiles production HTML, publishing it immediately to your subdomain or custom domain.
-              </p>
-            </div>
-
-            {/* Case 2 */}
-            <div className="bg-[#111827]/80 border border-white/10 rounded-2xl p-6 space-y-3 hover:border-[#818cf8]/40 transition">
-              <div className="w-10 h-10 rounded-xl bg-[#818cf8]/10 border border-[#818cf8]/20 flex items-center justify-center text-[#818cf8]">
-                <BarChart3 className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-white">2. Conversational Visitor Analytics</h3>
-              <p className="text-xs text-white/70 leading-relaxed">
-                Ask your AI: <em className="text-[#818cf8]">"Which of my landing pages had the highest visitor conversion this week?"</em> The MCP server queries page view aggregates, unique visitor IPs, and performance metrics directly.
-              </p>
-            </div>
-
-            {/* Case 3 */}
-            <div className="bg-[#111827]/80 border border-white/10 rounded-2xl p-6 space-y-3 hover:border-[#34d399]/40 transition">
-              <div className="w-10 h-10 rounded-xl bg-[#34d399]/10 border border-[#34d399]/20 flex items-center justify-center text-[#34d399]">
-                <Layers className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-white">3. Email & Landing Page Inventory</h3>
-              <p className="text-xs text-white/70 leading-relaxed">
-                Inspect all saved email templates, newsletters, and draft pages in your account. Your AI assistant can clone, update, or reference existing designs during prompt conversations.
-              </p>
-            </div>
-
-            {/* Case 4 */}
-            <div className="bg-[#111827]/80 border border-white/10 rounded-2xl p-6 space-y-3 hover:border-[#a78bfa]/40 transition">
-              <div className="w-10 h-10 rounded-xl bg-[#a78bfa]/10 border border-[#a78bfa]/20 flex items-center justify-center text-[#a78bfa]">
-                <Lock className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-white">4. Browser Sign-In Authentication</h3>
-              <p className="text-xs text-white/70 leading-relaxed">
-                Never type sensitive API keys directly into public chat windows. The Plexo MCP server uses a secure browser authorization flow (<code className="text-[#34d399]">/mcp/login</code>) to grant tokens safely.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* ── PLATFORM SETUP GUIDES ──────────────────────────────── */}
-        <section className="bg-[#111827]/80 border border-white/10 rounded-3xl p-6 md:p-8 space-y-6">
+        {/* ── CONNECTION & SETUP GUIDES ──────────────────────────── */}
+        <section id="setup-guides" className="bg-[#111827]/80 border border-white/10 rounded-3xl p-6 md:p-8 space-y-8">
           <div>
-            <h2 className="text-xl font-bold text-white">Supported AI Platforms</h2>
-            <p className="text-xs text-white/60">Connect in less than 60 seconds across all major AI tools.</p>
+            <h2 className="text-xl font-bold text-white">How to Add Plexo on Claude & ChatGPT</h2>
+            <p className="text-xs text-white/60">Follow the menu paths shown below to connect directly.</p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Claude */}
-            <div className="p-5 rounded-2xl bg-[#090d16] border border-white/10 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#8b5cf6]" />
-                  Claude (Web & Desktop)
-                </span>
-                <span className="text-[10px] font-mono text-[#a78bfa] bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 px-2 py-0.5 rounded">
-                  MCP
-                </span>
-              </div>
-              <p className="text-xs text-white/60">Add <code className="text-white/80">@charisol/plexo-mcp</code> to your <code className="text-white/80">claude_desktop_config.json</code> or load SKILL.md.</p>
-            </div>
-
-            {/* ChatGPT */}
-            <div className="p-5 rounded-2xl bg-[#090d16] border border-white/10 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white flex items-center gap-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* 1. ChatGPT Developer Plugin */}
+            <div className="p-6 rounded-2xl bg-[#090d16] border border-white/10 space-y-4">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <span className="text-sm font-bold text-white flex items-center gap-2">
                   <Bot className="w-4 h-4 text-[#34d399]" />
-                  ChatGPT Custom Action
+                  1. ChatGPT Developer Plugin / Remote MCP
                 </span>
                 <span className="text-[10px] font-mono text-[#34d399] bg-[#34d399]/10 border border-[#34d399]/20 px-2 py-0.5 rounded">
-                  OpenAPI 3.1
+                  Developer Mode
                 </span>
               </div>
-              <p className="text-xs text-white/60">Import <code className="text-white/80">{baseUrl}/openapi.json</code> in ChatGPT GPT Builder Editor.</p>
+
+              <ol className="space-y-2.5 text-xs text-white/70 list-decimal list-inside leading-relaxed">
+                <li>Toggle ON <strong className="text-white">Developer mode</strong> in ChatGPT (<code className="text-white/90">Settings → Security and login</code>).</li>
+                <li>Go to <strong className="text-white">Settings → Plugins</strong> (or <a href="https://chatgpt.com/plugins" target="_blank" className="text-[#34d399] underline">chatgpt.com/plugins</a>).</li>
+                <li>Click <strong className="text-white">+ (New Plugin)</strong> → select <strong className="text-white">Developer-mode app / Remote MCP server</strong>.</li>
+                <li>Set Name to <strong className="text-white">Plexo</strong> and Server URL to <code className="text-[#34d399]">{serverMcpUrl}</code>.</li>
+                <li>Select <strong className="text-white">OAuth</strong> authentication, check terms, and click <strong className="text-white">Create</strong>.</li>
+              </ol>
+
+              <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-[11px] text-white/60 space-y-1 font-mono">
+                <div>Server URL: <code className="text-[#34d399] select-all">{serverMcpUrl}</code></div>
+                <div>Authorize URL: <code className="text-[#34d399] select-all">{authorizeUrl}</code></div>
+                <div>Token URL: <code className="text-[#34d399] select-all">{tokenUrl}</code></div>
+              </div>
             </div>
 
-            {/* Cursor */}
-            <div className="p-5 rounded-2xl bg-[#090d16] border border-white/10 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white flex items-center gap-2">
-                  <Terminal className="w-4 h-4 text-[#818cf8]" />
-                  Cursor / Windsurf IDE
+            {/* 2. Claude Custom Connectors */}
+            <div className="p-6 rounded-2xl bg-[#090d16] border border-white/10 space-y-4">
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <span className="text-sm font-bold text-white flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[#8b5cf6]" />
+                  2. Claude Custom Connectors
                 </span>
-                <span className="text-[10px] font-mono text-[#818cf8] bg-[#818cf8]/10 border border-[#818cf8]/20 px-2 py-0.5 rounded">
-                  .cursor/mcp.json
+                <span className="text-[10px] font-mono text-[#a78bfa] bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 px-2 py-0.5 rounded">
+                  Connectors
                 </span>
               </div>
-              <p className="text-xs text-white/60">Add <code className="text-white/80">npx @charisol/plexo-mcp</code> command server to workspace config.</p>
+
+              <ol className="space-y-2.5 text-xs text-white/70 list-decimal list-inside leading-relaxed">
+                <li>In Claude left sidebar, click <strong className="text-white">Customize → Connectors</strong> (located right above Plugins).</li>
+                <li>Click <strong className="text-white">Add ∨</strong> at top right → select <strong className="text-white">Add custom connector</strong>.</li>
+                <li>Set Name to <strong className="text-white">Plexo</strong> and URL to <code className="text-[#a78bfa]">{serverMcpUrl}</code>.</li>
+                <li>Under Advanced settings (Optional), enter Client ID: <code className="text-white/90">plexo_mcp_client</code> & Secret: <code className="text-white/90">plexo_mcp_secret</code>.</li>
+                <li>Click <strong className="text-white">Add</strong> and complete the popup OAuth login prompt.</li>
+              </ol>
+
+              <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-[11px] text-white/60 space-y-1 font-mono">
+                <div>Connector URL: <code className="text-[#a78bfa] select-all">{serverMcpUrl}</code></div>
+                <div>OAuth Client ID: <code className="text-white/80">plexo_mcp_client</code></div>
+                <div>OAuth Client Secret: <code className="text-white/80">plexo_mcp_secret</code></div>
+              </div>
             </div>
           </div>
         </section>
