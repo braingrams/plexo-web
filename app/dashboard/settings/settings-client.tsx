@@ -14,7 +14,7 @@ type SettingsApiKey = {
   useAi: boolean;
   aiProvider: string;
   aiTier: AiTier;
-  aiApiKey: string | null;
+  hasAiApiKey: boolean;
 };
 
 type Props = {
@@ -199,6 +199,7 @@ export function SettingsClient({ initialApiKeys }: Props) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedRawKey, setGeneratedRawKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [revokingKeys, setRevokingKeys] = useState<Set<string>>(new Set());
 
   const activeKey = useMemo(
     () => apiKeys.find((item) => item.id === activeKeyId) ?? null,
@@ -210,21 +211,25 @@ export function SettingsClient({ initialApiKeys }: Props) {
     normalizeProvider(activeKey?.aiProvider ?? "openai"),
   );
   const [draftAiTier, setDraftAiTier] = useState<AiTier>(activeKey?.aiTier ?? "AUTO");
-  const [draftAiApiKey, setDraftAiApiKey] = useState<string>(activeKey?.aiApiKey ?? "");
+  // The server never returns the stored key (write-only) — this field always starts
+  // blank and is only sent on save if the user actually typed into it (aiKeyTouched).
+  const [draftAiApiKey, setDraftAiApiKey] = useState<string>("");
+  const [aiKeyTouched, setAiKeyTouched] = useState(false);
   const [draftDirty, setDraftDirty] = useState(false);
 
   useEffect(() => {
     if (!activeKeyId) {
-      setDraftUseAi(false); setDraftAiProvider("openai"); setDraftAiTier("AUTO"); setDraftAiApiKey(""); setDraftDirty(false); return;
+      setDraftUseAi(false); setDraftAiProvider("openai"); setDraftAiTier("AUTO"); setDraftAiApiKey(""); setAiKeyTouched(false); setDraftDirty(false); return;
     }
     const selected = apiKeys.find((item) => item.id === activeKeyId);
     if (!selected) {
-      setDraftUseAi(false); setDraftAiProvider("openai"); setDraftAiTier("AUTO"); setDraftAiApiKey(""); setDraftDirty(false); return;
+      setDraftUseAi(false); setDraftAiProvider("openai"); setDraftAiTier("AUTO"); setDraftAiApiKey(""); setAiKeyTouched(false); setDraftDirty(false); return;
     }
     setDraftUseAi(selected.useAi);
     setDraftAiProvider(normalizeProvider(selected.aiProvider));
     setDraftAiTier(selected.aiTier);
-    setDraftAiApiKey(selected.aiApiKey ?? "");
+    setDraftAiApiKey("");
+    setAiKeyTouched(false);
     setDraftDirty(false);
   }, [activeKeyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -240,7 +245,7 @@ export function SettingsClient({ initialApiKeys }: Props) {
             useAi: draftUseAi,
             aiProvider: draftAiProvider,
             aiTier: draftAiTier,
-            aiApiKey: draftAiApiKey || null
+            ...(aiKeyTouched ? { aiApiKey: draftAiApiKey } : {}),
           }),
         });
         if (!response.ok) throw new Error("Unable to persist AI configuration.");
@@ -248,6 +253,10 @@ export function SettingsClient({ initialApiKeys }: Props) {
         setApiKeys((current) => current.map((item) => (item.id === payload.apiKey.id ? payload.apiKey : item)));
         setSaveNotice("AI settings saved.");
         setDraftDirty(false);
+        if (aiKeyTouched) {
+          setDraftAiApiKey("");
+          setAiKeyTouched(false);
+        }
       } catch (error) {
         setSaveError(error instanceof Error ? error.message : "Unable to persist AI configuration.");
       } finally {
@@ -255,7 +264,7 @@ export function SettingsClient({ initialApiKeys }: Props) {
       }
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [activeKey, draftAiProvider, draftAiTier, draftDirty, draftUseAi, draftAiApiKey]);
+  }, [activeKey, draftAiProvider, draftAiTier, draftDirty, draftUseAi, draftAiApiKey, aiKeyTouched]);
 
   async function generateApiKey(): Promise<void> {
     setIsGenerating(true); setSaveError(null);
@@ -278,23 +287,33 @@ export function SettingsClient({ initialApiKeys }: Props) {
 
   async function revokeKey(keyId: string): Promise<void> {
     setSaveError(null);
+    setRevokingKeys((prev) => {
+      const next = new Set(prev);
+      next.add(keyId);
+      return next;
+    });
     try {
       const response = await fetch(`/api/settings/api-keys/${keyId}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "revoke" }),
       });
       if (!response.ok) throw new Error("Unable to revoke API key.");
-      const payload = (await response.json()) as { apiKey: SettingsApiKey };
       setApiKeys((current) => {
-        const nextState = current.map((item) => (item.id === payload.apiKey.id ? payload.apiKey : item));
-        if (activeKeyId === payload.apiKey.id && !payload.apiKey.isActive) {
-          const nextActive = nextState.find((item) => item.id !== payload.apiKey.id && item.isActive);
+        const nextState = current.filter((item) => item.id !== keyId);
+        if (activeKeyId === keyId) {
+          const nextActive = nextState.find((item) => item.isActive);
           setActiveKeyId(nextActive?.id ?? null);
         }
         return nextState;
       });
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Unable to revoke API key.");
+    } finally {
+      setRevokingKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(keyId);
+        return next;
+      });
     }
   }
 
@@ -437,7 +456,7 @@ export function SettingsClient({ initialApiKeys }: Props) {
                       <td style={{ padding: "0.85rem 1.25rem" }}>
                         <button
                           type="button"
-                          disabled={!item.isActive}
+                          disabled={!item.isActive || revokingKeys.has(item.id)}
                           onClick={() => void revokeKey(item.id)}
                           style={{
                             padding: "0.4rem 0.85rem",
@@ -445,13 +464,13 @@ export function SettingsClient({ initialApiKeys }: Props) {
                             border: "1px solid rgba(248,113,113,0.25)",
                             background: "transparent",
                             color: "#f87171", fontSize: "0.75rem", fontWeight: 600,
-                            cursor: item.isActive ? "pointer" : "not-allowed",
-                            opacity: item.isActive ? 1 : 0.4,
+                            cursor: (item.isActive && !revokingKeys.has(item.id)) ? "pointer" : "not-allowed",
+                            opacity: (item.isActive && !revokingKeys.has(item.id)) ? 1 : 0.4,
                             fontFamily: "inherit",
                             transition: "background 0.15s",
                           }}
                         >
-                          Revoke
+                          {revokingKeys.has(item.id) ? "Revoking..." : "Revoke"}
                         </button>
                       </td>
                     </tr>
@@ -613,12 +632,13 @@ export function SettingsClient({ initialApiKeys }: Props) {
                       </span>
                       <input
                         type="password"
-                        placeholder="Enter your AI provider API key"
+                        placeholder={activeKey.hasAiApiKey && !aiKeyTouched ? "•••••••••••••••• (saved — enter a new key to replace it)" : "Enter your AI provider API key"}
                         value={draftAiApiKey}
                         disabled={!activeKey.isActive}
                         onChange={(e) => {
                           const v = e.target.value;
                           setDraftAiApiKey(v);
+                          setAiKeyTouched(true);
                           setDraftDirty(true);
                         }}
                         style={{
@@ -635,8 +655,10 @@ export function SettingsClient({ initialApiKeys }: Props) {
                           transition: "border-color 0.15s",
                         }}
                       />
-                      <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.3)", marginTop: "0.3rem" }}>
-                        This API key will be used dynamically when querying the builder AI functions.
+                      <p style={{ fontSize: "0.72rem", color: activeKey.hasAiApiKey ? "#34d399" : "rgba(240,242,255,0.3)", marginTop: "0.3rem" }}>
+                        {activeKey.hasAiApiKey
+                          ? "A key is saved and encrypted at rest. It is never sent back to the browser — leave this field blank to keep it."
+                          : "This key is encrypted at rest and used server-side only when querying the builder AI functions."}
                       </p>
                     </div>
                   </>

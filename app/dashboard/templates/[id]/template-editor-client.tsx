@@ -24,7 +24,9 @@ type Props = {
   useAi: boolean;
   aiProvider: string;
   aiTier: AiTier;
-  aiApiKey: string | null;
+  unsplashKey?: string;
+  pexelsKey?: string;
+  pixabayKey?: string;
 };
 
 function IconArrowLeft() {
@@ -72,7 +74,9 @@ export function TemplateEditorClient({
   useAi,
   aiProvider,
   aiTier,
-  aiApiKey,
+  unsplashKey,
+  pexelsKey,
+  pixabayKey,
 }: Props) {
   const router = useRouter();
   const builderRef = useRef<PlexoBuilderRef>(null);
@@ -331,9 +335,11 @@ export function TemplateEditorClient({
           useAi={useAi}
           aiProvider={aiProvider}
           aiTier={aiTier}
-          aiApiKey={aiApiKey || undefined}
           allowPublishLandingPage={templateKind === "LANDING_PAGE"}
           templateId={templateId}
+          unsplashKey={unsplashKey}
+          pexelsKey={pexelsKey}
+          pixabayKey={pixabayKey}
           {...({ __internalPlan: subscriptionPlan } as any)}
         />
       </div>

@@ -21,7 +21,9 @@ export type TemplateEditorProps = {
   useAi: boolean;
   aiProvider: string;
   aiTier: AiTier;
-  aiApiKey: string | null;
+  unsplashKey?: string;
+  pexelsKey?: string;
+  pixabayKey?: string;
 };
 
 function EditorSkeleton() {

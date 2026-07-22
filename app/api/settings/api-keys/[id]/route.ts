@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { encryptSecret } from "@/lib/crypto";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 
@@ -28,7 +29,7 @@ function serializeApiKey(record: {
     useAi: record.useAi,
     aiProvider: record.aiProvider,
     aiTier: record.aiTier,
-    aiApiKey: record.aiApiKey,
+    hasAiApiKey: !!record.aiApiKey,
   };
 }
 
@@ -67,18 +68,25 @@ export async function PATCH(
   }
 
   if ("action" in body && body.action === "revoke") {
-    const revoked = await prisma.apiKey.update({
+    await prisma.apiKey.delete({
       where: { id: existingKey.id },
-      data: { isActive: false },
     });
 
-    return NextResponse.json({ apiKey: serializeApiKey(revoked) });
+    return NextResponse.json({ success: true, deletedId: existingKey.id });
   }
 
   const useAi = typeof body.useAi === "boolean" ? body.useAi : existingKey.useAi;
   const aiProvider = typeof body.aiProvider === "string" ? body.aiProvider : existingKey.aiProvider;
   const aiTier = typeof body.aiTier === "string" ? body.aiTier : existingKey.aiTier;
-  const aiApiKey = typeof body.aiApiKey === "string" ? body.aiApiKey : existingKey.aiApiKey;
+
+  // aiApiKey is write-only: the client only sends it when the user actually typed a
+  // replacement. An empty string clears the stored key; omitting the field leaves it
+  // untouched. Never round-tripped back to the client — see serializeApiKey.
+  let aiApiKey = existingKey.aiApiKey;
+  if (typeof body.aiApiKey === "string") {
+    const trimmed = body.aiApiKey.trim();
+    aiApiKey = trimmed ? encryptSecret(trimmed) : null;
+  }
 
   if (!PROVIDER_VALUES.has(aiProvider)) {
     return NextResponse.json({ error: "Invalid AI provider" }, { status: 400 });

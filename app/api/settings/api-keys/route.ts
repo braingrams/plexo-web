@@ -43,7 +43,7 @@ function serializeApiKey(record: {
     useAi: record.useAi,
     aiProvider: record.aiProvider,
     aiTier: record.aiTier,
-    aiApiKey: record.aiApiKey,
+    hasAiApiKey: !!record.aiApiKey,
   };
 }
 

@@ -6,6 +6,27 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const host = request.headers.get("host") || "";
   const hostname = host.split(":")[0];
 
+  // Handle CORS and preflight requests for API endpoints
+  if (pathname.startsWith("/api/")) {
+    const origin = request.headers.get("origin") || "";
+    
+    if (request.method === "OPTIONS") {
+      const response = new NextResponse(null, { status: 204 });
+      response.headers.set("Access-Control-Allow-Credentials", "true");
+      response.headers.set("Access-Control-Allow-Origin", origin || "*");
+      response.headers.set("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
+      response.headers.set("Access-Control-Allow-Headers", "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, x-api-key, Authorization, x-unsplash-key, x-pexels-key, x-pixabay-key");
+      return response;
+    }
+
+    const response = NextResponse.next();
+    response.headers.set("Access-Control-Allow-Credentials", "true");
+    response.headers.set("Access-Control-Allow-Origin", origin || "*");
+    response.headers.set("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
+    response.headers.set("Access-Control-Allow-Headers", "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, x-api-key, Authorization, x-unsplash-key, x-pexels-key, x-pixabay-key");
+    return response;
+  }
+
   // Resolve base domain dynamically from env or fallback
   const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const baseDomain = new URL(baseAppUrl).hostname; // e.g. "localhost" or "plexo.charisol.io"
@@ -26,7 +47,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       lookupDomain = `${sub}.${baseDomain}`;
     }
     
-    // Rewrite path to /pub/[lookupDomain]/[path]
+    // Rewrite path to /pub/${lookupDomain}${pathname}
     return NextResponse.rewrite(new URL(`/pub/${lookupDomain}${pathname}`, request.url));
   }
 
@@ -50,10 +71,9 @@ export const config = {
   matcher: [
     /*
      * Match all paths except:
-     * 1. /api routes
-     * 2. /_next (Next.js internals)
-     * 3. static files with extensions (e.g. favicon.ico, images, css)
+     * 1. /_next (Next.js internals)
+     * 2. static files with extensions (e.g. favicon.ico, images, css)
      */
-    "/((?!api/|_next/|.*\\..*).*)",
+    "/((?!_next/|.*\\..*).*)",
   ],
 };

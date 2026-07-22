@@ -75,7 +75,7 @@ const ElementTypeSchema = z.enum([
   'video', 'social', 'menu', 'html', 'table', 'timer', 'icon'
 ]);
 
-const ElementJSONSchema = z.object({
+export const ElementJSONSchema = z.object({
   id: z.string().max(100),
   type: ElementTypeSchema,
   style: StyleRecordSchema,
@@ -114,10 +114,13 @@ const PublishConfigSchema = z.object({
   apiKeyOverride: z.string().max(500).optional(),
 });
 
+// NOTE: apiKey/provider were dropped from this schema deliberately — a per-template
+// override used to carry a raw provider key inside designJson, which is loaded into
+// the browser wholesale for editing and could never be kept secret there. The actual
+// key now always comes from the account's server-side, encrypted ApiKey row; a
+// template may only override useAi/tier.
 const AiConfigSchema = z.object({
   useAi: z.boolean().optional(),
-  provider: z.string().max(100).optional(),
-  apiKey: z.string().max(500).optional(),
   tier: z.string().max(100).optional(),
 });
 
@@ -134,7 +137,7 @@ const BodyJSONSchema = z.object({
   aiConfig: AiConfigSchema.optional(),
 });
 
-const TemplateJSONSchema = z.object({
+export const TemplateJSONSchema = z.object({
   body: BodyJSONSchema,
 });
 

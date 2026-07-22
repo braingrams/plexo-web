@@ -69,7 +69,6 @@ export default async function TemplateEditorPage(
             useAi: true,
             aiProvider: true,
             aiTier: true,
-            aiApiKey: true,
           },
         },
       },
@@ -87,6 +86,10 @@ export default async function TemplateEditorPage(
   const activeApiKey = user?.apiKeys[0] ?? null;
   const tierFeatures = getTierFeatures(user?.subscriptionPlan);
 
+  const unsplashKey = process.env.UNSPLASH_KEY || "";
+  const pexelsKey = process.env.PEXELS_KEY || "";
+  const pixabayKey = process.env.PIXABAY_KEY || "";
+
   return (
     <TemplateEditorDynamic
       templateId={template.id}
@@ -97,7 +100,9 @@ export default async function TemplateEditorPage(
       useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}
       aiProvider={activeApiKey?.aiProvider ?? "openai"}
       aiTier={activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}
-      aiApiKey={activeApiKey?.aiApiKey ?? null}
+      unsplashKey={unsplashKey}
+      pexelsKey={pexelsKey}
+      pixabayKey={pixabayKey}
     />
   );
 }

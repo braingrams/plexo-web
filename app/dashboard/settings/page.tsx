@@ -15,7 +15,7 @@ type SettingsApiKey = {
   useAi: boolean;
   aiProvider: string;
   aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
-  aiApiKey: string | null;
+  hasAiApiKey: boolean;
 };
 
 function serializeApiKey(record: {
@@ -38,7 +38,7 @@ function serializeApiKey(record: {
     useAi: record.useAi,
     aiProvider: record.aiProvider,
     aiTier: record.aiTier,
-    aiApiKey: record.aiApiKey,
+    hasAiApiKey: !!record.aiApiKey,
   };
 }
 
@@ -51,7 +51,10 @@ export default async function DashboardSettingsPage() {
   }
 
   const apiKeys = await prisma.apiKey.findMany({
-    where: { userId: session.user.id },
+    where: {
+      userId: session.user.id,
+      isActive: true,
+    },
     orderBy: { createdAt: "desc" },
   });
 
