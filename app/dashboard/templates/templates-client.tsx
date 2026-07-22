@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PageHeader } from "../_components/PageHeader";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
@@ -144,20 +145,10 @@ export function TemplatesClient({ initialTemplates }: Props) {
 
   return (
     <div style={{ padding: "2rem 1.75rem", maxWidth: 1500, margin: "0 auto" }}>
-      {/* Header */}
-      <div style={{ marginBottom: "2rem" }}>
-        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.35rem" }}>
-          Workspace
-        </p>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-          <h1 style={{
-            fontFamily: "var(--font-heading), sans-serif",
-            fontSize: "clamp(1.6rem, 3vw, 2.1rem)",
-            fontWeight: 800, letterSpacing: "-0.025em",
-            color: "#f0f2ff",
-          }}>
-            Your Templates
-          </h1>
+      <PageHeader
+        eyebrow="Workspace"
+        title="Your Templates"
+        action={
           <button
             id="create-template-btn"
             type="button"
@@ -176,8 +167,8 @@ export function TemplatesClient({ initialTemplates }: Props) {
             <IconPlus />
             New Template
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Toolbar: filter tabs + search */}
       <div style={{

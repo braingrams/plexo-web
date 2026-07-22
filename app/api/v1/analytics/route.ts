@@ -85,10 +85,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // Calculate total aggregates
     const totalViews = pageViews.length;
-    
+
     // Total unique visitors across the entire 7 days
     const uniqueIps = new Set(pageViews.map((pv) => pv.ipHash).filter(Boolean));
     const totalUnique = uniqueIps.size;
+
+    // 7. Bucket views by day-of-week x hour-of-day for the activity heatmap widget
+    const heatmapBuckets = new Map<string, number>();
+    pageViews.forEach((view) => {
+      const day = view.createdAt.getDay();
+      const hour = view.createdAt.getHours();
+      const key = `${day}-${hour}`;
+      heatmapBuckets.set(key, (heatmapBuckets.get(key) ?? 0) + 1);
+    });
+    const heatmap = Array.from(heatmapBuckets.entries()).map(([key, count]) => {
+      const [day, hour] = key.split("-").map(Number);
+      return { day, hour, count };
+    });
 
     return NextResponse.json({
       success: true,
@@ -96,6 +109,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       totalViews,
       totalUnique,
       chartData,
+      heatmap,
     });
   } catch (error) {
     return NextResponse.json(

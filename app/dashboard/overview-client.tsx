@@ -3,6 +3,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { CustomSelect } from "./domains/domains-client";
+import { Card } from "./_components/Card";
+import { ActivityHeatmap, type HeatmapPoint } from "./_components/ActivityHeatmap";
+import { useLayoutMode } from "./layout-mode-context";
 
 type TimelineDay = {
   date: string;
@@ -22,6 +25,9 @@ type Props = {
   hasDomains: boolean;
   hasApiKeys: boolean;
   hasViews: boolean;
+  templatesCount: number;
+  domainsCount: number;
+  apiKeysCount: number;
 };
 
 export function OverviewClient({
@@ -31,6 +37,9 @@ export function OverviewClient({
   hasDomains,
   hasApiKeys,
   hasViews,
+  templatesCount,
+  domainsCount,
+  apiKeysCount,
 }: Props) {
   // Onboarding steps calculations
   const steps = [
@@ -42,6 +51,7 @@ export function OverviewClient({
 
   const completedSteps = steps.filter((s) => s.done).length;
   const onboardingPercentage = Math.round((completedSteps / steps.length) * 100);
+  const onboardingComplete = onboardingPercentage === 100;
 
   // Analytics Filter States
   const [filterType, setFilterType] = useState<"all" | "published">("all");
@@ -53,6 +63,10 @@ export function OverviewClient({
   const [totalViews, setTotalViews] = useState(0);
   const [totalUnique, setTotalUnique] = useState(0);
   const [chartData, setChartData] = useState<TimelineDay[]>([]);
+  const [heatmapData, setHeatmapData] = useState<HeatmapPoint[]>([]);
+
+  const { mode } = useLayoutMode();
+  const isModern = mode === "MODERN";
 
   useEffect(() => {
     setLoading(true);
@@ -70,6 +84,7 @@ export function OverviewClient({
           setTotalViews(data.totalViews);
           setTotalUnique(data.totalUnique);
           setChartData(data.chartData);
+          setHeatmapData(data.heatmap ?? []);
           if (data.templates) {
             setTemplates(data.templates);
           }
@@ -157,84 +172,122 @@ export function OverviewClient({
         </span>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem", marginBottom: "2.5rem", width: "100%" }} className="overview-top-row">
-        {/* Onboarding Checklist Card */}
-        <div style={{
-          background: "rgba(255,255,255,0.02)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          borderRadius: 16, padding: "1.75rem",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-          display: "flex", flexDirection: "column", gap: "1.5rem"
-        }}>
-          <div>
-            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
-              Onboarding Checklist
-            </h2>
-            <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
-              Follow these simple steps to deploy your landing pages.
-            </p>
-          </div>
-
-          {/* Progress Bar */}
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", fontWeight: 650, color: "#f0f2ff", marginBottom: "0.5rem" }}>
-              <span>Workspace Setup Progress</span>
-              <span style={{ color: "var(--brand)" }}>{onboardingPercentage}%</span>
-            </div>
-            <div style={{ width: "100%", height: 6, background: "rgba(255,255,255,0.04)", borderRadius: 999, overflow: "hidden" }}>
-              <div style={{ width: `${onboardingPercentage}%`, height: "100%", background: "linear-gradient(90deg, var(--brand), #a78bfa)", borderRadius: 999, transition: "width 0.5s ease" }} />
-            </div>
-          </div>
-
-          {/* Steps List */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-            {steps.map((step) => (
-              <div key={step.id} style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "0.75rem 1rem", borderRadius: 10,
-                background: step.done ? "rgba(16,185,129,0.03)" : "rgba(255,255,255,0.01)",
-                border: step.done ? "1px solid rgba(16,185,129,0.1)" : "1px solid rgba(255,255,255,0.04)",
-                fontSize: "0.82rem"
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                  <div style={{
-                    width: 20, height: 20, borderRadius: "50%",
-                    background: step.done ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.03)",
-                    border: step.done ? "1px solid rgba(16,185,129,0.15)" : "1px solid rgba(255,255,255,0.06)",
-                    display: "grid", placeItems: "center", fontSize: "0.68rem"
-                  }}>
-                    {step.done ? "✓" : ""}
-                  </div>
-                  <span style={{ color: step.done ? "rgba(240,242,255,0.75)" : "rgba(240,242,255,0.45)", fontWeight: step.done ? 600 : 400 }}>
-                    {step.label}
-                  </span>
-                </div>
-                {step.done ? (
-                  <span style={{ color: "#34d399", fontWeight: 700, fontSize: "0.75rem" }}>
-                    Completed
-                  </span>
-                ) : step.link ? (
-                  <Link href={step.link} style={{ color: "var(--brand)", textDecoration: "none", fontWeight: 700, fontSize: "0.75rem" }}>
-                    {step.linkText}
-                  </Link>
-                ) : (
-                  <span style={{ color: "rgba(240,242,255,0.25)", fontSize: "0.72rem", fontStyle: "italic" }}>
-                    {step.statusText}
-                  </span>
-                )}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isModern ? "1fr 1fr 1fr" : "1fr 1fr",
+          gap: "2rem",
+          marginBottom: "2.5rem",
+          width: "100%",
+        }}
+        className="overview-top-row"
+      >
+        {/* Onboarding Checklist Card — replaced with a Workspace Snapshot once setup is complete */}
+        <Card style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+          {onboardingComplete ? (
+            <>
+              <div>
+                <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
+                  Workspace Snapshot
+                </h2>
+                <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
+                  Your workspace is fully set up — here&apos;s where things stand.
+                </p>
               </div>
-            ))}
-          </div>
-        </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", flex: 1 }}>
+                {[
+                  { label: "Templates", value: templatesCount, link: "/dashboard/templates" },
+                  { label: "Live Domains", value: domainsCount, link: "/dashboard/domains" },
+                  { label: "API Keys", value: apiKeysCount, link: "/dashboard/settings" },
+                  { label: "Views (7d)", value: totalViews, link: "/dashboard" },
+                ].map((stat) => (
+                  <Link
+                    key={stat.label}
+                    href={stat.link}
+                    style={{
+                      background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)",
+                      borderRadius: 12, padding: "1rem", textDecoration: "none",
+                      display: "flex", flexDirection: "column", gap: "0.35rem",
+                    }}
+                  >
+                    <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "rgba(240,242,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      {stat.label}
+                    </span>
+                    <span style={{ fontSize: "1.6rem", fontWeight: 800, color: "#f0f2ff" }}>
+                      {stat.value}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
+                  Onboarding Checklist
+                </h2>
+                <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
+                  Follow these simple steps to deploy your landing pages.
+                </p>
+              </div>
+
+              {/* Progress Bar */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", fontWeight: 650, color: "#f0f2ff", marginBottom: "0.5rem" }}>
+                  <span>Workspace Setup Progress</span>
+                  <span style={{ color: "var(--brand)" }}>{onboardingPercentage}%</span>
+                </div>
+                <div style={{ width: "100%", height: 6, background: "rgba(255,255,255,0.04)", borderRadius: 999, overflow: "hidden" }}>
+                  <div style={{ width: `${onboardingPercentage}%`, height: "100%", background: "linear-gradient(90deg, var(--brand), #a78bfa)", borderRadius: 999, transition: "width 0.5s ease" }} />
+                </div>
+              </div>
+
+              {/* Steps List */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                {steps.map((step) => (
+                  <div key={step.id} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "0.75rem 1rem", borderRadius: 10,
+                    background: step.done ? "rgba(16,185,129,0.03)" : "rgba(255,255,255,0.01)",
+                    border: step.done ? "1px solid rgba(16,185,129,0.1)" : "1px solid rgba(255,255,255,0.04)",
+                    fontSize: "0.82rem"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                      <div style={{
+                        width: 20, height: 20, borderRadius: "50%",
+                        background: step.done ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.03)",
+                        border: step.done ? "1px solid rgba(16,185,129,0.15)" : "1px solid rgba(255,255,255,0.06)",
+                        display: "grid", placeItems: "center", fontSize: "0.68rem"
+                      }}>
+                        {step.done ? "✓" : ""}
+                      </div>
+                      <span style={{ color: step.done ? "rgba(240,242,255,0.75)" : "rgba(240,242,255,0.45)", fontWeight: step.done ? 600 : 400 }}>
+                        {step.label}
+                      </span>
+                    </div>
+                    {step.done ? (
+                      <span style={{ color: "#34d399", fontWeight: 700, fontSize: "0.75rem" }}>
+                        Completed
+                      </span>
+                    ) : step.link ? (
+                      <Link href={step.link} style={{ color: "var(--brand)", textDecoration: "none", fontWeight: 700, fontSize: "0.75rem" }}>
+                        {step.linkText}
+                      </Link>
+                    ) : (
+                      <span style={{ color: "rgba(240,242,255,0.25)", fontSize: "0.72rem", fontStyle: "italic" }}>
+                        {step.statusText}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </Card>
 
         {/* Plexo Core Capabilities Card */}
-        <div style={{
-          background: "rgba(255,255,255,0.02)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          borderRadius: 16, padding: "1.75rem",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-          display: "flex", flexDirection: "column", gap: "1.25rem"
-        }}>
+        <Card style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           <div>
             <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
               Plexo Core Features
@@ -261,17 +314,26 @@ export function OverviewClient({
               </div>
             ))}
           </div>
-        </div>
+        </Card>
+
+        {/* Activity Heatmap — Modern layout only */}
+        {isModern && (
+          <Card style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+            <div>
+              <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
+                Activity by Time
+              </h2>
+              <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
+                When your visitors show up, over the last 7 days.
+              </p>
+            </div>
+            <ActivityHeatmap data={heatmapData} />
+          </Card>
+        )}
       </div>
 
       {/* Analytics Graph & Timeline Dashboard */}
-      <div style={{
-        background: "rgba(255,255,255,0.02)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: 16, padding: "1.75rem",
-        boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-        marginBottom: "2rem"
-      }}>
+      <Card style={{ marginBottom: "2rem" }}>
         {/* Filters and Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "1.25rem", flexWrap: "wrap", gap: "1.25rem" }}>
           <div>
@@ -494,7 +556,7 @@ export function OverviewClient({
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       <style jsx>{`
         .spinner {

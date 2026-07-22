@@ -49,6 +49,9 @@ export default async function OverviewPage() {
         hasDomains={domainsCount > 0}
         hasApiKeys={apiKeysCount > 0}
         hasViews={viewsCount > 0}
+        templatesCount={templatesCount}
+        domainsCount={domainsCount}
+        apiKeysCount={apiKeysCount}
       />
     </div>
   );

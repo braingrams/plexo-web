@@ -62,7 +62,7 @@ export default function RegisterPage() {
         name: name.trim() || email.split("@")[0] || "Plexo User",
         email,
         password,
-        callbackURL: "/dashboard/templates",
+        callbackURL: "/dashboard",
       });
 
       if (result?.error) {

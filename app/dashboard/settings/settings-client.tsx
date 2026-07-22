@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { PageHeader } from "../_components/PageHeader";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 type Provider = "openai" | "anthropic_claude" | "google_gemini";
@@ -310,22 +311,11 @@ export function SettingsClient({ initialApiKeys }: Props) {
 
   return (
     <>
-      {/* Header */}
-      <div style={{ marginBottom: "2rem" }}>
-        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.35rem" }}>
-          Developer
-        </p>
-        <h1 style={{
-          fontFamily: "var(--font-heading), sans-serif",
-          fontSize: "clamp(1.6rem, 3vw, 2.1rem)",
-          fontWeight: 800, letterSpacing: "-0.025em", color: "#f0f2ff",
-        }}>
-          Settings
-        </h1>
-        <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.45)", marginTop: "0.35rem" }}>
-          Manage API credentials and global AI proxy configuration.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Developer"
+        title="Settings"
+        subtitle="Manage API credentials and global AI proxy configuration."
+      />
 
       <div style={{ display: "grid", gap: "1.5rem", gridTemplateColumns: "1fr" }}>
 

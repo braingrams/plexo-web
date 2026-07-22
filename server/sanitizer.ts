@@ -110,6 +110,17 @@ const UploadedImageSchema = z.object({
   src: z.string().max(4000),
 });
 
+const PublishConfigSchema = z.object({
+  apiKeyOverride: z.string().max(500).optional(),
+});
+
+const AiConfigSchema = z.object({
+  useAi: z.boolean().optional(),
+  provider: z.string().max(100).optional(),
+  apiKey: z.string().max(500).optional(),
+  tier: z.string().max(100).optional(),
+});
+
 const BodyJSONSchema = z.object({
   style: StyleRecordSchema,
   rows: z.array(RowJSONSchema).max(200),
@@ -119,6 +130,8 @@ const BodyJSONSchema = z.object({
     domain: SafeStringSchema,
     type: z.enum(['SUBDOMAIN', 'CUSTOM']),
   }).optional(),
+  publishConfig: PublishConfigSchema.optional(),
+  aiConfig: AiConfigSchema.optional(),
 });
 
 const TemplateJSONSchema = z.object({

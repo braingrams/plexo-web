@@ -49,7 +49,7 @@ function LoginForm() {
     setError(null);
     setLoading(true);
 
-    const redirectTo = params.get("redirectTo") ?? "/dashboard/templates";
+    const redirectTo = params.get("redirectTo") ?? "/dashboard";
 
     try {
       const result = await (authClient as any).signIn.email({

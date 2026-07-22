@@ -658,7 +658,7 @@ import { PlexoBuilder } from '@charisol/plexo-sdk';
 
 export default function Editor() {
   return (
-    <PlexoBuilder
+    <PlexoBuilde
       apiKey="pk_live_yourkey..."
       mode="email"
       themeBgColor="#8b5cf6"

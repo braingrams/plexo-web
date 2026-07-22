@@ -1,6 +1,9 @@
 ﻿"use client";
 
 import { FormEvent, useState } from "react";
+import { Card } from "../_components/Card";
+import { PageHeader } from "../_components/PageHeader";
+import { useLayoutMode, type LayoutMode } from "../layout-mode-context";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -102,31 +105,19 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
 
   return (
     <div style={{ padding: "2rem 1.75rem", maxWidth: 1500, margin: "0 auto" }}>
-      {/* Header */}
-      <div style={{ marginBottom: "2rem" }}>
-        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.35rem" }}>
-          Account
-        </p>
-        <h1 style={{
-          fontFamily: "var(--font-heading), sans-serif",
-          fontSize: "clamp(1.6rem, 3vw, 2.1rem)",
-          fontWeight: 800, letterSpacing: "-0.025em", color: "#f0f2ff",
-        }}>
-          Your Profile
-        </h1>
-        <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.45)", marginTop: "0.35rem" }}>
-          Manage your personal information and account preferences.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Account"
+        title="Your Profile"
+        subtitle="Manage your personal information and account preferences."
+      />
 
       {/* Avatar + info card */}
-      <div style={{
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 16, padding: "1.75rem",
-        marginBottom: "1.5rem",
-        display: "flex", alignItems: "center", gap: "1.5rem", flexWrap: "wrap",
-      }}>
+      <Card
+        style={{
+          marginBottom: "1.5rem",
+          display: "flex", alignItems: "center", gap: "1.5rem", flexWrap: "wrap",
+        }}
+      >
         {/* Avatar */}
         <div style={{
           width: 72, height: 72, borderRadius: "50%",
@@ -181,14 +172,10 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
         }}>
           {subscriptionPlan}
         </span>
-      </div>
+      </Card>
 
       {/* Edit form */}
-      <div style={{
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 16, padding: "1.75rem",
-      }}>
+      <Card style={{ marginBottom: "1.5rem" }}>
         <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.3rem" }}>
           Edit Profile
         </h2>
@@ -308,6 +295,122 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
             </div>
           </div>
         </form>
+      </Card>
+
+      {/* Dashboard layout preference */}
+      <LayoutModeSection />
+    </div>
+  );
+}
+
+function LayoutModeSection() {
+  const { mode, setMode, saving, error } = useLayoutMode();
+
+  const options: Array<{ value: LayoutMode; title: string; desc: string }> = [
+    { value: "CLASSIC", title: "Classic", desc: "Vertical sidebar navigation — the current Plexo dashboard." },
+    { value: "MODERN", title: "Modern 2026", desc: "Floating top navigation with spacious bento-style cards." },
+  ];
+
+  return (
+    <Card style={{ marginTop: "1.5rem" }}>
+      <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.3rem" }}>
+        Dashboard Layout
+      </h2>
+      <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.35)", marginBottom: "1.5rem" }}>
+        Choose how your dashboard looks. Your choice is saved to your account and applied the next time you sign in.
+      </p>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }} className="layout-mode-grid">
+        {options.map((opt) => {
+          const selected = mode === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => void setMode(opt.value)}
+              disabled={saving}
+              style={{
+                textAlign: "left",
+                background: selected ? "var(--brand-subtle)" : "rgba(255,255,255,0.02)",
+                border: selected ? "1.5px solid var(--brand)" : "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 14,
+                padding: "1.1rem",
+                cursor: saving ? "not-allowed" : "pointer",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.75rem",
+                fontFamily: "inherit",
+                transition: "border-color 0.15s, background 0.15s",
+              }}
+            >
+              <LayoutPreview variant={opt.value} />
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+                <div>
+                  <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#f0f2ff" }}>{opt.title}</p>
+                  <p style={{ fontSize: "0.76rem", color: "rgba(240,242,255,0.4)", marginTop: "0.15rem" }}>{opt.desc}</p>
+                </div>
+                {selected && (
+                  <span
+                    style={{
+                      width: 20, height: 20, borderRadius: "50%",
+                      background: "var(--brand)", color: "#fff",
+                      display: "grid", placeItems: "center", flexShrink: 0,
+                      fontSize: "0.7rem", fontWeight: 700,
+                    }}
+                  >
+                    ✓
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {error && (
+        <p style={{ fontSize: "0.82rem", color: "#f87171", marginTop: "1rem" }} role="alert">
+          {error}
+        </p>
+      )}
+
+      <style jsx>{`
+        @media (max-width: 640px) {
+          .layout-mode-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+    </Card>
+  );
+}
+
+function LayoutPreview({ variant }: { variant: LayoutMode }) {
+  const boxStyle = {
+    height: 80,
+    borderRadius: 10,
+    background: "rgba(255,255,255,0.03)",
+    border: "1px solid rgba(255,255,255,0.05)",
+    padding: 8,
+  } as const;
+
+  if (variant === "MODERN") {
+    return (
+      <div style={{ ...boxStyle, display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ height: 10, borderRadius: 999, background: "linear-gradient(90deg, var(--brand), var(--brand-deep))", width: "60%" }} />
+        <div style={{ flex: 1, display: "flex", gap: 5 }}>
+          <div style={{ flex: 1, borderRadius: 6, background: "rgba(255,255,255,0.06)" }} />
+          <div style={{ flex: 1, borderRadius: 6, background: "rgba(255,255,255,0.06)" }} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...boxStyle, display: "flex", gap: 6 }}>
+      <div style={{ width: 18, borderRadius: 6, background: "rgba(255,255,255,0.08)" }} />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
+        <div style={{ height: 10, borderRadius: 4, background: "linear-gradient(90deg, var(--brand), var(--brand-deep))", width: "50%" }} />
+        <div style={{ flex: 1, borderRadius: 6, background: "rgba(255,255,255,0.06)" }} />
       </div>
     </div>
   );

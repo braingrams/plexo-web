@@ -107,6 +107,33 @@ export const LOGO = {
   appName:   "Plexo",
 } as const;
 
+/* ── Modern (2026) layout mode tokens ───────────────────
+ *  Used only when the dashboard is switched to "Modern" via
+ *  the Profile page. Brand colours are intentionally shared
+ *  with Classic (BRAND.* above) — only shape/depth changes.
+ */
+export const MODERN = {
+  radius: {
+    md: 16,
+    lg: 24,
+    xl: 28,
+  },
+  shadow: {
+    card: "0 24px 60px -16px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06)",
+    cardHover: "0 30px 70px -14px rgba(139,92,246,0.28), 0 0 0 1px rgba(139,92,246,0.18)",
+    pill: "0 12px 32px -8px rgba(0,0,0,0.55)",
+  },
+  surface: {
+    fill: "rgba(255, 255, 255, 0.045)",
+    fillHover: "rgba(255, 255, 255, 0.07)",
+    border: "rgba(255, 255, 255, 0.09)",
+  },
+  spacing: {
+    cardPad: "2rem",
+    gap: "1.5rem",
+  },
+} as const;
+
 /* ── Convenience: inline-style objects ─────────────────── */
 
 /** Brand-500 gradient button style (inline, for elements that can't use CSS classes) */

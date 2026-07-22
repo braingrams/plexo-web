@@ -8,7 +8,7 @@ export default async function ConfirmPage({
 }) {
   const params = await searchParams;
   const token = params.token;
-  const callbackURL = "/dashboard/templates";
+  const callbackURL = "/dashboard";
 
   if (token) {
     const target = `/api/auth/verify-email?token=${encodeURIComponent(token)}&callbackURL=${encodeURIComponent(callbackURL)}`;

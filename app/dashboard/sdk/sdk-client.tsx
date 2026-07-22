@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { PageHeader } from "../_components/PageHeader";
+import { Card } from "../_components/Card";
 
 type SimpleKey = {
   id: string;
@@ -111,29 +113,14 @@ const text = compileToPlainText(template.designJson);
 
   return (
     <>
-      {/* Header */}
-      <div style={{ marginBottom: "2rem" }}>
-        <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.35rem" }}>
-          Integration
-        </p>
-        <h1 style={{
-          fontFamily: "var(--font-heading), sans-serif",
-          fontSize: "clamp(1.6rem, 3vw, 2.1rem)",
-          fontWeight: 800, letterSpacing: "-0.025em", color: "#f0f2ff",
-        }}>
-          Plexo SDK Client
-        </h1>
-        <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.45)", marginTop: "0.35rem" }}>
-          Connect your application visually and programmatically using our SDK.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Integration"
+        title="Plexo SDK Client"
+        subtitle="Connect your application visually and programmatically using our SDK."
+      />
 
       {/* Select key warning/option */}
-      <div style={{
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 16, padding: "1.5rem", marginBottom: "1.5rem",
-      }}>
+      <Card padded={false} style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
         <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.5rem" }}>
           Select Active API Key to Inject in Snippets
         </h2>
@@ -164,16 +151,12 @@ const text = compileToPlainText(template.designJson);
             </span>
           </div>
         )}
-      </div>
+      </Card>
 
       <div style={{ display: "grid", gap: "1.5rem", gridTemplateColumns: "1fr" }}>
-        
+
         {/* 1. Install */}
-        <div style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: 16, padding: "1.5rem",
-        }}>
+        <Card padded={false} style={{ padding: "1.5rem" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
             <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <span style={{ color: "var(--brand)" }}><IconTerminal /></span>
@@ -199,14 +182,10 @@ const text = compileToPlainText(template.designJson);
           }}>
             {installCode}
           </pre>
-        </div>
+        </Card>
 
         {/* 2. Embedded component */}
-        <div style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: 16, padding: "1.5rem",
-        }}>
+        <Card padded={false} style={{ padding: "1.5rem" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
             <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff" }}>
               Step 2: Embed the Builder Component (React / Next.js)
@@ -231,14 +210,10 @@ const text = compileToPlainText(template.designJson);
           }}>
             {reactCode}
           </pre>
-        </div>
+        </Card>
 
         {/* 3. Server-side compilation */}
-        <div style={{
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: 16, padding: "1.5rem",
-        }}>
+        <Card padded={false} style={{ padding: "1.5rem" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
             <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff" }}>
               Step 3: Server compilation (Next.js server-side, Node.js backend)
@@ -263,7 +238,7 @@ const text = compileToPlainText(template.designJson);
           }}>
             {nodeCode}
           </pre>
-        </div>
+        </Card>
 
         {/* Documentation links */}
         <div style={{
