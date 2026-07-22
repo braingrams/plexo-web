@@ -131,7 +131,13 @@ export async function resolveUser(
 
   const hashedKey = sha256(rawKey);
   const apiKey = await prisma.apiKey.findFirst({
-    where: { hashedKey, isActive: true },
+    where: {
+      OR: [
+        { hashedKey },
+        { maskedKey: rawKey },
+      ],
+      isActive: true,
+    },
     select: {
       userId: true,
     },
