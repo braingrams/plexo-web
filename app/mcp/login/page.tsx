@@ -22,12 +22,13 @@ export default async function McpLoginPage(props: {
   try {
     session = await auth.api.getSession({ headers: reqHeaders });
   } catch (err) {
-    console.warn("[mcp/login] Session retrieval failed, redirecting to login:", err);
-    redirect(`/auth/login?redirectTo=${encodeURIComponent(`/mcp/login${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}${state ? `&state=${encodeURIComponent(state)}` : ""}` : ""}`)}`);
+    console.warn("[mcp/login] Session retrieval failed:", err);
   }
 
+  // Handle unauthenticated state outside try/catch so Next.js redirect works
   if (!session?.user) {
-    redirect(`/auth/login?redirectTo=${encodeURIComponent(`/mcp/login${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}${state ? `&state=${encodeURIComponent(state)}` : ""}` : ""}`)}`);
+    const loginTarget = `/auth/login?redirectTo=${encodeURIComponent(`/mcp/login${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}${state ? `&state=${encodeURIComponent(state)}` : ""}` : ""}`)}`;
+    redirect(loginTarget);
   }
 
   // Find or create an MCP API key for this user
@@ -58,7 +59,8 @@ export default async function McpLoginPage(props: {
     rawKey = apiKeyRecord.maskedKey;
   }
 
-  // If callbackUrl is provided (e.g. from ChatGPT, Claude Web, or Localhost), redirect back immediately
+  // Build target redirect URL outside try/catch to ensure NEXT_REDIRECT exception propagates
+  let targetRedirectUrl = "";
   if (callbackUrl) {
     try {
       const redirectTarget = new URL(callbackUrl);
@@ -68,10 +70,14 @@ export default async function McpLoginPage(props: {
       if (state) {
         redirectTarget.searchParams.set("state", state);
       }
-      redirect(redirectTarget.toString());
+      targetRedirectUrl = redirectTarget.toString();
     } catch (e) {
       console.warn("Invalid callbackUrl format:", callbackUrl, e);
     }
+  }
+
+  if (targetRedirectUrl) {
+    redirect(targetRedirectUrl);
   }
 
   return (
@@ -109,7 +115,7 @@ export default async function McpLoginPage(props: {
           </p>
 
           <div className="p-4 rounded-xl bg-[#090d16] border border-white/10 text-xs font-mono text-[#a78bfa] break-all select-all">
-            <span className="text-white/40 block mb-1 font-sans text-[11px] font-medium font-semibold">YOUR AUTHORIZATION TOKEN:</span>
+            <span className="text-white/40 block mb-1 font-sans text-[11px] font-semibold">YOUR AUTHORIZATION TOKEN:</span>
             {rawKey}
           </div>
         </div>
