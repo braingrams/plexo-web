@@ -14,6 +14,287 @@ const RESERVED_SUBDOMAINS = new Set([
   "profile", "domains", "account", "login", "register", "signup", "logout", "signin"
 ]);
 
+export function generateDefaultSaaSDesignJson(title: string = "SaaS Product"): any {
+  return {
+    body: {
+      style: {
+        backgroundColor: "#08090f",
+        color: "#f0f2ff",
+        fontFamily: "Inter, sans-serif",
+        padding: "0px",
+        margin: "0px",
+      },
+      rows: [
+        // 1. Header / Navbar
+        {
+          id: "row-nav",
+          style: {
+            paddingTop: "24px",
+            paddingBottom: "24px",
+            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+          },
+          columns: [
+            {
+              id: "col-nav-logo",
+              width: "30%",
+              elements: [
+                {
+                  type: "heading",
+                  style: { fontSize: "22px", color: "#8b5cf6", fontWeight: "bold" },
+                  attributes: { text: title },
+                },
+              ],
+            },
+            {
+              id: "col-nav-menu",
+              width: "70%",
+              elements: [
+                {
+                  type: "menu",
+                  style: { textAlign: "right", color: "#a78bfa" },
+                  attributes: {
+                    links: [
+                      { label: "Features", href: "#features" },
+                      { label: "Solutions", href: "#solutions" },
+                      { label: "Pricing", href: "#pricing" },
+                      { label: "Docs", href: "#docs" },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        // 2. Hero Section
+        {
+          id: "row-hero",
+          style: {
+            paddingTop: "80px",
+            paddingBottom: "80px",
+            textAlign: "center",
+          },
+          columns: [
+            {
+              id: "col-hero-main",
+              width: "100%",
+              elements: [
+                {
+                  type: "heading",
+                  style: {
+                    fontSize: "48px",
+                    color: "#ffffff",
+                    fontWeight: "800",
+                    textAlign: "center",
+                    marginBottom: "16px",
+                  },
+                  attributes: { text: `Build & Scale Faster with ${title}` },
+                },
+                {
+                  type: "paragraph",
+                  style: {
+                    fontSize: "18px",
+                    color: "#94a3b8",
+                    textAlign: "center",
+                    maxWidth: "700px",
+                    margin: "0 auto 32px auto",
+                  },
+                  attributes: {
+                    text: "The AI-native platform built to generate landing pages, automate customer workflows, and scale your product with zero effort.",
+                  },
+                },
+                {
+                  type: "button",
+                  style: {
+                    textAlign: "center",
+                    backgroundColor: "#8b5cf6",
+                    color: "#ffffff",
+                    borderRadius: "12px",
+                    paddingTop: "14px",
+                    paddingBottom: "14px",
+                    paddingLeft: "28px",
+                    paddingRight: "28px",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                  },
+                  attributes: { text: "Start Free 14-Day Trial", href: "#signup" },
+                },
+                {
+                  type: "spacer",
+                  style: { height: "40px" },
+                },
+                {
+                  type: "image",
+                  style: { borderRadius: "16px", borderWidth: "1px", borderColor: "rgba(255, 255, 255, 0.1)" },
+                  attributes: {
+                    src: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=80",
+                    alt: "SaaS Dashboard Preview",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        // 3. Features Cards
+        {
+          id: "row-features",
+          style: {
+            paddingTop: "60px",
+            paddingBottom: "60px",
+          },
+          columns: [
+            {
+              id: "col-feat-1",
+              width: "33.33%",
+              elements: [
+                {
+                  type: "card",
+                  style: {
+                    backgroundColor: "#111827",
+                    borderRadius: "16px",
+                    padding: "24px",
+                    borderWidth: "1px",
+                    borderColor: "rgba(255,255,255,0.08)",
+                  },
+                  attributes: {
+                    title: "🚀 Lightning Fast Deployment",
+                    description: "Publish your pages directly to subdomains with zero infrastructure complexity.",
+                  },
+                },
+              ],
+            },
+            {
+              id: "col-feat-2",
+              width: "33.33%",
+              elements: [
+                {
+                  type: "card",
+                  style: {
+                    backgroundColor: "#111827",
+                    borderRadius: "16px",
+                    padding: "24px",
+                    borderWidth: "1px",
+                    borderColor: "rgba(255,255,255,0.08)",
+                  },
+                  attributes: {
+                    title: "✨ AI Native Builder",
+                    description: "Generate pixel-perfect layouts, typography, and responsive sections in seconds.",
+                  },
+                },
+              ],
+            },
+            {
+              id: "col-feat-3",
+              width: "33.33%",
+              elements: [
+                {
+                  type: "card",
+                  style: {
+                    backgroundColor: "#111827",
+                    borderRadius: "16px",
+                    padding: "24px",
+                    borderWidth: "1px",
+                    borderColor: "rgba(255,255,255,0.08)",
+                  },
+                  attributes: {
+                    title: "📊 Real-Time Analytics",
+                    description: "Track page views, visitor engagement, and conversion metrics in your dashboard.",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        // 4. CTA Banner
+        {
+          id: "row-cta",
+          style: {
+            backgroundColor: "rgba(139, 92, 246, 0.12)",
+            borderRadius: "24px",
+            padding: "48px",
+            textAlign: "center",
+            marginTop: "40px",
+            marginBottom: "60px",
+            borderWidth: "1px",
+            borderColor: "rgba(139, 92, 246, 0.3)",
+          },
+          columns: [
+            {
+              id: "col-cta",
+              width: "100%",
+              elements: [
+                {
+                  type: "heading",
+                  style: { fontSize: "32px", color: "#ffffff", fontWeight: "700", textAlign: "center" },
+                  attributes: { text: "Ready to Supercharge Your Growth?" },
+                },
+                {
+                  type: "paragraph",
+                  style: { fontSize: "16px", color: "#a78bfa", textAlign: "center", marginBottom: "24px" },
+                  attributes: { text: "Join thousands of product teams building high-converting sites on Plexo." },
+                },
+                {
+                  type: "button",
+                  style: {
+                    textAlign: "center",
+                    backgroundColor: "#ffffff",
+                    color: "#08090f",
+                    borderRadius: "12px",
+                    paddingTop: "12px",
+                    paddingBottom: "12px",
+                    paddingLeft: "24px",
+                    paddingRight: "24px",
+                    fontWeight: "700",
+                  },
+                  attributes: { text: "Get Started Now", href: "#signup" },
+                },
+              ],
+            },
+          ],
+        },
+        // 5. Footer
+        {
+          id: "row-footer",
+          style: {
+            paddingTop: "32px",
+            paddingBottom: "32px",
+            borderTop: "1px solid rgba(255, 255, 255, 0.08)",
+          },
+          columns: [
+            {
+              id: "col-footer-copy",
+              width: "50%",
+              elements: [
+                {
+                  type: "paragraph",
+                  style: { fontSize: "13px", color: "#64748b" },
+                  attributes: { text: `© ${new Date().getFullYear()} ${title}. All rights reserved.` },
+                },
+              ],
+            },
+            {
+              id: "col-footer-social",
+              width: "50%",
+              elements: [
+                {
+                  type: "social",
+                  style: { textAlign: "right", iconColor: "#94a3b8", iconBackgroundColor: "transparent" },
+                  attributes: {
+                    links: [
+                      { provider: "twitter", url: "https://x.com" },
+                      { provider: "linkedin", url: "https://linkedin.com" },
+                      { provider: "youtube", url: "https://youtube.com" },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 export const PLEXO_MCP_TOOLS = [
   {
     name: "publish_landing_page",
@@ -24,11 +305,11 @@ export const PLEXO_MCP_TOOLS = [
       properties: {
         name: {
           type: "string",
-          description: "Title of the landing page (e.g. 'Acme AI CRM')",
+          description: "Title of the landing page (e.g. 'Bulum SaaS')",
         },
         designJson: {
           type: "object",
-          description: "Plexo layout schema containing body style and rows array",
+          description: "Plexo layout schema containing body style and rows array. If omitted or empty, Plexo auto-generates a complete SaaS landing page layout.",
         },
         compiledHtml: {
           type: "string",
@@ -36,7 +317,7 @@ export const PLEXO_MCP_TOOLS = [
         },
         domain: {
           type: "string",
-          description: "Subdomain slug (e.g. 'acme-crm') or custom domain ('myacme.com')",
+          description: "Subdomain slug (e.g. 'bulum') or custom domain ('bulum.com')",
         },
         type: {
           type: "string",
@@ -44,7 +325,6 @@ export const PLEXO_MCP_TOOLS = [
           description: "Domain routing type (SUBDOMAIN or CUSTOM)",
         },
       },
-      required: ["designJson"],
     },
   },
   {
@@ -144,7 +424,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
 
     const resolved = await resolveUser(request);
     if (!resolved) {
-      const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://plexobuilder.com"}/mcp/login`;
+      const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io"}/mcp/login`;
       return NextResponse.json({
         jsonrpc,
         id,
@@ -171,7 +451,28 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const name = args.name?.trim() || "AI Landing Page";
-          const designJson = args.designJson;
+          let designJson = args.designJson;
+
+          if (typeof designJson === "string") {
+            try {
+              designJson = JSON.parse(designJson);
+            } catch (e) {
+              designJson = null;
+            }
+          }
+
+          const rows = designJson?.body?.rows || (Array.isArray(designJson?.rows) ? designJson.rows : []);
+          if (!rows || rows.length === 0) {
+            designJson = generateDefaultSaaSDesignJson(name);
+          } else if (!designJson.body) {
+            designJson = {
+              body: {
+                style: { backgroundColor: "#08090f", color: "#f0f2ff", fontFamily: "Inter, sans-serif" },
+                rows,
+              },
+            };
+          }
+
           let compiledHtml = args.compiledHtml || compileToHTML(designJson);
           let rawDomain = args.domain?.trim().toLowerCase() || "";
           let domainType = args.type as "SUBDOMAIN" | "CUSTOM" | undefined;
@@ -186,7 +487,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             },
           });
 
-          const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+          const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
           const baseDomain = new URL(baseAppUrl).hostname;
           const editableUrl = `${baseAppUrl}/dashboard/templates/${template.id}`;
 
@@ -210,14 +511,30 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             finalDomain = `${rawDomain}.${baseDomain}`;
           }
 
-          await prisma.publishedDomain.create({
-            data: {
-              userId: resolved.userId,
-              templateId: template.id,
-              domain: finalDomain,
-              type: domainType,
-            },
+          // Check if domain is already published to this template or another template
+          const existingDomain = await prisma.publishedDomain.findUnique({
+            where: { domain: finalDomain },
           });
+
+          if (existingDomain) {
+            await prisma.publishedDomain.update({
+              where: { domain: finalDomain },
+              data: {
+                templateId: template.id,
+                userId: resolved.userId,
+                type: domainType,
+              },
+            });
+          } else {
+            await prisma.publishedDomain.create({
+              data: {
+                userId: resolved.userId,
+                templateId: template.id,
+                domain: finalDomain,
+                type: domainType,
+              },
+            });
+          }
 
           const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
           toolResult = {
@@ -279,7 +596,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           ],
         },
       });
-    } catch (err) {
+    } catch (err: any) {
       return NextResponse.json({
         jsonrpc,
         id,
@@ -287,7 +604,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           content: [
             {
               type: "text",
-              text: `Tool execution failed: ${err instanceof Error ? err.message : String(err)}`,
+              text: `Error executing ${toolName}: ${err.message || String(err)}`,
             },
           ],
           isError: true,
@@ -296,8 +613,12 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
     }
   }
 
-  return NextResponse.json(
-    { jsonrpc, id, error: { code: -32601, message: "Method not found" } },
-    { status: 404 }
-  );
+  return NextResponse.json({
+    jsonrpc,
+    id,
+    error: {
+      code: -32601,
+      message: "Method not found",
+    },
+  });
 }
