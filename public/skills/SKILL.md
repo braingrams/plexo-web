@@ -66,7 +66,7 @@ A Plexo landing page contains a `body` with global styling tokens and an array o
                 "id": "elem_hero_cta",
                 "type": "button",
                 "style": {
-                  "backgroundColor": "#fc0694",
+                  "backgroundColor": "#8b5cf6",
                   "color": "#ffffff",
                   "paddingTop": "14px",
                   "paddingBottom": "14px",
@@ -108,6 +108,6 @@ A Plexo landing page contains a `body` with global styling tokens and an array o
 ---
 
 ## Best Practices
-- **Design Tokens**: Use vibrant, dark-mode sleek aesthetics (backgrounds: `#0b0f19`, `#111827`, accent: `#fc0694`, text: `#ffffff`, secondary text: `#94a3b8`).
+- **Design Tokens**: Use vibrant, dark-mode sleek aesthetics (backgrounds: `#0b0f19`, `#111827`, accent: `#8b5cf6`, text: `#ffffff`, secondary text: `#94a3b8`).
 - **Structure**: Always divide into Hero -> Key Benefits / Features Grid -> Testimonial/Social Proof -> Pricing -> CTA Form -> Footer.
 - **Publishing**: When user prompts to publish, call `publishLandingPage` tool with `domain: "<slug>"`.

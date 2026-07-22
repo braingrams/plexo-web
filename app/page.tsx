@@ -140,7 +140,7 @@ const features = [
     icon: <IconSparkles />,
     title: "MCP & AI Protocol",
     description: "Prompt Claude, ChatGPT, Cursor & Gemini to generate & publish landing pages in 1 step.",
-    color: "#fc0694",
+    color: "#8b5cf6",
   },
 ];
 
@@ -249,7 +249,7 @@ export default function HomePage() {
               borderRadius: 8,
               fontSize: "0.875rem",
               fontWeight: 600,
-              color: "#fc0694",
+              color: "#a78bfa",
               textDecoration: "none",
               transition: "color 0.15s, background 0.15s",
             }}

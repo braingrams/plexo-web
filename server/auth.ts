@@ -27,11 +27,11 @@ function buildVerificationEmail(actionUrl: string): string {
             <td style="vertical-align:middle;padding-right:10px;">
               <table cellpadding="0" cellspacing="0">
                 <tr>
-                  <td style="width:36px;height:36px;background:linear-gradient(135deg,#fc0694,#d4057d);border-radius:8px;text-align:center;vertical-align:middle;">
+                  <td style="width:36px;height:36px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);border-radius:8px;text-align:center;vertical-align:middle;">
                     <!-- Inline SVG Shield logo -->
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;margin-top:2px;">
                       <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="#ffffff" opacity="0.95" />
-                      <path d="M9 12l2 2 4-4" stroke="#fc0694" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                      <path d="M9 12l2 2 4-4" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
                   </td>
                 </tr>
@@ -54,13 +54,13 @@ function buildVerificationEmail(actionUrl: string): string {
               </p>
               
               <p style="margin:0 0 28px;font-size:14px;color:#64748b;line-height:1.6;text-align:center;">
-                Click the button below to verify your account. This link is valid for <strong style="color:#fc0694;">60 minutes</strong>.
+                Click the button below to verify your account. This link is valid for <strong style="color:#8b5cf6;">60 minutes</strong>.
               </p>
 
               <!-- Centered CTA Button -->
               <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 32px auto;">
                 <tr>
-                  <td style="border-radius:10px;background:linear-gradient(135deg,#fc0694,#d4057d);text-align:center;">
+                  <td style="border-radius:10px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);text-align:center;">
                     <a href="${actionUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;letter-spacing:0.2px;">
                       Verify Email Address →
                     </a>
@@ -72,7 +72,7 @@ function buildVerificationEmail(actionUrl: string): string {
                 If the button doesn't work, copy and paste this link into your browser:
               </p>
               <p style="margin:0;font-size:11px;color:#64748b;word-break:break-all;line-height:1.4;text-align:center;">
-                <a href="${actionUrl}" style="color:#fc0694;text-decoration:none;">${actionUrl}</a>
+                <a href="${actionUrl}" style="color:#8b5cf6;text-decoration:none;">${actionUrl}</a>
               </p>
             </td>
           </tr>
@@ -108,11 +108,11 @@ function buildPasswordResetEmail(actionUrl: string): string {
             <td style="vertical-align:middle;padding-right:10px;">
               <table cellpadding="0" cellspacing="0">
                 <tr>
-                  <td style="width:36px;height:36px;background:linear-gradient(135deg,#fc0694,#d4057d);border-radius:8px;text-align:center;vertical-align:middle;">
+                  <td style="width:36px;height:36px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);border-radius:8px;text-align:center;vertical-align:middle;">
                     <!-- Inline SVG Shield logo -->
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;margin-top:2px;">
                       <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="#ffffff" opacity="0.95" />
-                      <path d="M9 12l2 2 4-4" stroke="#fc0694" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                      <path d="M9 12l2 2 4-4" stroke="#8b5cf6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
                   </td>
                 </tr>
@@ -139,13 +139,13 @@ function buildPasswordResetEmail(actionUrl: string): string {
               </p>
               
               <p style="margin:0 0 28px;font-size:14px;color:#64748b;line-height:1.6;text-align:center;">
-                This link expires in <strong style="color:#fc0694;">15 minutes</strong>.
+                This link expires in <strong style="color:#8b5cf6;">15 minutes</strong>.
               </p>
 
               <!-- Centered CTA Button -->
               <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 32px auto;">
                 <tr>
-                  <td style="border-radius:10px;background:linear-gradient(135deg,#fc0694,#d4057d);text-align:center;">
+                  <td style="border-radius:10px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);text-align:center;">
                     <a href="${actionUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;letter-spacing:0.2px;">
                       Reset Password →
                     </a>
@@ -157,7 +157,7 @@ function buildPasswordResetEmail(actionUrl: string): string {
                 If the button doesn't work, copy and paste this link into your browser:
               </p>
               <p style="margin:0;font-size:11px;color:#64748b;word-break:break-all;line-height:1.4;text-align:center;">
-                <a href="${actionUrl}" style="color:#fc0694;text-decoration:none;">${actionUrl}</a>
+                <a href="${actionUrl}" style="color:#8b5cf6;text-decoration:none;">${actionUrl}</a>
               </p>
             </td>
           </tr>
