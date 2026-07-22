@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
 import { auth } from "@/server/auth";
+import { resolveManageLandingPagePublishing } from "@/lib/subscription";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -77,19 +78,25 @@ function parseBearerToken(authorization: string | null): string | null {
 
 export async function resolveUser(
   request: NextRequest,
-): Promise<{ userId: string; subscriptionPlan: string; customDomainLimit: number | null } | null> {
+): Promise<{
+  userId: string;
+  subscriptionPlan: string;
+  customDomainLimit: number | null;
+  manageLandingPagePublishing: boolean;
+} | null> {
   // 1. Try session-based auth first
   const session = await auth.api.getSession({ headers: request.headers });
   if (session?.user) {
     const user = await (prisma.user.findUnique as any)({
       where: { id: session.user.id },
-      select: { id: true, subscriptionPlan: true, customDomainLimit: true },
+      select: { id: true, subscriptionPlan: true, customDomainLimit: true, manageLandingPagePublishing: true },
     });
     if (user) {
       return {
         userId: user.id,
         subscriptionPlan: user.subscriptionPlan,
         customDomainLimit: user.customDomainLimit,
+        manageLandingPagePublishing: resolveManageLandingPagePublishing(user.subscriptionPlan, user.manageLandingPagePublishing),
       };
     }
   }
@@ -107,13 +114,15 @@ export async function resolveUser(
 
   if (rawKey === "test_key") {
     const firstUser = await (prisma.user.findFirst as any)({
-      select: { id: true, subscriptionPlan: true, customDomainLimit: true },
+      select: { id: true, subscriptionPlan: true, customDomainLimit: true, manageLandingPagePublishing: true },
     });
     if (firstUser) {
+      const plan = firstUser.subscriptionPlan || "FREE";
       return {
         userId: firstUser.id,
-        subscriptionPlan: firstUser.subscriptionPlan || "FREE",
+        subscriptionPlan: plan,
         customDomainLimit: firstUser.customDomainLimit,
+        manageLandingPagePublishing: resolveManageLandingPagePublishing(plan, firstUser.manageLandingPagePublishing),
       };
     }
   }
@@ -132,7 +141,7 @@ export async function resolveUser(
 
   const user = await (prisma.user.findUnique as any)({
     where: { id: apiKey.userId },
-    select: { subscriptionPlan: true, customDomainLimit: true },
+    select: { subscriptionPlan: true, customDomainLimit: true, manageLandingPagePublishing: true },
   });
 
   if (!user) return null;
@@ -140,10 +149,11 @@ export async function resolveUser(
     userId: apiKey.userId,
     subscriptionPlan: user.subscriptionPlan,
     customDomainLimit: user.customDomainLimit,
+    manageLandingPagePublishing: resolveManageLandingPagePublishing(user.subscriptionPlan, user.manageLandingPagePublishing),
   };
 }
 
-function getDomainLimit(plan: string, customLimit: number | null): number {
+export function getDomainLimit(plan: string, customLimit: number | null): number {
   if (customLimit !== null && customLimit !== undefined) {
     return customLimit;
   }
@@ -192,7 +202,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     where: { userId: resolved.userId },
   });
 
-  const limit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
+  // -1 = unlimited (self-managed publishing, Ultra-gated — see resolveManageLandingPagePublishing)
+  const limit = resolved.manageLandingPagePublishing
+    ? -1
+    : getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
 
   return NextResponse.json({
     domains,
@@ -200,6 +213,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     limit,
     plan: resolved.subscriptionPlan,
     baseDomain,
+    manageLandingPagePublishing: resolved.manageLandingPagePublishing,
   });
 }
 
@@ -292,9 +306,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     where: { userId: resolved.userId },
   });
 
-  const limit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
+  const limit = resolved.manageLandingPagePublishing
+    ? -1
+    : getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
 
-  if (currentCount >= limit) {
+  if (limit !== -1 && currentCount >= limit) {
     return NextResponse.json({
       error: `You have reached your limit of ${limit} published domains. Please delete an existing domain to publish a new one.`
     }, { status: 403 });

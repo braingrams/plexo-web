@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { ensureCreditPeriod } from "@/lib/credits/ledger";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 
@@ -58,9 +59,41 @@ export default async function DashboardSettingsPage() {
     orderBy: { createdAt: "desc" },
   });
 
+  // Lazily grants the next monthly allowance if the current period has elapsed,
+  // so the balance shown below is always current even without a cron job.
+  const balance = await ensureCreditPeriod(session.user.id);
+
+  const [user, recentActivity] = await Promise.all([
+    prisma.user.findUniqueOrThrow({
+      where: { id: session.user.id },
+      select: { subscriptionPlan: true, manageLandingPagePublishing: true },
+    }),
+    prisma.creditLedgerEntry.findMany({
+      where: { userId: session.user.id },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    }),
+  ]);
+
   return (
     <div style={{ padding: "2rem 1.75rem", maxWidth: 1500, margin: "0 auto" }}>
-      <SettingsClient initialApiKeys={apiKeys.map(serializeApiKey)} />
+      <SettingsClient
+        initialApiKeys={apiKeys.map(serializeApiKey)}
+        initialManageLandingPagePublishing={user.manageLandingPagePublishing}
+        billing={{
+          plan: user.subscriptionPlan,
+          allowanceBalance: balance.allowanceBalance,
+          topupBalance: balance.topupBalance,
+          allowanceResetAt: balance.allowanceResetAt.toISOString(),
+          recentActivity: recentActivity.map((entry) => ({
+            id: entry.id,
+            type: entry.type,
+            amount: entry.amount,
+            description: entry.description,
+            createdAt: entry.createdAt.toISOString(),
+          })),
+        }}
+      />
     </div>
   );
 }

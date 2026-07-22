@@ -55,7 +55,7 @@ export default async function DomainsPage() {
   });
 
   // Format domains for client
-  const domains = publishedDomains.map((d) => ({
+  const domains = publishedDomains.map((d: any) => ({
     id: d.id,
     domain: d.domain,
     type: d.type as "SUBDOMAIN" | "CUSTOM",

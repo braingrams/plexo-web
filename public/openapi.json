@@ -1,0 +1,151 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Plexo AI Page Builder & Publishing API",
+    "description": "API for creating, compiling, and publishing landing pages, managing email templates, and inspecting analytics on Plexo.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://plexobuilder.com",
+      "description": "Production Server"
+    }
+  ],
+  "paths": {
+    "/api/v1/publish": {
+      "post": {
+        "summary": "Generate and Publish Landing Page",
+        "description": "Creates a Plexo landing page template (JSON schema and auto-compiled HTML) and binds it to a subdomain or custom domain in 1 step.",
+        "operationId": "publishLandingPage",
+        "security": [
+          { "ApiKeyAuth": [] },
+          { "BearerAuth": [] }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["designJson"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Name or title of the landing page",
+                    "example": "Acme AI CRM Landing Page"
+                  },
+                  "designJson": {
+                    "type": "object",
+                    "description": "Plexo drag-and-drop JSON canvas layout object containing body style and rows"
+                  },
+                  "compiledHtml": {
+                    "type": "string",
+                    "description": "Optional pre-compiled HTML. If omitted, Plexo automatically compiles designJson to HTML."
+                  },
+                  "domain": {
+                    "type": "string",
+                    "description": "Subdomain slug (e.g. 'acme') or full custom domain ('acme.com')",
+                    "example": "acme-crm"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["SUBDOMAIN", "CUSTOM"],
+                    "description": "Type of domain routing"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully created and published page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "templateId": { "type": "string" },
+                    "name": { "type": "string" },
+                    "domain": { "type": "string" },
+                    "publishedUrl": { "type": "string" },
+                    "editableUrl": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized - Invalid API key" },
+          "403": { "description": "Subscription limit reached" }
+        }
+      }
+    },
+    "/api/v1/profile": {
+      "get": {
+        "summary": "Get User Profile & Usage Limits",
+        "description": "Retrieves user details, subscription plan (FREE, PRO, ULTRA), AI credit balance, and domain limits.",
+        "operationId": "getUserProfile",
+        "security": [
+          { "ApiKeyAuth": [] },
+          { "BearerAuth": [] }
+        ],
+        "responses": {
+          "200": {
+            "description": "User profile and active plan limits"
+          }
+        }
+      }
+    },
+    "/api/v1/analytics": {
+      "get": {
+        "summary": "Get Visitor Analytics",
+        "description": "Returns total page views, unique visitor counts, and daily timeline metrics for published landing pages.",
+        "operationId": "getAnalytics",
+        "security": [
+          { "ApiKeyAuth": [] },
+          { "BearerAuth": [] }
+        ],
+        "parameters": [
+          {
+            "name": "templateId",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Optional template ID to filter analytics"
+          }
+        ],
+        "responses": {
+          "200": { "description": "Analytics metrics" }
+        }
+      }
+    },
+    "/api/templates": {
+      "get": {
+        "summary": "List User Templates & Pages",
+        "description": "Fetches all saved landing pages and email templates owned by the user.",
+        "operationId": "listTemplates",
+        "security": [
+          { "ApiKeyAuth": [] },
+          { "BearerAuth": [] }
+        ],
+        "responses": {
+          "200": { "description": "List of templates" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key"
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

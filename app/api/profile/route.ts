@@ -12,14 +12,14 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { name?: string; layoutMode?: string };
+  let body: { name?: string; layoutMode?: string; manageLandingPagePublishing?: boolean };
   try {
-    body = (await request.json()) as { name?: string; layoutMode?: string };
+    body = (await request.json()) as { name?: string; layoutMode?: string; manageLandingPagePublishing?: boolean };
   } catch {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const data: { name?: string; layoutMode?: "CLASSIC" | "MODERN" } = {};
+  const data: { name?: string; layoutMode?: "CLASSIC" | "MODERN"; manageLandingPagePublishing?: boolean } = {};
 
   if (body.name !== undefined) {
     const name = body.name.trim();
@@ -39,6 +39,24 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     data.layoutMode = body.layoutMode;
   }
 
+  if (body.manageLandingPagePublishing !== undefined) {
+    if (typeof body.manageLandingPagePublishing !== "boolean") {
+      return NextResponse.json({ error: "Invalid value for manageLandingPagePublishing." }, { status: 400 });
+    }
+    // Server-side Ultra gate — reject with a clear error rather than silently storing a
+    // value that resolveManageLandingPagePublishing() would collapse to false everywhere else.
+    if (body.manageLandingPagePublishing === true) {
+      const currentUser = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { subscriptionPlan: true },
+      });
+      if (currentUser?.subscriptionPlan !== "ULTRA") {
+        return NextResponse.json({ error: "This feature requires the Ultra plan." }, { status: 403 });
+      }
+    }
+    data.manageLandingPagePublishing = body.manageLandingPagePublishing;
+  }
+
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "No changes to update." }, { status: 400 });
   }
@@ -47,7 +65,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     const updatedUser = await prisma.user.update({
       where: { id: session.user.id },
       data,
-      select: { id: true, name: true, email: true, layoutMode: true },
+      select: { id: true, name: true, email: true, layoutMode: true, manageLandingPagePublishing: true },
     });
 
     return NextResponse.json({ user: updatedUser });

@@ -136,6 +136,12 @@ const features = [
     description: "Full theme customization with Strata token support. Your brand, perfectly consistent.",
     color: "#c084fc",
   },
+  {
+    icon: <IconSparkles />,
+    title: "MCP & AI Protocol",
+    description: "Prompt Claude, ChatGPT, Cursor & Gemini to generate & publish landing pages in 1 step.",
+    color: "#fc0694",
+  },
 ];
 
 const steps = [
@@ -235,6 +241,20 @@ export default function HomePage() {
             }}
           >
             SDK
+          </Link>
+          <Link
+            href="/mcp"
+            style={{
+              padding: "0.4rem 0.85rem",
+              borderRadius: 8,
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              color: "#fc0694",
+              textDecoration: "none",
+              transition: "color 0.15s, background 0.15s",
+            }}
+          >
+            MCP & AI
           </Link>
         </nav>
 

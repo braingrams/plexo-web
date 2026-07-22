@@ -29,6 +29,14 @@ enum LayoutMode {
   MODERN
 }
 
+enum CreditTransactionType {
+  MONTHLY_GRANT
+  TOPUP_PURCHASE
+  AI_USAGE
+  REFUND
+  ADJUSTMENT
+}
+
 model User {
   id               String           @id @default(uuid()) @db.Uuid
   name             String           @default("Plexo User")
@@ -36,17 +44,56 @@ model User {
   email            String           @unique
   passwordHash     String           @default("")
   isConfirmed      Boolean          @default(false)
-  subscriptionPlan SubscriptionPlan @default(ULTRA)
+  // Was @default(ULTRA) pre-Phase-2 (free beta, no billing). Now that plan
+  // determines real monthly AI credit allowance, new signups default to FREE.
+  subscriptionPlan SubscriptionPlan @default(FREE)
   customDomainLimit Int?
+  // Ultra-gated: lets embedded SDK builders publish/AI under this account without a
+  // per-account domain limit. Enforcement of the Ultra requirement happens in app code
+  // (see lib/subscription.ts resolveManageLandingPagePublishing), not at the DB layer.
+  manageLandingPagePublishing Boolean @default(false)
   layoutMode       LayoutMode       @default(MODERN)
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
+
+  // Billing / credits (Phase 2)
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?
+  allowanceBalance     Int       @default(0)
+  topupBalance         Int       @default(0)
+  allowanceResetAt     DateTime  @default(now())
+
   apiKeys          ApiKey[]
   templates        Template[]
   accounts         Account[]
   sessions         Session[]
   publishedDomains PublishedDomain[]
   uploadedImages   UploadedImage[]
+  creditLedger     CreditLedgerEntry[]
+}
+
+model CreditLedgerEntry {
+  id            String                @id @default(uuid()) @db.Uuid
+  userId        String                @db.Uuid
+  type          CreditTransactionType
+  amount        Int // positive = credit added, negative = credit spent
+  balanceAfter  Int
+  description   String?
+  stripeEventId String?
+  metadata      Json?
+  createdAt     DateTime              @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([stripeEventId])
+}
+
+// Idempotency guard for Stripe webhook deliveries — insert the event id before
+// processing; a unique-constraint violation means it's already been handled.
+model StripeEvent {
+  id        String   @id
+  createdAt DateTime @default(now())
 }
 
 model ApiKey {

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
+import { resolveManageLandingPagePublishing } from "@/lib/subscription";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -16,7 +17,7 @@ function sha256(value: string): string {
  *   x-api-key: <raw api key> | "workspace-internal"
  *
  * Responses:
- *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA", useAi: boolean, aiProvider: string, aiTier: string }
+ *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA", useAi: boolean, aiProvider: string, aiTier: string, manageLandingPagePublishing: boolean }
  *   400 { valid: false, error: "API key is required." }
  *   401 { valid: false, error: "Invalid key or unauthorized." }
  *   500 { valid: false, error: "Internal server error." }
@@ -36,6 +37,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     let useAi = false;
     let aiProvider = "openai";
     let aiTier = "AUTO";
+    let manageLandingPagePublishing = false;
 
     if (rawKey === "workspace-internal") {
       const { auth } = await import("@/server/auth");
@@ -52,6 +54,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         where: { id: session.user.id },
         select: {
           subscriptionPlan: true,
+          manageLandingPagePublishing: true,
           apiKeys: {
             where: { isActive: true },
             orderBy: { createdAt: "desc" },
@@ -69,6 +72,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
 
       subscriptionPlan = user.subscriptionPlan ?? "ULTRA";
+      manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user.manageLandingPagePublishing);
       if (user.apiKeys?.[0]) {
         useAi = user.apiKeys[0].useAi;
         aiProvider = user.apiKeys[0].aiProvider;
@@ -76,7 +80,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
     } else if (rawKey === "test_key") {
       const firstUser = await (prisma.user.findFirst as any)({
-        select: { id: true, subscriptionPlan: true },
+        select: { id: true, subscriptionPlan: true, manageLandingPagePublishing: true },
       });
       if (!firstUser) {
         return NextResponse.json(
@@ -85,6 +89,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         );
       }
       subscriptionPlan = firstUser.subscriptionPlan ?? "ULTRA";
+      manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, firstUser.manageLandingPagePublishing);
       useAi = true;
       aiProvider = "openai";
       aiTier = "AUTO";
@@ -115,10 +120,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       // Fetch the owner's subscription plan separately to avoid nested-select type issues
       const user = await (prisma.user.findUnique as any)({
         where: { id: apiKey.userId },
-        select: { subscriptionPlan: true },
+        select: { subscriptionPlan: true, manageLandingPagePublishing: true },
       });
 
       subscriptionPlan = user?.subscriptionPlan ?? "ULTRA";
+      manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user?.manageLandingPagePublishing);
       useAi = apiKey.useAi;
       aiProvider = apiKey.aiProvider;
       aiTier = apiKey.aiTier;
@@ -136,6 +142,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       useAi,
       aiProvider,
       aiTier,
+      manageLandingPagePublishing,
     });
   } catch (err) {
     console.error("[validate-key] Unexpected error:", err);

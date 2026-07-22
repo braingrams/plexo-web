@@ -10,7 +10,7 @@ import * as openaiProvider from "./providers/openai";
 import type { ProviderCallResult } from "./providers/shared";
 import type { AiActionMode, AiProvider, ConcreteTier, GenerateOutcome } from "./types";
 
-const MAX_TOKENS: Record<AiActionMode, number> = {
+export const MAX_TOKENS: Record<AiActionMode, number> = {
   edit_element: 4000,
   edit_layout: 16000,
   generate_layout: 16000,
