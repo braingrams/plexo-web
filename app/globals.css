@@ -508,7 +508,36 @@
   .dash-mobile-nav-toggle {
     display: flex;
   }
+  .dash-main-modern {
+    padding: calc(0.85rem + 52px + 1rem) 0.85rem 2rem;
+  }
+  .overview-top-row {
+    grid-template-columns: 1fr !important;
+    gap: 1.25rem !important;
+  }
+  .analytics-layout-split {
+    grid-template-columns: 1fr !important;
+    gap: 1.25rem !important;
+  }
 }
+
+/* ─────────────────────────────────────────
+   Mobile Responsive Utilities
+   ───────────────────────────────────────── */
+.table-responsive-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 
 /* Template editor (PlexoBuilder) needs its own full viewport below the desktop tier —
    the builder's own chrome becomes responsive there, but only if the dashboard shell

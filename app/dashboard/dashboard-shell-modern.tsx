@@ -154,7 +154,7 @@ export function DashboardShellModern({ children, userName, userEmail }: Props) {
                 position: "absolute",
                 top: "calc(100% + 0.75rem)",
                 left: 0,
-                width: 220,
+                width: "min(220px, calc(100vw - 3rem))",
                 background: "rgba(13,15,26,0.98)",
                 border: "1px solid rgba(255,255,255,0.09)",
                 borderRadius: 16,

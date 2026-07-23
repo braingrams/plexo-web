@@ -519,13 +519,15 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
           marginBottom: "2rem"
         }}>
           <div style={{
-            padding: "1.25rem 1.5rem",
+            padding: "1rem 1.25rem",
             borderBottom: "1px solid rgba(255,255,255,0.06)",
             display: "flex",
             justifyContent: "space-between",
-            alignItems: "center"
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "0.75rem",
           }}>
-            <h2 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#f0f2ff" }}>
+            <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff" }}>
               Active Published Domains
             </h2>
             {domains.length > 0 && (
@@ -534,10 +536,12 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                 onClick={() => setIsDrawerOpen(true)}
                 className="btn-primary"
                 style={{
-                  padding: "0.55rem 1.25rem", borderRadius: 8, fontSize: "0.82rem", fontWeight: 700,
+                  padding: "0.5rem 1rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700,
                   background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
                   border: "none", color: "#fff", cursor: "pointer",
-                  boxShadow: "0 4px 14px var(--brand-glow)"
+                  boxShadow: "0 4px 14px var(--brand-glow)",
+                  whiteSpace: "nowrap",
+                  marginLeft: "auto",
                 }}
               >
                 + Link Domain

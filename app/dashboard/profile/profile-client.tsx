@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useState } from "react";
 import { Card } from "../_components/Card";
@@ -104,7 +104,7 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
   }
 
   return (
-    <div style={{ padding: "2rem 1.75rem", maxWidth: 1500, margin: "0 auto" }}>
+    <div style={{ padding: 0, maxWidth: 1500, margin: "0 auto" }}>
       <PageHeader
         eyebrow="Account"
         title="Your Profile"
@@ -115,15 +115,15 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
       <Card
         style={{
           marginBottom: "1.5rem",
-          display: "flex", alignItems: "center", gap: "1.5rem", flexWrap: "wrap",
+          display: "flex", alignItems: "center", gap: "1.25rem", flexWrap: "wrap",
         }}
       >
         {/* Avatar */}
         <div style={{
-          width: 72, height: 72, borderRadius: "50%",
+          width: 64, height: 64, borderRadius: "50%",
           background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
           display: "grid", placeItems: "center",
-          fontSize: "1.5rem", fontWeight: 800, color: "#fff",
+          fontSize: "1.35rem", fontWeight: 800, color: "#fff",
           fontFamily: "var(--font-heading), sans-serif",
           boxShadow: "0 0 28px rgba(139,92,246,0.4)",
           flexShrink: 0,
@@ -132,46 +132,48 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
           {initials || <IconUser />}
         </div>
 
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 style={{
-            fontFamily: "var(--font-heading), sans-serif",
-            fontSize: "1.2rem", fontWeight: 700, color: "#f0f2ff",
-            marginBottom: "0.3rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-          }}>
-            {name || "Unnamed User"}
-          </h2>
-          <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", marginBottom: "0.35rem" }}>
+            <h2 style={{
+              fontFamily: "var(--font-heading), sans-serif",
+              fontSize: "1.15rem", fontWeight: 700, color: "#f0f2ff",
+              margin: 0, wordBreak: "break-word",
+            }}>
+              {name || "Unnamed User"}
+            </h2>
+            {/* Plan badge */}
+            <span style={{
+              display: "inline-flex", alignItems: "center",
+              padding: "0.25rem 0.7rem",
+              borderRadius: 999,
+              fontSize: "0.68rem", fontWeight: 700,
+              letterSpacing: "0.08em", textTransform: "uppercase",
+              background: planStyle.bg,
+              color: planStyle.color,
+              border: `1px solid ${planStyle.border}`,
+              flexShrink: 0,
+            }}>
+              {subscriptionPlan}
+            </span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", flexWrap: "wrap" }}>
             <span style={{
               display: "inline-flex", alignItems: "center", gap: "0.35rem",
-              fontSize: "0.82rem", color: "rgba(240,242,255,0.45)",
+              fontSize: "0.8rem", color: "rgba(240,242,255,0.55)", wordBreak: "break-all",
             }}>
               <IconMail />
               {email}
             </span>
             <span style={{
               display: "inline-flex", alignItems: "center", gap: "0.35rem",
-              fontSize: "0.82rem", color: "rgba(240,242,255,0.35)",
+              fontSize: "0.78rem", color: "rgba(240,242,255,0.35)",
             }}>
               <IconCalendar />
               Member since {formatDate(memberSince)}
             </span>
           </div>
         </div>
-
-        {/* Plan badge */}
-        <span style={{
-          display: "inline-flex", alignItems: "center",
-          padding: "0.3rem 0.85rem",
-          borderRadius: 999,
-          fontSize: "0.72rem", fontWeight: 700,
-          letterSpacing: "0.08em", textTransform: "uppercase",
-          background: planStyle.bg,
-          color: planStyle.color,
-          border: `1px solid ${planStyle.border}`,
-          flexShrink: 0,
-        }}>
-          {subscriptionPlan}
-        </span>
       </Card>
 
       {/* Edit form */}

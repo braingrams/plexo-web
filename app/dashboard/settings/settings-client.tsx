@@ -391,22 +391,24 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
         }}>
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "1.25rem 1.5rem",
+            padding: "1rem 1.25rem",
             borderBottom: "1px solid rgba(255,255,255,0.06)",
+            flexWrap: "wrap",
+            gap: "0.75rem",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
               <div style={{
                 width: 34, height: 34, borderRadius: 9,
                 background: "var(--brand-subtle)", border: "1px solid rgba(139,92,246,0.2)",
-                display: "grid", placeItems: "center", color: "var(--brand)",
+                display: "grid", placeItems: "center", color: "var(--brand)", flexShrink: 0,
               }}>
                 <IconKey />
               </div>
               <div>
-                <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff" }}>
+                <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff" }}>
                   API Key Management
                 </h2>
-                <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)" }}>
+                <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)" }}>
                   {apiKeys.length} key{apiKeys.length !== 1 ? "s" : ""} total
                 </p>
               </div>
@@ -418,13 +420,15 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
               disabled={isGenerating}
               style={{
                 display: "inline-flex", alignItems: "center", gap: "0.5rem",
-                padding: "0.55rem 1rem",
+                padding: "0.5rem 0.9rem",
                 borderRadius: 9, border: "none", cursor: isGenerating ? "not-allowed" : "pointer",
-                fontSize: "0.8rem", fontWeight: 700,
+                fontSize: "0.78rem", fontWeight: 700,
                 background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
                 color: "#fff", opacity: isGenerating ? 0.7 : 1,
                 boxShadow: "0 3px 14px var(--brand-glow)",
                 fontFamily: "inherit",
+                whiteSpace: "nowrap",
+                marginLeft: "auto",
               }}
             >
               <IconKey />
@@ -432,16 +436,16 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
             </button>
           </div>
 
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+          <div style={{ width: "100%", overflowX: "auto" }} className="table-responsive-wrap">
+            <table style={{ width: "100%", minWidth: 550, borderCollapse: "collapse", fontSize: "0.85rem" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                   {["Name", "Masked Key", "Created", "Status", "Action"].map((h) => (
                     <th key={h} style={{
-                      padding: "0.75rem 1.25rem",
-                      textAlign: "left", fontWeight: 600, fontSize: "0.72rem",
+                      padding: "0.75rem 1rem",
+                      textAlign: "left", fontWeight: 600, fontSize: "0.7rem",
                       letterSpacing: "0.08em", textTransform: "uppercase",
-                      color: "rgba(240,242,255,0.35)",
+                      color: "rgba(240,242,255,0.35)", whiteSpace: "nowrap",
                     }}>
                       {h}
                     </th>

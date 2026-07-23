@@ -120,12 +120,12 @@ const text = compileToPlainText(template.designJson);
       />
 
       {/* Select key warning/option */}
-      <Card padded={false} style={{ padding: "1.5rem", marginBottom: "1.5rem" }}>
-        <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.5rem" }}>
+      <Card padded={false} style={{ padding: "1rem 1.25rem", marginBottom: "1.25rem" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.5rem" }}>
           Select Active API Key to Inject in Snippets
         </h2>
         {initialKeys.length === 0 ? (
-          <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.45)" }}>
+          <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.45)" }}>
             No active API keys found. Visit the{" "}
             <Link href="/dashboard/settings" style={{ color: "var(--brand)", fontWeight: 600, textDecoration: "none" }}>
               Developer Settings
@@ -133,12 +133,12 @@ const text = compileToPlainText(template.designJson);
             {" "}page to generate a key first.
           </p>
         ) : (
-          <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
             <select
               value={selectedKeyId}
               onChange={(e) => setSelectedKeyId(e.target.value)}
               className="field-select"
-              style={{ maxWidth: 300, flex: 1 }}
+              style={{ width: "100%", maxWidth: "100%" }}
             >
               {initialKeys.map((k) => (
                 <option key={k.id} value={k.id}>
@@ -146,19 +146,19 @@ const text = compileToPlainText(template.designJson);
                 </option>
               ))}
             </select>
-            <span style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.35)" }}>
+            <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.35)", lineHeight: 1.4 }}>
               The selected key will be injected directly into the copy-paste integration blocks below.
             </span>
           </div>
         )}
       </Card>
 
-      <div style={{ display: "grid", gap: "1.5rem", gridTemplateColumns: "1fr" }}>
+      <div style={{ display: "grid", gap: "1.25rem", gridTemplateColumns: "1fr" }}>
 
         {/* 1. Install */}
-        <Card padded={false} style={{ padding: "1.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
-            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <Card padded={false} style={{ padding: "1rem 1.25rem" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem", flexWrap: "wrap", gap: "0.5rem" }}>
+            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", display: "flex", alignItems: "center", gap: "0.5rem" }}>
               <span style={{ color: "var(--brand)" }}><IconTerminal /></span>
               Step 1: Install Package
             </h3>
@@ -177,7 +177,7 @@ const text = compileToPlainText(template.designJson);
           </div>
           <pre style={{
             background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255,255,255,0.06)",
-            borderRadius: 10, padding: "0.9rem 1.1rem", fontFamily: "monospace", fontSize: "0.85rem",
+            borderRadius: 10, padding: "0.75rem 1rem", fontFamily: "monospace", fontSize: "0.8rem",
             color: "var(--brand)", overflowX: "auto",
           }}>
             {installCode}
@@ -185,9 +185,9 @@ const text = compileToPlainText(template.designJson);
         </Card>
 
         {/* 2. Embedded component */}
-        <Card padded={false} style={{ padding: "1.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
-            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff" }}>
+        <Card padded={false} style={{ padding: "1rem 1.25rem" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem", flexWrap: "wrap", gap: "0.5rem" }}>
+            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff" }}>
               Step 2: Embed the Builder Component (React / Next.js)
             </h3>
             <button
@@ -205,7 +205,7 @@ const text = compileToPlainText(template.designJson);
           </div>
           <pre style={{
             background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255,255,255,0.06)",
-            borderRadius: 10, padding: "1.25rem", fontFamily: "monospace", fontSize: "0.82rem",
+            borderRadius: 10, padding: "1rem", fontFamily: "monospace", fontSize: "0.78rem",
             color: "rgba(240,242,255,0.85)", overflowX: "auto", lineHeight: 1.5,
           }}>
             {reactCode}
@@ -213,9 +213,9 @@ const text = compileToPlainText(template.designJson);
         </Card>
 
         {/* 3. Server-side compilation */}
-        <Card padded={false} style={{ padding: "1.5rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
-            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff" }}>
+        <Card padded={false} style={{ padding: "1rem 1.25rem" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem", flexWrap: "wrap", gap: "0.5rem" }}>
+            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff" }}>
               Step 3: Server compilation (Next.js server-side, Node.js backend)
             </h3>
             <button
@@ -233,7 +233,7 @@ const text = compileToPlainText(template.designJson);
           </div>
           <pre style={{
             background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255,255,255,0.06)",
-            borderRadius: 10, padding: "1.25rem", fontFamily: "monospace", fontSize: "0.82rem",
+            borderRadius: 10, padding: "1rem", fontFamily: "monospace", fontSize: "0.78rem",
             color: "rgba(240,242,255,0.85)", overflowX: "auto", lineHeight: 1.5,
           }}>
             {nodeCode}

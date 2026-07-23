@@ -67,20 +67,20 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
   );
 
   return (
-    <div className="max-w-[1500px] mx-auto p-6 md:p-8 space-y-8 font-sans text-[#f0f2ff]">
+    <div className="max-w-[1500px] mx-auto p-0 sm:p-4 md:p-6 space-y-6 font-sans text-[#f0f2ff]">
       {/* ── Header ─────────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-white/10">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/10">
         <div>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#8b5cf6] to-[#7c3aed] flex items-center justify-center shadow-lg shadow-[#8b5cf6]/25">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#8b5cf6] to-[#7c3aed] flex items-center justify-center shadow-lg shadow-[#8b5cf6]/25 shrink-0">
               <Bot className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-                AI & MCP Integration Hub
-                <Sparkles className="w-4 h-4 text-[#a78bfa]" />
+              <h1 className="text-lg sm:text-2xl font-bold text-white tracking-tight leading-snug">
+                AI & MCP Integration Hub{" "}
+                <Sparkles className="w-4 h-4 text-[#a78bfa] inline-block align-middle" />
               </h1>
-              <p className="text-sm text-white/60">
+              <p className="text-xs sm:text-sm text-white/60 mt-0.5">
                 Connect Claude, ChatGPT, Cursor, and Gemini to generate, compile, and publish landing pages directly from chat.
               </p>
             </div>
@@ -90,7 +90,7 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
         <a
           href="/mcp/login"
           target="_blank"
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#8b5cf6]/10 border border-[#8b5cf6]/25 text-[#a78bfa] hover:bg-[#8b5cf6]/20 text-xs font-semibold transition"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#8b5cf6]/10 border border-[#8b5cf6]/25 text-[#a78bfa] hover:bg-[#8b5cf6]/20 text-xs font-semibold transition shrink-0 self-start sm:self-auto"
         >
           <Lock className="w-4 h-4" />
           Authenticate Session Token
@@ -99,7 +99,7 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
       </div>
 
       {/* ── Tabs Selector ─────────────────────────────────────── */}
-      <div className="flex items-center gap-2 border-b border-white/10 pb-4 overflow-x-auto">
+      <div className="flex items-center gap-2 border-b border-white/10 pb-4 overflow-x-auto no-scrollbar">
         {[
           { id: "claude", label: "Claude Custom Connectors", icon: Sparkles },
           { id: "chatgpt", label: "ChatGPT Developer Plugin / Remote MCP", icon: Bot },
@@ -112,7 +112,7 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition whitespace-nowrap ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition whitespace-nowrap ${
                 active
                   ? "bg-[#8b5cf6] text-white shadow-lg shadow-[#8b5cf6]/25"
                   : "bg-white/[0.04] text-white/60 hover:text-white border border-white/10"
@@ -127,18 +127,18 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
 
       {/* ── Active Tab Details ─────────────────────────────────── */}
       {activeTab === "claude" && (
-        <div className="bg-[#111827]/80 border border-white/10 rounded-3xl p-6 md:p-8 space-y-6 shadow-xl">
-          <div className="flex items-center justify-between border-b border-white/10 pb-4">
+        <div className="bg-[#111827]/80 border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 space-y-6 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 flex items-center justify-center text-[#8b5cf6]">
-                <Sparkles className="w-5 h-5" />
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 flex items-center justify-center text-[#8b5cf6] shrink-0">
+                <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white">Claude Web Custom Connector Setup</h2>
-                <p className="text-xs text-white/60">Connect Plexo in Claude Web under <code className="text-[#a78bfa]">Customize → Connectors</code>.</p>
+                <h2 className="text-base sm:text-lg font-bold text-white leading-tight">Claude Web Custom Connector Setup</h2>
+                <p className="text-xs text-white/60 mt-0.5">Connect Plexo in Claude Web under <code className="text-[#a78bfa]">Customize → Connectors</code>.</p>
               </div>
             </div>
-            <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-[#8b5cf6]/10 text-[#a78bfa] border border-[#8b5cf6]/20">
+            <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-[#8b5cf6]/10 text-[#a78bfa] border border-[#8b5cf6]/20 self-start sm:self-auto shrink-0">
               Remote MCP
             </span>
           </div>

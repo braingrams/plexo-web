@@ -188,9 +188,9 @@ export default function CompileClientPage() {
 
   const renderEditorBoxContent = () => (
     <>
-      <div className="bg-[#0e1526] px-4 py-3 border-b border-slate-800 flex justify-between items-center h-[46px] shrink-0">
+      <div className="bg-[#0e1526] px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-slate-800 flex flex-wrap sm:flex-nowrap justify-between items-center min-h-[44px] gap-2 shrink-0">
         <div className="flex items-center">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
             {activeTab === "html-to-json" ? "Pasted HTML / MJML Markup" : "Pasted Builder JSON template"}
           </span>
           {renderLeftHeaderControls()}
@@ -198,12 +198,12 @@ export default function CompileClientPage() {
         <button
           onClick={handleCompile}
           disabled={isLoading || !inputText.trim()}
-          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-extrabold text-white rounded transition shadow-sm"
+          className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-extrabold text-white rounded transition shadow-sm shrink-0 ml-auto sm:ml-0"
         >
           {isLoading ? "Compiling..." : "Compile"}
         </button>
       </div>
-      <div className="flex-1 relative">
+      <div className="flex-1 relative min-h-[220px] sm:min-h-[300px]">
         <textarea
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
@@ -212,7 +212,7 @@ export default function CompileClientPage() {
               ? "<!-- Paste your HTML or MJML code here -->\n<mjml>\n  <mj-body>\n    ...\n  </mj-body>\n</mjml>"
               : "{\n  \"body\": {\n    \"style\": {},\n    \"rows\": []\n  }\n}"
           }
-          className="w-full h-full bg-transparent p-4 font-mono text-xs leading-relaxed outline-none border-none text-slate-300 resize-none absolute inset-0"
+          className="w-full h-full bg-transparent p-3.5 sm:p-4 font-mono text-xs leading-relaxed outline-none border-none text-slate-300 resize-none absolute inset-0"
         />
       </div>
     </>
@@ -220,9 +220,9 @@ export default function CompileClientPage() {
 
   const renderOutputBoxContent = () => (
     <>
-      <div className="bg-[#0e1526] px-4 py-3 border-b border-slate-800 flex justify-between items-center h-[46px] shrink-0">
+      <div className="bg-[#0e1526] px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-slate-800 flex flex-wrap sm:flex-nowrap justify-between items-center min-h-[44px] gap-2 shrink-0">
         <div className="flex items-center">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">
             {activeTab === "html-to-json" ? "Compiled JSON Output" : "Compiled HTML Output"}
           </span>
           {activeTab === "json-to-html" && renderLeftHeaderControls()}
@@ -230,19 +230,19 @@ export default function CompileClientPage() {
         {outputText && (
           <button
             onClick={handleCopy}
-            className={`text-xs font-semibold transition ${copied ? "text-emerald-400 font-bold" : "text-indigo-400 hover:text-indigo-300"}`}
+            className={`text-xs font-semibold transition shrink-0 ml-auto sm:ml-0 ${copied ? "text-emerald-400 font-bold" : "text-indigo-400 hover:text-indigo-300"}`}
           >
             {copied ? "Copied!" : "Copy Output"}
           </button>
         )}
       </div>
-      <div className="flex-1 relative bg-transparent">
+      <div className="flex-1 relative bg-transparent min-h-[220px] sm:min-h-[300px]">
         {error ? (
           <div className="p-4 text-xs font-semibold text-rose-400 bg-rose-950/10 absolute inset-0 overflow-auto">
             Error: {error}
           </div>
         ) : (
-          <pre className="w-full h-full p-4 font-mono text-xs text-slate-300 select-text absolute inset-0 overflow-auto">
+          <pre className="w-full h-full p-3.5 sm:p-4 font-mono text-xs text-slate-300 select-text absolute inset-0 overflow-auto">
             {outputText || "// Click Compile to process output..."}
           </pre>
         )}
@@ -252,9 +252,9 @@ export default function CompileClientPage() {
 
   const renderLivePreviewContent = () => (
     <>
-      <div className="bg-[#0e1526] px-4 py-3 border-b border-slate-800 flex justify-between items-center h-[46px] shrink-0">
+      <div className="bg-[#0e1526] px-3.5 sm:px-4 py-2.5 sm:py-3 border-b border-slate-800 flex flex-wrap sm:flex-nowrap justify-between items-center min-h-[44px] gap-2 shrink-0">
         <div className="flex items-center">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Live Preview</span>
+          <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">Live Preview</span>
           {renderRightHeaderControls()}
         </div>
         <button
@@ -262,12 +262,12 @@ export default function CompileClientPage() {
             setShowSplitPreview(false);
             setCollapseState("none");
           }}
-          className="text-xs font-semibold text-rose-400 hover:text-rose-300 transition"
+          className="text-xs font-semibold text-rose-400 hover:text-rose-300 transition shrink-0 ml-auto sm:ml-0"
         >
           Close Preview
         </button>
       </div>
-      <div className="flex-1 bg-white relative">
+      <div className="flex-1 bg-white relative min-h-[250px]">
         <iframe
           srcDoc={previewHtml}
           title="Compile Live Preview"
@@ -278,18 +278,18 @@ export default function CompileClientPage() {
   );
 
   return (
-    <div style={{ fontFamily: "Inter, sans-serif", color: "#f1f5f9" }} className="flex flex-col gap-6 max-w-7xl mx-auto py-4">
+    <div style={{ fontFamily: "Inter, sans-serif", color: "#f1f5f9" }} className="flex flex-col gap-4 sm:gap-6 max-w-7xl mx-auto py-2 sm:py-4">
       {/* Title */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">Compile Studio</h1>
-        <p className="text-sm text-slate-400 mt-1">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Compile Studio</h1>
+        <p className="text-xs sm:text-sm text-slate-400 mt-1">
           Paste HTML to compile into JSON, or paste builder JSON to compile to clean responsive HTML.
         </p>
       </div>
 
       {/* Tabs / Header Control */}
-      <div className="flex justify-between items-center border-b border-slate-800">
-        <div className="flex gap-6">
+      <div className="flex flex-wrap sm:flex-nowrap justify-between items-center gap-3 border-b border-slate-800">
+        <div className="flex gap-4 sm:gap-6 overflow-x-auto no-scrollbar w-full sm:w-auto">
           <button
             onClick={() => {
               setActiveTab("html-to-json");
@@ -299,7 +299,7 @@ export default function CompileClientPage() {
               setShowSplitPreview(false);
               setCollapseState("none");
             }}
-            className={`pb-3 text-sm font-semibold border-b-2 transition ${activeTab === "html-to-json" ? "border-indigo-500 text-white" : "border-transparent text-slate-400 hover:text-slate-200"}`}
+            className={`pb-2.5 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap ${activeTab === "html-to-json" ? "border-indigo-500 text-white" : "border-transparent text-slate-400 hover:text-slate-200"}`}
           >
             HTML to JSON Converter
           </button>
@@ -312,7 +312,7 @@ export default function CompileClientPage() {
               setShowSplitPreview(false);
               setCollapseState("none");
             }}
-            className={`pb-3 text-sm font-semibold border-b-2 transition ${activeTab === "json-to-html" ? "border-indigo-500 text-white" : "border-transparent text-slate-400 hover:text-slate-200"}`}
+            className={`pb-2.5 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap ${activeTab === "json-to-html" ? "border-indigo-500 text-white" : "border-transparent text-slate-400 hover:text-slate-200"}`}
           >
             JSON to HTML Compiler
           </button>
@@ -325,7 +325,7 @@ export default function CompileClientPage() {
               setShowSplitPreview(nextState);
               setCollapseState("none");
             }}
-            className={`mb-2 px-4 py-1.5 rounded text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`mb-2 px-3.5 py-1.5 rounded text-xs font-bold transition flex items-center gap-1.5 shrink-0 ${
               showSplitPreview
                 ? "bg-indigo-600/25 text-indigo-400 border border-indigo-500/30"
                 : "bg-indigo-600 text-white hover:bg-indigo-500"
@@ -341,7 +341,7 @@ export default function CompileClientPage() {
       </div>
 
       {/* Workspace Panel */}
-      <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-220px)] min-h-[500px] items-stretch">
+      <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 h-auto lg:h-[calc(100vh-220px)] min-h-[450px] items-stretch">
         {/* Left Hand Column */}
         {(!showSplitPreview || collapseState !== "left") && (
           <div

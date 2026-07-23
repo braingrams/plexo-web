@@ -16,25 +16,21 @@ export function PageHeader({ eyebrow, title, subtitle, action }: Props) {
 
   return (
     <div
+      className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4"
       style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "flex-end",
-        flexWrap: "wrap",
-        gap: "1rem",
-        marginBottom: isModern ? "2.25rem" : "2rem",
+        marginBottom: isModern ? "1.75rem" : "1.5rem",
       }}
     >
-      <div>
+      <div style={{ flex: 1, minWidth: 0 }}>
         {eyebrow && (
           <p
             style={{
-              fontSize: "0.72rem",
+              fontSize: "0.7rem",
               fontWeight: 700,
               letterSpacing: "0.12em",
               textTransform: "uppercase",
               color: "var(--brand)",
-              marginBottom: "0.35rem",
+              marginBottom: "0.25rem",
             }}
           >
             {eyebrow}
@@ -43,19 +39,24 @@ export function PageHeader({ eyebrow, title, subtitle, action }: Props) {
         <h1
           style={{
             fontFamily: "var(--font-heading), sans-serif",
-            fontSize: isModern ? "clamp(1.8rem, 3vw, 2.4rem)" : "clamp(1.6rem, 3vw, 2.1rem)",
+            fontSize: isModern ? "clamp(1.35rem, 3.5vw, 2.2rem)" : "clamp(1.25rem, 3.5vw, 1.95rem)",
             fontWeight: 800,
             letterSpacing: "-0.025em",
             color: "#f0f2ff",
+            lineHeight: 1.2,
           }}
         >
           {title}
         </h1>
         {subtitle && (
-          <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.45)", marginTop: "0.35rem" }}>{subtitle}</p>
+          <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.45)", marginTop: "0.35rem", lineHeight: 1.45 }}>{subtitle}</p>
         )}
       </div>
-      {action}
+      {action && (
+        <div style={{ flexShrink: 0, marginTop: "0.25rem" }}>
+          {action}
+        </div>
+      )}
     </div>
   );
 }

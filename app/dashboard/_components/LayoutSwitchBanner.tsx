@@ -66,12 +66,9 @@ export function LayoutSwitchBanner() {
 
   return (
     <div
+      className="flex flex-row flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 sm:gap-3"
       style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: "0.75rem",
-        padding: "0.5rem 0.9rem",
+        padding: "0.55rem 0.85rem",
         marginBottom: "1.25rem",
         borderRadius: 10,
         background: "var(--brand-subtle)",
@@ -81,12 +78,16 @@ export function LayoutSwitchBanner() {
       }}
       role="status"
     >
-      <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-muted)" }}>
-        <IconSwap />
-        You&apos;re using the <strong style={{ color: "var(--text-main)" }}>{MODE_LABEL[mode]}</strong> layout.
-      </span>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--text-muted)", flex: "1 1 180px" }}>
+        <span style={{ display: "inline-flex", flexShrink: 0 }}>
+          <IconSwap />
+        </span>
+        <span style={{ fontSize: "0.78rem", lineHeight: 1.35 }}>
+          You&apos;re using the <strong style={{ color: "var(--text-main)" }}>{MODE_LABEL[mode]}</strong> layout.
+        </span>
+      </div>
 
-      <span style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0, marginLeft: "auto" }}>
         <button
           onClick={() => void setMode(target)}
           disabled={saving}
@@ -123,7 +124,7 @@ export function LayoutSwitchBanner() {
         >
           ×
         </button>
-      </span>
+      </div>
     </div>
   );
 }

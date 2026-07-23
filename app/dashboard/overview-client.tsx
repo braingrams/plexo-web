@@ -153,19 +153,19 @@ export function OverviewClient({
   return (
     <>
       {/* Welcome Banner */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem", flexWrap: "wrap", gap: "0.75rem" }}>
         <div>
-          <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "2.1rem", fontWeight: 800, color: "#f0f2ff", letterSpacing: "-0.025em" }}>
+          <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "clamp(1.35rem, 4vw, 2.1rem)", fontWeight: 800, color: "#f0f2ff", letterSpacing: "-0.025em", lineHeight: 1.2 }}>
             Welcome back, {userName}!
           </h1>
-          <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.45)", marginTop: "0.35rem" }}>
-            Here is what's happening on your visual builder platform workspace.
+          <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.45)", marginTop: "0.35rem" }}>
+            Here is what&apos;s happening on your visual builder platform workspace.
           </p>
         </div>
         <span style={{
-          fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.08em",
+          fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.08em",
           textTransform: "uppercase", color: "var(--brand)",
-          background: "var(--brand-subtle)", padding: "0.35rem 0.75rem", borderRadius: 8,
+          background: "var(--brand-subtle)", padding: "0.3rem 0.65rem", borderRadius: 8,
           border: "1px solid rgba(139,92,246,0.15)"
         }}>
           {plan} ACCOUNT
@@ -175,9 +175,9 @@ export function OverviewClient({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: isModern ? "1fr 1fr 1fr" : "1fr 1fr",
-          gap: "2rem",
-          marginBottom: "2.5rem",
+          gridTemplateColumns: isModern ? "repeat(auto-fit, minmax(280px, 1fr))" : "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: "1.5rem",
+          marginBottom: "2rem",
           width: "100%",
         }}
         className="overview-top-row"
@@ -335,7 +335,7 @@ export function OverviewClient({
       {/* Analytics Graph & Timeline Dashboard */}
       <Card style={{ marginBottom: "2rem" }}>
         {/* Filters and Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "1.25rem", flexWrap: "wrap", gap: "1.25rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "1.25rem", flexWrap: "wrap", gap: "1rem" }}>
           <div>
             <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
               Visitor Insights Graph
@@ -346,7 +346,7 @@ export function OverviewClient({
           </div>
 
           {/* Filtering controls */}
-          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ display: "flex", background: "rgba(255,255,255,0.03)", padding: 4, borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)" }}>
               <button
                 type="button"
@@ -376,7 +376,7 @@ export function OverviewClient({
 
             {/* Template filter list */}
             {templates.length > 0 && (
-              <div style={{ width: 180 }}>
+              <div style={{ width: "min(180px, 100%)" }}>
                 <CustomSelect
                   value={selectedTemplateId}
                   options={templateOptions}
