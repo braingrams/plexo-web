@@ -142,6 +142,95 @@ export const TemplateJSONSchema = z.object({
 });
 
 // ==========================================
+// 3.5. Structural Hydration for External/AI Callers
+// ==========================================
+
+function randomId(prefix: string): string {
+  return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Fills in structural bookkeeping (ids, empty style/attributes objects, default
+ * column widths) that external AI callers (MCP, REST publish) often omit.
+ * Deliberately does NOT interpret or convert shorthand content blocks (e.g.
+ * { type: "products", content: {...} }) into columns/elements — a row missing
+ * that structure is left as-is so TemplateJSONSchema rejects it with an
+ * actionable error instead of this layer silently guessing and dropping data.
+ */
+export function hydrateStructuralDefaults(inputJson: any): any {
+  if (!inputJson || typeof inputJson !== 'object') return inputJson;
+
+  const rawRows: any[] = Array.isArray(inputJson.body?.rows)
+    ? inputJson.body.rows
+    : Array.isArray(inputJson.rows)
+      ? inputJson.rows
+      : [];
+
+  const rows = rawRows.map((row: any, rowIdx: number) => {
+    if (!row || typeof row !== 'object') return row;
+    return {
+      ...row,
+      id: typeof row.id === 'string' && row.id ? row.id : randomId(`row-${rowIdx}`),
+      style: row.style && typeof row.style === 'object' ? row.style : {},
+      columns: Array.isArray(row.columns)
+        ? row.columns.map((col: any, colIdx: number) => {
+            if (!col || typeof col !== 'object') return col;
+            return {
+              ...col,
+              id: typeof col.id === 'string' && col.id ? col.id : randomId(`row-${rowIdx}-col-${colIdx}`),
+              width: typeof col.width === 'string' && col.width ? col.width : '100%',
+              elements: Array.isArray(col.elements)
+                ? col.elements.map((el: any, elIdx: number) => {
+                    if (!el || typeof el !== 'object') return el;
+                    return {
+                      ...el,
+                      id: typeof el.id === 'string' && el.id ? el.id : randomId(`row-${rowIdx}-col-${colIdx}-el-${elIdx}`),
+                      style: el.style && typeof el.style === 'object' ? el.style : {},
+                      attributes: el.attributes && typeof el.attributes === 'object' ? el.attributes : {},
+                    };
+                  })
+                : col.elements,
+            };
+          })
+        : row.columns,
+    };
+  });
+
+  const extractedStyle: Record<string, any> = {};
+  const sources = [inputJson.style, inputJson.body?.style, inputJson.body, inputJson];
+  for (const src of sources) {
+    if (src && typeof src === 'object' && !Array.isArray(src)) {
+      if (src.backgroundColor !== undefined) extractedStyle.backgroundColor = src.backgroundColor;
+      if (src.background !== undefined) extractedStyle.background = src.background;
+      if (src.color !== undefined) extractedStyle.color = src.color;
+      if (src.textColor !== undefined) extractedStyle.color = src.textColor;
+      if (src.fontFamily !== undefined) extractedStyle.fontFamily = src.fontFamily;
+      if (src.htmlTitle !== undefined) extractedStyle.htmlTitle = src.htmlTitle;
+    }
+  }
+
+  const style: Record<string, any> = {
+    backgroundColor: '#08090f',
+    background: '#08090f',
+    color: '#f0f2ff',
+    fontFamily: 'Inter, sans-serif',
+    ...extractedStyle,
+  };
+  if (style.backgroundColor && !style.background) style.background = style.backgroundColor;
+  else if (style.background && !style.backgroundColor) style.backgroundColor = style.background;
+
+  return { body: { style, rows } };
+}
+
+/** Formats the first few Zod issues into a single line an AI tool-caller can act on. */
+export function formatValidationIssues(error: z.ZodError): string {
+  return error.issues
+    .slice(0, 6)
+    .map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`)
+    .join('; ');
+}
+
+// ==========================================
 // 4. HTML & Style Sanitizers
 // ==========================================
 

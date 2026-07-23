@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { TemplateKind } from "@prisma/client";
 import { prisma } from "@/server/prisma";
 import { compileToHTML } from "@/lib/compiler";
+import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { getTierFeatures } from "@/lib/subscription";
 import { getDomainLimit, resolveUser } from "../domains/route";
 
@@ -46,16 +47,23 @@ async function addVercelDomain(domain: string) {
  * POST /api/v1/publish
  *
  * Single atomic endpoint for AI tools (MCP server, ChatGPT Custom Actions, Agents)
- * to save a landing page design AND publish it to a domain in 1 step.
+ * to save a landing page or email template design, and (landing pages only) publish
+ * it to a domain, in 1 step.
  *
  * Payload:
  * {
  *   "name": "Acme SaaS Landing Page",
- *   "designJson": { ... },
- *   "compiledHtml": "<html>...</html>" (optional, auto-compiled from designJson if omitted),
- *   "domain": "acme-saas",
+ *   "kind": "LANDING_PAGE" | "EMAIL" (optional, defaults to "LANDING_PAGE"),
+ *   "designJson": { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [...] }] }] } },
+ *   "compiledHtml": ignored — always compiled server-side from designJson,
+ *   "domain": "acme-saas" (LANDING_PAGE only — ignored for EMAIL, which has no domain),
  *   "type": "SUBDOMAIN" | "CUSTOM" (optional, inferred if omitted)
  * }
+ *
+ * designJson must already be the fully hydrated builder schema (every row has a 'columns'
+ * array of columns with an 'elements' array) — validated against the same TemplateJSONSchema
+ * the dashboard's own save endpoint uses (server/sanitizer.ts). Invalid/shorthand shapes are
+ * rejected with a 400 describing exactly what's wrong, instead of being silently guessed at.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const resolved = await resolveUser(request);
@@ -63,45 +71,60 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized. Valid API Key or Session required." }, { status: 401 });
   }
 
+  const body = await request.json().catch(() => ({}));
+  const kind: TemplateKind =
+    typeof body.kind === "string" && body.kind.toUpperCase() === "EMAIL"
+      ? TemplateKind.EMAIL
+      : TemplateKind.LANDING_PAGE;
+
   const features = getTierFeatures(resolved.subscriptionPlan);
-  if (!features.landingPagesEnabled) {
+  if (kind === TemplateKind.LANDING_PAGE && !features.landingPagesEnabled) {
     return NextResponse.json(
       { error: "Landing page creation requires a PRO or ULTRA subscription plan." },
       { status: 403 }
     );
   }
 
-  const body = await request.json().catch(() => ({}));
-  const name = body.name?.trim() || "AI Generated Landing Page";
-  const designJson = body.designJson;
-  let rawDomain = body.domain?.trim().toLowerCase() || "";
+  const name = body.name?.trim() || (kind === TemplateKind.EMAIL ? "AI Generated Email Template" : "AI Generated Landing Page");
+  const rawDesignJson = body.designJson;
+  let rawDomain = kind === TemplateKind.EMAIL ? "" : body.domain?.trim().toLowerCase() || "";
   let domainType = body.type as "SUBDOMAIN" | "CUSTOM" | undefined;
 
-  if (!designJson || typeof designJson !== "object") {
+  if (!rawDesignJson || typeof rawDesignJson !== "object") {
     return NextResponse.json(
       { error: "Missing required 'designJson' object representing page layout." },
       { status: 400 }
     );
   }
 
-  // Auto-compile HTML if compiledHtml is not provided
-  let compiledHtml = body.compiledHtml;
-  if (!compiledHtml || typeof compiledHtml !== "string" || !compiledHtml.trim()) {
-    try {
-      if (designJson && typeof designJson === "object") {
-        if ((designJson as any).body && (designJson as any).body.style) {
-          (designJson as any).body.style.htmlTitle = (designJson as any).body.style.htmlTitle || name;
-        } else if ((designJson as any).style) {
-          (designJson as any).style.htmlTitle = (designJson as any).style.htmlTitle || name;
-        }
-      }
-      compiledHtml = compileToHTML(designJson as any);
-    } catch (err) {
-      return NextResponse.json(
-        { error: `Failed to compile designJson into HTML: ${err instanceof Error ? err.message : "Malformed structure"}` },
-        { status: 400 }
-      );
-    }
+  // Same strict schema the dashboard's own save endpoint enforces (server/sanitizer.ts) —
+  // every row must already be a fully hydrated { columns: [{ elements: [...] }] } tree.
+  // We reject rather than guess: a caller (MCP server, ChatGPT Custom Action, agent) gets
+  // one clean, actionable error to retry against instead of a silently mangled page.
+  const hydrated = hydrateStructuralDefaults(rawDesignJson);
+  const validation = TemplateJSONSchema.safeParse(hydrated);
+  if (!validation.success) {
+    return NextResponse.json(
+      { error: `designJson failed schema validation: ${formatValidationIssues(validation.error)}` },
+      { status: 400 }
+    );
+  }
+  const designJson = validation.data;
+  if (designJson.body.style) {
+    designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+  }
+
+  // compiledHtml is always derived server-side from the validated designJson (never trusted
+  // from the caller) so the published page can never drift from what's editable in the
+  // dashboard, and so a third-party AI client can't hand us raw HTML/script to serve.
+  let compiledHtml: string;
+  try {
+    compiledHtml = sanitizeHtml(compileToHTML(designJson));
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Failed to compile designJson into HTML: ${err instanceof Error ? err.message : "Malformed structure"}` },
+      { status: 400 }
+    );
   }
 
   // Check template creation limits
@@ -115,12 +138,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // 1. Create the Landing Page Template
+  // 1. Create the template
   const template = await prisma.template.create({
     data: {
       userId: resolved.userId,
       name,
-      kind: TemplateKind.LANDING_PAGE,
+      kind,
       designJson,
       compiledHtml,
     },
@@ -129,6 +152,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const baseDomain = new URL(baseAppUrl).hostname;
   const editableUrl = `${baseAppUrl}/dashboard/templates/${template.id}`;
+
+  // Email templates don't publish to a domain — only landing pages do.
+  if (kind === TemplateKind.EMAIL) {
+    return NextResponse.json({
+      success: true,
+      templateId: template.id,
+      name: template.name,
+      editableUrl,
+      publishedUrl: null,
+      message: "Email template saved successfully.",
+    });
+  }
 
   // If no domain was provided, return the saved template details and dashboard URL
   if (!rawDomain) {

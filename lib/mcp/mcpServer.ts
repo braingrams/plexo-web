@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
-import { compileToHTML, convertSectionRowToPlexoRow } from "@/lib/compiler";
+import { compileToHTML } from "@/lib/compiler";
+import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { getTierFeatures } from "@/lib/subscription";
 import { resolveUser, getDomainLimit } from "@/app/api/v1/domains/route";
 
@@ -14,49 +15,25 @@ const RESERVED_SUBDOMAINS = new Set([
   "profile", "domains", "account", "login", "register", "signup", "logout", "signin"
 ]);
 
-function normalizeDesignJson(inputJson: any): any {
-  if (!inputJson || typeof inputJson !== "object") return inputJson;
+const SCHEMA_HINT =
+  "Every row must already be a fully hydrated layout: { id, style, columns: [{ id, width, elements: [{ id, type, style, attributes }] }] }. " +
+  "Shorthand content blocks like { \"type\": \"products\", \"content\": { \"items\": [...] } } are not accepted here — expand each item into its own " +
+  "column with real elements (e.g. one column per product, each with a heading/image/paragraph for name/price/description) before calling this tool. " +
+  "See this tool's description for a full worked example.";
 
-  const rawRows = inputJson.body?.rows || (Array.isArray(inputJson.rows) ? inputJson.rows : []);
-  const normalizedRows = rawRows.map((row: any) => convertSectionRowToPlexoRow(row)).filter(Boolean);
-
-  const extractedStyle: Record<string, any> = {};
-  const sources = [inputJson.style, inputJson.body?.style, inputJson.body, inputJson];
-  for (const src of sources) {
-    if (src && typeof src === "object" && !Array.isArray(src)) {
-      if (src.backgroundColor !== undefined) extractedStyle.backgroundColor = src.backgroundColor;
-      if (src.background !== undefined) extractedStyle.background = src.background;
-      if (src.color !== undefined) extractedStyle.color = src.color;
-      if (src.textColor !== undefined) extractedStyle.color = src.textColor;
-      if (src.fontFamily !== undefined) extractedStyle.fontFamily = src.fontFamily;
-      if (src.htmlTitle !== undefined) extractedStyle.htmlTitle = src.htmlTitle;
-    }
+/**
+ * Validates designJson against the exact same TemplateJSONSchema the dashboard's
+ * own save endpoint enforces. Throws with an actionable message (fed back to the
+ * calling AI as an MCP tool error) instead of silently accepting a lossy shape —
+ * callers get one clean shot to retry with the corrected, fully hydrated JSON.
+ */
+function validateDesignJson(rawDesignJson: any): any {
+  const hydrated = hydrateStructuralDefaults(rawDesignJson);
+  const validation = TemplateJSONSchema.safeParse(hydrated);
+  if (!validation.success) {
+    throw new Error(`designJson failed schema validation: ${formatValidationIssues(validation.error)}. ${SCHEMA_HINT}`);
   }
-
-  const defaultStyle = {
-    backgroundColor: "#08090f",
-    background: "#08090f",
-    color: "#f0f2ff",
-    fontFamily: "Inter, sans-serif",
-  };
-
-  const styleObj = {
-    ...defaultStyle,
-    ...extractedStyle,
-  };
-
-  if (styleObj.backgroundColor && !styleObj.background) {
-    styleObj.background = styleObj.backgroundColor;
-  } else if (styleObj.background && !styleObj.backgroundColor) {
-    styleObj.backgroundColor = styleObj.background;
-  }
-
-  return {
-    body: {
-      style: styleObj,
-      rows: normalizedRows,
-    },
-  };
+  return validation.data;
 }
 
 export const PLEXO_MCP_TOOLS = [
@@ -65,10 +42,14 @@ export const PLEXO_MCP_TOOLS = [
     description: `Creates, compiles, and publishes a landing page template to a subdomain or custom domain in 1 step.
 
 IMPORTANT INSTRUCTION FOR AI CLIENTS:
-The designJson argument MUST be a fully hydrated layout tree containing body style and rows array.
-Every row MUST contain a 'columns' array with percentage widths ('100%', '50%', '33.33%'), and each column MUST contain an 'elements' array with component objects ('heading', 'paragraph', 'button', 'card', 'image', 'menu', 'social', 'divider', 'spacer', 'form_container').
+The designJson argument MUST be a fully hydrated layout tree containing body style and rows array. There is no shorthand format —
+do NOT send rows shaped like { "type": "products", "content": { "items": [...] } }. That will be REJECTED with a validation error.
+Every row MUST already contain a 'columns' array with percentage widths ('100%', '50%', '33.33%'), and each column MUST contain an
+'elements' array with fully-styled component objects ('heading', 'paragraph', 'button', 'card', 'image', 'menu', 'social', 'divider',
+'spacer', 'form_container'). For any repeated-item section (products, features, testimonials, pricing tiers, etc.) YOU must expand
+each item into its own column with real elements — one column per item — rather than passing a list for the server to interpret.
 
-EXAMPLE VALID designJson PAYLOAD:
+EXAMPLE VALID designJson PAYLOAD (hero row, plus a 3-item product grid row):
 {
   "body": {
     "style": { "backgroundColor": "#08090f", "color": "#f0f2ff", "fontFamily": "Inter, sans-serif", "htmlTitle": "Bulum SaaS Platform" },
@@ -86,6 +67,30 @@ EXAMPLE VALID designJson PAYLOAD:
               { "type": "button", "style": { "textAlign": "center", "backgroundColor": "#8b5cf6", "color": "#ffffff", "borderRadius": "12px", "paddingTop": "14px", "paddingBottom": "14px", "paddingLeft": "28px", "paddingRight": "28px" }, "attributes": { "text": "Start Free Trial", "href": "#signup" } }
             ]
           }
+        ]
+      },
+      {
+        "id": "row-products",
+        "style": { "paddingTop": "60px", "paddingBottom": "60px" },
+        "columns": [
+          { "id": "col-product-1", "width": "33.33%", "elements": [
+            { "type": "image", "style": { "width": "100%", "borderRadius": "12px" }, "attributes": { "src": "https://...", "alt": "Urban Runner" } },
+            { "type": "heading", "style": { "fontSize": "20px", "marginTop": "12px" }, "attributes": { "text": "Urban Runner" } },
+            { "type": "paragraph", "style": { "fontSize": "14px", "color": "#94a3b8" }, "attributes": { "text": "Lightweight sneakers for daily adventures" } },
+            { "type": "paragraph", "style": { "fontSize": "16px", "fontWeight": "700", "color": "#8b5cf6" }, "attributes": { "text": "$89" } }
+          ] },
+          { "id": "col-product-2", "width": "33.33%", "elements": [
+            { "type": "image", "style": { "width": "100%", "borderRadius": "12px" }, "attributes": { "src": "https://...", "alt": "Classic Court" } },
+            { "type": "heading", "style": { "fontSize": "20px", "marginTop": "12px" }, "attributes": { "text": "Classic Court" } },
+            { "type": "paragraph", "style": { "fontSize": "14px", "color": "#94a3b8" }, "attributes": { "text": "Timeless style with modern comfort" } },
+            { "type": "paragraph", "style": { "fontSize": "16px", "fontWeight": "700", "color": "#8b5cf6" }, "attributes": { "text": "$79" } }
+          ] },
+          { "id": "col-product-3", "width": "33.33%", "elements": [
+            { "type": "image", "style": { "width": "100%", "borderRadius": "12px" }, "attributes": { "src": "https://...", "alt": "Street Flex" } },
+            { "type": "heading", "style": { "fontSize": "20px", "marginTop": "12px" }, "attributes": { "text": "Street Flex" } },
+            { "type": "paragraph", "style": { "fontSize": "14px", "color": "#94a3b8" }, "attributes": { "text": "Flexible performance footwear" } },
+            { "type": "paragraph", "style": { "fontSize": "16px", "fontWeight": "700", "color": "#8b5cf6" }, "attributes": { "text": "$99" } }
+          ] }
         ]
       }
     ]
@@ -132,16 +137,19 @@ EXAMPLE VALID designJson PAYLOAD:
                 },
                 rows: {
                   type: "array",
-                  description: "Array of row objects containing columns and elements arrays.",
+                  description: "Array of row objects. Every row MUST already have a 'columns' array — there is no shorthand row type; rows without 'columns' are rejected.",
                   items: {
                     type: "object",
+                    required: ["id", "style", "columns"],
                     properties: {
                       id: { type: "string" },
                       style: { type: "object" },
                       columns: {
                         type: "array",
+                        description: "Required. One entry per column — for a repeated-item section (products, features, testimonials), put one item per column here, not a nested list.",
                         items: {
                           type: "object",
+                          required: ["id", "width", "elements"],
                           properties: {
                             id: { type: "string" },
                             width: { type: "string", description: "Percentage width (e.g. '100%', '50%', '33.33%')." },
@@ -149,6 +157,7 @@ EXAMPLE VALID designJson PAYLOAD:
                               type: "array",
                               items: {
                                 type: "object",
+                                required: ["id", "type", "style", "attributes"],
                                 properties: {
                                   type: {
                                     type: "string",
@@ -171,7 +180,7 @@ EXAMPLE VALID designJson PAYLOAD:
         },
         compiledHtml: {
           type: "string",
-          description: "Optional pre-compiled HTML.",
+          description: "Ignored. HTML is always compiled server-side from the validated designJson (and sanitized) so the published page can never drift from what's editable in the Plexo dashboard.",
         },
         domain: {
           type: "string",
@@ -188,7 +197,9 @@ EXAMPLE VALID designJson PAYLOAD:
   },
   {
     name: "create_email_template",
-    description: "Creates and saves a responsive HTML email template for newsletters or promotional campaigns.",
+    description: `Creates and saves a responsive HTML email template for newsletters or promotional campaigns.
+
+Uses the SAME fully-hydrated layout schema as publish_landing_page — designJson MUST be { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [{ "id", "type", "style", "attributes" }] }] }] } }. There is no shorthand row format; rows without a 'columns' array are rejected. See publish_landing_page's description for a full worked example.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -198,11 +209,11 @@ EXAMPLE VALID designJson PAYLOAD:
         },
         designJson: {
           type: "object",
-          description: "Email layout schema generated by the AI.",
+          description: "Plexo layout schema object (same shape as publish_landing_page's designJson) containing body style and a fully hydrated rows array with columns and elements.",
         },
         compiledHtml: {
           type: "string",
-          description: "Optional pre-compiled HTML.",
+          description: "Ignored. HTML is always compiled server-side from the validated designJson (and sanitized).",
         },
       },
       required: ["name", "designJson"],
@@ -346,11 +357,14 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw new Error("designJson object is required to compile and publish a landing page. Please provide a valid Plexo layout schema.");
           }
 
-          const designJson = normalizeDesignJson(rawDesignJson);
-          if (designJson && designJson.body && designJson.body.style) {
+          const designJson = validateDesignJson(rawDesignJson);
+          if (designJson.body.style) {
             designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
           }
-          let compiledHtml = args.compiledHtml || compileToHTML(designJson);
+          // compiledHtml is always derived server-side from the validated designJson (never
+          // trusted from the caller) so the published page can never drift from what's
+          // editable in the dashboard, and so an AI client can't hand us raw HTML/script.
+          const compiledHtml = sanitizeHtml(compileToHTML(designJson));
           let rawDomain = args.domain?.trim().toLowerCase() || "";
           let domainType = args.type as "SUBDOMAIN" | "CUSTOM" | undefined;
 
@@ -440,8 +454,8 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw new Error("designJson object is required to create an email template.");
           }
 
-          const designJson = normalizeDesignJson(rawDesignJson);
-          let compiledHtml = args.compiledHtml || compileToHTML(designJson);
+          const designJson = validateDesignJson(rawDesignJson);
+          const compiledHtml = sanitizeHtml(compileToHTML(designJson));
           const template = await prisma.template.create({
             data: {
               userId: resolved.userId,

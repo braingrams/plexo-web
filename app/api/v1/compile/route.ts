@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
 import { compileToHTML } from "@/lib/compiler";
 import { parseJsonToTargetFormat } from "@/lib/compilerClient";
+import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues } from "@/server/sanitizer";
 
 type CompileTargetType = "landing_page" | "email";
 
@@ -106,13 +107,23 @@ async function parseCompileRequest(request: NextRequest): Promise<ParsedCompileR
     const templateObj = (payload as any).template || (payload as any).designJson || (payload as any).design || (isTemplateJson(payload) ? payload : null);
 
     if (templateObj) {
+      // Same strict schema /api/v1/publish and the MCP tools enforce — reject malformed or
+      // shorthand designJson with an actionable error instead of silently compiling it into
+      // HTML that looks complete but is missing content.
+      const hydrated = hydrateStructuralDefaults(templateObj);
+      const validation = TemplateJSONSchema.safeParse(hydrated);
+      if (!validation.success) {
+        throw new Error(`designJson failed schema validation: ${formatValidationIssues(validation.error)}`);
+      }
+      const validatedTemplate = validation.data;
+
       const targetType = (payload as any).targetType === "email" ? "email" : "landing_page";
 
       if (targetType === "landing_page") {
-        return { kind: "html", html: compileToHTML(templateObj as any) };
+        return { kind: "html", html: compileToHTML(validatedTemplate) };
       }
 
-      return { kind: "mjml", mjml: parseJsonToTargetFormat(templateObj as any, "email") };
+      return { kind: "mjml", mjml: parseJsonToTargetFormat(validatedTemplate, "email") };
     }
 
     if (typeof payload.mjml === "string" && payload.mjml.trim()) {
@@ -156,7 +167,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     // Allow compile without a real API key record
-    const parsedRequest = await parseCompileRequest(clonedRequest);
+    let parsedRequest: ParsedCompileRequest | null;
+    try {
+      parsedRequest = await parseCompileRequest(clonedRequest);
+    } catch (err) {
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "Malformed template structure." },
+        { status: 400 },
+      );
+    }
     if (!parsedRequest) {
       return NextResponse.json(
         { error: "Compile payload is required (MJML string or builder template JSON)." },
@@ -201,7 +220,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const parsedRequest = await parseCompileRequest(clonedRequest);
+  let parsedRequest: ParsedCompileRequest | null;
+  try {
+    parsedRequest = await parseCompileRequest(clonedRequest);
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Malformed template structure." },
+      { status: 400 },
+    );
+  }
   if (!parsedRequest) {
     return NextResponse.json(
       { error: "Compile payload is required (MJML string or builder template JSON)." },
