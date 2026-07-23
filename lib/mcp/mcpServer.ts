@@ -220,6 +220,34 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page — designJso
     },
   },
   {
+    name: "update_template",
+    description: `Edits an existing landing page or email template in place, under the same template ID. Recompiles and re-saves the HTML from the new designJson — the editable URL stays the same, and for a published landing page the live URL and domain are unchanged too (this does not publish/unpublish or change the domain; call publish_landing_page again with a domain for that).
+
+Uses the SAME fully-hydrated layout schema as publish_landing_page/create_email_template — designJson MUST be { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [{ "id", "type", "style", "attributes" }] }] }] } }. There is no shorthand row format; rows without a 'columns' array are rejected, and this replaces the ENTIRE designJson — to edit one section, fetch the current template's designJson first (via list_landing_pages/list_email_templates, or the Plexo dashboard) and send back the full modified tree, not just the changed part. See publish_landing_page's description for a full worked example.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the template to update — the templateId returned by publish_landing_page, create_email_template, list_landing_pages, or list_email_templates.",
+        },
+        name: {
+          type: "string",
+          description: "Optional new title for the template. Omit to keep the existing name.",
+        },
+        designJson: {
+          type: "object",
+          description: "The FULL replacement Plexo layout schema (same shape as publish_landing_page's designJson) — not a partial patch.",
+        },
+        compiledHtml: {
+          type: "string",
+          description: "Ignored. HTML is always compiled server-side from the validated designJson (and sanitized).",
+        },
+      },
+      required: ["templateId", "designJson"],
+    },
+  },
+  {
     name: "list_landing_pages",
     description: "Lists all saved landing page templates and published domain URLs in the user's Plexo account.",
     inputSchema: {
@@ -472,6 +500,77 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             templateId: template.id,
             name: template.name,
             editableUrl: `${baseAppUrl}/dashboard/templates/${template.id}`,
+          };
+          break;
+        }
+
+        case "update_template": {
+          const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+          if (!templateId) {
+            throw new Error("templateId is required to update a template.");
+          }
+
+          const existing = await prisma.template.findFirst({
+            where: { id: templateId, userId: resolved.userId },
+            select: { id: true, kind: true, name: true },
+          });
+          if (!existing) {
+            throw new Error(`No template found with id "${templateId}" in this account. Use list_landing_pages or list_email_templates to look up the correct id.`);
+          }
+
+          if (existing.kind === "LANDING_PAGE") {
+            const features = getTierFeatures(resolved.subscriptionPlan);
+            if (!features.landingPagesEnabled) {
+              throw new Error("Editing a landing page requires PRO or ULTRA plan.");
+            }
+          }
+
+          let rawDesignJson = args.designJson;
+          if (typeof rawDesignJson === "string") {
+            try {
+              rawDesignJson = JSON.parse(rawDesignJson);
+            } catch (e) {
+              rawDesignJson = null;
+            }
+          }
+          if (!rawDesignJson || typeof rawDesignJson !== "object") {
+            throw new Error("designJson object is required to update a template. Please provide the full replacement Plexo layout schema.");
+          }
+
+          const name = args.name?.trim() || existing.name;
+          const designJson = validateDesignJson(rawDesignJson);
+          if (designJson.body.style) {
+            designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+          }
+          const compiledHtml = sanitizeHtml(compileToHTML(designJson));
+
+          const updated = await prisma.template.update({
+            where: { id: existing.id },
+            data: { name, designJson, compiledHtml },
+          });
+
+          const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+          const editableUrl = `${baseAppUrl}/dashboard/templates/${updated.id}`;
+
+          let publishedUrl: string | null = null;
+          if (existing.kind === "LANDING_PAGE") {
+            const domain = await prisma.publishedDomain.findFirst({
+              where: { templateId: updated.id },
+              select: { domain: true },
+            });
+            if (domain) {
+              const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+              publishedUrl = `${protocol}://${domain.domain}`;
+            }
+          }
+
+          toolResult = {
+            success: true,
+            templateId: updated.id,
+            name: updated.name,
+            kind: existing.kind,
+            editableUrl,
+            publishedUrl,
           };
           break;
         }
