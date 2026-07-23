@@ -1,4 +1,4 @@
-import DOMPurify from 'isomorphic-dompurify';
+import sanitizeHtmlLib from 'sanitize-html';
 import { z } from 'zod';
 
 // ==========================================
@@ -288,74 +288,68 @@ function sanitizeStyleString(style: string): string {
   return cleanDeclarations.join('; ');
 }
 
+const ALLOWED_TAGS = [
+  'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'a', 'img', 'button', 'svg', 'path', 'table', 'thead', 'tbody',
+  'tr', 'th', 'td', 'hr', 'br', 'ul', 'ol', 'li', 'section', 'article',
+  'main', 'header', 'footer', 'aside'
+];
+
+const ALLOWED_ATTR = [
+  'href', 'src', 'alt', 'class', 'id', 'style', 'title', 'target', 'rel',
+  'width', 'height', 'align', 'valign', 'cellpadding', 'cellspacing',
+  'border', 'viewbox', 'fill', 'stroke', 'd', 'xmlns'
+];
+
+const DANGEROUS_URL_SCHEMES = ['javascript:', 'vbscript:', 'data:'];
+
 /**
  * Purifies raw HTML against XSS/DOM Cloaking with strict tag and attribute whitelists.
+ *
+ * Uses sanitize-html (a pure-JS parser, no DOM) rather than DOMPurify+jsdom — jsdom pulls
+ * in a chain of packages (html-encoding-sniffer, cssstyle) that keep introducing ESM-only
+ * sub-dependencies incompatible with Turbopack's external-module loader (ERR_REQUIRE_ESM at
+ * runtime, not build time, so it only surfaces once this code path is actually hit).
  */
 export function sanitizeHtml(html: string): string {
-  const ALLOWED_TAGS = [
-    'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-    'a', 'img', 'button', 'svg', 'path', 'table', 'thead', 'tbody',
-    'tr', 'th', 'td', 'hr', 'br', 'ul', 'ol', 'li', 'section', 'article',
-    'main', 'header', 'footer', 'aside'
-  ];
+  return sanitizeHtmlLib(html, {
+    allowedTags: ALLOWED_TAGS,
+    allowedAttributes: { '*': ALLOWED_ATTR },
+    allowVulnerableTags: true, // 'style' is a plain attribute here, not the <style> element
+    transformTags: {
+      '*': (tagName, attribs) => {
+        const nextAttribs = { ...attribs };
 
-  const ALLOWED_ATTR = [
-    'href', 'src', 'alt', 'class', 'id', 'style', 'title', 'target', 'rel',
-    'width', 'height', 'align', 'valign', 'cellpadding', 'cellspacing',
-    'border', 'viewbox', 'fill', 'stroke', 'd', 'xmlns'
-  ];
+        // Force secure links
+        if (tagName === 'a') {
+          nextAttribs.target = '_blank';
+          nextAttribs.rel = 'noopener noreferrer';
+        }
 
-  DOMPurify.removeAllHooks();
+        for (const urlAttr of ['href', 'src']) {
+          const value = nextAttribs[urlAttr];
+          if (typeof value === 'string') {
+            const trimmed = value.trim().toLowerCase();
+            if (DANGEROUS_URL_SCHEMES.some((scheme) => trimmed.startsWith(scheme))) {
+              delete nextAttribs[urlAttr];
+            }
+          }
+        }
 
-  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-    // Force secure links
-    if (node.tagName === 'A') {
-      node.setAttribute('target', '_blank');
-      node.setAttribute('rel', 'noopener noreferrer');
+        // Strict inline CSS sanitization
+        if (typeof nextAttribs.style === 'string') {
+          const sanitizedStyle = sanitizeStyleString(nextAttribs.style);
+          if (sanitizedStyle) {
+            nextAttribs.style = sanitizedStyle;
+          } else {
+            delete nextAttribs.style;
+          }
+        }
 
-      const href = node.getAttribute('href') || '';
-      const trimmedHref = href.trim().toLowerCase();
-      if (
-        trimmedHref.startsWith('javascript:') ||
-        trimmedHref.startsWith('vbscript:') ||
-        trimmedHref.startsWith('data:')
-      ) {
-        node.removeAttribute('href');
-      }
-    }
-
-    if (node.hasAttribute('src')) {
-      const src = node.getAttribute('src') || '';
-      const trimmedSrc = src.trim().toLowerCase();
-      if (
-        trimmedSrc.startsWith('javascript:') ||
-        trimmedSrc.startsWith('vbscript:') ||
-        trimmedSrc.startsWith('data:')
-      ) {
-        node.removeAttribute('src');
-      }
-    }
-
-    // Strict inline CSS sanitization
-    if (node.hasAttribute('style')) {
-      const style = node.getAttribute('style') || '';
-      const sanitized = sanitizeStyleString(style);
-      if (sanitized) {
-        node.setAttribute('style', sanitized);
-      } else {
-        node.removeAttribute('style');
-      }
-    }
+        return { tagName, attribs: nextAttribs };
+      },
+    },
   });
-
-  const cleaned = DOMPurify.sanitize(html, {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR,
-    RETURN_TRUSTED_TYPE: false,
-  });
-
-  DOMPurify.removeAllHooks();
-  return cleaned;
 }
 
 // ==========================================

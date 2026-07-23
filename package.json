@@ -31,16 +31,17 @@
     "@prisma/client": "^7.8.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.1.1",
+    "@types/sanitize-html": "^2.16.1",
     "autoprefixer": "^10.5.4",
     "better-auth": "^1.6.23",
     "dotenv": "^17.4.2",
-    "isomorphic-dompurify": "^3.19.0",
     "mjml": "^4.16.1",
     "next": "^16.2.10",
     "openai": "^4.104.0",
     "postcss": "^8.5.19",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "sanitize-html": "^2.17.5",
     "stripe": "^22.3.2",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.2",
@@ -49,7 +50,6 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@types/dompurify": "^3.0.5",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "prisma": "^7.8.0",
@@ -58,8 +58,7 @@
   "overrides": {
     "openai": {
       "zod": "$zod"
-    },
-    "jsdom": "27.3.0"
+    }
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
