@@ -30,6 +30,183 @@ const getSocialIconMarkup = (provider: string, color = 'currentColor') => {
   }
 };
 
+/**
+ * Converts high-level AI section block rows (hero, features, cta, etc.) into Plexo column/element layouts.
+ */
+export function convertSectionRowToPlexoRow(row: any): any {
+  if (!row || typeof row !== 'object') return null;
+
+  if (Array.isArray(row.columns) && row.columns.length > 0) {
+    return row;
+  }
+
+  const type = (row.type || "").toLowerCase();
+  const content = row.content || row.attributes || {};
+  const style = row.style || {};
+
+  switch (type) {
+    case "hero": {
+      const headline = content.headline || content.title || content.text || "Build faster. Scale smarter.";
+      const subheadline = content.subheadline || content.description || content.subtitle || "";
+      const primaryBtn = content.primaryButton || content.button || content.cta || "Get Started";
+      const secondaryBtn = content.secondaryButton || "";
+
+      const elements: any[] = [
+        {
+          type: "heading",
+          style: { fontSize: "48px", fontWeight: "800", textAlign: "center", marginBottom: "16px" },
+          attributes: { text: headline },
+        },
+      ];
+
+      if (subheadline) {
+        elements.push({
+          type: "paragraph",
+          style: { fontSize: "18px", color: "#94a3b8", textAlign: "center", maxWidth: "700px", margin: "0 auto 32px auto" },
+          attributes: { text: subheadline },
+        });
+      }
+
+      if (primaryBtn) {
+        elements.push({
+          type: "button",
+          style: { textAlign: "center", backgroundColor: "#8b5cf6", color: "#ffffff", borderRadius: "12px", paddingTop: "14px", paddingBottom: "14px", paddingLeft: "28px", paddingRight: "28px", fontSize: "16px", fontWeight: "600" },
+          attributes: { text: primaryBtn, href: "#signup" },
+        });
+      }
+
+      if (secondaryBtn) {
+        elements.push({
+          type: "button",
+          style: { textAlign: "center", backgroundColor: "rgba(255,255,255,0.1)", color: "#ffffff", borderRadius: "12px", paddingTop: "14px", paddingBottom: "14px", paddingLeft: "28px", paddingRight: "28px", fontSize: "16px", fontWeight: "600", marginLeft: "12px" },
+          attributes: { text: secondaryBtn, href: "#demo" },
+        });
+      }
+
+      return {
+        id: row.id || `row-hero-${Math.random().toString(36).substring(2, 7)}`,
+        style: { paddingTop: "80px", paddingBottom: "80px", textAlign: "center", ...style },
+        columns: [
+          {
+            id: `col-hero-${Math.random().toString(36).substring(2, 7)}`,
+            width: "100%",
+            elements,
+          },
+        ],
+      };
+    }
+
+    case "features": {
+      const title = content.title || content.headline || "Features";
+      const items = Array.isArray(content.items) ? content.items : Array.isArray(content.features) ? content.features : [];
+
+      const elements: any[] = [
+        {
+          type: "heading",
+          style: { fontSize: "32px", fontWeight: "700", textAlign: "center", marginBottom: "40px" },
+          attributes: { text: title },
+        },
+      ];
+
+      const columns: any[] = [];
+      if (items.length > 0) {
+        const colWidth = items.length === 2 ? "50%" : items.length >= 3 ? "33.33%" : "100%";
+        items.forEach((item: any, idx: number) => {
+          const itemTitle = typeof item === "string" ? item : item.title || item.name || `Feature ${idx + 1}`;
+          const itemDesc = typeof item === "string" ? "" : item.description || item.text || "";
+
+          columns.push({
+            id: `col-feat-${idx}`,
+            width: colWidth,
+            elements: [
+              {
+                type: "card",
+                style: { backgroundColor: "#111827", borderRadius: "16px", padding: "24px", borderWidth: "1px", borderColor: "rgba(255,255,255,0.08)" },
+                attributes: { title: itemTitle, description: itemDesc || "Powerful functionality built for performance and scale." },
+              },
+            ],
+          });
+        });
+      }
+
+      return {
+        id: row.id || `row-features-${Math.random().toString(36).substring(2, 7)}`,
+        style: { paddingTop: "60px", paddingBottom: "60px", ...style },
+        columns: columns.length > 0 ? columns : [{ id: "col-feat-fallback", width: "100%", elements }],
+      };
+    }
+
+    case "cta": {
+      const headline = content.headline || content.title || "Ready to transform your workflow?";
+      const btnText = content.button || content.primaryButton || content.cta || "Get Started";
+
+      return {
+        id: row.id || `row-cta-${Math.random().toString(36).substring(2, 7)}`,
+        style: { backgroundColor: "rgba(139, 92, 246, 0.12)", borderRadius: "24px", padding: "48px", textAlign: "center", marginTop: "40px", marginBottom: "60px", borderWidth: "1px", borderColor: "rgba(139, 92, 246, 0.3)", ...style },
+        columns: [
+          {
+            id: `col-cta-${Math.random().toString(36).substring(2, 7)}`,
+            width: "100%",
+            elements: [
+              {
+                type: "heading",
+                style: { fontSize: "32px", color: "#ffffff", fontWeight: "700", textAlign: "center", marginBottom: "20px" },
+                attributes: { text: headline },
+              },
+              {
+                type: "button",
+                style: { textAlign: "center", backgroundColor: "#8b5cf6", color: "#ffffff", borderRadius: "12px", paddingTop: "14px", paddingBottom: "14px", paddingLeft: "28px", paddingRight: "28px", fontWeight: "700" },
+                attributes: { text: btnText, href: "#signup" },
+              },
+            ],
+          },
+        ],
+      };
+    }
+
+    default: {
+      const title = content.headline || content.title || content.text || "";
+      const description = content.subheadline || content.description || content.subtitle || "";
+      const btnText = content.button || content.primaryButton || content.cta || "";
+
+      const elements: any[] = [];
+      if (title) {
+        elements.push({
+          type: "heading",
+          style: { fontSize: "32px", fontWeight: "700", marginBottom: "16px" },
+          attributes: { text: title },
+        });
+      }
+      if (description) {
+        elements.push({
+          type: "paragraph",
+          style: { fontSize: "16px", color: "#94a3b8", marginBottom: "24px" },
+          attributes: { text: description },
+        });
+      }
+      if (btnText) {
+        elements.push({
+          type: "button",
+          style: { backgroundColor: "#8b5cf6", color: "#ffffff", borderRadius: "12px", paddingTop: "12px", paddingBottom: "12px", paddingLeft: "24px", paddingRight: "24px" },
+          attributes: { text: btnText, href: "#action" },
+        });
+      }
+
+      return {
+        id: row.id || `row-generic-${Math.random().toString(36).substring(2, 7)}`,
+        style: { paddingTop: "40px", paddingBottom: "40px", ...style },
+        columns: [
+          {
+            id: `col-generic-${Math.random().toString(36).substring(2, 7)}`,
+            width: "100%",
+            elements: elements.length > 0 ? elements : [{ type: "heading", attributes: { text: "Section" } }],
+          },
+        ],
+      };
+    }
+  }
+}
+
 const compileFormFields = (fields: Array<any>, defaultSharedStyles: string) => {
   let previousField: any = null;
   return fields
@@ -92,7 +269,6 @@ const compileFormFields = (fields: Array<any>, defaultSharedStyles: string) => {
     .join('');
 };
 
-// Helper to convert style objects to inline style strings defensively
 const getInlineStyles = (styleObj: Record<string, any> = {}): string => {
   if (!styleObj || typeof styleObj !== 'object') return '';
   return Object.entries(styleObj)
@@ -190,162 +366,16 @@ const compileElementToHTML = (elem: ElementJSON): string => {
         <h3 style="margin-top: 0; margin-bottom: 8px; color: #ffffff;">${attrs.title || 'Card Title'}</h3>
         <p style="margin: 0; color: #94a3b8; font-size: 14px;">${attrs.description || 'Card description.'}</p>
       </div>`;
-    case 'form_container':
-      {
-        const fields = (attrs.fields as Array<any>) || [];
-        const actionMode = attrs.actionMode || 'submit';
-        const formAction = actionMode === 'submit' ? attrs.actionUrl || '#' : '#';
-        const formMethod = attrs.method || 'POST';
-        const formExtras =
-          actionMode === 'javascript'
-            ? `onsubmit="${attrs.buttonFunction || 'handleSubmit'}(event); return false;"`
-            : actionMode === 'redirect'
-              ? `onsubmit="window.location.href='${attrs.redirectUrl || '#'}'; return false;"`
-              : '';
-        const fieldMarkup = compileFormFields(fields, 'padding:8px 12px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;background:#fff;color:#1e293b;');
-        const buttonType = actionMode === 'submit' ? 'submit' : 'button';
-        const buttonAction =
-          actionMode === 'javascript'
-            ? `onclick="${attrs.buttonFunction || 'handleSubmit'}(event)"`
-            : actionMode === 'redirect'
-              ? `onclick="window.location.href='${attrs.redirectUrl || '#'}'"`
-              : '';
-
-        const btnStyles = [
-          `display: inline-block`,
-          `border: none`,
-          `cursor: pointer`,
-          `background-color: ${elemStyle.buttonBackgroundColor || '#0f172a'}`,
-          `color: ${elemStyle.buttonTextColor || '#ffffff'}`,
-          `border-radius: ${elemStyle.buttonBorderRadius || '12px'}`,
-          `font-size: ${elemStyle.buttonFontSize || '13px'}`,
-          `font-weight: ${elemStyle.buttonFontWeight || '700'}`,
-          `padding-top: ${elemStyle.buttonPaddingTop || elemStyle.buttonPadding || '10px'}`,
-          `padding-bottom: ${elemStyle.buttonPaddingBottom || elemStyle.buttonPadding || '10px'}`,
-          `padding-left: ${elemStyle.buttonPaddingLeft || elemStyle.buttonPadding || '14px'}`,
-          `padding-right: ${elemStyle.buttonPaddingRight || elemStyle.buttonPadding || '14px'}`,
-          elemStyle.buttonMarginTop || elemStyle.buttonMargin ? `margin-top: ${elemStyle.buttonMarginTop || elemStyle.buttonMargin}` : '',
-          elemStyle.buttonMarginBottom || elemStyle.buttonMargin ? `margin-bottom: ${elemStyle.buttonMarginBottom || elemStyle.buttonMargin}` : '',
-          elemStyle.buttonMarginLeft || elemStyle.buttonMargin ? `margin-left: ${elemStyle.buttonMarginLeft || elemStyle.buttonMargin}` : '',
-          elemStyle.buttonMarginRight || elemStyle.buttonMargin ? `margin-right: ${elemStyle.buttonMarginRight || elemStyle.buttonMargin}` : '',
-          attrs.buttonAutoWidth === false ? `width: ${elemStyle.buttonWidth || '100%'}` : 'width: auto',
-          attrs.buttonAutoHeight === false ? `height: ${elemStyle.buttonHeight || 'auto'}` : '',
-        ].filter(Boolean).join(';');
-
-        const alignVal = elemStyle.buttonAlign === 'center' ? 'center' : elemStyle.buttonAlign === 'right' ? 'right' : 'left';
-
-        return `<form name="${attrs.formName || 'form'}" action="${formAction}" method="${formMethod}" ${formExtras} style="${styles}">${fieldMarkup}<div style="width:100%;text-align:${alignVal};"><button type="${buttonType}" ${buttonAction} style="${btnStyles}">${attrs.submitLabel || 'Submit'}</button></div></form>`;
-      }
-    case 'input':
-      return `<div style="margin-bottom: 12px;"><label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">${attrs.name || 'Field'
-        }${attrs.required ? ' *' : ''}</label><input type="text" placeholder="${attrs.placeholder || ''
-        }" ${attrs.required ? 'required' : ''} style="width: 100%; box-sizing: border-box; ${styles}" /></div>`;
-    case 'textarea':
-      return `<div style="margin-bottom: 12px;"><label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">${attrs.name || 'Field'
-        }${attrs.required ? ' *' : ''}</label><textarea placeholder="${attrs.placeholder || ''
-        }" ${attrs.required ? 'required' : ''} style="width: 100%; box-sizing: border-box; min-height: 80px; ${styles}"></textarea></div>`;
-    case 'select': {
-      const opts = (attrs.options as Array<{ label: string; value: string }>) || [];
-      const optsHtml = opts.map((o) => `<option value="${o.value}">${o.label}</option>`).join('');
-      return `<div style="margin-bottom: 12px;"><label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">${attrs.name || 'Dropdown'
-        }</label><select style="width: 100%; box-sizing: border-box; ${styles}">${optsHtml}</select></div>`;
-    }
-    case 'menu': {
-      const links = (attrs.links as Array<{ label: string; href: string }>) || [];
-      const linksHtml = links
-        .map((l) => `<a href="${l.href || '#'}" style="color: inherit; text-decoration: none; padding: 0 12px;">${l.label}</a>`)
-        .join('');
-      return `<div style="display: flex; flex-wrap: wrap; justify-content: ${elemStyle.textAlign === 'center'
-        ? 'center'
-        : elemStyle.textAlign === 'right'
-          ? 'flex-end'
-          : 'flex-start'
-        }; ${styles}">${linksHtml}</div>`;
-    }
-    case 'html':
-      return attrs.htmlContent ? String(attrs.htmlContent) : '<!-- Raw HTML empty -->';
-    case 'table': {
-      const rowCount = Number(attrs.rowCount) || 2;
-      const colCount = Number(attrs.colCount) || 2;
-      const cellPadding = elemStyle.cellPadding || '8px';
-      const cellBorder = `${elemStyle.borderWidth || '1px'} ${elemStyle.borderStyle || 'solid'} ${elemStyle.borderColor || '#334155'
-        }`;
-      let tableRows = '';
-      for (let r = 0; r < rowCount; r++) {
-        let cols = '';
-        for (let c = 0; c < colCount; c++) {
-          cols += `<td style="padding: ${cellPadding}; border: ${cellBorder};">Cell ${r + 1}, ${c + 1}</td>`;
-        }
-        tableRows += `<tr>${cols}</tr>`;
-      }
-      return `<table style="width: 100%; border-collapse: collapse; border: ${cellBorder}; ${styles}">${tableRows}</table>`;
-    }
-    case 'timer':
-      return `<div style="text-align: center; ${styles}">
-        <span style="font-size: 1.5em; font-weight: bold;">[Countdown Timer to ${attrs.targetDate || 'Future Target'}]</span>
-      </div>`;
-    case 'video':
-      return `<div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; ${styles}">
-        <iframe src="${attrs.videoUrl || 'https://www.youtube.com/embed/dQw4w9WgXcQ'
-        }" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" allowfullscreen></iframe>
-      </div>`;
-    case 'social': {
-      const links = (attrs.links as Array<{ provider: string; url: string; color?: string; backgroundColor?: string; iconType?: string; size?: string }>) || [];
-      const linksHtml = links
-        .map(
-          (l) => {
-            const linkColor = String(l.color || elemStyle.iconColor || '#475569');
-            const linkBackground = String(l.backgroundColor || elemStyle.iconBackgroundColor || '#f8fafc');
-            const linkSize = String(l.size || elemStyle.iconSize || '32px');
-            return (
-              `<a href="${l.url || '#'
-              }" style="display: inline-flex; align-items: center; justify-content: center; width: ${linkSize}; height: ${linkSize}; border-radius: ${(l.iconType || attrs.iconType) === 'square' ? '10px' : '9999px'}; background: ${linkBackground}; color: ${linkColor}; text-decoration: none;">${getSocialIconMarkup(l.provider, linkColor)}</a>`
-            );
-          }
-        )
-        .join('');
-      return `<div style="text-align: ${elemStyle.textAlign || 'center'}; display:flex; flex-wrap:wrap; justify-content:${elemStyle.textAlign === 'center' ? 'center' : elemStyle.textAlign === 'right' ? 'flex-end' : 'flex-start'}; gap:${elemStyle.iconSpacing || '8px'}; ${styles}">${linksHtml}</div>`;
-    }
-    case 'carousel': {
-      const slides = (attrs.images as Array<{ src: string; caption?: string }>) || [];
-      const slidesHtml = slides
-        .map(
-          (s, idx) =>
-            `<div style="display: ${idx === 0 ? 'block' : 'none'
-            }; text-align: center;"><img src="${s.src}" style="max-width: 100%; height: auto; ${styles}" />${s.caption ? `<div style="font-size: 12px; margin-top: 4px;">${s.caption}</div>` : ''
-            }</div>`
-        )
-        .join('');
-      return `<div class="plexo-carousel" style="overflow: hidden;">${slidesHtml}</div>`;
-    }
-    case 'icon': {
-      const iconName = attrs.iconName || 'star';
-      const iconSize = elemStyle.fontSize || '48px';
-      const iconColor = elemStyle.color || '#1e293b';
-      const iconHref = attrs.href || '';
-      const openInNewTab = !!attrs.openInNewTab;
-      const align = elemStyle.textAlign || 'center';
-      const outerStyle = `text-align: ${align}; padding: ${elemStyle.padding || '8px'}; margin: ${elemStyle.margin || '0px'};`;
-
-      const iconUrl = `https://cdn.jsdelivr.net/npm/lucide-static@0.415.0/icons/${iconName}.svg`;
-      const sizePx = parseInt(iconSize) || 48;
-
-      const imgStyle = `display: inline-block; vertical-align: middle; fill: ${iconColor}; color: ${iconColor}; width: ${sizePx}px; height: ${sizePx}px;`;
-      const imgMarkup = `<img src="${iconUrl}" width="${sizePx}" height="${sizePx}" alt="${iconName}" style="${imgStyle}" />`;
-
-      const nodeHtml = iconHref
-        ? `<a href="${iconHref}" target="${openInNewTab ? '_blank' : '_self'}" style="text-decoration: none;">${imgMarkup}</a>`
-        : imgMarkup;
-
-      return `<div style="${outerStyle}">${nodeHtml}</div>`;
-    }
     default:
       return `<!-- Unsupported block ${elem.type} -->`;
   }
 };
 
-const compileRowToHTML = (row: RowJSON): string => {
-  if (!row || typeof row !== 'object') return '';
+const compileRowToHTML = (rawRow: RowJSON | any): string => {
+  if (!rawRow || typeof rawRow !== 'object') return '';
+  const row = convertSectionRowToPlexoRow(rawRow);
+  if (!row) return '';
+
   const rowStyle = getInlineStyles(row.style || {});
   const rowIdAttr = getOptionalAttr('id', row.htmlId);
   const rowClassAttr = getOptionalAttr('class', row.htmlClass);
@@ -355,7 +385,7 @@ const compileRowToHTML = (row: RowJSON): string => {
   const columns = Array.isArray(row.columns) ? row.columns : [];
   for (const col of columns) {
     if (!col) continue;
-    const colStyle = getInlineStyles(col.styles || (col as any).style || {});
+    const colStyle = getInlineStyles(col.styles || col.style || {});
     const colIdAttr = getOptionalAttr('id', col.attrs?.htmlId);
     const colCustomClass = col.attrs?.htmlClass ? ` ${col.attrs.htmlClass}` : '';
     html += `\n      <!-- COLUMN START: ${col.id || 'col'} -->`;
@@ -378,12 +408,6 @@ const compileRowToHTML = (row: RowJSON): string => {
       html += `\n        <div${elementIdAttr}${elementClassAttr} style="margin-bottom: 16px;">`;
       html += `\n          ${compileElementToHTML(elem)}`;
       html += `\n        </div>`;
-    }
-
-    if (Array.isArray(col.nestedRows) && col.nestedRows.length > 0) {
-      for (const nr of col.nestedRows) {
-        html += compileRowToHTML(nr);
-      }
     }
 
     html += `\n      </div>`;
@@ -456,40 +480,4 @@ ${customJs ? `  <script>\n${customJs}\n  </script>` : ''}
 </html>`;
 
   return html;
-};
-
-// Plain Text Elements compiler
-const compileElementToText = (elem: ElementJSON): string => {
-  if (!elem || typeof elem !== 'object') return '';
-  const attrs = elem.attributes || {};
-  switch (elem.type) {
-    case 'heading':
-      return `\n## ${attrs.text || 'Heading'}\n`;
-    case 'paragraph':
-      return `\n${attrs.text || ''}\n`;
-    case 'button':
-      return `\n[ ${attrs.text || 'Button'} ] (${attrs.href || '#'})\n`;
-    case 'card':
-      return `\n[ ${attrs.title || 'Card'} ]\n${attrs.description || ''}\n`;
-    default:
-      return '';
-  }
-};
-
-export const compileToPlainText = (template: TemplateJSON | any): string => {
-  if (!template || typeof template !== 'object') return '';
-  const bodyObj = template.body || (Array.isArray(template.rows) ? { rows: template.rows } : { rows: [] });
-  const rows = Array.isArray(bodyObj.rows) ? bodyObj.rows : [];
-
-  let text = '';
-  for (const row of rows) {
-    if (!row || !Array.isArray(row.columns)) continue;
-    for (const col of row.columns) {
-      if (!col || !Array.isArray(col.elements)) continue;
-      for (const elem of col.elements) {
-        text += compileElementToText(elem);
-      }
-    }
-  }
-  return text.trim();
 };
