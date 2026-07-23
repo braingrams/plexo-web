@@ -250,10 +250,10 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
                 <li>Select <strong className="text-white">OAuth</strong> authentication, check terms, and click <strong className="text-white">Create</strong>.</li>
               </ol>
 
-              <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-[11px] text-white/60 space-y-1 font-mono">
-                <div>Server URL: <code className="text-[#34d399] select-all">{serverMcpUrl}</code></div>
-                <div>Authorize URL: <code className="text-[#34d399] select-all">{authorizeUrl}</code></div>
-                <div>Token URL: <code className="text-[#34d399] select-all">{tokenUrl}</code></div>
+              <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-[11px] text-white/60 space-y-1.5 font-mono min-w-0 overflow-hidden">
+                <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 min-w-0"><span className="shrink-0 text-white/50">Server URL:</span> <code className="text-[#34d399] select-all break-all">{serverMcpUrl}</code></div>
+                <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 min-w-0"><span className="shrink-0 text-white/50">Authorize URL:</span> <code className="text-[#34d399] select-all break-all">{authorizeUrl}</code></div>
+                <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 min-w-0"><span className="shrink-0 text-white/50">Token URL:</span> <code className="text-[#34d399] select-all break-all">{tokenUrl}</code></div>
               </div>
             </div>
 

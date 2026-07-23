@@ -476,7 +476,7 @@ export function DashboardShellClassic({ children, userName, userEmail }: Props) 
           background: "var(--bg)",
         }}
       >
-        <div className="dash-classic-banner" style={{ padding: "2rem 2rem 0", maxWidth: 1500, margin: "0 auto" }}>
+        <div className="dash-classic-banner" style={{ padding: "2rem 8px 0", maxWidth: 1500, margin: "0 auto" }}>
           <LayoutSwitchBanner />
         </div>
         {children}

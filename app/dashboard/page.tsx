@@ -41,7 +41,7 @@ export default async function OverviewPage() {
   }
 
   return (
-    <div style={{ padding: "2rem", maxWidth: 1500, margin: "0 auto" }}>
+    <div style={{ padding: "2rem 8px", maxWidth: 1500, margin: "0 auto" }}>
       <OverviewClient
         userName={user.name}
         plan={user.subscriptionPlan}

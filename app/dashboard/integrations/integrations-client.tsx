@@ -180,12 +180,12 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
 
                 <div>
                   <label className="text-white/60 block mb-1">Remote MCP Server URL:</label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <input
                       type="text"
                       readOnly
                       value={serverMcpUrl}
-                      className="w-full p-2.5 bg-white/[0.04] border border-white/10 rounded-xl font-mono text-[#a78bfa] select-all"
+                      className="w-full min-w-0 p-2.5 bg-white/[0.04] border border-white/10 rounded-xl font-mono text-[#a78bfa] select-all truncate"
                     />
                     <button
                       onClick={() => handleCopy(serverMcpUrl, "claude-url")}
@@ -198,14 +198,14 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
 
                 <div>
                   <label className="text-white/60 block mb-1">OAuth Client ID (Optional / Advanced):</label>
-                  <div className="p-2.5 bg-white/[0.04] border border-white/10 rounded-xl font-mono text-white/80">
+                  <div className="p-2.5 bg-white/[0.04] border border-white/10 rounded-xl font-mono text-white/80 break-all select-all overflow-x-auto">
                     plexo_mcp_client
                   </div>
                 </div>
 
                 <div>
                   <label className="text-white/60 block mb-1">OAuth Client Secret (Optional / Advanced):</label>
-                  <div className="p-2.5 bg-white/[0.04] border border-white/10 rounded-xl font-mono text-white/80">
+                  <div className="p-2.5 bg-white/[0.04] border border-white/10 rounded-xl font-mono text-white/80 break-all select-all overflow-x-auto">
                     plexo_mcp_secret
                   </div>
                 </div>
@@ -277,12 +277,12 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
 
                 <div>
                   <label className="text-white/60 block mb-1">Connection (Server URL):</label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <input
                       type="text"
                       readOnly
                       value={serverMcpUrl}
-                      className="w-full p-2.5 bg-white/[0.04] border border-white/10 rounded-xl font-mono text-[#34d399] select-all"
+                      className="w-full min-w-0 p-2.5 bg-white/[0.04] border border-white/10 rounded-xl font-mono text-[#34d399] select-all truncate"
                     />
                     <button
                       onClick={() => handleCopy(serverMcpUrl, "chatgpt-url")}
@@ -302,9 +302,15 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
 
                 <div className="pt-2 border-t border-white/10 space-y-2">
                   <span className="text-[11px] font-mono text-white/50 block">Advanced OAuth Settings:</span>
-                  <div className="text-[11px] font-mono text-white/70 space-y-1">
-                    <div>Authorize URL: <code className="text-[#34d399]">{authorizeUrl}</code></div>
-                    <div>Token URL: <code className="text-[#34d399]">{tokenUrl}</code></div>
+                  <div className="text-[11px] font-mono text-white/70 space-y-2 min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 min-w-0">
+                      <span className="shrink-0 text-white/50">Authorize URL:</span>
+                      <code className="text-[#34d399] break-all select-all bg-white/[0.04] px-2 py-1 rounded-lg border border-white/10 font-mono text-[11px] max-w-full overflow-x-auto block sm:inline-block">{authorizeUrl}</code>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 min-w-0">
+                      <span className="shrink-0 text-white/50">Token URL:</span>
+                      <code className="text-[#34d399] break-all select-all bg-white/[0.04] px-2 py-1 rounded-lg border border-white/10 font-mono text-[11px] max-w-full overflow-x-auto block sm:inline-block">{tokenUrl}</code>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -330,7 +336,7 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
           <div className="space-y-3">
             <label className="text-xs font-mono text-white/50 block">Config File Snippet:</label>
             <div className="relative">
-              <pre className="p-4 bg-[#090d16] border border-white/10 rounded-2xl text-xs font-mono text-[#818cf8] overflow-x-auto">
+              <pre className="p-4 bg-[#090d16] border border-white/10 rounded-2xl text-xs font-mono text-[#818cf8] overflow-x-auto max-w-full whitespace-pre-wrap break-all sm:whitespace-pre">
                 {cursorMcpConfig}
               </pre>
               <button
@@ -360,12 +366,12 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
 
           <div className="space-y-4">
             <label className="text-xs font-mono text-white/50 block">OpenAPI Import URL:</label>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               <input
                 type="text"
                 readOnly
                 value={`${baseUrl}/openapi.json`}
-                className="w-full p-3 bg-[#090d16] border border-white/10 rounded-xl text-xs font-mono text-[#34d399] select-all"
+                className="w-full min-w-0 p-3 bg-[#090d16] border border-white/10 rounded-xl text-xs font-mono text-[#34d399] select-all truncate"
               />
               <button
                 onClick={() => handleCopy(`${baseUrl}/openapi.json`, "openapi-tab")}
