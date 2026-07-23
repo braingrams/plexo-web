@@ -58,7 +58,8 @@
   "overrides": {
     "openai": {
       "zod": "$zod"
-    }
+    },
+    "jsdom": "27.3.0"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
