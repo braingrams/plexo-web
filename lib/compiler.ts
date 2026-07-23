@@ -408,7 +408,13 @@ export const compileToHTML = (rawTemplate: TemplateJSON | any): string => {
 <body${htmlIdAttr}${htmlClassAttr} style="${bodyStyle}">
   <div style="max-width: 1200px; margin: 0 auto; width: 100%;">`;
 
-  const rows = Array.isArray(bodyObj.rows) ? bodyObj.rows : [];
+  const rows = Array.isArray(bodyObj.rows)
+    ? bodyObj.rows
+    : Array.isArray(template.rows)
+      ? template.rows
+      : Array.isArray(rawTemplate.rows)
+        ? rawTemplate.rows
+        : [];
   for (const row of rows) {
     html += compileRowToHTML(row);
   }
