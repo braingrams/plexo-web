@@ -41,7 +41,7 @@ export function convertSectionRowToPlexoRow(row: any): any {
   }
 
   const type = (row.type || "").toLowerCase();
-  const content = row.content || row.attributes || {};
+  const content = row.props || row.content || row.attributes || row.data || row.payload || row;
   const style = row.style || {};
 
   switch (type) {
@@ -207,68 +207,6 @@ export function convertSectionRowToPlexoRow(row: any): any {
   }
 }
 
-const compileFormFields = (fields: Array<any>, defaultSharedStyles: string) => {
-  let previousField: any = null;
-  return fields
-    .map((field) => {
-      const resolved = field.inheritStylesFromPrevious && previousField
-        ? {
-          ...field,
-          fontSize: previousField.fontSize,
-          borderRadius: previousField.borderRadius,
-          borderWidth: previousField.borderWidth,
-          borderColor: previousField.borderColor,
-          labelColor: previousField.labelColor,
-          inputTextColor: previousField.inputTextColor,
-          placeholderColor: previousField.placeholderColor,
-        }
-        : field;
-
-      previousField = resolved;
-
-      const required = resolved.required ? 'required' : '';
-      const labelColor = resolved.labelColor || '#94a3b8';
-      const labelFontSize = resolved.fontSize || '12px';
-      const label = `<label style="display:block;font-size:${labelFontSize};color:${labelColor};margin-bottom:4px;">${resolved.label || resolved.name || 'Field'}${resolved.required ? ' *' : ''}</label>`;
-
-      const fieldStyles = [
-        `border-radius: ${resolved.borderRadius || '12px'}`,
-        `border-width: ${resolved.borderWidth || '1px'}`,
-        `border-color: ${resolved.borderColor || '#cbd5e1'}`,
-        `color: ${resolved.inputTextColor || '#1e293b'}`,
-        `font-size: ${resolved.fontSize || '13px'}`,
-      ].join(';');
-
-      const combinedStyles = `${defaultSharedStyles};${fieldStyles}`;
-
-      if (resolved.kind === 'textarea') {
-        return `<div style="margin-bottom:12px;">${label}<textarea name="${resolved.name || ''}" placeholder="${resolved.placeholder || ''}" ${required} style="width:100%;box-sizing:border-box;min-height:80px;${combinedStyles}"></textarea></div>`;
-      }
-
-      if (resolved.kind === 'select') {
-        const options = ((resolved.options as Array<any>) || [])
-          .map((option) => `<option value="${option.value}">${option.label}</option>`)
-          .join('');
-        return `<div style="margin-bottom:12px;">${label}<select name="${resolved.name || ''}" ${required} style="width:100%;box-sizing:border-box;${combinedStyles}">${options}</select></div>`;
-      }
-
-      if (resolved.kind === 'radio' || resolved.kind === 'checkbox') {
-        const inputType = resolved.kind;
-        const options = ((resolved.options as Array<any>) || [])
-          .map(
-            (option) =>
-              `<label style="display:inline-flex;align-items:center;gap:8px;margin:0 12px 8px 0;font-size:12px;color:${resolved.inputTextColor || '#475569'};"><input type="${inputType}" name="${resolved.name || ''}" value="${option.value}" ${required} />${option.label}</label>`
-          )
-          .join('');
-        return `<div style="margin-bottom:12px;">${label}<div>${options}</div></div>`;
-      }
-
-      const type = resolved.kind === 'email' ? 'email' : 'text';
-      return `<div style="margin-bottom:12px;">${label}<input type="${type}" name="${resolved.name || ''}" placeholder="${resolved.placeholder || ''}" ${required} style="width:100%;box-sizing:border-box;${combinedStyles}" /></div>`;
-    })
-    .join('');
-};
-
 const getInlineStyles = (styleObj: Record<string, any> = {}): string => {
   if (!styleObj || typeof styleObj !== 'object') return '';
   return Object.entries(styleObj)
@@ -417,11 +355,12 @@ const compileRowToHTML = (rawRow: RowJSON | any): string => {
   return html;
 };
 
-export const compileToHTML = (template: TemplateJSON | any): string => {
-  if (!template || typeof template !== 'object') {
+export const compileToHTML = (rawTemplate: TemplateJSON | any): string => {
+  if (!rawTemplate || typeof rawTemplate !== 'object') {
     return '<!-- Empty template -->';
   }
 
+  const template = rawTemplate.designJson || rawTemplate.template || rawTemplate;
   const bodyObj = template.body || (Array.isArray(template.rows) ? { style: template.style || {}, rows: template.rows } : { style: {}, rows: [] });
   const bodyStyleObj = bodyObj.style || {};
   const bodyStyle = getInlineStyles(bodyStyleObj);
