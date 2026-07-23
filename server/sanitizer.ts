@@ -288,7 +288,16 @@ function sanitizeStyleString(style: string): string {
   return cleanDeclarations.join('; ');
 }
 
+// compileToHTML() returns a full document (<!DOCTYPE>, <html>, <head> with <title>/<meta>/a
+// base <style> block, <body>) — not a content fragment — so the allowlist must include the
+// document shell or sanitize-html strips it, silently dropping the base font/flex CSS and
+// leaking <title>'s text as visible body content (both exactly reproduced the reported bug).
+// 'script' is deliberately NOT allowed: compileToHTML interpolates body.style.customJs into a
+// raw, unescaped <script> tag, and customJs is a free-form string with no schema restriction
+// (StyleRecordSchema accepts any string under any key) — an AI/external caller could otherwise
+// smuggle arbitrary JS into the published page via that field.
 const ALLOWED_TAGS = [
+  'html', 'head', 'body', 'title', 'meta', 'style',
   'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'a', 'img', 'button', 'svg', 'path', 'table', 'thead', 'tbody',
   'tr', 'th', 'td', 'hr', 'br', 'ul', 'ol', 'li', 'section', 'article',
@@ -298,7 +307,8 @@ const ALLOWED_TAGS = [
 const ALLOWED_ATTR = [
   'href', 'src', 'alt', 'class', 'id', 'style', 'title', 'target', 'rel',
   'width', 'height', 'align', 'valign', 'cellpadding', 'cellspacing',
-  'border', 'viewbox', 'fill', 'stroke', 'd', 'xmlns'
+  'border', 'viewbox', 'fill', 'stroke', 'd', 'xmlns',
+  'charset', 'name', 'content', 'lang',
 ];
 
 const DANGEROUS_URL_SCHEMES = ['javascript:', 'vbscript:', 'data:'];
@@ -312,7 +322,11 @@ const DANGEROUS_URL_SCHEMES = ['javascript:', 'vbscript:', 'data:'];
  * runtime, not build time, so it only surfaces once this code path is actually hit).
  */
 export function sanitizeHtml(html: string): string {
-  return sanitizeHtmlLib(html, {
+  // sanitize-html has no concept of a doctype declaration and silently drops it — without it
+  // the published page renders in the browser's quirks mode instead of standards mode.
+  const hasDoctype = /^\s*<!doctype\s+html\s*>/i.test(html);
+
+  const sanitized = sanitizeHtmlLib(html, {
     allowedTags: ALLOWED_TAGS,
     allowedAttributes: { '*': ALLOWED_ATTR },
     allowVulnerableTags: true, // 'style' is a plain attribute here, not the <style> element
@@ -350,6 +364,8 @@ export function sanitizeHtml(html: string): string {
       },
     },
   });
+
+  return hasDoctype ? `<!DOCTYPE html>\n${sanitized}` : sanitized;
 }
 
 // ==========================================
