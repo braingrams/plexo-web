@@ -103,14 +103,16 @@ async function parseCompileRequest(request: NextRequest): Promise<ParsedCompileR
       return null;
     }
 
-    if (isTemplateJson(payload.template)) {
-      const targetType = payload.targetType === "email" ? "email" : "landing_page";
+    const templateObj = (payload as any).template || (payload as any).designJson || (payload as any).design || (isTemplateJson(payload) ? payload : null);
+
+    if (templateObj) {
+      const targetType = (payload as any).targetType === "email" ? "email" : "landing_page";
 
       if (targetType === "landing_page") {
-        return { kind: "html", html: compileToHTML(payload.template as any) };
+        return { kind: "html", html: compileToHTML(templateObj as any) };
       }
 
-      return { kind: "mjml", mjml: parseJsonToTargetFormat(payload.template as any, "email") };
+      return { kind: "mjml", mjml: parseJsonToTargetFormat(templateObj as any, "email") };
     }
 
     if (typeof payload.mjml === "string" && payload.mjml.trim()) {
