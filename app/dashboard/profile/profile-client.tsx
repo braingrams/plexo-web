@@ -104,7 +104,7 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
   }
 
   return (
-    <div style={{ padding: 0, maxWidth: 1500, margin: "0 auto" }}>
+    <div style={{ padding: "2rem 8px", maxWidth: 1500, margin: "0 auto" }}>
       <PageHeader
         eyebrow="Account"
         title="Your Profile"

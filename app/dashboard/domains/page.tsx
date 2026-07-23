@@ -65,7 +65,7 @@ export default async function DomainsPage() {
   }));
 
   return (
-    <div style={{ padding: "2rem", maxWidth: 1500, margin: "0 auto" }}>
+    <div style={{ padding: "2rem 8px", maxWidth: 1500, margin: "0 auto" }}>
       <DomainsClient
         initialDomains={domains}
         landingPages={landingPages}

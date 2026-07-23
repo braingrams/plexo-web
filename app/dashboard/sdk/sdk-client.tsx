@@ -156,10 +156,10 @@ const text = compileToPlainText(template.designJson);
       <div style={{ display: "grid", gap: "1.25rem", gridTemplateColumns: "1fr" }}>
 
         {/* 1. Install */}
-        <Card padded={false} style={{ padding: "1rem 1.25rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem", flexWrap: "wrap", gap: "0.5rem" }}>
-            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <span style={{ color: "var(--brand)" }}><IconTerminal /></span>
+        <Card padded={false} style={{ padding: "1rem 0.85rem", overflow: "hidden", maxWidth: "100%" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem", flexWrap: "wrap", gap: "0.5rem", width: "100%" }}>
+            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", display: "flex", alignItems: "center", gap: "0.5rem", flex: "1 1 200px", minWidth: 0, wordBreak: "break-word" }}>
+              <span style={{ color: "var(--brand)", flexShrink: 0 }}><IconTerminal /></span>
               Step 1: Install Package
             </h3>
             <button
@@ -169,25 +169,28 @@ const text = compileToPlainText(template.designJson);
                 display: "flex", alignItems: "center", gap: "0.35rem",
                 color: copiedInstall ? "#34d399" : "rgba(240,242,255,0.4)",
                 fontSize: "0.75rem", fontWeight: 600, fontFamily: "inherit",
+                flexShrink: 0, marginLeft: "auto",
               }}
             >
               {copiedInstall ? <IconCheck /> : <IconCopy />}
               {copiedInstall ? "Copied!" : "Copy"}
             </button>
           </div>
-          <pre style={{
-            background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255,255,255,0.06)",
-            borderRadius: 10, padding: "0.75rem 1rem", fontFamily: "monospace", fontSize: "0.8rem",
-            color: "var(--brand)", overflowX: "auto",
-          }}>
-            {installCode}
-          </pre>
+          <div style={{ width: "100%", overflowX: "auto" }}>
+            <pre style={{
+              background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 10, padding: "0.75rem 0.85rem", fontFamily: "monospace", fontSize: "0.8rem",
+              color: "var(--brand)", overflowX: "auto", maxWidth: "100%", whiteSpace: "pre",
+            }}>
+              {installCode}
+            </pre>
+          </div>
         </Card>
 
         {/* 2. Embedded component */}
-        <Card padded={false} style={{ padding: "1rem 1.25rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem", flexWrap: "wrap", gap: "0.5rem" }}>
-            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff" }}>
+        <Card padded={false} style={{ padding: "1rem 0.85rem", overflow: "hidden", maxWidth: "100%" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem", flexWrap: "wrap", gap: "0.5rem", width: "100%" }}>
+            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", flex: "1 1 200px", minWidth: 0, wordBreak: "break-word" }}>
               Step 2: Embed the Builder Component (React / Next.js)
             </h3>
             <button
@@ -197,25 +200,29 @@ const text = compileToPlainText(template.designJson);
                 display: "flex", alignItems: "center", gap: "0.35rem",
                 color: copiedReact ? "#34d399" : "rgba(240,242,255,0.4)",
                 fontSize: "0.75rem", fontWeight: 600, fontFamily: "inherit",
+                flexShrink: 0, marginLeft: "auto",
               }}
             >
               {copiedReact ? <IconCheck /> : <IconCopy />}
               {copiedReact ? "Copied!" : "Copy"}
             </button>
           </div>
-          <pre style={{
-            background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255,255,255,0.06)",
-            borderRadius: 10, padding: "1rem", fontFamily: "monospace", fontSize: "0.78rem",
-            color: "rgba(240,242,255,0.85)", overflowX: "auto", lineHeight: 1.5,
-          }}>
-            {reactCode}
-          </pre>
+          <div style={{ width: "100%", overflowX: "auto" }}>
+            <pre style={{
+              background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 10, padding: "0.85rem", fontFamily: "monospace", fontSize: "0.78rem",
+              color: "rgba(240,242,255,0.85)", overflowX: "auto", lineHeight: 1.5,
+              maxWidth: "100%", whiteSpace: "pre",
+            }}>
+              {reactCode}
+            </pre>
+          </div>
         </Card>
 
         {/* 3. Server-side compilation */}
-        <Card padded={false} style={{ padding: "1rem 1.25rem" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem", flexWrap: "wrap", gap: "0.5rem" }}>
-            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff" }}>
+        <Card padded={false} style={{ padding: "1rem 0.85rem", overflow: "hidden", maxWidth: "100%" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem", flexWrap: "wrap", gap: "0.5rem", width: "100%" }}>
+            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", flex: "1 1 200px", minWidth: 0, wordBreak: "break-word" }}>
               Step 3: Server compilation (Next.js server-side, Node.js backend)
             </h3>
             <button
@@ -225,19 +232,23 @@ const text = compileToPlainText(template.designJson);
                 display: "flex", alignItems: "center", gap: "0.35rem",
                 color: copiedNode ? "#34d399" : "rgba(240,242,255,0.4)",
                 fontSize: "0.75rem", fontWeight: 600, fontFamily: "inherit",
+                flexShrink: 0, marginLeft: "auto",
               }}
             >
               {copiedNode ? <IconCheck /> : <IconCopy />}
               {copiedNode ? "Copied!" : "Copy"}
             </button>
           </div>
-          <pre style={{
-            background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255,255,255,0.06)",
-            borderRadius: 10, padding: "1rem", fontFamily: "monospace", fontSize: "0.78rem",
-            color: "rgba(240,242,255,0.85)", overflowX: "auto", lineHeight: 1.5,
-          }}>
-            {nodeCode}
-          </pre>
+          <div style={{ width: "100%", overflowX: "auto" }}>
+            <pre style={{
+              background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 10, padding: "0.85rem", fontFamily: "monospace", fontSize: "0.78rem",
+              color: "rgba(240,242,255,0.85)", overflowX: "auto", lineHeight: 1.5,
+              maxWidth: "100%", whiteSpace: "pre",
+            }}>
+              {nodeCode}
+            </pre>
+          </div>
         </Card>
 
         {/* Documentation links */}

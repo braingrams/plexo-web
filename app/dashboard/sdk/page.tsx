@@ -28,7 +28,7 @@ export default async function DashboardSdkPage() {
   });
 
   return (
-    <div style={{ padding: "2rem 1.75rem", maxWidth: 1500, margin: "0 auto" }}>
+    <div style={{ padding: "2rem 8px", maxWidth: 1500, margin: "0 auto" }}>
       <SdkClient initialKeys={apiKeys} />
     </div>
   );
