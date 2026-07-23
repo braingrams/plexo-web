@@ -20,11 +20,36 @@ function normalizeDesignJson(inputJson: any): any {
   const rawRows = inputJson.body?.rows || (Array.isArray(inputJson.rows) ? inputJson.rows : []);
   const normalizedRows = rawRows.map((row: any) => convertSectionRowToPlexoRow(row)).filter(Boolean);
 
-  const styleObj = inputJson.body?.style || inputJson.style || {
+  const extractedStyle: Record<string, any> = {};
+  const sources = [inputJson.style, inputJson.body?.style, inputJson.body, inputJson];
+  for (const src of sources) {
+    if (src && typeof src === "object" && !Array.isArray(src)) {
+      if (src.backgroundColor !== undefined) extractedStyle.backgroundColor = src.backgroundColor;
+      if (src.background !== undefined) extractedStyle.background = src.background;
+      if (src.color !== undefined) extractedStyle.color = src.color;
+      if (src.textColor !== undefined) extractedStyle.color = src.textColor;
+      if (src.fontFamily !== undefined) extractedStyle.fontFamily = src.fontFamily;
+      if (src.htmlTitle !== undefined) extractedStyle.htmlTitle = src.htmlTitle;
+    }
+  }
+
+  const defaultStyle = {
     backgroundColor: "#08090f",
+    background: "#08090f",
     color: "#f0f2ff",
     fontFamily: "Inter, sans-serif",
   };
+
+  const styleObj = {
+    ...defaultStyle,
+    ...extractedStyle,
+  };
+
+  if (styleObj.backgroundColor && !styleObj.background) {
+    styleObj.background = styleObj.backgroundColor;
+  } else if (styleObj.background && !styleObj.backgroundColor) {
+    styleObj.backgroundColor = styleObj.background;
+  }
 
   return {
     body: {
@@ -46,7 +71,7 @@ Every row MUST contain a 'columns' array with percentage widths ('100%', '50%', 
 EXAMPLE VALID designJson PAYLOAD:
 {
   "body": {
-    "style": { "backgroundColor": "#08090f", "color": "#f0f2ff", "fontFamily": "Inter, sans-serif" },
+    "style": { "backgroundColor": "#08090f", "color": "#f0f2ff", "fontFamily": "Inter, sans-serif", "htmlTitle": "Bulum SaaS Platform" },
     "rows": [
       {
         "id": "row-hero",
@@ -80,11 +105,30 @@ EXAMPLE VALID designJson PAYLOAD:
           properties: {
             body: {
               type: "object",
-              required: ["rows"],
+              required: ["style", "rows"],
               properties: {
                 style: {
                   type: "object",
-                  description: "Global CSS style (backgroundColor, color, fontFamily).",
+                  description: "Global CSS style and page metadata.",
+                  required: ["backgroundColor", "color", "fontFamily", "htmlTitle"],
+                  properties: {
+                    backgroundColor: {
+                      type: "string",
+                      description: "Background color of the page in hex format (e.g. '#08090f' for dark mode, '#ffffff' for light mode)."
+                    },
+                    color: {
+                      type: "string",
+                      description: "Default text color of the page in hex format (e.g. '#f0f2ff' for dark mode, '#1e293b' for light mode)."
+                    },
+                    fontFamily: {
+                      type: "string",
+                      description: "Font family of the page text (e.g. 'Inter, sans-serif')."
+                    },
+                    htmlTitle: {
+                      type: "string",
+                      description: "The HTML title of the page (matches the brand name or page title, e.g. 'Bulum SaaS Platform')."
+                    }
+                  }
                 },
                 rows: {
                   type: "array",
@@ -303,6 +347,9 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const designJson = normalizeDesignJson(rawDesignJson);
+          if (designJson && designJson.body && designJson.body.style) {
+            designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+          }
           let compiledHtml = args.compiledHtml || compileToHTML(designJson);
           let rawDomain = args.domain?.trim().toLowerCase() || "";
           let domainType = args.type as "SUBDOMAIN" | "CUSTOM" | undefined;

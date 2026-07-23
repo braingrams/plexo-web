@@ -88,6 +88,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let compiledHtml = body.compiledHtml;
   if (!compiledHtml || typeof compiledHtml !== "string" || !compiledHtml.trim()) {
     try {
+      if (designJson && typeof designJson === "object") {
+        if ((designJson as any).body && (designJson as any).body.style) {
+          (designJson as any).body.style.htmlTitle = (designJson as any).body.style.htmlTitle || name;
+        } else if ((designJson as any).style) {
+          (designJson as any).style.htmlTitle = (designJson as any).style.htmlTitle || name;
+        }
+      }
       compiledHtml = compileToHTML(designJson as any);
     } catch (err) {
       return NextResponse.json(

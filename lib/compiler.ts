@@ -362,13 +362,34 @@ export const compileToHTML = (rawTemplate: TemplateJSON | any): string => {
 
   const template = rawTemplate.designJson || rawTemplate.template || rawTemplate;
   const bodyObj = template.body || (Array.isArray(template.rows) ? { style: template.style || {}, rows: template.rows } : { style: {}, rows: [] });
-  const bodyStyleObj = bodyObj.style || {};
+  
+  const bodyStyleObj: Record<string, any> = { ...(bodyObj.style || {}) };
+  
+  const possibleStyles = ['backgroundColor', 'background', 'color', 'textColor', 'fontFamily', 'htmlTitle'];
+  for (const key of possibleStyles) {
+    if (bodyStyleObj[key] === undefined) {
+      if (bodyObj[key] !== undefined) bodyStyleObj[key] = bodyObj[key];
+      else if (template[key] !== undefined) bodyStyleObj[key] = template[key];
+    }
+  }
+
+  if (bodyStyleObj.backgroundColor && !bodyStyleObj.background) {
+    bodyStyleObj.background = bodyStyleObj.backgroundColor;
+  } else if (bodyStyleObj.background && !bodyStyleObj.backgroundColor) {
+    bodyStyleObj.backgroundColor = bodyStyleObj.background;
+  }
+  if (bodyStyleObj.textColor && !bodyStyleObj.color) {
+    bodyStyleObj.color = bodyStyleObj.textColor;
+  }
+
   const bodyStyle = getInlineStyles(bodyStyleObj);
 
   const htmlTitle =
     typeof bodyStyleObj.htmlTitle === 'string' && bodyStyleObj.htmlTitle.trim()
       ? bodyStyleObj.htmlTitle.trim()
-      : 'Plexo Rendered Page';
+      : typeof rawTemplate?.name === 'string' && rawTemplate.name.trim()
+        ? rawTemplate.name.trim()
+        : 'Plexo Rendered Page';
   const htmlIdAttr = getOptionalAttr('id', bodyStyleObj.htmlId);
   const htmlClassAttr = getOptionalAttr('class', bodyStyleObj.htmlClass);
   const customCss =
