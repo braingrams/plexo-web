@@ -120,12 +120,23 @@ function IconOverview() {
   );
 }
 
+function IconAiMcp() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" />
+      <path d="M19 3v3M20.5 4.5H17.5" />
+      <path d="M5 17v2.5M6.25 18.25H3.75" />
+    </svg>
+  );
+}
+
 const NAV_ICONS: Record<string, React.ReactNode> = {
   "/dashboard": <IconOverview />,
   "/dashboard/templates": <IconTemplates />,
   "/dashboard/compile": <IconCompile />,
   "/dashboard/sdk": <IconSdk />,
   "/dashboard/domains": <IconDomains />,
+  "/dashboard/integrations": <IconAiMcp />,
   "/dashboard/settings": <IconSettings />,
   "/dashboard/profile": <IconProfile />,
 };
@@ -218,7 +229,11 @@ export function DashboardShellClassic({ children, userName, userEmail }: Props) 
         className={`dash-classic-aside${isMobileNavOpen ? " dash-classic-aside-open" : ""}`}
         style={{
           position: "fixed",
-          top: 0, left: 0, bottom: 0,
+          top: 0, bottom: 0,
+          // Pinned to the true viewport edge up to 1500px wide (max(0, ...) is 0 below that,
+          // same as before). Past 1500px the whole shell (this + main content) should read as
+          // a centered 1500px-wide app, not stretch the sidebar to the raw viewport edge.
+          left: "max(0px, calc((100vw - 1500px) / 2))",
           zIndex: 40,
           width: sidebarWidth,
           display: "flex",
@@ -470,7 +485,8 @@ export function DashboardShellClassic({ children, userName, userEmail }: Props) 
         className="dash-classic-main"
         style={{
           flex: 1,
-          marginLeft: sidebarWidth,
+          marginLeft: `calc(${sidebarWidth}px + max(0px, calc((100vw - 1500px) / 2)))`,
+          maxWidth: `calc(1500px - ${sidebarWidth}px)`,
           minHeight: "100vh",
           transition: "margin-left 0.25s cubic-bezier(0.4,0,0.2,1)",
           background: "var(--bg)",

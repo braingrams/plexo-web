@@ -166,7 +166,8 @@ export function CustomSelect({
               backdropFilter: "blur(16px)",
               border: "1px solid rgba(139,92,246,0.3)",
               borderRadius: 10,
-              overflow: "hidden",
+              maxHeight: "min(320px, 60vh)",
+              overflowY: "auto",
               boxShadow: "0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(139,92,246,0.15)",
             }}
           >

@@ -521,6 +521,14 @@
   }
 }
 
+/* Above mobile width, the visitor-insights toggle (All Pages/Published Only) and the
+   template filter dropdown should sit on one line rather than wrap onto separate rows. */
+@media (min-width: 480px) {
+  .overview-filter-controls {
+    flex-wrap: nowrap !important;
+  }
+}
+
 /* ─────────────────────────────────────────
    Mobile Responsive Utilities
    ───────────────────────────────────────── */
