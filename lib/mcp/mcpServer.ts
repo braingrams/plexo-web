@@ -165,7 +165,7 @@ EXAMPLE VALID designJson PAYLOAD (hero row, plus a 3-item product grid row):
                                     enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video"],
                                   },
                                   style: { type: "object" },
-                                  attributes: { type: "object", description: "Component attributes (text, href, src, title, description, links, fields)." },
+                                  attributes: { type: "object", description: "Component attributes (text, href, src, title, description, links, fields). For type 'html', raw markup goes under 'htmlContent' — NOT 'text'." },
                                 },
                               },
                             },
@@ -259,12 +259,13 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page — designJso
                                   style: { type: "object" },
                                   attributes: {
                                     type: "object",
-                                    description: "Component attributes. IMPORTANT: text content for 'heading'/'paragraph'/'text'/'button' elements goes under the key 'text' (NOT 'content'). Images use 'src'/'alt'. Buttons/links use 'href'.",
+                                    description: "Component attributes. IMPORTANT: text content for 'heading'/'paragraph'/'text'/'button' elements goes under the key 'text' (NOT 'content'). Images use 'src'/'alt'. Buttons/links use 'href'. Raw markup for type 'html' goes under 'htmlContent' (NOT 'text').",
                                     properties: {
                                       text: { type: "string", description: "Visible text for heading/paragraph/text/button elements." },
                                       href: { type: "string", description: "Link URL for button/card elements." },
                                       src: { type: "string", description: "Image URL for image elements." },
                                       alt: { type: "string", description: "Alt text for image elements." },
+                                      htmlContent: { type: "string", description: "Raw HTML markup for type 'html' elements only." },
                                     },
                                   },
                                 },
