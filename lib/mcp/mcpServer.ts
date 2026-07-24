@@ -162,7 +162,7 @@ EXAMPLE VALID designJson PAYLOAD (hero row, plus a 3-item product grid row):
                                 properties: {
                                   type: {
                                     type: "string",
-                                    enum: ["heading", "paragraph", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "table", "timer", "video"],
+                                    enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video"],
                                   },
                                   style: { type: "object" },
                                   attributes: { type: "object", description: "Component attributes (text, href, src, title, description, links, fields)." },
