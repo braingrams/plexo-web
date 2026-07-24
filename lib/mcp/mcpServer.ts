@@ -4,6 +4,7 @@ import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { getTierFeatures } from "@/lib/subscription";
 import { resolveUser, getDomainLimit } from "@/app/api/v1/domains/route";
+import { resolveStrataProjectId, fetchStrataTokens } from "@/server/strata";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -199,7 +200,7 @@ EXAMPLE VALID designJson PAYLOAD (hero row, plus a 3-item product grid row):
     name: "create_email_template",
     description: `Creates and saves a responsive HTML email template for newsletters or promotional campaigns.
 
-Uses the SAME fully-hydrated layout schema as publish_landing_page — designJson MUST be { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [{ "id", "type", "style", "attributes" }] }] }] } }. There is no shorthand row format; rows without a 'columns' array are rejected. See publish_landing_page's description for a full worked example.`,
+Uses the SAME fully-hydrated layout schema as publish_landing_page — designJson MUST be { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [{ "id", "type", "style", "attributes" }] }] }] } }. There is no shorthand row format; rows without a 'columns' array are rejected. Text content for heading/paragraph/text/button elements MUST be under attributes.text (NOT attributes.content) — a "content" key is silently ignored by the editor and renders as empty/placeholder text. See publish_landing_page's description for a full worked example.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -210,6 +211,74 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page — designJso
         designJson: {
           type: "object",
           description: "Plexo layout schema object (same shape as publish_landing_page's designJson) containing body style and a fully hydrated rows array with columns and elements.",
+          required: ["body"],
+          properties: {
+            body: {
+              type: "object",
+              required: ["style", "rows"],
+              properties: {
+                style: {
+                  type: "object",
+                  description: "Global CSS style and page metadata.",
+                  required: ["backgroundColor", "color", "fontFamily", "htmlTitle"],
+                  properties: {
+                    backgroundColor: { type: "string", description: "Background color of the email in hex format (e.g. '#F4F2F8')." },
+                    color: { type: "string", description: "Default text color of the email in hex format." },
+                    fontFamily: { type: "string", description: "Font family of the email text (e.g. 'Arial, Helvetica, sans-serif')." },
+                    htmlTitle: { type: "string", description: "The HTML title of the email (matches the subject/brand name)." },
+                  },
+                },
+                rows: {
+                  type: "array",
+                  description: "Array of row objects. Every row MUST already have a 'columns' array — there is no shorthand row type; rows without 'columns' are rejected.",
+                  items: {
+                    type: "object",
+                    required: ["id", "style", "columns"],
+                    properties: {
+                      id: { type: "string" },
+                      style: { type: "object" },
+                      columns: {
+                        type: "array",
+                        description: "Required. One entry per column.",
+                        items: {
+                          type: "object",
+                          required: ["id", "width", "elements"],
+                          properties: {
+                            id: { type: "string" },
+                            width: { type: "string", description: "Percentage width (e.g. '100%', '50%', '33.33%')." },
+                            elements: {
+                              type: "array",
+                              items: {
+                                type: "object",
+                                required: ["id", "type", "style", "attributes"],
+                                properties: {
+                                  type: {
+                                    type: "string",
+                                    enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video"],
+                                  },
+                                  style: { type: "object" },
+                                  attributes: {
+                                    type: "object",
+                                    description: "Component attributes. IMPORTANT: text content for 'heading'/'paragraph'/'text'/'button' elements goes under the key 'text' (NOT 'content'). Images use 'src'/'alt'. Buttons/links use 'href'.",
+                                    properties: {
+                                      text: { type: "string", description: "Visible text for heading/paragraph/text/button elements." },
+                                      href: { type: "string", description: "Link URL for button/card elements." },
+                                      src: { type: "string", description: "Image URL for image elements." },
+                                      alt: { type: "string", description: "Alt text for image elements." },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
         },
         compiledHtml: {
           type: "string",
@@ -217,6 +286,23 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page — designJso
         },
       },
       required: ["name", "designJson"],
+    },
+  },
+  {
+    name: "get_strata_tokens",
+    description: `Checks whether the account has a Strata design-system project connected and, if so, fetches its design tokens (colors, typography, spacing, etc).
+
+Call this BEFORE publish_landing_page or create_email_template whenever the user wants their brand/Strata colors and styles used. Call with no arguments first to check the currently connected project. If the result has "connected": false, ask the user for their Strata project id (found in their Strata project's snapshot/share URL) and call this tool again with that projectId — it connects the account to that project (remembered for future calls) and fetches its tokens in the same call.
+
+Map the returned tokens into designJson style fields: color-type tokens into backgroundColor/color/borderColor, spacing-type tokens into padding/margin values, and any font-related tokens into fontFamily/fontSize. Prefer tokens whose "name" hints at their role (e.g. a name containing "primary", "background", "text", "accent").`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: {
+          type: "string",
+          description: "Optional. The user's Strata project id to connect (or switch to). Omit to check/use the previously connected project, if any.",
+        },
+      },
     },
   },
   {
@@ -604,6 +690,29 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           });
           const features = getTierFeatures(user?.subscriptionPlan);
           toolResult = { user, features, limit: getDomainLimit(user?.subscriptionPlan ?? "FREE", user?.customDomainLimit ?? null) };
+          break;
+        }
+
+        case "get_strata_tokens": {
+          const incomingProjectId = typeof args.projectId === "string" ? args.projectId : undefined;
+          const projectId = await resolveStrataProjectId(resolved.userId, incomingProjectId);
+
+          if (!projectId) {
+            toolResult = {
+              connected: false,
+              projectId: null,
+              tokens: [],
+              message: "No Strata project connected yet. Pass a projectId to connect (find it in your Strata project's snapshot/share URL).",
+            };
+            break;
+          }
+
+          const result = await fetchStrataTokens(projectId);
+          if ("error" in result) {
+            toolResult = { connected: false, projectId, tokens: [], error: result.error };
+          } else {
+            toolResult = { connected: true, projectId, tokenCount: result.tokens.length, tokens: result.tokens };
+          }
           break;
         }
 
