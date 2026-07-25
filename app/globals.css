@@ -442,8 +442,11 @@
 .dash-topbar {
   position: fixed;
   top: 0.85rem;
-  left: 0.85rem;
-  right: 0.85rem;
+  /* Hugs the viewport edge (0.85rem gutter) up to 1500px + gutters wide, same as before.
+     Past that, the calc() term wins and pulls both edges in symmetrically so the topbar
+     tops out at 1500px wide, centered — matching .dash-main-modern-inner below it. */
+  left: max(0.85rem, calc((100vw - 1500px) / 2));
+  right: max(0.85rem, calc((100vw - 1500px) / 2));
   z-index: 40;
   display: flex;
   align-items: center;
