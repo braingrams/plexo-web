@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CustomSelect } from "./domains/domains-client";
 import { Card } from "./_components/Card";
 import { ActivityHeatmap, type HeatmapPoint } from "./_components/ActivityHeatmap";
+import { VisitorDetailsModal } from "./_components/VisitorDetailsModal";
 import { useLayoutMode } from "./layout-mode-context";
 
 type TimelineDay = {
@@ -57,6 +58,7 @@ export function OverviewClient({
   const [filterType, setFilterType] = useState<"all" | "published">("all");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("all");
   const [loading, setLoading] = useState(true);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   
   // Data from API
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
@@ -387,6 +389,20 @@ export function OverviewClient({
                 />
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={() => setDetailsOpen(true)}
+              disabled={totalViews === 0}
+              style={{
+                padding: "0.5rem 0.9rem", borderRadius: 10, fontSize: "0.78rem", fontWeight: 650,
+                background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.25)",
+                color: totalViews === 0 ? "rgba(240,242,255,0.25)" : "#c4b5fd",
+                cursor: totalViews === 0 ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+              }}
+            >
+              View Details
+            </button>
           </div>
         </div>
 
@@ -557,6 +573,13 @@ export function OverviewClient({
           </div>
         )}
       </Card>
+
+      <VisitorDetailsModal
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        templateId={selectedTemplateId}
+        filterType={filterType}
+      />
 
       <style jsx>{`
         .spinner {
