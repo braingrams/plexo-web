@@ -6,6 +6,7 @@ import { BillingSection } from "./billing-section";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 type Provider = "openai" | "anthropic_claude" | "google_gemini";
+type AiAccessMode = "SYSTEM" | "BYOK" | "HOST_MANAGED";
 type SettingsApiKey = {
   id: string;
   name: string;
@@ -16,7 +17,16 @@ type SettingsApiKey = {
   aiProvider: string;
   aiTier: AiTier;
   hasAiApiKey: boolean;
+  aiAccessMode: AiAccessMode;
+  hostAuthWebhookUrl: string | null;
+  hasHostWebhookSecret: boolean;
 };
+
+const ACCESS_MODE_OPTIONS: Array<{ value: AiAccessMode; label: string; desc: string }> = [
+  { value: "SYSTEM", label: "System AI", desc: "Plexo's own credit balance pays" },
+  { value: "BYOK", label: "Bring Your Own Key", desc: "Your own provider key pays, no credits used" },
+  { value: "HOST_MANAGED", label: "Host-Managed", desc: "Your app authorizes & bills its own users" },
+];
 
 type BillingProps = {
   plan: "FREE" | "PRO" | "ULTRA";
@@ -236,21 +246,24 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
   // blank and is only sent on save if the user actually typed into it (aiKeyTouched).
   const [draftAiApiKey, setDraftAiApiKey] = useState<string>("");
   const [aiKeyTouched, setAiKeyTouched] = useState(false);
+  const [draftAccessMode, setDraftAccessMode] = useState<AiAccessMode>(activeKey?.aiAccessMode ?? "SYSTEM");
+  const [draftHostAuthWebhookUrl, setDraftHostAuthWebhookUrl] = useState<string>(activeKey?.hostAuthWebhookUrl ?? "");
+  // Write-only, same convention as draftAiApiKey.
+  const [draftHostWebhookSecret, setDraftHostWebhookSecret] = useState<string>("");
+  const [hostWebhookSecretTouched, setHostWebhookSecretTouched] = useState(false);
   const [draftDirty, setDraftDirty] = useState(false);
 
   useEffect(() => {
-    if (!activeKeyId) {
-      setDraftUseAi(false); setDraftAiProvider("openai"); setDraftAiTier("AUTO"); setDraftAiApiKey(""); setAiKeyTouched(false); setDraftDirty(false); return;
-    }
-    const selected = apiKeys.find((item) => item.id === activeKeyId);
-    if (!selected) {
-      setDraftUseAi(false); setDraftAiProvider("openai"); setDraftAiTier("AUTO"); setDraftAiApiKey(""); setAiKeyTouched(false); setDraftDirty(false); return;
-    }
-    setDraftUseAi(selected.useAi);
-    setDraftAiProvider(normalizeProvider(selected.aiProvider));
-    setDraftAiTier(selected.aiTier);
+    const selected = activeKeyId ? apiKeys.find((item) => item.id === activeKeyId) : null;
+    setDraftUseAi(selected?.useAi ?? false);
+    setDraftAiProvider(normalizeProvider(selected?.aiProvider ?? "openai"));
+    setDraftAiTier(selected?.aiTier ?? "AUTO");
     setDraftAiApiKey("");
     setAiKeyTouched(false);
+    setDraftAccessMode(selected?.aiAccessMode ?? "SYSTEM");
+    setDraftHostAuthWebhookUrl(selected?.hostAuthWebhookUrl ?? "");
+    setDraftHostWebhookSecret("");
+    setHostWebhookSecretTouched(false);
     setDraftDirty(false);
   }, [activeKeyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -267,6 +280,9 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
             aiProvider: draftAiProvider,
             aiTier: draftAiTier,
             ...(aiKeyTouched ? { aiApiKey: draftAiApiKey } : {}),
+            aiAccessMode: draftAccessMode,
+            hostAuthWebhookUrl: draftHostAuthWebhookUrl,
+            ...(hostWebhookSecretTouched ? { hostWebhookSecret: draftHostWebhookSecret } : {}),
           }),
         });
         if (!response.ok) throw new Error("Unable to persist AI configuration.");
@@ -278,6 +294,10 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
           setDraftAiApiKey("");
           setAiKeyTouched(false);
         }
+        if (hostWebhookSecretTouched) {
+          setDraftHostWebhookSecret("");
+          setHostWebhookSecretTouched(false);
+        }
       } catch (error) {
         setSaveError(error instanceof Error ? error.message : "Unable to persist AI configuration.");
       } finally {
@@ -285,7 +305,19 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
       }
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [activeKey, draftAiProvider, draftAiTier, draftDirty, draftUseAi, draftAiApiKey, aiKeyTouched]);
+  }, [
+    activeKey,
+    draftAiProvider,
+    draftAiTier,
+    draftDirty,
+    draftUseAi,
+    draftAiApiKey,
+    aiKeyTouched,
+    draftAccessMode,
+    draftHostAuthWebhookUrl,
+    draftHostWebhookSecret,
+    hostWebhookSecretTouched,
+  ]);
 
   async function generateApiKey(): Promise<void> {
     setIsGenerating(true); setSaveError(null);
@@ -678,6 +710,64 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
 
                 {draftUseAi && (
                   <>
+                    {/* AI Access Mode */}
+                    <div>
+                      <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+                        AI Access Mode
+                      </p>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                        {ACCESS_MODE_OPTIONS.map((option) => {
+                          const active = draftAccessMode === option.value;
+                          const requiresUltra = option.value === "HOST_MANAGED" && !isUltra;
+                          const isBtnDisabled = !activeKey.isActive || requiresUltra;
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              disabled={isBtnDisabled}
+                              onClick={() => {
+                                setDraftAccessMode(option.value);
+                                setDraftDirty(true);
+                                setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiAccessMode: option.value } : item)));
+                              }}
+                              style={{
+                                padding: "0.65rem 0.75rem",
+                                borderRadius: 9,
+                                border: active ? "1.5px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                                background: active ? "rgba(139,92,246,0.1)" : "rgba(255,255,255,0.03)",
+                                color: active ? "#c4b5fd" : "rgba(240,242,255,0.55)",
+                                cursor: isBtnDisabled ? "not-allowed" : "pointer",
+                                fontFamily: "inherit", textAlign: "left",
+                                transition: "all 0.15s",
+                                opacity: isBtnDisabled && !active ? 0.5 : 1,
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                <p style={{ fontSize: "0.8rem", fontWeight: active ? 700 : 600 }}>{option.label}</p>
+                                {requiresUltra && (
+                                  <span style={{
+                                    fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.05em",
+                                    textTransform: "uppercase", color: "var(--brand)",
+                                    background: "var(--brand-subtle)", padding: "0.15rem 0.4rem", borderRadius: 5
+                                  }}>
+                                    Requires Ultra
+                                  </span>
+                                )}
+                              </div>
+                              <p style={{ fontSize: "0.68rem", color: active ? "rgba(196,181,253,0.7)" : "rgba(240,242,255,0.3)" }}>{option.desc}</p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {draftAccessMode === "HOST_MANAGED" && !isUltra && (
+                        <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginTop: "0.5rem" }}>
+                          This account is configured for Host-Managed AI access but is not on the Ultra plan — AI requests will be blocked until you upgrade. Upgrade in the Billing section below.
+                        </p>
+                      )}
+                    </div>
+
+                    {draftAccessMode !== "HOST_MANAGED" && (
+                    <>
                     {/* Provider */}
                     <div>
                       <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
@@ -695,6 +785,8 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
                         }}
                       />
                     </div>
+                    </>
+                    )}
 
                     {/* Tier */}
                     <div>
@@ -736,7 +828,7 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
                       </div>
                     </div>
 
-                    {/* AI API Key Field */}
+                    {draftAccessMode === "BYOK" && (
                     <div>
                       <span style={{
                         display: "block", fontSize: "0.78rem", fontWeight: 600,
@@ -777,6 +869,93 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
                           : "This key is encrypted at rest and used server-side only when querying the builder AI functions."}
                       </p>
                     </div>
+                    )}
+
+                    {draftAccessMode === "HOST_MANAGED" && (
+                    <>
+                    <div>
+                      <span style={{
+                        display: "block", fontSize: "0.78rem", fontWeight: 600,
+                        letterSpacing: "0.06em", textTransform: "uppercase",
+                        color: "rgba(240,242,255,0.4)",
+                        marginBottom: "0.4rem"
+                      }}>
+                        Authorization Webhook URL
+                      </span>
+                      <input
+                        type="text"
+                        placeholder="https://your-app.example.com/api/v1/plexo-webhooks"
+                        value={draftHostAuthWebhookUrl}
+                        disabled={!activeKey.isActive}
+                        onChange={(e) => {
+                          setDraftHostAuthWebhookUrl(e.target.value);
+                          setDraftDirty(true);
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "0.6rem 0.875rem",
+                          borderRadius: 9,
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          background: "rgba(255,255,255,0.05)",
+                          color: "rgba(240,242,255,0.9)",
+                          fontFamily: "inherit",
+                          fontSize: "0.875rem",
+                          outline: "none",
+                          cursor: "text",
+                          transition: "border-color 0.15s",
+                        }}
+                      />
+                      <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.3)", marginTop: "0.3rem" }}>
+                        Called with POST {"{url}"}/ai-authorize and /ai-charge before and after every AI action — your app decides who can afford it and charges them.
+                      </p>
+                    </div>
+                    <div>
+                      <span style={{
+                        display: "block", fontSize: "0.78rem", fontWeight: 600,
+                        letterSpacing: "0.06em", textTransform: "uppercase",
+                        color: "rgba(240,242,255,0.4)",
+                        marginBottom: "0.4rem"
+                      }}>
+                        Webhook Signing Secret
+                      </span>
+                      <input
+                        type="password"
+                        placeholder={activeKey.hasHostWebhookSecret && !hostWebhookSecretTouched ? "•••••••••••••••• (saved — enter a new value to replace it)" : "Shared secret used to sign/verify webhook calls"}
+                        value={draftHostWebhookSecret}
+                        disabled={!activeKey.isActive}
+                        onChange={(e) => {
+                          setDraftHostWebhookSecret(e.target.value);
+                          setHostWebhookSecretTouched(true);
+                          setDraftDirty(true);
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "0.6rem 0.875rem",
+                          borderRadius: 9,
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          background: "rgba(255,255,255,0.05)",
+                          color: "rgba(240,242,255,0.9)",
+                          fontFamily: "inherit",
+                          fontSize: "0.875rem",
+                          outline: "none",
+                          cursor: "text",
+                          transition: "border-color 0.15s",
+                        }}
+                      />
+                      <p style={{ fontSize: "0.72rem", color: activeKey.hasHostWebhookSecret ? "#34d399" : "rgba(240,242,255,0.3)", marginTop: "0.3rem" }}>
+                        {activeKey.hasHostWebhookSecret
+                          ? "A secret is saved and encrypted at rest. It is never sent back to the browser — leave this field blank to keep it."
+                          : "Must match the secret your webhook uses to verify the x-plexo-signature header."}
+                      </p>
+                    </div>
+                    <a
+                      href="/dashboard/integrations"
+                      style={{ fontSize: "0.75rem", color: "var(--brand)", textDecoration: "underline", display: "inline-block" }}
+                    >
+                      View the full webhook integration guide (payload shapes, signature verification, endpoints to implement) →
+                    </a>
+                    </>
+                    )}
                   </>
                 )}
 

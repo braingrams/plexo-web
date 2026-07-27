@@ -29,6 +29,15 @@ export type TierFeatures = {
    * unless an end-user overrides it with their own Plexo API key.
    */
   manageLandingPagePublishingEnabled: boolean;
+  /**
+   * Whether the account may use Host-Managed AI access (an embedding host app
+   * authorizes/bills its own end users for every AI action via a webhook,
+   * instead of Plexo's own credit ledger — see lib/ai/hostAuthorization.ts).
+   * Gated to Ultra: it hands a host app control over every AI request Plexo
+   * would otherwise meter/bill itself, so it's a paid-tier trust boundary,
+   * not just a convenience feature.
+   */
+  hostManagedAiEnabled: boolean;
 };
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
@@ -41,6 +50,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     maxApiKeys: 1,
     sdkAiTier: "BASIC",
     manageLandingPagePublishingEnabled: false,
+    hostManagedAiEnabled: false,
   },
   PRO: {
     maxTemplates: 20,
@@ -51,6 +61,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     maxApiKeys: 3,
     sdkAiTier: "MEDIUM",
     manageLandingPagePublishingEnabled: false,
+    hostManagedAiEnabled: false,
   },
   ULTRA: {
     maxTemplates: -1, // unlimited
@@ -61,6 +72,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     maxApiKeys: 10,
     sdkAiTier: "HIGH",
     manageLandingPagePublishingEnabled: true,
+    hostManagedAiEnabled: true,
   },
 };
 
@@ -118,4 +130,17 @@ export function resolveManageLandingPagePublishing(
   rawFlag: boolean | null | undefined,
 ): boolean {
   return !!rawFlag && canDo(plan, "manageLandingPagePublishingEnabled");
+}
+
+/**
+ * Whether an account on the given plan may use Host-Managed AI access.
+ * Enforced both where an ApiKey's aiAccessMode is saved (reject setting it to
+ * HOST_MANAGED on a non-Ultra account) and at request time in
+ * app/api/v1/ai/generate/route.ts (reject even if the column somehow still
+ * says HOST_MANAGED, e.g. after a downgrade) — the request-time check is the
+ * one that actually matters; the save-time check just gives a clearer error
+ * earlier.
+ */
+export function canUseHostManagedAi(plan: SubscriptionPlan | string | null | undefined): boolean {
+  return canDo(plan, "hostManagedAiEnabled");
 }

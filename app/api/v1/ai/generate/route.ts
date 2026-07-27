@@ -5,9 +5,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { classifyPromptComplexity } from "@/lib/ai/complexity";
 import { decryptSecret } from "@/lib/crypto";
 import { generateBuilderAction } from "@/lib/ai/generate";
+import { authorizeHostManagedAction, newRequestId, settleHostManagedAction } from "@/lib/ai/hostAuthorization";
 import { resolveSystemProvider } from "@/lib/ai/systemProvider";
 import type { AiActionMode, AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { chargeUsage, ensureCreditPeriod, estimateWorstCaseCost } from "@/lib/credits/ledger";
+import { canUseHostManagedAi } from "@/lib/subscription";
 import { prisma } from "@/server/prisma";
 
 function sha256(value: string): string {
@@ -32,6 +34,30 @@ interface ResolvedAiKey {
   aiProvider: string;
   aiTier: string;
   aiApiKey: string | null;
+  aiAccessMode: "SYSTEM" | "BYOK" | "HOST_MANAGED";
+  hostAuthWebhookUrl: string | null;
+  hostWebhookSecret: string | null;
+  subscriptionPlan: string;
+}
+
+const RESOLVED_AI_KEY_SELECT = {
+  id: true,
+  userId: true,
+  useAi: true,
+  aiProvider: true,
+  aiTier: true,
+  aiApiKey: true,
+  aiAccessMode: true,
+  hostAuthWebhookUrl: true,
+  hostWebhookSecret: true,
+  user: { select: { subscriptionPlan: true } },
+} as const;
+
+function withSubscriptionPlan<T extends { user: { subscriptionPlan: string } }>(
+  record: T,
+): Omit<T, "user"> & { subscriptionPlan: string } {
+  const { user, ...rest } = record;
+  return { ...rest, subscriptionPlan: user.subscriptionPlan };
 }
 
 type ResolveResult = { key: ResolvedAiKey } | { error: string; status: number };
@@ -49,14 +75,14 @@ async function resolveAiKey(request: NextRequest): Promise<ResolveResult> {
     const activeKey = await prisma.apiKey.findFirst({
       where: { userId: session.user.id, isActive: true },
       orderBy: { createdAt: "desc" },
-      select: { id: true, userId: true, useAi: true, aiProvider: true, aiTier: true, aiApiKey: true },
+      select: RESOLVED_AI_KEY_SELECT,
     });
 
     if (!activeKey) {
       return { error: "No active API key configured for this account.", status: 400 };
     }
 
-    return { key: activeKey };
+    return { key: withSubscriptionPlan(activeKey) };
   }
 
   const bearerToken = parseBearerToken(request.headers.get("authorization"));
@@ -67,14 +93,14 @@ async function resolveAiKey(request: NextRequest): Promise<ResolveResult> {
   const hashedKey = sha256(bearerToken);
   const activeKey = await prisma.apiKey.findFirst({
     where: { hashedKey, isActive: true },
-    select: { id: true, userId: true, useAi: true, aiProvider: true, aiTier: true, aiApiKey: true },
+    select: RESOLVED_AI_KEY_SELECT,
   });
 
   if (!activeKey) {
     return { error: "Forbidden", status: 403 };
   }
 
-  return { key: activeKey };
+  return { key: withSubscriptionPlan(activeKey) };
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -94,6 +120,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     templateKind?: string;
     context?: unknown;
     tier?: string;
+    externalUserId?: string;
   } | null;
 
   if (!body || typeof body.prompt !== "string" || !body.prompt.trim()) {
@@ -108,13 +135,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (body.context === undefined || body.context === null) {
     return NextResponse.json({ error: "Context is required." }, { status: 400 });
   }
+  if (key.aiAccessMode === "HOST_MANAGED" && (!body.externalUserId || !body.externalUserId.trim())) {
+    return NextResponse.json(
+      { error: "externalUserId is required for this account's AI access mode." },
+      { status: 400 },
+    );
+  }
 
   const mode = body.mode as AiActionMode;
   const tier = body.tier && VALID_TIERS.has(body.tier) ? body.tier : key.aiTier;
+  const concreteTier: ConcreteTier = tier === "AUTO" ? classifyPromptComplexity(mode, body.prompt) : (tier as ConcreteTier);
 
   let provider: AiProvider;
   let providerApiKey: string;
   let isSystemAi = false;
+  let isHostManaged = false;
+  let hostRequestId: string | null = null;
 
   if (key.aiApiKey) {
     // BYOK — unchanged from Phase 1, no credits touched, the account's own key/bill.
@@ -125,6 +161,52 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         { error: "Stored AI key could not be decrypted. Please re-enter it in Settings." },
         { status: 500 },
+      );
+    }
+  } else if (key.aiAccessMode === "HOST_MANAGED") {
+    // Host-Managed — the embedding host app authorizes and charges its own
+    // users; Plexo never touches its own credit ledger for this key and
+    // never learns the host's cost/denomination, only the action + tier.
+    // Ultra-gated: this hands a host app control over every AI request Plexo
+    // would otherwise meter/bill itself, so a plan downgrade must hard-block
+    // it rather than silently falling back to (unmetered-for-the-host) System AI.
+    if (!canUseHostManagedAi(key.subscriptionPlan)) {
+      return NextResponse.json(
+        { error: "Host-Managed AI access requires the Ultra plan on this Plexo account." },
+        { status: 403 },
+      );
+    }
+    isHostManaged = true;
+    if (!key.hostAuthWebhookUrl || !key.hostWebhookSecret) {
+      return NextResponse.json(
+        { error: "Host-Managed AI access is not fully configured for this account (missing webhook URL/secret)." },
+        { status: 503 },
+      );
+    }
+
+    let systemProvider;
+    try {
+      systemProvider = resolveSystemProvider();
+    } catch (err) {
+      return NextResponse.json(
+        { error: `System AI is not configured: ${err instanceof Error ? err.message : "unknown error"}` },
+        { status: 503 },
+      );
+    }
+    provider = systemProvider.provider;
+    providerApiKey = systemProvider.apiKey;
+
+    hostRequestId = newRequestId();
+    const decryptedSecret = decryptSecret(key.hostWebhookSecret);
+    const authorization = await authorizeHostManagedAction(
+      { hostAuthWebhookUrl: key.hostAuthWebhookUrl, hostWebhookSecret: decryptedSecret },
+      { externalUserId: body.externalUserId!.trim(), actionMode: mode, tier: concreteTier, requestId: hostRequestId },
+    );
+
+    if (!authorization.allowed) {
+      return NextResponse.json(
+        { error: authorization.reason ?? "AI access denied by the host application." },
+        { status: 402 },
       );
     }
   } else {
@@ -142,7 +224,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     provider = systemProvider.provider;
     providerApiKey = systemProvider.apiKey;
 
-    const concreteTier: ConcreteTier = tier === "AUTO" ? classifyPromptComplexity(mode, body.prompt) : (tier as ConcreteTier);
     const balance = await ensureCreditPeriod(key.userId);
     const approxInputChars = body.prompt.length + JSON.stringify(body.context).length;
     const estimatedCost = estimateWorstCaseCost(provider, concreteTier, mode, approxInputChars);
@@ -167,8 +248,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
 
     if (isSystemAi) {
-      const concreteTier: ConcreteTier = tier === "AUTO" ? classifyPromptComplexity(mode, body.prompt) : (tier as ConcreteTier);
       await chargeUsage(key.userId, { provider, tier: concreteTier, mode, usage: outcome.usage });
+    } else if (isHostManaged) {
+      const decryptedSecret = decryptSecret(key.hostWebhookSecret!);
+      await settleHostManagedAction(
+        { hostAuthWebhookUrl: key.hostAuthWebhookUrl!, hostWebhookSecret: decryptedSecret },
+        {
+          externalUserId: body.externalUserId!.trim(),
+          actionMode: mode,
+          tier: concreteTier,
+          usage: outcome.usage,
+          requestId: hostRequestId!,
+        },
+      );
     }
 
     await prisma.apiKey.update({ where: { id: key.id }, data: { lastUsedAt: new Date() } });

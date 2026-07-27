@@ -37,6 +37,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     let useAi = false;
     let aiProvider = "openai";
     let aiTier = "AUTO";
+    let aiAccessMode = "SYSTEM";
     let manageLandingPagePublishing = false;
 
     if (rawKey === "workspace-internal") {
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             where: { isActive: true },
             orderBy: { createdAt: "desc" },
             take: 1,
-            select: { useAi: true, aiProvider: true, aiTier: true },
+            select: { useAi: true, aiProvider: true, aiTier: true, aiAccessMode: true },
           },
         },
       });
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         useAi = user.apiKeys[0].useAi;
         aiProvider = user.apiKeys[0].aiProvider;
         aiTier = user.apiKeys[0].aiTier;
+        aiAccessMode = user.apiKeys[0].aiAccessMode;
       }
     } else if (rawKey === "test_key") {
       const firstUser = await (prisma.user.findFirst as any)({
@@ -107,6 +109,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           useAi: true,
           aiProvider: true,
           aiTier: true,
+          aiAccessMode: true,
         },
       });
 
@@ -128,6 +131,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       useAi = apiKey.useAi;
       aiProvider = apiKey.aiProvider;
       aiTier = apiKey.aiTier;
+      aiAccessMode = apiKey.aiAccessMode;
 
       // Touch lastUsedAt so we can track active SDK sessions
       await prisma.apiKey.update({
@@ -142,6 +146,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       useAi,
       aiProvider,
       aiTier,
+      aiAccessMode,
       manageLandingPagePublishing,
     });
   } catch (err) {

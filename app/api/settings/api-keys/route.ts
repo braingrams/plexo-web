@@ -33,6 +33,9 @@ function serializeApiKey(record: {
   aiProvider: string;
   aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
   aiApiKey: string | null;
+  aiAccessMode: "SYSTEM" | "BYOK" | "HOST_MANAGED";
+  hostAuthWebhookUrl: string | null;
+  hostWebhookSecret: string | null;
 }) {
   return {
     id: record.id,
@@ -44,6 +47,9 @@ function serializeApiKey(record: {
     aiProvider: record.aiProvider,
     aiTier: record.aiTier,
     hasAiApiKey: !!record.aiApiKey,
+    aiAccessMode: record.aiAccessMode,
+    hostAuthWebhookUrl: record.hostAuthWebhookUrl,
+    hasHostWebhookSecret: !!record.hostWebhookSecret,
   };
 }
 

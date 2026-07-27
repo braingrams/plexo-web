@@ -37,6 +37,17 @@ enum CreditTransactionType {
   ADJUSTMENT
 }
 
+// SYSTEM: Plexo's own credit ledger pays (default).
+// BYOK: the account's own provider key pays, no credits touched.
+// HOST_MANAGED: the embedding host app authorizes + charges its own users for
+// every AI action via a webhook (see lib/ai/hostAuthorization.ts) — Plexo never
+// touches its own ledger for this key and never knows the host's credit model.
+enum AiAccessMode {
+  SYSTEM
+  BYOK
+  HOST_MANAGED
+}
+
 model User {
   id               String           @id @default(uuid()) @db.Uuid
   name             String           @default("Plexo User")
@@ -112,6 +123,15 @@ model ApiKey {
   isActive  Boolean   @default(true)
   createdAt DateTime  @default(now())
   lastUsedAt DateTime?
+
+  // Host-Managed AI access (Phase 3): lets an embedding host app own AI
+  // authorization/billing for its own end users instead of Plexo's ledger.
+  // hostAuthWebhookUrl/hostWebhookSecret are only read when aiAccessMode is
+  // HOST_MANAGED; hostWebhookSecret is encrypted at rest like aiApiKey and
+  // never echoed back to the client (see app/api/settings/api-keys).
+  aiAccessMode      AiAccessMode @default(SYSTEM)
+  hostAuthWebhookUrl String?
+  hostWebhookSecret  String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

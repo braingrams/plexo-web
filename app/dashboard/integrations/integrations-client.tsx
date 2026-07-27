@@ -35,7 +35,7 @@ type IntegrationClientProps = {
 
 export default function IntegrationsClient({ user, apiKeys, baseUrl }: IntegrationClientProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"claude" | "chatgpt" | "cursor" | "gpts">("claude");
+  const [activeTab, setActiveTab] = useState<"claude" | "chatgpt" | "cursor" | "gpts" | "hostManaged">("claude");
 
   const activeKeyDisplay = apiKeys[0]?.maskedKey || "plexo_sk_your_api_key_here";
 
@@ -65,6 +65,46 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
     null,
     2
   );
+
+  const generateSecretCommand = `openssl rand -hex 32`;
+
+  const hostManagedPayloadShape = JSON.stringify(
+    {
+      externalUserId: "your own id for the end user driving the builder",
+      actionMode: "edit_element | edit_layout | generate_layout",
+      tier: "BASIC | MEDIUM | HIGH",
+      requestId: "uuid, same value on the matching authorize + charge call",
+      usage: "{ inputTokens, outputTokens } — only present on /ai-charge",
+    },
+    null,
+    2
+  );
+
+  const hostManagedSignatureSnippet = `import { createHmac, timingSafeEqual } from "node:crypto";
+
+function verifyPlexoSignature(secret, timestamp, rawBody, signature) {
+  const skewMs = Math.abs(Date.now() - Number(timestamp));
+  if (!Number.isFinite(skewMs) || skewMs > 5 * 60 * 1000) return false; // reject stale/replayed requests
+
+  const expected = createHmac("sha256", secret)
+    .update(\`\${timestamp}.\${rawBody}\`, "utf8")
+    .digest("hex");
+
+  const a = Buffer.from(expected, "hex");
+  const b = Buffer.from(signature, "hex");
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+// req.headers["x-plexo-timestamp"], req.headers["x-plexo-signature"]
+// rawBody must be the exact raw request bytes, not a re-serialized copy`;
+
+  const hostManagedResponseShapes = `POST {yourWebhookUrl}/ai-authorize
+  -> 200 { "allowed": true }
+  -> 200 { "allowed": false, "reason": "shown to the end user" }
+
+POST {yourWebhookUrl}/ai-charge
+  -> any 2xx to acknowledge (body not checked)
+  -> deduplicate on requestId — retried a few times on failure/timeout`;
 
   return (
     <div className="max-w-[1500px] mx-auto p-0 sm:p-4 md:p-6 space-y-6 font-sans text-[#f0f2ff]">
@@ -105,6 +145,7 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
           { id: "chatgpt", label: "ChatGPT Developer Plugin / Remote MCP", icon: Bot },
           { id: "cursor", label: "Cursor & Windsurf IDE", icon: Terminal },
           { id: "gpts", label: "ChatGPT Custom GPT Action", icon: Globe },
+          { id: "hostManaged", label: "Host-Managed AI (Ultra)", icon: ShieldCheck },
         ].map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -390,6 +431,125 @@ export default function IntegrationsClient({ user, apiKeys, baseUrl }: Integrati
               >
                 Open GPT Builder in ChatGPT
                 <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "hostManaged" && (
+        <div className="bg-[#111827]/80 border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 space-y-6 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#22d3ee]/10 border border-[#22d3ee]/20 flex items-center justify-center text-[#22d3ee] shrink-0">
+                <ShieldCheck className="w-4 h-4 sm:w-5 sm:h-5" />
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-bold text-white leading-tight">Host-Managed AI Access</h2>
+                <p className="text-xs text-white/60 mt-0.5">
+                  Let your own backend authorize and bill AI usage for your end users instead of Plexo&apos;s credit ledger.
+                </p>
+              </div>
+            </div>
+            <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-[#22d3ee]/10 text-[#22d3ee] border border-[#22d3ee]/20 self-start sm:self-auto shrink-0">
+              Ultra plan only
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-[#22d3ee]" />
+                Step-by-Step Instructions
+              </h3>
+              <ol className="space-y-3 text-xs text-white/70 list-decimal list-inside leading-relaxed">
+                <li>Generate a random secret yourself — Plexo doesn&apos;t issue one, it&apos;s symmetric like a GitHub webhook secret (command on the right).</li>
+                <li>Implement two endpoints on your own backend: <code className="text-[#22d3ee]">POST {"{yourWebhookUrl}"}/ai-authorize</code> and <code className="text-[#22d3ee]">POST {"{yourWebhookUrl}"}/ai-charge</code>.</li>
+                <li>Verify the <code className="text-[#22d3ee]">x-plexo-signature</code> header on every request before trusting it (snippet on the right).</li>
+                <li>
+                  In <a href="/dashboard/settings" className="text-[#22d3ee] underline">Settings</a>, pick the API key, set <strong className="text-white">AI Access Mode</strong> to <strong className="text-white">Host-Managed</strong>, then paste your webhook URL and the secret from step 1.
+                </li>
+                <li>Set that identical secret in your own backend&apos;s environment — nothing is copied <em>from</em> Plexo, the value just needs to match in both places.</li>
+              </ol>
+
+              <div className="p-4 rounded-2xl bg-[#090d16] border border-white/10 space-y-2">
+                <span className="text-[11px] font-semibold text-[#22d3ee] block flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5" />
+                  Fails closed
+                </span>
+                <p className="text-xs text-white/60 leading-relaxed">
+                  If your webhook is unreachable, times out, or denies the request, the AI action is blocked — Plexo never falls back to billing it against its own System AI credits. Requires the account to be on the Ultra plan; a downgrade blocks Host-Managed requests (403) until it&apos;s back on Ultra.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-mono text-white/50 block">1. Generate a Secret:</label>
+                <div className="relative">
+                  <pre className="p-3 bg-[#090d16] border border-white/10 rounded-2xl text-xs font-mono text-[#22d3ee] overflow-x-auto">
+                    {generateSecretCommand}
+                  </pre>
+                  <button
+                    onClick={() => handleCopy(generateSecretCommand, "hm-secret")}
+                    className="absolute top-2.5 right-2.5 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition"
+                  >
+                    {copiedKey === "hm-secret" ? <Check className="w-3.5 h-3.5 text-[#34d399]" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-mono text-white/50 block">2. Request Payload (both endpoints):</label>
+                <div className="relative">
+                  <pre className="p-4 bg-[#090d16] border border-white/10 rounded-2xl text-xs font-mono text-[#22d3ee] overflow-x-auto max-w-full whitespace-pre-wrap break-all sm:whitespace-pre">
+                    {hostManagedPayloadShape}
+                  </pre>
+                  <button
+                    onClick={() => handleCopy(hostManagedPayloadShape, "hm-payload")}
+                    className="absolute top-3 right-3 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition"
+                  >
+                    {copiedKey === "hm-payload" ? <Check className="w-4 h-4 text-[#34d399]" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-mono text-white/50 block">3. Verify the Signature (Node.js):</label>
+                <div className="relative">
+                  <pre className="p-4 bg-[#090d16] border border-white/10 rounded-2xl text-xs font-mono text-[#22d3ee] overflow-x-auto max-w-full whitespace-pre-wrap break-all sm:whitespace-pre">
+                    {hostManagedSignatureSnippet}
+                  </pre>
+                  <button
+                    onClick={() => handleCopy(hostManagedSignatureSnippet, "hm-sig")}
+                    className="absolute top-3 right-3 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition"
+                  >
+                    {copiedKey === "hm-sig" ? <Check className="w-4 h-4 text-[#34d399]" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-mono text-white/50 block">4. Expected Responses:</label>
+                <div className="relative">
+                  <pre className="p-4 bg-[#090d16] border border-white/10 rounded-2xl text-xs font-mono text-[#22d3ee] overflow-x-auto max-w-full whitespace-pre-wrap break-all sm:whitespace-pre">
+                    {hostManagedResponseShapes}
+                  </pre>
+                  <button
+                    onClick={() => handleCopy(hostManagedResponseShapes, "hm-resp")}
+                    className="absolute top-3 right-3 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition"
+                  >
+                    {copiedKey === "hm-resp" ? <Check className="w-4 h-4 text-[#34d399]" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <a
+                href="/dashboard/settings"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#22d3ee]/10 border border-[#22d3ee]/25 text-[#22d3ee] hover:bg-[#22d3ee]/20 text-xs font-semibold transition"
+              >
+                Go to Settings to configure it
+                <ChevronRight className="w-3.5 h-3.5" />
               </a>
             </div>
           </div>
