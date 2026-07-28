@@ -246,6 +246,12 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
   // blank and is only sent on save if the user actually typed into it (aiKeyTouched).
   const [draftAiApiKey, setDraftAiApiKey] = useState<string>("");
   const [aiKeyTouched, setAiKeyTouched] = useState(false);
+  // Provider has no "unset" state (CustomSelect always shows a value, defaulting
+  // to whatever was last saved or "openai") — so we track explicit interaction
+  // separately to catch a host pasting e.g. a Gemini key while the dropdown is
+  // still sitting on a stale/default provider, which would silently misroute
+  // every request to the wrong provider's API with the wrong-shaped key.
+  const [providerTouched, setProviderTouched] = useState(false);
   const [draftAccessMode, setDraftAccessMode] = useState<AiAccessMode>(activeKey?.aiAccessMode ?? "SYSTEM");
   const [draftHostAuthWebhookUrl, setDraftHostAuthWebhookUrl] = useState<string>(activeKey?.hostAuthWebhookUrl ?? "");
   // Write-only, same convention as draftAiApiKey.
@@ -260,6 +266,7 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
     setDraftAiTier(selected?.aiTier ?? "AUTO");
     setDraftAiApiKey("");
     setAiKeyTouched(false);
+    setProviderTouched(false);
     setDraftAccessMode(selected?.aiAccessMode ?? "SYSTEM");
     setDraftHostAuthWebhookUrl(selected?.hostAuthWebhookUrl ?? "");
     setDraftHostWebhookSecret("");
@@ -269,6 +276,10 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
 
   useEffect(() => {
     if (!draftDirty || !activeKey) return;
+    if (draftAccessMode === "HOST_MANAGED" && aiKeyTouched && !providerTouched) {
+      setSaveError("Confirm the AI Provider that matches the key you just entered, then save again — Plexo routes every request using this selection.");
+      return;
+    }
     const timer = window.setTimeout(async () => {
       setSaving(true); setSaveError(null); setSaveNotice(null);
       try {
@@ -285,7 +296,10 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
             ...(hostWebhookSecretTouched ? { hostWebhookSecret: draftHostWebhookSecret } : {}),
           }),
         });
-        if (!response.ok) throw new Error("Unable to persist AI configuration.");
+        if (!response.ok) {
+          const errorPayload = (await response.json().catch(() => null)) as { error?: string } | null;
+          throw new Error(errorPayload?.error ?? "Unable to persist AI configuration.");
+        }
         const payload = (await response.json()) as { apiKey: SettingsApiKey };
         setApiKeys((current) => current.map((item) => (item.id === payload.apiKey.id ? payload.apiKey : item)));
         setSaveNotice("AI settings saved.");
@@ -293,6 +307,7 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
         if (aiKeyTouched) {
           setDraftAiApiKey("");
           setAiKeyTouched(false);
+          setProviderTouched(false);
         }
         if (hostWebhookSecretTouched) {
           setDraftHostWebhookSecret("");
@@ -313,6 +328,7 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
     draftUseAi,
     draftAiApiKey,
     aiKeyTouched,
+    providerTouched,
     draftAccessMode,
     draftHostAuthWebhookUrl,
     draftHostWebhookSecret,
@@ -778,6 +794,7 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
                         onChange={(next) => {
                           const v = next as Provider;
                           setDraftAiProvider(v);
+                          setProviderTouched(true);
                           setDraftDirty(true);
                           setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiProvider: v } : item)));
                         }}
