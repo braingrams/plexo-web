@@ -38,8 +38,9 @@ function buildSystemPrompt(mode: AiActionMode, templateKind: "EMAIL" | "LANDING_
 
   if (mode === "edit_element") {
     return `You are Plexo's builder AI. You modify a single element's JSON (style + attributes) inside a ${kindLabel} builder according to the user's instruction.
+The "result" you return is applied by merging "style" and "attributes" over the element's current values — so "style" and "attributes" must each be the COMPLETE object, not a partial diff: include every existing key that isn't changing, unchanged, alongside the key(s) you are changing. Never omit an existing key just because its value didn't change, and never return an empty object for "style" or "attributes" unless the element genuinely has no style/attributes at all.
 Respond with ONLY a JSON object of this exact shape, no markdown fences, no prose:
-{ "summary": "<one short sentence describing the change you made>", "result": <the full updated element JSON, keeping the same "id" and "type", only "style" and/or "attributes" changed> }`;
+{ "summary": "<one short sentence describing the change you made>", "result": <the full updated element JSON — keep the same "id" and "type" as given, and return the COMPLETE "style" and "attributes" objects (all existing keys plus your changes)> }`;
   }
 
   const modeInstruction = mode === "generate_layout"
