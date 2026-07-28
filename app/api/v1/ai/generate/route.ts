@@ -85,12 +85,15 @@ async function resolveAiKey(request: NextRequest): Promise<ResolveResult> {
     return { key: withSubscriptionPlan(activeKey) };
   }
 
-  const bearerToken = parseBearerToken(request.headers.get("authorization"));
-  if (!bearerToken) {
+  // @charisol/plexo-sdk sends the real key via x-api-key (see aiHelper.ts), never
+  // Authorization — Bearer is only kept as a fallback for other callers, matching
+  // the same x-api-key-first pattern already used by validate-key and domains.
+  const rawKey = xApiKey || parseBearerToken(request.headers.get("authorization"));
+  if (!rawKey) {
     return { error: "Unauthorized", status: 401 };
   }
 
-  const hashedKey = sha256(bearerToken);
+  const hashedKey = sha256(rawKey);
   const activeKey = await prisma.apiKey.findFirst({
     where: { hashedKey, isActive: true },
     select: RESOLVED_AI_KEY_SELECT,

@@ -194,14 +194,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // ── Path 2: API key via Bearer token ────────────────────────────────────
-  const bearerToken = parseBearerToken(request.headers.get("authorization"));
+  // ── Path 2: API key via x-api-key (matches @charisol/plexo-sdk; Bearer kept
+  // as a fallback for other callers, same pattern as validate-key/domains) ──
+  const rawKey = xApiKey || parseBearerToken(request.headers.get("authorization"));
 
-  if (!bearerToken) {
+  if (!rawKey) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const hashedKey = sha256(bearerToken);
+  const hashedKey = sha256(rawKey);
 
   const apiKey = await prisma.apiKey.findFirst({
     where: {
