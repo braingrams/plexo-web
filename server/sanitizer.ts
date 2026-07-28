@@ -80,12 +80,20 @@ export const ElementJSONSchema = z.object({
   type: ElementTypeSchema,
   style: StyleRecordSchema,
   attributes: ElementAttributesSchema,
+  // Explicit per-breakpoint overrides (plexo-sdk's ElementJSON.styleTablet/styleMobile —
+  // see utilities/responsiveDefaults.ts there). z.object() strips unrecognized keys by
+  // default, so omitting these here would silently discard every explicit responsive
+  // override on every save, even though the SDK itself round-trips them fine.
+  styleTablet: StyleRecordSchema.optional(),
+  styleMobile: StyleRecordSchema.optional(),
 });
 
 const ColumnJSONSchema: z.ZodType<any> = z.lazy(() => z.object({
   id: z.string().max(100),
   width: z.string().max(20),
   styles: StyleRecordSchema.optional(),
+  stylesTablet: StyleRecordSchema.optional(),
+  stylesMobile: StyleRecordSchema.optional(),
   elements: z.array(ElementJSONSchema).max(200),
   nestedRows: z.array(RowJSONSchema).max(50).optional(),
   attrs: z.record(z.string(), z.any()).optional(),
@@ -94,6 +102,8 @@ const ColumnJSONSchema: z.ZodType<any> = z.lazy(() => z.object({
 const RowJSONSchema: z.ZodType<any> = z.lazy(() => z.object({
   id: z.string().max(100),
   style: StyleRecordSchema,
+  styleTablet: StyleRecordSchema.optional(),
+  styleMobile: StyleRecordSchema.optional(),
   columns: z.array(ColumnJSONSchema).max(12),
   htmlId: z.string().max(100).optional(),
   htmlClass: z.string().max(250).optional(),
