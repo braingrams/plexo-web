@@ -5,7 +5,7 @@ import type { ProviderCallParams, ProviderCallResult } from "./shared";
  * Uses the Gemini Interactions API (`client.interactions.create`) — the current
  * GA surface Google's docs recommend "for access to all the latest features",
  * superseding the older `client.models.generateContent`. Field names (snake_case:
- * system_instruction, response_mime_type, generation_config.max_output_tokens) were
+ * system_instruction, response_format, generation_config.max_output_tokens) were
  * verified directly against the installed @google/genai SDK's own type definitions
  * (node_modules/@google/genai/dist/genai.d.ts), not just docs, since the docs API
  * surface is new enough to risk drift between what's written and what's shipped.
@@ -15,8 +15,12 @@ import type { ProviderCallParams, ProviderCallResult } from "./shared";
  * genai.d.ts — `outputs` no longer appears anywhere in the response types).
  * Only steps with `type: "model_output"` carry generated content; each one's
  * `content` array holds typed parts (text/image/audio/...), of which we only
- * care about `type: "text"`. `response_mime_type` and `usage.total_*_tokens`
- * are unchanged (deprecated, not removed).
+ * care about `type: "text"`. `usage.total_*_tokens` is unchanged.
+ *
+ * `response_mime_type` alone is deprecated AND now rejected outright — the
+ * API 400s with "responseFormat must be set when responseMimeType is set"
+ * once it's the only thing set. JSON mode now goes entirely through
+ * `response_format: { type: "text", mime_type: "application/json" }`.
  */
 export async function generate({
   model,
@@ -31,7 +35,7 @@ export async function generate({
     model,
     input: userPrompt,
     system_instruction: systemPrompt,
-    response_mime_type: "application/json",
+    response_format: { type: "text", mime_type: "application/json" },
     generation_config: {
       max_output_tokens: maxTokens,
     },
