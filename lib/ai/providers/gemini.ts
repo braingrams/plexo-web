@@ -9,6 +9,14 @@ import type { ProviderCallParams, ProviderCallResult } from "./shared";
  * verified directly against the installed @google/genai SDK's own type definitions
  * (node_modules/@google/genai/dist/genai.d.ts), not just docs, since the docs API
  * surface is new enough to risk drift between what's written and what's shipped.
+ *
+ * Google's May 2026 Interactions API schema change replaced the response's
+ * `outputs` array with a `steps` array (verified against @google/genai@2.13.0's
+ * genai.d.ts — `outputs` no longer appears anywhere in the response types).
+ * Only steps with `type: "model_output"` carry generated content; each one's
+ * `content` array holds typed parts (text/image/audio/...), of which we only
+ * care about `type: "text"`. `response_mime_type` and `usage.total_*_tokens`
+ * are unchanged (deprecated, not removed).
  */
 export async function generate({
   model,
@@ -30,13 +38,16 @@ export async function generate({
     stream: false,
   });
 
-  // The SDK's internal "Content" union for interaction outputs isn't cleanly
-  // exported under a matching public type name, so duck-type the one shape we
-  // care about (text parts) rather than fight the SDK's internal aliasing.
-  const text = (interaction.outputs ?? [])
-    .filter((item): item is { type: "text"; text: string } => (
-      typeof item === "object" && item !== null && (item as { type?: unknown }).type === "text"
+  // The SDK's internal step/content unions aren't cleanly exported under
+  // matching public type names, so duck-type the two shapes we care about
+  // (model_output steps, text content parts) rather than fight the SDK's
+  // internal aliasing.
+  const text = ((interaction.steps ?? []) as unknown[])
+    .filter((step): step is { type: "model_output"; content?: Array<{ type: string; text: string }> } => (
+      typeof step === "object" && step !== null && (step as { type?: unknown }).type === "model_output"
     ))
+    .flatMap((step) => step.content ?? [])
+    .filter((item): item is { type: "text"; text: string } => item.type === "text" && typeof item.text === "string")
     .map((item) => item.text)
     .join("");
 
