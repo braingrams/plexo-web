@@ -766,8 +766,6 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
                       )}
                     </div>
 
-                    {draftAccessMode !== "HOST_MANAGED" && (
-                    <>
                     {/* Provider */}
                     <div>
                       <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
@@ -785,8 +783,6 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
                         }}
                       />
                     </div>
-                    </>
-                    )}
 
                     {/* Tier */}
                     <div>
@@ -828,7 +824,7 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
                       </div>
                     </div>
 
-                    {draftAccessMode === "BYOK" && (
+                    {(draftAccessMode === "BYOK" || draftAccessMode === "HOST_MANAGED") && (
                     <div>
                       <span style={{
                         display: "block", fontSize: "0.78rem", fontWeight: 600,
@@ -866,7 +862,9 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
                       <p style={{ fontSize: "0.72rem", color: activeKey.hasAiApiKey ? "#34d399" : "rgba(240,242,255,0.3)", marginTop: "0.3rem" }}>
                         {activeKey.hasAiApiKey
                           ? "A key is saved and encrypted at rest. It is never sent back to the browser — leave this field blank to keep it."
-                          : "This key is encrypted at rest and used server-side only when querying the builder AI functions."}
+                          : draftAccessMode === "HOST_MANAGED"
+                            ? "Required for Host-Managed access — Plexo's system key is never used in this mode. Encrypted at rest, used server-side only."
+                            : "This key is encrypted at rest and used server-side only when querying the builder AI functions."}
                       </p>
                     </div>
                     )}
