@@ -105,6 +105,13 @@ export interface GenerateParams {
   context: unknown;
 }
 
+class ProviderCallError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProviderCallError";
+  }
+}
+
 export async function generateBuilderAction(params: GenerateParams): Promise<GenerateOutcome> {
   const concreteTier: ConcreteTier =
     params.tier === "AUTO"
@@ -119,14 +126,24 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
 
   const attempt = async (extraNote?: string): Promise<GenerateOutcome> => {
     const userPrompt = `${extraNote ? `${extraNote}\n\n` : ""}User instruction: ${params.prompt}\n\nCurrent JSON:\n${JSON.stringify(trimmedContext)}`;
-    const { text, usage } = await callProvider(
-      params.provider,
-      model,
-      params.apiKey,
-      systemPrompt,
-      userPrompt,
-      maxTokens,
-    );
+    let text: string;
+    let usage: ProviderCallResult["usage"];
+    try {
+      ({ text, usage } = await callProvider(
+        params.provider,
+        model,
+        params.apiKey,
+        systemPrompt,
+        userPrompt,
+        maxTokens,
+      ));
+    } catch (err) {
+      // Auth/network/rate-limit failures from the provider are not the model
+      // returning malformed JSON — don't relabel them as parse errors, and
+      // don't burn a retry re-asking the provider to "fix its JSON".
+      const reason = err instanceof Error ? err.message : "unknown error";
+      throw new ProviderCallError(`AI provider request failed: ${reason}`);
+    }
     const cleaned = cleanJsonString(text);
     const parsed = JSON.parse(cleaned);
     const validated = schema.parse(parsed);
@@ -136,11 +153,17 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
   try {
     return await attempt();
   } catch (firstError) {
+    if (firstError instanceof ProviderCallError) {
+      throw firstError;
+    }
     // Layout JSON is large and occasionally malformed — one retry with the error fed back.
     try {
       const reason = firstError instanceof Error ? firstError.message : "parse error";
       return await attempt(`Your previous response was invalid (${reason}). Return ONLY the corrected JSON object, with no markdown fences.`);
     } catch (secondError) {
+      if (secondError instanceof ProviderCallError) {
+        throw secondError;
+      }
       const reason = secondError instanceof Error ? secondError.message : "unknown error";
       throw new Error(`AI response could not be parsed: ${reason}`);
     }

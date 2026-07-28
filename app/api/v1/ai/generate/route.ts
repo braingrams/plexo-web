@@ -155,21 +155,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let isHostManaged = false;
   let hostRequestId: string | null = null;
 
-  if (key.aiApiKey) {
-    // BYOK — unchanged from Phase 1, no credits touched, the account's own key/bill.
-    provider = key.aiProvider as AiProvider;
-    try {
-      providerApiKey = decryptSecret(key.aiApiKey);
-    } catch {
-      return NextResponse.json(
-        { error: "Stored AI key could not be decrypted. Please re-enter it in Settings." },
-        { status: 500 },
-      );
-    }
-  } else if (key.aiAccessMode === "HOST_MANAGED") {
-    // Host-Managed — the embedding host app authorizes and charges its own
-    // users; Plexo never touches its own credit ledger for this key and
-    // never learns the host's cost/denomination, only the action + tier.
+  if (key.aiAccessMode === "HOST_MANAGED") {
+    // Host-Managed — the embedding host app is fully responsible for this
+    // request: it authorizes/settles its own end users via webhook AND
+    // supplies its own AI provider key. Plexo never touches its own credit
+    // ledger and never supplies a provider key for this mode — there is no
+    // fallback to System AI, by design (see hard requirement below).
     // Ultra-gated: this hands a host app control over every AI request Plexo
     // would otherwise meter/bill itself, so a plan downgrade must hard-block
     // it rather than silently falling back to (unmetered-for-the-host) System AI.
@@ -186,18 +177,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 503 },
       );
     }
-
-    let systemProvider;
-    try {
-      systemProvider = resolveSystemProvider();
-    } catch (err) {
+    if (!key.aiApiKey) {
       return NextResponse.json(
-        { error: `System AI is not configured: ${err instanceof Error ? err.message : "unknown error"}` },
+        {
+          error:
+            "Host-Managed AI access requires the account's own AI provider key. Add one in Settings — Plexo's system key is not used in this mode.",
+        },
         { status: 503 },
       );
     }
-    provider = systemProvider.provider;
-    providerApiKey = systemProvider.apiKey;
+
+    provider = key.aiProvider as AiProvider;
+    try {
+      providerApiKey = decryptSecret(key.aiApiKey);
+    } catch {
+      return NextResponse.json(
+        { error: "Stored AI key could not be decrypted. Please re-enter it in Settings." },
+        { status: 500 },
+      );
+    }
 
     hostRequestId = newRequestId();
     const decryptedSecret = decryptSecret(key.hostWebhookSecret);
@@ -210,6 +208,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         { error: authorization.reason ?? "AI access denied by the host application." },
         { status: 402 },
+      );
+    }
+  } else if (key.aiApiKey) {
+    // BYOK — unchanged from Phase 1, no credits touched, the account's own key/bill.
+    provider = key.aiProvider as AiProvider;
+    try {
+      providerApiKey = decryptSecret(key.aiApiKey);
+    } catch {
+      return NextResponse.json(
+        { error: "Stored AI key could not be decrypted. Please re-enter it in Settings." },
+        { status: 500 },
       );
     }
   } else {

@@ -130,6 +130,12 @@ export async function PATCH(
         { status: 400 },
       );
     }
+    if (!aiApiKey) {
+      return NextResponse.json(
+        { error: "Host-Managed AI access requires the account's own AI provider key. Plexo's system key is never used in this mode." },
+        { status: 400 },
+      );
+    }
 
     const owner = await prisma.user.findUniqueOrThrow({
       where: { id: existingKey.userId },
