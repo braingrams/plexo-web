@@ -2,12 +2,15 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { FileEntry } from "@/app/api/v1/templates/[id]/files/route";
 import { buildPreviewHtml } from "./preview-utils";
+import { PagesPanel } from "./PagesPanel";
 
 type Props = {
   templateId: string;
   templateName: string;
+  subscriptionPlan: string;
 };
 
 function IconEye() {
@@ -33,7 +36,8 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
-export function RawFileEditor({ templateId, templateName }: Props) {
+export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Props) {
+  const router = useRouter();
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [savedContent, setSavedContent] = useState<Record<string, string>>({});
@@ -188,6 +192,11 @@ export function RawFileEditor({ templateId, templateName }: Props) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0b0f19", color: "#f0f2ff" }}>
+      <PagesPanel
+        templateId={templateId}
+        subscriptionPlan={subscriptionPlan}
+        onNavigate={(pageId) => { if (pageId !== templateId) router.push(`/dashboard/templates/${pageId}`); }}
+      />
       {/* Toolbar */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",

@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { put, BlobError } from "@vercel/blob";
+import { TemplateKind } from "@prisma/client";
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
 import { getTierFeatures } from "@/lib/subscription";
+import { ensureUniqueSlug, isValidUuid } from "@/server/slug";
 import {
   extractZipUpload,
   validateSingleHtmlUpload,
@@ -29,6 +31,11 @@ const RAW_UPLOAD_DAILY_LIMIT = 15;
  *   name       (optional) display name for the template
  *   file       required — a .html/.htm or .zip File
  *   acceptAup  "true" — required on an account's first raw upload (see /legal/acceptable-use)
+ *   parentId   (optional) an existing LANDING_PAGE template's id — when present, this
+ *              upload becomes a sub-page under it (e.g. an uploaded "about" page next to
+ *              a DnD-built home page) instead of a new top-level site. Mixed-mode sites
+ *              are supported page-by-page: each page's own sourceType decides how /pub
+ *              serves it, independent of its siblings — see app/pub/[domain]/[[...slug]].
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const resolved = await resolveUser(request);
@@ -76,8 +83,40 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const name = (form.get("name") as string | null)?.trim() || file.name.replace(/\.(html?|zip)$/i, "") || "Uploaded Site";
 
-  // Template creation limit — same pool as builder pages (maxTemplates counts root pages).
-  if (features.maxTemplates !== -1) {
+  const parentIdInput = (form.get("parentId") as string | null)?.trim() || null;
+  let slug: string | null = null;
+  let order = 0;
+  if (parentIdInput) {
+    // Same Ultra-gating as adding a DnD sub-page (app/api/templates/route.ts) — a raw
+    // upload used as a sub-page is still a sub-page for plan-limit purposes.
+    if (!features.multiPageSitesEnabled) {
+      return NextResponse.json(
+        { error: "Multi-page sites require an Ultra subscription plan." },
+        { status: 403 }
+      );
+    }
+    if (!isValidUuid(parentIdInput)) {
+      return NextResponse.json({ error: "Parent page not found." }, { status: 404 });
+    }
+    const parent = await prisma.template.findFirst({
+      where: { id: parentIdInput, userId: resolved.userId },
+      select: { id: true, kind: true },
+    });
+    if (!parent) {
+      return NextResponse.json({ error: "Parent page not found." }, { status: 404 });
+    }
+    if (parent.kind !== TemplateKind.LANDING_PAGE) {
+      return NextResponse.json({ error: "Only landing pages can have sub-pages." }, { status: 400 });
+    }
+    slug = await ensureUniqueSlug(parentIdInput, name);
+    const lastSibling = await prisma.template.findFirst({
+      where: { parentId: parentIdInput },
+      orderBy: { order: "desc" },
+      select: { order: true },
+    });
+    order = (lastSibling?.order ?? -1) + 1;
+  } else if (features.maxTemplates !== -1) {
+    // The plan's template limit counts root/home pages only, matching /api/templates.
     const templateCount = await prisma.template.count({ where: { userId: resolved.userId, parentId: null } });
     if (templateCount >= features.maxTemplates) {
       return NextResponse.json(
@@ -164,6 +203,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       sourceType: "RAW_UPLOAD",
       designJson: {}, // no builder representation for raw uploads
       compiledHtml: site.indexHtml,
+      parentId: parentIdInput,
+      slug,
+      order,
     },
   });
 

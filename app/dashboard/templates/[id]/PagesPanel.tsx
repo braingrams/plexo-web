@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getTierFeatures } from "@/lib/subscription";
+
+type SourceType = "BUILDER" | "RAW_UPLOAD";
 
 type PageNode = {
 	id: string;
@@ -11,6 +13,7 @@ type PageNode = {
 	parentId: string | null;
 	order: number;
 	updatedAt: string;
+	sourceType: SourceType;
 };
 
 type Props = {
@@ -64,6 +67,22 @@ function IconTrash() {
 	return (
 		<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
 			<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" />
+		</svg>
+	);
+}
+
+function IconUpload() {
+	return (
+		<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M12 19V5M5 12l7-7 7 7" />
+		</svg>
+	);
+}
+
+function IconSwitch() {
+	return (
+		<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M17 1l4 4-4 4M3 11V9a4 4 0 0 1 4-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 0 1-4 4H3" />
 		</svg>
 	);
 }
@@ -312,6 +331,9 @@ function ManagePagesModal({
 	const [dragId, setDragId] = useState<string | null>(null);
 	const [dropTarget, setDropTarget] = useState<{ id: string; zone: DropZone } | null>(null);
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+	const [uploadParentId, setUploadParentId] = useState<string | null>(null);
+	const [resetTarget, setResetTarget] = useState<PageNode | null>(null);
+	const uploadInputRef = useRef<HTMLInputElement | null>(null);
 	const router = useRouter();
 
 	async function createPage(parentId: string) {
@@ -332,6 +354,73 @@ function ManagePagesModal({
 			await onReload();
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Unable to create page.");
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	function triggerUpload(parentId: string) {
+		setUploadParentId(parentId);
+		uploadInputRef.current?.click();
+	}
+
+	async function handleUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+		const file = e.target.files?.[0];
+		e.target.value = "";
+		if (!file || !uploadParentId) return;
+		setBusy(true);
+		setError(null);
+		try {
+			const form = new FormData();
+			form.append("file", file);
+			form.append("parentId", uploadParentId);
+			const res = await fetch("/api/v1/templates/upload-raw", { method: "POST", body: form });
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) {
+				// First-ever raw upload on the account needs the full consent flow (with the
+				// actual policy text), not a silent bypass from this quick action.
+				if (data.requiresAupAcceptance) {
+					throw new Error('Accept the Acceptable Use Policy first — use "Upload Site" from the Templates page once, then this quick upload works from here on.');
+				}
+				throw new Error(data.error ?? "Unable to upload page.");
+			}
+			await onReload();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Unable to upload page.");
+		} finally {
+			setBusy(false);
+			setUploadParentId(null);
+		}
+	}
+
+	async function switchToRaw(id: string) {
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await fetch(`/api/templates/${id}/eject`, { method: "POST" });
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) throw new Error(data.error ?? "Unable to switch this page.");
+			await onReload();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Unable to switch this page.");
+		} finally {
+			setBusy(false);
+		}
+	}
+
+	async function confirmResetToBuilder() {
+		if (!resetTarget) return;
+		const id = resetTarget.id;
+		setResetTarget(null);
+		setBusy(true);
+		setError(null);
+		try {
+			const res = await fetch(`/api/templates/${id}/reset-to-builder`, { method: "POST" });
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) throw new Error(data.error ?? "Unable to switch this page.");
+			await onReload();
+		} catch (err) {
+			setError(err instanceof Error ? err.message : "Unable to switch this page.");
 		} finally {
 			setBusy(false);
 		}
@@ -559,6 +648,15 @@ function ManagePagesModal({
 							>
 								<span style={{ fontSize: "0.85rem", fontWeight: isCurrent ? 700 : 500, color: "#f0f2ff" }}>
 									{isHome ? "🏠 " : ""}{node.name}
+									{node.sourceType === "RAW_UPLOAD" && (
+										<span style={{
+											marginLeft: "0.4rem", fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.04em",
+											textTransform: "uppercase", color: "#818cf8", background: "rgba(99,102,241,0.1)",
+											padding: "0.1rem 0.4rem", borderRadius: 4, verticalAlign: "middle",
+										}}>
+											HTML
+										</span>
+									)}
 								</span>
 								<span style={{ display: "block", fontSize: "0.7rem", color: "rgba(240,242,255,0.35)" }}>
 									{domainPreview ? `${domainPreview}${pathFor(node.id, byId)}` : pathFor(node.id, byId)}
@@ -568,11 +666,40 @@ function ManagePagesModal({
 								{isUltra && (
 									<button
 										type="button"
-										title="Add sub-page"
+										title="Add DnD sub-page"
 										onClick={() => { setAddParentId(node.id); setNewPageName(""); }}
 										style={iconBtn}
 									>
 										<IconPlus />
+									</button>
+								)}
+								{isUltra && (
+									<button
+										type="button"
+										title="Upload sub-page (.html/.zip)"
+										onClick={() => triggerUpload(node.id)}
+										style={iconBtn}
+									>
+										<IconUpload />
+									</button>
+								)}
+								{node.sourceType === "BUILDER" ? (
+									<button
+										type="button"
+										title="Switch to raw HTML editing"
+										onClick={() => void switchToRaw(node.id)}
+										style={iconBtn}
+									>
+										<IconSwitch />
+									</button>
+								) : (
+									<button
+										type="button"
+										title="Switch to DnD builder (discards uploaded content)"
+										onClick={() => setResetTarget(node)}
+										style={iconBtn}
+									>
+										<IconSwitch />
 									</button>
 								)}
 								{!isHome && isUltra && (
@@ -627,6 +754,13 @@ function ManagePagesModal({
 			onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
 		>
 			<div style={{ width: "min(100%,560px)", maxHeight: "80vh", display: "flex", flexDirection: "column", background: "#0d0f1a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 18, boxShadow: "0 30px 100px rgba(0,0,0,0.7)" }}>
+				<input
+					ref={uploadInputRef}
+					type="file"
+					accept=".html,.htm,.zip"
+					onChange={(e) => void handleUploadFile(e)}
+					style={{ display: "none" }}
+				/>
 				<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.1rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
 					<div>
 						<p style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.2rem" }}>Site structure</p>
@@ -683,6 +817,29 @@ function ManagePagesModal({
 							<button type="button" onClick={() => setDeleteTarget(null)} style={smallBtn}>Cancel</button>
 							<button type="button" onClick={() => void confirmDelete()} disabled={busy} style={{ ...smallBtnPrimary, background: "#dc2626" }}>
 								Delete{busy ? "…" : ""}
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{resetTarget && (
+				<div
+					style={{ position: "fixed", inset: 0, zIndex: 70, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.6)", padding: "1rem" }}
+					onClick={(e) => { if (e.target === e.currentTarget) setResetTarget(null); }}
+				>
+					<div style={{ width: "min(100%,400px)", background: "#0d0f1a", border: "1px solid rgba(248,113,113,0.3)", borderRadius: 16, padding: "1.5rem" }}>
+						<h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.05rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.6rem" }}>
+							Switch &quot;{resetTarget.name}&quot; to the DnD builder?
+						</h3>
+						<p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.6)", marginBottom: "1.25rem", lineHeight: 1.5 }}>
+							There's no way to convert uploaded HTML into DnD blocks, so this discards the uploaded files
+							entirely and starts the page from a blank canvas instead. This can't be undone.
+						</p>
+						<div style={{ display: "flex", gap: "0.6rem", justifyContent: "flex-end" }}>
+							<button type="button" onClick={() => setResetTarget(null)} style={smallBtn}>Cancel</button>
+							<button type="button" onClick={() => void confirmResetToBuilder()} disabled={busy} style={{ ...smallBtnPrimary, background: "#dc2626" }}>
+								Switch{busy ? "…" : ""}
 							</button>
 						</div>
 					</div>

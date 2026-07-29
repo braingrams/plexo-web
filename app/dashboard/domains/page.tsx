@@ -41,11 +41,16 @@ export default async function DomainsPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  // Fetch user's landing pages to link/re-link
+  // Fetch user's landing pages to link/re-link — root/home pages only. A domain always
+  // links to a page tree's root; its sub-pages ride along under that same domain via the
+  // page-tree walk in app/pub/[domain]/[[...slug]], they never get an independent
+  // PublishedDomain of their own, so listing them here would let someone "link a domain"
+  // to a page that can't actually be a site root.
   const landingPages = await prisma.template.findMany({
     where: {
       userId: session.user.id,
       kind: "LANDING_PAGE",
+      parentId: null,
     },
     select: {
       id: true,

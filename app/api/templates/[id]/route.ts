@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
+import { del } from "@vercel/blob";
 
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
-import { isValidSlugSegment, isSameOrAncestor, isValidUuid, slugify } from "@/server/slug";
+import { isValidSlugSegment, isSameOrAncestor, isValidUuid, slugify, getDescendantIds } from "@/server/slug";
 
 type PatchTemplateBody = {
   name?: string;
@@ -122,6 +123,22 @@ export async function DELETE(
   });
   if (!existing) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
+  }
+
+  // TemplateAsset rows cascade at the DB level (Template.assets onDelete: Cascade), but
+  // Vercel Blob has no idea Postgres just deleted anything — clean up the actual blob
+  // storage for this page and everything nested under it before the cascade fires,
+  // otherwise every raw-uploaded file becomes a permanently orphaned, still-billed blob.
+  const descendantIds = await getDescendantIds(resolved.userId, existing.id);
+  const assets = await prisma.templateAsset.findMany({
+    where: { templateId: { in: [existing.id, ...descendantIds] } },
+    select: { blobUrl: true },
+  });
+  if (assets.length > 0) {
+    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+    await del(assets.map((a) => a.blobUrl), blobToken ? { token: blobToken } : undefined).catch((err) =>
+      console.error("Failed to delete blobs during page delete (non-fatal):", err)
+    );
   }
 
   // Descendants and any linked PublishedDomain cascade at the DB level

@@ -100,10 +100,19 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 export const config = {
   matcher: [
     /*
-     * Match all paths except:
-     * 1. /_next (Next.js internals)
-     * 2. static files with extensions (e.g. favicon.ico, images, css)
+     * Match all paths except /_next (Next.js internals).
+     *
+     * Previously this also excluded any path containing a dot (meant to skip static
+     * files like favicon.ico), but that silently broke every raw-upload asset request
+     * with a real extension (style.css, app.js, logo.png) — on ANY host, since the
+     * exclusion ran before the tenant-vs-dashboard check even happened, so those
+     * requests never reached this middleware to be rewritten to /pub at all. The
+     * dashboard's own static files (_next/static/*, /public/*) don't need that
+     * exclusion for correctness: on the dashboard's own host, isKnownHost is true below
+     * and this middleware just falls through to NextResponse.next(), so Next's normal
+     * static-file serving is unaffected — this only costs a few extra middleware
+     * invocations for the dashboard's own assets, not a behavior change.
      */
-    "/((?!_next/|.*\\..*).*)",
+    "/((?!_next/).*)",
   ],
 };

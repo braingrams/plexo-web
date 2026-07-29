@@ -83,7 +83,13 @@ export default async function TemplateEditorPage(
   }
 
   if (template.sourceType === "RAW_UPLOAD") {
-    return <RawFileEditor templateId={template.id} templateName={template.name} />;
+    return (
+      <RawFileEditor
+        templateId={template.id}
+        templateName={template.name}
+        subscriptionPlan={user?.subscriptionPlan ?? "ULTRA"}
+      />
+    );
   }
 
   const initialDesignJson = isTemplateJson(template.designJson)
