@@ -144,14 +144,19 @@ async function parseCompileRequest(request: NextRequest): Promise<ParsedCompileR
   return null;
 }
 
-async function compileParsedRequest(parsed: ParsedCompileRequest): Promise<string> {
+async function compileParsedRequest(parsed: ParsedCompileRequest): Promise<{ html: string; errors: string[] }> {
   if (parsed.kind === "html") {
-    return parsed.html;
+    return { html: parsed.html, errors: [] };
   }
 
   const { default: mjml2html } = await import("mjml");
   const compileResult = mjml2html(parsed.mjml, { validationLevel: "soft" });
-  return compileResult.html;
+  // "soft" lets compilation proceed despite MJML validation issues (e.g. an unexpected
+  // attribute) rather than throwing — surface them as warnings instead of silently
+  // discarding, so a design that compiled "successfully" but dropped something isn't a
+  // total mystery to the caller.
+  const errors = compileResult.errors.map((e) => e.formattedMessage ?? e.message);
+  return { html: compileResult.html, errors };
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -184,8 +189,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     try {
-      const html = await compileParsedRequest(parsedRequest);
-      return NextResponse.json({ html, errors: [] });
+      const { html, errors } = await compileParsedRequest(parsedRequest);
+      return NextResponse.json({ html, errors });
     } catch (err) {
       return NextResponse.json(
         { error: `Compilation failed: ${err instanceof Error ? err.message : 'Malformed template structure'}` },
@@ -237,9 +242,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  let compiledHtmlString;
+  let compiledHtmlString: string;
+  let compileErrors: string[];
   try {
-    compiledHtmlString = await compileParsedRequest(parsedRequest);
+    ({ html: compiledHtmlString, errors: compileErrors } = await compileParsedRequest(parsedRequest));
   } catch (err) {
     return NextResponse.json(
       { error: `Compilation failed: ${err instanceof Error ? err.message : 'Malformed template structure'}` },
@@ -259,7 +265,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({
     html: compiledHtmlString,
-    errors: [],
+    errors: compileErrors,
   });
 }
 
