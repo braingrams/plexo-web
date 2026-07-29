@@ -16,7 +16,7 @@ const RESERVED_SUBDOMAINS = new Set([
   "profile", "domains", "account", "login", "register", "signup", "logout", "signin"
 ]);
 
-async function addVercelDomain(domain: string) {
+export async function addVercelDomain(domain: string) {
   const token = process.env.VERCEL_AUTH_TOKEN;
   const projectId = process.env.VERCEL_PROJECT_ID;
   const teamId = process.env.VERCEL_TEAM_ID;
@@ -43,7 +43,7 @@ async function addVercelDomain(domain: string) {
   }
 }
 
-async function removeVercelDomain(domain: string) {
+export async function removeVercelDomain(domain: string) {
   const token = process.env.VERCEL_AUTH_TOKEN;
   const projectId = process.env.VERCEL_PROJECT_ID;
   const teamId = process.env.VERCEL_TEAM_ID;

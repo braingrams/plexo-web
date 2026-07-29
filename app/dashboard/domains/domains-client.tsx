@@ -199,14 +199,20 @@ export function CustomSelect({
         <>
           {/* Backdrop */}
           <div
-            style={{ position: "fixed", inset: 0, zIndex: 99 }}
+            // Above every other fixed-position overlay in this file (drawer: 9998/9999,
+            // delete/alert dialogs: 10000/10001) — this is portaled to document.body, so
+            // it's a stacking-order sibling of those, not nested inside them, and needs
+            // to out-rank whichever overlay it's opened from or it renders invisibly
+            // behind it (confirmed: this was exactly why the drawer's dropdown didn't
+            // visibly appear on click even though it was opening correctly).
+            style={{ position: "fixed", inset: 0, zIndex: 10100 }}
             onClick={() => setOpen(false)}
           />
           {/* Dropdown panel */}
           <div
             style={{
               ...menuStyle,
-              zIndex: 100,
+              zIndex: 10101,
               background: "rgba(18,16,36,0.95)",
               backdropFilter: "blur(16px)",
               border: "1px solid rgba(139,92,246,0.3)",
@@ -1016,13 +1022,6 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                         </span>
                       </div>
                     </div>
-                    <p style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.4)", marginTop: "0.6rem" }}>
-                      Vercel now recommends CNAME (even for root/apex domains via CNAME flattening) instead of
-                      the old A-record + IP setup. If your registrar shows you a different, domain-specific
-                      CNAME value in its own dashboard, that works too — this generic target is a stable
-                      fallback that Vercel keeps supported indefinitely.
-                    </p>
-                    
                     <p style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.35)", marginTop: "0.6rem", fontStyle: "italic", margin: "0.6rem 0 0" }}>
                       * DNS changes can take anywhere from a few minutes up to 24 hours to take effect worldwide.
                     </p>

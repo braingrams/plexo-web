@@ -1,10 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { put, del } from "@vercel/blob";
 import { prisma } from "@/server/prisma";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { getTierFeatures } from "@/lib/subscription";
-import { resolveUser, getDomainLimit } from "@/app/api/v1/domains/route";
+import { resolveUser, getDomainLimit, removeVercelDomain, addVercelDomain } from "@/app/api/v1/domains/route";
 import { resolveStrataProjectId, fetchStrataTokens } from "@/server/strata";
+import { getPagesDomain } from "@/server/pagesDomain";
 import {
   slugify,
   isValidSlugSegment,
@@ -65,8 +68,12 @@ async function linkDomainToTemplate(
     throw new Error("A domain is required to publish.");
   }
 
-  const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
-  const baseDomain = new URL(baseAppUrl).hostname;
+  // Tenant subdomains live on the dedicated pages domain (server/pagesDomain.ts),
+  // isolated from the dashboard's own cookie/session domain — not the app's own
+  // hostname. This function previously derived baseDomain from NEXT_PUBLIC_APP_URL
+  // directly, missing the plexopages.io migration entirely: every subdomain published
+  // through MCP was still landing on the dashboard's own domain regardless of that fix.
+  const pagesDomain = getPagesDomain();
 
   let domainType = domainTypeInput;
   if (!domainType) {
@@ -81,13 +88,13 @@ async function linkDomainToTemplate(
     if (RESERVED_SUBDOMAINS.has(rawDomain)) {
       throw new Error(`Subdomain '${rawDomain}' is reserved.`);
     }
-    finalDomain = `${rawDomain}.${baseDomain}`;
+    finalDomain = `${rawDomain}.${pagesDomain}`;
   } else {
     if (!DOMAIN_REGEX.test(rawDomain)) {
       throw new Error("Invalid custom domain format.");
     }
-    if (rawDomain.endsWith("." + baseDomain) || rawDomain === baseDomain) {
-      throw new Error("Custom domains cannot end with the platform base domain.");
+    if (rawDomain.endsWith("." + pagesDomain) || rawDomain === pagesDomain) {
+      throw new Error("Custom domains cannot end with the platform pages domain.");
     }
   }
 
@@ -107,6 +114,12 @@ async function linkDomainToTemplate(
       data: { templateId, type: domainType },
     });
   } else {
+    // Previously missing entirely for the MCP path: without this, a CUSTOM domain got
+    // a database row but was never actually attached to the Vercel project, so it had
+    // no valid routing or TLS cert and would never work when visited.
+    if (domainType === "CUSTOM") {
+      await addVercelDomain(finalDomain);
+    }
     await prisma.publishedDomain.create({
       data: { userId: resolved.userId, templateId, domain: finalDomain, type: domainType },
     });
@@ -1035,6 +1048,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
               isHomePage: p.parentId === null,
               path: pathForPage(p.id, tree.pages),
               order: p.order,
+              sourceType: p.sourceType,
             })),
           };
           break;
@@ -1140,6 +1154,32 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const descendantIds = await getDescendantIds(resolved.userId, existing.id);
+          const allIds = [existing.id, ...descendantIds];
+
+          // Same cleanup as the REST DELETE route (app/api/templates/[id]/route.ts) —
+          // TemplateAsset rows and PublishedDomain rows cascade at the DB level, but
+          // Vercel Blob storage and Vercel's own domain registry have no idea Postgres
+          // just deleted anything, so both need explicit cleanup before the cascade.
+          const assets = await prisma.templateAsset.findMany({
+            where: { templateId: { in: allIds } },
+            select: { blobUrl: true },
+          });
+          if (assets.length > 0) {
+            const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+            await del(assets.map((a) => a.blobUrl), blobToken ? { token: blobToken } : undefined).catch((err) =>
+              console.error("Failed to delete blobs during MCP page delete (non-fatal):", err)
+            );
+          }
+          const domainsToRemove = await prisma.publishedDomain.findMany({
+            where: { templateId: { in: allIds }, type: "CUSTOM" },
+            select: { domain: true },
+          });
+          for (const d of domainsToRemove) {
+            await removeVercelDomain(d.domain).catch((err) =>
+              console.error(`Failed to remove Vercel domain ${d.domain} during MCP page delete (non-fatal):`, err)
+            );
+          }
+
           await prisma.template.delete({ where: { id: existing.id } });
 
           toolResult = {
@@ -1164,7 +1204,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
 
           const existing = await prisma.template.findFirst({
             where: { id: templateId, userId: resolved.userId },
-            select: { id: true, name: true, kind: true, parentId: true, slug: true, designJson: true, compiledHtml: true },
+            select: { id: true, name: true, kind: true, parentId: true, slug: true, designJson: true, compiledHtml: true, sourceType: true },
           });
           if (!existing) {
             throw new Error(`No page found with id "${templateId}" in this account.`);
@@ -1182,11 +1222,45 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           const name = `${existing.name} copy`;
           const slug = await ensureUniqueSlug(existing.parentId, `${existing.slug ?? name}-copy`);
 
+          // Raw-upload pages own real files in Blob storage — copy them independently
+          // rather than sharing a reference, so editing/deleting one page's files can
+          // never silently break its duplicate (or vice versa). Same fix as the REST
+          // duplicate route (app/api/templates/[id]/duplicate/route.ts) — this tool has
+          // its own separate implementation, so it needed the fix separately too.
+          const newId = randomUUID();
+          let copiedAssets: { templateId: string; path: string; blobUrl: string; contentType: string; size: number }[] = [];
+          if (existing.sourceType === "RAW_UPLOAD") {
+            const sourceAssets = await prisma.templateAsset.findMany({ where: { templateId: existing.id } });
+            if (sourceAssets.length > 0) {
+              const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+              copiedAssets = await Promise.all(
+                sourceAssets.map(async (asset) => {
+                  const sourceRes = await fetch(asset.blobUrl);
+                  const buffer = Buffer.from(await sourceRes.arrayBuffer());
+                  const blob = await put(`raw-sites/${newId}/${asset.path}`, buffer, {
+                    access: "public",
+                    contentType: asset.contentType,
+                    ...(blobToken ? { token: blobToken } : {}),
+                  });
+                  return {
+                    templateId: newId,
+                    path: asset.path,
+                    blobUrl: blob.url,
+                    contentType: asset.contentType,
+                    size: buffer.byteLength,
+                  };
+                })
+              );
+            }
+          }
+
           const duplicate = await prisma.template.create({
             data: {
+              id: newId,
               userId: resolved.userId,
               name,
               kind: existing.kind,
+              sourceType: existing.sourceType,
               parentId: existing.parentId,
               slug,
               order: (lastSibling?.order ?? -1) + 1,
@@ -1194,6 +1268,10 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
               compiledHtml: existing.compiledHtml,
             },
           });
+
+          if (copiedAssets.length > 0) {
+            await prisma.templateAsset.createMany({ data: copiedAssets });
+          }
 
           const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
           toolResult = {

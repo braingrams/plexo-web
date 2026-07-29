@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { del } from "@vercel/blob";
 
 import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
+import { resolveUser, removeVercelDomain } from "@/app/api/v1/domains/route";
 import { isValidSlugSegment, isSameOrAncestor, isValidUuid, slugify, getDescendantIds } from "@/server/slug";
 
 type PatchTemplateBody = {
@@ -125,11 +125,12 @@ export async function DELETE(
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
 
+  const descendantIds = await getDescendantIds(resolved.userId, existing.id);
+
   // TemplateAsset rows cascade at the DB level (Template.assets onDelete: Cascade), but
   // Vercel Blob has no idea Postgres just deleted anything — clean up the actual blob
   // storage for this page and everything nested under it before the cascade fires,
   // otherwise every raw-uploaded file becomes a permanently orphaned, still-billed blob.
-  const descendantIds = await getDescendantIds(resolved.userId, existing.id);
   const assets = await prisma.templateAsset.findMany({
     where: { templateId: { in: [existing.id, ...descendantIds] } },
     select: { blobUrl: true },
@@ -138,6 +139,21 @@ export async function DELETE(
     const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
     await del(assets.map((a) => a.blobUrl), blobToken ? { token: blobToken } : undefined).catch((err) =>
       console.error("Failed to delete blobs during page delete (non-fatal):", err)
+    );
+  }
+
+  // Same problem for CUSTOM PublishedDomain rows: they cascade at the DB level, but
+  // Vercel's own domain registry has no idea — a CUSTOM domain (added via addVercelDomain
+  // at link time) stays attached to this Vercel project forever unless explicitly
+  // removed, blocking that domain from ever being re-added ("already in use by one of
+  // your projects") even though it no longer appears anywhere in the dashboard.
+  const domainsToRemove = await prisma.publishedDomain.findMany({
+    where: { templateId: { in: [existing.id, ...descendantIds] }, type: "CUSTOM" },
+    select: { domain: true },
+  });
+  for (const d of domainsToRemove) {
+    await removeVercelDomain(d.domain).catch((err) =>
+      console.error(`Failed to remove Vercel domain ${d.domain} during page delete (non-fatal):`, err)
     );
   }
 

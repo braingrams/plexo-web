@@ -333,6 +333,10 @@ function ManagePagesModal({
 	const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 	const [uploadParentId, setUploadParentId] = useState<string | null>(null);
 	const [resetTarget, setResetTarget] = useState<PageNode | null>(null);
+	// Holds the in-flight file when a quick upload hits the account's first-ever-raw-upload
+	// AUP gate, so accepting inline can resubmit the exact same upload instead of losing it
+	// and forcing a trip to a separate page.
+	const [aupPending, setAupPending] = useState<{ parentId: string; file: File } | null>(null);
 	const uploadInputRef = useRef<HTMLInputElement | null>(null);
 	const router = useRouter();
 
@@ -368,19 +372,27 @@ function ManagePagesModal({
 		const file = e.target.files?.[0];
 		e.target.value = "";
 		if (!file || !uploadParentId) return;
+		await doUpload(uploadParentId, file, false);
+	}
+
+	// Shared by the initial attempt and the AUP-acceptance retry — acceptAup is only ever
+	// true on the retry, once the inline consent dialog below has been confirmed.
+	async function doUpload(parentId: string, file: File, acceptAup: boolean) {
 		setBusy(true);
 		setError(null);
 		try {
 			const form = new FormData();
 			form.append("file", file);
-			form.append("parentId", uploadParentId);
+			form.append("parentId", parentId);
+			if (acceptAup) form.append("acceptAup", "true");
 			const res = await fetch("/api/v1/templates/upload-raw", { method: "POST", body: form });
 			const data = await res.json().catch(() => ({}));
 			if (!res.ok) {
-				// First-ever raw upload on the account needs the full consent flow (with the
-				// actual policy text), not a silent bypass from this quick action.
-				if (data.requiresAupAcceptance) {
-					throw new Error('Accept the Acceptable Use Policy first — use "Upload Site" from the Templates page once, then this quick upload works from here on.');
+				// First-ever raw upload on the account needs explicit consent — hold onto the
+				// file and offer that consent inline rather than losing the upload.
+				if (data.requiresAupAcceptance && !acceptAup) {
+					setAupPending({ parentId, file });
+					return;
 				}
 				throw new Error(data.error ?? "Unable to upload page.");
 			}
@@ -391,6 +403,13 @@ function ManagePagesModal({
 			setBusy(false);
 			setUploadParentId(null);
 		}
+	}
+
+	async function confirmAupAndUpload() {
+		if (!aupPending) return;
+		const { parentId, file } = aupPending;
+		setAupPending(null);
+		await doUpload(parentId, file, true);
 	}
 
 	async function switchToRaw(id: string) {
@@ -840,6 +859,33 @@ function ManagePagesModal({
 							<button type="button" onClick={() => setResetTarget(null)} style={smallBtn}>Cancel</button>
 							<button type="button" onClick={() => void confirmResetToBuilder()} disabled={busy} style={{ ...smallBtnPrimary, background: "#dc2626" }}>
 								Switch{busy ? "…" : ""}
+							</button>
+						</div>
+					</div>
+				</div>
+			)}
+
+			{aupPending && (
+				<div
+					style={{ position: "fixed", inset: 0, zIndex: 70, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.6)", padding: "1rem" }}
+					onClick={(e) => { if (e.target === e.currentTarget) setAupPending(null); }}
+				>
+					<div style={{ width: "min(100%,440px)", background: "#0d0f1a", border: "1px solid rgba(139,92,246,0.3)", borderRadius: 16, padding: "1.5rem" }}>
+						<h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.05rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.6rem" }}>
+							Accept the Acceptable Use Policy
+						</h3>
+						<p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.6)", marginBottom: "1.25rem", lineHeight: 1.5 }}>
+							Raw HTML uploads are published exactly as uploaded, with no content sanitization — you're
+							responsible for what &quot;{aupPending.file.name}&quot; contains, including any script it runs.
+							Required once per account, before your first raw upload.{" "}
+							<a href="/legal/acceptable-use" target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand)" }}>
+								Read the policy
+							</a>.
+						</p>
+						<div style={{ display: "flex", gap: "0.6rem", justifyContent: "flex-end" }}>
+							<button type="button" onClick={() => setAupPending(null)} style={smallBtn}>Cancel</button>
+							<button type="button" onClick={() => void confirmAupAndUpload()} disabled={busy} style={smallBtnPrimary}>
+								{busy ? "Uploading…" : "Accept & Upload"}
 							</button>
 						</div>
 					</div>
