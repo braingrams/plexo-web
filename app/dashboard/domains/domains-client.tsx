@@ -266,7 +266,10 @@ function initialDnsStatus(records: DomainRecord[]): Record<string, { checking: b
 
 export function DomainsClient({ initialDomains, landingPages, plan, customLimit }: Props) {
   const [domains, setDomains] = useState<DomainRecord[]>(initialDomains);
-  const [baseDomain, setBaseDomain] = useState<string>("plexopages.io");
+  // NEXT_PUBLIC_ vars are inlined into the client bundle at build time, so this is
+  // correct on first paint with no hardcoded domain guess and no flash of a stale
+  // value before the /api/v1/domains fetch below confirms it server-side.
+  const [baseDomain, setBaseDomain] = useState<string>(process.env.NEXT_PUBLIC_PAGES_DOMAIN || "localhost");
   const [count, setCount] = useState<number>(initialDomains.length);
   const [limit, setLimit] = useState<number>(25);
 
