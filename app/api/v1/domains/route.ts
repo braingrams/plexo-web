@@ -114,21 +114,6 @@ export async function resolveUser(
     return null;
   }
 
-  if (rawKey === "test_key") {
-    const firstUser = await (prisma.user.findFirst as any)({
-      select: { id: true, subscriptionPlan: true, customDomainLimit: true, manageLandingPagePublishing: true },
-    });
-    if (firstUser) {
-      const plan = firstUser.subscriptionPlan || "FREE";
-      return {
-        userId: firstUser.id,
-        subscriptionPlan: plan,
-        customDomainLimit: firstUser.customDomainLimit,
-        manageLandingPagePublishing: resolveManageLandingPagePublishing(plan, firstUser.manageLandingPagePublishing),
-      };
-    }
-  }
-
   if (!rawKey) return null;
 
   const hashedKey = sha256(rawKey);

@@ -252,6 +252,22 @@ model Verification {
   @@index([value])
 }
 
+// better-auth's own rate-limit storage (server/auth.ts rateLimit.storage: "database") —
+// required so rate limiting is actually shared across serverless instances instead of
+// each one keeping its own in-memory counter (the framework default), which would let
+// an attacker bypass limits simply by landing on a different warm instance.
+// lastRequest MUST be BigInt, not Int: it stores Date.now() (epoch milliseconds), which
+// overflows a 32-bit Int. Confirmed against better-auth's own adapter code, which
+// explicitly normalizes a bigint lastRequest value read back from the DB.
+model RateLimit {
+  id          String @id @default(cuid())
+  key         String
+  count       Int
+  lastRequest BigInt
+
+  @@index([key])
+}
+
 model PublishedDomain {
   id         String   @id @default(uuid()) @db.Uuid
   userId     String   @db.Uuid

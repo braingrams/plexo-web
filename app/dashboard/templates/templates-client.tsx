@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { PageHeader } from "../_components/PageHeader";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
@@ -150,24 +151,39 @@ export function TemplatesClient({ initialTemplates }: Props) {
         eyebrow="Workspace"
         title="Your Templates"
         action={
-          <button
-            id="create-template-btn"
-            type="button"
-            onClick={openModal}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: "0.5rem",
-              padding: "0.65rem 1.2rem",
-              borderRadius: 10, fontWeight: 700, fontSize: "0.875rem",
-              background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-              color: "#fff", border: "none", cursor: "pointer",
-              boxShadow: "0 4px 20px var(--brand-glow)",
-              transition: "opacity 0.15s, box-shadow 0.15s",
-              fontFamily: "inherit",
-            }}
-          >
-            <IconPlus />
-            New Template
-          </button>
+          <div style={{ display: "flex", gap: "0.6rem" }}>
+            <Link
+              href="/dashboard/templates/upload"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                padding: "0.65rem 1.2rem",
+                borderRadius: 10, fontWeight: 700, fontSize: "0.875rem",
+                background: "none", border: "1px solid rgba(255,255,255,0.12)",
+                color: "rgba(240,242,255,0.85)", textDecoration: "none",
+                fontFamily: "inherit",
+              }}
+            >
+              Upload Site
+            </Link>
+            <button
+              id="create-template-btn"
+              type="button"
+              onClick={openModal}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                padding: "0.65rem 1.2rem",
+                borderRadius: 10, fontWeight: 700, fontSize: "0.875rem",
+                background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
+                color: "#fff", border: "none", cursor: "pointer",
+                boxShadow: "0 4px 20px var(--brand-glow)",
+                transition: "opacity 0.15s, box-shadow 0.15s",
+                fontFamily: "inherit",
+              }}
+            >
+              <IconPlus />
+              New Template
+            </button>
+          </div>
         }
       />
 

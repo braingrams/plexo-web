@@ -239,6 +239,23 @@ export const auth = betterAuth({
   verification: {
     modelName: "Verification",
   },
+  // Rate limiting is on by default in production (better-auth's own default), but the
+  // default storage is in-memory — useless on Vercel's serverless functions, where each
+  // instance keeps its own counter, so an attacker bypasses the limit just by landing on
+  // a different warm instance. "database" shares counts across all instances via the
+  // RateLimit table (prisma/schema.prisma). Auth endpoints get tighter limits than the
+  // framework's 100-req/10s default, since those are the ones worth protecting against
+  // credential-stuffing / brute force specifically.
+  rateLimit: {
+    storage: "database",
+    modelName: "RateLimit",
+    customRules: {
+      "/sign-in/email": { window: 60, max: 5 },
+      "/sign-up/email": { window: 60, max: 5 },
+      "/request-password-reset": { window: 60, max: 3 },
+      "/reset-password": { window: 60, max: 5 },
+    },
+  },
   emailVerification: {
     sendOnSignUp: true,
     sendOnSignIn: true,

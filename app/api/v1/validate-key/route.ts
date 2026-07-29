@@ -80,21 +80,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         aiTier = user.apiKeys[0].aiTier;
         aiAccessMode = user.apiKeys[0].aiAccessMode;
       }
-    } else if (rawKey === "test_key") {
-      const firstUser = await (prisma.user.findFirst as any)({
-        select: { id: true, subscriptionPlan: true, manageLandingPagePublishing: true },
-      });
-      if (!firstUser) {
-        return NextResponse.json(
-          { valid: false, error: "Authenticated user not found." },
-          { status: 401 }
-        );
-      }
-      subscriptionPlan = firstUser.subscriptionPlan ?? "ULTRA";
-      manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, firstUser.manageLandingPagePublishing);
-      useAi = true;
-      aiProvider = "openai";
-      aiTier = "AUTO";
     } else {
       const hashedKey = sha256(rawKey);
 

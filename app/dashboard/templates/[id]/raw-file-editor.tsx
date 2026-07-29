@@ -49,8 +49,15 @@ export function RawFileEditor({ templateId, templateName }: Props) {
   const [previewRootPath, setPreviewRootPath] = useState("index.html");
   const previewCleanupRef = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    fetch(`/api/v1/templates/${templateId}/files`)
+  const [pendingReplaceFile, setPendingReplaceFile] = useState<File | null>(null);
+  const [replacing, setReplacing] = useState(false);
+  const [replaceError, setReplaceError] = useState<string | null>(null);
+  const replaceInputRef = useRef<HTMLInputElement | null>(null);
+
+  const loadFiles = useCallback(() => {
+    setLoading(true);
+    setLoadError(null);
+    return fetch(`/api/v1/templates/${templateId}/files`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load files.");
         return res.json();
@@ -63,10 +70,15 @@ export function RawFileEditor({ templateId, templateName }: Props) {
         }
         setEdits(initial);
         setSavedContent(initial);
+        setActivePath("index.html");
       })
       .catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load files."))
       .finally(() => setLoading(false));
   }, [templateId]);
+
+  useEffect(() => {
+    void loadFiles();
+  }, [loadFiles]);
 
   useEffect(() => {
     return () => previewCleanupRef.current?.();
@@ -125,6 +137,37 @@ export function RawFileEditor({ templateId, templateName }: Props) {
     previewCleanupRef.current = null;
   }
 
+  function handlePickReplaceFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    e.target.value = ""; // allow picking the same filename again later
+    if (file) setPendingReplaceFile(file);
+  }
+
+  async function handleConfirmReplace() {
+    if (!pendingReplaceFile) return;
+    setReplacing(true);
+    setReplaceError(null);
+    try {
+      const form = new FormData();
+      form.append("file", pendingReplaceFile);
+      const res = await fetch(`/api/v1/templates/${templateId}/replace-upload`, {
+        method: "POST",
+        body: form,
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.error ?? "Replace failed.");
+
+      setPendingReplaceFile(null);
+      await loadFiles();
+      setSavedFlash(true);
+      setTimeout(() => setSavedFlash(false), 1500);
+    } catch (err) {
+      setReplaceError(err instanceof Error ? err.message : "Replace failed.");
+    } finally {
+      setReplacing(false);
+    }
+  }
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
@@ -165,6 +208,25 @@ export function RawFileEditor({ templateId, templateName }: Props) {
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
           {saveError && <span style={{ color: "#f87171", fontSize: "0.78rem" }}>⚠️ {saveError}</span>}
           {savedFlash && <span style={{ color: "#34d399", fontSize: "0.78rem" }}>✓ Saved</span>}
+          <input
+            ref={replaceInputRef}
+            type="file"
+            accept=".html,.htm,.zip"
+            onChange={handlePickReplaceFile}
+            style={{ display: "none" }}
+          />
+          <button
+            type="button"
+            onClick={() => replaceInputRef.current?.click()}
+            style={{
+              padding: "0.45rem 0.9rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 600,
+              background: "none", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.8)",
+              cursor: "pointer",
+            }}
+            title="Replace every file on this site with a new .html/.zip upload"
+          >
+            Replace Files
+          </button>
           <button
             type="button"
             onClick={handleOpenPreview}
@@ -273,6 +335,49 @@ export function RawFileEditor({ templateId, templateName }: Props) {
             style={{ flex: 1, border: "none", background: "#fff" }}
           />
         </div>
+      )}
+
+      {/* Replace-files confirmation */}
+      {pendingReplaceFile && (
+        <>
+          <div
+            onClick={() => !replacing && setPendingReplaceFile(null)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 10000 }}
+          />
+          <div style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            width: "100%", maxWidth: 440, background: "#16142c", border: "1px solid rgba(239,68,68,0.25)",
+            borderRadius: 16, padding: "2rem", zIndex: 10001, display: "flex", flexDirection: "column", gap: "1.25rem",
+          }}>
+            <div>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 800, margin: 0 }}>Replace all files?</h3>
+              <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.6)", marginTop: "0.6rem", lineHeight: 1.5 }}>
+                This permanently deletes every current file in <strong>{templateName}</strong> and replaces
+                them with <code style={{ background: "rgba(239,68,68,0.1)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>{pendingReplaceFile.name}</code>.
+                Any domain already linked to this site stays linked — it'll just serve the new content. This cannot be undone.
+              </p>
+            </div>
+            {replaceError && <p style={{ fontSize: "0.8rem", color: "#f87171", margin: 0 }}>⚠️ {replaceError}</p>}
+            <div style={{ display: "flex", gap: "0.75rem" }}>
+              <button
+                type="button"
+                onClick={() => setPendingReplaceFile(null)}
+                disabled={replacing}
+                style={{ flex: 1, padding: "0.6rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 600, background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(240,242,255,0.7)", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmReplace()}
+                disabled={replacing}
+                style={{ flex: 1, padding: "0.6rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 700, background: "linear-gradient(135deg, #ef4444, #b91c1c)", color: "#fff", border: "none", cursor: replacing ? "default" : "pointer", opacity: replacing ? 0.6 : 1 }}
+              >
+                {replacing ? "Replacing…" : "Replace"}
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

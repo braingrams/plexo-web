@@ -86,6 +86,7 @@ export interface PageTreeNode {
   parentId: string | null;
   order: number;
   updatedAt: Date;
+  sourceType: "BUILDER" | "RAW_UPLOAD";
 }
 
 /**
@@ -117,7 +118,7 @@ export async function getPageTree(userId: string, anyPageId: string): Promise<{ 
 
   const root = await prisma.template.findFirst({
     where: { id: rootId, userId },
-    select: { id: true, name: true, slug: true, parentId: true, order: true, updatedAt: true },
+    select: { id: true, name: true, slug: true, parentId: true, order: true, updatedAt: true, sourceType: true },
   });
   if (!root) return null;
 
@@ -127,7 +128,7 @@ export async function getPageTree(userId: string, anyPageId: string): Promise<{ 
     const children = await prisma.template.findMany({
       where: { parentId: { in: frontier }, userId },
       orderBy: { order: "asc" },
-      select: { id: true, name: true, slug: true, parentId: true, order: true, updatedAt: true },
+      select: { id: true, name: true, slug: true, parentId: true, order: true, updatedAt: true, sourceType: true },
     });
     pages.push(...children);
     frontier = children.map((c) => c.id);

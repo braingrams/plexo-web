@@ -9,21 +9,44 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // Handle CORS and preflight requests for API endpoints
   if (pathname.startsWith("/api/")) {
     const origin = request.headers.get("origin") || "";
-    
+    const appOrigin = new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").origin;
+    // Extra first-party origins allowed to make COOKIE-credentialed requests, comma
+    // separated (e.g. a staging URL). The dashboard's own origin is always trusted.
+    const extraTrustedOrigins = (process.env.TRUSTED_CORS_ORIGINS || "")
+      .split(",").map((o) => o.trim()).filter(Boolean);
+    const credentialedAllowlist = new Set([appOrigin, ...extraTrustedOrigins]);
+
+    // Credentialed (cookie/session-based) CORS is only ever granted to explicitly
+    // trusted first-party origins — previously this reflected ANY origin back with
+    // Access-Control-Allow-Credentials: true unconditionally, which let a malicious
+    // page make authenticated requests using a visitor's session cookie if it was ever
+    // sent cross-site. Every other origin still gets a working response (needed for
+    // API-key-authenticated cross-origin callers — SDK embeds, MCP, ChatGPT custom
+    // actions — which never rely on cookies) but WITHOUT Allow-Credentials, which is no
+    // more permissive than a plain "*" wildcard since no ambient browser credential is
+    // exposed to it.
+    const isTrustedOrigin = origin !== "" && credentialedAllowlist.has(origin);
+
+    const corsHeaders: [string, string][] = [
+      ["Access-Control-Allow-Origin", origin || "*"],
+      ["Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT"],
+      ["Access-Control-Allow-Headers", "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, x-api-key, Authorization, x-unsplash-key, x-pexels-key, x-pixabay-key"],
+    ];
+    if (isTrustedOrigin) {
+      // Only valid when Allow-Origin echoes the exact origin (guaranteed above, since
+      // isTrustedOrigin requires a non-empty origin) — browsers reject credentials
+      // combined with a wildcard "*" origin.
+      corsHeaders.push(["Access-Control-Allow-Credentials", "true"]);
+    }
+
     if (request.method === "OPTIONS") {
       const response = new NextResponse(null, { status: 204 });
-      response.headers.set("Access-Control-Allow-Credentials", "true");
-      response.headers.set("Access-Control-Allow-Origin", origin || "*");
-      response.headers.set("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
-      response.headers.set("Access-Control-Allow-Headers", "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, x-api-key, Authorization, x-unsplash-key, x-pexels-key, x-pixabay-key");
+      for (const [key, value] of corsHeaders) response.headers.set(key, value);
       return response;
     }
 
     const response = NextResponse.next();
-    response.headers.set("Access-Control-Allow-Credentials", "true");
-    response.headers.set("Access-Control-Allow-Origin", origin || "*");
-    response.headers.set("Access-Control-Allow-Methods", "GET,OPTIONS,PATCH,DELETE,POST,PUT");
-    response.headers.set("Access-Control-Allow-Headers", "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, x-api-key, Authorization, x-unsplash-key, x-pexels-key, x-pixabay-key");
+    for (const [key, value] of corsHeaders) response.headers.set(key, value);
     return response;
   }
 
