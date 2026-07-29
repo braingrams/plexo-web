@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
 import { auth } from "@/server/auth";
 import { resolveManageLandingPagePublishing } from "@/lib/subscription";
+import { getPagesDomain } from "@/server/pagesDomain";
+import { scanPublishedDomain } from "@/lib/safeBrowsing";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -180,8 +182,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const baseDomain = new URL(baseAppUrl).hostname;
+  const baseDomain = getPagesDomain();
 
   const { searchParams } = new URL(request.url);
   const templateId = searchParams.get("templateId");
@@ -241,8 +242,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid domain type." }, { status: 400 });
   }
 
-  const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const baseDomain = new URL(baseAppUrl).hostname;
+  const baseDomain = getPagesDomain();
 
   // Validate template exists and belongs to the user
   const template = await prisma.template.findFirst({
@@ -292,6 +292,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         where: { id: existingDomain.id },
         data: { templateId },
       });
+      // Content changed under this domain — re-scan rather than trust the last result.
+      void scanPublishedDomain(updated.id).catch((err) => console.error("Safe Browsing scan failed:", err));
       return NextResponse.json({ success: true, domain: updated });
     }
 
@@ -340,6 +342,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       type,
     },
   });
+
+  // Fire-and-forget abuse scan — never blocks the publish response on an external API call.
+  void scanPublishedDomain(created.id).catch((err) => console.error("Safe Browsing scan failed:", err));
 
   return NextResponse.json({ success: true, domain: created });
 }

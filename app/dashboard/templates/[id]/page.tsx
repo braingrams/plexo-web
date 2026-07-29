@@ -7,6 +7,7 @@ import { prisma } from "@/server/prisma";
 import { getTierFeatures } from "@/lib/subscription";
 
 import { TemplateEditorDynamic } from "./template-editor-dynamic";
+import { RawFileEditor } from "./raw-file-editor";
 
 function isTemplateJson(value: unknown): value is TemplateJSON {
   if (typeof value !== "object" || value === null) {
@@ -55,6 +56,7 @@ export default async function TemplateEditorPage(
         kind: true,
         parentId: true,
         designJson: true,
+        sourceType: true,
       },
     }),
     prisma.user.findUnique({
@@ -78,6 +80,10 @@ export default async function TemplateEditorPage(
 
   if (!template) {
     notFound();
+  }
+
+  if (template.sourceType === "RAW_UPLOAD") {
+    return <RawFileEditor templateId={template.id} templateName={template.name} />;
   }
 
   const initialDesignJson = isTemplateJson(template.designJson)

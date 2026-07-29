@@ -62,6 +62,8 @@ export default async function DomainsPage() {
     templateId: d.templateId,
     templateName: d.template.name,
     createdAt: d.createdAt.toISOString(),
+    dnsVerified: d.dnsVerified,
+    dnsVerifiedAt: d.dnsVerifiedAt ? d.dnsVerifiedAt.toISOString() : null,
   }));
 
   return (

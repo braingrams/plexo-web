@@ -5,6 +5,8 @@ import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { getTierFeatures } from "@/lib/subscription";
 import { getDomainLimit, resolveUser } from "../domains/route";
+import { getPagesDomain } from "@/server/pagesDomain";
+import { scanPublishedDomain } from "@/lib/safeBrowsing";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -151,7 +153,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   });
 
   const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const baseDomain = new URL(baseAppUrl).hostname;
+  const pagesDomain = getPagesDomain();
   const editableUrl = `${baseAppUrl}/dashboard/templates/${template.id}`;
 
   // Email templates don't publish to a domain — only landing pages do.
@@ -193,13 +195,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (RESERVED_SUBDOMAINS.has(rawDomain)) {
       return NextResponse.json({ error: `Subdomain '${rawDomain}' is reserved.` }, { status: 400 });
     }
-    finalDomain = `${rawDomain}.${baseDomain}`;
+    finalDomain = `${rawDomain}.${pagesDomain}`;
   } else {
     if (!DOMAIN_REGEX.test(rawDomain)) {
       return NextResponse.json({ error: "Invalid custom domain format." }, { status: 400 });
     }
-    if (rawDomain.endsWith("." + baseDomain) || rawDomain === baseDomain) {
-      return NextResponse.json({ error: "Custom domains cannot end with platform base domain." }, { status: 400 });
+    if (rawDomain.endsWith("." + pagesDomain) || rawDomain === pagesDomain) {
+      return NextResponse.json({ error: "Custom domains cannot end with the platform pages domain." }, { status: 400 });
     }
   }
 
@@ -224,6 +226,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         where: { id: existingDomain.id },
         data: { templateId: template.id },
       });
+      void scanPublishedDomain(existingDomain.id).catch((err) => console.error("Safe Browsing scan failed:", err));
     } else {
       return NextResponse.json({ error: `Domain '${finalDomain}' is already registered by another account.` }, { status: 409 });
     }
@@ -238,7 +241,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    await prisma.publishedDomain.create({
+    const createdDomain = await prisma.publishedDomain.create({
       data: {
         userId: resolved.userId,
         templateId: template.id,
@@ -246,6 +249,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         type: domainType,
       },
     });
+    void scanPublishedDomain(createdDomain.id).catch((err) => console.error("Safe Browsing scan failed:", err));
   }
 
   const protocol = process.env.NODE_ENV === "development" ? "http" : "https";

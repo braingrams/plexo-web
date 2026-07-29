@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
+import Link from "next/link";
+
+// Vercel's generic, stable CNAME target — works for both subdomains and apex/root
+// domains via CNAME flattening (registrar-dependent) and is documented as permanently
+// supported, unlike the old A-record + static IP recommendation it replaced.
+const DNS_CNAME_TARGET = "cname.vercel-dns.com";
 
 type DomainType = "SUBDOMAIN" | "CUSTOM";
 
@@ -11,6 +18,8 @@ type DomainRecord = {
   templateId: string;
   templateName: string;
   createdAt: string;
+  dnsVerified?: boolean;
+  dnsVerifiedAt?: string | null;
 };
 
 type LandingPage = {
@@ -104,19 +113,60 @@ export function CustomSelect({
   options,
   disabled,
   onChange,
-  openUpwards,
 }: {
   value: string;
   options: Array<{ label: string; value: string }>;
   disabled?: boolean;
   onChange: (val: string) => void;
-  openUpwards?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const selected = options.find((o) => o.value === value);
+
+  // Positions the menu (portaled to document.body below) from the trigger's live
+  // viewport coordinates instead of a CSS-relative offset — the previous
+  // position:absolute + a hardcoded per-callsite `openUpwards` prop got silently
+  // clipped by any scrollable ancestor (e.g. the domains table's horizontal-scroll
+  // wrapper: setting overflowX without overflowY makes the browser compute
+  // overflowY as "auto" too per the CSS overflow spec, turning that wrapper into a
+  // vertical clipping box). A portal escapes that ancestor entirely, and the flip
+  // direction is now decided from actual available space, not a guess baked in at
+  // the call site.
+  const updatePosition = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const menuHeight = Math.min(320, options.length * 40 + 16);
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const shouldOpenUpwards = spaceBelow < menuHeight + 12 && rect.top > spaceBelow;
+    setMenuStyle({
+      position: "fixed",
+      left: rect.left,
+      width: rect.width,
+      ...(shouldOpenUpwards
+        ? { bottom: window.innerHeight - rect.top + 6 }
+        : { top: rect.bottom + 6 }),
+    });
+  }, [options.length]);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    // Capture-phase scroll listener so this also repositions on scroll from any
+    // scrollable ancestor (e.g. the table's own horizontal scroll), not just the window.
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open, updatePosition]);
+
   return (
     <div style={{ position: "relative" }}>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen((o) => !o)}
@@ -145,7 +195,7 @@ export function CustomSelect({
         </span>
       </button>
 
-      {open && (
+      {open && typeof document !== "undefined" && createPortal(
         <>
           {/* Backdrop */}
           <div
@@ -155,12 +205,7 @@ export function CustomSelect({
           {/* Dropdown panel */}
           <div
             style={{
-              position: "absolute",
-              ...(openUpwards 
-                ? { bottom: "calc(100% + 6px)" } 
-                : { top: "calc(100% + 6px)" }
-              ),
-              left: 0, right: 0,
+              ...menuStyle,
               zIndex: 100,
               background: "rgba(18,16,36,0.95)",
               backdropFilter: "blur(16px)",
@@ -202,15 +247,26 @@ export function CustomSelect({
               );
             })}
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
 }
 
+function initialDnsStatus(records: DomainRecord[]): Record<string, { checking: boolean; valid?: boolean; error?: string }> {
+  const status: Record<string, { checking: boolean; valid?: boolean; error?: string }> = {};
+  for (const d of records) {
+    if (d.type === "CUSTOM" && d.dnsVerified) {
+      status[d.domain] = { checking: false, valid: true };
+    }
+  }
+  return status;
+}
+
 export function DomainsClient({ initialDomains, landingPages, plan, customLimit }: Props) {
   const [domains, setDomains] = useState<DomainRecord[]>(initialDomains);
-  const [baseDomain, setBaseDomain] = useState<string>("plexo.charisol.io");
+  const [baseDomain, setBaseDomain] = useState<string>("plexopages.io");
   const [count, setCount] = useState<number>(initialDomains.length);
   const [limit, setLimit] = useState<number>(25);
 
@@ -236,6 +292,12 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  const dnsHostLabel = useMemo(() => {
+    if (!customDomainInput) return "subdomain";
+    const parts = customDomainInput.split(".");
+    return parts.length > 2 ? parts[0] : "@";
+  }, [customDomainInput]);
+
   const templateOptions = useMemo(() => {
     if (landingPages.length === 0) {
       return [{ label: "No landing pages available", value: "" }];
@@ -243,15 +305,19 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
     return landingPages.map((lp) => ({ label: lp.name, value: lp.id }));
   }, [landingPages]);
 
-  // DNS Verification status map
-  const [dnsStatus, setDnsStatus] = useState<Record<string, { checking: boolean; valid?: boolean; error?: string }>>({});
+  // DNS Verification status map — seeded from the persisted dnsVerified flag so a
+  // reload doesn't lose a domain that was already confirmed as verified.
+  const [dnsStatus, setDnsStatus] = useState<Record<string, { checking: boolean; valid?: boolean; error?: string }>>(
+    () => initialDnsStatus(initialDomains)
+  );
 
   // Relink state mapping: domainId -> boolean (isEditing)
   const [editingDomainId, setEditingDomainId] = useState<string | null>(null);
   const [relinkTemplateId, setRelinkTemplateId] = useState<string>("");
 
   useEffect(() => {
-    // Fetch limits and config from API to get baseDomain correctly
+    // Fetch limits and config from API to get the pages domain (returned as
+    // `baseDomain` for backward compatibility with this component's naming) correctly
     fetch("/api/v1/domains")
       .then((res) => res.json())
       .then((data) => {
@@ -266,8 +332,8 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   function getClickUrl(domainName: string): string {
     const isDev = baseDomain === "localhost";
     if (isDev) {
-      if (domainName.endsWith(".plexo.charisol.io")) {
-        const sub = domainName.replace(".plexo.charisol.io", "");
+      if (domainName.endsWith(`.${baseDomain}`)) {
+        const sub = domainName.replace(`.${baseDomain}`, "");
         return `http://${sub}.localhost:3000`;
       }
       return `http://${domainName}:3000`;
@@ -532,21 +598,33 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
               Active Published Domains
             </h2>
             {domains.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setIsDrawerOpen(true)}
-                className="btn-primary"
-                style={{
-                  padding: "0.5rem 1rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700,
-                  background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-                  border: "none", color: "#fff", cursor: "pointer",
-                  boxShadow: "0 4px 14px var(--brand-glow)",
-                  whiteSpace: "nowrap",
-                  marginLeft: "auto",
-                }}
-              >
-                + Link Domain
-              </button>
+              <div style={{ display: "flex", gap: "0.6rem", marginLeft: "auto" }}>
+                <Link
+                  href="/dashboard/templates/upload"
+                  style={{
+                    padding: "0.5rem 1rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700,
+                    background: "none", border: "1px solid rgba(255,255,255,0.1)",
+                    color: "rgba(240,242,255,0.75)", whiteSpace: "nowrap", textDecoration: "none",
+                    display: "inline-flex", alignItems: "center",
+                  }}
+                >
+                  Upload HTML Site
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setIsDrawerOpen(true)}
+                  className="btn-primary"
+                  style={{
+                    padding: "0.5rem 1rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700,
+                    background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
+                    border: "none", color: "#fff", cursor: "pointer",
+                    boxShadow: "0 4px 14px var(--brand-glow)",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  + Link Domain
+                </button>
+              </div>
             )}
           </div>
 
@@ -575,21 +653,34 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
               <p style={{ color: "rgba(240,242,255,0.45)", fontSize: "0.85rem", maxWidth: 380, lineHeight: 1.5, marginBottom: "1.75rem", margin: "0.25rem auto 1.5rem" }}>
                 Host your responsive landing pages on custom subdomains or external domains. Get started by linking your first domain!
               </p>
-              <button
-                type="button"
-                onClick={() => setIsDrawerOpen(true)}
-                className="btn-primary"
-                style={{
-                  padding: "0.65rem 1.75rem", borderRadius: 10, fontWeight: 700, fontSize: "0.85rem",
-                  background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-                  color: "#fff", border: "none", cursor: "pointer",
-                  boxShadow: "0 4px 20px var(--brand-glow)",
-                  transition: "opacity 0.15s, box-shadow 0.15s",
-                  fontFamily: "inherit"
-                }}
-              >
-                Link a Domain
-              </button>
+              <div style={{ display: "flex", gap: "0.75rem" }}>
+                <button
+                  type="button"
+                  onClick={() => setIsDrawerOpen(true)}
+                  className="btn-primary"
+                  style={{
+                    padding: "0.65rem 1.75rem", borderRadius: 10, fontWeight: 700, fontSize: "0.85rem",
+                    background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
+                    color: "#fff", border: "none", cursor: "pointer",
+                    boxShadow: "0 4px 20px var(--brand-glow)",
+                    transition: "opacity 0.15s, box-shadow 0.15s",
+                    fontFamily: "inherit"
+                  }}
+                >
+                  Link a Domain
+                </button>
+                <Link
+                  href="/dashboard/templates/upload"
+                  style={{
+                    padding: "0.65rem 1.75rem", borderRadius: 10, fontWeight: 700, fontSize: "0.85rem",
+                    background: "none", border: "1px solid rgba(255,255,255,0.1)",
+                    color: "rgba(240,242,255,0.75)", textDecoration: "none",
+                    display: "inline-flex", alignItems: "center", fontFamily: "inherit"
+                  }}
+                >
+                  Upload HTML Site
+                </Link>
+              </div>
             </div>
           ) : (
             <div style={{ width: "100%", overflowX: "auto" }}>
@@ -643,7 +734,6 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                                   value={relinkTemplateId}
                                   onChange={(val) => setRelinkTemplateId(val)}
                                   options={templateOptions}
-                                  openUpwards
                                 />
                               </div>
                               <button
@@ -897,27 +987,13 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: "0.72rem", alignItems: "center" }}>
                         <span style={{ width: "25%", color: "#c4b5fd", fontWeight: 600 }}>
-                          {(() => {
-                            if (!customDomainInput) return "CNAME";
-                            const parts = customDomainInput.split(".");
-                            return parts.length > 2 ? "CNAME" : "A";
-                          })()}
+                          CNAME
                         </span>
                         <span style={{ width: "35%", color: "#f0f2ff", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                          {(() => {
-                            if (!customDomainInput) return "subdomain";
-                            const parts = customDomainInput.split(".");
-                            if (parts.length > 2) {
-                              return parts[0];
-                            }
-                            return "@";
-                          })()}
+                          {dnsHostLabel}
                           <button
                             type="button"
-                            onClick={() => {
-                              const val = !customDomainInput ? "subdomain" : (customDomainInput.split(".").length > 2 ? customDomainInput.split(".")[0] : "@");
-                              handleCopy(val, 'host');
-                            }}
+                            onClick={() => handleCopy(dnsHostLabel, 'host')}
                             style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", alignSelf: "center" }}
                             title="Copy Host"
                           >
@@ -925,27 +1001,10 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                           </button>
                         </span>
                         <span style={{ width: "40%", color: "var(--brand)", fontWeight: 600, textAlign: "right", wordBreak: "break-all", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.25rem" }}>
-                          {(() => {
-                            if (!customDomainInput) return baseDomain === "localhost" ? "plexobuilder.vercel.app" : baseDomain;
-                            const parts = customDomainInput.split(".");
-                            if (parts.length > 2) {
-                              return baseDomain === "localhost" ? "plexobuilder.vercel.app" : baseDomain;
-                            }
-                            return "76.76.21.21";
-                          })()}
+                          {DNS_CNAME_TARGET}
                           <button
                             type="button"
-                            onClick={() => {
-                              const val = (() => {
-                                if (!customDomainInput) return baseDomain === "localhost" ? "plexobuilder.vercel.app" : baseDomain;
-                                const parts = customDomainInput.split(".");
-                                if (parts.length > 2) {
-                                  return baseDomain === "localhost" ? "plexobuilder.vercel.app" : baseDomain;
-                                }
-                                return "76.76.21.21";
-                              })();
-                              handleCopy(val, 'target');
-                            }}
+                            onClick={() => handleCopy(DNS_CNAME_TARGET, 'target')}
                             style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", alignSelf: "center" }}
                             title="Copy Target"
                           >
@@ -954,6 +1013,12 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                         </span>
                       </div>
                     </div>
+                    <p style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.4)", marginTop: "0.6rem" }}>
+                      Vercel now recommends CNAME (even for root/apex domains via CNAME flattening) instead of
+                      the old A-record + IP setup. If your registrar shows you a different, domain-specific
+                      CNAME value in its own dashboard, that works too — this generic target is a stable
+                      fallback that Vercel keeps supported indefinitely.
+                    </p>
                     
                     <p style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.35)", marginTop: "0.6rem", fontStyle: "italic", margin: "0.6rem 0 0" }}>
                       * DNS changes can take anywhere from a few minutes up to 24 hours to take effect worldwide.

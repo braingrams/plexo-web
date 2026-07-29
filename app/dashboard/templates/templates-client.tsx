@@ -289,6 +289,11 @@ export function TemplatesClient({ initialTemplates }: Props) {
                       <iframe
                         srcDoc={template.compiledHtml}
                         title={`Preview ${template.name}`}
+                        // Empty sandbox (no tokens, notably no allow-scripts / allow-same-origin):
+                        // this is a decorative visual snapshot, not an interactive preview, and
+                        // compiledHtml can be raw/unsanitized user HTML now (RAW_UPLOAD templates)
+                        // — it must never execute here with this page's own privileges.
+                        sandbox=""
                         style={{
                           width: "100%",
                           height: "100%",

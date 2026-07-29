@@ -11,6 +11,15 @@ enum TemplateKind {
   LANDING_PAGE
 }
 
+// BUILDER: page assembled from designJson via the visual builder (existing flow).
+// RAW_UPLOAD: user-supplied HTML/CSS/JS uploaded as-is (single .html or a .zip site),
+// served verbatim with no sanitization — see server/rawUpload.ts for the isolation
+// story that makes this safe (dedicated plexopages.io origin, see middleware.ts).
+enum TemplateSourceType {
+  BUILDER
+  RAW_UPLOAD
+}
+
 enum SubscriptionPlan {
   FREE
   PRO
@@ -49,33 +58,36 @@ enum AiAccessMode {
 }
 
 model User {
-  id               String           @id @default(uuid()) @db.Uuid
-  name             String           @default("Plexo User")
-  image            String?
-  email            String           @unique
-  passwordHash     String           @default("")
-  isConfirmed      Boolean          @default(false)
+  id                          String           @id @default(uuid()) @db.Uuid
+  name                        String           @default("Plexo User")
+  image                       String?
+  email                       String           @unique
+  passwordHash                String           @default("")
+  isConfirmed                 Boolean          @default(false)
   // Was @default(ULTRA) pre-Phase-2 (free beta, no billing). Now that plan
   // determines real monthly AI credit allowance, new signups default to FREE.
-  subscriptionPlan SubscriptionPlan @default(FREE)
-  customDomainLimit Int?
+  subscriptionPlan            SubscriptionPlan @default(FREE)
+  customDomainLimit           Int?
+  // Timestamp of accepting the Acceptable Use Policy — required before a user's first
+  // unsanitized raw-HTML publish (see app/api/v1/templates/upload-raw/route.ts).
+  aupAcceptedAt               DateTime?
   // Ultra-gated: lets embedded SDK builders publish/AI under this account without a
   // per-account domain limit. Enforcement of the Ultra requirement happens in app code
   // (see lib/subscription.ts resolveManageLandingPagePublishing), not at the DB layer.
-  manageLandingPagePublishing Boolean @default(false)
-  layoutMode       LayoutMode       @default(MODERN)
+  manageLandingPagePublishing Boolean          @default(false)
+  layoutMode                  LayoutMode       @default(MODERN)
   // Strata design-system project the user has connected — lets AI tooling (MCP) auto-detect
   // and fetch brand tokens without the user re-supplying a project id on every call.
-  strataProjectId  String?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  strataProjectId             String?
+  createdAt                   DateTime         @default(now())
+  updatedAt                   DateTime         @updatedAt
 
   // Billing / credits (Phase 2)
-  stripeCustomerId     String?   @unique
+  stripeCustomerId     String?  @unique
   stripeSubscriptionId String?
-  allowanceBalance     Int       @default(0)
-  topupBalance         Int       @default(0)
-  allowanceResetAt     DateTime  @default(now())
+  allowanceBalance     Int      @default(0)
+  topupBalance         Int      @default(0)
+  allowanceResetAt     DateTime @default(now())
 
   apiKeys          ApiKey[]
   templates        Template[]
@@ -111,17 +123,17 @@ model StripeEvent {
 }
 
 model ApiKey {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @db.Uuid
-  name      String
-  hashedKey String
-  maskedKey String
-  useAi     Boolean   @default(false)
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  name       String
+  hashedKey  String
+  maskedKey  String
+  useAi      Boolean   @default(false)
   aiProvider String    @default("openai")
-  aiTier    AiTier    @default(AUTO)
-  aiApiKey  String?
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
+  aiTier     AiTier    @default(AUTO)
+  aiApiKey   String?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
 
   // Host-Managed AI access (Phase 3): lets an embedding host app own AI
@@ -129,7 +141,7 @@ model ApiKey {
   // hostAuthWebhookUrl/hostWebhookSecret are only read when aiAccessMode is
   // HOST_MANAGED; hostWebhookSecret is encrypted at rest like aiApiKey and
   // never echoed back to the client (see app/api/settings/api-keys).
-  aiAccessMode      AiAccessMode @default(SYSTEM)
+  aiAccessMode       AiAccessMode @default(SYSTEM)
   hostAuthWebhookUrl String?
   hostWebhookSecret  String?
 
@@ -139,14 +151,18 @@ model ApiKey {
 }
 
 model Template {
-  id           String       @id @default(uuid()) @db.Uuid
-  userId       String       @db.Uuid
+  id           String             @id @default(uuid()) @db.Uuid
+  userId       String             @db.Uuid
   name         String
   kind         TemplateKind
+  // RAW_UPLOAD templates have an empty/placeholder designJson (nothing to edit in the
+  // builder) — compiledHtml holds the uploaded index.html verbatim, unsanitized;
+  // additional files (css/js/images) live in TemplateAsset.
+  sourceType   TemplateSourceType @default(BUILDER)
   designJson   Json
-  compiledHtml String       @db.Text
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  compiledHtml String             @db.Text
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
   // Multipage support: a LANDING_PAGE template with parentId == null is a
   // standalone/home page (the thing a PublishedDomain links to, unchanged
@@ -159,15 +175,34 @@ model Template {
   slug     String?
   order    Int     @default(0)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent   Template?  @relation("TemplatePages", fields: [parentId], references: [id], onDelete: Cascade)
-  pages    Template[] @relation("TemplatePages")
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent           Template?         @relation("TemplatePages", fields: [parentId], references: [id], onDelete: Cascade)
+  pages            Template[]        @relation("TemplatePages")
   publishedDomains PublishedDomain[]
-  pageViews PageView[]
+  pageViews        PageView[]
+  assets           TemplateAsset[]
 
   @@unique([parentId, slug])
   @@index([userId])
   @@index([parentId])
+}
+
+// Non-root files belonging to a RAW_UPLOAD template (style.css, app.js, images, fonts...).
+// The root document itself stays in Template.compiledHtml so the common case (single
+// self-contained .html upload) needs no blob storage at all.
+model TemplateAsset {
+  id          String   @id @default(uuid()) @db.Uuid
+  templateId  String   @db.Uuid
+  path        String // relative path as referenced in the HTML, e.g. "style.css", "assets/logo.png"
+  blobUrl     String
+  contentType String
+  size        Int
+  createdAt   DateTime @default(now())
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, path])
+  @@index([templateId])
 }
 
 model Account {
@@ -222,9 +257,23 @@ model PublishedDomain {
   userId     String   @db.Uuid
   templateId String   @db.Uuid
   domain     String   @unique
-  type       String   // "SUBDOMAIN" | "CUSTOM"
+  type       String // "SUBDOMAIN" | "CUSTOM"
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+
+  // Persisted DNS verification (previously only lived in transient client state, so a
+  // page reload always reverted CUSTOM domains to "Check DNS" even after a successful check).
+  dnsVerified   Boolean   @default(false)
+  dnsVerifiedAt DateTime?
+
+  // Takedown / abuse-scan state (see lib/safeBrowsing.ts, app/api/internal/domains/[id]/suspend).
+  // /pub refuses to serve content for a domain with active=false.
+  active          Boolean   @default(true)
+  suspendedAt     DateTime?
+  suspendedReason String?
+  flagged         Boolean   @default(false)
+  flagReason      String?
+  lastScannedAt   DateTime?
 
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
@@ -237,9 +286,9 @@ model PublishedDomain {
 model PageView {
   id         String   @id @default(uuid()) @db.Uuid
   templateId String   @db.Uuid
-  domain     String?  // tracks which subdomain/custom domain was visited
-  ipHash     String?  // sha-256 hash of visitor IP for unique counting — raw IP is never stored
-  userAgent  String?  // browser/device information
+  domain     String? // tracks which subdomain/custom domain was visited
+  ipHash     String? // sha-256 hash of visitor IP for unique counting — raw IP is never stored
+  userAgent  String? // browser/device information
   // Derived from Vercel's geolocation headers (free, no third-party API) — coarse
   // country/region/city only, never the raw IP that produced them.
   country    String?
@@ -247,12 +296,12 @@ model PageView {
   city       String?
   // Parsed from userAgent at write time so the dashboard can filter/display without
   // re-parsing the raw string per row.
-  deviceType String?  // "mobile" | "tablet" | "desktop"
+  deviceType String? // "mobile" | "tablet" | "desktop"
   browser    String?
   os         String?
   createdAt  DateTime @default(now())
 
-  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@index([templateId])
   @@index([createdAt])
@@ -272,9 +321,9 @@ model UploadedImage {
 
 model StockCache {
   id        String   @id @default(uuid()) @db.Uuid
-  provider  String   // "unsplash" | "pexels" | "pixabay"
-  query     String   // search query
-  results   Json     // JSON array of cached StockImageResult[]
+  provider  String // "unsplash" | "pexels" | "pixabay"
+  query     String // search query
+  results   Json // JSON array of cached StockImageResult[]
   createdAt DateTime @default(now())
 
   @@unique([provider, query])

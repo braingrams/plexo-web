@@ -271,6 +271,10 @@ export default function CompileClientPage() {
         <iframe
           srcDoc={previewHtml}
           title="Compile Live Preview"
+          // Empty sandbox: previewHtml can be raw HTML the user pasted directly (see
+          // setPreviewHtml(inputText) above) — never sanitized, so this must not execute
+          // with this dashboard's own origin privileges.
+          sandbox=""
           className="w-full h-full border-none bg-white absolute inset-0"
         />
       </div>

@@ -1,0 +1,181 @@
+import { randomUUID } from "node:crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { put, BlobError } from "@vercel/blob";
+import { prisma } from "@/server/prisma";
+import { resolveUser } from "@/app/api/v1/domains/route";
+import { getTierFeatures } from "@/lib/subscription";
+import {
+  extractZipUpload,
+  validateSingleHtmlUpload,
+  RawUploadValidationError,
+  type ExtractedSite,
+} from "@/server/rawUpload";
+
+// Per-account cap on RAW_UPLOAD template creation — a plain DB count query rather than a
+// dedicated rate-limit store, since there's no Redis/Upstash in this stack yet. Fine at
+// current scale; swap for a token-bucket in Upstash if raw uploads get high-volume.
+const RAW_UPLOAD_DAILY_LIMIT = 15;
+
+/**
+ * POST /api/v1/templates/upload-raw
+ *
+ * Publishes a self-contained HTML site (single .html/.htm, or a .zip with index.html at
+ * its root plus css/js/images/fonts) as a Template with NO HTML sanitization — the
+ * content is served byte-for-byte as uploaded. This is safe only because served content
+ * lives on the isolated plexopages.io origin (see server/pagesDomain.ts), never on the
+ * dashboard's own domain, and carries no ambient cookies/session.
+ *
+ * multipart/form-data fields:
+ *   name       (optional) display name for the template
+ *   file       required — a .html/.htm or .zip File
+ *   acceptAup  "true" — required on an account's first raw upload (see /legal/acceptable-use)
+ */
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const resolved = await resolveUser(request);
+  if (!resolved) {
+    return NextResponse.json({ error: "Unauthorized. Valid session or API key required." }, { status: 401 });
+  }
+
+  const features = getTierFeatures(resolved.subscriptionPlan);
+  if (!features.landingPagesEnabled) {
+    return NextResponse.json(
+      { error: "Raw HTML publishing requires a PRO or ULTRA subscription plan." },
+      { status: 403 }
+    );
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: resolved.userId },
+    select: { aupAcceptedAt: true },
+  });
+
+  const form = await request.formData().catch(() => null);
+  if (!form) {
+    return NextResponse.json({ error: "Expected multipart/form-data." }, { status: 400 });
+  }
+
+  const acceptAup = form.get("acceptAup") === "true";
+  if (!user?.aupAcceptedAt) {
+    if (!acceptAup) {
+      return NextResponse.json({
+        error: "You must accept the Acceptable Use Policy before publishing unsanitized HTML.",
+        requiresAupAcceptance: true,
+        aupUrl: "/legal/acceptable-use",
+      }, { status: 403 });
+    }
+    await prisma.user.update({
+      where: { id: resolved.userId },
+      data: { aupAcceptedAt: new Date() },
+    });
+  }
+
+  const file = form.get("file");
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: "Missing required 'file' field." }, { status: 400 });
+  }
+
+  const name = (form.get("name") as string | null)?.trim() || file.name.replace(/\.(html?|zip)$/i, "") || "Uploaded Site";
+
+  // Template creation limit — same pool as builder pages (maxTemplates counts root pages).
+  if (features.maxTemplates !== -1) {
+    const templateCount = await prisma.template.count({ where: { userId: resolved.userId, parentId: null } });
+    if (templateCount >= features.maxTemplates) {
+      return NextResponse.json(
+        { error: `Template limit reached (${features.maxTemplates}). Upgrade plan to create more pages.` },
+        { status: 403 }
+      );
+    }
+  }
+
+  // Per-account rate limit on raw uploads specifically — this is the abuse-prone path
+  // (unsanitized, arbitrary JS), so it gets its own tighter ceiling independent of the
+  // general template limit above.
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const recentUploadCount = await prisma.template.count({
+    where: { userId: resolved.userId, sourceType: "RAW_UPLOAD", createdAt: { gte: since } },
+  });
+  if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
+    return NextResponse.json({
+      error: `You've reached the raw-upload limit of ${RAW_UPLOAD_DAILY_LIMIT} per 24 hours. Try again later.`,
+    }, { status: 429 });
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  let site: ExtractedSite;
+  try {
+    site = file.name.toLowerCase().endsWith(".zip")
+      ? await extractZipUpload(buffer)
+      : validateSingleHtmlUpload(file.name, buffer);
+  } catch (err) {
+    if (err instanceof RawUploadValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+    throw err;
+  }
+
+  // On an actual Vercel deployment, the store's OIDC token (auto-injected, short-lived,
+  // no env var needed) authenticates this automatically — the SDK picks it up on its own.
+  // BLOB_READ_WRITE_TOKEN is only read here as a fallback for environments without OIDC
+  // (i.e. local `next dev`); don't set it in Vercel's own project env vars once you've
+  // confirmed OIDC works, per Vercel's own guidance to revoke unused static tokens.
+  const localDevToken = process.env.BLOB_READ_WRITE_TOKEN;
+
+  // Generate the id up front so blob paths can be namespaced by it, and upload assets
+  // BEFORE writing anything to Postgres — if storage isn't reachable, nothing is left
+  // half-created in the database.
+  const templateId = randomUUID();
+  let uploadedAssets: { templateId: string; path: string; blobUrl: string; contentType: string; size: number }[] = [];
+
+  if (site.assets.length > 0) {
+    try {
+      uploadedAssets = await Promise.all(
+        site.assets.map(async (asset) => {
+          const blob = await put(`raw-sites/${templateId}/${asset.path}`, asset.buffer, {
+            access: "public",
+            contentType: asset.contentType,
+            ...(localDevToken ? { token: localDevToken } : {}),
+          });
+          return {
+            templateId,
+            path: asset.path,
+            blobUrl: blob.url,
+            contentType: asset.contentType,
+            size: asset.buffer.byteLength,
+          };
+        })
+      );
+    } catch (err) {
+      if (err instanceof BlobError) {
+        console.error("Blob storage upload failed:", err.message);
+        return NextResponse.json({
+          error: "Storage isn't available for multi-file uploads right now. Upload a single self-contained .html file, or contact support.",
+        }, { status: 500 });
+      }
+      throw err;
+    }
+  }
+
+  const template = await prisma.template.create({
+    data: {
+      id: templateId,
+      userId: resolved.userId,
+      name,
+      kind: "LANDING_PAGE",
+      sourceType: "RAW_UPLOAD",
+      designJson: {}, // no builder representation for raw uploads
+      compiledHtml: site.indexHtml,
+    },
+  });
+
+  if (uploadedAssets.length > 0) {
+    await prisma.templateAsset.createMany({ data: uploadedAssets });
+  }
+
+  return NextResponse.json({
+    success: true,
+    templateId: template.id,
+    name: template.name,
+    assetCount: site.assets.length,
+    message: "Site uploaded. Link it to a subdomain or custom domain from Domain Management to go live.",
+  });
+}

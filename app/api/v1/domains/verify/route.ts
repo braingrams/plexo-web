@@ -1,6 +1,8 @@
 import dns from "node:dns/promises";
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/server/prisma";
 import { resolveUser } from "../route";
+import { getPagesDomain } from "@/server/pagesDomain";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const resolved = await resolveUser(request);
@@ -15,32 +17,53 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Domain parameter is required." }, { status: 400 });
   }
 
-  const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const baseDomain = new URL(baseAppUrl).hostname;
+  // Tenant content (subdomains + custom domains) always resolves to the pages domain,
+  // never the dashboard's own app domain — see server/pagesDomain.ts.
+  const pagesDomain = getPagesDomain();
+
+  const record = await prisma.publishedDomain.findFirst({
+    where: { domain, userId: resolved.userId },
+  });
+  if (!record) {
+    return NextResponse.json({ error: "Domain not found or unauthorized." }, { status: 404 });
+  }
+
+  const respond = async (result: { valid: boolean; type?: string; records?: string[]; error?: string }) => {
+    // Persist the outcome so the frontend doesn't lose "Verified" on reload — previously
+    // this endpoint only ever returned a result without writing it anywhere.
+    await prisma.publishedDomain.update({
+      where: { id: record.id },
+      data: {
+        dnsVerified: result.valid,
+        dnsVerifiedAt: result.valid ? new Date() : record.dnsVerifiedAt,
+      },
+    });
+    return NextResponse.json(result);
+  };
 
   try {
     // 1. Try to resolve CNAME
     const cnames = await dns.resolveCname(domain).catch(() => [] as string[]);
     const hasCname = cnames.some(
-      r => r.toLowerCase().endsWith(baseDomain) || r.toLowerCase() === baseDomain
+      r => r.toLowerCase().endsWith(pagesDomain) || r.toLowerCase() === pagesDomain
     );
-    
+
     if (hasCname) {
-      return NextResponse.json({ valid: true, type: "CNAME", records: cnames });
+      return await respond({ valid: true, type: "CNAME", records: cnames });
     }
 
     // 2. Try resolving A records (for root domains or ANAME/ALIAS records)
     const aRecords = await dns.resolve(domain, "A").catch(() => [] as string[]);
     if (aRecords.length > 0) {
-      return NextResponse.json({ valid: true, type: "A", records: aRecords });
+      return await respond({ valid: true, type: "A", records: aRecords });
     }
 
-    return NextResponse.json({
+    return await respond({
       valid: false,
-      error: `Could not verify CNAME pointing to ${baseDomain} or any A records. Please verify your DNS settings.`,
+      error: `Could not verify CNAME pointing to ${pagesDomain} or any A records. Please verify your DNS settings.`,
     });
   } catch (error) {
-    return NextResponse.json({
+    return await respond({
       valid: false,
       error: error instanceof Error ? error.message : "DNS validation failed.",
     });
