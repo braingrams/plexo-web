@@ -13,6 +13,7 @@ type TemplateSummary = {
   compiledHtml: string;
   createdAt: string;
   updatedAt: string;
+  pageCount: number;
 };
 
 type CreatePayload = {
@@ -346,8 +347,18 @@ export function TemplatesClient({ initialTemplates }: Props) {
                   }}>
                     {template.name}
                   </h2>
-                  <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)", marginBottom: "1rem" }}>
+                  <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)", marginBottom: "1rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
                     Updated {formatDate(template.updatedAt)}
+                    {!isEmail && template.pageCount > 0 && (
+                      <span style={{
+                        display: "inline-flex", alignItems: "center",
+                        padding: "0.1rem 0.5rem", borderRadius: 999,
+                        fontSize: "0.68rem", fontWeight: 700,
+                        background: "rgba(129,140,248,0.12)", color: "#818cf8",
+                      }}>
+                        {template.pageCount + 1} pages
+                      </span>
+                    )}
                   </p>
                   <button
                     type="button"

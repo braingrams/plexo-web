@@ -16,6 +16,7 @@ export type TemplateEditorProps = {
   templateId: string;
   templateName: string;
   templateKind: "EMAIL" | "LANDING_PAGE";
+  templateParentId: string | null;
   initialDesignJson: TemplateJSON;
   subscriptionPlan: string;
   useAi: boolean;

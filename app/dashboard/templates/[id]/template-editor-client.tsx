@@ -16,6 +16,7 @@ import {
 	type TemplateJSON,
 } from "@charisol/plexo-sdk";
 import "@charisol/plexo-sdk/dist/plexo-sdk.css";
+import { PagesPanel } from "./PagesPanel";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 
@@ -23,6 +24,10 @@ type Props = {
 	templateId: string;
 	templateName: string;
 	templateKind: "EMAIL" | "LANDING_PAGE";
+	// Non-null when this page is a sub-page of another landing page — sub-pages
+	// are reached through their site's shared domain, so they never get their
+	// own PublishedDomain and shouldn't trigger the "publish this page" nudge.
+	templateParentId: string | null;
 	initialDesignJson: TemplateJSON;
 	subscriptionPlan: string;
 	useAi: boolean;
@@ -319,6 +324,7 @@ export function TemplateEditorClient({
 	templateId,
 	templateName,
 	templateKind,
+	templateParentId,
 	initialDesignJson,
 	subscriptionPlan,
 	useAi,
@@ -346,6 +352,35 @@ export function TemplateEditorClient({
 
 	const isEmail = templateKind === "EMAIL";
 
+	/** Exports and persists the current canvas without any of the save button's UI side effects — used when switching pages so the outgoing page's edits aren't lost. */
+	async function flushSave(): Promise<void> {
+		if (!builderRef.current) return;
+		const mode = isEmail ? "email" : "landing_page";
+		const exported = await builderRef.current.exportDesign(mode);
+		const response = await fetch(`/api/templates/update/${templateId}`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				designJson: exported.json,
+				compiledHtml: exported.html,
+			}),
+		});
+		if (!response.ok) {
+			const payload = (await response.json().catch(() => ({}))) as { error?: string };
+			throw new Error(payload.error ?? "Unable to save template.");
+		}
+	}
+
+	async function handleNavigateToPage(pageId: string): Promise<void> {
+		if (pageId === templateId) return;
+		try {
+			await flushSave();
+		} catch (err) {
+			console.error("Failed to save before switching pages:", err);
+		}
+		router.push(`/dashboard/templates/${pageId}`);
+	}
+
 	async function handleSave(): Promise<void> {
 		if (!builderRef.current) {
 			setSaveError("Builder is not ready yet.");
@@ -355,28 +390,14 @@ export function TemplateEditorClient({
 		setSaveMessage(null);
 		setIsSaving(true);
 		try {
-			const mode = isEmail ? "email" : "landing_page";
-			const exported = await builderRef.current.exportDesign(mode);
-			const response = await fetch(`/api/templates/update/${templateId}`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					designJson: exported.json,
-					compiledHtml: exported.html,
-				}),
-			});
-			if (!response.ok) {
-				const payload = (await response.json().catch(() => ({}))) as {
-					error?: string;
-				};
-				throw new Error(payload.error ?? "Unable to save template.");
-			}
+			await flushSave();
 			setSaveMessage("Design saved successfully.");
 			setTimeout(() => setSaveMessage(null), 3000);
 			router.refresh();
 
-			// Check if it's a landing page and doesn't have a linked domain
-			if (templateKind === "LANDING_PAGE") {
+			// Check if it's a landing page and doesn't have a linked domain (sub-pages
+			// share their site's domain and never get their own, so skip them).
+			if (templateKind === "LANDING_PAGE" && !templateParentId) {
 				try {
 					const checkRes = await fetch(
 						`/api/v1/domains?templateId=${templateId}`,
@@ -465,7 +486,13 @@ export function TemplateEditorClient({
 				overflow: "hidden",
 			}}
 		>
-			{/* ── Builder Canvas ───────────────────────── */}
+			{templateKind === "LANDING_PAGE" && (
+				<PagesPanel
+					templateId={templateId}
+					subscriptionPlan={subscriptionPlan}
+					onNavigate={(pageId) => void handleNavigateToPage(pageId)}
+				/>
+			)}
 			<div style={{ flex: 1, overflow: "hidden", background: "#0a0c15" }}>
 				<PlexoBuilder
 					ref={builderRef}

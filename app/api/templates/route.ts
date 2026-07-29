@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { getTierFeatures } from "@/lib/subscription";
+import { ensureUniqueSlug } from "@/server/slug";
 
 type TemplateSummary = {
   id: string;
@@ -13,11 +14,17 @@ type TemplateSummary = {
   kind: TemplateKind;
   createdAt: string;
   updatedAt: string;
+  pageCount: number;
 };
 
 type CreateTemplateBody = {
   name?: string;
   kind?: "EMAIL" | "LANDING_PAGE";
+  // Present when creating a sub-page from the editor's Pages panel — the
+  // new template is nested under this existing LANDING_PAGE template
+  // instead of appearing as its own top-level dashboard entry.
+  parentId?: string;
+  slug?: string;
 };
 
 const BLANK_TEMPLATE_SHELL = {
@@ -36,6 +43,7 @@ function serializeTemplate(record: {
   kind: TemplateKind;
   createdAt: Date;
   updatedAt: Date;
+  _count?: { pages: number };
 }): TemplateSummary {
   return {
     id: record.id,
@@ -43,6 +51,7 @@ function serializeTemplate(record: {
     kind: record.kind,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    pageCount: record._count?.pages ?? 0,
   };
 }
 
@@ -102,8 +111,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Sub-pages (parentId set) are managed inside their parent's editor via
+  // the Pages panel, not listed as their own top-level dashboard entries.
   const templates = await prisma.template.findMany({
-    where: { userId: resolved.userId },
+    where: { userId: resolved.userId, parentId: null },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -111,6 +122,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       kind: true,
       createdAt: true,
       updatedAt: true,
+      _count: { select: { pages: true } },
     },
   });
 
@@ -136,9 +148,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Template name is required." }, { status: 400 });
   }
 
-  // Enforce template limit based on subscription plan
-  if (features.maxTemplates !== -1) {
-    const count = await prisma.template.count({ where: { userId: resolved.userId } });
+  const parentId = body.parentId?.trim() || null;
+  let parent: { id: string; kind: TemplateKind } | null = null;
+  if (parentId) {
+    // Multi-page sites are an Ultra feature. A page's sub-pages are unlimited
+    // once enabled (see the template-limit check below, which only counts
+    // root/home pages) — Ultra-gating is the actual scarcity control here.
+    if (!features.multiPageSitesEnabled) {
+      return NextResponse.json(
+        { error: "Multi-page sites require an Ultra subscription plan.", plan: resolved.subscriptionPlan },
+        { status: 403 },
+      );
+    }
+    parent = await prisma.template.findFirst({
+      where: { id: parentId, userId: resolved.userId },
+      select: { id: true, kind: true },
+    });
+    if (!parent) {
+      return NextResponse.json({ error: "Parent page not found." }, { status: 404 });
+    }
+    if (parent.kind !== TemplateKind.LANDING_PAGE) {
+      return NextResponse.json({ error: "Only landing pages can have sub-pages." }, { status: 400 });
+    }
+  } else if (features.maxTemplates !== -1) {
+    // The plan's template limit counts root/home pages only — a page with
+    // five sub-pages still counts as one template against this limit, not six.
+    const count = await prisma.template.count({ where: { userId: resolved.userId, parentId: null } });
     if (count >= features.maxTemplates) {
       return NextResponse.json(
         {
@@ -150,7 +185,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  const kind = body.kind === "LANDING_PAGE" ? TemplateKind.LANDING_PAGE : TemplateKind.EMAIL;
+  // A sub-page always belongs to the same landing-page tree as its parent.
+  const kind = parent ? TemplateKind.LANDING_PAGE : (body.kind === "LANDING_PAGE" ? TemplateKind.LANDING_PAGE : TemplateKind.EMAIL);
 
   // Enforce landing page access
   if (kind === TemplateKind.LANDING_PAGE && !features.landingPagesEnabled) {
@@ -160,11 +196,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  let slug: string | null = null;
+  let order = 0;
+  if (parentId) {
+    slug = await ensureUniqueSlug(parentId, body.slug?.trim() || name);
+    const lastSibling = await prisma.template.findFirst({
+      where: { parentId },
+      orderBy: { order: "desc" },
+      select: { order: true },
+    });
+    order = (lastSibling?.order ?? -1) + 1;
+  }
+
   const template = await prisma.template.create({
     data: {
       userId: resolved.userId,
       name,
       kind,
+      parentId,
+      slug,
+      order,
       designJson: BLANK_TEMPLATE_SHELL,
       compiledHtml: "",
     },

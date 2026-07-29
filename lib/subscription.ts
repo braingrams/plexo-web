@@ -38,6 +38,13 @@ export type TierFeatures = {
    * not just a convenience feature.
    */
   hostManagedAiEnabled: boolean;
+  /**
+   * Whether the account can turn a landing page into a multi-page site
+   * (add sub-pages nested under it, e.g. /about, /blog/post-1). Gated to
+   * Ultra: sub-pages are unlimited per site once enabled (maxTemplates only
+   * counts root/home pages), so this is the actual scarcity control.
+   */
+  multiPageSitesEnabled: boolean;
 };
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
@@ -51,6 +58,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     sdkAiTier: "BASIC",
     manageLandingPagePublishingEnabled: false,
     hostManagedAiEnabled: false,
+    multiPageSitesEnabled: false,
   },
   PRO: {
     maxTemplates: 20,
@@ -62,6 +70,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     sdkAiTier: "MEDIUM",
     manageLandingPagePublishingEnabled: false,
     hostManagedAiEnabled: false,
+    multiPageSitesEnabled: false,
   },
   ULTRA: {
     maxTemplates: -1, // unlimited
@@ -73,6 +82,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     sdkAiTier: "HIGH",
     manageLandingPagePublishingEnabled: true,
     hostManagedAiEnabled: true,
+    multiPageSitesEnabled: true,
   },
 };
 

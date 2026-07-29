@@ -148,11 +148,26 @@ model Template {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
+  // Multipage support: a LANDING_PAGE template with parentId == null is a
+  // standalone/home page (the thing a PublishedDomain links to, unchanged
+  // from pre-multipage behavior). A non-null parentId makes this row a
+  // sub-page reachable at <domain>/<slug> under its parent — and since the
+  // parent can itself be a sub-page, arbitrary nesting (/blog/post-1) falls
+  // out of this self-relation without any extra modeling.
+  parentId String? @db.Uuid
+  // One path segment (e.g. "post-1"), not the full path. Null for root pages.
+  slug     String?
+  order    Int     @default(0)
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent   Template?  @relation("TemplatePages", fields: [parentId], references: [id], onDelete: Cascade)
+  pages    Template[] @relation("TemplatePages")
   publishedDomains PublishedDomain[]
   pageViews PageView[]
 
+  @@unique([parentId, slug])
   @@index([userId])
+  @@index([parentId])
 }
 
 model Account {

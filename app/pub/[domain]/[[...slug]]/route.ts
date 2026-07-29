@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import type { Template } from "@prisma/client";
 import { prisma } from "@/server/prisma";
 import { parseUserAgent, extractGeoFromHeaders } from "@/server/analytics";
 
@@ -28,7 +29,28 @@ export async function GET(
     });
   }
 
-  if (!published || !published.template) {
+  // Walk the requested path segment by segment through the page tree rooted
+  // at the domain's home template — sub-pages can nest arbitrarily deep
+  // (e.g. /blog/post-1), each segment just matches one child's slug.
+  let resolvedTemplate: Template | null = published?.template ?? null;
+  const slugSegments = params.slug ?? [];
+  if (resolvedTemplate && slugSegments.length > 0) {
+    let cursor: Template = resolvedTemplate;
+    let found = true;
+    for (const segment of slugSegments) {
+      const child = await prisma.template.findFirst({
+        where: { parentId: cursor.id, slug: segment },
+      });
+      if (!child) {
+        found = false;
+        break;
+      }
+      cursor = child;
+    }
+    resolvedTemplate = found ? cursor : null;
+  }
+
+  if (!published || !resolvedTemplate) {
     return new NextResponse(
       `<!DOCTYPE html>
       <html>
@@ -68,7 +90,7 @@ export async function GET(
 
     void prisma.pageView.create({
       data: {
-        templateId: published.templateId,
+        templateId: resolvedTemplate.id,
         domain: rawDomain,
         ipHash,
         userAgent,
@@ -85,7 +107,7 @@ export async function GET(
   }
 
   // Return the compiled HTML
-  return new NextResponse(published.template.compiledHtml, {
+  return new NextResponse(resolvedTemplate.compiledHtml, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
     },

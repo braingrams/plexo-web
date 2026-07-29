@@ -53,6 +53,7 @@ export default async function TemplateEditorPage(
         id: true,
         name: true,
         kind: true,
+        parentId: true,
         designJson: true,
       },
     }),
@@ -95,6 +96,7 @@ export default async function TemplateEditorPage(
       templateId={template.id}
       templateName={template.name}
       templateKind={template.kind}
+      templateParentId={template.parentId}
       initialDesignJson={initialDesignJson}
       subscriptionPlan={user?.subscriptionPlan ?? "ULTRA"}
       useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}

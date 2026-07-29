@@ -14,6 +14,7 @@ type TemplateSummary = {
   compiledHtml: string;
   createdAt: string;
   updatedAt: string;
+  pageCount: number;
 };
 
 function serializeTemplate(record: {
@@ -23,6 +24,7 @@ function serializeTemplate(record: {
   compiledHtml: string;
   createdAt: Date;
   updatedAt: Date;
+  _count: { pages: number };
 }): TemplateSummary {
   return {
     id: record.id,
@@ -31,6 +33,7 @@ function serializeTemplate(record: {
     compiledHtml: record.compiledHtml,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    pageCount: record._count.pages,
   };
 }
 
@@ -42,8 +45,10 @@ export default async function TemplatesDashboardPage() {
     redirect("/auth/login?redirectTo=/dashboard/templates");
   }
 
+  // Sub-pages (parentId set) live inside their parent's editor, not as
+  // separate top-level entries here.
   const templates = await prisma.template.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, parentId: null },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -52,6 +57,7 @@ export default async function TemplatesDashboardPage() {
       compiledHtml: true,
       createdAt: true,
       updatedAt: true,
+      _count: { select: { pages: true } },
     },
   });
 
