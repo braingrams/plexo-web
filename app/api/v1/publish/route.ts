@@ -127,9 +127,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Check template creation limits
+  // Check template creation limits — root/home pages only, so a landing page with
+  // several multipage sub-pages still counts as one against this limit, not several.
   if (features.maxTemplates !== -1) {
-    const templateCount = await prisma.template.count({ where: { userId: resolved.userId } });
+    const templateCount = await prisma.template.count({ where: { userId: resolved.userId, parentId: null } });
     if (templateCount >= features.maxTemplates) {
       return NextResponse.json(
         { error: `Template limit reached (${features.maxTemplates}). Upgrade plan to create more pages.` },

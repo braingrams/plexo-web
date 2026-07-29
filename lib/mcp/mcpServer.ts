@@ -5,6 +5,15 @@ import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, 
 import { getTierFeatures } from "@/lib/subscription";
 import { resolveUser, getDomainLimit } from "@/app/api/v1/domains/route";
 import { resolveStrataProjectId, fetchStrataTokens } from "@/server/strata";
+import {
+  slugify,
+  isValidSlugSegment,
+  ensureUniqueSlug,
+  isSameOrAncestor,
+  getPageTree,
+  pathForPage,
+  getDescendantIds,
+} from "@/server/slug";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -35,6 +44,76 @@ function validateDesignJson(rawDesignJson: any): any {
     throw new Error(`designJson failed schema validation: ${formatValidationIssues(validation.error)}. ${SCHEMA_HINT}`);
   }
   return validation.data;
+}
+
+/**
+ * Validates and links a domain to an existing template — shared by
+ * publish_landing_page (domain arg on a freshly-created template) and
+ * publish_existing_landing_page (an already-existing one). Correctly
+ * rejects re-linking a domain owned by a different account (409-equivalent
+ * thrown error) — the same check app/api/v1/publish/route.ts's REST
+ * counterpart already enforces.
+ */
+async function linkDomainToTemplate(
+  resolved: { userId: string; subscriptionPlan: string; customDomainLimit: number | null },
+  templateId: string,
+  rawDomainInput: string,
+  domainTypeInput?: "SUBDOMAIN" | "CUSTOM"
+): Promise<{ finalDomain: string; publishedUrl: string }> {
+  const rawDomain = rawDomainInput.trim().toLowerCase();
+  if (!rawDomain) {
+    throw new Error("A domain is required to publish.");
+  }
+
+  const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+  const baseDomain = new URL(baseAppUrl).hostname;
+
+  let domainType = domainTypeInput;
+  if (!domainType) {
+    domainType = rawDomain.includes(".") ? "CUSTOM" : "SUBDOMAIN";
+  }
+
+  let finalDomain = rawDomain;
+  if (domainType === "SUBDOMAIN") {
+    if (!SUBDOMAIN_REGEX.test(rawDomain)) {
+      throw new Error("Subdomain slug must be lowercase alphanumeric characters or hyphens.");
+    }
+    if (RESERVED_SUBDOMAINS.has(rawDomain)) {
+      throw new Error(`Subdomain '${rawDomain}' is reserved.`);
+    }
+    finalDomain = `${rawDomain}.${baseDomain}`;
+  } else {
+    if (!DOMAIN_REGEX.test(rawDomain)) {
+      throw new Error("Invalid custom domain format.");
+    }
+    if (rawDomain.endsWith("." + baseDomain) || rawDomain === baseDomain) {
+      throw new Error("Custom domains cannot end with the platform base domain.");
+    }
+  }
+
+  const currentDomainCount = await prisma.publishedDomain.count({ where: { userId: resolved.userId } });
+  const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
+  if (currentDomainCount >= domainLimit) {
+    throw new Error(`Published domain limit reached (${domainLimit}). Unlink an existing domain to publish a new one.`);
+  }
+
+  const existingDomain = await prisma.publishedDomain.findUnique({ where: { domain: finalDomain } });
+  if (existingDomain) {
+    if (existingDomain.userId !== resolved.userId) {
+      throw new Error(`Domain '${finalDomain}' is already registered by another account.`);
+    }
+    await prisma.publishedDomain.update({
+      where: { id: existingDomain.id },
+      data: { templateId, type: domainType },
+    });
+  } else {
+    await prisma.publishedDomain.create({
+      data: { userId: resolved.userId, templateId, domain: finalDomain, type: domainType },
+    });
+  }
+
+  const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+  return { finalDomain, publishedUrl: `${protocol}://${finalDomain}` };
 }
 
 export const PLEXO_MCP_TOOLS = [
@@ -335,6 +414,151 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page/create_email_
     },
   },
   {
+    name: "create_landing_page",
+    description: `Creates and saves a landing page template WITHOUT publishing it to a domain — use this when the user wants to build a page (or start a multi-page site) first and go live later. Call publish_existing_landing_page afterward with the returned templateId to link a subdomain or custom domain whenever they're ready. To create a page AND publish it in one step, use publish_landing_page instead.
+
+Uses the SAME fully-hydrated layout schema as publish_landing_page — designJson MUST be { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [...] }] }] } }. See publish_landing_page's description for a full worked example.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Title of the landing page (e.g. 'Kicks Store').",
+        },
+        designJson: {
+          type: "object",
+          description: "Plexo layout schema object — same shape as publish_landing_page's designJson.",
+        },
+      },
+      required: ["name", "designJson"],
+    },
+  },
+  {
+    name: "publish_existing_landing_page",
+    description: `Links a subdomain or custom domain to an already-existing landing page template — for a template created via create_landing_page, or the home page of a multi-page site (see create_landing_page_subpage) once its sub-pages are ready. Unlike publish_landing_page, this does NOT create a new template — it publishes the one you already have. Every sub-page nested under templateId automatically becomes reachable at this domain too (e.g. domain.com/about) — no separate publish call is needed per sub-page.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of an existing landing page template to publish — must be a home page (no parent), not a sub-page.",
+        },
+        domain: {
+          type: "string",
+          description: "Subdomain slug (e.g. 'kicks') or custom domain ('kicks.com').",
+        },
+        type: {
+          type: "string",
+          enum: ["SUBDOMAIN", "CUSTOM"],
+          description: "Domain routing type. Inferred from the domain string if omitted.",
+        },
+      },
+      required: ["templateId", "domain"],
+    },
+  },
+  {
+    name: "create_landing_page_subpage",
+    description: `Adds a new page nested under an existing landing page, reachable at <site domain>/<slug> — or nested deeper (e.g. /blog/post-1) if parentTemplateId is itself a sub-page rather than the home page. This is how a single landing page becomes a multi-page site. No separate publish step is needed for sub-pages: they automatically become reachable once the site's home page has a domain linked (see publish_existing_landing_page). Requires an Ultra subscription plan — sub-pages are otherwise unlimited per site once enabled (the plan's template limit only counts home pages, not their sub-pages).
+
+designJson is optional — omit it to create a blank page (fill it in afterward with update_template using the returned templateId), or provide it to populate content in the same call. Uses the same fully-hydrated layout schema as publish_landing_page.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        parentTemplateId: {
+          type: "string",
+          description: "ID of the page this new page should be nested under — the site's home page for a top-level page (e.g. /about), or another sub-page's ID to nest deeper (e.g. a 'Blog' page's ID to create /blog/post-1).",
+        },
+        name: {
+          type: "string",
+          description: "Friendly name of the page (e.g. 'About Us').",
+        },
+        slug: {
+          type: "string",
+          description: "Optional URL segment (e.g. 'about-us'). Auto-generated from name if omitted; auto-suffixed (about-us-2, ...) if it collides with a sibling page under the same parent.",
+        },
+        designJson: {
+          type: "object",
+          description: "Optional. Plexo layout schema object — same shape as publish_landing_page's designJson. Omit to create a blank page.",
+        },
+      },
+      required: ["parentTemplateId", "name"],
+    },
+  },
+  {
+    name: "get_landing_page_pages",
+    description: "Returns every page belonging to the same multi-page site as the given template — its home page plus all nested sub-pages, each with its name, URL segment (slug), parent, and full resolved path (e.g. '/blog/post-1'). Pass the home page's ID or any sub-page's ID — either way you get the whole tree back. Use this before create_landing_page_subpage/update_landing_page_page when you need to know what pages already exist or what a page's current slug/parent is.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the site's home page, or any sub-page within it.",
+        },
+      },
+      required: ["templateId"],
+    },
+  },
+  {
+    name: "update_landing_page_page",
+    description: `Renames a page, changes its URL segment (slug), moves it under a different parent page, or reorders it among its siblings. The home page of a site (no parent) can be renamed but has no slug of its own and can't be re-parented — use publish_existing_landing_page to manage its domain instead.
+
+To edit a page's CONTENT (designJson), use update_template with the same templateId instead — this tool only manages the page's place in the site's structure, not what's on it.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the page to update.",
+        },
+        name: {
+          type: "string",
+          description: "Optional new name.",
+        },
+        slug: {
+          type: "string",
+          description: "Optional new URL segment. Not allowed for the home page.",
+        },
+        parentTemplateId: {
+          type: "string",
+          description: "Optional new parent page ID, to move this page elsewhere in the site's tree. Rejected if it would create a cycle (e.g. moving a page underneath its own sub-page).",
+        },
+        order: {
+          type: "number",
+          description: "Optional sort position among sibling pages under the same parent (lower = earlier).",
+        },
+      },
+      required: ["templateId"],
+    },
+  },
+  {
+    name: "delete_landing_page_page",
+    description: "Deletes a page. If it has sub-pages nested under it, they're deleted too (cascade) — the response reports how many. Deleting a site's home page deletes the whole site, including every page nested under it and its published domain link — this can't be undone, confirm with the user first.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the page to delete.",
+        },
+      },
+      required: ["templateId"],
+    },
+  },
+  {
+    name: "duplicate_landing_page_page",
+    description: "Clones a sub-page's content into a new sibling page under the same parent — handy for building several similar pages (e.g. multiple product pages) without starting blank. Not available for a site's home page. Requires an Ultra subscription plan.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the sub-page to duplicate — must not be a home page.",
+        },
+      },
+      required: ["templateId"],
+    },
+  },
+  {
     name: "list_landing_pages",
     description: "Lists all saved landing page templates and published domain URLs in the user's Plexo account.",
     inputSchema: {
@@ -494,7 +718,6 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           });
 
           const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
-          const baseDomain = new URL(baseAppUrl).hostname;
           const editableUrl = `${baseAppUrl}/dashboard/templates/${template.id}`;
 
           if (!rawDomain) {
@@ -508,46 +731,13 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             break;
           }
 
-          if (!domainType) {
-            domainType = rawDomain.includes(".") ? "CUSTOM" : "SUBDOMAIN";
-          }
-
-          let finalDomain = rawDomain;
-          if (domainType === "SUBDOMAIN") {
-            finalDomain = `${rawDomain}.${baseDomain}`;
-          }
-
-          const existingDomain = await prisma.publishedDomain.findUnique({
-            where: { domain: finalDomain },
-          });
-
-          if (existingDomain) {
-            await prisma.publishedDomain.update({
-              where: { domain: finalDomain },
-              data: {
-                templateId: template.id,
-                userId: resolved.userId,
-                type: domainType,
-              },
-            });
-          } else {
-            await prisma.publishedDomain.create({
-              data: {
-                userId: resolved.userId,
-                templateId: template.id,
-                domain: finalDomain,
-                type: domainType,
-              },
-            });
-          }
-
-          const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+          const { finalDomain, publishedUrl } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
           toolResult = {
             success: true,
             templateId: template.id,
             name: template.name,
             domain: finalDomain,
-            publishedUrl: `${protocol}://${finalDomain}`,
+            publishedUrl,
             editableUrl,
           };
           break;
@@ -662,16 +852,374 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           break;
         }
 
+        case "create_landing_page": {
+          const features = getTierFeatures(resolved.subscriptionPlan);
+          if (!features.landingPagesEnabled) {
+            throw new Error("Landing page creation requires PRO or ULTRA plan.");
+          }
+          if (features.maxTemplates !== -1) {
+            // Root/home pages only — a page's sub-pages don't count against this limit.
+            const rootCount = await prisma.template.count({ where: { userId: resolved.userId, parentId: null } });
+            if (rootCount >= features.maxTemplates) {
+              throw new Error(`Template limit reached (${features.maxTemplates}). Upgrade plan to create more.`);
+            }
+          }
+
+          const name = args.name?.trim() || "AI Landing Page";
+          let rawDesignJson = args.designJson;
+          if (typeof rawDesignJson === "string") {
+            try {
+              rawDesignJson = JSON.parse(rawDesignJson);
+            } catch (e) {
+              rawDesignJson = null;
+            }
+          }
+          if (!rawDesignJson || typeof rawDesignJson !== "object") {
+            throw new Error("designJson object is required to create a landing page.");
+          }
+
+          const designJson = validateDesignJson(rawDesignJson);
+          if (designJson.body.style) {
+            designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+          }
+          const compiledHtml = sanitizeHtml(compileToHTML(designJson));
+
+          const template = await prisma.template.create({
+            data: { userId: resolved.userId, name, kind: "LANDING_PAGE", designJson, compiledHtml },
+          });
+
+          const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+          toolResult = {
+            success: true,
+            templateId: template.id,
+            name: template.name,
+            editableUrl: `${baseAppUrl}/dashboard/templates/${template.id}`,
+            publishedUrl: null,
+            message: "Landing page created without publishing. Call publish_existing_landing_page with this templateId when ready to go live, or create_landing_page_subpage to add more pages to it first.",
+          };
+          break;
+        }
+
+        case "publish_existing_landing_page": {
+          const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+          if (!templateId) {
+            throw new Error("templateId is required.");
+          }
+          const rawDomain = typeof args.domain === "string" ? args.domain : "";
+          if (!rawDomain.trim()) {
+            throw new Error("domain is required.");
+          }
+
+          const template = await prisma.template.findFirst({
+            where: { id: templateId, userId: resolved.userId, kind: "LANDING_PAGE" },
+            select: { id: true, name: true },
+          });
+          if (!template) {
+            throw new Error(`No landing page template found with id "${templateId}" in this account. Use list_landing_pages to look up the correct id.`);
+          }
+
+          const domainType = args.type === "SUBDOMAIN" || args.type === "CUSTOM" ? args.type : undefined;
+          const { finalDomain, publishedUrl } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
+
+          const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+          toolResult = {
+            success: true,
+            templateId: template.id,
+            name: template.name,
+            domain: finalDomain,
+            publishedUrl,
+            editableUrl: `${baseAppUrl}/dashboard/templates/${template.id}`,
+          };
+          break;
+        }
+
+        case "create_landing_page_subpage": {
+          const features = getTierFeatures(resolved.subscriptionPlan);
+          if (!features.multiPageSitesEnabled) {
+            throw new Error("Multi-page sites require an Ultra subscription plan.");
+          }
+
+          const parentTemplateId = typeof args.parentTemplateId === "string" ? args.parentTemplateId.trim() : "";
+          const name = typeof args.name === "string" ? args.name.trim() : "";
+          if (!parentTemplateId || !name) {
+            throw new Error("parentTemplateId and name are required to create a sub-page.");
+          }
+
+          const parent = await prisma.template.findFirst({
+            where: { id: parentTemplateId, userId: resolved.userId },
+            select: { id: true, kind: true },
+          });
+          if (!parent) {
+            throw new Error(`No page found with id "${parentTemplateId}" in this account.`);
+          }
+          if (parent.kind !== "LANDING_PAGE") {
+            throw new Error("Only landing pages can have sub-pages.");
+          }
+
+          let rawDesignJson = args.designJson;
+          if (typeof rawDesignJson === "string") {
+            try {
+              rawDesignJson = JSON.parse(rawDesignJson);
+            } catch (e) {
+              rawDesignJson = null;
+            }
+          }
+
+          let designJson: any;
+          let compiledHtml: string;
+          if (rawDesignJson && typeof rawDesignJson === "object") {
+            designJson = validateDesignJson(rawDesignJson);
+            if (designJson.body.style) {
+              designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+            }
+            compiledHtml = sanitizeHtml(compileToHTML(designJson));
+          } else {
+            designJson = { body: { style: { background: "#0b0f19", padding: "24px" }, rows: [] } };
+            compiledHtml = "";
+          }
+
+          const slug = await ensureUniqueSlug(parentTemplateId, (typeof args.slug === "string" && args.slug.trim()) || name);
+          const lastSibling = await prisma.template.findFirst({
+            where: { parentId: parentTemplateId },
+            orderBy: { order: "desc" },
+            select: { order: true },
+          });
+
+          const page = await prisma.template.create({
+            data: {
+              userId: resolved.userId,
+              name,
+              kind: "LANDING_PAGE",
+              parentId: parentTemplateId,
+              slug,
+              order: (lastSibling?.order ?? -1) + 1,
+              designJson,
+              compiledHtml,
+            },
+          });
+
+          const tree = await getPageTree(resolved.userId, page.id);
+          const path = tree ? pathForPage(page.id, tree.pages) : `/${slug}`;
+          const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+
+          toolResult = {
+            success: true,
+            templateId: page.id,
+            parentTemplateId,
+            name: page.name,
+            slug: page.slug,
+            path,
+            editableUrl: `${baseAppUrl}/dashboard/templates/${page.id}`,
+          };
+          break;
+        }
+
+        case "get_landing_page_pages": {
+          const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+          if (!templateId) {
+            throw new Error("templateId is required.");
+          }
+
+          const tree = await getPageTree(resolved.userId, templateId);
+          if (!tree) {
+            throw new Error(`No page found with id "${templateId}" in this account.`);
+          }
+
+          toolResult = {
+            rootId: tree.rootId,
+            pages: tree.pages.map((p) => ({
+              templateId: p.id,
+              name: p.name,
+              slug: p.slug,
+              parentTemplateId: p.parentId,
+              isHomePage: p.parentId === null,
+              path: pathForPage(p.id, tree.pages),
+              order: p.order,
+            })),
+          };
+          break;
+        }
+
+        case "update_landing_page_page": {
+          const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+          if (!templateId) {
+            throw new Error("templateId is required.");
+          }
+
+          const existing = await prisma.template.findFirst({
+            where: { id: templateId, userId: resolved.userId },
+            select: { id: true, parentId: true, slug: true },
+          });
+          if (!existing) {
+            throw new Error(`No page found with id "${templateId}" in this account.`);
+          }
+
+          const data: any = {};
+
+          if (typeof args.name === "string" && args.name.trim()) {
+            data.name = args.name.trim();
+          }
+
+          if (typeof args.slug === "string") {
+            if (existing.parentId === null) {
+              throw new Error("The home page doesn't have its own URL segment.");
+            }
+            const nextSlug = slugify(args.slug);
+            if (!nextSlug || !isValidSlugSegment(nextSlug)) {
+              throw new Error("That page URL isn't valid. Use lowercase letters, numbers, and hyphens.");
+            }
+            data.slug = nextSlug;
+          }
+
+          if (typeof args.parentTemplateId === "string" && args.parentTemplateId.trim()) {
+            if (existing.parentId === null) {
+              throw new Error("The home page can't be nested under another page.");
+            }
+            const targetParentId = args.parentTemplateId.trim();
+            if (targetParentId === existing.id) {
+              throw new Error("A page can't be nested under itself.");
+            }
+            const targetParent = await prisma.template.findFirst({
+              where: { id: targetParentId, userId: resolved.userId },
+              select: { id: true },
+            });
+            if (!targetParent) {
+              throw new Error(`Target parent page "${targetParentId}" not found.`);
+            }
+            if (await isSameOrAncestor(targetParentId, existing.id)) {
+              throw new Error("Can't move a page underneath one of its own sub-pages.");
+            }
+            data.parentId = targetParentId;
+          }
+
+          if (typeof args.order === "number" && Number.isFinite(args.order)) {
+            data.order = args.order;
+          }
+
+          if (Object.keys(data).length === 0) {
+            throw new Error("Provide at least one of name, slug, parentTemplateId, or order to update.");
+          }
+
+          let updated;
+          try {
+            updated = await prisma.template.update({
+              where: { id: existing.id },
+              data,
+              select: { id: true, name: true, slug: true, parentId: true, order: true },
+            });
+          } catch (err: any) {
+            if (err?.code === "P2002") {
+              throw new Error("A page with this URL already exists here.");
+            }
+            throw err;
+          }
+
+          toolResult = {
+            success: true,
+            templateId: updated.id,
+            name: updated.name,
+            slug: updated.slug,
+            parentTemplateId: updated.parentId,
+            order: updated.order,
+          };
+          break;
+        }
+
+        case "delete_landing_page_page": {
+          const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+          if (!templateId) {
+            throw new Error("templateId is required.");
+          }
+
+          const existing = await prisma.template.findFirst({
+            where: { id: templateId, userId: resolved.userId },
+            select: { id: true, parentId: true },
+          });
+          if (!existing) {
+            throw new Error(`No page found with id "${templateId}" in this account.`);
+          }
+
+          const descendantIds = await getDescendantIds(resolved.userId, existing.id);
+          await prisma.template.delete({ where: { id: existing.id } });
+
+          toolResult = {
+            success: true,
+            deletedTemplateId: existing.id,
+            deletedDescendantCount: descendantIds.length,
+            wasHomePage: existing.parentId === null,
+          };
+          break;
+        }
+
+        case "duplicate_landing_page_page": {
+          const features = getTierFeatures(resolved.subscriptionPlan);
+          if (!features.multiPageSitesEnabled) {
+            throw new Error("Multi-page sites require an Ultra subscription plan.");
+          }
+
+          const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+          if (!templateId) {
+            throw new Error("templateId is required.");
+          }
+
+          const existing = await prisma.template.findFirst({
+            where: { id: templateId, userId: resolved.userId },
+            select: { id: true, name: true, kind: true, parentId: true, slug: true, designJson: true, compiledHtml: true },
+          });
+          if (!existing) {
+            throw new Error(`No page found with id "${templateId}" in this account.`);
+          }
+          if (!existing.parentId) {
+            throw new Error("The home page can't be duplicated from here.");
+          }
+
+          const lastSibling = await prisma.template.findFirst({
+            where: { parentId: existing.parentId },
+            orderBy: { order: "desc" },
+            select: { order: true },
+          });
+
+          const name = `${existing.name} copy`;
+          const slug = await ensureUniqueSlug(existing.parentId, `${existing.slug ?? name}-copy`);
+
+          const duplicate = await prisma.template.create({
+            data: {
+              userId: resolved.userId,
+              name,
+              kind: existing.kind,
+              parentId: existing.parentId,
+              slug,
+              order: (lastSibling?.order ?? -1) + 1,
+              designJson: existing.designJson as any,
+              compiledHtml: existing.compiledHtml,
+            },
+          });
+
+          const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+          toolResult = {
+            success: true,
+            templateId: duplicate.id,
+            name: duplicate.name,
+            slug: duplicate.slug,
+            parentTemplateId: duplicate.parentId,
+            editableUrl: `${baseAppUrl}/dashboard/templates/${duplicate.id}`,
+          };
+          break;
+        }
+
         case "list_landing_pages": {
           const templates = await prisma.template.findMany({
             where: { userId: resolved.userId, kind: "LANDING_PAGE" },
-            select: { id: true, name: true, createdAt: true, updatedAt: true },
+            select: { id: true, name: true, parentId: true, slug: true, createdAt: true, updatedAt: true },
           });
           const domains = await prisma.publishedDomain.findMany({
             where: { userId: resolved.userId },
             select: { domain: true, type: true, templateId: true },
           });
-          toolResult = { templates, publishedDomains: domains };
+          toolResult = {
+            templates: templates.map((t) => ({ ...t, isHomePage: t.parentId === null })),
+            publishedDomains: domains,
+          };
           break;
         }
 
