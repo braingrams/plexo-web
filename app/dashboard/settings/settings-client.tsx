@@ -45,6 +45,7 @@ type BillingProps = {
 type Props = {
   initialApiKeys: SettingsApiKey[];
   initialManageLandingPagePublishing: boolean;
+  initialHideBranding: boolean;
   billing: BillingProps;
 };
 
@@ -215,12 +216,17 @@ function CustomSelect({
   );
 }
 
-export function SettingsClient({ initialApiKeys, initialManageLandingPagePublishing, billing }: Props) {
+export function SettingsClient({ initialApiKeys, initialManageLandingPagePublishing, initialHideBranding, billing }: Props) {
   const [apiKeys, setApiKeys] = useState<SettingsApiKey[]>(initialApiKeys);
   const isUltra = billing.plan === "ULTRA";
+  const isProOrAbove = billing.plan === "PRO" || billing.plan === "ULTRA";
   const [manageLandingPagePublishing, setManageLandingPagePublishing] = useState<boolean>(initialManageLandingPagePublishing);
   const [publishSettingSaving, setPublishSettingSaving] = useState(false);
   const [publishSettingError, setPublishSettingError] = useState<string | null>(null);
+  const [hideBranding, setHideBranding] = useState<boolean>(initialHideBranding);
+  const [brandingSaving, setBrandingSaving] = useState(false);
+  const [brandingError, setBrandingError] = useState<string | null>(null);
+  const [brandingUpgradeRedirecting, setBrandingUpgradeRedirecting] = useState(false);
   const [activeKeyId, setActiveKeyId] = useState<string | null>(
     initialApiKeys.find((item) => item.isActive)?.id ?? initialApiKeys[0]?.id ?? null,
   );
@@ -413,6 +419,51 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
       setPublishSettingError(error instanceof Error ? error.message : "Unable to update this setting.");
     } finally {
       setPublishSettingSaving(false);
+    }
+  }
+
+  // FREE users clicking this should get a seamless upgrade path, not an inert control — so
+  // this branches to Stripe Checkout instead of using a plain native `disabled` toggle (which
+  // would swallow the click). Reuses the same /api/billing/checkout pattern as billing-section.
+  async function onBrandingToggleClick(): Promise<void> {
+    if (!isProOrAbove) {
+      setBrandingUpgradeRedirecting(true);
+      setBrandingError(null);
+      try {
+        const res = await fetch("/api/billing/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "subscription", plan: "PRO" }),
+        });
+        const data = (await res.json()) as { url?: string; error?: string };
+        if (!res.ok || !data.url) throw new Error(data.error ?? "Could not start checkout.");
+        window.location.href = data.url;
+      } catch (err) {
+        setBrandingUpgradeRedirecting(false);
+        setBrandingError(err instanceof Error ? err.message : "Could not start checkout.");
+      }
+      return;
+    }
+
+    const next = !hideBranding;
+    setHideBranding(next);
+    setBrandingSaving(true);
+    setBrandingError(null);
+    try {
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hideBranding: next }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error ?? "Unable to update this setting.");
+      }
+    } catch (error) {
+      setHideBranding(!next);
+      setBrandingError(error instanceof Error ? error.message : "Unable to update this setting.");
+    } finally {
+      setBrandingSaving(false);
     }
   }
 
@@ -642,6 +693,73 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
           )}
           {publishSettingError && (
             <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.75rem" }}>{publishSettingError}</p>
+          )}
+        </div>
+
+        {/* ── PLEXO BRANDING ──────────────────────── */}
+        <div style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 16, padding: "1.5rem",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+            <div>
+              <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.35rem" }}>
+                Plexo Branding
+              </h2>
+              <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.35)", maxWidth: 520 }}>
+                Pages published on your plexopages.io subdomain show a "Hosted with Plexo" bar. Hide it on Pro or Ultra.
+              </p>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
+              {!isProOrAbove && (
+                <span style={{
+                  fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.05em",
+                  textTransform: "uppercase", color: "var(--brand)",
+                  background: "var(--brand-subtle)", padding: "0.2rem 0.5rem", borderRadius: 5
+                }}>
+                  Requires Pro
+                </span>
+              )}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={hideBranding}
+                aria-disabled={!isProOrAbove}
+                id="toggle-hide-branding"
+                onClick={() => void onBrandingToggleClick()}
+                style={{
+                  position: "relative",
+                  width: 44, height: 24,
+                  borderRadius: 999,
+                  background: hideBranding ? "var(--brand)" : "rgba(255,255,255,0.1)",
+                  border: hideBranding ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.12)",
+                  cursor: brandingSaving || brandingUpgradeRedirecting ? "default" : "pointer",
+                  opacity: isProOrAbove ? 1 : 0.5,
+                  transition: "background 0.2s, border-color 0.2s",
+                  flexShrink: 0,
+                }}
+              >
+                <span style={{
+                  position: "absolute",
+                  top: 3, left: hideBranding ? 22 : 3,
+                  width: 16, height: 16, borderRadius: "50%",
+                  background: "#fff",
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+                  transition: "left 0.2s cubic-bezier(0.4,0,0.2,1)",
+                }} />
+              </button>
+            </div>
+          </div>
+
+          {!isProOrAbove && (
+            <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginTop: "1rem" }}>
+              {brandingUpgradeRedirecting ? "Redirecting to checkout…" : "Click the toggle to upgrade to Pro and hide the Plexo badge on your published pages."}
+            </p>
+          )}
+          {brandingError && (
+            <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.75rem" }}>{brandingError}</p>
           )}
         </div>
 

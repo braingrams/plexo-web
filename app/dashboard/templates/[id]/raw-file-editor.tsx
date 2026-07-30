@@ -1,8 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import CodeMirror, { EditorView } from "@uiw/react-codemirror";
+import { html } from "@codemirror/lang-html";
+import { css } from "@codemirror/lang-css";
+import { javascript } from "@codemirror/lang-javascript";
+import { oneDark } from "@codemirror/theme-one-dark";
 import type { FileEntry } from "@/app/api/v1/templates/[id]/files/route";
 import { buildPreviewHtml } from "./preview-utils";
 import { PagesPanel } from "./PagesPanel";
@@ -35,6 +40,30 @@ function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
+
+/** CodeMirror's language package picks syntax highlighting/indentation rules per file type;
+ * html() already knows how to highlight embedded <style>/<script> blocks, so .html/.htm
+ * cover typical raw-upload pages without needing the css/js packages nested manually. */
+function getLanguageExtension(path: string) {
+  const ext = path.toLowerCase().split(".").pop() ?? "";
+  if (ext === "css") return css();
+  if (ext === "js" || ext === "mjs" || ext === "cjs") return javascript();
+  return html();
+}
+
+// Matches the app's dark shell (#0b0f19 background) instead of oneDark's default panel color,
+// so the editor doesn't look like a mismatched widget dropped into the page.
+const editorTheme = EditorView.theme(
+  {
+    "&": { backgroundColor: "#0b0f19", height: "100%" },
+    ".cm-content": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.85rem", padding: "1.25rem 1.25rem 1.25rem 0" },
+    ".cm-gutters": { backgroundColor: "#0b0f19", borderRight: "1px solid rgba(255,255,255,0.06)", color: "rgba(240,242,255,0.25)" },
+    ".cm-activeLineGutter": { backgroundColor: "rgba(255,255,255,0.04)" },
+    ".cm-activeLine": { backgroundColor: "rgba(255,255,255,0.03)" },
+    "&.cm-focused": { outline: "none" },
+  },
+  { dark: true }
+);
 
 export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Props) {
   const router = useRouter();
@@ -89,6 +118,10 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
   }, []);
 
   const activeFile = files.find((f) => f.path === activePath) ?? null;
+  const languageExtension = useMemo(
+    () => (activeFile ? getLanguageExtension(activeFile.path) : html()),
+    [activeFile]
+  );
   const isDirty = useCallback(
     (path: string) => edits[path] !== undefined && edits[path] !== savedContent[path],
     [edits, savedContent]
@@ -296,16 +329,18 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
         {/* Editor / binary preview pane */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
           {!activeFile ? null : activeFile.editable ? (
-            <textarea
-              value={edits[activeFile.path] ?? ""}
-              onChange={(e) => setEdits((prev) => ({ ...prev, [activeFile.path]: e.target.value }))}
-              spellCheck={false}
-              style={{
-                flex: 1, width: "100%", resize: "none", border: "none", outline: "none",
-                background: "#0b0f19", color: "#e2e4f5", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                fontSize: "0.85rem", lineHeight: 1.6, padding: "1.25rem", tabSize: 2,
-              }}
-            />
+            <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
+              <CodeMirror
+                value={edits[activeFile.path] ?? ""}
+                onChange={(value) => setEdits((prev) => ({ ...prev, [activeFile.path]: value }))}
+                extensions={[languageExtension, editorTheme, EditorView.lineWrapping]}
+                theme={oneDark}
+                basicSetup={{ tabSize: 2 }}
+                indentWithTab
+                height="100%"
+                style={{ flex: 1, minWidth: 0, overflow: "auto" }}
+              />
+            </div>
           ) : (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1rem", color: "rgba(240,242,255,0.5)" }}>
               {activeFile.contentType.startsWith("image/") && activeFile.url ? (

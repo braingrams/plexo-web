@@ -33,11 +33,19 @@ export default async function OverviewPage() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { name: true, subscriptionPlan: true },
+    select: { name: true, subscriptionPlan: true, pendingPlan: true },
   });
 
   if (!user) {
     redirect("/auth/login");
+  }
+
+  // User picked Pro/Ultra at signup but hasn't completed payment yet (subscriptionPlan
+  // only flips once the Stripe webhook confirms an active subscription) — a UX nudge,
+  // not the real security boundary: every actual entitlement check reads subscriptionPlan
+  // directly regardless of whether the user ever passes through this page.
+  if (user.pendingPlan && user.pendingPlan !== user.subscriptionPlan) {
+    redirect("/auth/complete-subscription");
   }
 
   return (

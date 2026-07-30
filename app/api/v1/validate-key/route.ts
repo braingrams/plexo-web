@@ -33,7 +33,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    let subscriptionPlan = "ULTRA";
+    let subscriptionPlan = "FREE";
     let useAi = false;
     let aiProvider = "openai";
     let aiTier = "AUTO";
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      subscriptionPlan = user.subscriptionPlan ?? "ULTRA";
+      subscriptionPlan = user.subscriptionPlan ?? "FREE";
       manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user.manageLandingPagePublishing);
       if (user.apiKeys?.[0]) {
         useAi = user.apiKeys[0].useAi;
@@ -111,7 +111,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         select: { subscriptionPlan: true, manageLandingPagePublishing: true },
       });
 
-      subscriptionPlan = user?.subscriptionPlan ?? "ULTRA";
+      subscriptionPlan = user?.subscriptionPlan ?? "FREE";
       manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user?.manageLandingPagePublishing);
       useAi = apiKey.useAi;
       aiProvider = apiKey.aiProvider;

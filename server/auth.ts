@@ -229,6 +229,29 @@ export const auth = betterAuth({
     fields: {
       emailVerified: "isConfirmed",
     },
+    additionalFields: {
+      // Carries the plan picked on the pricing page straight into user creation — see
+      // databaseHooks below for why this can't instead be a follow-up authenticated write.
+      pendingPlan: { type: "string", required: false, input: true },
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        // signUp.email() never has a session to attach a follow-up write to: with
+        // requireEmailVerification true (below), better-auth unconditionally skips
+        // auto-sign-in, so there's no cookie yet at the point registration would otherwise
+        // call an authenticated "set my pending plan" endpoint. additionalFields only
+        // enforces JS type ("string"), not enum membership, and pendingPlan is a real
+        // Prisma SubscriptionPlan? column — passing anything else through would throw and
+        // fail the entire signup, so this sanitizes to exactly PRO/ULTRA/null first.
+        before: async (user) => {
+          const requested = (user as Record<string, unknown>).pendingPlan;
+          const pendingPlan = requested === "PRO" || requested === "ULTRA" ? requested : null;
+          return { data: { ...user, pendingPlan } };
+        },
+      },
+    },
   },
   account: {
     modelName: "Account",

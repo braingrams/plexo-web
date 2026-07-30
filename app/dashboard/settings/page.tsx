@@ -75,7 +75,7 @@ export default async function DashboardSettingsPage() {
   const [user, recentActivity] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: session.user.id },
-      select: { subscriptionPlan: true, manageLandingPagePublishing: true },
+      select: { subscriptionPlan: true, manageLandingPagePublishing: true, hideBranding: true },
     }),
     prisma.creditLedgerEntry.findMany({
       where: { userId: session.user.id },
@@ -89,6 +89,7 @@ export default async function DashboardSettingsPage() {
       <SettingsClient
         initialApiKeys={apiKeys.map(serializeApiKey)}
         initialManageLandingPagePublishing={user.manageLandingPagePublishing}
+        initialHideBranding={user.hideBranding}
         billing={{
           plan: user.subscriptionPlan,
           allowanceBalance: balance.allowanceBalance,

@@ -1,273 +1,166 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-
-function PlexoLogo() {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", textDecoration: "none" }}>
-      <div style={{
-        width: 34, height: 34, borderRadius: 9,
-        background: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
-        display: "grid", placeItems: "center",
-        boxShadow: "0 0 20px rgba(139,92,246,0.45)",
-        flexShrink: 0,
-      }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.9" />
-          <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-      <span style={{
-        fontFamily: "var(--font-heading), sans-serif",
-        fontWeight: 700, fontSize: "1.15rem",
-        color: "#f0f2ff", letterSpacing: "-0.02em",
-      }}>Plexo</span>
-    </div>
-  );
-}
-
-function IconMenu() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <line x1="3" y1="12" x2="21" y2="12" />
-      <line x1="3" y1="18" x2="21" y2="18" />
-    </svg>
-  );
-}
-
-function IconClose() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
+import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
+import { Menu, X, Sun, Moon } from "lucide-react";
+import { PlexoLogo } from "./plexo-logo";
 
 const NAV_LINKS = [
+  { label: "Studio", href: "#studio" },
   { label: "Features", href: "#features" },
-  { label: "How It Works", href: "#how-it-works" },
   { label: "Pricing", href: "#pricing" },
+  { label: "FAQ", href: "#faq" },
 ];
 
-/**
- * The landing page's fixed navbar. Split into its own client component (rather than living
- * inline in the server-rendered page) purely so the mobile hamburger menu can hold its own
- * open/close state — the rest of the page stays a plain server component.
- */
+function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  // Avoids a hydration mismatch: the server has no way to know the visitor's stored
+  // theme preference, so this renders nothing until mounted client-side confirms it.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) {
+    return <div className="theme-toggle-btn" aria-hidden style={{ visibility: "hidden" }} />;
+  }
+
+  const isDark = resolvedTheme === "dark";
+  return (
+    <button
+      type="button"
+      className="theme-toggle-btn"
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+    >
+      {isDark ? <Sun size={16} /> : <Moon size={16} />}
+    </button>
+  );
+}
+
 export function LandingNav() {
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setIsScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    document.body.style.overflow = isMenuOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isMenuOpen]);
 
   return (
     <>
-      <header style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-        height: 64,
-        background: "rgba(8,9,15,0.85)",
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-      }}>
-        {/* The bar above stays full-bleed (background/blur/border touch both viewport
-            edges); this inner row is what actually caps out at 1500px, centered, so the
-            header's content lines up with the rest of the page on very wide screens. */}
-        <div style={{
-          maxWidth: 1500, margin: "0 auto", height: "100%",
-          padding: "0 1.5rem",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-        }}>
-          <Link href="/" style={{ textDecoration: "none" }} onClick={() => setMobileOpen(false)}>
-            <PlexoLogo />
-          </Link>
+      <nav className={`site-nav${isScrolled ? " is-scrolled" : ""}`}>
+        <div
+          className="landing-container"
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}
+        >
+          <PlexoLogo size={30} />
 
-          <nav className="landing-nav-center" style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-            {NAV_LINKS.map((item) => (
+          <div
+            className="nav-center-links"
+            style={{ display: "none", alignItems: "center", gap: "2rem" }}
+          >
+            {NAV_LINKS.map((link) => (
               <a
-                key={item.label}
-                href={item.href}
-                style={{
-                  padding: "0.4rem 0.85rem",
-                  borderRadius: 8,
-                  fontSize: "0.875rem",
-                  fontWeight: 500,
-                  color: "rgba(240,242,255,0.7)",
-                  textDecoration: "none",
-                  transition: "color 0.15s, background 0.15s",
-                }}
+                key={link.href}
+                href={link.href}
+                style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text-muted)", textDecoration: "none" }}
               >
-                {item.label}
+                {link.label}
               </a>
             ))}
-            <Link
-              href="/sdk"
-              style={{
-                padding: "0.4rem 0.85rem",
-                borderRadius: 8,
-                fontSize: "0.875rem",
-                fontWeight: 500,
-                color: "rgba(240,242,255,0.7)",
-                textDecoration: "none",
-                transition: "color 0.15s, background 0.15s",
-              }}
-            >
+            <Link href="/sdk" style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}>
               SDK
             </Link>
-            <Link
-              href="/mcp"
-              style={{
-                padding: "0.4rem 0.85rem",
-                borderRadius: 8,
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                color: "#a78bfa",
-                textDecoration: "none",
-                transition: "color 0.15s, background 0.15s",
-              }}
-            >
-              MCP & AI
+            <Link href="/mcp" style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}>
+              MCP
             </Link>
-          </nav>
+          </div>
 
-          <div className="landing-nav-actions" style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <Link href="/auth/login" className="landing-nav-signin" style={{
-              padding: "0.5rem 1rem",
-              borderRadius: 9,
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "rgba(240,242,255,0.8)",
-              textDecoration: "none",
-              border: "1px solid rgba(255,255,255,0.1)",
-              transition: "background 0.15s",
-            }}>
+          <div
+            className="nav-right-actions"
+            style={{ display: "none", alignItems: "center", gap: "1rem" }}
+          >
+            <ThemeToggle />
+            <Link href="/auth/login" style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text-main)", textDecoration: "none" }}>
               Sign In
             </Link>
-            <Link href="/auth/register" className="btn-brand" style={{ padding: "0.5rem 1.1rem", fontSize: "0.875rem" }}>
-              Get Started
+            <Link href="/auth/register" className="btn-brand" style={{ padding: "0.6rem 1.3rem", fontSize: "0.85rem" }}>
+              Get Started Free
             </Link>
+          </div>
 
+          <div className="nav-mobile-actions" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <ThemeToggle />
             <button
               type="button"
-              className="landing-nav-hamburger"
-              onClick={() => setMobileOpen((v) => !v)}
-              aria-label={mobileOpen ? "Close menu" : "Open menu"}
-              aria-expanded={mobileOpen}
+              aria-label={isMenuOpen ? "Close menu" : "Open menu"}
+              onClick={() => setIsMenuOpen((v) => !v)}
               style={{
-                background: "none", border: "none", cursor: "pointer",
-                color: "#f0f2ff", padding: "0.35rem", display: "none",
-                alignItems: "center", justifyContent: "center",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                width: 36, height: 36, borderRadius: 10, border: "1px solid var(--surface-border)",
+                background: "var(--surface)", color: "var(--text-main)", cursor: "pointer",
               }}
             >
-              {mobileOpen ? <IconClose /> : <IconMenu />}
+              {isMenuOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
           </div>
         </div>
-      </header>
+      </nav>
 
-      {mobileOpen && (
+      {isMenuOpen && (
         <div
-          className="landing-nav-mobile-panel"
           style={{
-            position: "fixed",
-            top: 64, left: 0, right: 0, bottom: 0,
-            zIndex: 99,
-            background: "rgba(8,9,15,0.98)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-            padding: "1.5rem",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.25rem",
-            overflowY: "auto",
+            position: "fixed", inset: 0, zIndex: 90, background: "var(--bg)",
+            paddingTop: "6rem", display: "flex", flexDirection: "column",
+            alignItems: "center", gap: "1.75rem",
           }}
         >
-          {NAV_LINKS.map((item) => (
+          {NAV_LINKS.map((link) => (
             <a
-              key={item.label}
-              href={item.href}
-              onClick={() => setMobileOpen(false)}
-              style={{
-                padding: "0.9rem 0.5rem",
-                fontSize: "1.05rem",
-                fontWeight: 600,
-                color: "rgba(240,242,255,0.85)",
-                textDecoration: "none",
-                borderBottom: "1px solid rgba(255,255,255,0.06)",
-              }}
+              key={link.href}
+              href={link.href}
+              onClick={() => setIsMenuOpen(false)}
+              style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--text-main)", textDecoration: "none" }}
             >
-              {item.label}
+              {link.label}
             </a>
           ))}
-          <Link
-            href="/sdk"
-            onClick={() => setMobileOpen(false)}
-            style={{
-              padding: "0.9rem 0.5rem",
-              fontSize: "1.05rem",
-              fontWeight: 600,
-              color: "rgba(240,242,255,0.85)",
-              textDecoration: "none",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-            }}
-          >
+          <Link href="/sdk" onClick={() => setIsMenuOpen(false)} style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--brand)", textDecoration: "none" }}>
             SDK
           </Link>
-          <Link
-            href="/mcp"
-            onClick={() => setMobileOpen(false)}
-            style={{
-              padding: "0.9rem 0.5rem",
-              fontSize: "1.05rem",
-              fontWeight: 600,
-              color: "#a78bfa",
-              textDecoration: "none",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-            }}
-          >
-            MCP & AI
+          <Link href="/mcp" onClick={() => setIsMenuOpen(false)} style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--brand)", textDecoration: "none" }}>
+            MCP
           </Link>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginTop: "1.5rem" }}>
-            <Link
-              href="/auth/login"
-              onClick={() => setMobileOpen(false)}
-              style={{
-                padding: "0.75rem 1rem", borderRadius: 9, textAlign: "center",
-                fontSize: "0.95rem", fontWeight: 600,
-                color: "rgba(240,242,255,0.8)", textDecoration: "none",
-                border: "1px solid rgba(255,255,255,0.1)",
-              }}
-            >
+          <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem", width: "80%", maxWidth: 280 }}>
+            <Link href="/auth/login" onClick={() => setIsMenuOpen(false)} className="btn-ghost" style={{ justifyContent: "center" }}>
               Sign In
             </Link>
-            <Link
-              href="/auth/register"
-              className="btn-brand"
-              onClick={() => setMobileOpen(false)}
-              style={{ padding: "0.75rem 1rem", fontSize: "0.95rem", textAlign: "center" }}
-            >
-              Get Started
+            <Link href="/auth/register" onClick={() => setIsMenuOpen(false)} className="btn-brand" style={{ justifyContent: "center" }}>
+              Get Started Free
             </Link>
           </div>
         </div>
       )}
 
-      {/*
-        :global() here because these classes sit on a next/link <Link> (and the <nav>
-        wrapping the Link-based SDK/MCP items) — styled-jsx only auto-scopes native DOM
-        tags it can see directly in this component's JSX, not the elements a wrapped
-        component like <Link> renders internally, so a scoped selector would silently
-        never match them.
-      */}
       <style jsx>{`
-        @media (max-width: 768px) {
-          :global(.landing-nav-center),
-          :global(.landing-nav-signin) {
-            display: none !important;
-          }
-          :global(.landing-nav-hamburger) {
+        @media (min-width: 900px) {
+          .nav-center-links {
             display: flex !important;
+          }
+          .nav-right-actions {
+            display: flex !important;
+          }
+          .nav-mobile-actions {
+            display: none !important;
           }
         }
       `}</style>

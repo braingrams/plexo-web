@@ -77,15 +77,15 @@ export const SEMANTIC = {
 /* ── Typography ─────────────────────────────────────────── */
 export const FONTS = {
   /**
-   * Heading font — imported in layout.tsx via next/font/google.
+   * Heading font — imported in layout.tsx via the `geist` package (geist/font/sans).
    * Change here AND update the import in layout.tsx.
    */
-  heading: "Space Grotesk",
+  heading: "Geist",
   /**
-   * Body / UI font — imported in layout.tsx via next/font/google.
+   * Body / UI font — imported in layout.tsx via the `geist` package (geist/font/sans).
    * Change here AND update the import in layout.tsx.
    */
-  body:    "Inter",
+  body:    "Geist",
 } as const;
 
 /* ── Border Radius ──────────────────────────────────────── */

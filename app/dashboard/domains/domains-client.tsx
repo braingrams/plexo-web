@@ -286,6 +286,33 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   const [deleteConfirmInfo, setDeleteConfirmInfo] = useState<{ id: string; domain: string } | null>(null);
   const [customAlertInfo, setCustomAlertInfo] = useState<{ title: string; message: string } | null>(null);
 
+  const canUseCustomDomain = plan === "PRO" || plan === "ULTRA";
+  const [upgradeRedirecting, setUpgradeRedirecting] = useState(false);
+
+  // Custom domains are a Pro/Ultra feature — a FREE user clicking this should be offered a
+  // seamless path to upgrade rather than just sitting on an inert disabled control, so this
+  // reuses the same checkout pattern as billing-section.tsx's startCheckout instead of a plain
+  // native `disabled` attribute (which would swallow the click entirely).
+  async function startUpgradeCheckout(): Promise<void> {
+    setUpgradeRedirecting(true);
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "subscription", plan: "PRO" }),
+      });
+      const data = (await res.json()) as { url?: string; error?: string };
+      if (!res.ok || !data.url) throw new Error(data.error ?? "Could not start checkout.");
+      window.location.href = data.url;
+    } catch (err) {
+      setUpgradeRedirecting(false);
+      setCustomAlertInfo({
+        title: "Could not start checkout",
+        message: err instanceof Error ? err.message : "Could not start checkout.",
+      });
+    }
+  }
+
   const handleCopy = (text: string, field: string) => {
     navigator.clipboard.writeText(text);
     setCopiedField(field);
@@ -923,17 +950,39 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDomainType("CUSTOM")}
+                    aria-disabled={!canUseCustomDomain}
+                    onClick={() => {
+                      if (!canUseCustomDomain) {
+                        void startUpgradeCheckout();
+                        return;
+                      }
+                      setDomainType("CUSTOM");
+                    }}
                     style={{
-                      flex: 1, padding: "0.4rem", fontSize: "0.8rem", fontWeight: 600, border: "none", cursor: "pointer", borderRadius: 6,
+                      flex: 1, padding: "0.4rem", fontSize: "0.8rem", fontWeight: 600, border: "none", borderRadius: 6,
+                      cursor: upgradeRedirecting ? "default" : "pointer",
                       background: domainType === "CUSTOM" ? "var(--brand)" : "transparent",
-                      color: domainType === "CUSTOM" ? "#fff" : "rgba(240,242,255,0.55)",
+                      color: domainType === "CUSTOM" ? "#fff" : canUseCustomDomain ? "rgba(240,242,255,0.55)" : "rgba(240,242,255,0.3)",
                       transition: "background 0.15s, color 0.15s"
                     }}
                   >
-                    Custom Domain
+                    {upgradeRedirecting ? "Redirecting…" : "Custom Domain"}
+                    {!canUseCustomDomain && (
+                      <span style={{
+                        marginLeft: 6, fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.05em",
+                        textTransform: "uppercase", color: "var(--brand)", background: "var(--brand-subtle)",
+                        padding: "0.1rem 0.4rem", borderRadius: 4,
+                      }}>
+                        Pro
+                      </span>
+                    )}
                   </button>
                 </div>
+                {!canUseCustomDomain && (
+                  <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.4)", marginTop: "0.4rem" }}>
+                    Custom domains require a Pro or Ultra plan — click "Custom Domain" to upgrade.
+                  </p>
+                )}
               </div>
 
               {/* Input fields based on type */}

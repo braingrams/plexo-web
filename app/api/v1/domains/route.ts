@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
 import { auth } from "@/server/auth";
-import { resolveManageLandingPagePublishing } from "@/lib/subscription";
+import { resolveManageLandingPagePublishing, getTierFeatures } from "@/lib/subscription";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 
@@ -310,6 +310,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   if (type === "CUSTOM") {
+    if (!getTierFeatures(resolved.subscriptionPlan).customDomainEnabled) {
+      return NextResponse.json({
+        error: "Custom domains require a Pro or Ultra plan. Upgrade in Settings → Billing."
+      }, { status: 403 });
+    }
     try {
       await addVercelDomain(finalDomain);
     } catch (err) {

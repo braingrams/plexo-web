@@ -67,6 +67,13 @@ model User {
   // Was @default(ULTRA) pre-Phase-2 (free beta, no billing). Now that plan
   // determines real monthly AI credit allowance, new signups default to FREE.
   subscriptionPlan            SubscriptionPlan @default(FREE)
+  // Set at signup when the user picks Pro/Ultra on the pricing page, before they've paid —
+  // durably records intent across the signup -> verify-email -> first-login gap (which can
+  // span devices/time) since no session exists yet at signup time to persist this any other
+  // way (see server/auth.ts's databaseHooks). Cleared once the Stripe webhook confirms payment
+  // (or the user explicitly opts to continue on Free) — see app/dashboard/page.tsx's gate and
+  // app/auth/complete-subscription.
+  pendingPlan                 SubscriptionPlan?
   customDomainLimit           Int?
   // Timestamp of accepting the Acceptable Use Policy — required before a user's first
   // unsanitized raw-HTML publish (see app/api/v1/templates/upload-raw/route.ts).
@@ -75,6 +82,11 @@ model User {
   // per-account domain limit. Enforcement of the Ultra requirement happens in app code
   // (see lib/subscription.ts resolveManageLandingPagePublishing), not at the DB layer.
   manageLandingPagePublishing Boolean          @default(false)
+  // Pro/Ultra-gated: hides the "Hosted with Plexo" bar injected into BUILDER pages served on
+  // the shared plexopages.io subdomain (see app/pub/[domain]/[[...slug]]/route.ts). Collapsed
+  // with plan entitlement via lib/subscription.ts's resolveHideBranding, same pattern as
+  // resolveManageLandingPagePublishing, so a stale true after a downgrade doesn't leak through.
+  hideBranding                Boolean          @default(false)
   layoutMode                  LayoutMode       @default(MODERN)
   // Strata design-system project the user has connected — lets AI tooling (MCP) auto-detect
   // and fetch brand tokens without the user re-supplying a project id on every call.

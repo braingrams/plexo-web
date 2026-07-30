@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { LandingNav } from "../landing-nav";
 import {
   Bot,
   Sparkles,
@@ -37,10 +38,6 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
-
-  const serverMcpUrl = `${baseUrl}/api/v1/mcp`;
-  const authorizeUrl = `${baseUrl}/api/v1/auth/oauth/authorize`;
-  const tokenUrl = `${baseUrl}/api/v1/auth/oauth/token`;
 
   const samplePrompts = {
     prompt: {
@@ -98,58 +95,31 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
 
   return (
     <div className="min-h-screen bg-[#08090f] text-[#f0f2ff] font-sans selection:bg-[#8b5cf6] selection:text-white">
-      {/* ── Top Navbar ────────────────────────────────────────── */}
-      <header className="fixed top-0 left-0 right-0 z-50 h-16 px-6 bg-[#08090f]/90 backdrop-blur-xl border-b border-white/[0.08] flex items-center justify-between">
-        <div className="max-w-[1500px] w-full mx-auto flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5 text-decoration-none">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#8b5cf6] to-[#7c3aed] flex items-center justify-center shadow-lg shadow-[#8b5cf6]/30">
-              <Bot className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-bold text-lg text-white tracking-tight">
-              Plexo <span className="text-[#a78bfa] font-mono text-xs px-1.5 py-0.5 rounded bg-[#8b5cf6]/10 border border-[#8b5cf6]/20">MCP</span>
-            </span>
-          </Link>
+      <LandingNav />
 
-          <div className="flex items-center gap-4">
-            <Link
-              href="/dashboard/integrations"
-              className="text-xs text-white/70 hover:text-white transition font-medium hidden sm:inline-block"
-            >
-              Integration Hub
-            </Link>
-            <Link
-              href="/login"
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#7c3aed] hover:from-[#7c3aed] hover:to-[#6d28d9] text-white text-xs font-semibold shadow-md shadow-[#8b5cf6]/25 transition"
-            >
-              Get Started
-            </Link>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Main Container (Enforcing 1500px limit) ──────────────────── */}
-      <main className="pt-24 pb-20 px-4 md:px-6 max-w-[1500px] mx-auto space-y-16">
+      {/* ── Main Container ───────────────────────────────────── */}
+      <main className="pt-28 pb-20 px-4 md:px-6 max-w-[1400px] mx-auto space-y-16">
         {/* ── HERO SECTION ───────────────────────────────────── */}
-        <section className="text-center max-w-3xl mx-auto space-y-6 pt-6">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 text-[#a78bfa] text-xs font-medium backdrop-blur-md">
+        <section className="text-center max-w-3xl mx-auto space-y-6 pt-4">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 text-[#a78bfa] text-xs font-bold backdrop-blur-md uppercase tracking-wider">
             <Sparkles className="w-3.5 h-3.5 text-[#8b5cf6]" />
-            Model Context Protocol & Custom Actions
+            Model Context Protocol (@charisol/plexo-mcp)
           </div>
 
           <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-white leading-tight">
-            Prompt Any AI to <span className="bg-gradient-to-r from-[#a78bfa] via-[#818cf8] to-[#34d399] bg-clip-text text-transparent">Generate & Publish</span> Plexo Pages
+            Prompt Any AI to <span className="bg-gradient-to-r from-[#a78bfa] via-[#818cf8] to-[#34d399] bg-clip-text text-transparent">Generate & Publish</span> Web Pages
           </h1>
 
           <p className="text-sm md:text-base text-[#f0f2ff]/70 max-w-2xl mx-auto leading-relaxed">
-            Connect <strong className="text-white">Claude</strong>, <strong className="text-white">ChatGPT</strong>, <strong className="text-white">Cursor</strong>, and <strong className="text-white">Gemini</strong> to Plexo. Create landing pages in JSON & HTML, publish to custom domains, and inspect analytics directly from AI chat.
+            Connect <strong className="text-white">Claude Desktop</strong>, <strong className="text-white">ChatGPT</strong>, <strong className="text-white">Cursor</strong>, and <strong className="text-white">Gemini</strong> to Plexo. Create landing pages, compile responsive HTML, publish to custom subdomains, and inspect analytics via plain language.
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
             <Link
-              href="/dashboard/integrations"
+              href="/auth/register"
               className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#8b5cf6] to-[#7c3aed] hover:opacity-95 text-white text-sm font-bold shadow-xl shadow-[#8b5cf6]/25 flex items-center gap-2 transition"
             >
-              Connect Your AI Assistant
+              Get Your MCP API Key
               <ArrowRight className="w-4 h-4" />
             </Link>
 
@@ -168,9 +138,9 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 <Terminal className="w-5 h-5 text-[#8b5cf6]" />
-                Live MCP Prompt Simulation
+                Live MCP Tool Call Simulation
               </h2>
-              <p className="text-xs text-white/50">Click a scenario to see how Plexo MCP handles AI prompts behind the scenes.</p>
+              <p className="text-xs text-white/50">Click a scenario to see how Plexo MCP processes AI prompts under the hood.</p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -188,7 +158,7 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
                     onClick={() => setActiveTab(tab.id as any)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
                       active
-                        ? "bg-[#8b5cf6] text-white shadow-md shadow-[#8b5cf6]/30"
+                        ? "bg-[#8b5cf6] text-white shadow-md shadow-[#8b5cf6]/30 font-bold"
                         : "bg-white/[0.04] text-white/60 hover:text-white border border-white/10"
                     }`}
                   >
@@ -200,108 +170,127 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* User Input Bubble */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-mono text-white/40 uppercase tracking-wider block">USER PROMPT (Claude / ChatGPT)</span>
-              <div className="p-4 rounded-2xl bg-[#090d16] border border-white/10 text-xs text-[#a78bfa] font-sans leading-relaxed shadow-inner">
+          {/* Chat Bubble & Response Mock */}
+          <div className="grid md:grid-cols-2 gap-6 items-start">
+            <div className="bg-[#08090f] border border-white/10 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center gap-2 text-xs text-[#a78bfa] font-mono">
+                <Bot className="w-4 h-4" />
+                Prompt (User Input in Claude / Cursor)
+              </div>
+              <p className="text-sm font-medium text-white bg-white/[0.03] border border-white/10 rounded-xl p-4 leading-relaxed">
                 "{currentSample.userPrompt}"
-              </div>
+              </p>
             </div>
 
-            {/* AI Result Execution */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-mono text-white/40 uppercase tracking-wider block flex items-center gap-1.5">
-                <CheckCircle2 className="w-3.5 h-3.5 text-[#34d399]" />
-                MCP RESPONSE & ACTION
-              </span>
-              <div className="p-4 rounded-2xl bg-[#090d16] border border-white/10 text-xs font-mono text-[#34d399] space-y-2 overflow-x-auto shadow-inner">
-                <pre>{JSON.stringify(currentSample.aiResult, null, 2)}</pre>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── CONNECTION & SETUP GUIDES ──────────────────────────── */}
-        <section id="setup-guides" className="bg-[#111827]/80 border border-white/10 rounded-3xl p-6 md:p-8 space-y-8">
-          <div>
-            <h2 className="text-xl font-bold text-white">How to Add Plexo on Claude & ChatGPT</h2>
-            <p className="text-xs text-white/60">Follow the menu paths shown below to connect directly.</p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* 1. ChatGPT Developer Plugin */}
-            <div className="p-6 rounded-2xl bg-[#090d16] border border-white/10 space-y-4">
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <span className="text-sm font-bold text-white flex items-center gap-2">
-                  <Bot className="w-4 h-4 text-[#34d399]" />
-                  1. ChatGPT Developer Plugin / Remote MCP
+            <div className="bg-[#08090f] border border-[#8b5cf6]/30 rounded-2xl p-5 space-y-3 shadow-lg shadow-[#8b5cf6]/10">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono text-[#34d399] flex items-center gap-1.5 font-bold">
+                  <CheckCircle2 className="w-4 h-4" />
+                  {currentSample.aiResult.action}
                 </span>
-                <span className="text-[10px] font-mono text-[#34d399] bg-[#34d399]/10 border border-[#34d399]/20 px-2 py-0.5 rounded">
-                  Developer Mode
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#34d399]/10 text-[#34d399] border border-[#34d399]/20">
+                  200 OK
                 </span>
               </div>
 
-              <ol className="space-y-2.5 text-xs text-white/70 list-decimal list-inside leading-relaxed">
-                <li>Toggle ON <strong className="text-white">Developer mode</strong> in ChatGPT (<code className="text-white/90">Settings → Security and login</code>).</li>
-                <li>Go to <strong className="text-white">Settings → Plugins</strong> (or <a href="https://chatgpt.com/plugins" target="_blank" className="text-[#34d399] underline">chatgpt.com/plugins</a>).</li>
-                <li>Click <strong className="text-white">+ (New Plugin)</strong> → select <strong className="text-white">Developer-mode app / Remote MCP server</strong>.</li>
-                <li>Set Name to <strong className="text-white">Plexo</strong> and Server URL to <code className="text-[#34d399]">{serverMcpUrl}</code>.</li>
-                <li>Select <strong className="text-white">OAuth</strong> authentication, check terms, and click <strong className="text-white">Create</strong>.</li>
-              </ol>
-
-              <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-[11px] text-white/60 space-y-1.5 font-mono min-w-0 overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 min-w-0"><span className="shrink-0 text-white/50">Server URL:</span> <code className="text-[#34d399] select-all break-all">{serverMcpUrl}</code></div>
-                <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 min-w-0"><span className="shrink-0 text-white/50">Authorize URL:</span> <code className="text-[#34d399] select-all break-all">{authorizeUrl}</code></div>
-                <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 min-w-0"><span className="shrink-0 text-white/50">Token URL:</span> <code className="text-[#34d399] select-all break-all">{tokenUrl}</code></div>
-              </div>
-            </div>
-
-            {/* 2. Claude Custom Connectors */}
-            <div className="p-6 rounded-2xl bg-[#090d16] border border-white/10 space-y-4">
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <span className="text-sm font-bold text-white flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#8b5cf6]" />
-                  2. Claude Custom Connectors
-                </span>
-                <span className="text-[10px] font-mono text-[#a78bfa] bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 px-2 py-0.5 rounded">
-                  Connectors
-                </span>
-              </div>
-
-              <ol className="space-y-2.5 text-xs text-white/70 list-decimal list-inside leading-relaxed">
-                <li>In Claude left sidebar, click <strong className="text-white">Customize → Connectors</strong> (located right above Plugins).</li>
-                <li>Click <strong className="text-white">Add ∨</strong> at top right → select <strong className="text-white">Add custom connector</strong>.</li>
-                <li>Set Name to <strong className="text-white">Plexo</strong> and URL to <code className="text-[#a78bfa]">{serverMcpUrl}</code>.</li>
-                <li>Under Advanced settings (Optional), enter Client ID: <code className="text-white/90">plexo_mcp_client</code> & Secret: <code className="text-white/90">plexo_mcp_secret</code>.</li>
-                <li>Click <strong className="text-white">Add</strong> and complete the popup OAuth login prompt.</li>
-              </ol>
-
-              <div className="p-3 bg-white/[0.03] border border-white/10 rounded-xl text-[11px] text-white/60 space-y-1 font-mono">
-                <div>Connector URL: <code className="text-[#a78bfa] select-all">{serverMcpUrl}</code></div>
-                <div>OAuth Client ID: <code className="text-white/80">plexo_mcp_client</code></div>
-                <div>OAuth Client Secret: <code className="text-white/80">plexo_mcp_secret</code></div>
-              </div>
+              <pre className="text-xs font-mono bg-black/60 border border-white/10 rounded-xl p-4 text-white/80 overflow-x-auto leading-relaxed">
+                {JSON.stringify(currentSample.aiResult, null, 2)}
+              </pre>
             </div>
           </div>
         </section>
 
-        {/* ── FOOTER CTA ────────────────────────────────────────── */}
-        <section className="text-center py-10 space-y-5 bg-gradient-to-tr from-[#8b5cf6]/10 via-[#7c3aed]/10 to-[#34d399]/10 border border-white/10 rounded-3xl p-6">
-          <h2 className="text-2xl font-bold text-white">Ready to Power Your AI Workflows with Plexo?</h2>
-          <p className="text-xs text-white/70 max-w-xl mx-auto">
-            Get instant access to AI page generation, visual drag-and-drop customization, and custom domain publishing.
-          </p>
-
-          <div className="pt-2">
-            <Link
-              href="/dashboard/integrations"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#8b5cf6] to-[#7c3aed] hover:from-[#7c3aed] hover:to-[#6d28d9] text-white font-bold text-xs shadow-lg shadow-[#8b5cf6]/25 transition"
-            >
-              Open Integration Hub
-              <ArrowRight className="w-4 h-4" />
-            </Link>
+        {/* ── SETUP GUIDES SECTION ───────────────────────────────── */}
+        <section id="setup-guides" className="space-y-8">
+          <div className="text-center max-w-2xl mx-auto space-y-2">
+            <h2 className="text-2xl md:text-3xl font-extrabold text-white">Connection Guides</h2>
+            <p className="text-xs md:text-sm text-white/60">1-minute setup for Claude Desktop, Cursor IDE, Windsurf, and ChatGPT.</p>
           </div>
+
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Claude Desktop Config */}
+            <div className="bg-[#111827]/80 border border-white/10 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Laptop className="w-4 h-4 text-[#8b5cf6]" />
+                  Claude Desktop Configuration
+                </h3>
+                <button
+                  onClick={() => handleCopy(`{\n  "mcpServers": {\n    "plexo": {\n      "command": "npx",\n      "args": ["-y", "@charisol/plexo-mcp"],\n      "env": {\n        "PLEXO_API_KEY": "plexo_sk_your_key_here"\n      }\n    }\n  }\n}`, "claude")}
+                  className="px-2.5 py-1 rounded-lg bg-white/[0.05] hover:bg-white/10 text-xs text-white/80 border border-white/10 flex items-center gap-1 transition"
+                >
+                  {copiedId === "claude" ? <Check className="w-3 h-3 text-[#34d399]" /> : <Copy className="w-3 h-3" />}
+                  {copiedId === "claude" ? "Copied" : "Copy"}
+                </button>
+              </div>
+
+              <p className="text-xs text-white/60">
+                Add to your <code className="text-[#a78bfa]">claude_desktop_config.json</code>:
+              </p>
+
+              <pre className="text-xs font-mono bg-black/60 border border-white/10 rounded-xl p-4 text-[#a78bfa] overflow-x-auto leading-relaxed">
+{`{
+  "mcpServers": {
+    "plexo": {
+      "command": "npx",
+      "args": ["-y", "@charisol/plexo-mcp"],
+      "env": {
+        "PLEXO_API_KEY": "plexo_sk_your_key_here"
+      }
+    }
+  }
+}`}
+              </pre>
+            </div>
+
+            {/* Cursor IDE Config */}
+            <div className="bg-[#111827]/80 border border-white/10 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Code2 className="w-4 h-4 text-[#38bdf8]" />
+                  Cursor & Windsurf Config
+                </h3>
+                <button
+                  onClick={() => handleCopy(`{\n  "mcpServers": {\n    "plexo": {\n      "command": "npx",\n      "args": ["-y", "@charisol/plexo-mcp"],\n      "env": {\n        "PLEXO_API_KEY": "plexo_sk_your_key_here"\n      }\n    }\n  }\n}`, "cursor")}
+                  className="px-2.5 py-1 rounded-lg bg-white/[0.05] hover:bg-white/10 text-xs text-white/80 border border-white/10 flex items-center gap-1 transition"
+                >
+                  {copiedId === "cursor" ? <Check className="w-3 h-3 text-[#34d399]" /> : <Copy className="w-3 h-3" />}
+                  {copiedId === "cursor" ? "Copied" : "Copy"}
+                </button>
+              </div>
+
+              <p className="text-xs text-white/60">
+                Add to your project's <code className="text-[#38bdf8]">.cursor/mcp.json</code>:
+              </p>
+
+              <pre className="text-xs font-mono bg-black/60 border border-white/10 rounded-xl p-4 text-[#38bdf8] overflow-x-auto leading-relaxed">
+{`{
+  "mcpServers": {
+    "plexo": {
+      "command": "npx",
+      "args": ["-y", "@charisol/plexo-mcp"],
+      "env": {
+        "PLEXO_API_KEY": "plexo_sk_your_key_here"
+      }
+    }
+  }
+}`}
+              </pre>
+            </div>
+          </div>
+        </section>
+
+        {/* ── CALL TO ACTION ────────────────────────────────────── */}
+        <section className="text-center bg-gradient-to-r from-[#8b5cf6]/15 to-[#7c3aed]/15 border border-[#8b5cf6]/30 rounded-3xl p-10 space-y-6">
+          <h2 className="text-2xl md:text-3xl font-extrabold text-white">Start Commanding Your Landing Pages with AI</h2>
+          <p className="text-sm text-white/60 max-w-xl mx-auto">Generate your Plexo API key and connect your favorite AI assistant today.</p>
+          <Link
+            href="/auth/register"
+            className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-gradient-to-r from-[#8b5cf6] to-[#7c3aed] hover:opacity-95 text-white text-sm font-bold shadow-xl shadow-[#8b5cf6]/30 transition"
+          >
+            Get Free API Key
+            <ArrowRight className="w-4 h-4" />
+          </Link>
         </section>
       </main>
     </div>

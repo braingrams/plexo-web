@@ -45,6 +45,14 @@ export type TierFeatures = {
    * counts root/home pages), so this is the actual scarcity control.
    */
   multiPageSitesEnabled: boolean;
+  /** Whether the account may link a CUSTOM (non-plexopages.io) domain to a published page. */
+  customDomainEnabled: boolean;
+  /**
+   * Whether the account may hide the "Hosted with Plexo" bar injected into BUILDER pages
+   * served on the shared plexopages.io subdomain (see app/pub/[domain]/[[...slug]]/route.ts
+   * and User.hideBranding).
+   */
+  brandingRemovalEnabled: boolean;
 };
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
@@ -59,6 +67,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     manageLandingPagePublishingEnabled: false,
     hostManagedAiEnabled: false,
     multiPageSitesEnabled: false,
+    customDomainEnabled: false,
+    brandingRemovalEnabled: false,
   },
   PRO: {
     maxTemplates: 20,
@@ -71,6 +81,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     manageLandingPagePublishingEnabled: false,
     hostManagedAiEnabled: false,
     multiPageSitesEnabled: false,
+    customDomainEnabled: true,
+    brandingRemovalEnabled: true,
   },
   ULTRA: {
     maxTemplates: -1, // unlimited
@@ -83,6 +95,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     manageLandingPagePublishingEnabled: true,
     hostManagedAiEnabled: true,
     multiPageSitesEnabled: true,
+    customDomainEnabled: true,
+    brandingRemovalEnabled: true,
   },
 };
 
@@ -105,14 +119,13 @@ export const PLAN_MONTHLY_CREDITS: Record<SubscriptionPlan, number> = {
 
 /**
  * Returns the feature set for a given subscription plan.
- * Defaults to ULTRA for any unrecognised plan string (fail-open for beta).
+ * Defaults to FREE for any unrecognised plan string (fail-closed now that plans are billed).
  */
 export function getTierFeatures(plan: string | null | undefined): TierFeatures {
   if (plan === "FREE" || plan === "PRO" || plan === "ULTRA") {
     return TIER_DEFINITIONS[plan];
   }
-  // Default to ULTRA — all current users are on the free beta with full access
-  return TIER_DEFINITIONS.ULTRA;
+  return TIER_DEFINITIONS.FREE;
 }
 
 /**
@@ -153,4 +166,17 @@ export function resolveManageLandingPagePublishing(
  */
 export function canUseHostManagedAi(plan: SubscriptionPlan | string | null | undefined): boolean {
   return canDo(plan, "hostManagedAiEnabled");
+}
+
+/**
+ * Collapses the raw, persisted `User.hideBranding` column with the account's current plan —
+ * same pattern as resolveManageLandingPagePublishing: even if the column is `true` (e.g. stale
+ * after a downgrade from Pro/Ultra), the effective value is `false` unless the plan currently
+ * entitles branding removal.
+ */
+export function resolveHideBranding(
+  plan: SubscriptionPlan | string | null | undefined,
+  rawFlag: boolean | null | undefined,
+): boolean {
+  return !!rawFlag && canDo(plan, "brandingRemovalEnabled");
 }

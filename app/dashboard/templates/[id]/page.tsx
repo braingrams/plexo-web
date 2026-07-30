@@ -87,7 +87,7 @@ export default async function TemplateEditorPage(
       <RawFileEditor
         templateId={template.id}
         templateName={template.name}
-        subscriptionPlan={user?.subscriptionPlan ?? "ULTRA"}
+        subscriptionPlan={user?.subscriptionPlan ?? "FREE"}
       />
     );
   }
@@ -110,7 +110,7 @@ export default async function TemplateEditorPage(
       templateKind={template.kind}
       templateParentId={template.parentId}
       initialDesignJson={initialDesignJson}
-      subscriptionPlan={user?.subscriptionPlan ?? "ULTRA"}
+      subscriptionPlan={user?.subscriptionPlan ?? "FREE"}
       useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}
       aiProvider={activeApiKey?.aiProvider ?? "openai"}
       aiTier={activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}

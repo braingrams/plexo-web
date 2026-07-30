@@ -1,19 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Space_Grotesk, Inter } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
+import { ThemeProvider } from "next-themes";
 
 import "./globals.css";
 
-const headingFont = Space_Grotesk({
-  subsets: ["latin"],
-  variable: "--font-heading",
-  weight: ["400", "500", "600", "700"],
-});
-
-const bodyFont = Inter({
-  subsets: ["latin"],
-  variable: "--font-body",
-  weight: ["400", "500", "600", "700"],
-});
+// geist's variable names (--font-geist-sans/--font-geist-mono) are fixed by the package
+// itself, unlike next/font/google's `variable` option — globals.css bridges these to the
+// existing --font-heading/--font-body contract so nothing downstream needs to change names.
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -38,9 +32,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${headingFont.variable} ${bodyFont.variable}`}>
-        {children}
+    <html lang="en" suppressHydrationWarning>
+      <body className={`${GeistSans.variable} ${GeistMono.variable}`}>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

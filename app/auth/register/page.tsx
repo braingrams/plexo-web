@@ -1,10 +1,18 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { FormEvent, Suspense, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
+
+type Plan = "FREE" | "PRO" | "ULTRA";
+
+const PLAN_COPY: Record<Plan, { label: string; price: string }> = {
+  FREE: { label: "Free", price: "$0/mo" },
+  PRO: { label: "Pro", price: "$19/mo" },
+  ULTRA: { label: "Ultra", price: "$49/mo" },
+};
 
 function EyeIcon({ visible }: { visible: boolean }) {
   if (visible) {
@@ -36,7 +44,19 @@ function PlexoLogoMark() {
 }
 
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterForm />
+    </Suspense>
+  );
+}
+
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedPlan = searchParams.get("plan")?.toUpperCase();
+  const plan: Plan = requestedPlan === "PRO" || requestedPlan === "ULTRA" ? requestedPlan : "FREE";
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -63,6 +83,10 @@ export default function RegisterPage() {
         email,
         password,
         callbackURL: "/dashboard",
+        // Persisted atomically at row-creation time via server/auth.ts's databaseHooks —
+        // signUp.email() has no session yet to attach a follow-up authenticated write to
+        // (requireEmailVerification skips auto-sign-in), so this can't be a separate call.
+        ...(plan !== "FREE" ? { pendingPlan: plan } : {}),
       });
 
       if (result?.error) {
@@ -90,6 +114,37 @@ export default function RegisterPage() {
 
         <h1 className="auth-title">Create your account</h1>
         <p className="auth-subtitle">Start building beautiful templates today.</p>
+
+        <div style={{ display: "flex", gap: 6, marginBottom: "1.25rem" }}>
+          {(Object.keys(PLAN_COPY) as Plan[]).map((p) => (
+            <Link
+              key={p}
+              href={`/auth/register?plan=${p}`}
+              style={{
+                flex: 1, textAlign: "center", padding: "0.5rem 0.4rem", borderRadius: 9,
+                fontSize: "0.78rem", fontWeight: 700, textDecoration: "none",
+                border: plan === p ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
+                background: plan === p ? "var(--brand-subtle)" : "transparent",
+                color: plan === p ? "var(--brand)" : "rgba(240,242,255,0.55)",
+              }}
+            >
+              {PLAN_COPY[p].label}
+              <span style={{ display: "block", fontSize: "0.68rem", fontWeight: 500, opacity: 0.75 }}>
+                {PLAN_COPY[p].price}
+              </span>
+            </Link>
+          ))}
+        </div>
+
+        {plan === "FREE" ? (
+          <p className="auth-meta" style={{ marginTop: -8, marginBottom: "1rem", color: "#34d399" }}>
+            No credit card required.
+          </p>
+        ) : (
+          <p className="auth-meta" style={{ marginTop: -8, marginBottom: "1rem" }}>
+            You&apos;ll create your account first, then complete payment for {PLAN_COPY[plan].label} on the next step.
+          </p>
+        )}
 
         <form onSubmit={onSubmit} noValidate>
           {/* Name */}
