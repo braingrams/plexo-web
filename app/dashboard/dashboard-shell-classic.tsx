@@ -192,7 +192,7 @@ export function DashboardShellClassic({ children, userName, userEmail }: Props) 
   return (
     <div className={rootClassName} style={{ minHeight: "100vh", display: "flex" }}>
       {/* ── MOBILE TOP BAR (below 768px only) ─────── */}
-      <header className="dash-classic-mobile-topbar">
+      <header className="dash-classic-mobile-topbar flex md:hidden">
         <button
           type="button"
           onClick={() => setIsMobileNavOpen(true)}

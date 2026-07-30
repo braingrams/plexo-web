@@ -15,6 +15,25 @@
   animation-play-state: paused;
 }
 
+.dash-classic-mobile-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #0f1422;
+  border-bottom: 1px solid #1e293b;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .dash-classic-mobile-topbar {
+    display: none !important;
+  }
+}
+
 /* ─────────────────────────────────────────
    Tailwind v4 Theme Extension
    ───────────────────────────────────────── */
