@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import { put, BlobError } from "@vercel/blob";
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
-import { isEditableExtension } from "@/server/rawUpload";
+import {
+  contentTypeFor,
+  isAllowedExtension,
+  isEditableExtension,
+  starterContentFor,
+  MAX_FILE_COUNT,
+  RawUploadValidationError,
+} from "@/server/rawUpload";
 
 export type FileEntry = {
   path: string;
@@ -80,4 +88,94 @@ export async function GET(
   files.sort((a, b) => (a.path === "index.html" ? -1 : b.path === "index.html" ? 1 : a.path.localeCompare(b.path)));
 
   return NextResponse.json({ templateId: template.id, name: template.name, files });
+}
+
+function normalizeNewFilePath(rawPath: string): string {
+  return rawPath.trim().replace(/^\.?\/+/, "");
+}
+
+/**
+ * POST /api/v1/templates/:id/files
+ *
+ * Adds a brand-new file to a RAW_UPLOAD template — e.g. a style.css or script.js that
+ * didn't come from the original upload — so index.html can <link>/<script> it. This is
+ * the one gap the PUT-only [...path] route intentionally leaves open ("doesn't add or
+ * remove files"); everything else (extension allowlist, size/count caps, blob storage)
+ * mirrors the zip-extraction path in server/rawUpload.ts.
+ */
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const resolved = await resolveUser(request);
+  if (!resolved) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const { id } = await context.params;
+  const template = await prisma.template.findFirst({
+    where: { id, userId: resolved.userId },
+    include: { assets: true },
+  });
+  if (!template) {
+    return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });
+  }
+  if (template.sourceType !== "RAW_UPLOAD") {
+    return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
+  }
+
+  const body = await request.json().catch(() => null);
+  const rawPath = body?.path;
+  if (typeof rawPath !== "string" || !rawPath.trim()) {
+    return NextResponse.json({ error: "Missing required 'path' string." }, { status: 400 });
+  }
+
+  const path = normalizeNewFilePath(rawPath);
+  if (!path || path.includes("..") || path.startsWith("/") || /^[a-zA-Z]:/.test(path)) {
+    return NextResponse.json({ error: "Invalid file path." }, { status: 400 });
+  }
+  if (!isAllowedExtension(path)) {
+    return NextResponse.json({
+      error: `File type ".${path.split(".").pop()}" isn't allowed. Use .css, .js, or another supported static asset type.`,
+    }, { status: 400 });
+  }
+  if (path.toLowerCase() === "index.html" || template.assets.some((a) => a.path.toLowerCase() === path.toLowerCase())) {
+    return NextResponse.json({ error: `"${path}" already exists on this template.` }, { status: 409 });
+  }
+  if (template.assets.length + 1 >= MAX_FILE_COUNT) {
+    return NextResponse.json({ error: `This template already has the maximum of ${MAX_FILE_COUNT} files.` }, { status: 400 });
+  }
+
+  const content = starterContentFor(path);
+  const contentType = contentTypeFor(path);
+  const localDevToken = process.env.BLOB_READ_WRITE_TOKEN; // see upload-raw/route.ts — OIDC covers real deployments
+
+  let blobUrl: string;
+  try {
+    const blob = await put(`raw-sites/${template.id}/${path}`, Buffer.from(content, "utf8"), {
+      access: "public",
+      contentType,
+      ...(localDevToken ? { token: localDevToken } : {}),
+    });
+    blobUrl = blob.url;
+  } catch (err) {
+    if (err instanceof BlobError || err instanceof RawUploadValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 500 });
+    }
+    throw err;
+  }
+
+  const asset = await prisma.templateAsset.create({
+    data: { templateId: template.id, path, blobUrl, contentType, size: Buffer.byteLength(content, "utf8") },
+  });
+
+  const file: FileEntry = {
+    path: asset.path,
+    contentType: asset.contentType,
+    size: asset.size,
+    editable: isEditableExtension(asset.path),
+    content,
+  };
+
+  return NextResponse.json({ success: true, file });
 }

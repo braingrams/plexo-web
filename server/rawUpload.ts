@@ -26,6 +26,27 @@ export function isEditableExtension(path: string): boolean {
   return TEXT_EXTENSIONS.has(extensionOf(path));
 }
 
+export function isAllowedExtension(path: string): boolean {
+  return ALLOWED_EXTENSIONS.has(extensionOf(path));
+}
+
+// Minimal starter content per extension so a newly-added file isn't just a blank blob —
+// mirrors what someone would actually type first in a new .css/.js file.
+export function starterContentFor(path: string): string {
+  switch (extensionOf(path)) {
+    case "css":
+      return "/* " + path + " */\n";
+    case "js":
+    case "mjs":
+      return "// " + path + "\n";
+    case "json":
+    case "webmanifest":
+      return "{}\n";
+    default:
+      return "";
+  }
+}
+
 export class RawUploadValidationError extends Error {}
 
 export type ExtractedAsset = {

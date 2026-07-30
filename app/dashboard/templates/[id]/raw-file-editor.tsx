@@ -35,6 +35,14 @@ function IconClose() {
   );
 }
 
+function IconPlus() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -86,6 +94,12 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
   const [replacing, setReplacing] = useState(false);
   const [replaceError, setReplaceError] = useState<string | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [addFileOpen, setAddFileOpen] = useState(false);
+  const [newFileName, setNewFileName] = useState("");
+  const [addingFile, setAddingFile] = useState(false);
+  const [addFileError, setAddFileError] = useState<string | null>(null);
+  const newFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadFiles = useCallback(() => {
     setLoading(true);
@@ -205,6 +219,45 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
     }
   }
 
+  function handleOpenAddFile() {
+    setNewFileName("");
+    setAddFileError(null);
+    setAddFileOpen(true);
+    setTimeout(() => newFileInputRef.current?.focus(), 0);
+  }
+
+  async function handleCreateFile() {
+    const path = newFileName.trim();
+    if (!path) {
+      setAddFileError("Enter a file name.");
+      return;
+    }
+    setAddingFile(true);
+    setAddFileError(null);
+    try {
+      const res = await fetch(`/api/v1/templates/${templateId}/files`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.error ?? "Couldn't create the file.");
+
+      const newFile: FileEntry = payload.file;
+      setFiles((prev) => [...prev, newFile].sort((a, b) => (a.path === "index.html" ? -1 : b.path === "index.html" ? 1 : a.path.localeCompare(b.path))));
+      if (newFile.editable) {
+        setEdits((prev) => ({ ...prev, [newFile.path]: newFile.content ?? "" }));
+        setSavedContent((prev) => ({ ...prev, [newFile.path]: newFile.content ?? "" }));
+      }
+      setActivePath(newFile.path);
+      setAddFileOpen(false);
+    } catch (err) {
+      setAddFileError(err instanceof Error ? err.message : "Couldn't create the file.");
+    } finally {
+      setAddingFile(false);
+    }
+  }
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
@@ -303,7 +356,25 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
       {/* Body */}
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         {/* File list sidebar */}
-        <div style={{ width: 220, borderRight: "1px solid rgba(255,255,255,0.08)", overflowY: "auto", flexShrink: 0 }}>
+        <div style={{ width: 220, borderRight: "1px solid rgba(255,255,255,0.08)", overflowY: "auto", flexShrink: 0, display: "flex", flexDirection: "column" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.6rem 0.9rem 0.4rem" }}>
+            <span style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "rgba(240,242,255,0.35)" }}>
+              Files
+            </span>
+            <button
+              type="button"
+              onClick={handleOpenAddFile}
+              title="Add a new file (e.g. style.css or script.js) to import from index.html"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "0.3rem",
+                background: "none", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6,
+                color: "rgba(240,242,255,0.6)", fontSize: "0.7rem", fontWeight: 600,
+                padding: "0.15rem 0.45rem", cursor: "pointer",
+              }}
+            >
+              <IconPlus /> Add
+            </button>
+          </div>
           {files.map((f) => (
             <button
               key={f.path}
@@ -418,6 +489,72 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
                 style={{ flex: 1, padding: "0.6rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 700, background: "linear-gradient(135deg, #ef4444, #b91c1c)", color: "#fff", border: "none", cursor: replacing ? "default" : "pointer", opacity: replacing ? 0.6 : 1 }}
               >
                 {replacing ? "Replacing…" : "Replace"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Add-file dialog */}
+      {addFileOpen && (
+        <>
+          <div
+            onClick={() => !addingFile && setAddFileOpen(false)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 10000 }}
+          />
+          <div style={{
+            position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+            width: "100%", maxWidth: 420, background: "#16142c", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 16, padding: "2rem", zIndex: 10001, display: "flex", flexDirection: "column", gap: "1.1rem",
+          }}>
+            <div>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 800, margin: 0 }}>Add a file</h3>
+              <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.6)", marginTop: "0.5rem", lineHeight: 1.5 }}>
+                Creates a new, empty file on this site — e.g. <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>style.css</code> or{" "}
+                <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>script.js</code>. Import it from{" "}
+                <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>index.html</code> with a{" "}
+                <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>&lt;link&gt;</code> or{" "}
+                <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>&lt;script&gt;</code> tag.
+              </p>
+            </div>
+            <input
+              ref={newFileInputRef}
+              type="text"
+              value={newFileName}
+              onChange={(e) => setNewFileName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleCreateFile();
+                if (e.key === "Escape") setAddFileOpen(false);
+              }}
+              placeholder="style.css"
+              disabled={addingFile}
+              style={{
+                width: "100%", padding: "0.55rem 0.75rem", borderRadius: 8, fontSize: "0.85rem", fontFamily: "monospace",
+                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "#f0f2ff",
+              }}
+            />
+            {addFileError && <p style={{ fontSize: "0.8rem", color: "#f87171", margin: 0 }}>⚠️ {addFileError}</p>}
+            <div style={{ display: "flex", gap: "0.75rem" }}>
+              <button
+                type="button"
+                onClick={() => setAddFileOpen(false)}
+                disabled={addingFile}
+                style={{ flex: 1, padding: "0.6rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 600, background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(240,242,255,0.7)", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCreateFile()}
+                disabled={addingFile}
+                className="btn-primary"
+                style={{
+                  flex: 1, padding: "0.6rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 700,
+                  background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", border: "none",
+                  cursor: addingFile ? "default" : "pointer", opacity: addingFile ? 0.6 : 1,
+                }}
+              >
+                {addingFile ? "Adding…" : "Add file"}
               </button>
             </div>
           </div>
