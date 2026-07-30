@@ -1,55 +1,26 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
-
+import { ArrowLeft, Sparkles, ShieldCheck, CheckCircle2, Eye, EyeOff, Zap } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
+import { Mulish } from "next/font/google";
+import { PlexoLogo } from "@/app/plexo-logo";
+
+const mulish = Mulish({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
+  display: "swap",
+});
 
 type Plan = "FREE" | "PRO" | "ULTRA";
 
 const PLAN_COPY: Record<Plan, { label: string; price: string }> = {
-  FREE: { label: "Free", price: "$0/mo" },
-  PRO: { label: "Pro", price: "$19/mo" },
-  ULTRA: { label: "Ultra", price: "$49/mo" },
+  FREE: { label: "Free Plan", price: "$0/mo" },
+  PRO: { label: "Pro Plan", price: "$19/mo" },
+  ULTRA: { label: "Ultra Plan", price: "$49/mo" },
 };
-
-function EyeIcon({ visible }: { visible: boolean }) {
-  if (visible) {
-    return (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-        <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-        <line x1="1" y1="1" x2="23" y2="23"/>
-      </svg>
-    );
-  }
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-      <circle cx="12" cy="12" r="3"/>
-    </svg>
-  );
-}
-
-function PlexoLogoMark() {
-  return (
-    <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", display: "grid", placeItems: "center", boxShadow: "0 0 14px rgba(139,92,246,0.4)", flexShrink: 0 }}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
-        <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </div>
-  );
-}
-
-export default function RegisterPage() {
-  return (
-    <Suspense fallback={null}>
-      <RegisterForm />
-    </Suspense>
-  );
-}
 
 function RegisterForm() {
   const router = useRouter();
@@ -83,9 +54,6 @@ function RegisterForm() {
         email,
         password,
         callbackURL: "/dashboard",
-        // Persisted atomically at row-creation time via server/auth.ts's databaseHooks —
-        // signUp.email() has no session yet to attach a follow-up authenticated write to
-        // (requireEmailVerification skips auto-sign-in), so this can't be a separate call.
         ...(plan !== "FREE" ? { pendingPlan: plan } : {}),
       });
 
@@ -104,152 +72,222 @@ function RegisterForm() {
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-card">
-        {/* Logo */}
-        <Link href="/" className="auth-logo">
-          <PlexoLogoMark />
-          <span className="auth-logo-text">Plexo</span>
+    <div className="w-full max-w-md mx-auto space-y-7 py-12 px-4 sm:px-8">
+      {/* Mobile Back Link & Logo */}
+      <div className="lg:hidden flex items-center justify-between">
+        <Link href="/" className="inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-colors">
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Plexo</span>
         </Link>
+        <PlexoLogo size={28} textStyle={{ color: "#ffffff" }} />
+      </div>
 
-        <h1 className="auth-title">Create your account</h1>
-        <p className="auth-subtitle">Start building beautiful templates today.</p>
-
-        <div style={{ display: "flex", gap: 6, marginBottom: "1.25rem" }}>
-          {(Object.keys(PLAN_COPY) as Plan[]).map((p) => (
-            <Link
-              key={p}
-              href={`/auth/register?plan=${p}`}
-              style={{
-                flex: 1, textAlign: "center", padding: "0.5rem 0.4rem", borderRadius: 9,
-                fontSize: "0.78rem", fontWeight: 700, textDecoration: "none",
-                border: plan === p ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
-                background: plan === p ? "var(--brand-subtle)" : "transparent",
-                color: plan === p ? "var(--brand)" : "rgba(240,242,255,0.55)",
-              }}
-            >
-              {PLAN_COPY[p].label}
-              <span style={{ display: "block", fontSize: "0.68rem", fontWeight: 500, opacity: 0.75 }}>
-                {PLAN_COPY[p].price}
-              </span>
-            </Link>
-          ))}
+      {/* Form Header */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+            Create account
+          </h1>
+          {plan !== "FREE" && (
+            <span className="bg-purple-900/80 border border-purple-700 text-purple-300 text-xs font-extrabold px-3 py-1 rounded-full flex items-center gap-1">
+              <Zap className="w-3 h-3 fill-purple-300" />
+              <span>{PLAN_COPY[plan].label}</span>
+            </span>
+          )}
         </div>
+        <p className="text-sm font-medium text-slate-400">
+          Start building web pages &amp; email templates in seconds.
+        </p>
+      </div>
 
-        {plan === "FREE" ? (
-          <p className="auth-meta" style={{ marginTop: -8, marginBottom: "1rem", color: "#34d399" }}>
-            No credit card required.
-          </p>
-        ) : (
-          <p className="auth-meta" style={{ marginTop: -8, marginBottom: "1rem" }}>
-            You&apos;ll create your account first, then complete payment for {PLAN_COPY[plan].label} on the next step.
-          </p>
+      {/* Form */}
+      <form onSubmit={onSubmit} className="space-y-4" noValidate>
+        {error && (
+          <div className="p-4 rounded-2xl bg-red-950/80 border border-red-800 text-red-300 text-xs font-semibold">
+            {error}
+          </div>
         )}
 
-        <form onSubmit={onSubmit} noValidate>
-          {/* Name */}
-          <label className="auth-field">
-            <span className="auth-label">Display Name</span>
-            <input
-              id="register-name"
-              className="auth-input"
-              type="text"
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Alex Johnson"
-            />
+        {/* Full Name */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-extrabold uppercase tracking-wider text-slate-300 block">
+            Full Name
           </label>
+          <input
+            id="register-name"
+            type="text"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Alex Morgan"
+            className="w-full bg-[#090d16] border border-slate-800 focus:border-purple-500 rounded-2xl px-4 py-3.5 text-sm text-white placeholder-slate-600 focus:outline-none transition-all"
+          />
+        </div>
 
-          {/* Email */}
-          <label className="auth-field">
-            <span className="auth-label">Email address</span>
+        {/* Email */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-extrabold uppercase tracking-wider text-slate-300 block">
+            Email Address
+          </label>
+          <input
+            id="register-email"
+            type="email"
+            required
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@company.com"
+            className="w-full bg-[#090d16] border border-slate-800 focus:border-purple-500 rounded-2xl px-4 py-3.5 text-sm text-white placeholder-slate-600 focus:outline-none transition-all"
+          />
+        </div>
+
+        {/* Password */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-extrabold uppercase tracking-wider text-slate-300 block">
+            Password
+          </label>
+          <div className="relative">
             <input
-              id="register-email"
-              className="auth-input"
-              type="email"
+              id="register-password"
+              type={showPw ? "text" : "password"}
               required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@company.com"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 8 characters"
+              className="w-full bg-[#090d16] border border-slate-800 focus:border-purple-500 rounded-2xl px-4 py-3.5 pr-12 text-sm text-white placeholder-slate-600 focus:outline-none transition-all"
             />
+            <button
+              type="button"
+              onClick={() => setShowPw((v) => !v)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+              aria-label={showPw ? "Hide password" : "Show password"}
+            >
+              {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Confirm Password */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-extrabold uppercase tracking-wider text-slate-300 block">
+            Confirm Password
           </label>
-
-          {/* Password */}
-          <div className="auth-field">
-            <span className="auth-label">Password</span>
-            <div className="auth-input-wrap">
-              <input
-                id="register-password"
-                className="auth-input auth-input-pr"
-                type={showPw ? "text" : "password"}
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 8 characters"
-              />
-              <button
-                type="button"
-                className="auth-eye-btn"
-                aria-label={showPw ? "Hide password" : "Show password"}
-                onClick={() => setShowPw((v) => !v)}
-              >
-                <EyeIcon visible={showPw} />
-              </button>
-            </div>
+          <div className="relative">
+            <input
+              id="register-confirm-password"
+              type={showConfirmPw ? "text" : "password"}
+              required
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Repeat your password"
+              className="w-full bg-[#090d16] border border-slate-800 focus:border-purple-500 rounded-2xl px-4 py-3.5 pr-12 text-sm text-white placeholder-slate-600 focus:outline-none transition-all"
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPw((v) => !v)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+              aria-label={showConfirmPw ? "Hide password" : "Show password"}
+            >
+              {showConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
           </div>
+        </div>
 
-          {/* Confirm Password */}
-          <div className="auth-field">
-            <span className="auth-label">Confirm Password</span>
-            <div className="auth-input-wrap">
-              <input
-                id="register-confirm-password"
-                className="auth-input auth-input-pr"
-                type={showConfirmPw ? "text" : "password"}
-                required
-                minLength={8}
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Retype your password"
-              />
-              <button
-                type="button"
-                className="auth-eye-btn"
-                aria-label={showConfirmPw ? "Hide confirm password" : "Show confirm password"}
-                onClick={() => setShowConfirmPw((v) => !v)}
-              >
-                <EyeIcon visible={showConfirmPw} />
-              </button>
-            </div>
-          </div>
-
-          {error ? (
-            <p className="auth-error" role="alert">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-              </svg>
-              {error}
-            </p>
-          ) : null}
-
-          <button className="auth-button" id="register-submit" type="submit" disabled={loading}>
-            {loading ? <span className="auth-spinner" aria-hidden="true" /> : null}
-            {loading ? "Creating account…" : "Create Account"}
+        {/* Submit */}
+        <div className="pt-3">
+          <button
+            id="register-submit"
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#6b3bf9] hover:bg-[#5b2be6] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {loading ? <span>Creating account...</span> : <span>Create Account</span>}
           </button>
-        </form>
+        </div>
+      </form>
 
-        <p className="auth-meta">
-          Already have an account?{" "}
-          <Link href="/auth/login" className="auth-link">
-            Sign in
+      {/* Meta Link */}
+      <p className="text-center text-xs font-semibold text-slate-400">
+        Already have an account?{" "}
+        <Link href="/auth/login" className="text-purple-400 font-bold hover:underline">
+          Sign in
+        </Link>
+      </p>
+    </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <main className={`${mulish.className} min-h-screen bg-[#0b0f19] text-white font-['Mulish',sans-serif] grid grid-cols-1 lg:grid-cols-12 antialiased`}>
+      {/* LEFT 50%: Vibrant Branded Showcase Panel */}
+      <div className="hidden lg:flex lg:col-span-6 bg-gradient-to-br from-[#120e24] via-[#1b1539] to-[#2b1c54] p-12 flex-col justify-between relative overflow-hidden border-r border-slate-800/80">
+        {/* Glow Effects */}
+        <div className="absolute top-10 left-10 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-10 right-10 w-72 h-72 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none" />
+
+        {/* Top Header */}
+        <div className="relative z-10 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <PlexoLogo size={34} textStyle={{ color: "#ffffff" }} />
           </Link>
-        </p>
-      </section>
+
+          <Link href="/" className="inline-flex items-center gap-2 text-xs font-extrabold text-slate-300 hover:text-white bg-white/10 border border-white/15 px-4 py-2 rounded-xl backdrop-blur-md transition-all">
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Home</span>
+          </Link>
+        </div>
+
+        {/* Center Content */}
+        <div className="relative z-10 space-y-8 max-w-lg my-auto">
+          <div className="space-y-4">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-purple-500/10 text-purple-300 border border-purple-500/20">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>FREE PERMANENT TIER INCLUDED</span>
+            </div>
+
+            <h2 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-[1.08]">
+              Join thousands of creators &amp; engineers.
+            </h2>
+
+            <p className="text-base text-slate-300 leading-relaxed font-medium">
+              Start building landing pages with drag-and-drop visual editing, AI prompt generation, custom domain linking, and clean HTML/MJML code exports.
+            </p>
+          </div>
+
+          {/* Testimonial Quote Pill */}
+          <div className="bg-slate-950/80 border border-white/15 rounded-3xl p-6 shadow-2xl backdrop-blur-md space-y-3">
+            <p className="text-xs font-semibold text-slate-200 leading-relaxed italic">
+              &ldquo;The embeddable SDK and clean code exports mean zero vendor lock-in. We embedded Plexo directly into our platform.&rdquo;
+            </p>
+            <div className="flex items-center gap-3 pt-1 text-xs">
+              <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center font-bold text-white">
+                EO
+              </div>
+              <div>
+                <p className="font-extrabold text-white">Ebuka Okoli</p>
+                <p className="text-[11px] text-purple-300">Full Stack Engineer, Maildrip</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Badges */}
+        <div className="relative z-10 flex items-center gap-6 text-xs font-bold text-slate-400 border-t border-white/10 pt-6">
+          <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Free 10 AI Credits</span>
+          <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Isolated Subdomain</span>
+          <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> No Credit Card</span>
+        </div>
+      </div>
+
+      {/* RIGHT 50%: Clean Auth Form Container */}
+      <div className="lg:col-span-6 flex items-center justify-center min-h-screen">
+        <Suspense fallback={<div className="text-slate-400 text-xs font-mono">Loading form...</div>}>
+          <RegisterForm />
+        </Suspense>
+      </div>
     </main>
   );
 }

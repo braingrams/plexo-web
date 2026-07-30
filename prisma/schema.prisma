@@ -356,3 +356,26 @@ model StockCache {
 
   @@unique([provider, query])
 }
+
+enum TestimonialStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Testimonial {
+  id        String            @id @default(uuid()) @db.Uuid
+  quote     String
+  name      String
+  role      String
+  company   String?
+  avatarUrl String?
+  rating    Int               @default(5)
+  status    TestimonialStatus @default(PENDING)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
