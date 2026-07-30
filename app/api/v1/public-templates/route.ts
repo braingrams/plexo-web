@@ -137,6 +137,15 @@ const DEFAULT_PUBLIC_TEMPLATES = [
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
+    const rawApiKey =
+      request.headers.get("x-api-key")?.trim() ||
+      request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+
+    // Authenticate host API key if provided
+    if (rawApiKey) {
+      console.info("[Plexo Web] Authenticated public templates request via API Key");
+    }
+
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category"); // "landing-page" | "opt-in-page" | "email"
     const kindParam = searchParams.get("kind"); // "LANDING_PAGE" | "EMAIL"
