@@ -85,6 +85,15 @@ function IconX() {
   );
 }
 
+function IconTrash() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
+
 type FilterKind = "ALL" | TemplateKind;
 
 export function TemplatesClient({ initialTemplates }: Props) {
@@ -97,6 +106,30 @@ export function TemplatesClient({ initialTemplates }: Props) {
   const [templateKind, setTemplateKind] = useState<TemplateKind>("EMAIL");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = useState<TemplateSummary | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/templates/${deleteTarget.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete template");
+      setTemplates((prev) => prev.filter((t) => t.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (err: any) {
+      setDeleteError(err.message || "Failed to delete template");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     let list = templates;
@@ -381,23 +414,42 @@ export function TemplatesClient({ initialTemplates }: Props) {
                       </span>
                     )}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/dashboard/templates/${template.id}`)}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: "0.5rem",
-                      padding: "0.5rem 1rem",
-                      borderRadius: 8, border: "none", cursor: "pointer",
-                      fontSize: "0.8rem", fontWeight: 600,
-                      background: "var(--brand-subtle)",
-                      color: "var(--brand)",
-                      transition: "background 0.15s",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    Open Editor
-                    <IconArrow />
-                  </button>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/dashboard/templates/${template.id}`)}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                        padding: "0.5rem 1rem",
+                        borderRadius: 8, border: "none", cursor: "pointer",
+                        fontSize: "0.8rem", fontWeight: 600,
+                        background: "var(--brand-subtle)",
+                        color: "var(--brand)",
+                        transition: "background 0.15s",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      Open Editor
+                      <IconArrow />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(template)}
+                      title="Delete Template"
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: "0.4rem",
+                        padding: "0.55rem 0.75rem",
+                        borderRadius: 8, border: "1px solid rgba(239, 68, 68, 0.25)", cursor: "pointer",
+                        fontSize: "0.8rem", fontWeight: 600,
+                        background: "rgba(239, 68, 68, 0.1)",
+                        color: "#f87171",
+                        transition: "all 0.15s",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      <IconTrash />
+                    </button>
+                  </div>
                 </div>
               </article>
             );
@@ -609,6 +661,91 @@ export function TemplatesClient({ initialTemplates }: Props) {
                 }}
               >
                 {isCreating ? "Creating…" : "Create Template"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE CONFIRMATION MODAL ────────────────────────── */}
+      {deleteTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-modal-title"
+          style={{
+            position: "fixed", inset: 0, zIndex: 50,
+            display: "grid", placeItems: "center",
+            background: "rgba(0,0,0,0.75)",
+            backdropFilter: "blur(8px)",
+            WebkitBackdropFilter: "blur(8px)",
+            padding: "1rem",
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setDeleteTarget(null); } }}
+        >
+          <div style={{
+            width: "min(100%,440px)",
+            background: "#0d0f1a",
+            border: "1px solid rgba(239,68,68,0.3)",
+            borderRadius: 20,
+            padding: "1.75rem",
+            boxShadow: "0 30px 100px rgba(0,0,0,0.8)",
+          }}>
+            <div style={{ marginBottom: "1.25rem" }}>
+              <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#ef4444", marginBottom: "0.3rem" }}>
+                Confirm Deletion
+              </p>
+              <h2 id="delete-modal-title" style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.25rem", fontWeight: 800, color: "#f0f2ff" }}>
+                Delete &quot;{deleteTarget.name}&quot;?
+              </h2>
+              <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.6)", marginTop: "0.5rem", lineHeight: 1.5 }}>
+                This will permanently delete this template, all attached sub-pages, assets, and unbind custom domain mappings. This action cannot be undone.
+              </p>
+            </div>
+
+            {deleteError && (
+              <p style={{ fontSize: "0.8rem", color: "#ef4444", marginBottom: "1rem" }}>
+                {deleteError}
+              </p>
+            )}
+
+            <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={isDeleting}
+                style={{
+                  padding: "0.6rem 1.2rem",
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "#f0f2ff",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConfirmDelete()}
+                disabled={isDeleting}
+                style={{
+                  padding: "0.6rem 1.2rem",
+                  borderRadius: 10,
+                  border: "none",
+                  background: "#dc2626",
+                  color: "#ffffff",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  cursor: isDeleting ? "not-allowed" : "pointer",
+                  opacity: isDeleting ? 0.7 : 1,
+                  fontFamily: "inherit",
+                }}
+              >
+                {isDeleting ? "Deleting…" : "Delete Template"}
               </button>
             </div>
           </div>

@@ -114,3 +114,65 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     publishedUrl,
   });
 }
+
+/**
+ * DELETE /api/v1/templates/:id
+ *
+ * Permanently deletes a template, cleaning up any Vercel Blob assets, custom domain
+ * registrations in Vercel, and cascading database records (pages, publishedDomains, pageViews, assets).
+ */
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+): Promise<NextResponse> {
+  const resolved = await resolveUser(request);
+  if (!resolved) {
+    return NextResponse.json({ error: "Unauthorized. Valid API Key or Session required." }, { status: 401 });
+  }
+
+  const { id } = await context.params;
+  const existing = await prisma.template.findFirst({
+    where: { id, userId: resolved.userId },
+    select: { id: true, name: true },
+  });
+  if (!existing) {
+    return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });
+  }
+
+  // 1. Delete linked Vercel Blob storage assets
+  const assets = await prisma.templateAsset.findMany({
+    where: { templateId: existing.id },
+    select: { blobUrl: true },
+  });
+  if (assets.length > 0) {
+    const { del } = await import("@vercel/blob");
+    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
+    await del(assets.map((a) => a.blobUrl), blobToken ? { token: blobToken } : undefined).catch((err) =>
+      console.error("Failed to delete blobs during template delete (non-fatal):", err)
+    );
+  }
+
+  // 2. Remove Custom Domains from Vercel registry
+  const domainsToRemove = await prisma.publishedDomain.findMany({
+    where: { templateId: existing.id, type: "CUSTOM" },
+    select: { domain: true },
+  });
+  if (domainsToRemove.length > 0) {
+    const { removeVercelDomain } = await import("../../domains/route");
+    for (const d of domainsToRemove) {
+      await removeVercelDomain(d.domain).catch((err) =>
+        console.error(`Failed to remove Vercel domain ${d.domain} during template delete (non-fatal):`, err)
+      );
+    }
+  }
+
+  // 3. Delete from database (cascades pages, publishedDomains, pageViews, assets)
+  await prisma.template.delete({ where: { id: existing.id } });
+
+  return NextResponse.json({
+    success: true,
+    deletedId: existing.id,
+    name: existing.name,
+    message: `Template "${existing.name}" deleted successfully.`
+  });
+}
