@@ -97,9 +97,11 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
 
   const [addFileOpen, setAddFileOpen] = useState(false);
   const [newFileName, setNewFileName] = useState("");
+  const [pickedUploadFile, setPickedUploadFile] = useState<File | null>(null);
   const [addingFile, setAddingFile] = useState(false);
   const [addFileError, setAddFileError] = useState<string | null>(null);
   const newFileInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadFiles = useCallback(() => {
     setLoading(true);
@@ -221,9 +223,19 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
 
   function handleOpenAddFile() {
     setNewFileName("");
+    setPickedUploadFile(null);
     setAddFileError(null);
     setAddFileOpen(true);
     setTimeout(() => newFileInputRef.current?.focus(), 0);
+  }
+
+  function handlePickUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    e.target.value = ""; // allow picking the same filename again later
+    if (!file) return;
+    setPickedUploadFile(file);
+    setNewFileName(file.name);
+    setAddFileError(null);
   }
 
   async function handleCreateFile() {
@@ -235,11 +247,19 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
     setAddingFile(true);
     setAddFileError(null);
     try {
-      const res = await fetch(`/api/v1/templates/${templateId}/files`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path }),
-      });
+      let res: Response;
+      if (pickedUploadFile) {
+        const form = new FormData();
+        form.append("file", pickedUploadFile);
+        form.append("path", path);
+        res = await fetch(`/api/v1/templates/${templateId}/files`, { method: "POST", body: form });
+      } else {
+        res = await fetch(`/api/v1/templates/${templateId}/files`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path }),
+        });
+      }
       const payload = await res.json();
       if (!res.ok) throw new Error(payload.error ?? "Couldn't create the file.");
 
@@ -251,6 +271,7 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
       }
       setActivePath(newFile.path);
       setAddFileOpen(false);
+      setPickedUploadFile(null);
     } catch (err) {
       setAddFileError(err instanceof Error ? err.message : "Couldn't create the file.");
     } finally {
@@ -510,13 +531,54 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
             <div>
               <h3 style={{ fontSize: "1.05rem", fontWeight: 800, margin: 0 }}>Add a file</h3>
               <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.6)", marginTop: "0.5rem", lineHeight: 1.5 }}>
-                Creates a new, empty file on this site — e.g. <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>style.css</code> or{" "}
-                <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>script.js</code>. Import it from{" "}
+                Upload an existing <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>.css</code>/<code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>.js</code> file,
+                or just name a new blank one. Import it from{" "}
                 <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>index.html</code> with a{" "}
                 <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>&lt;link&gt;</code> or{" "}
                 <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>&lt;script&gt;</code> tag.
               </p>
             </div>
+
+            <input
+              ref={uploadFileInputRef}
+              type="file"
+              accept=".html,.htm,.css,.js,.mjs,.json,.txt,.xml,.map,.webmanifest,.png,.jpg,.jpeg,.gif,.svg,.webp,.avif,.ico,.woff,.woff2,.ttf,.otf,.eot"
+              onChange={handlePickUploadFile}
+              style={{ display: "none" }}
+            />
+            {pickedUploadFile ? (
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem",
+                padding: "0.55rem 0.75rem", borderRadius: 8, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+              }}>
+                <span style={{ fontSize: "0.8rem", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {pickedUploadFile.name} — {formatSize(pickedUploadFile.size)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setPickedUploadFile(null); setNewFileName(""); }}
+                  disabled={addingFile}
+                  style={{ background: "none", border: "none", color: "rgba(240,242,255,0.5)", cursor: "pointer", flexShrink: 0 }}
+                  title="Remove picked file"
+                >
+                  <IconClose />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => uploadFileInputRef.current?.click()}
+                disabled={addingFile}
+                style={{
+                  padding: "0.55rem 0.75rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 600,
+                  background: "none", border: "1px dashed rgba(255,255,255,0.2)", color: "rgba(240,242,255,0.7)",
+                  cursor: "pointer", textAlign: "left",
+                }}
+              >
+                Choose a file to upload…
+              </button>
+            )}
+
             <input
               ref={newFileInputRef}
               type="text"

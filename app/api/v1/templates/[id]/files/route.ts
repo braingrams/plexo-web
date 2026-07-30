@@ -8,6 +8,7 @@ import {
   isEditableExtension,
   starterContentFor,
   MAX_FILE_COUNT,
+  MAX_SINGLE_FILE_BYTES,
   RawUploadValidationError,
 } from "@/server/rawUpload";
 
@@ -102,6 +103,12 @@ function normalizeNewFilePath(rawPath: string): string {
  * the one gap the PUT-only [...path] route intentionally leaves open ("doesn't add or
  * remove files"); everything else (extension allowlist, size/count caps, blob storage)
  * mirrors the zip-extraction path in server/rawUpload.ts.
+ *
+ * Two request shapes:
+ *   - multipart/form-data { file, path? } — uploads a real local file (e.g. a .css/.js
+ *     the user already wrote); path defaults to the file's own name.
+ *   - application/json { path } — creates an empty file with minimal starter content,
+ *     for typing a brand-new file straight into the editor.
  */
 export async function POST(
   request: NextRequest,
@@ -124,12 +131,26 @@ export async function POST(
     return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
   }
 
-  const body = await request.json().catch(() => null);
-  const rawPath = body?.path;
-  if (typeof rawPath !== "string" || !rawPath.trim()) {
-    return NextResponse.json({ error: "Missing required 'path' string." }, { status: 400 });
+  let rawPath: string;
+  let buffer: Buffer;
+  const isMultipart = (request.headers.get("content-type") ?? "").includes("multipart/form-data");
+  if (isMultipart) {
+    const form = await request.formData().catch(() => null);
+    const uploaded = form?.get("file");
+    if (!(uploaded instanceof File)) {
+      return NextResponse.json({ error: "Missing required 'file' field." }, { status: 400 });
+    }
+    rawPath = ((form?.get("path") as string | null) || uploaded.name || "").trim();
+    buffer = Buffer.from(await uploaded.arrayBuffer());
+  } else {
+    const body = await request.json().catch(() => null);
+    rawPath = typeof body?.path === "string" ? body.path : "";
+    buffer = null as unknown as Buffer; // filled in below once the path is validated
   }
 
+  if (!rawPath) {
+    return NextResponse.json({ error: "Missing required 'path' string." }, { status: 400 });
+  }
   const path = normalizeNewFilePath(rawPath);
   if (!path || path.includes("..") || path.startsWith("/") || /^[a-zA-Z]:/.test(path)) {
     return NextResponse.json({ error: "Invalid file path." }, { status: 400 });
@@ -146,13 +167,21 @@ export async function POST(
     return NextResponse.json({ error: `This template already has the maximum of ${MAX_FILE_COUNT} files.` }, { status: 400 });
   }
 
-  const content = starterContentFor(path);
+  if (!isMultipart) {
+    buffer = Buffer.from(starterContentFor(path), "utf8");
+  }
+  if (buffer.byteLength > MAX_SINGLE_FILE_BYTES) {
+    return NextResponse.json({
+      error: `File exceeds the ${MAX_SINGLE_FILE_BYTES / 1024 / 1024}MB per-file limit.`,
+    }, { status: 400 });
+  }
+
   const contentType = contentTypeFor(path);
   const localDevToken = process.env.BLOB_READ_WRITE_TOKEN; // see upload-raw/route.ts — OIDC covers real deployments
 
   let blobUrl: string;
   try {
-    const blob = await put(`raw-sites/${template.id}/${path}`, Buffer.from(content, "utf8"), {
+    const blob = await put(`raw-sites/${template.id}/${path}`, buffer, {
       access: "public",
       contentType,
       ...(localDevToken ? { token: localDevToken } : {}),
@@ -166,15 +195,16 @@ export async function POST(
   }
 
   const asset = await prisma.templateAsset.create({
-    data: { templateId: template.id, path, blobUrl, contentType, size: Buffer.byteLength(content, "utf8") },
+    data: { templateId: template.id, path, blobUrl, contentType, size: buffer.byteLength },
   });
 
+  const editable = isEditableExtension(asset.path);
   const file: FileEntry = {
     path: asset.path,
     contentType: asset.contentType,
     size: asset.size,
-    editable: isEditableExtension(asset.path),
-    content,
+    editable,
+    ...(editable ? { content: buffer.toString("utf8") } : { url: asset.blobUrl }),
   };
 
   return NextResponse.json({ success: true, file });
