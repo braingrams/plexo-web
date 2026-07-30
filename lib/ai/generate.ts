@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ElementJSONSchema, TemplateJSONSchema } from "@/server/sanitizer";
+import { ElementJSONSchema, TemplateJSONSchema, hydrateStructuralDefaults } from "@/server/sanitizer";
 
 import { classifyPromptComplexity } from "./complexity";
 import { resolveModel } from "./modelRegistry";
@@ -49,6 +49,7 @@ Respond with ONLY a JSON object of this exact shape, no markdown fences, no pros
 
   return `You are Plexo's builder AI. ${modeInstruction}
 Allowed element types: ${ALLOWED_ELEMENT_TYPES.join(", ")}.
+Every row, column, and element must include a unique, non-empty "id" string. Every row and element must include "style" (and every element "attributes") as an object — use {} if there is nothing to set, never omit the key. Every column must include a "width" string (e.g. "100%").
 Respond with ONLY a JSON object of this exact shape, no markdown fences, no prose:
 { "summary": "<one or two short sentences describing what you changed or built>", "result": <the full TemplateJSON, i.e. { "body": { "style": {...}, "rows": [...] } }> }`;
 }
@@ -147,6 +148,12 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
     }
     const cleaned = cleanJsonString(text);
     const parsed = JSON.parse(cleaned);
+    // LLMs frequently omit structural bookkeeping (id/style/attributes/width) on repeated
+    // rows/columns/elements — hydrate the same way MCP/publish/compile/templates callers do
+    // before validating, instead of failing the whole response over missing defaults.
+    if (params.mode !== "edit_element" && parsed && typeof parsed === "object" && "result" in parsed) {
+      parsed.result = hydrateStructuralDefaults(parsed.result);
+    }
     const validated = schema.parse(parsed);
     return { summary: validated.summary, result: validated.result, usage };
   };
