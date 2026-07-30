@@ -545,16 +545,19 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   },
   {
     name: "delete_template",
-    description: "Permanently deletes any landing page or email template by templateId. Cleans up attached sub-pages, Vercel Blob assets, and custom domain routing. Confirm with user before calling as this action cannot be undone.",
+    description: "Permanently deletes any landing page or email template by templateId or template name (e.g. 'buzm'). Cleans up attached sub-pages, Vercel Blob assets, and custom domain routing. Confirm with user before calling as this action cannot be undone.",
     inputSchema: {
       type: "object",
       properties: {
         templateId: {
           type: "string",
-          description: "ID of the template or page to delete.",
+          description: "ID of the template or page to delete (UUID, or exact/partial template name like 'buzm').",
+        },
+        name: {
+          type: "string",
+          description: "Optional template name or search phrase if templateId is unknown (e.g. 'buzm').",
         },
       },
-      required: ["templateId"],
     },
   },
   {
@@ -1155,17 +1158,35 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
 
         case "delete_template":
         case "delete_landing_page_page": {
-          const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
-          if (!templateId) {
-            throw new Error("templateId is required.");
+          const queryStr = (typeof args.templateId === "string" ? args.templateId : "") || (typeof args.name === "string" ? args.name : "") || (typeof args.templateName === "string" ? args.templateName : "");
+          const rawInput = queryStr.trim();
+          if (!rawInput) {
+            throw new Error("templateId or template name is required.");
           }
 
-          const existing = await prisma.template.findFirst({
-            where: { id: templateId, userId: resolved.userId },
-            select: { id: true, parentId: true },
+          // 1. First try exact UUID/id match
+          let existing = await prisma.template.findFirst({
+            where: { id: rawInput, userId: resolved.userId },
+            select: { id: true, parentId: true, name: true, kind: true },
           });
+
+          // 2. If not found by ID, search by case-insensitive name match
           if (!existing) {
-            throw new Error(`No page found with id "${templateId}" in this account.`);
+            existing = await prisma.template.findFirst({
+              where: {
+                userId: resolved.userId,
+                OR: [
+                  { name: { equals: rawInput, mode: "insensitive" } },
+                  { name: { contains: rawInput, mode: "insensitive" } },
+                ],
+              },
+              orderBy: { updatedAt: "desc" },
+              select: { id: true, parentId: true, name: true, kind: true },
+            });
+          }
+
+          if (!existing) {
+            throw new Error(`No template found matching "${rawInput}" in this account. Use list_landing_pages or list_email_templates to view saved templates.`);
           }
 
           const descendantIds = await getDescendantIds(resolved.userId, existing.id);
