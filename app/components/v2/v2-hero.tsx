@@ -60,11 +60,11 @@ export function V2Hero({ isDark }: { isDark: boolean }) {
         </div>
 
         {/* Right Column Canvas & Floating Mockup Composition */}
-        <div className="lg:col-span-5 relative flex justify-center lg:justify-end w-full">
+        <div className="lg:col-span-5 relative flex justify-center lg:justify-end w-full overflow-hidden sm:overflow-visible">
           <div ref={mockupRef} className="relative w-full max-w-[480px] space-y-3">
             {/* Background Decorative Glow */}
-            <div className="absolute -top-12 -right-12 w-64 h-64 bg-purple-500/25 rounded-full blur-3xl" />
-            <div className="absolute -bottom-12 -left-12 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl" />
+            <div className="absolute -top-6 right-0 sm:-top-12 sm:-right-12 w-64 h-64 bg-purple-500/25 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-6 left-0 sm:-bottom-12 sm:-left-12 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
 
             {/* Overlapping Mockup Card 1 (Email Template) */}
             <div className="w-[85%] ml-auto bg-slate-900/95 text-white rounded-2xl p-4 border border-white/20 shadow-2xl backdrop-blur-md space-y-2 transform -rotate-3 hover:rotate-0 transition-transform duration-300">

@@ -5,7 +5,7 @@ import { Reveal } from "@/app/scroll-fx";
 
 export function V2TrustAndHeader({ isDark }: { isDark: boolean }) {
   return (
-    <section className={`py-10 md:py-14 px-4 sm:px-8 md:px-16 transition-colors duration-500 font-['Mulish',sans-serif] ${
+    <section className={`py-10 md:py-14 px-4 sm:px-8 md:px-16 overflow-hidden transition-colors duration-500 font-['Mulish',sans-serif] ${
       isDark ? "bg-[#0b0f19] text-white" : "bg-white text-slate-950"
     }`}>
       <div className="max-w-7xl mx-auto space-y-10">
@@ -69,23 +69,23 @@ export function V2TrustAndHeader({ isDark }: { isDark: boolean }) {
           {/* Section Headline */}
           <Reveal delay={0.2}>
             <div className="relative max-w-4xl mx-auto text-center space-y-3">
-              <Sparkles className="absolute -top-6 -left-8 w-5 h-5 text-purple-400 animate-pulse" />
-              <Sparkles className="absolute top-2 -right-8 w-4 h-4 text-indigo-400 animate-pulse delay-300" />
-              <Sparkles className="absolute -bottom-4 left-10 w-4 h-4 text-purple-300" />
+              <Sparkles className="absolute -top-6 -left-2 sm:-left-8 w-5 h-5 text-purple-400 animate-pulse" />
+              <Sparkles className="absolute top-2 -right-2 sm:-right-8 w-4 h-4 text-indigo-400 animate-pulse delay-300" />
+              <Sparkles className="absolute -bottom-4 left-4 sm:left-10 w-4 h-4 text-purple-300" />
 
-              <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight whitespace-nowrap">
+              <h2 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight">
                 No Limits, No Code Lock-in
               </h2>
 
-              <div className="flex items-center justify-center gap-3 text-4xl sm:text-5xl font-extrabold">
+              <div className="flex flex-wrap sm:flex-nowrap items-center justify-center gap-3 text-2xl sm:text-4xl md:text-5xl font-extrabold">
                 <span className="bg-gradient-to-r from-purple-500 via-indigo-500 to-blue-500 bg-clip-text text-transparent">
                   Publish anywhere
                 </span>
 
                 {/* Purple Toggle Switch Pill */}
-                <div className="w-14 h-8 bg-purple-600 rounded-full p-1 flex items-center justify-end shadow-inner">
-                  <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-md">
-                    <Zap className="w-3.5 h-3.5 text-purple-600 fill-purple-600" />
+                <div className="w-12 sm:w-14 h-7 sm:h-8 bg-purple-600 rounded-full p-1 flex items-center justify-end shadow-inner">
+                  <div className="w-5 sm:w-6 h-5 sm:h-6 bg-white rounded-full flex items-center justify-center shadow-md">
+                    <Zap className="w-3 h-3.5 text-purple-600 fill-purple-600" />
                   </div>
                 </div>
               </div>

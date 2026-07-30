@@ -29,7 +29,7 @@ export default function RootHomePage() {
 
   return (
     <ScrollFxProvider>
-      <main className={`${mulish.className} min-h-screen antialiased selection:bg-purple-600 selection:text-white transition-colors duration-500 ${
+      <main className={`${mulish.className} min-h-screen w-full max-w-full overflow-x-hidden antialiased selection:bg-purple-600 selection:text-white transition-colors duration-500 ${
         isDark ? "bg-[#0b0f19] text-white" : "bg-white text-slate-950"
       }`}>
         <V2Nav isDark={isDark} onToggleTheme={toggleTheme} />
