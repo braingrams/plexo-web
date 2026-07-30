@@ -544,6 +544,20 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
     },
   },
   {
+    name: "delete_template",
+    description: "Permanently deletes any landing page or email template by templateId. Cleans up attached sub-pages, Vercel Blob assets, and custom domain routing. Confirm with user before calling as this action cannot be undone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the template or page to delete.",
+        },
+      },
+      required: ["templateId"],
+    },
+  },
+  {
     name: "delete_landing_page_page",
     description: "Deletes a page. If it has sub-pages nested under it, they're deleted too (cascade) — the response reports how many. Deleting a site's home page deletes the whole site, including every page nested under it and its published domain link — this can't be undone, confirm with the user first.",
     inputSchema: {
@@ -1139,6 +1153,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           break;
         }
 
+        case "delete_template":
         case "delete_landing_page_page": {
           const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
           if (!templateId) {
