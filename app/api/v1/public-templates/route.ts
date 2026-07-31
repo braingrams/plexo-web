@@ -1,6 +1,11 @@
+import { createHash } from "node:crypto";
 import { TemplateKind } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
 
 // High quality default public templates served by Plexo Web when requested by clients
 const DEFAULT_PUBLIC_TEMPLATES = [
@@ -141,10 +146,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       request.headers.get("x-api-key")?.trim() ||
       request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
 
-    // Authenticate host API key if provided
-    if (rawApiKey) {
-      console.info("[Plexo Web] Authenticated public templates request via API Key");
+    // This previously logged that a key was present without ever validating it or scoping
+    // the DB query below by its owner — every caller (regardless of whose key they sent, or
+    // even with no key at all) got every user's saved templates in the entire database, not
+    // just their own. A key is required: this endpoint returns DB-backed user templates
+    // alongside the hardcoded public samples, and there's no legitimate "anonymous, see
+    // everyone's templates" use case for it.
+    if (!rawApiKey) {
+      return NextResponse.json({ error: "An API key is required (x-api-key or Authorization: Bearer)." }, { status: 401 });
     }
+
+    const hashedKey = sha256(rawApiKey);
+    const apiKeyRecord = await prisma.apiKey.findFirst({
+      where: { hashedKey, isActive: true },
+      select: { id: true, userId: true },
+    });
+
+    if (!apiKeyRecord) {
+      return NextResponse.json({ error: "Invalid or inactive API key." }, { status: 401 });
+    }
+
+    const ownerUserId = apiKeyRecord.userId;
 
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category"); // "landing-page" | "opt-in-page" | "email"
@@ -161,8 +183,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       targetKind = TemplateKind.EMAIL;
     }
 
-    // Query DB for templates with no parentId (root pages)
-    const dbWhere: any = { parentId: null };
+    // Query DB for templates with no parentId (root pages), scoped to the authenticated
+    // key's own owner — this previously had no userId filter at all, so every request
+    // returned every user's saved templates across the entire platform.
+    const dbWhere: any = { parentId: null, userId: ownerUserId };
     if (targetKind) {
       dbWhere.kind = targetKind;
     }
