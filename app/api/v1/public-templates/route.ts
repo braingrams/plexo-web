@@ -167,6 +167,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const ownerUserId = apiKeyRecord.userId;
+    // Every DB-backed template below belongs to this same owner (that's what dbWhere.userId
+    // now enforces), so the real account name only needs fetching once — used so callers
+    // (e.g. maildrip-server's getPublicTemplates) can show the actual owner instead of a
+    // hardcoded placeholder like "Plexo Official".
+    const ownerUser = await prisma.user.findUnique({ where: { id: ownerUserId }, select: { name: true } });
+    const ownerName = ownerUser?.name || null;
 
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category"); // "landing-page" | "opt-in-page" | "email"
@@ -220,6 +226,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       previewImage: null,
       designJson: t.designJson,
       compiledHtml: t.compiledHtml,
+      authorName: ownerName,
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString()
     }));
@@ -235,7 +242,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       return true;
     });
 
-    const combined = [...formattedDbTemplates, ...filteredDefaults].slice(skip, skip + limit);
+    // Tag the hardcoded samples with their own real authorship too (rather than leaving
+    // authorName undefined for them) — these genuinely are official Plexo starter templates,
+    // as opposed to formattedDbTemplates above, which belong to whichever account's API key
+    // was used. Without this, a caller that defaults a missing authorName to the API key
+    // owner's name (e.g. "Maildrip") would mislabel Plexo's own samples as that account's.
+    const namedDefaults = filteredDefaults.map((tpl) => ({ ...tpl, authorName: "Plexo" }));
+
+    const combined = [...formattedDbTemplates, ...namedDefaults].slice(skip, skip + limit);
 
     return NextResponse.json({
       success: true,
