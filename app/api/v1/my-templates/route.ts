@@ -4,19 +4,13 @@ import { prisma } from "@/server/prisma";
 import { resolveApiKey } from "../_lib/apiKeyAuth";
 
 /**
- * GET /api/v1/public-templates
+ * GET /api/v1/my-templates
  *
- * Genuinely public, platform-curated templates — Template.isOfficial rows, regardless of who
- * owns them. Still requires a valid API key (any active key works — this isn't scoped to that
- * key's own account, it's just used to authenticate the caller), which is what distinguishes
- * this from /api/v1/my-templates (that one *is* scoped to the calling key's own userId).
- *
- * This route used to return the calling key's own templates plus a handful of designs hardcoded
- * directly in this file (DEFAULT_PUBLIC_TEMPLATES) — neither of those is what "public" should
- * mean. The owner-scoped behavior moved to /api/v1/my-templates; the hardcoded samples were
- * migrated into real isOfficial-tagged Template rows (see prisma/seed.ts) so official templates
- * are a single consistent, curatable, DB-backed concept. Curation happens via
- * PATCH /api/admin/templates/[id]/official (email-allowlisted).
+ * Returns the templates owned by whichever account's API key made this request — this is the
+ * exact behavior /api/v1/public-templates used to have before it was split. Used by any caller
+ * (a host app's own shared key, or an individual end-user's own linked key) that wants "give me
+ * the templates belonging to whoever this key is," as opposed to /api/v1/public-templates, which
+ * now means genuinely public/official content regardless of who owns it.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -24,6 +18,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!resolved) {
       return NextResponse.json({ error: "A valid, active API key is required (x-api-key or Authorization: Bearer)." }, { status: 401 });
     }
+    const { userId: ownerUserId } = resolved;
+
+    // Every template returned below belongs to this same owner, so the real account name only
+    // needs fetching once.
+    const ownerUser = await prisma.user.findUnique({ where: { id: ownerUserId }, select: { name: true } });
+    const ownerName = ownerUser?.name || null;
 
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category"); // "landing-page" | "opt-in-page" | "email"
@@ -40,8 +40,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       targetKind = TemplateKind.EMAIL;
     }
 
-    // Platform-wide, unscoped by owner — the whole point of this being "public."
-    const dbWhere: any = { parentId: null, isOfficial: true };
+    const dbWhere: any = { parentId: null, userId: ownerUserId };
     if (targetKind) {
       dbWhere.kind = targetKind;
     }
@@ -61,11 +60,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           compiledHtml: true,
           createdAt: true,
           updatedAt: true,
-          user: { select: { name: true } },
         },
       });
     } catch (dbErr) {
-      console.warn("[Plexo Web] DB query for public-templates warning:", dbErr);
+      console.warn("[Plexo Web] DB query for my-templates warning:", dbErr);
     }
 
     const templates = dbTemplates.map((t) => ({
@@ -76,7 +74,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       previewImage: null,
       designJson: t.designJson,
       compiledHtml: t.compiledHtml,
-      authorName: t.user?.name || "Plexo",
+      authorName: ownerName,
       createdAt: t.createdAt.toISOString(),
       updatedAt: t.updatedAt.toISOString(),
     }));
@@ -87,7 +85,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       total: templates.length,
     });
   } catch (error: any) {
-    console.error("[Plexo Web Public Templates Error]:", error);
-    return NextResponse.json({ error: error.message || "Failed to fetch public templates" }, { status: 500 });
+    console.error("[Plexo Web My Templates Error]:", error);
+    return NextResponse.json({ error: error.message || "Failed to fetch your templates" }, { status: 500 });
   }
 }

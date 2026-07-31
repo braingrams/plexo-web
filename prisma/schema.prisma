@@ -187,6 +187,12 @@ model Template {
   slug     String?
   order    Int     @default(0)
 
+  // Marks this as a genuinely public, platform-curated template — distinct from userId, which
+  // is just whoever owns the row. Only flippable via the email-allowlisted admin route (see
+  // app/api/admin/templates/[id]/official/route.ts); /api/v1/public-templates queries this
+  // platform-wide, unscoped by owner, which is the whole point of it being "public."
+  isOfficial Boolean @default(false)
+
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   parent           Template?         @relation("TemplatePages", fields: [parentId], references: [id], onDelete: Cascade)
   pages            Template[]        @relation("TemplatePages")
