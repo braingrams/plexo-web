@@ -197,7 +197,7 @@ export function OverviewClient({
                 </p>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", flex: 1 }}>
+              <div className="stat-tile-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", flex: 1 }}>
                 {[
                   { label: "Templates", value: templatesCount, link: "/dashboard/templates" },
                   { label: "Live Domains", value: domainsCount, link: "/dashboard/domains" },
@@ -299,7 +299,7 @@ export function OverviewClient({
             </p>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", flex: 1 }}>
+          <div className="stat-tile-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", flex: 1 }}>
             {[
               { icon: "🎨", title: "Visual Editor", desc: "Drag-and-drop landing page elements & styles." },
               { icon: "⚡", title: "AI Generation", desc: "Automate builder style structures & typography." },
@@ -596,6 +596,11 @@ export function OverviewClient({
             grid-template-columns: 1fr !important;
           }
           .analytics-layout-split {
+            grid-template-columns: 1fr !important;
+          }
+        }
+        @media (max-width: 420px) {
+          .stat-tile-grid {
             grid-template-columns: 1fr !important;
           }
         }

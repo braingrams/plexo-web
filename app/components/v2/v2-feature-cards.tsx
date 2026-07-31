@@ -175,7 +175,7 @@ export function V2FeatureCards({ isDark }: { isDark: boolean }) {
               <p className={`text-base sm:text-lg font-medium leading-relaxed max-w-lg ${
                 isDark ? "text-slate-300" : "text-slate-700"
               }`}>
-                Link your custom domain (<code className="bg-emerald-950/80 border border-emerald-800 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-sm">yourdomain.com</code>) or host on free isolated subdomains (<code className="bg-emerald-950/80 border border-emerald-800 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-sm">site.plexopages.com</code>) with automatic Vercel DNS and Blob storage management.
+                Link your custom domain (<code className="bg-emerald-950/80 border border-emerald-800 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-sm">yourdomain.com</code>) or host on free isolated subdomains (<code className="bg-emerald-950/80 border border-emerald-800 px-1.5 py-0.5 rounded text-emerald-300 font-mono text-sm">site.plexopages.com</code>) with automatic DNS configuration and storage management — no setup required.
               </p>
 
               <Link
@@ -193,9 +193,9 @@ export function V2FeatureCards({ isDark }: { isDark: boolean }) {
             <div className="lg:col-span-6 relative flex justify-center items-center">
               <div className="relative w-full max-w-[380px] bg-slate-950 text-white rounded-3xl p-6 shadow-2xl border border-slate-800 space-y-4">
                 <div className="flex items-center justify-between text-xs font-bold text-slate-300">
-                  <span className="bg-slate-900 border border-slate-800 px-3 py-1 rounded-full font-mono">NEXT.JS</span>
-                  <span className="bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-blue-400 font-mono">VERCEL</span>
-                  <span className="bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-cyan-400 font-mono">TAILWIND</span>
+                  <span className="bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-emerald-400 font-mono">AUTO SSL</span>
+                  <span className="bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-blue-400 font-mono">INSTANT DNS</span>
+                  <span className="bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-cyan-400 font-mono">99.9% UPTIME</span>
                 </div>
 
                 {/* Hosting Card Graphic */}

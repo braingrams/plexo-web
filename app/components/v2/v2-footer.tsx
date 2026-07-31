@@ -88,7 +88,7 @@ export function V2Footer({ isDark }: { isDark: boolean }) {
         </div>
 
         <p className="max-w-3xl">
-          Plexo is a modern drag-and-drop web and email builder platform equipped with an SDK, an MCP server, and AI publish capabilities. Hosted on Vercel Edge infrastructure with database-backed security and tenant isolation. Copyright © Plexo Inc. 2026. All rights reserved.
+          Plexo is a modern drag-and-drop web and email builder platform equipped with an SDK, an MCP server, and AI publish capabilities. Built for speed, security, and scale — with tenant isolation to keep every workspace private. Copyright © Plexo Inc. 2026. All rights reserved.
         </p>
       </div>
 

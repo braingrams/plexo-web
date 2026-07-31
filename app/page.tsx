@@ -5,6 +5,7 @@ import { Mulish } from "next/font/google";
 import { ScrollFxProvider } from "@/app/scroll-fx";
 import { V2Nav } from "./components/v2/v2-nav";
 import { V2Hero } from "./components/v2/v2-hero";
+import { V2TaglineReveal } from "./components/v2/v2-tagline-reveal";
 import { V2TrustAndHeader } from "./components/v2/v2-trust-and-header";
 import { V2FeatureCards } from "./components/v2/v2-feature-cards";
 import { V2DarkFeatureSection } from "./components/v2/v2-dark-feature-section";
@@ -34,6 +35,7 @@ export default function RootHomePage() {
       }`}>
         <V2Nav isDark={isDark} onToggleTheme={toggleTheme} />
         <V2Hero isDark={isDark} />
+        <V2TaglineReveal isDark={isDark} />
         <V2TrustAndHeader isDark={isDark} />
         <V2FeatureCards isDark={isDark} />
         <V2DarkFeatureSection isDark={isDark} />

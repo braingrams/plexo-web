@@ -20,7 +20,7 @@ const FAQS: FaqItem[] = [
   },
   {
     question: "Can I connect my own custom domain to published pages?",
-    answer: "Yes! On supported plans, you can link custom domains (e.g., yourdomain.com) with automated Vercel DNS routing and SSL certificate provisioning. On the free tier, pages are published immediately on isolated subdomains (site.plexopages.com).",
+    answer: "Yes! On supported plans, you can link custom domains (e.g., yourdomain.com) with automated DNS routing and SSL certificate provisioning. On the free tier, pages are published immediately on isolated subdomains (site.plexopages.com).",
   },
   {
     question: "What happens when I eject a page or export clean code?",

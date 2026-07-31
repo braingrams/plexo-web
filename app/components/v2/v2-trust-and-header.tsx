@@ -17,30 +17,12 @@ export function V2TrustAndHeader({ isDark }: { isDark: boolean }) {
             <span className={`text-xs font-extrabold tracking-widest uppercase ${
               isDark ? "text-slate-400" : "text-slate-500"
             }`}>
-              INTEGRATES SEAMLESSLY WITH
+              WORKS WITH YOUR FAVORITE AI ASSISTANTS
             </span>
 
             <div className={`flex flex-wrap items-center justify-center md:justify-end gap-8 sm:gap-10 font-bold text-base sm:text-lg ${
               isDark ? "text-slate-300" : "text-slate-700"
             }`}>
-              {/* Next.js */}
-              <div className="flex items-center gap-2 hover:text-purple-400 transition-colors font-mono">
-                <span className="text-lg">▲</span>
-                <span>Next.js</span>
-              </div>
-
-              {/* React */}
-              <div className="flex items-center gap-2 hover:text-purple-400 transition-colors">
-                <span className="text-lg text-cyan-400">⚛</span>
-                <span>React</span>
-              </div>
-
-              {/* Node.js */}
-              <div className="flex items-center gap-2 hover:text-purple-400 transition-colors font-mono">
-                <span className="text-lg text-emerald-500">⬡</span>
-                <span>Node.js</span>
-              </div>
-
               {/* Claude */}
               <div className="flex items-center gap-2 hover:text-purple-400 transition-colors">
                 <Sparkles className="w-4 h-4 text-orange-400" />
@@ -61,8 +43,8 @@ export function V2TrustAndHeader({ isDark }: { isDark: boolean }) {
           <Reveal delay={0.1}>
             <div className="w-16 h-16 rounded-full bg-purple-700 text-white flex flex-col items-center justify-center shadow-xl border-2 border-purple-800 mb-6 p-2 mx-auto">
               <ShieldCheck className="w-6 h-6 text-white mb-0.5" />
-              <span className="text-[8px] font-extrabold tracking-widest leading-none">VERCEL</span>
-              <span className="text-[6px] opacity-80 leading-none">EDGE SECURED</span>
+              <span className="text-[8px] font-extrabold tracking-widest leading-none">SECURE</span>
+              <span className="text-[6px] opacity-80 leading-none">SSL PROTECTED</span>
             </div>
           </Reveal>
 

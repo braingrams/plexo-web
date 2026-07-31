@@ -524,3 +524,164 @@
   border-color: var(--brand-glow);
   transform: translateY(-1px);
 }
+
+/* ─────────────────────────────────────────
+   DASHBOARD SHELLS — classic + modern mobile responsiveness. The shell components
+   (dashboard-shell-classic.tsx, dashboard-shell-modern.tsx) render these classNames as
+   forward-references with no definitions anywhere in the codebase, so the intended
+   off-canvas drawer / hamburger-nav behavior below 768px never actually applied — this
+   fills in that base + responsive styling. Overrides need !important where the shells
+   set the same property inline (width/margin-left/max-width), since inline style
+   specificity otherwise wins over any class selector.
+   ───────────────────────────────────────── */
+
+.dash-mobile-nav-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 12, 0.6);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 39;
+}
+
+@media (min-width: 768px) {
+  .dash-mobile-nav-backdrop {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .dash-classic-aside {
+    width: 280px !important;
+    max-width: 82vw;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 12px 0 40px rgba(0, 0, 0, 0.45);
+    overflow-y: auto !important;
+  }
+
+  .dash-classic-aside > nav {
+    overflow-y: auto !important;
+  }
+
+  .dash-classic-aside.dash-classic-aside-open {
+    transform: translateX(0);
+  }
+
+  .dash-classic-main {
+    margin-left: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Desktop-only collapse/expand chevrons — the mobile drawer always shows full labels. */
+  .dash-classic-collapse-btn {
+    display: none !important;
+  }
+
+  .dash-classic-mobile-close-btn {
+    display: grid !important;
+  }
+
+  .dash-classic-editor-route .dash-classic-aside,
+  .dash-classic-editor-route .dash-classic-mobile-topbar,
+  .dash-classic-editor-route .dash-classic-banner,
+  .dash-classic-editor-route .dash-mobile-nav-backdrop {
+    display: none !important;
+  }
+
+  .dash-classic-editor-route .dash-classic-main {
+    margin-left: 0 !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Modern: floating pill topbar — previously had zero CSS of its own. */
+.dash-topbar {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  max-width: 1500px;
+  margin: 0.75rem auto 0;
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  background: rgba(13, 15, 26, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.dash-pill-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+  scrollbar-width: none;
+}
+
+.dash-pill-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.dash-pill-nav-item {
+  flex-shrink: 0;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: rgba(240, 242, 255, 0.65);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.dash-pill-nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f0f2ff;
+}
+
+.dash-pill-nav-item.active {
+  background: var(--brand-subtle);
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.dash-mobile-nav-toggle {
+  display: none;
+}
+
+.dash-main-modern {
+  padding: 1.5rem 2rem 4rem;
+}
+
+@media (max-width: 767px) {
+  .dash-topbar {
+    margin: 0.5rem 0.75rem 0;
+    padding: 0.5rem 0.6rem;
+    gap: 0.5rem;
+  }
+
+  .dash-pill-nav {
+    display: none !important;
+  }
+
+  .dash-mobile-nav-toggle {
+    display: flex !important;
+  }
+
+  .dash-main-modern {
+    padding: 1rem 1rem 3rem;
+  }
+
+  .dash-modern-editor-route .dash-topbar {
+    display: none !important;
+  }
+
+  .dash-modern-editor-route .dash-main-modern {
+    padding: 0 !important;
+  }
+}
