@@ -97,6 +97,14 @@ const ColumnJSONSchema: z.ZodType<any> = z.lazy(() => z.object({
   elements: z.array(ElementJSONSchema).max(200),
   nestedRows: z.array(RowJSONSchema).max(50).optional(),
   attrs: z.record(z.string(), z.any()).optional(),
+  // plexo-sdk's ColumnJSON.childOrder — the true interleaved visual order of this column's
+  // elements and nested rows (see plexo-sdk's utilities/columnOrder.ts). Same z.object()
+  // unrecognized-key stripping as styleTablet/styleMobile above: omitting this silently
+  // discarded any reordering that placed something above/below a nested row, or moved an
+  // element out of insertion order, on every save AND on every /api/v1/compile call — the
+  // canvas (reading the live in-memory JSON) showed the right order, but the compiled
+  // output silently fell back to elements-then-nestedRows / insertion order.
+  childOrder: z.array(z.string().max(100)).max(250).optional(),
 }));
 
 const RowJSONSchema: z.ZodType<any> = z.lazy(() => z.object({
