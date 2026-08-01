@@ -7,6 +7,8 @@ import { authClient } from "@/lib/auth-client";
 import { NAV_ITEMS as BASE_NAV_ITEMS } from "./nav-items";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls";
+import type { OrgBranding } from "./dashboard-shell";
+import { darken, toRgba } from "@/lib/color";
 
 /* ─── Icons ─────────────────────────────────── */
 function IconTemplates() {
@@ -149,9 +151,18 @@ type Props = {
   userName: string;
   userEmail: string;
   organizationName: string;
+  orgBranding?: OrgBranding;
 };
 
-export function DashboardShellClassic({ children, userName, userEmail, organizationName }: Props) {
+export function DashboardShellClassic({ children, userName, userEmail, organizationName, orgBranding }: Props) {
+  const brandName = orgBranding?.name ?? "Plexo";
+  const brandVars: React.CSSProperties = orgBranding?.color
+    ? ({
+        "--brand": orgBranding.color,
+        "--brand-deep": darken(orgBranding.color, 0.12),
+        "--brand-glow": toRgba(orgBranding.color, 0.35),
+      } as React.CSSProperties)
+    : {};
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
@@ -192,7 +203,7 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
   }, [pathname]);
 
   return (
-    <div className={rootClassName} style={{ minHeight: "100vh", display: "flex" }}>
+    <div className={rootClassName} style={{ minHeight: "100vh", display: "flex", ...brandVars }}>
       {/* ── MOBILE TOP BAR (below 768px only) ─────── */}
       <header className="dash-classic-mobile-topbar flex md:hidden">
         <button
@@ -212,7 +223,7 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
           fontWeight: 700, fontSize: "0.95rem",
           color: "#f0f2ff", letterSpacing: "-0.02em",
         }}>
-          Plexo
+          {brandName}
         </span>
         <span style={{ width: 32 }} />
       </header>
@@ -261,40 +272,60 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
         }}>
           {!collapsed && (
             <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.55rem", textDecoration: "none" }}>
-              <div style={{
-                width: 30, height: 30, borderRadius: 8,
-                background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
-                display: "grid", placeItems: "center",
-                boxShadow: "0 0 14px var(--brand-glow)",
-                flexShrink: 0,
-              }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
-                  <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
+              {orgBranding?.logoUrl ? (
+                <img
+                  src={orgBranding.logoUrl}
+                  alt={brandName}
+                  width={30}
+                  height={30}
+                  style={{ borderRadius: 8, objectFit: "cover", flexShrink: 0 }}
+                />
+              ) : (
+                <div style={{
+                  width: 30, height: 30, borderRadius: 8,
+                  background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
+                  display: "grid", placeItems: "center",
+                  boxShadow: "0 0 14px var(--brand-glow)",
+                  flexShrink: 0,
+                }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
+                    <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              )}
               <span style={{
                 fontFamily: "var(--font-heading), sans-serif",
                 fontWeight: 700, fontSize: "1rem",
                 color: "#f0f2ff", letterSpacing: "-0.02em",
                 whiteSpace: "nowrap",
               }}>
-                Plexo
+                {brandName}
               </span>
             </Link>
           )}
           {collapsed && (
-            <div style={{
-              width: 30, height: 30, borderRadius: 8,
-              background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
-              display: "grid", placeItems: "center",
-              boxShadow: "0 0 14px var(--brand-glow)",
-            }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
-                <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
+            orgBranding?.logoUrl ? (
+              <img
+                src={orgBranding.logoUrl}
+                alt={brandName}
+                width={30}
+                height={30}
+                style={{ borderRadius: 8, objectFit: "cover" }}
+              />
+            ) : (
+              <div style={{
+                width: 30, height: 30, borderRadius: 8,
+                background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
+                display: "grid", placeItems: "center",
+                boxShadow: "0 0 14px var(--brand-glow)",
+              }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
+                  <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+            )
           )}
           {!collapsed && (
             <button

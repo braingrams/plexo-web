@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
+import { getOrgBrand } from "@/lib/subscription";
 import { DashboardShell } from "./dashboard-shell";
 
 export default async function DashboardLayout({
@@ -36,6 +37,8 @@ export default async function DashboardLayout({
     redirect("/choose-org");
   }
 
+  const orgBranding = await getOrgBrand(orgResolution.organizationId);
+
   return (
     // The marketing site's new light/dark toggle (see app/landing-nav.tsx) is a single
     // global next-themes provider at the root layout, so its stored preference would
@@ -49,6 +52,7 @@ export default async function DashboardLayout({
         userEmail={userEmail}
         initialLayoutMode={initialLayoutMode}
         organizationName={orgResolution.organizationName}
+        orgBranding={orgBranding}
       >
         {children}
       </DashboardShell>

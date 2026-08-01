@@ -1,10 +1,29 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
-import { resolveManageLandingPagePublishing } from "@/lib/subscription";
+import { resolveManageLandingPagePublishing, canWhiteLabel, getOrganizationOwnerPlan } from "@/lib/subscription";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+/**
+ * Resolved only when the org is entitled (Pro/Ultra owner plan) and has actually set
+ * branding — otherwise omitted from the response entirely, so a Free-tier embed (or one
+ * from an org that hasn't configured anything) keeps plexo-sdk's default Plexo splash.
+ * See plexo-sdk's useApiKeyValidation.ts, which consumes this field.
+ */
+async function resolveSdkBranding(
+  organizationId: string,
+): Promise<{ name: string; logoUrl?: string; brandColor?: string } | undefined> {
+  const plan = await getOrganizationOwnerPlan(organizationId);
+  if (!canWhiteLabel(plan)) return undefined;
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { name: true, logo: true, brandColor: true },
+  });
+  if (!org || (!org.logo && !org.brandColor)) return undefined;
+  return { name: org.name, logoUrl: org.logo ?? undefined, brandColor: org.brandColor ?? undefined };
 }
 
 /**
@@ -17,7 +36,9 @@ function sha256(value: string): string {
  *   x-api-key: <raw api key> | "workspace-internal"
  *
  * Responses:
- *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA", useAi: boolean, aiProvider: string, aiTier: string, manageLandingPagePublishing: boolean }
+ *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA", useAi: boolean, aiProvider: string, aiTier: string, manageLandingPagePublishing: boolean, branding?: { name: string, logoUrl?: string, brandColor?: string } }
+ *   branding is present only for orgs entitled to (and who've configured) white-labeling —
+ *   see resolveSdkBranding below and plexo-sdk's useApiKeyValidation.ts, which consumes it.
  *   400 { valid: false, error: "API key is required." }
  *   401 { valid: false, error: "Invalid key or unauthorized." }
  *   500 { valid: false, error: "Internal server error." }
@@ -39,6 +60,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     let aiTier = "AUTO";
     let aiAccessMode = "SYSTEM";
     let manageLandingPagePublishing = false;
+    let branding: Awaited<ReturnType<typeof resolveSdkBranding>>;
 
     if (rawKey === "workspace-internal") {
       const { auth } = await import("@/server/auth");
@@ -80,6 +102,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         aiTier = user.apiKeys[0].aiTier;
         aiAccessMode = user.apiKeys[0].aiAccessMode;
       }
+
+      const activeOrgId = (session.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId;
+      const membership =
+        (activeOrgId &&
+          (await prisma.member.findUnique({
+            where: { organizationId_userId: { organizationId: activeOrgId, userId: session.user.id } },
+          }))) ||
+        (await prisma.member.findFirst({ where: { userId: session.user.id }, orderBy: { createdAt: "asc" } }));
+      if (membership) {
+        branding = await resolveSdkBranding(membership.organizationId);
+      }
     } else {
       const hashedKey = sha256(rawKey);
 
@@ -91,6 +124,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         select: {
           id: true,
           userId: true,
+          organizationId: true,
           useAi: true,
           aiProvider: true,
           aiTier: true,
@@ -117,6 +151,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       aiProvider = apiKey.aiProvider;
       aiTier = apiKey.aiTier;
       aiAccessMode = apiKey.aiAccessMode;
+      branding = await resolveSdkBranding(apiKey.organizationId);
 
       // Touch lastUsedAt so we can track active SDK sessions
       await prisma.apiKey.update({
@@ -133,6 +168,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       aiTier,
       aiAccessMode,
       manageLandingPagePublishing,
+      ...(branding ? { branding } : {}),
     });
   } catch (err) {
     console.error("[validate-key] Unexpected error:", err);

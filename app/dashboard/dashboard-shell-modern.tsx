@@ -8,6 +8,8 @@ import { NAV_ITEMS } from "./nav-items";
 import { Avatar } from "./_components/Avatar";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls";
+import type { OrgBranding } from "./dashboard-shell";
+import { darken, toRgba } from "@/lib/color";
 
 const HIDDEN_FROM_TOP_NAV = new Set(["/dashboard/settings", "/dashboard/profile"]);
 const TOP_NAV_ITEMS = NAV_ITEMS.filter((item) => !HIDDEN_FROM_TOP_NAV.has(item.href));
@@ -55,9 +57,21 @@ type Props = {
   userName: string;
   userEmail: string;
   organizationName: string;
+  orgBranding?: OrgBranding;
 };
 
-export function DashboardShellModern({ children, userName, userEmail, organizationName }: Props) {
+export function DashboardShellModern({ children, userName, userEmail, organizationName, orgBranding }: Props) {
+  const brandName = orgBranding?.name ?? "Plexo";
+  // Overrides the globals.css --brand triplet for this subtree only (inline style on the
+  // shell root cascades to every var(--brand)/var(--brand-deep)/var(--brand-glow) read
+  // below it) — leaves the marketing site and other dashboards' sessions untouched.
+  const brandVars: React.CSSProperties = orgBranding?.color
+    ? ({
+        "--brand": orgBranding.color,
+        "--brand-deep": darken(orgBranding.color, 0.12),
+        "--brand-glow": toRgba(orgBranding.color, 0.35),
+      } as React.CSSProperties)
+    : {};
   const pathname = usePathname();
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -105,23 +119,33 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
   }
 
   return (
-    <div className={rootClassName} style={{ minHeight: "100vh" }}>
+    <div className={rootClassName} style={{ minHeight: "100vh", ...brandVars }}>
       {/* ── FLOATING TOPBAR ─────────────────────────── */}
       <header className="dash-topbar">
         <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none", flexShrink: 0 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 8,
-            background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
-            display: "grid", placeItems: "center",
-            boxShadow: "0 0 14px var(--brand-glow)",
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
-              <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
+          {orgBranding?.logoUrl ? (
+            <img
+              src={orgBranding.logoUrl}
+              alt={brandName}
+              width={28}
+              height={28}
+              style={{ borderRadius: 8, objectFit: "cover", flexShrink: 0 }}
+            />
+          ) : (
+            <div style={{
+              width: 28, height: 28, borderRadius: 8,
+              background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
+              display: "grid", placeItems: "center",
+              boxShadow: "0 0 14px var(--brand-glow)",
+            }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
+                <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+          )}
           <span style={{ fontFamily: "var(--font-heading), sans-serif", fontWeight: 700, fontSize: "0.95rem", color: "#f0f2ff", letterSpacing: "-0.02em" }}>
-            Plexo
+            {brandName}
           </span>
         </Link>
 
@@ -256,6 +280,15 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
               >
                 <IconProfile />
                 Team
+              </Link>
+
+              <Link
+                href="/dashboard/settings/branding"
+                onClick={() => setMenuOpen(false)}
+                style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.55rem 0.6rem", borderRadius: 10, fontSize: "0.82rem", fontWeight: 500, color: "rgba(240,242,255,0.7)", textDecoration: "none" }}
+              >
+                <IconSettings />
+                Branding
               </Link>
 
               <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0.3rem 0" }} />

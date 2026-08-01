@@ -110,7 +110,22 @@ export const auth = betterAuth({
       // backfill script (scripts/backfill-personal-orgs.ts); new signups get
       // theirs created the first time they visit the dashboard.
       allowUserToCreateOrganization: true,
+      // White-label accent color — a plain column on Organization (prisma/schema.prisma),
+      // not a better-auth-recognized field by default, so it must be declared here to flow
+      // through auth.api.updateOrganization / authClient.organization.update. See
+      // lib/subscription.ts's canWhiteLabel for the plan gate that governs whether it's
+      // actually *used* anywhere it's read (dashboard chrome, emails, SDK) — this only
+      // controls whether the field can be persisted at all.
+      schema: {
+        organization: {
+          additionalFields: {
+            brandColor: { type: "string", required: false, input: true },
+          },
+        },
+      },
       sendInvitationEmail: async ({ id, role, email, organization: org, inviter }) => {
+        const { getOrgBrand } = await import("@/lib/subscription");
+        const brand = await getOrgBrand(org.id);
         await sendMaildripEmail({
           to: email,
           subject: `${inviter.user.name} invited you to join ${org.name} on Plexo`,
@@ -119,6 +134,7 @@ export const auth = betterAuth({
             orgName: org.name,
             role,
             acceptUrl: `${baseUrl}/accept-invite/${id}`,
+            brand,
           }),
         });
       },

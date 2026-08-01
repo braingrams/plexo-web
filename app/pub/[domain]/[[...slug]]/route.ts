@@ -4,7 +4,7 @@ import type { Template } from "@prisma/client";
 import { prisma } from "@/server/prisma";
 import { parseUserAgent, extractGeoFromHeaders } from "@/server/analytics";
 import { getPagesDomain } from "@/server/pagesDomain";
-import { resolveHideBranding } from "@/lib/subscription";
+import { resolveHideBranding, canWhiteLabel, getOrganizationOwnerPlan } from "@/lib/subscription";
 
 function notFoundResponse(): NextResponse {
   return new NextResponse(
@@ -74,6 +74,20 @@ function injectBaseHref(html: string, basePath: string): string {
   return baseTag + html;
 }
 
+// White-label favicon override for a published page, splice-injected the same way as
+// injectBaseHref — only called for orgs entitled to (and who've set) custom branding, see
+// the call site below. A same-origin builder-compiled page won't already have its own
+// <link rel="icon">, so this never needs to replace one, only add one.
+function injectFavicon(html: string, logoUrl: string): string {
+  const linkTag = `<link rel="icon" href="${logoUrl}">`;
+  const headMatch = html.match(/<head[^>]*>/i);
+  if (headMatch && headMatch.index !== undefined) {
+    const idx = headMatch.index + headMatch[0].length;
+    return html.slice(0, idx) + linkTag + html.slice(idx);
+  }
+  return html;
+}
+
 // Only ever called for BUILDER pages (platform-compiled, well-formed HTML) — never
 // RAW_UPLOAD content, where an arbitrary uploaded page could contain a literal "</body>"
 // string inside a <script> block or string literal that isn't the real closing tag and
@@ -100,7 +114,11 @@ export async function GET(
   // Find the published domain mapping and template (exact lookup first)
   let published = await prisma.publishedDomain.findUnique({
     where: { domain: rawDomain },
-    include: { template: true, user: { select: { subscriptionPlan: true, hideBranding: true } } },
+    include: {
+      template: true,
+      user: { select: { subscriptionPlan: true, hideBranding: true } },
+      organization: { select: { id: true, logo: true } },
+    },
   });
 
   // middleware.ts already normalizes "xyz.localhost" -> "xyz.{pagesDomain}" before
@@ -109,7 +127,11 @@ export async function GET(
     const sub = rawDomain.replace(".localhost", "");
     published = await prisma.publishedDomain.findUnique({
       where: { domain: `${sub}.${getPagesDomain()}` },
-      include: { template: true, user: { select: { subscriptionPlan: true, hideBranding: true } } },
+      include: {
+        template: true,
+        user: { select: { subscriptionPlan: true, hideBranding: true } },
+        organization: { select: { id: true, logo: true } },
+      },
     });
   }
 
@@ -168,6 +190,18 @@ export async function GET(
     if (cursor.sourceType !== "RAW_UPLOAD" && !resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
       html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
+    }
+
+    // White-label favicon — only for orgs entitled to custom branding (Pro/Ultra owner
+    // plan, same gate as the dashboard chrome/emails/SDK splash) that have actually set a
+    // logo. BUILDER and RAW_UPLOAD both get this (unlike the branding bar above, this is a
+    // single <link> tag in <head>, not a </body> splice, so RAW_UPLOAD's "arbitrary
+    // uploaded HTML" safety concern doesn't apply).
+    if (published.organization.logo) {
+      const ownerPlan = await getOrganizationOwnerPlan(published.organization.id);
+      if (canWhiteLabel(ownerPlan)) {
+        html = injectFavicon(html, published.organization.logo);
+      }
     }
 
     // Record analytics view asynchronously (does not block client response)

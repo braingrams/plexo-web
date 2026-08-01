@@ -1,9 +1,9 @@
-import { emailShell } from "./maildrip";
+import { emailShell, type EmailBrand } from "./maildrip";
 
-const CTA_BUTTON = (href: string, label: string) => `
+const CTA_BUTTON = (href: string, label: string, color = "#8b5cf6", colorDeep = "#7c3aed") => `
   <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 32px auto;">
     <tr>
-      <td style="border-radius:10px;background:linear-gradient(135deg,#8b5cf6,#7c3aed);text-align:center;">
+      <td style="border-radius:10px;background:linear-gradient(135deg,${color},${colorDeep});text-align:center;">
         <a href="${href}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;letter-spacing:0.2px;">
           ${label} &rarr;
         </a>
@@ -11,12 +11,12 @@ const CTA_BUTTON = (href: string, label: string) => `
     </tr>
   </table>`;
 
-const FALLBACK_LINK = (href: string) => `
+const FALLBACK_LINK = (href: string, color = "#8b5cf6") => `
   <p style="margin:0 0 8px;font-size:12px;color:#64748b;line-height:1.5;text-align:center;">
     If the button doesn't work, copy and paste this link into your browser:
   </p>
   <p style="margin:0;font-size:11px;color:#64748b;word-break:break-all;line-height:1.4;text-align:center;">
-    <a href="${href}" style="color:#8b5cf6;text-decoration:none;">${href}</a>
+    <a href="${href}" style="color:${color};text-decoration:none;">${href}</a>
   </p>`;
 
 export function buildVerificationEmail(actionUrl: string): string {
@@ -71,22 +71,27 @@ export function buildInviteEmail(input: {
   orgName: string;
   role: string;
   acceptUrl: string;
+  /** Org's white-label identity, when entitled — see server/auth.ts's sendInvitationEmail. */
+  brand?: EmailBrand;
 }): string {
   const roleLabel = ROLE_LABELS[input.role] ?? input.role;
+  const productName = input.brand?.name ?? "Plexo";
+  const accent = input.brand?.color ?? "#8b5cf6";
   return emailShell({
-    title: `Join ${input.orgName} on Plexo`,
+    title: `Join ${input.orgName} on ${productName}`,
     bodyHtml: `
       <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">You've been invited to collaborate</h1>
       <p style="margin:0 0 8px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
-        <strong>${input.inviterName}</strong> invited you to join <strong>${input.orgName}</strong> on Plexo as a
+        <strong>${input.inviterName}</strong> invited you to join <strong>${input.orgName}</strong> on ${productName} as a
       </p>
       <p style="margin:0 0 28px;text-align:center;">
         <span style="display:inline-block;background:#ede9fe;color:#7c3aed;font-size:13px;font-weight:700;padding:6px 14px;border-radius:9999px;letter-spacing:0.2px;">${roleLabel}</span>
       </p>
-      ${CTA_BUTTON(input.acceptUrl, "Accept Invitation")}
-      ${FALLBACK_LINK(input.acceptUrl)}
+      ${CTA_BUTTON(input.acceptUrl, "Accept Invitation", accent)}
+      ${FALLBACK_LINK(input.acceptUrl, accent)}
     `,
     footerHtml: "If you weren't expecting this invitation, you can safely ignore this email.<br/>",
+    brand: input.brand,
   });
 }
 
@@ -95,9 +100,12 @@ export function buildMentionEmail(input: {
   templateName: string;
   commentSnippet: string;
   deepLinkUrl: string;
+  brand?: EmailBrand;
 }): string {
+  const productName = input.brand?.name ?? "Plexo";
+  const accent = input.brand?.color ?? "#8b5cf6";
   return emailShell({
-    title: `${input.mentionerName} mentioned you on Plexo`,
+    title: `${input.mentionerName} mentioned you on ${productName}`,
     bodyHtml: `
       <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">You were mentioned in a comment</h1>
       <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
@@ -106,9 +114,10 @@ export function buildMentionEmail(input: {
       <p style="margin:0 0 28px;font-size:14px;color:#334155;line-height:1.6;text-align:center;background:#f1f5f9;border-radius:10px;padding:16px 20px;">
         &ldquo;${input.commentSnippet}&rdquo;
       </p>
-      ${CTA_BUTTON(input.deepLinkUrl, "View Comment")}
-      ${FALLBACK_LINK(input.deepLinkUrl)}
+      ${CTA_BUTTON(input.deepLinkUrl, "View Comment", accent)}
+      ${FALLBACK_LINK(input.deepLinkUrl, accent)}
     `,
+    brand: input.brand,
   });
 }
 
@@ -117,9 +126,12 @@ export function buildCommentReplyEmail(input: {
   templateName: string;
   commentSnippet: string;
   deepLinkUrl: string;
+  brand?: EmailBrand;
 }): string {
+  const productName = input.brand?.name ?? "Plexo";
+  const accent = input.brand?.color ?? "#8b5cf6";
   return emailShell({
-    title: `${input.replierName} replied on Plexo`,
+    title: `${input.replierName} replied on ${productName}`,
     bodyHtml: `
       <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">New reply on your comment</h1>
       <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
@@ -128,8 +140,9 @@ export function buildCommentReplyEmail(input: {
       <p style="margin:0 0 28px;font-size:14px;color:#334155;line-height:1.6;text-align:center;background:#f1f5f9;border-radius:10px;padding:16px 20px;">
         &ldquo;${input.commentSnippet}&rdquo;
       </p>
-      ${CTA_BUTTON(input.deepLinkUrl, "View Reply")}
-      ${FALLBACK_LINK(input.deepLinkUrl)}
+      ${CTA_BUTTON(input.deepLinkUrl, "View Reply", accent)}
+      ${FALLBACK_LINK(input.deepLinkUrl, accent)}
     `,
+    brand: input.brand,
   });
 }

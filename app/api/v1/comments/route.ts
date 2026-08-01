@@ -7,6 +7,7 @@ import { parseMentionedUserIds, commentSnippet } from "@/lib/comments/mentions";
 import { triggerEvent, commentChannelName, userChannelName, isRealtimeConfigured } from "@/lib/realtime/pusher";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildMentionEmail, buildCommentReplyEmail } from "@/lib/mail/templates";
+import { getOrgBrand } from "@/lib/subscription";
 
 function serializeComment(c: {
   id: string;
@@ -188,14 +189,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     const deepLinkUrl = `${baseUrl}/dashboard/templates/${template.id}?comment=${comment.id}`;
     const snippet = commentSnippet(trimmedBody);
+    const brand = await getOrgBrand(resolved.organizationId);
 
     for (const target of notificationTargets) {
       const to = emailByUserId.get(target.userId);
       if (!to) continue;
       const html =
         target.type === "MENTION"
-          ? buildMentionEmail({ mentionerName: comment.author.name, templateName: template.name, commentSnippet: snippet, deepLinkUrl })
-          : buildCommentReplyEmail({ replierName: comment.author.name, templateName: template.name, commentSnippet: snippet, deepLinkUrl });
+          ? buildMentionEmail({ mentionerName: comment.author.name, templateName: template.name, commentSnippet: snippet, deepLinkUrl, brand })
+          : buildCommentReplyEmail({ replierName: comment.author.name, templateName: template.name, commentSnippet: snippet, deepLinkUrl, brand });
       sendMaildripEmail({
         to,
         subject: target.type === "MENTION" ? `${comment.author.name} mentioned you on Plexo` : `${comment.author.name} replied on Plexo`,

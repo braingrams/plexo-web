@@ -53,6 +53,14 @@ export type TierFeatures = {
    * and User.hideBranding).
    */
   brandingRemovalEnabled: boolean;
+  /**
+   * Whether the organization may set its own name/logo/color in place of the Plexo brand
+   * across the dashboard, transactional emails, published-page favicon, and the embedded
+   * SDK's splash screen (Organization.logo/brandColor). Distinct from
+   * brandingRemovalEnabled: that hides the "Hosted with Plexo" bar; this replaces the
+   * Plexo identity itself with the org's own.
+   */
+  whiteLabelEnabled: boolean;
 };
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
@@ -69,6 +77,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     multiPageSitesEnabled: false,
     customDomainEnabled: false,
     brandingRemovalEnabled: false,
+    whiteLabelEnabled: false,
   },
   PRO: {
     maxTemplates: 20,
@@ -83,6 +92,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     multiPageSitesEnabled: false,
     customDomainEnabled: true,
     brandingRemovalEnabled: true,
+    whiteLabelEnabled: true,
   },
   ULTRA: {
     maxTemplates: -1, // unlimited
@@ -97,6 +107,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     multiPageSitesEnabled: true,
     customDomainEnabled: true,
     brandingRemovalEnabled: true,
+    whiteLabelEnabled: true,
   },
 };
 
@@ -181,4 +192,50 @@ export function resolveHideBranding(
   rawFlag: boolean | null | undefined,
 ): boolean {
   return !!rawFlag && canDo(plan, "brandingRemovalEnabled");
+}
+
+/**
+ * Whether an account on the given plan may white-label (set its own name/logo/color in
+ * place of the Plexo brand). See TierFeatures.whiteLabelEnabled.
+ */
+export function canWhiteLabel(plan: SubscriptionPlan | string | null | undefined): boolean {
+  return canDo(plan, "whiteLabelEnabled");
+}
+
+/**
+ * Billing lives entirely on User today (subscriptionPlan, stripeCustomerId, etc.) — there
+ * is no plan column on Organization. This resolves an org's effective plan by joining to
+ * whichever Member has role "owner" and reading *their* subscriptionPlan, rather than
+ * denormalizing plan onto Organization (a much larger change touching the Stripe webhook,
+ * checkout flow, and credit ledger — see the white-labeling plan's notes on this). Use
+ * this anywhere a feature needs to gate on "does this organization's plan allow X".
+ */
+export async function getOrganizationOwnerPlan(organizationId: string): Promise<SubscriptionPlan> {
+  const { prisma } = await import("@/server/prisma");
+  const owner = await prisma.member.findFirst({
+    where: { organizationId, role: "owner" },
+    select: { user: { select: { subscriptionPlan: true } } },
+  });
+  return (owner?.user.subscriptionPlan as SubscriptionPlan | undefined) ?? "FREE";
+}
+
+/**
+ * Resolves the white-label identity for an organization — dashboard chrome
+ * (dashboard-shell-{modern,classic}.tsx), transactional emails (lib/mail/templates.ts),
+ * and the SDK-facing /api/v1/validate-key response all call this. Returns undefined if
+ * the org isn't entitled (or has set no branding), in which case callers fall back to the
+ * default Plexo identity.
+ */
+export async function getOrgBrand(
+  organizationId: string,
+): Promise<{ name: string; logoUrl?: string; color?: string } | undefined> {
+  const { prisma } = await import("@/server/prisma");
+  const plan = await getOrganizationOwnerPlan(organizationId);
+  if (!canWhiteLabel(plan)) return undefined;
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { name: true, logo: true, brandColor: true },
+  });
+  if (!org) return undefined;
+  return { name: org.name, logoUrl: org.logo ?? undefined, color: org.brandColor ?? undefined };
 }
