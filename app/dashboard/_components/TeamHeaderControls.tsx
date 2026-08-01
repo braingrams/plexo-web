@@ -42,13 +42,22 @@ export function OrgSwitcher({ organizationName }: { organizationName: string }) 
   useEffect(() => {
     if (!open || orgs) return;
     authClient.organization.list().then((res: any) => {
-      const list = res?.data ?? res ?? [];
+      if (res?.error) {
+        console.error("Failed to list organizations:", res.error);
+        setOrgs([]);
+        return;
+      }
+      const list = res?.data ?? [];
       setOrgs(Array.isArray(list) ? list.map((o: any) => ({ id: o.id, name: o.name })) : []);
     }).catch(() => setOrgs([]));
   }, [open, orgs]);
 
   async function switchTo(organizationId: string) {
-    await authClient.organization.setActive({ organizationId });
+    const res: any = await authClient.organization.setActive({ organizationId });
+    if (res?.error) {
+      console.error("Failed to switch organizations:", res.error);
+      return;
+    }
     setOpen(false);
     router.refresh();
   }

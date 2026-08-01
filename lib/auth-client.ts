@@ -21,8 +21,7 @@ type ForgetPasswordInput = {
   redirectTo?: string;
 };
 
-export const authClient = {
-  ...coreClient,
+const overrides = {
   signUp: {
     email: (input: Record<string, unknown>) => signUpEmail(input),
   },
@@ -32,3 +31,18 @@ export const authClient = {
   forgetPassword: (input: ForgetPasswordInput) =>
     requestPasswordReset(input),
 };
+
+// better-auth's client is a `get`-only Proxy (no `ownKeys` trap) over an empty function
+// target — every nested namespace (organization, admin, useSession, signOut, ...) only
+// exists through that `get` trap. `{...coreClient}` silently produces an EMPTY object
+// (verified: Object.keys(coreClient) === []), so spreading it here previously dropped
+// everything except the 3 keys explicitly re-added below, breaking any other
+// authClient.* call with "Cannot read properties of undefined" the first time it was
+// ever exercised. Wrapping in our own Proxy (instead of spreading) keeps every
+// pass-through namespace working while still overriding these 3.
+export const authClient = new Proxy(coreClient as any, {
+  get(target, prop, receiver) {
+    if (prop in overrides) return overrides[prop as keyof typeof overrides];
+    return Reflect.get(target, prop, receiver);
+  },
+}) as typeof coreClient & typeof overrides;

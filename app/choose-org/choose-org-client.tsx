@@ -26,7 +26,10 @@ export function ChooseOrgClient({
     setPendingId(organizationId);
     setError(null);
     try {
-      await authClient.organization.setActive({ organizationId });
+      const res: any = await authClient.organization.setActive({ organizationId });
+      if (res?.error) {
+        throw new Error(res.error.message ?? "Couldn't switch organizations.");
+      }
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't switch organizations. Try again.");

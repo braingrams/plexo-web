@@ -14,7 +14,13 @@ export function AcceptInviteClient({ invitationId }: { invitationId: string }) {
     setPending("accept");
     setError(null);
     try {
+      // better-auth client methods resolve with { data, error } rather than throwing on
+      // an API-level failure — must check res.error explicitly or a failed accept would
+      // silently navigate to /dashboard as if it had succeeded.
       const res: any = await authClient.organization.acceptInvitation({ invitationId });
+      if (res?.error) {
+        throw new Error(res.error.message ?? "Couldn't accept this invitation.");
+      }
       const organizationId = res?.data?.invitation?.organizationId ?? res?.data?.member?.organizationId;
       if (organizationId) {
         await authClient.organization.setActive({ organizationId });
@@ -30,7 +36,10 @@ export function AcceptInviteClient({ invitationId }: { invitationId: string }) {
     setPending("decline");
     setError(null);
     try {
-      await authClient.organization.rejectInvitation({ invitationId });
+      const res: any = await authClient.organization.rejectInvitation({ invitationId });
+      if (res?.error) {
+        throw new Error(res.error.message ?? "Couldn't decline this invitation.");
+      }
       router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't decline this invitation.");
