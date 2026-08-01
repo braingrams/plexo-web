@@ -104,17 +104,19 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
  * Monthly system-AI credit allowance per plan — granted lazily (see
  * `lib/credits/ledger.ts`'s `ensureCreditPeriod`) and reset (not rolled over)
  * each 30-day cycle. Only applies to accounts using system AI (no BYOK key
- * configured); BYOK accounts never touch credits. These are starting defaults —
- * tune alongside `lib/credits/pricing.ts`'s CREDIT_USD_VALUE before launch.
+ * configured); BYOK accounts never touch credits.
+ *
+ * Sized against `lib/credits/pricing.ts`'s CREDIT_USD_VALUE default of $0.001/credit
+ * (1000 credits = $1): ULTRA's 5,000 credits = $5 of real AI cost at that rate.
  *
  * ULTRA is intentionally a large-but-finite number, not unlimited — now that
  * system AI has a real dollar cost behind it, unbounded usage on a fixed
  * subscription price is a margin risk; usage beyond the allowance is a top-up.
  */
 export const PLAN_MONTHLY_CREDITS: Record<SubscriptionPlan, number> = {
-  FREE: 2_000,
-  PRO: 20_000,
-  ULTRA: 100_000,
+  FREE: 10,
+  PRO: 2_000,
+  ULTRA: 5_000,
 };
 
 /**

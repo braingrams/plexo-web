@@ -43,7 +43,7 @@ const PLANS: Plan[] = [
     popular: true,
     features: [
       "Up to 20 Templates",
-      "100 Monthly AI Credits",
+      "2,000 Monthly AI Credits",
       "Custom Domain Linking (yourdomain.com)",
       "Branding Removal (Hide 'Hosted with Plexo')",
       "Visual & Raw HTML Eject Mode",
@@ -61,7 +61,7 @@ const PLANS: Plan[] = [
     description: "Maximum power for power users, teams, and platforms needing AI automation.",
     features: [
       "Unlimited Templates",
-      "500 Monthly AI Credits",
+      "5,000 Monthly AI Credits",
       "Multi-Page Sites Enabled",
       "Host-Managed AI Enabled",
       "MCP Server Agent Access",

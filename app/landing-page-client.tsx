@@ -522,7 +522,7 @@ const PLANS = [
     description: "For agencies and SaaS apps embedding Plexo for end users.",
     features: [
       "Unlimited Templates", "Unlimited Multi-Page Sites", "25 Published Domains", "Host-Managed AI Webhooks",
-      "White-Glove SDK Embedding", "100,000 Monthly AI Credits", "10 API Keys", "Everything in Pro",
+      "White-Glove SDK Embedding", "5,000 Monthly AI Credits", "10 API Keys", "Everything in Pro",
     ],
     cta: "Get Ultra",
     highlight: false,
