@@ -463,6 +463,12 @@ model Session {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Required by better-auth's organization() plugin (server/auth.ts) — tracks which
+  // org a multi-membership user is currently "in", set via auth.api.setActiveOrganization
+  // (see server/org.ts's ensureActiveOrganization). Plain string, not a Prisma relation,
+  // matching Member.role's same "better-auth owns the semantics" convention.
+  activeOrganizationId String? @db.Uuid
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
