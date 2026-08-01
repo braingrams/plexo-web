@@ -5,6 +5,7 @@ import { put } from "@vercel/blob";
 
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
+import { requirePermission } from "@/server/requirePermission";
 import { ensureUniqueSlug, isValidUuid } from "@/server/slug";
 import { getTierFeatures } from "@/lib/subscription";
 
@@ -32,12 +33,15 @@ export async function POST(
     );
   }
 
+  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["create"] });
+  if (permissionError) return permissionError;
+
   const { id } = await context.params;
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
   const existing = await prisma.template.findFirst({
-    where: { id, userId: resolved.userId },
+    where: { id, organizationId: resolved.organizationId },
     select: { id: true, name: true, kind: true, parentId: true, slug: true, designJson: true, compiledHtml: true, sourceType: true },
   });
   if (!existing) {
@@ -90,6 +94,7 @@ export async function POST(
     data: {
       id: newId,
       userId: resolved.userId,
+      organizationId: resolved.organizationId,
       name,
       kind: existing.kind,
       sourceType: existing.sourceType,

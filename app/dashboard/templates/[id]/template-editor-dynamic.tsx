@@ -25,6 +25,9 @@ export type TemplateEditorProps = {
   unsplashKey?: string;
   pexelsKey?: string;
   pixabayKey?: string;
+  currentUserId: string;
+  currentUserRole: string;
+  organizationId: string;
 };
 
 function EditorSkeleton() {

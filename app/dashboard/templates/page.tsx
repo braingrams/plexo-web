@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
+import { ensureActiveOrganization } from "@/server/org";
 
 import { TemplatesClient } from "./templates-client";
 
@@ -45,10 +46,15 @@ export default async function TemplatesDashboardPage() {
     redirect("/auth/login?redirectTo=/dashboard/templates");
   }
 
+  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  if (orgResolution.status === "needs-choice") {
+    redirect("/choose-org");
+  }
+
   // Sub-pages (parentId set) live inside their parent's editor, not as
   // separate top-level entries here.
   const templates = await prisma.template.findMany({
-    where: { userId: session.user.id, parentId: null },
+    where: { organizationId: orgResolution.organizationId, parentId: null },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,

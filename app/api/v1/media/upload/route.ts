@@ -37,6 +37,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const uploadedImage = await prisma.uploadedImage.create({
       data: {
         userId,
+        organizationId: resolved.organizationId,
         name: file.name,
         url: fileUrl,
       },

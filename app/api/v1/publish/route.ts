@@ -7,6 +7,7 @@ import { getTierFeatures } from "@/lib/subscription";
 import { getDomainLimit, resolveUser } from "../domains/route";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
+import { requirePermission } from "@/server/requirePermission";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -73,6 +74,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized. Valid API Key or Session required." }, { status: 401 });
   }
 
+  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["publish"] });
+  if (permissionError) return permissionError;
+
   const body = await request.json().catch(() => ({}));
   const kind: TemplateKind =
     typeof body.kind === "string" && body.kind.toUpperCase() === "EMAIL"
@@ -132,7 +136,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Check template creation limits — root/home pages only, so a landing page with
   // several multipage sub-pages still counts as one against this limit, not several.
   if (features.maxTemplates !== -1) {
-    const templateCount = await prisma.template.count({ where: { userId: resolved.userId, parentId: null } });
+    const templateCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null } });
     if (templateCount >= features.maxTemplates) {
       return NextResponse.json(
         { error: `Template limit reached (${features.maxTemplates}). Upgrade plan to create more pages.` },
@@ -145,6 +149,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const template = await prisma.template.create({
     data: {
       userId: resolved.userId,
+      organizationId: resolved.organizationId,
       name,
       kind,
       designJson,
@@ -206,7 +211,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // Check domain limits
-  const currentDomainCount = await prisma.publishedDomain.count({ where: { userId: resolved.userId } });
+  const currentDomainCount = await prisma.publishedDomain.count({ where: { organizationId: resolved.organizationId } });
   const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
   if (currentDomainCount >= domainLimit) {
     return NextResponse.json({
@@ -220,7 +225,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   });
 
   if (existingDomain) {
-    if (existingDomain.userId === resolved.userId) {
+    if (existingDomain.organizationId === resolved.organizationId) {
       // Re-link to new template
       await prisma.publishedDomain.update({
         where: { id: existingDomain.id },
@@ -244,6 +249,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const createdDomain = await prisma.publishedDomain.create({
       data: {
         userId: resolved.userId,
+        organizationId: resolved.organizationId,
         templateId: template.id,
         domain: finalDomain,
         type: domainType,

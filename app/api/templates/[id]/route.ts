@@ -4,6 +4,7 @@ import { del } from "@vercel/blob";
 
 import { prisma } from "@/server/prisma";
 import { resolveUser, removeVercelDomain } from "@/app/api/v1/domains/route";
+import { requirePermission } from "@/server/requirePermission";
 import { isValidSlugSegment, isSameOrAncestor, isValidUuid, slugify, getDescendantIds } from "@/server/slug";
 
 type PatchTemplateBody = {
@@ -22,12 +23,15 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  if (permissionError) return permissionError;
+
   const { id } = await context.params;
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
   const existing = await prisma.template.findFirst({
-    where: { id, userId: resolved.userId },
+    where: { id, organizationId: resolved.organizationId },
     select: { id: true, parentId: true, slug: true, kind: true },
   });
   if (!existing) {
@@ -72,7 +76,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Target page not found." }, { status: 404 });
     }
     const targetParent = await prisma.template.findFirst({
-      where: { id: targetParentId, userId: resolved.userId },
+      where: { id: targetParentId, organizationId: resolved.organizationId },
       select: { id: true },
     });
     if (!targetParent) {
@@ -113,19 +117,22 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["delete"] });
+  if (permissionError) return permissionError;
+
   const { id } = await context.params;
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
   const existing = await prisma.template.findFirst({
-    where: { id, userId: resolved.userId },
+    where: { id, organizationId: resolved.organizationId },
     select: { id: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
 
-  const descendantIds = await getDescendantIds(resolved.userId, existing.id);
+  const descendantIds = await getDescendantIds(resolved.organizationId, existing.id);
 
   // TemplateAsset rows cascade at the DB level (Template.assets onDelete: Cascade), but
   // Vercel Blob has no idea Postgres just deleted anything — clean up the actual blob

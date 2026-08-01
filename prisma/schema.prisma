@@ -57,16 +57,158 @@ enum AiAccessMode {
   HOST_MANAGED
 }
 
+enum NotificationType {
+  MENTION
+  COMMENT_REPLY
+  COMMENT_RESOLVED
+  INVITE_ACCEPTED
+}
+
+// Owned by better-auth's organization() plugin (server/auth.ts, server/accessControl.ts).
+// Member.role is a plain string matching one of accessControl.ts's role ids
+// ("owner" | "admin" | "editor" | "commenter" | "viewer") — validated at the app layer via
+// the plugin's access-control statements, not enforced as a DB enum, since better-auth
+// itself treats roles as strings (see roleSchema in its own schema).
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  logo      String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  members          Member[]
+  invitations      Invitation[]
+  templates        Template[]
+  apiKeys          ApiKey[]
+  publishedDomains PublishedDomain[]
+  uploadedImages   UploadedImage[]
+  comments         Comment[]
+  notifications    Notification[]
+}
+
+model Member {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  userId         String   @db.Uuid
+  role           String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model Invitation {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  email          String
+  role           String
+  status         String   @default("pending")
+  inviterId      String   @db.Uuid
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inviter      User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+}
+
+// Figma-style anchored comments on the PlexoBuilder canvas. anchorNodeId is a
+// RowJSON/ColumnJSON/ElementJSON.id from the template's designJson; null means a
+// template-level (unanchored) comment. See plexo-sdk's data-plexo-node-id +
+// getNodeRect() additions for how the pin's on-screen position is resolved.
+model Comment {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @db.Uuid
+  templateId     String    @db.Uuid
+  authorId       String    @db.Uuid
+  parentId       String?   @db.Uuid
+  body           String    @db.Text
+  anchorNodeId   String?
+  anchorNodeType String?
+  anchorX        Float?
+  anchorY        Float?
+  deviceView     String?
+  resolvedAt     DateTime?
+  resolvedById   String?   @db.Uuid
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  template     Template         @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  author       User             @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  resolvedBy   User?            @relation("CommentResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  parent       Comment?         @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      Comment[]        @relation("CommentReplies")
+  mentions     CommentMention[]
+
+  @@index([templateId])
+  @@index([organizationId])
+  @@index([parentId])
+}
+
+model CommentMention {
+  id        String   @id @default(uuid()) @db.Uuid
+  commentId String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([commentId, userId])
+  @@index([userId])
+}
+
+// Backs both the in-app notification bell and the trigger for mention/reply emails
+// (see lib/mail/templates.ts's buildMentionEmail/buildCommentReplyEmail).
+model Notification {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  userId         String           @db.Uuid
+  type           NotificationType
+  actorId        String?          @db.Uuid
+  commentId      String?          @db.Uuid
+  templateId     String?          @db.Uuid
+  readAt         DateTime?
+  createdAt      DateTime         @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor        User?        @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, readAt])
+  @@index([organizationId])
+}
+
+// Owned by plexo-admin (a separate app, same database) — see plexo-admin/prisma/schema.prisma
+// for the copy it builds against and plexo-admin/README.md for the two-repo schema-sync
+// process. null on User.adminRole = ordinary customer; non-null = staff member permitted
+// into the admin app.
+enum AdminRole {
+  SUPERADMIN
+  SUPPORT
+  MODERATOR
+  FINANCE
+}
+
 model User {
-  id                          String           @id @default(uuid()) @db.Uuid
-  name                        String           @default("Plexo User")
+  id                          String            @id @default(uuid()) @db.Uuid
+  name                        String            @default("Plexo User")
   image                       String?
-  email                       String           @unique
-  passwordHash                String           @default("")
-  isConfirmed                 Boolean          @default(false)
+  email                       String            @unique
+  passwordHash                String            @default("")
+  isConfirmed                 Boolean           @default(false)
   // Was @default(ULTRA) pre-Phase-2 (free beta, no billing). Now that plan
   // determines real monthly AI credit allowance, new signups default to FREE.
-  subscriptionPlan            SubscriptionPlan @default(FREE)
+  subscriptionPlan            SubscriptionPlan  @default(FREE)
   // Set at signup when the user picks Pro/Ultra on the pricing page, before they've paid —
   // durably records intent across the signup -> verify-email -> first-login gap (which can
   // span devices/time) since no session exists yet at signup time to persist this any other
@@ -81,18 +223,18 @@ model User {
   // Ultra-gated: lets embedded SDK builders publish/AI under this account without a
   // per-account domain limit. Enforcement of the Ultra requirement happens in app code
   // (see lib/subscription.ts resolveManageLandingPagePublishing), not at the DB layer.
-  manageLandingPagePublishing Boolean          @default(false)
+  manageLandingPagePublishing Boolean           @default(false)
   // Pro/Ultra-gated: hides the "Hosted with Plexo" bar injected into BUILDER pages served on
   // the shared plexopages.io subdomain (see app/pub/[domain]/[[...slug]]/route.ts). Collapsed
   // with plan entitlement via lib/subscription.ts's resolveHideBranding, same pattern as
   // resolveManageLandingPagePublishing, so a stale true after a downgrade doesn't leak through.
-  hideBranding                Boolean          @default(false)
-  layoutMode                  LayoutMode       @default(MODERN)
+  hideBranding                Boolean           @default(false)
+  layoutMode                  LayoutMode        @default(MODERN)
   // Strata design-system project the user has connected — lets AI tooling (MCP) auto-detect
   // and fetch brand tokens without the user re-supplying a project id on every call.
   strataProjectId             String?
-  createdAt                   DateTime         @default(now())
-  updatedAt                   DateTime         @updatedAt
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @updatedAt
 
   // Billing / credits (Phase 2)
   stripeCustomerId     String?  @unique
@@ -101,6 +243,19 @@ model User {
   topupBalance         Int      @default(0)
   allowanceResetAt     DateTime @default(now())
 
+  // Owned by plexo-admin: null = ordinary customer, non-null = staff member. See the
+  // AdminRole enum's comment above.
+  adminRole AdminRole?
+
+  // Owned by plexo-admin: account-wide suspend/reinstate, distinct from a single
+  // PublishedDomain's own active/suspendedAt. NOTE: this repo (plexo-web) does not yet
+  // check suspendedAt anywhere (sign-in, resolveUser, /pub serving) — setting it from
+  // the admin app currently records intent/audit only. A follow-up here should check it
+  // in server/auth.ts's sign-in hook and in app/api/v1/**'s resolveUser() before this is
+  // a real enforcement mechanism.
+  suspendedAt     DateTime?
+  suspendedReason String?
+
   apiKeys          ApiKey[]
   templates        Template[]
   accounts         Account[]
@@ -108,6 +263,16 @@ model User {
   publishedDomains PublishedDomain[]
   uploadedImages   UploadedImage[]
   creditLedger     CreditLedgerEntry[]
+  adminAuditLogs   AdminAuditLog[]
+
+  memberships            Member[]
+  sentInvitations        Invitation[]
+  comments               Comment[]        @relation("CommentAuthor")
+  resolvedComments       Comment[]        @relation("CommentResolvedBy")
+  commentMentions        CommentMention[]
+  notifications          Notification[]   @relation("NotificationRecipient")
+  triggeredNotifications Notification[]   @relation("NotificationActor")
+  templatePurchases       TemplatePurchase[]
 }
 
 model CreditLedgerEntry {
@@ -135,18 +300,19 @@ model StripeEvent {
 }
 
 model ApiKey {
-  id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @db.Uuid
-  name       String
-  hashedKey  String
-  maskedKey  String
-  useAi      Boolean   @default(false)
-  aiProvider String    @default("openai")
-  aiTier     AiTier    @default(AUTO)
-  aiApiKey   String?
-  isActive   Boolean   @default(true)
-  createdAt  DateTime  @default(now())
-  lastUsedAt DateTime?
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @db.Uuid
+  organizationId String    @db.Uuid
+  name           String
+  hashedKey      String
+  maskedKey      String
+  useAi          Boolean   @default(false)
+  aiProvider     String    @default("openai")
+  aiTier         AiTier    @default(AUTO)
+  aiApiKey       String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  lastUsedAt     DateTime?
 
   // Host-Managed AI access (Phase 3): lets an embedding host app own AI
   // authorization/billing for its own end users instead of Plexo's ledger.
@@ -157,24 +323,27 @@ model ApiKey {
   hostAuthWebhookUrl String?
   hostWebhookSecret  String?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([organizationId])
 }
 
 model Template {
-  id           String             @id @default(uuid()) @db.Uuid
-  userId       String             @db.Uuid
-  name         String
-  kind         TemplateKind
+  id             String             @id @default(uuid()) @db.Uuid
+  userId         String             @db.Uuid
+  organizationId String             @db.Uuid
+  name           String
+  kind           TemplateKind
   // RAW_UPLOAD templates have an empty/placeholder designJson (nothing to edit in the
   // builder) — compiledHtml holds the uploaded index.html verbatim, unsanitized;
   // additional files (css/js/images) live in TemplateAsset.
-  sourceType   TemplateSourceType @default(BUILDER)
-  designJson   Json
-  compiledHtml String             @db.Text
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  sourceType     TemplateSourceType @default(BUILDER)
+  designJson     Json
+  compiledHtml   String             @db.Text
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
   // Multipage support: a LANDING_PAGE template with parentId == null is a
   // standalone/home page (the thing a PublishedDomain links to, unchanged
@@ -193,16 +362,57 @@ model Template {
   // platform-wide, unscoped by owner, which is the whole point of it being "public."
   isOfficial Boolean @default(false)
 
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent           Template?         @relation("TemplatePages", fields: [parentId], references: [id], onDelete: Cascade)
-  pages            Template[]        @relation("TemplatePages")
+  // Template marketplace: owned by plexo-admin (curation) and served here by
+  // app/marketplace (browse/filter) + app/api/v1/marketplace/** (list/purchase/use).
+  // null marketplaceStatus = an ordinary, non-marketplace Template (nearly all rows).
+  // "type" filter on the public page is TemplateKind (kind, above); marketplaceCategory
+  // is a free-text tag plexo-admin sets, no separate taxonomy table.
+  marketplaceStatus      MarketplaceStatus?
+  marketplaceCategory    String?
+  marketplaceDescription String?
+  // Cents; 0 or null = free. Int, not Float, to avoid floating-point cent errors.
+  priceCents             Int?
+  marketplacePublishedAt DateTime?
+
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent           Template?          @relation("TemplatePages", fields: [parentId], references: [id], onDelete: Cascade)
+  pages            Template[]         @relation("TemplatePages")
   publishedDomains PublishedDomain[]
   pageViews        PageView[]
   assets           TemplateAsset[]
+  comments         Comment[]
+  purchases        TemplatePurchase[]
 
   @@unique([parentId, slug])
   @@index([userId])
+  @@index([organizationId])
   @@index([parentId])
+  @@index([marketplaceStatus])
+}
+
+enum MarketplaceStatus {
+  DRAFT
+  PUBLISHED
+}
+
+// One row per user who has unlocked a marketplace template (paid or claimed-free) — the
+// gate app/api/v1/marketplace/templates/[id]/use checks before letting someone duplicate
+// a marketplace template into their own account. Free templates still get a row
+// (priceCentsPaid 0) so "already own this"/"my library" checks don't special-case free.
+model TemplatePurchase {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @db.Uuid
+  templateId      String   @db.Uuid
+  priceCentsPaid  Int
+  stripeSessionId String?  @unique
+  createdAt       DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, templateId])
+  @@index([templateId])
 }
 
 // Non-root files belonging to a RAW_UPLOAD template (style.css, app.js, images, fonts...).
@@ -287,13 +497,14 @@ model RateLimit {
 }
 
 model PublishedDomain {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @db.Uuid
-  templateId String   @db.Uuid
-  domain     String   @unique
-  type       String // "SUBDOMAIN" | "CUSTOM"
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  organizationId String   @db.Uuid
+  templateId     String   @db.Uuid
+  domain         String   @unique
+  type           String // "SUBDOMAIN" | "CUSTOM"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Persisted DNS verification (previously only lived in transient client state, so a
   // page reload always reverted CUSTOM domains to "Check DNS" even after a successful check).
@@ -309,10 +520,12 @@ model PublishedDomain {
   flagReason      String?
   lastScannedAt   DateTime?
 
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  template     Template     @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([organizationId])
   @@index([templateId])
   @@index([domain])
 }
@@ -342,15 +555,18 @@ model PageView {
 }
 
 model UploadedImage {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @db.Uuid
-  name      String
-  url       String
-  createdAt DateTime @default(now())
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  url            String
+  createdAt      DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([organizationId])
 }
 
 model StockCache {
@@ -385,3 +601,20 @@ model Testimonial {
   @@index([createdAt])
 }
 
+// Owned by plexo-admin entirely: one row per mutating admin action, written by
+// plexo-admin/server/audit.ts's writeAuditLog(). Never mutated or deleted after creation.
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  actorId    String   @db.Uuid
+  action     String
+  targetType String
+  targetId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User @relation(fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}

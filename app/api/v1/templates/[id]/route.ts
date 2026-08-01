@@ -4,6 +4,7 @@ import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { getTierFeatures } from "@/lib/subscription";
 import { resolveUser } from "../../domains/route";
+import { requirePermission } from "@/server/requirePermission";
 
 /**
  * PUT /api/v1/templates/:id
@@ -31,10 +32,13 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     return NextResponse.json({ error: "Unauthorized. Valid API Key or Session required." }, { status: 401 });
   }
 
+  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  if (permissionError) return permissionError;
+
   const { id } = await context.params;
 
   const existing = await prisma.template.findFirst({
-    where: { id, userId: resolved.userId },
+    where: { id, organizationId: resolved.organizationId },
     select: { id: true, kind: true, name: true },
   });
   if (!existing) {
@@ -130,9 +134,12 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized. Valid API Key or Session required." }, { status: 401 });
   }
 
+  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["delete"] });
+  if (permissionError) return permissionError;
+
   const { id } = await context.params;
   const existing = await prisma.template.findFirst({
-    where: { id, userId: resolved.userId },
+    where: { id, organizationId: resolved.organizationId },
     select: { id: true, name: true },
   });
   if (!existing) {

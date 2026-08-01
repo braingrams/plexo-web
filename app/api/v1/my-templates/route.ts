@@ -18,7 +18,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!resolved) {
       return NextResponse.json({ error: "A valid, active API key is required (x-api-key or Authorization: Bearer)." }, { status: 401 });
     }
-    const { userId: ownerUserId } = resolved;
+    const { userId: ownerUserId, organizationId } = resolved;
 
     // Every template returned below belongs to this same owner, so the real account name only
     // needs fetching once.
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       targetKind = TemplateKind.EMAIL;
     }
 
-    const dbWhere: any = { parentId: null, userId: ownerUserId };
+    const dbWhere: any = { parentId: null, organizationId };
     if (targetKind) {
       dbWhere.kind = targetKind;
     }

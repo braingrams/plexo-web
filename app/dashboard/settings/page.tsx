@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { ensureCreditPeriod } from "@/lib/credits/ledger";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
+import { ensureActiveOrganization } from "@/server/org";
 
 import { SettingsClient } from "./settings-client";
 
@@ -60,9 +61,14 @@ export default async function DashboardSettingsPage() {
     redirect("/auth/login?redirectTo=/dashboard/settings");
   }
 
+  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  if (orgResolution.status === "needs-choice") {
+    redirect("/choose-org");
+  }
+
   const apiKeys = await prisma.apiKey.findMany({
     where: {
-      userId: session.user.id,
+      organizationId: orgResolution.organizationId,
       isActive: true,
     },
     orderBy: { createdAt: "desc" },

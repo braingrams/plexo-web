@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { NAV_ITEMS as BASE_NAV_ITEMS } from "./nav-items";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
+import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls";
 
 /* ─── Icons ─────────────────────────────────── */
 function IconTemplates() {
@@ -147,9 +148,10 @@ type Props = {
   children: React.ReactNode;
   userName: string;
   userEmail: string;
+  organizationName: string;
 };
 
-export function DashboardShellClassic({ children, userName, userEmail }: Props) {
+export function DashboardShellClassic({ children, userName, userEmail, organizationName }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
@@ -396,6 +398,14 @@ export function DashboardShellClassic({ children, userName, userEmail }: Props) 
           borderTop: "1px solid rgba(255,255,255,0.06)",
           flexShrink: 0,
         }}>
+          <div style={{
+            display: "flex", alignItems: "center",
+            justifyContent: collapsed ? "center" : "space-between",
+            gap: "0.4rem", marginBottom: "0.5rem",
+          }}>
+            {!collapsed && <OrgSwitcher organizationName={organizationName} />}
+            <NotificationBell />
+          </div>
           {!collapsed && (
             <div style={{
               display: "flex", alignItems: "center", gap: "0.6rem",

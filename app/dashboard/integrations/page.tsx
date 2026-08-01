@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
+import { ensureActiveOrganization } from "@/server/org";
 import IntegrationsClient from "./integrations-client";
 
 export default async function IntegrationsPage() {
@@ -19,9 +20,14 @@ export default async function IntegrationsPage() {
     redirect("/auth/login?redirectTo=/dashboard/integrations");
   }
 
-  // Fetch user's active API keys for easy 1-click copying
+  const orgResolution = await ensureActiveOrganization(reqHeaders, session.user.id);
+  if (orgResolution.status === "needs-choice") {
+    redirect("/choose-org");
+  }
+
+  // Fetch the org's active API keys for easy 1-click copying
   const apiKeys = await prisma.apiKey.findMany({
-    where: { userId: session.user.id, isActive: true },
+    where: { organizationId: orgResolution.organizationId, isActive: true },
     select: { id: true, name: true, maskedKey: true, createdAt: true },
     orderBy: { createdAt: "desc" },
   });

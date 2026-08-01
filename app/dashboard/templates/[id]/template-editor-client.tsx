@@ -9,14 +9,16 @@
  */
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
 	PlexoBuilder,
 	type PlexoBuilderRef,
 	type TemplateJSON,
+	type CommentTarget,
 } from "@charisol/plexo-sdk";
 import "@charisol/plexo-sdk/dist/plexo-sdk.css";
 import { PagesPanel } from "./PagesPanel";
+import { CommentLayer } from "./comments/CommentLayer";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 
@@ -36,6 +38,9 @@ type Props = {
 	unsplashKey?: string;
 	pexelsKey?: string;
 	pixabayKey?: string;
+	currentUserId: string;
+	currentUserRole: string;
+	organizationId: string;
 };
 
 function IconArrowLeft() {
@@ -88,6 +93,23 @@ function IconMail() {
 		>
 			<rect x="2" y="4" width="20" height="16" rx="3" />
 			<path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+		</svg>
+	);
+}
+
+function IconComment() {
+	return (
+		<svg
+			width="14"
+			height="14"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
 		</svg>
 	);
 }
@@ -215,12 +237,16 @@ function EditorHeaderRight({
 	subscriptionPlan,
 	isSaving,
 	onSave,
+	commentsOpen,
+	onToggleComments,
 }: {
 	saveMessage: string | null;
 	saveError: string | null;
 	subscriptionPlan: string;
 	isSaving: boolean;
 	onSave: () => void;
+	commentsOpen: boolean;
+	onToggleComments: () => void;
 }) {
 	return (
 		<div
@@ -231,6 +257,29 @@ function EditorHeaderRight({
 				flexShrink: 0,
 			}}
 		>
+			<button
+				type="button"
+				onClick={onToggleComments}
+				style={{
+					display: "inline-flex",
+					alignItems: "center",
+					gap: "0.4rem",
+					padding: "0.45rem 0.8rem",
+					borderRadius: 9,
+					border: commentsOpen ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
+					background: commentsOpen ? "var(--brand-subtle)" : "transparent",
+					color: commentsOpen ? "var(--brand)" : "rgba(240,242,255,0.6)",
+					cursor: "pointer",
+					fontFamily: "inherit",
+					fontSize: "0.8rem",
+					fontWeight: 600,
+					whiteSpace: "nowrap",
+				}}
+			>
+				<IconComment />
+				Comments
+			</button>
+
 			{saveMessage && (
 				<span
 					style={{
@@ -333,8 +382,12 @@ export function TemplateEditorClient({
 	unsplashKey,
 	pexelsKey,
 	pixabayKey,
+	currentUserId,
+	currentUserRole,
+	organizationId,
 }: Props) {
 	const router = useRouter();
+	const searchParams = useSearchParams();
 	const builderRef = useRef<PlexoBuilderRef>(null);
 	const [isSaving, setIsSaving] = useState(false);
 	const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -349,8 +402,16 @@ export function TemplateEditorClient({
 	const [modalError, setModalError] = useState<string | null>(null);
 	const [modalSuccess, setModalSuccess] = useState<string | null>(null);
 	const [baseDomain, setBaseDomain] = useState("plexo.charisol.io");
+	// Deep-linked from a mention/reply notification email (?comment=<id>) — opens the
+	// panel straight to that thread. See lib/mail/templates.ts's buildMentionEmail.
+	const [commentsOpen, setCommentsOpen] = useState(() => searchParams.has("comment"));
+	const [pendingPin, setPendingPin] = useState<import("@charisol/plexo-sdk").CommentTarget | null>(null);
 
 	const isEmail = templateKind === "EMAIL";
+	// Viewer/Commenter roles get a read-only canvas (enforced for real server-side by
+	// every mutating route's requirePermission check — this is UX support only, see
+	// plexo-sdk's readOnly prop docs).
+	const isReadOnlyRole = currentUserRole === "viewer" || currentUserRole === "commenter";
 
 	/** Exports and persists the current canvas without any of the save button's UI side effects — used when switching pages so the outgoing page's edits aren't lost. */
 	async function flushSave(): Promise<void> {
@@ -512,6 +573,9 @@ export function TemplateEditorClient({
 					unsplashKey={unsplashKey}
 					pexelsKey={pexelsKey}
 					pixabayKey={pixabayKey}
+					readOnly={isReadOnlyRole}
+					commentMode={commentsOpen}
+					onRequestComment={commentsOpen ? (target) => setPendingPin(target) : undefined}
 					headerLeftContent={
 						<EditorHeaderLeft
 							isEmail={isEmail}
@@ -526,9 +590,27 @@ export function TemplateEditorClient({
 							subscriptionPlan={subscriptionPlan}
 							isSaving={isSaving}
 							onSave={() => void handleSave()}
+							commentsOpen={commentsOpen}
+							onToggleComments={() => {
+								setCommentsOpen((v) => !v);
+								setPendingPin(null);
+							}}
 						/>
 					}
 					{...({ __internalPlan: subscriptionPlan } as any)}
+				/>
+
+				<CommentLayer
+					builderRef={builderRef}
+					templateId={templateId}
+					organizationId={organizationId}
+					currentUserId={currentUserId}
+					currentUserRole={currentUserRole}
+					active={commentsOpen}
+					pendingPin={pendingPin}
+					onConsumePendingPin={() => setPendingPin(null)}
+					onClose={() => setCommentsOpen(false)}
+					deepLinkCommentId={searchParams.get("comment")}
 				/>
 			</div>
 

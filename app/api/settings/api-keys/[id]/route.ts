@@ -4,6 +4,7 @@ import { encryptSecret } from "@/lib/crypto";
 import { canUseHostManagedAi } from "@/lib/subscription";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
+import { requirePermission } from "@/server/requirePermission";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 type AiAccessMode = "SYSTEM" | "BYOK" | "HOST_MANAGED";
@@ -42,19 +43,35 @@ function serializeApiKey(record: {
   };
 }
 
-async function getSessionUser(request: NextRequest) {
+// API keys belong to the organization — any teammate with apiKey.manage permission
+// (Owner/Admin) may manage the whole org's keys, matching the list route's scoping.
+async function getSessionOrgContext(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers });
-  return session?.user ?? null;
+  if (!session?.user) return null;
+
+  const activeOrgId = (session.session as { activeOrganizationId?: string }).activeOrganizationId;
+  const membership =
+    (activeOrgId &&
+      (await prisma.member.findUnique({
+        where: { organizationId_userId: { organizationId: activeOrgId, userId: session.user.id } },
+      }))) ||
+    (await prisma.member.findFirst({ where: { userId: session.user.id }, orderBy: { createdAt: "asc" } }));
+  if (!membership) return null;
+
+  return { userId: session.user.id, organizationId: membership.organizationId, role: membership.role };
 }
 
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
-  const user = await getSessionUser(request);
-  if (!user) {
+  const ctx = await getSessionOrgContext(request);
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const permissionError = await requirePermission(request.headers, ctx.role, { apiKey: ["manage"] });
+  if (permissionError) return permissionError;
 
   const params = await context.params;
   const body = (await request.json().catch(() => ({}))) as {
@@ -71,7 +88,7 @@ export async function PATCH(
   const existingKey = await prisma.apiKey.findFirst({
     where: {
       id: params.id,
-      userId: user.id,
+      organizationId: ctx.organizationId,
     },
   });
 

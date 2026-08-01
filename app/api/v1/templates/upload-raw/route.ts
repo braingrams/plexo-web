@@ -4,6 +4,7 @@ import { put, BlobError } from "@vercel/blob";
 import { TemplateKind } from "@prisma/client";
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
+import { requirePermission } from "@/server/requirePermission";
 import { getTierFeatures } from "@/lib/subscription";
 import { ensureUniqueSlug, isValidUuid } from "@/server/slug";
 import {
@@ -42,6 +43,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!resolved) {
     return NextResponse.json({ error: "Unauthorized. Valid session or API key required." }, { status: 401 });
   }
+
+  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["create"] });
+  if (permissionError) return permissionError;
 
   const features = getTierFeatures(resolved.subscriptionPlan);
   if (!features.landingPagesEnabled) {
@@ -99,7 +103,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Parent page not found." }, { status: 404 });
     }
     const parent = await prisma.template.findFirst({
-      where: { id: parentIdInput, userId: resolved.userId },
+      where: { id: parentIdInput, organizationId: resolved.organizationId },
       select: { id: true, kind: true },
     });
     if (!parent) {
@@ -117,7 +121,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     order = (lastSibling?.order ?? -1) + 1;
   } else if (features.maxTemplates !== -1) {
     // The plan's template limit counts root/home pages only, matching /api/templates.
-    const templateCount = await prisma.template.count({ where: { userId: resolved.userId, parentId: null } });
+    const templateCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null } });
     if (templateCount >= features.maxTemplates) {
       return NextResponse.json(
         { error: `Template limit reached (${features.maxTemplates}). Upgrade plan to create more pages.` },
@@ -198,6 +202,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     data: {
       id: templateId,
       userId: resolved.userId,
+      organizationId: resolved.organizationId,
       name,
       kind: "LANDING_PAGE",
       sourceType: "RAW_UPLOAD",

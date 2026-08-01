@@ -6,6 +6,7 @@ import { prisma } from "@/server/prisma";
 import { sanitizePlexoPayload } from "@/server/sanitizer";
 
 import { resolveUser } from "@/app/api/v1/domains/route";
+import { requirePermission } from "@/server/requirePermission";
 
 type UpdateTemplateBody = {
   designJson?: unknown;
@@ -20,7 +21,9 @@ export async function POST(
   if (!resolved) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const userId = resolved.userId;
+
+  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  if (permissionError) return permissionError;
 
   const params = await context.params;
   const body = (await request.json().catch(() => ({}))) as UpdateTemplateBody;
@@ -45,7 +48,7 @@ export async function POST(
   const existing = await prisma.template.findFirst({
     where: {
       id: params.id,
-      userId,
+      organizationId: resolved.organizationId,
     },
     select: { id: true },
   });

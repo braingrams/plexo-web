@@ -9,12 +9,13 @@ type Props = {
   userName: string;
   userEmail: string;
   initialLayoutMode: LayoutMode;
+  organizationName: string;
 };
 
-export function DashboardShell({ children, userName, userEmail, initialLayoutMode }: Props) {
+export function DashboardShell({ children, userName, userEmail, initialLayoutMode, organizationName }: Props) {
   return (
     <LayoutModeProvider initialMode={initialLayoutMode}>
-      <ShellSwitcher userName={userName} userEmail={userEmail}>
+      <ShellSwitcher userName={userName} userEmail={userEmail} organizationName={organizationName}>
         {children}
       </ShellSwitcher>
     </LayoutModeProvider>
@@ -25,23 +26,25 @@ function ShellSwitcher({
   children,
   userName,
   userEmail,
+  organizationName,
 }: {
   children: React.ReactNode;
   userName: string;
   userEmail: string;
+  organizationName: string;
 }) {
   const { mode } = useLayoutMode();
 
   if (mode === "MODERN") {
     return (
-      <DashboardShellModern userName={userName} userEmail={userEmail}>
+      <DashboardShellModern userName={userName} userEmail={userEmail} organizationName={organizationName}>
         {children}
       </DashboardShellModern>
     );
   }
 
   return (
-    <DashboardShellClassic userName={userName} userEmail={userEmail}>
+    <DashboardShellClassic userName={userName} userEmail={userEmail} organizationName={organizationName}>
       {children}
     </DashboardShellClassic>
   );

@@ -94,12 +94,12 @@ export interface PageTreeNode {
  * that `anyPageId` belongs to, regardless of whether it's the root itself or
  * nested somewhere inside it. Shared by the REST pages-tree route and the
  * MCP get_landing_page_pages tool. Returns null if `anyPageId` doesn't
- * belong to `userId`.
+ * belong to `organizationId`.
  */
-export async function getPageTree(userId: string, anyPageId: string): Promise<{ rootId: string; pages: PageTreeNode[] } | null> {
+export async function getPageTree(organizationId: string, anyPageId: string): Promise<{ rootId: string; pages: PageTreeNode[] } | null> {
   if (!isValidUuid(anyPageId)) return null;
   const current = await prisma.template.findFirst({
-    where: { id: anyPageId, userId },
+    where: { id: anyPageId, organizationId },
     select: { id: true, parentId: true },
   });
   if (!current) return null;
@@ -108,7 +108,7 @@ export async function getPageTree(userId: string, anyPageId: string): Promise<{ 
   let walkParentId = current.parentId;
   while (walkParentId) {
     const parent = await prisma.template.findFirst({
-      where: { id: walkParentId, userId },
+      where: { id: walkParentId, organizationId },
       select: { id: true, parentId: true },
     });
     if (!parent) break;
@@ -117,7 +117,7 @@ export async function getPageTree(userId: string, anyPageId: string): Promise<{ 
   }
 
   const root = await prisma.template.findFirst({
-    where: { id: rootId, userId },
+    where: { id: rootId, organizationId },
     select: { id: true, name: true, slug: true, parentId: true, order: true, updatedAt: true, sourceType: true },
   });
   if (!root) return null;
@@ -126,7 +126,7 @@ export async function getPageTree(userId: string, anyPageId: string): Promise<{ 
   let frontier = [rootId];
   while (frontier.length > 0) {
     const children = await prisma.template.findMany({
-      where: { parentId: { in: frontier }, userId },
+      where: { parentId: { in: frontier }, organizationId },
       orderBy: { order: "asc" },
       select: { id: true, name: true, slug: true, parentId: true, order: true, updatedAt: true, sourceType: true },
     });
@@ -150,12 +150,12 @@ export function pathForPage(pageId: string, pages: PageTreeNode[]): string {
 }
 
 /** Every descendant id under `pageId` (not including `pageId` itself), for delete-confirmation counts. */
-export async function getDescendantIds(userId: string, pageId: string): Promise<string[]> {
+export async function getDescendantIds(organizationId: string, pageId: string): Promise<string[]> {
   const result: string[] = [];
   let frontier = [pageId];
   while (frontier.length > 0) {
     const children = await prisma.template.findMany({
-      where: { parentId: { in: frontier }, userId },
+      where: { parentId: { in: frontier }, organizationId },
       select: { id: true },
     });
     result.push(...children.map((c) => c.id));

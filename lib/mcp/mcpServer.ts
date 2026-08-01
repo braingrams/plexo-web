@@ -58,7 +58,7 @@ function validateDesignJson(rawDesignJson: any): any {
  * counterpart already enforces.
  */
 async function linkDomainToTemplate(
-  resolved: { userId: string; subscriptionPlan: string; customDomainLimit: number | null },
+  resolved: { userId: string; organizationId: string; subscriptionPlan: string; customDomainLimit: number | null },
   templateId: string,
   rawDomainInput: string,
   domainTypeInput?: "SUBDOMAIN" | "CUSTOM"
@@ -98,7 +98,7 @@ async function linkDomainToTemplate(
     }
   }
 
-  const currentDomainCount = await prisma.publishedDomain.count({ where: { userId: resolved.userId } });
+  const currentDomainCount = await prisma.publishedDomain.count({ where: { organizationId: resolved.organizationId } });
   const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
   if (currentDomainCount >= domainLimit) {
     throw new Error(`Published domain limit reached (${domainLimit}). Unlink an existing domain to publish a new one.`);
@@ -106,7 +106,7 @@ async function linkDomainToTemplate(
 
   const existingDomain = await prisma.publishedDomain.findUnique({ where: { domain: finalDomain } });
   if (existingDomain) {
-    if (existingDomain.userId !== resolved.userId) {
+    if (existingDomain.organizationId !== resolved.organizationId) {
       throw new Error(`Domain '${finalDomain}' is already registered by another account.`);
     }
     await prisma.publishedDomain.update({
@@ -121,7 +121,7 @@ async function linkDomainToTemplate(
       await addVercelDomain(finalDomain);
     }
     await prisma.publishedDomain.create({
-      data: { userId: resolved.userId, templateId, domain: finalDomain, type: domainType },
+      data: { userId: resolved.userId, organizationId: resolved.organizationId, templateId, domain: finalDomain, type: domainType },
     });
   }
 
@@ -740,6 +740,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           const template = await prisma.template.create({
             data: {
               userId: resolved.userId,
+              organizationId: resolved.organizationId,
               name,
               kind: "LANDING_PAGE",
               designJson,
@@ -794,6 +795,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           const template = await prisma.template.create({
             data: {
               userId: resolved.userId,
+              organizationId: resolved.organizationId,
               name,
               kind: "EMAIL",
               designJson,
@@ -818,7 +820,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const existing = await prisma.template.findFirst({
-            where: { id: templateId, userId: resolved.userId },
+            where: { id: templateId, organizationId: resolved.organizationId },
             select: { id: true, kind: true, name: true },
           });
           if (!existing) {
@@ -889,7 +891,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
           if (features.maxTemplates !== -1) {
             // Root/home pages only — a page's sub-pages don't count against this limit.
-            const rootCount = await prisma.template.count({ where: { userId: resolved.userId, parentId: null } });
+            const rootCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null } });
             if (rootCount >= features.maxTemplates) {
               throw new Error(`Template limit reached (${features.maxTemplates}). Upgrade plan to create more.`);
             }
@@ -915,7 +917,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           const compiledHtml = sanitizeHtml(compileToHTML(designJson));
 
           const template = await prisma.template.create({
-            data: { userId: resolved.userId, name, kind: "LANDING_PAGE", designJson, compiledHtml },
+            data: { userId: resolved.userId, organizationId: resolved.organizationId, name, kind: "LANDING_PAGE", designJson, compiledHtml },
           });
 
           const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
@@ -941,7 +943,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const template = await prisma.template.findFirst({
-            where: { id: templateId, userId: resolved.userId, kind: "LANDING_PAGE" },
+            where: { id: templateId, organizationId: resolved.organizationId, kind: "LANDING_PAGE" },
             select: { id: true, name: true },
           });
           if (!template) {
@@ -976,7 +978,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const parent = await prisma.template.findFirst({
-            where: { id: parentTemplateId, userId: resolved.userId },
+            where: { id: parentTemplateId, organizationId: resolved.organizationId },
             select: { id: true, kind: true },
           });
           if (!parent) {
@@ -1018,6 +1020,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           const page = await prisma.template.create({
             data: {
               userId: resolved.userId,
+              organizationId: resolved.organizationId,
               name,
               kind: "LANDING_PAGE",
               parentId: parentTemplateId,
@@ -1028,7 +1031,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             },
           });
 
-          const tree = await getPageTree(resolved.userId, page.id);
+          const tree = await getPageTree(resolved.organizationId, page.id);
           const path = tree ? pathForPage(page.id, tree.pages) : `/${slug}`;
           const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
 
@@ -1050,7 +1053,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw new Error("templateId is required.");
           }
 
-          const tree = await getPageTree(resolved.userId, templateId);
+          const tree = await getPageTree(resolved.organizationId, templateId);
           if (!tree) {
             throw new Error(`No page found with id "${templateId}" in this account.`);
           }
@@ -1078,7 +1081,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const existing = await prisma.template.findFirst({
-            where: { id: templateId, userId: resolved.userId },
+            where: { id: templateId, organizationId: resolved.organizationId },
             select: { id: true, parentId: true, slug: true },
           });
           if (!existing) {
@@ -1111,7 +1114,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
               throw new Error("A page can't be nested under itself.");
             }
             const targetParent = await prisma.template.findFirst({
-              where: { id: targetParentId, userId: resolved.userId },
+              where: { id: targetParentId, organizationId: resolved.organizationId },
               select: { id: true },
             });
             if (!targetParent) {
@@ -1166,7 +1169,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
 
           // 1. First try exact UUID/id match
           let existing = await prisma.template.findFirst({
-            where: { id: rawInput, userId: resolved.userId },
+            where: { id: rawInput, organizationId: resolved.organizationId },
             select: { id: true, parentId: true, name: true, kind: true },
           });
 
@@ -1174,7 +1177,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           if (!existing) {
             existing = await prisma.template.findFirst({
               where: {
-                userId: resolved.userId,
+                organizationId: resolved.organizationId,
                 OR: [
                   { name: { equals: rawInput, mode: "insensitive" } },
                   { name: { contains: rawInput, mode: "insensitive" } },
@@ -1189,7 +1192,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw new Error(`No template found matching "${rawInput}" in this account. Use list_landing_pages or list_email_templates to view saved templates.`);
           }
 
-          const descendantIds = await getDescendantIds(resolved.userId, existing.id);
+          const descendantIds = await getDescendantIds(resolved.organizationId, existing.id);
           const allIds = [existing.id, ...descendantIds];
 
           // Same cleanup as the REST DELETE route (app/api/templates/[id]/route.ts) —
@@ -1239,7 +1242,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const existing = await prisma.template.findFirst({
-            where: { id: templateId, userId: resolved.userId },
+            where: { id: templateId, organizationId: resolved.organizationId },
             select: { id: true, name: true, kind: true, parentId: true, slug: true, designJson: true, compiledHtml: true, sourceType: true },
           });
           if (!existing) {
@@ -1294,6 +1297,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             data: {
               id: newId,
               userId: resolved.userId,
+              organizationId: resolved.organizationId,
               name,
               kind: existing.kind,
               sourceType: existing.sourceType,
@@ -1323,11 +1327,11 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
 
         case "list_landing_pages": {
           const templates = await prisma.template.findMany({
-            where: { userId: resolved.userId, kind: "LANDING_PAGE" },
+            where: { organizationId: resolved.organizationId, kind: "LANDING_PAGE" },
             select: { id: true, name: true, parentId: true, slug: true, createdAt: true, updatedAt: true },
           });
           const domains = await prisma.publishedDomain.findMany({
-            where: { userId: resolved.userId },
+            where: { organizationId: resolved.organizationId },
             select: { domain: true, type: true, templateId: true },
           });
           toolResult = {
@@ -1339,7 +1343,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
 
         case "list_email_templates": {
           const templates = await prisma.template.findMany({
-            where: { userId: resolved.userId, kind: "EMAIL" },
+            where: { organizationId: resolved.organizationId, kind: "EMAIL" },
             select: { id: true, name: true, createdAt: true, updatedAt: true },
           });
           toolResult = { emailTemplates: templates };

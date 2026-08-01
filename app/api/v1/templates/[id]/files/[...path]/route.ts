@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { put, BlobError } from "@vercel/blob";
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
+import { requirePermission } from "@/server/requirePermission";
 import {
   isEditableExtension,
   contentTypeFor,
@@ -32,10 +33,13 @@ export async function PUT(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
+  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  if (permissionError) return permissionError;
+
   const { id, path: pathSegments } = await context.params;
   const filePath = decodeURIComponent(pathSegments.join("/"));
 
-  const template = await prisma.template.findFirst({ where: { id, userId: resolved.userId } });
+  const template = await prisma.template.findFirst({ where: { id, organizationId: resolved.organizationId } });
   if (!template) {
     return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });
   }

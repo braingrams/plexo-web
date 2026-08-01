@@ -8,6 +8,7 @@ function sha256(value: string): string {
 export interface ResolvedApiKey {
   apiKeyId: string;
   userId: string;
+  organizationId: string;
 }
 
 /**
@@ -27,10 +28,10 @@ export async function resolveApiKey(request: Request): Promise<ResolvedApiKey | 
   const hashedKey = sha256(rawApiKey);
   const apiKeyRecord = await prisma.apiKey.findFirst({
     where: { hashedKey, isActive: true },
-    select: { id: true, userId: true },
+    select: { id: true, userId: true, organizationId: true },
   });
 
   if (!apiKeyRecord) return null;
 
-  return { apiKeyId: apiKeyRecord.id, userId: apiKeyRecord.userId };
+  return { apiKeyId: apiKeyRecord.id, userId: apiKeyRecord.userId, organizationId: apiKeyRecord.organizationId };
 }

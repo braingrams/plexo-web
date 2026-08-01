@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
-import { DashboardShell } from "../dashboard-shell";
+import { ensureActiveOrganization } from "@/server/org";
 import { DomainsClient } from "./domains-client";
 import { headers } from "next/headers";
 
@@ -11,6 +11,11 @@ export default async function DomainsPage() {
 
   if (!session?.user) {
     redirect("/auth/login");
+  }
+
+  const orgResolution = await ensureActiveOrganization(reqHeaders, session.user.id);
+  if (orgResolution.status === "needs-choice") {
+    redirect("/choose-org");
   }
 
   const user = await prisma.user.findUnique({
@@ -27,9 +32,9 @@ export default async function DomainsPage() {
     redirect("/auth/login");
   }
 
-  // Fetch user's published domains
+  // Fetch the org's published domains
   const publishedDomains = await prisma.publishedDomain.findMany({
-    where: { userId: session.user.id },
+    where: { organizationId: orgResolution.organizationId },
     include: {
       template: {
         select: {
@@ -41,14 +46,14 @@ export default async function DomainsPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  // Fetch user's landing pages to link/re-link — root/home pages only. A domain always
+  // Fetch the org's landing pages to link/re-link — root/home pages only. A domain always
   // links to a page tree's root; its sub-pages ride along under that same domain via the
   // page-tree walk in app/pub/[domain]/[[...slug]], they never get an independent
   // PublishedDomain of their own, so listing them here would let someone "link a domain"
   // to a page that can't actually be a site root.
   const landingPages = await prisma.template.findMany({
     where: {
-      userId: session.user.id,
+      organizationId: orgResolution.organizationId,
       kind: "LANDING_PAGE",
       parentId: null,
     },

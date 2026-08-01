@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
+import { ensureActiveOrganization } from "@/server/org";
 import { SdkClient } from "./sdk-client";
 
 export default async function DashboardSdkPage() {
@@ -13,10 +14,15 @@ export default async function DashboardSdkPage() {
     redirect("/auth/login?redirectTo=/dashboard/sdk");
   }
 
-  // Fetch active API keys for this user to display in their code integration tab
+  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  if (orgResolution.status === "needs-choice") {
+    redirect("/choose-org");
+  }
+
+  // Fetch the org's active API keys to display in the code integration tab
   const apiKeys = await prisma.apiKey.findMany({
     where: {
-      userId: session.user.id,
+      organizationId: orgResolution.organizationId,
       isActive: true,
     },
     orderBy: { createdAt: "desc" },

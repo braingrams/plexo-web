@@ -5,6 +5,7 @@ import { auth } from "@/server/auth";
 import { resolveManageLandingPagePublishing, getTierFeatures } from "@/lib/subscription";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
+import { requirePermission } from "@/server/requirePermission";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -82,6 +83,14 @@ export async function resolveUser(
   request: NextRequest,
 ): Promise<{
   userId: string;
+  // The org whose resources this request should read/write. Session-based callers get
+  // whichever org is active on their session (see server/org.ts's ensureActiveOrganization);
+  // API-key callers get the org that key belongs to (ApiKey.organizationId).
+  organizationId: string;
+  // Null for API-key auth: keys aren't tied to a human Member row/role, and have always
+  // been allowed to act on their own account's resources — see server/requirePermission.ts,
+  // which treats a null role as "skip the role check, this isn't a role-gated caller."
+  role: string | null;
   subscriptionPlan: string;
   customDomainLimit: number | null;
   manageLandingPagePublishing: boolean;
@@ -94,8 +103,25 @@ export async function resolveUser(
       select: { id: true, subscriptionPlan: true, customDomainLimit: true, manageLandingPagePublishing: true },
     });
     if (user) {
+      const activeOrgId = (session.session as { activeOrganizationId?: string }).activeOrganizationId;
+      const membership =
+        (activeOrgId &&
+          (await prisma.member.findUnique({
+            where: { organizationId_userId: { organizationId: activeOrgId, userId: user.id } },
+          }))) ||
+        (await prisma.member.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "asc" } }));
+
+      // Every user should have a membership by the time they can reach a dashboard route
+      // (see server/org.ts's ensureActiveOrganization, called from app/dashboard/layout.tsx),
+      // but a caller hitting this API directly with only a session cookie and no
+      // organization yet (e.g. right after signup, before the dashboard layout has run)
+      // has nothing to scope to.
+      if (!membership) return null;
+
       return {
         userId: user.id,
+        organizationId: membership.organizationId,
+        role: membership.role,
         subscriptionPlan: user.subscriptionPlan,
         customDomainLimit: user.customDomainLimit,
         manageLandingPagePublishing: resolveManageLandingPagePublishing(user.subscriptionPlan, user.manageLandingPagePublishing),
@@ -127,6 +153,7 @@ export async function resolveUser(
     },
     select: {
       userId: true,
+      organizationId: true,
     },
   });
 
@@ -140,6 +167,8 @@ export async function resolveUser(
   if (!user) return null;
   return {
     userId: apiKey.userId,
+    organizationId: apiKey.organizationId,
+    role: null,
     subscriptionPlan: user.subscriptionPlan,
     customDomainLimit: user.customDomainLimit,
     manageLandingPagePublishing: resolveManageLandingPagePublishing(user.subscriptionPlan, user.manageLandingPagePublishing),
@@ -174,7 +203,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const domains = await prisma.publishedDomain.findMany({
     where: {
-      userId: resolved.userId,
+      organizationId: resolved.organizationId,
       templateId: templateId || undefined,
     },
     include: {
@@ -215,6 +244,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const permissionError = await requirePermission(request.headers, resolved.role, { domain: ["manage"] });
+  if (permissionError) return permissionError;
+
   const body = await request.json().catch(() => ({}));
   const { templateId, type } = body;
   let rawDomain = body.domain?.trim().toLowerCase() || "";
@@ -229,9 +261,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const baseDomain = getPagesDomain();
 
-  // Validate template exists and belongs to the user
+  // Validate template exists and belongs to the organization
   const template = await prisma.template.findFirst({
-    where: { id: templateId, userId: resolved.userId },
+    where: { id: templateId, organizationId: resolved.organizationId },
   });
 
   if (!template) {
@@ -266,13 +298,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   });
 
   if (existingDomain) {
-    // 1. If it's already linked to the exact same template and user, it is an idempotent success
-    if (existingDomain.templateId === templateId && existingDomain.userId === resolved.userId) {
+    // 1. If it's already linked to the exact same template and org, it is an idempotent success
+    if (existingDomain.templateId === templateId && existingDomain.organizationId === resolved.organizationId) {
       return NextResponse.json({ success: true, domain: existingDomain });
     }
 
-    // 2. If it is an explicit re-link update request on the user's own domain
-    if (body.relink && existingDomain.userId === resolved.userId) {
+    // 2. If it is an explicit re-link update request on the org's own domain
+    if (body.relink && existingDomain.organizationId === resolved.organizationId) {
       const updated = await prisma.publishedDomain.update({
         where: { id: existingDomain.id },
         data: { templateId },
@@ -283,7 +315,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     // 3. Otherwise, block the request as a duplicate mapping attempt
-    if (existingDomain.userId === resolved.userId) {
+    if (existingDomain.organizationId === resolved.organizationId) {
       return NextResponse.json({
         error: "This domain is already linked to another landing page in your account. Please unlink it or edit it from the Domain Management dashboard."
       }, { status: 409 });
@@ -294,9 +326,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Check user limits before creating new domain mapping
+  // Check org limits before creating new domain mapping
   const currentCount = await prisma.publishedDomain.count({
-    where: { userId: resolved.userId },
+    where: { organizationId: resolved.organizationId },
   });
 
   const limit = resolved.manageLandingPagePublishing
@@ -327,6 +359,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const created = await prisma.publishedDomain.create({
     data: {
       userId: resolved.userId,
+      organizationId: resolved.organizationId,
       templateId,
       domain: finalDomain,
       type,
@@ -345,6 +378,9 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const permissionError = await requirePermission(request.headers, resolved.role, { domain: ["manage"] });
+  if (permissionError) return permissionError;
+
   const { searchParams } = new URL(request.url);
   const domainId = searchParams.get("id")?.trim();
   const domainName = searchParams.get("domain")?.trim().toLowerCase();
@@ -355,7 +391,7 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
         { id: domainId || undefined },
         { domain: domainName || undefined },
       ],
-      userId: resolved.userId,
+      organizationId: resolved.organizationId,
     },
   });
 

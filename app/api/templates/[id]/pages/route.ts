@@ -22,7 +22,7 @@ export async function GET(
   }
 
   const { id } = await context.params;
-  const tree = await getPageTree(resolved.userId, id);
+  const tree = await getPageTree(resolved.organizationId, id);
   if (!tree) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }

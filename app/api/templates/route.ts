@@ -1,12 +1,11 @@
-import { createHash } from "node:crypto";
-
 import { TemplateKind } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
-import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { getTierFeatures } from "@/lib/subscription";
 import { ensureUniqueSlug } from "@/server/slug";
+import { resolveUser } from "@/app/api/v1/domains/route";
+import { requirePermission } from "@/server/requirePermission";
 
 type TemplateSummary = {
   id: string;
@@ -55,56 +54,6 @@ function serializeTemplate(record: {
   };
 }
 
-function sha256(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
-}
-
-function parseBearerToken(authorization: string | null): string | null {
-  if (!authorization) return null;
-  const [scheme, token] = authorization.split(" ");
-  if (!scheme || !token) return null;
-  if (scheme.toLowerCase() !== "bearer") return null;
-  const trimmed = token.trim();
-  return trimmed || null;
-}
-
-/**
- * Resolves a user from either:
- *  1. A valid session cookie (browser/internal usage)
- *  2. A Bearer API key in the Authorization header (external API usage)
- *
- * Returns { userId, subscriptionPlan } or null if unauthenticated.
- */
-async function resolveUser(
-  request: NextRequest,
-): Promise<{ userId: string; subscriptionPlan: string } | null> {
-  // 1. Try session-based auth first
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (session?.user) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true, subscriptionPlan: true },
-    });
-    if (user) return { userId: user.id, subscriptionPlan: user.subscriptionPlan };
-  }
-
-  // 2. Fall back to API key Bearer token
-  const bearerToken = parseBearerToken(request.headers.get("authorization"));
-  if (!bearerToken) return null;
-
-  const hashedKey = sha256(bearerToken);
-  const apiKey = await prisma.apiKey.findFirst({
-    where: { hashedKey, isActive: true },
-    select: {
-      userId: true,
-      user: { select: { subscriptionPlan: true } },
-    },
-  });
-
-  if (!apiKey) return null;
-  return { userId: apiKey.userId, subscriptionPlan: apiKey.user.subscriptionPlan };
-}
-
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const resolved = await resolveUser(request);
   if (!resolved) {
@@ -114,7 +63,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Sub-pages (parentId set) are managed inside their parent's editor via
   // the Pages panel, not listed as their own top-level dashboard entries.
   const templates = await prisma.template.findMany({
-    where: { userId: resolved.userId, parentId: null },
+    where: { organizationId: resolved.organizationId, parentId: null },
     orderBy: { updatedAt: "desc" },
     select: {
       id: true,
@@ -139,6 +88,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["create"] });
+  if (permissionError) return permissionError;
+
   const features = getTierFeatures(resolved.subscriptionPlan);
 
   const body = (await request.json().catch(() => ({}))) as CreateTemplateBody;
@@ -161,7 +113,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
     parent = await prisma.template.findFirst({
-      where: { id: parentId, userId: resolved.userId },
+      where: { id: parentId, organizationId: resolved.organizationId },
       select: { id: true, kind: true },
     });
     if (!parent) {
@@ -173,7 +125,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } else if (features.maxTemplates !== -1) {
     // The plan's template limit counts root/home pages only — a page with
     // five sub-pages still counts as one template against this limit, not six.
-    const count = await prisma.template.count({ where: { userId: resolved.userId, parentId: null } });
+    const count = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null } });
     if (count >= features.maxTemplates) {
       return NextResponse.json(
         {
@@ -211,6 +163,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const template = await prisma.template.create({
     data: {
       userId: resolved.userId,
+      organizationId: resolved.organizationId,
       name,
       kind,
       parentId,

@@ -31,10 +31,25 @@ export default async function McpLoginPage(props: {
     redirect(loginTarget);
   }
 
-  // Find or create an MCP API key for this user
+  // Resolve the org this MCP key should belong to, same as server/org.ts's
+  // ensureActiveOrganization: whichever org is active on the session, falling back to
+  // this user's first membership.
+  const activeOrgId = (session.session as { activeOrganizationId?: string }).activeOrganizationId;
+  const membership =
+    (activeOrgId &&
+      (await prisma.member.findUnique({
+        where: { organizationId_userId: { organizationId: activeOrgId, userId: session.user.id } },
+      }))) ||
+    (await prisma.member.findFirst({ where: { userId: session.user.id }, orderBy: { createdAt: "asc" } }));
+
+  if (!membership) {
+    redirect("/dashboard");
+  }
+
+  // Find or create an MCP API key for this user's organization
   let apiKeyRecord = await prisma.apiKey.findFirst({
     where: {
-      userId: session.user.id,
+      organizationId: membership.organizationId,
       name: "Plexo MCP AI Integration Key",
       isActive: true,
     },
@@ -49,6 +64,7 @@ export default async function McpLoginPage(props: {
     apiKeyRecord = await prisma.apiKey.create({
       data: {
         userId: session.user.id,
+        organizationId: membership.organizationId,
         name: "Plexo MCP AI Integration Key",
         hashedKey,
         maskedKey,

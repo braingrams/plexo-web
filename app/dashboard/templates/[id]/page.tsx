@@ -5,6 +5,7 @@ import type { TemplateJSON } from "@charisol/plexo-sdk";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { getTierFeatures } from "@/lib/subscription";
+import { ensureActiveOrganization } from "@/server/org";
 
 import { TemplateEditorDynamic } from "./template-editor-dynamic";
 import { RawFileEditor } from "./raw-file-editor";
@@ -44,11 +45,16 @@ export default async function TemplateEditorPage(
     redirect(`/auth/login?redirectTo=/dashboard/templates/${params.id}`);
   }
 
+  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  if (orgResolution.status === "needs-choice") {
+    redirect("/choose-org");
+  }
+
   const [template, user] = await Promise.all([
     prisma.template.findFirst({
       where: {
         id: params.id,
-        userId: session.user.id,
+        organizationId: orgResolution.organizationId,
       },
       select: {
         id: true,
@@ -117,6 +123,9 @@ export default async function TemplateEditorPage(
       unsplashKey={unsplashKey}
       pexelsKey={pexelsKey}
       pixabayKey={pixabayKey}
+      currentUserId={session.user.id}
+      currentUserRole={orgResolution.role}
+      organizationId={orgResolution.organizationId}
     />
   );
 }

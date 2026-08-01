@@ -45,6 +45,17 @@ async function main(): Promise<void> {
     },
   });
 
+  let membership = await prisma.member.findFirst({ where: { userId: user.id } });
+  if (!membership) {
+    const organization = await prisma.organization.create({
+      data: { name: `${user.email}'s Workspace`, slug: `seed-${user.id.slice(0, 8)}` },
+    });
+    membership = await prisma.member.create({
+      data: { organizationId: organization.id, userId: user.id, role: "owner" },
+    });
+  }
+  const organizationId = membership.organizationId;
+
   const existingApiKey = await prisma.apiKey.findFirst({
     where: {
       userId: user.id,
@@ -70,6 +81,7 @@ async function main(): Promise<void> {
     await prisma.apiKey.create({
       data: {
         userId: user.id,
+        organizationId,
         name: defaultApiKeyName,
         hashedKey: sha256(fullApiKey),
         maskedKey: maskApiKey(fullApiKey),
@@ -143,6 +155,7 @@ async function main(): Promise<void> {
     await prisma.template.create({
       data: {
         userId: user.id,
+        organizationId,
         ...templateData,
       },
     });
@@ -250,7 +263,7 @@ async function main(): Promise<void> {
     if (existing) {
       await prisma.template.update({ where: { id: existing.id }, data });
     } else {
-      await prisma.template.create({ data: { userId: user.id, ...data } });
+      await prisma.template.create({ data: { userId: user.id, organizationId, ...data } });
     }
   }
 

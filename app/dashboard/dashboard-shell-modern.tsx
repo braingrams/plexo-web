@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client";
 import { NAV_ITEMS } from "./nav-items";
 import { Avatar } from "./_components/Avatar";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
+import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls";
 
 const HIDDEN_FROM_TOP_NAV = new Set(["/dashboard/settings", "/dashboard/profile"]);
 const TOP_NAV_ITEMS = NAV_ITEMS.filter((item) => !HIDDEN_FROM_TOP_NAV.has(item.href));
@@ -53,9 +54,10 @@ type Props = {
   children: React.ReactNode;
   userName: string;
   userEmail: string;
+  organizationName: string;
 };
 
-export function DashboardShellModern({ children, userName, userEmail }: Props) {
+export function DashboardShellModern({ children, userName, userEmail, organizationName }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -189,6 +191,11 @@ export function DashboardShellModern({ children, userName, userEmail }: Props) {
           )}
         </div>
 
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
+          <OrgSwitcher organizationName={organizationName} />
+          <NotificationBell />
+        </div>
+
         <div ref={menuRef} style={{ position: "relative", flexShrink: 0 }}>
           <button
             onClick={() => setMenuOpen((v) => !v)}
@@ -240,6 +247,15 @@ export function DashboardShellModern({ children, userName, userEmail }: Props) {
               >
                 <IconSettings />
                 Settings
+              </Link>
+
+              <Link
+                href="/dashboard/settings/team"
+                onClick={() => setMenuOpen(false)}
+                style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.55rem 0.6rem", borderRadius: 10, fontSize: "0.82rem", fontWeight: 500, color: "rgba(240,242,255,0.7)", textDecoration: "none" }}
+              >
+                <IconProfile />
+                Team
               </Link>
 
               <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0.3rem 0" }} />

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { headers } from "next/headers";
+import { ensureActiveOrganization } from "@/server/org";
 import { OverviewClient } from "./overview-client";
 
 export default async function OverviewPage() {
@@ -12,22 +13,28 @@ export default async function OverviewPage() {
     redirect("/auth/login");
   }
 
-  // 1. Fetch user onboarding statuses
+  const orgResolution = await ensureActiveOrganization(reqHeaders, session.user.id);
+  if (orgResolution.status === "needs-choice") {
+    redirect("/choose-org");
+  }
+  const organizationId = orgResolution.organizationId;
+
+  // 1. Fetch org-wide onboarding statuses
   const templatesCount = await prisma.template.count({
-    where: { userId: session.user.id },
+    where: { organizationId },
   });
 
   const domainsCount = await prisma.publishedDomain.count({
-    where: { userId: session.user.id },
+    where: { organizationId },
   });
 
   const apiKeysCount = await prisma.apiKey.count({
-    where: { userId: session.user.id },
+    where: { organizationId },
   });
 
   const viewsCount = await prisma.pageView.count({
     where: {
-      template: { userId: session.user.id },
+      template: { organizationId },
     },
   });
 

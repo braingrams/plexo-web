@@ -4,6 +4,7 @@ import { ThemeProvider } from "next-themes";
 
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
+import { ensureActiveOrganization } from "@/server/org";
 import { DashboardShell } from "./dashboard-shell";
 
 export default async function DashboardLayout({
@@ -27,6 +28,14 @@ export default async function DashboardLayout({
   });
   const initialLayoutMode = dbUser?.layoutMode ?? "MODERN";
 
+  // Org-scoped login: makes sure this session always has an active organization before
+  // rendering the dashboard shell (auto-picks a single membership, restores/creates one
+  // for a brand-new user, or routes to a chooser for someone in several orgs).
+  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  if (orgResolution.status === "needs-choice") {
+    redirect("/choose-org");
+  }
+
   return (
     // The marketing site's new light/dark toggle (see app/landing-nav.tsx) is a single
     // global next-themes provider at the root layout, so its stored preference would
@@ -35,7 +44,12 @@ export default async function DashboardLayout({
     // provider forces "dark" for this whole subtree regardless of what a visitor picked
     // on the homepage, which next-themes explicitly supports for exactly this case.
     <ThemeProvider forcedTheme="dark" attribute="class">
-      <DashboardShell userName={userName} userEmail={userEmail} initialLayoutMode={initialLayoutMode}>
+      <DashboardShell
+        userName={userName}
+        userEmail={userEmail}
+        initialLayoutMode={initialLayoutMode}
+        organizationName={orgResolution.organizationName}
+      >
         {children}
       </DashboardShell>
     </ThemeProvider>

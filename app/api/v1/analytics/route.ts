@@ -16,7 +16,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // 1. Fetch all templates owned by the user matching the general status filter
     const templates = await prisma.template.findMany({
       where: {
-        userId: resolved.userId,
+        organizationId: resolved.organizationId,
         ...(filter === "published" ? { publishedDomains: { some: {} } } : {}),
       },
       select: {

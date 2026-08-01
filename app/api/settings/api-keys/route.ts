@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
+import { requirePermission } from "@/server/requirePermission";
 
 const TOKEN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -53,19 +54,33 @@ function serializeApiKey(record: {
   };
 }
 
-async function getSessionUser(request: NextRequest) {
+// API keys belong to the organization, not the individual member who happened to create
+// one — any teammate with apiKey.manage permission (Owner/Admin) sees and can rotate the
+// whole org's keys, matching how ApiKey.organizationId (not userId alone) is now scoped.
+async function getSessionOrgContext(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers });
-  return session?.user ?? null;
+  if (!session?.user) return null;
+
+  const activeOrgId = (session.session as { activeOrganizationId?: string }).activeOrganizationId;
+  const membership =
+    (activeOrgId &&
+      (await prisma.member.findUnique({
+        where: { organizationId_userId: { organizationId: activeOrgId, userId: session.user.id } },
+      }))) ||
+    (await prisma.member.findFirst({ where: { userId: session.user.id }, orderBy: { createdAt: "asc" } }));
+  if (!membership) return null;
+
+  return { userId: session.user.id, organizationId: membership.organizationId, role: membership.role };
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const user = await getSessionUser(request);
-  if (!user) {
+  const ctx = await getSessionOrgContext(request);
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const apiKeys = await prisma.apiKey.findMany({
-    where: { userId: user.id },
+    where: { organizationId: ctx.organizationId },
     orderBy: { createdAt: "desc" },
   });
 
@@ -73,14 +88,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const user = await getSessionUser(request);
-  if (!user) {
+  const ctx = await getSessionOrgContext(request);
+  if (!ctx) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const permissionError = await requirePermission(request.headers, ctx.role, { apiKey: ["manage"] });
+  if (permissionError) return permissionError;
+
   const body = (await request.json().catch(() => ({}))) as { name?: string };
 
-  const keyCount = await prisma.apiKey.count({ where: { userId: user.id } });
+  const keyCount = await prisma.apiKey.count({ where: { organizationId: ctx.organizationId } });
   const keyName = body.name?.trim() || `API Key ${keyCount + 1}`;
 
   const rawKey = `pk_live_${randomToken(32)}`;
@@ -89,7 +107,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const apiKey = await prisma.apiKey.create({
     data: {
-      userId: user.id,
+      userId: ctx.userId,
+      organizationId: ctx.organizationId,
       name: keyName,
       hashedKey,
       maskedKey,

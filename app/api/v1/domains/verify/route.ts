@@ -22,7 +22,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const pagesDomain = getPagesDomain();
 
   const record = await prisma.publishedDomain.findFirst({
-    where: { domain, userId: resolved.userId },
+    where: { domain, organizationId: resolved.organizationId },
   });
   if (!record) {
     return NextResponse.json({ error: "Domain not found or unauthorized." }, { status: 404 });
