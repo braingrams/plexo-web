@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
+import { Prisma } from "@prisma/client";
 
 import { grantTopup } from "@/lib/credits/ledger";
 import { getStripe } from "@/lib/stripe";
@@ -53,6 +54,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             event.id,
             `Top-up purchase (${checkoutSession.metadata.pack ?? "credits"})`,
           );
+        }
+      }
+
+      if (checkoutSession.mode === "payment" && checkoutSession.metadata?.kind === "template_purchase") {
+        const templateId = checkoutSession.metadata.templateId;
+        const priceCents = Number(checkoutSession.metadata.priceCents ?? 0);
+        if (templateId) {
+          try {
+            await prisma.templatePurchase.create({
+              data: {
+                userId: plexoUserId,
+                templateId,
+                priceCentsPaid: priceCents,
+                stripeSessionId: checkoutSession.id,
+              },
+            });
+          } catch (err) {
+            // P2002 = already recorded (webhook retry, or the unique userId+templateId
+            // constraint) — anything else is a real failure worth surfacing.
+            if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")) throw err;
+          }
         }
       }
       // Subscription-mode sessions don't carry the confirmed plan reliably here —
