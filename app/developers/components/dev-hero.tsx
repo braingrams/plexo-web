@@ -116,10 +116,10 @@ import { mcpServer } from "@charisol/plexo-mcp";
 
 // 1. Embed Visual Builder Canvas
 <PlexoBuilder
-  apiKey="plx_live_99214"
-  mode="web_builder"
-  customDomain="yourdomain.com"
-  onPublish={(site) => alert(site.url)}
+  mode="landing_page"
+  apiKey={process.env.NEXT_PUBLIC_PLEXO_API_KEY}
+  useAi
+  onSave={({ json, html }) => console.log("Saved:", html)}
 />
 
 // 2. Connect AI Agents via MCP

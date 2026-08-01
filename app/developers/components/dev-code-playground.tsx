@@ -16,16 +16,11 @@ const CODE_EXAMPLES: Record<Tab, { title: string; filename: string; language: st
 export function BuilderCanvas({ pageId }: { pageId: string }) {
   return (
     <PlexoBuilder
+      mode="landing_page"
       apiKey={process.env.NEXT_PUBLIC_PLEXO_API_KEY}
       templateId={pageId}
-      mode="web_builder"
-      customDomain="yourdomain.com"
-      onPublish={async (site) => {
-        await fetch("/api/webhooks/site-published", {
-          method: "POST",
-          body: JSON.stringify({ url: site.publishedUrl }),
-        });
-      }}
+      useAi
+      onSave={({ json, html }) => console.log("Saved:", html)}
     />
   );
 }`,

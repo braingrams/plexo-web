@@ -65,10 +65,10 @@ export function V2DarkFeatureSection({ isDark }: { isDark: boolean }) {
 export default function MySaaSPage() {
   return (
     <PlexoBuilder
-      mode="web_builder"
-      apiKey={process.env.PLEXO_API_KEY}
-      customDomain="yourdomain.com"
-      onPublish={(site) => console.log("Published:", site.url)}
+      mode="landing_page"
+      apiKey={process.env.NEXT_PUBLIC_PLEXO_API_KEY}
+      useAi
+      onSave={({ json, html }) => console.log("Saved:", html)}
     />
   );
 }`}</code>

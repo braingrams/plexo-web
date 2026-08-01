@@ -13,17 +13,10 @@ export default function SaaSPageEditor() {
   return (
     <div className="h-screen w-full">
       <PlexoBuilder
-        apiKey={process.env.NEXT_PUBLIC_PLEXO_KEY}
-        mode="web_builder"
-        theme="dark"
-        customDomain="site.yourbrand.com"
-        onPublish={(result) => {
-          console.log("Published URL:", result.publishedUrl);
-          console.log("Assets:", result.assetBlobs);
-        }}
-        onEject={(rawHtml) => {
-          console.log("Ejected Raw HTML:", rawHtml);
-        }}
+        mode="landing_page"
+        apiKey={process.env.NEXT_PUBLIC_PLEXO_API_KEY}
+        useAi
+        onSave={({ json, html }) => console.log("Saved:", html)}
       />
     </div>
   );
