@@ -24,10 +24,11 @@ export const metadata = {
   title: "Plexo MCP & AI Integration - Connect Claude, ChatGPT & Cursor",
   description:
     "Prompt your AI assistant to generate, compile, publish, and manage landing pages and email templates on Plexo in seconds using Model Context Protocol (MCP) and OpenAPI Custom Actions.",
+  alternates: { canonical: "/mcp" },
 };
 
 export default function McpLandingPage() {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexobuilder.com";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
 
   return <McpLandingClient baseUrl={baseUrl} />;
 }

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
@@ -5,6 +6,24 @@ import Link from "next/link";
 import { auth } from "@/server/auth";
 import { getMarketplaceTemplateDetail } from "@/lib/marketplace";
 import { PurchaseAction } from "./PurchaseAction";
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params;
+  const detail = await getMarketplaceTemplateDetail(id, null);
+  if (!detail) return { title: "Template not found" };
+
+  const title = `${detail.name} — Free Plexo Template`;
+  const description =
+    detail.description ??
+    `${detail.kind === "LANDING_PAGE" ? "Landing page" : "Email"} template for Plexo. Use it directly or customize it in the drag-and-drop builder.`;
+
+  return {
+    title,
+    description,
+    alternates: { canonical: `/marketplace/${id}` },
+    openGraph: { title, description, type: "website" },
+  };
+}
 
 export default async function MarketplaceTemplateDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -15,8 +34,27 @@ export default async function MarketplaceTemplateDetailPage({ params }: { params
 
   const isFree = detail.priceCents === 0;
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: detail.name,
+    description: detail.description ?? undefined,
+    category: detail.category ?? undefined,
+    offers: {
+      "@type": "Offer",
+      price: (detail.priceCents / 100).toFixed(2),
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+    },
+  };
+
   return (
     <div className="min-h-screen bg-[#0b0f19] text-slate-100">
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <div className="max-w-2xl mx-auto px-6 py-12">
         <Link href="/marketplace" className="text-sm text-slate-500 hover:text-slate-300">
           ← Back to marketplace

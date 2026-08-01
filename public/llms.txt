@@ -1,0 +1,19 @@
+# Plexo
+
+> Plexo is a drag-and-drop visual builder for email campaigns and landing pages. It offers AI-powered generation (bring-your-own-key or Plexo's own system AI), an embeddable SDK (`@charisol/plexo-sdk`) for adding the builder to a third-party product, MCP (Model Context Protocol) support so agents like Claude and ChatGPT can build and publish templates directly, a REST API, custom domains for published pages, and a free tier.
+
+## Product
+
+- [Homepage](https://plexo.charisol.io/): overview, pricing, and feature tour.
+- [Marketplace](https://plexo.charisol.io/marketplace): free and premium email/landing-page templates.
+
+## Developers
+
+- [Developer hub](https://plexo.charisol.io/developers): SDK, MCP, and API overview.
+- [SDK](https://plexo.charisol.io/sdk): embed the visual builder in your own app via `@charisol/plexo-sdk`.
+- [MCP integration](https://plexo.charisol.io/mcp): connect Claude, ChatGPT, or Cursor to build/publish templates through natural-language tool calls.
+- [OpenAPI spec](https://plexo.charisol.io/openapi.json): the full REST API surface.
+
+## Policies
+
+- [Acceptable use policy](https://plexo.charisol.io/legal/acceptable-use)

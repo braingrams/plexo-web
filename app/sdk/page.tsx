@@ -46,6 +46,7 @@ function IconShield() {
 export const metadata = {
   title: "Plexo React SDK — Developer Documentation (@charisol/plexo-sdk)",
   description: "Embed the visual drag-and-drop landing page and email template builder in React. Server-proxied AI generation, theme customization, and clean HTML compilation.",
+  alternates: { canonical: "/sdk" },
 };
 
 export default function PublicSdkPage() {

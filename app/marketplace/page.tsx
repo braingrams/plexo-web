@@ -1,9 +1,17 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { TemplateKind } from "@prisma/client";
 
 import { listMarketplaceTemplates } from "@/lib/marketplace";
 import { MarketplaceFilters } from "./MarketplaceFilters";
 import { TemplateCard } from "./TemplateCard";
+
+export const metadata: Metadata = {
+  title: "Template Marketplace — Email & Landing Page Templates",
+  description:
+    "Browse ready-made email and landing page templates built with Plexo. Free and premium options, filterable by category — drop one into the builder and customize in minutes.",
+  alternates: { canonical: "/marketplace" },
+};
 
 export default async function MarketplacePage({
   searchParams,

@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   title: "Plexo — Build and publish, exactly how you imagine it",
   description:
     "A drag-and-drop web and email template builder with an SDK, MCP, and AI publish capabilities. Multi-page sites, custom domains, and a generous free tier forever.",
+  // Visual exploration of the homepage kept live for comparison, not the canonical
+  // marketing URL — keep it out of search results so it doesn't compete with "/".
+  robots: { index: false, follow: true },
 };
 
 /**
