@@ -64,7 +64,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // the Pages panel, not listed as their own top-level dashboard entries.
   const templates = await prisma.template.findMany({
     where: { organizationId: resolved.organizationId, parentId: null },
-    orderBy: { updatedAt: "desc" },
+    // Tie-break on createdAt — see app/dashboard/templates/page.tsx's identical comment:
+    // the org-backfill migration's updateMany bumped every template's updatedAt to the
+    // same instant via Prisma's @updatedAt, so ties need a secondary sort to avoid
+    // arbitrary ordering.
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,
       name: true,

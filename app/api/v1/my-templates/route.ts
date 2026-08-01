@@ -49,7 +49,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     try {
       dbTemplates = await prisma.template.findMany({
         where: dbWhere,
-        orderBy: { updatedAt: "desc" },
+        // Tie-break on createdAt — the org-backfill migration's updateMany bumped every
+        // template's updatedAt to the same instant via Prisma's @updatedAt.
+        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
         take: limit,
         skip: skip,
         select: {

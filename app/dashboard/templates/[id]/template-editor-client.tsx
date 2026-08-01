@@ -574,8 +574,15 @@ export function TemplateEditorClient({
 					pexelsKey={pexelsKey}
 					pixabayKey={pixabayKey}
 					readOnly={isReadOnlyRole}
+					// commentMode only gates the separate "click anywhere on the canvas" behavior.
+					// onRequestComment is always live so the selected-element toolbar's own Comment
+					// button (see plexo-sdk's SortableElement.tsx) works regardless of whether the
+					// Comments panel toggle is on — clicking it opens the panel automatically.
 					commentMode={commentsOpen}
-					onRequestComment={commentsOpen ? (target) => setPendingPin(target) : undefined}
+					onRequestComment={(target) => {
+						setPendingPin(target);
+						setCommentsOpen(true);
+					}}
 					headerLeftContent={
 						<EditorHeaderLeft
 							isEmail={isEmail}

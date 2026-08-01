@@ -1183,7 +1183,9 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
                   { name: { contains: rawInput, mode: "insensitive" } },
                 ],
               },
-              orderBy: { updatedAt: "desc" },
+              // Tie-break on createdAt — the org-backfill migration's updateMany bumped
+              // every template's updatedAt to the same instant via Prisma's @updatedAt.
+              orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
               select: { id: true, parentId: true, name: true, kind: true },
             });
           }

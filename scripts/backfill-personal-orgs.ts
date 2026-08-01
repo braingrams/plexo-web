@@ -55,22 +55,18 @@ async function main() {
       // match rows for a user who somehow has resources but no membership yet, which
       // shouldn't be reachable once organizationId is required, but stay harmless (0 rows
       // touched) if it ever happens.
-      await tx.template.updateMany({
-        where: { userId: user.id },
-        data: { organizationId: organization.id },
-      });
-      await tx.apiKey.updateMany({
-        where: { userId: user.id },
-        data: { organizationId: organization.id },
-      });
-      await tx.publishedDomain.updateMany({
-        where: { userId: user.id },
-        data: { organizationId: organization.id },
-      });
-      await tx.uploadedImage.updateMany({
-        where: { userId: user.id },
-        data: { organizationId: organization.id },
-      });
+      //
+      // Raw SQL, not tx.template.updateMany(...): Prisma's query engine auto-bumps any
+      // @updatedAt column on EVERY row touched by an update/updateMany, even when that
+      // column isn't in `data`. The first run of this script did exactly that — silently
+      // overwriting every template's real last-edited time with the migration's own
+      // run time, which is what broke "newest first" ordering across the dashboard
+      // (ties all landing on the same instant, sorted by whatever order Postgres
+      // happened to return them in). Raw SQL bypasses that auto-touch entirely.
+      await tx.$executeRaw`UPDATE "Template" SET "organizationId" = ${organization.id}::uuid WHERE "userId" = ${user.id}::uuid`;
+      await tx.$executeRaw`UPDATE "ApiKey" SET "organizationId" = ${organization.id}::uuid WHERE "userId" = ${user.id}::uuid`;
+      await tx.$executeRaw`UPDATE "PublishedDomain" SET "organizationId" = ${organization.id}::uuid WHERE "userId" = ${user.id}::uuid`;
+      await tx.$executeRaw`UPDATE "UploadedImage" SET "organizationId" = ${organization.id}::uuid WHERE "userId" = ${user.id}::uuid`;
     });
 
     migrated += 1;

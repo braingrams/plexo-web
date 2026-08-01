@@ -55,7 +55,13 @@ export default async function TemplatesDashboardPage() {
   // separate top-level entries here.
   const templates = await prisma.template.findMany({
     where: { organizationId: orgResolution.organizationId, parentId: null },
-    orderBy: { updatedAt: "desc" },
+    // Secondary key matters: the org-backfill migration bulk-updated every template's
+    // organizationId in one updateMany, and Prisma's @updatedAt auto-bumps on ANY update
+    // through the query engine — so a lot of rows now share the exact same updatedAt
+    // from that migration moment. Without a tie-breaker, Postgres returns those ties in
+    // arbitrary (often near-creation-order) order, which read as "ascending" instead of
+    // newest-edited-first.
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     select: {
       id: true,
       name: true,

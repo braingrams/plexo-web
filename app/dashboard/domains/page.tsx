@@ -61,7 +61,9 @@ export default async function DomainsPage() {
       id: true,
       name: true,
     },
-    orderBy: { updatedAt: "desc" },
+    // Tie-break on createdAt — the org-backfill migration's updateMany bumped every
+    // template's updatedAt to the same instant via Prisma's @updatedAt.
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
   });
 
   // Format domains for client
