@@ -25,14 +25,25 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   };
 }
 
-export default async function MarketplaceTemplateDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function MarketplaceTemplateDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ purchase?: string }>;
+}) {
   const { id } = await params;
+  const { purchase } = await searchParams;
   const session = await auth.api.getSession({ headers: await headers() });
   const detail = await getMarketplaceTemplateDetail(id, session?.user?.id ?? null);
 
   if (!detail) notFound();
 
   const isFree = detail.priceCents === 0;
+  // Successful Stripe redirect lands back here with ?purchase=success — if the webhook has
+  // already recorded the purchase (detail.owned), skip the extra click and go straight into
+  // the editor instead of making the user hit "Use this template" themselves.
+  const autoUse = purchase === "success" && detail.owned;
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -85,6 +96,7 @@ export default async function MarketplaceTemplateDetailPage({ params }: { params
             isFree={isFree}
             owned={detail.owned}
             isLoggedIn={!!session?.user}
+            autoUse={autoUse}
           />
         </div>
       </div>

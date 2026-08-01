@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export function PurchaseAction({
@@ -8,15 +8,19 @@ export function PurchaseAction({
   isFree,
   owned,
   isLoggedIn,
+  autoUse = false,
 }: {
   templateId: string;
   isFree: boolean;
   owned: boolean;
   isLoggedIn: boolean;
+  /** Auto-continue into the editor once, right after a successful Stripe redirect back here. */
+  autoUse?: boolean;
 }) {
   const router = useRouter();
-  const [pending, setPending] = useState(false);
+  const [pending, setPending] = useState(autoUse);
   const [error, setError] = useState<string | null>(null);
+  const autoUseFired = useRef(false);
 
   async function useTemplate() {
     const res = await fetch(`/api/v1/marketplace/templates/${templateId}/use`, { method: "POST" });
@@ -28,6 +32,13 @@ export function PurchaseAction({
     }
     router.push(`/dashboard/templates/${data.template.id}`);
   }
+
+  useEffect(() => {
+    if (!autoUse || !owned || autoUseFired.current) return;
+    autoUseFired.current = true;
+    void useTemplate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoUse, owned]);
 
   async function handleClick() {
     setError(null);
