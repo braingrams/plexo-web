@@ -400,6 +400,41 @@ enum MarketplaceStatus {
   PUBLISHED
 }
 
+enum TemplateGenerationStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
+// Tracks one admin-triggered "Generate Templates with AI" batch (plexo-admin). Processed
+// incrementally in chunks (see plexo-admin's lib/generation/job.ts) rather than in one
+// long-running request, so progress survives a serverless invocation timeout — lockedAt
+// is a heartbeat preventing the cron tick and a manual "process now" click from double-
+// processing the same job concurrently.
+model TemplateGenerationJob {
+  id                 String                   @id @default(uuid()) @db.Uuid
+  status             TemplateGenerationStatus @default(PENDING)
+  kind               TemplateKind
+  isOptIn            Boolean                  @default(false)
+  category           String
+  priceCents         Int                      @default(0)
+  targetStatus       MarketplaceStatus
+  provider           String // "anthropic_claude" | "openai" | "google_gemini"
+  requestedCount     Int
+  succeededCount     Int                      @default(0)
+  failedCount        Int                      @default(0)
+  createdTemplateIds String[]                 @default([])
+  errors             Json?
+  lockedAt           DateTime?
+  createdBy          String?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  @@index([status])
+}
+
 // One row per user who has unlocked a marketplace template (paid or claimed-free) — the
 // gate app/api/v1/marketplace/templates/[id]/use checks before letting someone duplicate
 // a marketplace template into their own account. Free templates still get a row
