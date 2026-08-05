@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
-import { encryptSecret } from "@/lib/crypto";
+import { encryptBankDetail } from "@/lib/crypto";
 import { sendWithdrawalRequestNotificationEmail } from "@/lib/email";
 
 /**
@@ -55,8 +55,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         data: {
           userId: resolved.userId,
           amountCents,
-          encryptedAccountNumber: encryptSecret(accountNumber),
-          encryptedAccountHolderName: encryptSecret(accountHolderName),
+          encryptedAccountNumber: encryptBankDetail(accountNumber),
+          encryptedAccountHolderName: encryptBankDetail(accountHolderName),
           bankName,
         },
       });

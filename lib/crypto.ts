@@ -4,21 +4,20 @@ const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 
-function getKey(): Buffer {
-  const secret = process.env.AI_KEY_ENCRYPTION_SECRET;
-  if (!secret) {
-    throw new Error("AI_KEY_ENCRYPTION_SECRET is not configured.");
-  }
+function deriveKey(secret: string): Buffer {
   // Normalize any secret length into a 32-byte AES-256 key.
   return createHash("sha256").update(secret, "utf8").digest();
 }
 
-/**
- * Encrypts a secret (e.g. a BYOK provider API key) for storage at rest.
- * Output: base64(iv || authTag || ciphertext).
- */
-export function encryptSecret(plainText: string): string {
-  const key = getKey();
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is not configured.`);
+  }
+  return value;
+}
+
+function encryptWithKey(plainText: string, key: Buffer): string {
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv);
   const ciphertext = Buffer.concat([cipher.update(plainText, "utf8"), cipher.final()]);
@@ -26,13 +25,7 @@ export function encryptSecret(plainText: string): string {
   return Buffer.concat([iv, authTag, ciphertext]).toString("base64");
 }
 
-/**
- * Decrypts a value produced by encryptSecret. Throws if the value is not a
- * valid ciphertext for the current key (wrong key, corrupted data, or a
- * legacy plaintext value) — callers use this to distinguish the two.
- */
-export function decryptSecret(encoded: string): string {
-  const key = getKey();
+function decryptWithKey(encoded: string, key: Buffer): string {
   const raw = Buffer.from(encoded, "base64");
   if (raw.length <= IV_LENGTH + AUTH_TAG_LENGTH) {
     throw new Error("Value is too short to be a valid encrypted secret.");
@@ -43,4 +36,35 @@ export function decryptSecret(encoded: string): string {
   const decipher = createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(authTag);
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
+}
+
+/**
+ * Encrypts a secret (e.g. a BYOK provider API key) for storage at rest, keyed off
+ * AI_KEY_ENCRYPTION_SECRET. Output: base64(iv || authTag || ciphertext).
+ */
+export function encryptSecret(plainText: string): string {
+  return encryptWithKey(plainText, deriveKey(requireEnv("AI_KEY_ENCRYPTION_SECRET")));
+}
+
+/**
+ * Decrypts a value produced by encryptSecret. Throws if the value is not a valid
+ * ciphertext for the current key (wrong key, corrupted data, or a legacy plaintext
+ * value) — callers use this to distinguish the two.
+ */
+export function decryptSecret(encoded: string): string {
+  return decryptWithKey(encoded, deriveKey(requireEnv("AI_KEY_ENCRYPTION_SECRET")));
+}
+
+/**
+ * Encrypts/decrypts WithdrawalRequest bank details (account number, holder name) — a
+ * DELIBERATELY separate secret (BANK_DETAILS_ENCRYPTION_SECRET) from encryptSecret's
+ * AI_KEY_ENCRYPTION_SECRET, so a leak of one never exposes the other. plexo-admin's copy
+ * of this file only ever calls decryptBankDetail, using the same env var value.
+ */
+export function encryptBankDetail(plainText: string): string {
+  return encryptWithKey(plainText, deriveKey(requireEnv("BANK_DETAILS_ENCRYPTION_SECRET")));
+}
+
+export function decryptBankDetail(encoded: string): string {
+  return decryptWithKey(encoded, deriveKey(requireEnv("BANK_DETAILS_ENCRYPTION_SECRET")));
 }
