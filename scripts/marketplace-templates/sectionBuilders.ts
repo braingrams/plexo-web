@@ -23,7 +23,7 @@ export class IdGen {
   }
 }
 
-type Style = Record<string, string | number>;
+type Style = Record<string, string | number | undefined>;
 
 function heading(id: IdGen, text: string, style: Style) {
   return { id: id.next("heading"), type: "heading" as const, style, attributes: { text } };
