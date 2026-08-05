@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client";
 import { NAV_ITEMS as BASE_NAV_ITEMS } from "./nav-items";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls";
+import { FeedbackButton } from "./_components/FeedbackButton";
 import type { OrgBranding } from "./dashboard-shell";
 import { darken, toRgba } from "@/lib/color";
 
@@ -435,6 +436,7 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
             gap: "0.4rem", marginBottom: "0.5rem",
           }}>
             {!collapsed && <OrgSwitcher organizationName={organizationName} />}
+            <FeedbackButton />
             <NotificationBell />
           </div>
           {!collapsed && (

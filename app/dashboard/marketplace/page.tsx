@@ -34,13 +34,50 @@ export default async function DashboardMarketplacePage({
 
   return (
     <div style={{ padding: "2rem 8px", maxWidth: 1200, margin: "0 auto" }}>
-      <div style={{ marginBottom: "2rem" }}>
-        <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff" }}>
-          Template marketplace
-        </h1>
-        <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.5)", marginTop: "0.25rem" }}>
-          {total.toLocaleString()} template{total === 1 ? "" : "s"} — free and premium, ready to publish.
-        </p>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", marginBottom: "2rem" }}>
+        <div>
+          <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff" }}>
+            Template marketplace
+          </h1>
+          <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.5)", marginTop: "0.25rem" }}>
+            {total.toLocaleString()} template{total === 1 ? "" : "s"} — free and premium, ready to publish.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: "0.6rem", flexShrink: 0 }}>
+          <Link
+            href="/dashboard/marketplace/listings"
+            style={{
+              display: "inline-flex", alignItems: "center", padding: "0.6rem 1.1rem",
+              borderRadius: 9, fontWeight: 650, fontSize: "0.82rem",
+              border: "1px solid rgba(255,255,255,0.1)", color: "rgba(240,242,255,0.75)",
+              textDecoration: "none",
+            }}
+          >
+            My listings
+          </Link>
+          <Link
+            href="/dashboard/marketplace/payouts"
+            style={{
+              display: "inline-flex", alignItems: "center", padding: "0.6rem 1.1rem",
+              borderRadius: 9, fontWeight: 650, fontSize: "0.82rem",
+              border: "1px solid rgba(255,255,255,0.1)", color: "rgba(240,242,255,0.75)",
+              textDecoration: "none",
+            }}
+          >
+            Payouts
+          </Link>
+          <Link
+            href="/dashboard/marketplace/sell"
+            style={{
+              display: "inline-flex", alignItems: "center", padding: "0.6rem 1.1rem",
+              borderRadius: 9, fontWeight: 700, fontSize: "0.82rem",
+              background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
+              color: "#fff", textDecoration: "none",
+            }}
+          >
+            Sell a template
+          </Link>
+        </div>
       </div>
 
       <MarketplaceFilters

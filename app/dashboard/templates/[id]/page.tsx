@@ -88,12 +88,19 @@ export default async function TemplateEditorPage(
     notFound();
   }
 
+  const activeApiKey = user?.apiKeys[0] ?? null;
+  const tierFeatures = getTierFeatures(user?.subscriptionPlan);
+
   if (template.sourceType === "RAW_UPLOAD") {
     return (
       <RawFileEditor
         templateId={template.id}
         templateName={template.name}
+        templateKind={template.kind}
         subscriptionPlan={user?.subscriptionPlan ?? "FREE"}
+        useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}
+        aiProvider={activeApiKey?.aiProvider ?? "openai"}
+        aiTier={activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}
       />
     );
   }
@@ -101,9 +108,6 @@ export default async function TemplateEditorPage(
   const initialDesignJson = isTemplateJson(template.designJson)
     ? template.designJson
     : BLANK_TEMPLATE_SHELL;
-
-  const activeApiKey = user?.apiKeys[0] ?? null;
-  const tierFeatures = getTierFeatures(user?.subscriptionPlan);
 
   const unsplashKey = process.env.UNSPLASH_KEY || "";
   const pexelsKey = process.env.PEXELS_KEY || "";

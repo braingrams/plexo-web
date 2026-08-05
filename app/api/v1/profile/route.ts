@@ -40,8 +40,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       where: { userId: user.id },
     });
 
-    const templateCount = await prisma.template.count({
-      where: { userId: user.id },
+    const emailTemplateCount = await prisma.template.count({
+      where: { userId: user.id, kind: "EMAIL" },
+    });
+    const landingPageCount = await prisma.template.count({
+      where: { userId: user.id, kind: "LANDING_PAGE" },
     });
 
     const features = getTierFeatures(user.subscriptionPlan);
@@ -66,9 +69,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           used: domainCount,
           limit: domainLimit,
         },
-        templates: {
-          used: templateCount,
-          limit: features.maxTemplates === -1 ? "unlimited" : features.maxTemplates,
+        emailTemplates: {
+          used: emailTemplateCount,
+          limit: features.maxEmailTemplates,
+        },
+        landingPages: {
+          used: landingPageCount,
+          limit: features.maxLandingPages,
         },
       },
       features,

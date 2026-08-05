@@ -43,6 +43,7 @@
 		"@vercel/blob": "^2.6.1",
 		"autoprefixer": "^10.5.4",
 		"better-auth": "^1.6.23",
+		"cheerio": "^1.2.0",
 		"dotenv": "^17.4.2",
 		"geist": "^1.7.2",
 		"gsap": "^3.15.0",

@@ -508,6 +508,8 @@ function ManagePagesModal({
 			if (wasCurrent && wasRoot) {
 				// The whole site (this page + every page nested under it) is gone —
 				// there's nothing left here to reload or navigate to within the tree.
+				// Refresh first so the prefetch-cached Templates list doesn't still show it.
+				router.refresh();
 				router.push("/dashboard/templates");
 				return;
 			}

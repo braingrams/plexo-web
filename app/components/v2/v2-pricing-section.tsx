@@ -24,7 +24,7 @@ const PLANS: Plan[] = [
     period: "forever",
     description: "Essential page & email builder features for creators and personal projects.",
     features: [
-      "Up to 3 Templates",
+      "Up to 5 Email Templates & 5 Landing Pages",
       "10 Monthly AI Credits",
       "Subdomain publishing (plexopages.com)",
       "Visual Drag & Drop Builder",
@@ -42,7 +42,7 @@ const PLANS: Plan[] = [
     description: "Designed for professional creators and growing brands building high-converting sites.",
     popular: true,
     features: [
-      "Up to 20 Templates",
+      "Up to 25 Email Templates & 25 Landing Pages",
       "2,000 Monthly AI Credits",
       "Custom Domain Linking (yourdomain.com)",
       "Branding Removal (Hide 'Hosted with Plexo')",
@@ -60,7 +60,7 @@ const PLANS: Plan[] = [
     period: "per month",
     description: "Maximum power for power users, teams, and platforms needing AI automation.",
     features: [
-      "Unlimited Templates",
+      "Up to 100 Email Templates & 100 Landing Pages",
       "5,000 Monthly AI Credits",
       "Multi-Page Sites Enabled",
       "Host-Managed AI Enabled",

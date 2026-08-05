@@ -23,7 +23,7 @@ export default async function BrandingSettingsPage() {
   const [org, plan] = await Promise.all([
     prisma.organization.findUniqueOrThrow({
       where: { id: orgResolution.organizationId },
-      select: { name: true, logo: true, brandColor: true },
+      select: { name: true, logo: true, brandColor: true, whiteLabelEnabled: true },
     }),
     getOrganizationOwnerPlan(orgResolution.organizationId),
   ]);
@@ -38,7 +38,8 @@ export default async function BrandingSettingsPage() {
       <BrandingForm
         organizationId={orgResolution.organizationId}
         canManage={orgResolution.role === "owner"}
-        whiteLabelEnabled={canWhiteLabel(plan)}
+        planAllowsWhiteLabel={canWhiteLabel(plan)}
+        initialWhiteLabelEnabled={org.whiteLabelEnabled}
         initialName={org.name}
         initialLogo={org.logo}
         initialBrandColor={org.brandColor}

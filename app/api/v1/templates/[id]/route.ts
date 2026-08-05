@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
-import { getTierFeatures } from "@/lib/subscription";
 import { resolveUser } from "../../domains/route";
 import { requirePermission } from "@/server/requirePermission";
 
@@ -43,16 +42,6 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
   });
   if (!existing) {
     return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });
-  }
-
-  if (existing.kind === "LANDING_PAGE") {
-    const features = getTierFeatures(resolved.subscriptionPlan);
-    if (!features.landingPagesEnabled) {
-      return NextResponse.json(
-        { error: "Editing a landing page requires a PRO or ULTRA subscription plan." },
-        { status: 403 }
-      );
-    }
   }
 
   const body = await request.json().catch(() => ({}));

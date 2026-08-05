@@ -117,7 +117,7 @@ export async function GET(
     include: {
       template: true,
       user: { select: { subscriptionPlan: true, hideBranding: true } },
-      organization: { select: { id: true, logo: true } },
+      organization: { select: { id: true, logo: true, whiteLabelEnabled: true } },
     },
   });
 
@@ -130,7 +130,7 @@ export async function GET(
       include: {
         template: true,
         user: { select: { subscriptionPlan: true, hideBranding: true } },
-        organization: { select: { id: true, logo: true } },
+        organization: { select: { id: true, logo: true, whiteLabelEnabled: true } },
       },
     });
   }
@@ -193,11 +193,12 @@ export async function GET(
     }
 
     // White-label favicon — only for orgs entitled to custom branding (Pro/Ultra owner
-    // plan, same gate as the dashboard chrome/emails/SDK splash) that have actually set a
-    // logo. BUILDER and RAW_UPLOAD both get this (unlike the branding bar above, this is a
-    // single <link> tag in <head>, not a </body> splice, so RAW_UPLOAD's "arbitrary
-    // uploaded HTML" safety concern doesn't apply).
-    if (published.organization.logo) {
+    // plan, same gate as the dashboard chrome/emails/SDK splash) that have explicitly turned
+    // white-labeling on (Organization.whiteLabelEnabled — plan eligibility alone isn't
+    // enough) and have actually set a logo. BUILDER and RAW_UPLOAD both get this (unlike the
+    // branding bar above, this is a single <link> tag in <head>, not a </body> splice, so
+    // RAW_UPLOAD's "arbitrary uploaded HTML" safety concern doesn't apply).
+    if (published.organization.logo && published.organization.whiteLabelEnabled) {
       const ownerPlan = await getOrganizationOwnerPlan(published.organization.id);
       if (canWhiteLabel(ownerPlan)) {
         html = injectFavicon(html, published.organization.logo);

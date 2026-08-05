@@ -14,6 +14,9 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   edit_element: 4000,
   edit_layout: 16000,
   generate_layout: 16000,
+  // Full-document output (the whole uploaded index.html back), matching the largest
+  // existing tier rather than a fresh guess.
+  edit_raw_html: 16000,
 };
 
 const ALLOWED_ELEMENT_TYPES = [
@@ -36,6 +39,13 @@ function cleanJsonString(raw: string): string {
 function buildSystemPrompt(mode: AiActionMode, templateKind: "EMAIL" | "LANDING_PAGE"): string {
   const kindLabel = templateKind === "EMAIL" ? "email template" : "landing page";
 
+  if (mode === "edit_raw_html") {
+    return `You are Plexo's builder AI. You edit a complete, self-contained static HTML document (an uploaded site, not a Plexo builder layout) according to the user's instruction.
+Preserve everything the user didn't ask you to change — structure, existing <style>/<script> blocks, classes, attributes, and functionality — and make only the requested edit.
+Respond with ONLY a JSON object of this exact shape, no markdown fences, no prose outside the JSON:
+{ "summary": "<one short sentence describing the change you made>", "result": "<the COMPLETE modified HTML document as a single string, starting from <!DOCTYPE html> or <html>, not a diff or partial snippet>" }`;
+  }
+
   if (mode === "edit_element") {
     return `You are Plexo's builder AI. You modify a single element's JSON (style + attributes) inside a ${kindLabel} builder according to the user's instruction.
 The "result" you return is applied by merging "style" and "attributes" over the element's current values — so "style" and "attributes" must each be the COMPLETE object, not a partial diff: include every existing key that isn't changing, unchanged, alongside the key(s) you are changing. Never omit an existing key just because its value didn't change, and never return an empty object for "style" or "attributes" unless the element genuinely has no style/attributes at all.
@@ -55,6 +65,9 @@ Respond with ONLY a JSON object of this exact shape, no markdown fences, no pros
 }
 
 function resultSchemaFor(mode: AiActionMode) {
+  if (mode === "edit_raw_html") {
+    return z.object({ summary: z.string().max(2000), result: z.string().min(1) });
+  }
   return z.object({
     summary: z.string().max(2000),
     result: mode === "edit_element" ? ElementJSONSchema : TemplateJSONSchema,
@@ -63,7 +76,7 @@ function resultSchemaFor(mode: AiActionMode) {
 
 /** Drops heavy/irrelevant fields before sending the template to the model — token efficiency. */
 function trimContext(mode: AiActionMode, context: unknown): unknown {
-  if (mode === "edit_element" || context === null || typeof context !== "object") {
+  if (mode === "edit_element" || mode === "edit_raw_html" || context === null || typeof context !== "object") {
     return context;
   }
   const clone = JSON.parse(JSON.stringify(context));
@@ -127,7 +140,13 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
   const maxTokens = MAX_TOKENS[params.mode];
 
   const attempt = async (extraNote?: string): Promise<GenerateOutcome> => {
-    const userPrompt = `${extraNote ? `${extraNote}\n\n` : ""}User instruction: ${params.prompt}\n\nCurrent JSON:\n${JSON.stringify(trimmedContext)}`;
+    // Raw HTML is embedded directly rather than JSON.stringify'd — stringifying would
+    // escape every quote/newline in the document, burning tokens and making the markup
+    // harder for the model to read as an actual document rather than a JSON string.
+    const contextBlock = params.mode === "edit_raw_html"
+      ? `Current HTML document:\n${(trimmedContext as { html: string }).html}`
+      : `Current JSON:\n${JSON.stringify(trimmedContext)}`;
+    const userPrompt = `${extraNote ? `${extraNote}\n\n` : ""}User instruction: ${params.prompt}\n\n${contextBlock}`;
     let text: string;
     let usage: ProviderCallResult["usage"];
     try {
@@ -151,7 +170,7 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
     // LLMs frequently omit structural bookkeeping (id/style/attributes/width) on repeated
     // rows/columns/elements — hydrate the same way MCP/publish/compile/templates callers do
     // before validating, instead of failing the whole response over missing defaults.
-    if (params.mode !== "edit_element" && parsed && typeof parsed === "object" && "result" in parsed) {
+    if (params.mode !== "edit_element" && params.mode !== "edit_raw_html" && parsed && typeof parsed === "object" && "result" in parsed) {
       parsed.result = hydrateStructuralDefaults(parsed.result);
     }
     const validated = schema.parse(parsed);

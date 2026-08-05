@@ -707,8 +707,11 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
       switch (toolName) {
         case "publish_landing_page": {
           const features = getTierFeatures(resolved.subscriptionPlan);
-          if (!features.landingPagesEnabled) {
-            throw new Error("Landing page creation requires PRO or ULTRA plan.");
+          {
+            const rootCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: "LANDING_PAGE" } });
+            if (rootCount >= features.maxLandingPages) {
+              throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
+            }
           }
 
           const name = args.name?.trim() || "AI Landing Page";
@@ -775,6 +778,14 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
         }
 
         case "create_email_template": {
+          const features = getTierFeatures(resolved.subscriptionPlan);
+          {
+            const rootCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: "EMAIL" } });
+            if (rootCount >= features.maxEmailTemplates) {
+              throw new Error(`Template limit reached (${features.maxEmailTemplates} email templates). Upgrade plan to create more.`);
+            }
+          }
+
           const name = args.name?.trim() || "AI Email Template";
           let rawDesignJson = args.designJson;
 
@@ -825,13 +836,6 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           });
           if (!existing) {
             throw new Error(`No template found with id "${templateId}" in this account. Use list_landing_pages or list_email_templates to look up the correct id.`);
-          }
-
-          if (existing.kind === "LANDING_PAGE") {
-            const features = getTierFeatures(resolved.subscriptionPlan);
-            if (!features.landingPagesEnabled) {
-              throw new Error("Editing a landing page requires PRO or ULTRA plan.");
-            }
           }
 
           let rawDesignJson = args.designJson;
@@ -886,14 +890,11 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
 
         case "create_landing_page": {
           const features = getTierFeatures(resolved.subscriptionPlan);
-          if (!features.landingPagesEnabled) {
-            throw new Error("Landing page creation requires PRO or ULTRA plan.");
-          }
-          if (features.maxTemplates !== -1) {
+          {
             // Root/home pages only — a page's sub-pages don't count against this limit.
-            const rootCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null } });
-            if (rootCount >= features.maxTemplates) {
-              throw new Error(`Template limit reached (${features.maxTemplates}). Upgrade plan to create more.`);
+            const rootCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: "LANDING_PAGE" } });
+            if (rootCount >= features.maxLandingPages) {
+              throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
             }
           }
 

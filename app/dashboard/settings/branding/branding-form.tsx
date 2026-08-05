@@ -28,7 +28,8 @@ const labelStyle: React.CSSProperties = {
 type Props = {
   organizationId: string;
   canManage: boolean;
-  whiteLabelEnabled: boolean;
+  planAllowsWhiteLabel: boolean;
+  initialWhiteLabelEnabled: boolean;
   initialName: string;
   initialLogo: string | null;
   initialBrandColor: string | null;
@@ -37,7 +38,8 @@ type Props = {
 export function BrandingForm({
   organizationId,
   canManage,
-  whiteLabelEnabled,
+  planAllowsWhiteLabel,
+  initialWhiteLabelEnabled,
   initialName,
   initialLogo,
   initialBrandColor,
@@ -46,11 +48,12 @@ export function BrandingForm({
   const [name, setName] = useState(initialName);
   const [logo, setLogo] = useState(initialLogo ?? "");
   const [brandColor, setBrandColor] = useState(initialBrandColor ?? "#8b5cf6");
+  const [whiteLabelOn, setWhiteLabelOn] = useState(initialWhiteLabelEnabled);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const disabled = !canManage || !whiteLabelEnabled;
+  const disabled = !canManage || !planAllowsWhiteLabel;
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -61,7 +64,12 @@ export function BrandingForm({
       const res = await fetch(`/api/organizations/${organizationId}/branding`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, logo: logo.trim() || null, brandColor: brandColor.trim() || null }),
+        body: JSON.stringify({
+          name,
+          logo: logo.trim() || null,
+          brandColor: brandColor.trim() || null,
+          whiteLabelEnabled: whiteLabelOn,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -78,7 +86,7 @@ export function BrandingForm({
 
   return (
     <Card>
-      {!whiteLabelEnabled && (
+      {!planAllowsWhiteLabel && (
         <div
           style={{
             marginBottom: "1.5rem",
@@ -95,7 +103,7 @@ export function BrandingForm({
           replace the Plexo name, logo, and color shown here.
         </div>
       )}
-      {whiteLabelEnabled && !canManage && (
+      {planAllowsWhiteLabel && !canManage && (
         <div
           style={{
             marginBottom: "1.5rem",
@@ -110,6 +118,64 @@ export function BrandingForm({
           Only the organization owner can change branding.
         </div>
       )}
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "1rem",
+          marginBottom: "1.5rem",
+          padding: "1rem 1.25rem",
+          borderRadius: 10,
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <div>
+          <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "#f0f2ff", margin: 0 }}>
+            Enable custom branding
+          </p>
+          <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", marginTop: "0.25rem", maxWidth: 460 }}>
+            Turn this on to replace "Plexo" with your name, logo, and color across the dashboard,
+            emails, and published pages. Off by default even on Pro/Ultra.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={whiteLabelOn}
+          aria-disabled={disabled}
+          id="toggle-white-label-enabled"
+          onClick={() => !disabled && setWhiteLabelOn((v) => !v)}
+          style={{
+            position: "relative",
+            width: 44,
+            height: 24,
+            borderRadius: 999,
+            background: whiteLabelOn ? "var(--brand)" : "rgba(255,255,255,0.1)",
+            border: whiteLabelOn ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.12)",
+            cursor: disabled ? "default" : "pointer",
+            opacity: disabled ? 0.5 : 1,
+            transition: "background 0.2s, border-color 0.2s",
+            flexShrink: 0,
+          }}
+        >
+          <span
+            style={{
+              position: "absolute",
+              top: 3,
+              left: whiteLabelOn ? 22 : 3,
+              width: 16,
+              height: 16,
+              borderRadius: "50%",
+              background: "#fff",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+              transition: "left 0.2s cubic-bezier(0.4,0,0.2,1)",
+            }}
+          />
+        </button>
+      </div>
 
       <form onSubmit={handleSave} style={{ display: "grid", gap: "1.25rem", opacity: disabled ? 0.6 : 1 }}>
         <label style={{ display: "block" }}>

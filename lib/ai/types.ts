@@ -1,4 +1,4 @@
-export type AiActionMode = "edit_element" | "edit_layout" | "generate_layout";
+export type AiActionMode = "edit_element" | "edit_layout" | "generate_layout" | "edit_raw_html";
 
 export type AiProvider = "openai" | "anthropic_claude" | "google_gemini";
 

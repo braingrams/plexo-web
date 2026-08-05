@@ -53,23 +53,19 @@ export async function POST(
   }
 
   const features = getTierFeatures(resolved.subscriptionPlan);
-  if (features.maxTemplates !== -1) {
-    const count = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null } });
-    if (count >= features.maxTemplates) {
+  {
+    const limit = listing.kind === "LANDING_PAGE" ? features.maxLandingPages : features.maxEmailTemplates;
+    const count = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: listing.kind } });
+    if (count >= limit) {
+      const label = listing.kind === "LANDING_PAGE" ? "landing pages" : "email templates";
       return NextResponse.json(
         {
-          error: `Your plan allows a maximum of ${features.maxTemplates} templates. Upgrade to create more.`,
+          error: `Your plan allows a maximum of ${limit} ${label}. Upgrade to create more.`,
           plan: resolved.subscriptionPlan,
         },
         { status: 403 },
       );
     }
-  }
-  if (listing.kind === "LANDING_PAGE" && !features.landingPagesEnabled) {
-    return NextResponse.json(
-      { error: "Landing page templates require a PRO or ULTRA plan.", plan: resolved.subscriptionPlan },
-      { status: 403 },
-    );
   }
 
   const newId = randomUUID();

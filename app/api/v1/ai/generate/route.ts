@@ -24,7 +24,7 @@ function parseBearerToken(authorization: string | null): string | null {
   return trimmed ? trimmed : null;
 }
 
-const VALID_MODES = new Set<AiActionMode>(["edit_element", "edit_layout", "generate_layout"]);
+const VALID_MODES = new Set<AiActionMode>(["edit_element", "edit_layout", "generate_layout", "edit_raw_html"]);
 const VALID_TIERS = new Set(["AUTO", "BASIC", "MEDIUM", "HIGH"]);
 
 interface ResolvedAiKey {

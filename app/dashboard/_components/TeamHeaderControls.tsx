@@ -33,15 +33,20 @@ function useOutsideClick(onOutside: () => void) {
   return ref;
 }
 
-export function OrgSwitcher({ organizationName }: { organizationName: string }) {
+/**
+ * Shared org-list fetch/switch logic behind both the standalone OrgSwitcher pill (classic
+ * shell's sidebar) and the modern shell's avatar-dropdown-embedded switcher — factored out so
+ * the modern shell doesn't need a nested dropdown-inside-a-dropdown just to reuse this.
+ */
+export function useOrgList() {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [orgs, setOrgs] = useState<{ id: string; name: string }[] | null>(null);
-  const ref = useOutsideClick(() => setOpen(false));
+  const [loaded, setLoaded] = useState(false);
+  const [orgs, setOrgs] = useState<{ id: string; name: string }[]>([]);
 
-  useEffect(() => {
-    if (!open || orgs) return;
+  function load() {
+    if (loaded) return;
     authClient.organization.list().then((res: any) => {
+      setLoaded(true);
       if (res?.error) {
         console.error("Failed to list organizations:", res.error);
         setOrgs([]);
@@ -49,8 +54,11 @@ export function OrgSwitcher({ organizationName }: { organizationName: string }) 
       }
       const list = res?.data ?? [];
       setOrgs(Array.isArray(list) ? list.map((o: any) => ({ id: o.id, name: o.name })) : []);
-    }).catch(() => setOrgs([]));
-  }, [open, orgs]);
+    }).catch(() => {
+      setLoaded(true);
+      setOrgs([]);
+    });
+  }
 
   async function switchTo(organizationId: string) {
     const res: any = await authClient.organization.setActive({ organizationId });
@@ -58,8 +66,24 @@ export function OrgSwitcher({ organizationName }: { organizationName: string }) 
       console.error("Failed to switch organizations:", res.error);
       return;
     }
-    setOpen(false);
     router.refresh();
+  }
+
+  return { orgs, loaded, load, switchTo };
+}
+
+export function OrgSwitcher({ organizationName }: { organizationName: string }) {
+  const [open, setOpen] = useState(false);
+  const { orgs, loaded, load, switchTo: switchToOrg } = useOrgList();
+  const ref = useOutsideClick(() => setOpen(false));
+
+  useEffect(() => {
+    if (open) load();
+  }, [open]);
+
+  async function switchTo(organizationId: string) {
+    await switchToOrg(organizationId);
+    setOpen(false);
   }
 
   return (
@@ -83,10 +107,10 @@ export function OrgSwitcher({ organizationName }: { organizationName: string }) 
           <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.4)", padding: "0.4rem 0.6rem" }}>
             Switch organization
           </p>
-          {orgs === null && (
+          {!loaded && (
             <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.5)", padding: "0.4rem 0.6rem" }}>Loading…</p>
           )}
-          {orgs?.map((org) => (
+          {orgs.map((org) => (
             <button
               key={org.id}
               onClick={() => switchTo(org.id)}

@@ -9,14 +9,14 @@
 export type SubscriptionPlan = "FREE" | "PRO" | "ULTRA";
 
 export type TierFeatures = {
-  /** Maximum number of templates the user can create */
-  maxTemplates: number;
+  /** Maximum number of email templates the user can create */
+  maxEmailTemplates: number;
+  /** Maximum number of landing pages the user can create */
+  maxLandingPages: number;
   /** Whether AI layout editing is allowed */
   aiEnabled: boolean;
   /** Whether the user can access the MJML compile API */
   compileApiEnabled: boolean;
-  /** Whether the user can use landing page templates */
-  landingPagesEnabled: boolean;
   /** Whether the user gets access to Strata design system components */
   strataEnabled: boolean;
   /** Maximum number of API keys the user can generate */
@@ -41,8 +41,8 @@ export type TierFeatures = {
   /**
    * Whether the account can turn a landing page into a multi-page site
    * (add sub-pages nested under it, e.g. /about, /blog/post-1). Gated to
-   * Ultra: sub-pages are unlimited per site once enabled (maxTemplates only
-   * counts root/home pages), so this is the actual scarcity control.
+   * Ultra: sub-pages are unlimited per site once enabled (maxLandingPages
+   * only counts root/home pages), so this is the actual scarcity control.
    */
   multiPageSitesEnabled: boolean;
   /** Whether the account may link a CUSTOM (non-plexopages.io) domain to a published page. */
@@ -65,10 +65,10 @@ export type TierFeatures = {
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
   FREE: {
-    maxTemplates: 3,
+    maxEmailTemplates: 5,
+    maxLandingPages: 5,
     aiEnabled: false,
     compileApiEnabled: false,
-    landingPagesEnabled: false,
     strataEnabled: false,
     maxApiKeys: 1,
     sdkAiTier: "BASIC",
@@ -80,10 +80,10 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     whiteLabelEnabled: false,
   },
   PRO: {
-    maxTemplates: 20,
+    maxEmailTemplates: 25,
+    maxLandingPages: 25,
     aiEnabled: true,
     compileApiEnabled: true,
-    landingPagesEnabled: true,
     strataEnabled: true,
     maxApiKeys: 3,
     sdkAiTier: "MEDIUM",
@@ -95,10 +95,10 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     whiteLabelEnabled: true,
   },
   ULTRA: {
-    maxTemplates: -1, // unlimited
+    maxEmailTemplates: 100,
+    maxLandingPages: 100,
     aiEnabled: true,
     compileApiEnabled: true,
-    landingPagesEnabled: true,
     strataEnabled: true,
     maxApiKeys: 10,
     sdkAiTier: "HIGH",
@@ -222,9 +222,10 @@ export async function getOrganizationOwnerPlan(organizationId: string): Promise<
 /**
  * Resolves the white-label identity for an organization — dashboard chrome
  * (dashboard-shell-{modern,classic}.tsx), transactional emails (lib/mail/templates.ts),
- * and the SDK-facing /api/v1/validate-key response all call this. Returns undefined if
- * the org isn't entitled (or has set no branding), in which case callers fall back to the
- * default Plexo identity.
+ * and the SDK-facing /api/v1/validate-key response all call this. Returns undefined if the org
+ * isn't entitled, or hasn't explicitly turned white-labeling on (Organization.whiteLabelEnabled —
+ * being Pro/Ultra only makes the org ELIGIBLE, it doesn't apply branding by itself), in which
+ * case callers fall back to the default Plexo identity.
  */
 export async function getOrgBrand(
   organizationId: string,
@@ -234,8 +235,8 @@ export async function getOrgBrand(
   if (!canWhiteLabel(plan)) return undefined;
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
-    select: { name: true, logo: true, brandColor: true },
+    select: { name: true, logo: true, brandColor: true, whiteLabelEnabled: true },
   });
-  if (!org) return undefined;
+  if (!org || !org.whiteLabelEnabled) return undefined;
   return { name: org.name, logoUrl: org.logo ?? undefined, color: org.brandColor ?? undefined };
 }

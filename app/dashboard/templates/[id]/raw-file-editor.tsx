@@ -11,11 +11,17 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import type { FileEntry } from "@/app/api/v1/templates/[id]/files/route";
 import { buildPreviewHtml } from "./preview-utils";
 import { PagesPanel } from "./PagesPanel";
+import { RawTextContentEditor } from "./RawTextContentEditor";
+import { RawAiEditPanel } from "./RawAiEditPanel";
 
 type Props = {
   templateId: string;
   templateName: string;
+  templateKind: "EMAIL" | "LANDING_PAGE";
   subscriptionPlan: string;
+  useAi: boolean;
+  aiProvider: string;
+  aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 };
 
 function IconEye() {
@@ -73,8 +79,9 @@ const editorTheme = EditorView.theme(
   { dark: true }
 );
 
-export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Props) {
+export function RawFileEditor({ templateId, templateName, templateKind, subscriptionPlan, useAi, aiProvider, aiTier }: Props) {
   const router = useRouter();
+  const [activeMode, setActiveMode] = useState<"code" | "text" | "ai">("code");
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [savedContent, setSavedContent] = useState<Record<string, string>>({});
@@ -320,6 +327,33 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
           }}>
             Raw Upload
           </span>
+          <div style={{ display: "flex", gap: "0.3rem", marginLeft: "0.5rem" }}>
+            {([
+              { key: "code", label: "Code" },
+              { key: "text", label: "Text Content" },
+              { key: "ai", label: "AI Edit" },
+            ] as const).map((tab) => {
+              const disabled = tab.key !== "code" && isDirty("index.html");
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  disabled={disabled}
+                  title={disabled ? "Save your code changes to index.html first" : undefined}
+                  onClick={() => setActiveMode(tab.key)}
+                  style={{
+                    padding: "0.35rem 0.75rem", borderRadius: 7, fontSize: "0.78rem", fontWeight: 600,
+                    background: activeMode === tab.key ? "rgba(139,92,246,0.1)" : "none",
+                    border: activeMode === tab.key ? "1px solid rgba(139,92,246,0.3)" : "1px solid rgba(255,255,255,0.1)",
+                    color: disabled ? "rgba(240,242,255,0.25)" : activeMode === tab.key ? "#c4b5fd" : "rgba(240,242,255,0.6)",
+                    cursor: disabled ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
           {saveError && <span style={{ color: "#f87171", fontSize: "0.78rem" }}>⚠️ {saveError}</span>}
@@ -375,6 +409,7 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
       </div>
 
       {/* Body */}
+      {activeMode === "code" && (
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
         {/* File list sidebar */}
         <div style={{ width: 220, borderRight: "1px solid rgba(255,255,255,0.08)", overflowY: "auto", flexShrink: 0, display: "flex", flexDirection: "column" }}>
@@ -446,6 +481,28 @@ export function RawFileEditor({ templateId, templateName, subscriptionPlan }: Pr
           )}
         </div>
       </div>
+      )}
+
+      {activeMode === "text" && (
+        <RawTextContentEditor templateId={templateId} />
+      )}
+
+      {activeMode === "ai" && (
+        <RawAiEditPanel
+          templateId={templateId}
+          templateKind={templateKind}
+          currentHtml={edits["index.html"] ?? ""}
+          useAi={useAi}
+          aiProvider={aiProvider}
+          aiTier={aiTier}
+          subscriptionPlan={subscriptionPlan}
+          onApply={(html) => {
+            setEdits((prev) => ({ ...prev, "index.html": html }));
+            setActiveMode("code");
+            setActivePath("index.html");
+          }}
+        />
+      )}
 
       {/* Preview modal */}
       {previewOpen && (

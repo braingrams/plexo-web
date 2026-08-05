@@ -7,7 +7,8 @@ import { authClient } from "@/lib/auth-client";
 import { NAV_ITEMS } from "./nav-items";
 import { Avatar } from "./_components/Avatar";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
-import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls";
+import { NotificationBell, useOrgList } from "./_components/TeamHeaderControls";
+import { FeedbackButton } from "./_components/FeedbackButton";
 import type { OrgBranding } from "./dashboard-shell";
 import { darken, toRgba } from "@/lib/color";
 
@@ -77,6 +78,7 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { orgs, loaded: orgsLoaded, load: loadOrgs, switchTo: switchOrg } = useOrgList();
   // Below 768px the horizontally-scrolling pill nav is replaced by a hamburger-triggered
   // dropdown listing the same items (see .dash-pill-nav / .dash-mobile-nav-toggle rules
   // in globals.css). Above that breakpoint nothing changes.
@@ -108,6 +110,18 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
     setNavMenuOpen(false);
   }, [pathname]);
 
+  // The org list only needs fetching once the account menu (which now hosts the workspace
+  // switcher) is actually opened — same lazy-on-open pattern the old standalone OrgSwitcher
+  // pill used, just keyed off this dropdown's own open state instead of its own toggle.
+  useEffect(() => {
+    if (menuOpen) loadOrgs();
+  }, [menuOpen]);
+
+  async function handleSwitchOrg(organizationId: string) {
+    setMenuOpen(false);
+    await switchOrg(organizationId);
+  }
+
   async function handleSignOut() {
     setIsSigningOut(true);
     try {
@@ -122,7 +136,7 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
     <div className={rootClassName} style={{ minHeight: "100vh", ...brandVars }}>
       {/* ── FLOATING TOPBAR ─────────────────────────── */}
       <header className="dash-topbar">
-        <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none", flexShrink: 0 }}>
+        <Link href="/" className="dash-brand-link" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none", flexShrink: 1, minWidth: 0, overflow: "hidden" }}>
           {orgBranding?.logoUrl ? (
             <img
               src={orgBranding.logoUrl}
@@ -144,7 +158,20 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
               </svg>
             </div>
           )}
-          <span style={{ fontFamily: "var(--font-heading), sans-serif", fontWeight: 700, fontSize: "0.95rem", color: "#f0f2ff", letterSpacing: "-0.02em" }}>
+          <span
+            className="dash-brand-name"
+            style={{
+              fontFamily: "var(--font-heading), sans-serif",
+              fontWeight: 700,
+              fontSize: "0.95rem",
+              color: "#f0f2ff",
+              letterSpacing: "-0.02em",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              minWidth: 0,
+            }}
+          >
             {brandName}
           </span>
         </Link>
@@ -216,7 +243,7 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-          <OrgSwitcher organizationName={organizationName} />
+          <FeedbackButton />
           <NotificationBell />
         </div>
 
@@ -254,6 +281,32 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
                   <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.4)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{userEmail}</p>
                 </div>
               </div>
+
+              <p style={{ fontSize: "0.68rem", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "rgba(240,242,255,0.35)", padding: "0.3rem 0.6rem" }}>
+                Workspace
+              </p>
+              {!orgsLoaded && (
+                <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.5)", padding: "0.2rem 0.6rem 0.5rem" }}>Loading…</p>
+              )}
+              {orgs.map((org) => (
+                <button
+                  key={org.id}
+                  onClick={() => void handleSwitchOrg(org.id)}
+                  style={{
+                    display: "block", width: "100%", textAlign: "left",
+                    padding: "0.55rem 0.6rem", borderRadius: 10, border: "none",
+                    background: org.name === organizationName ? "var(--brand-subtle)" : "transparent",
+                    color: org.name === organizationName ? "var(--brand)" : "#f0f2ff",
+                    fontSize: "0.82rem", fontWeight: org.name === organizationName ? 600 : 500,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}
+                >
+                  {org.name}
+                </button>
+              ))}
+
+              <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0.3rem 0" }} />
 
               <Link
                 href="/dashboard/profile"

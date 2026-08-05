@@ -60,10 +60,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Sub-pages (parentId set) are managed inside their parent's editor via
-  // the Pages panel, not listed as their own top-level dashboard entries.
+  // Sub-pages (parentId set) are managed inside their parent's editor via the Pages panel,
+  // not listed as their own top-level dashboard entries. Marketplace listing clones
+  // (marketplaceStatus set) are a separate concept from the seller's own working
+  // templates — they live in /dashboard/marketplace/listings instead of cluttering this
+  // list with a second, non-editable-in-the-same-way copy of the same content.
   const templates = await prisma.template.findMany({
-    where: { organizationId: resolved.organizationId, parentId: null },
+    where: { organizationId: resolved.organizationId, parentId: null, marketplaceStatus: null },
     // Tie-break on createdAt — see app/dashboard/templates/page.tsx's identical comment:
     // the org-backfill migration's updateMany bumped every template's updatedAt to the
     // same instant via Prisma's @updatedAt, so ties need a secondary sort to avoid
@@ -126,30 +129,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (parent.kind !== TemplateKind.LANDING_PAGE) {
       return NextResponse.json({ error: "Only landing pages can have sub-pages." }, { status: 400 });
     }
-  } else if (features.maxTemplates !== -1) {
-    // The plan's template limit counts root/home pages only — a page with
-    // five sub-pages still counts as one template against this limit, not six.
-    const count = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null } });
-    if (count >= features.maxTemplates) {
-      return NextResponse.json(
-        {
-          error: `Your plan allows a maximum of ${features.maxTemplates} templates. Upgrade to create more.`,
-          plan: resolved.subscriptionPlan,
-        },
-        { status: 403 },
-      );
-    }
   }
 
   // A sub-page always belongs to the same landing-page tree as its parent.
   const kind = parent ? TemplateKind.LANDING_PAGE : (body.kind === "LANDING_PAGE" ? TemplateKind.LANDING_PAGE : TemplateKind.EMAIL);
 
-  // Enforce landing page access
-  if (kind === TemplateKind.LANDING_PAGE && !features.landingPagesEnabled) {
-    return NextResponse.json(
-      { error: "Landing page templates require a PRO or ULTRA plan.", plan: resolved.subscriptionPlan },
-      { status: 403 },
-    );
+  if (!parentId) {
+    // The plan's template limit counts root/home pages only, per kind — a page with
+    // five sub-pages still counts as one landing page against this limit, not six.
+    const limit = kind === TemplateKind.LANDING_PAGE ? features.maxLandingPages : features.maxEmailTemplates;
+    const count = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind } });
+    if (count >= limit) {
+      const label = kind === TemplateKind.LANDING_PAGE ? "landing pages" : "email templates";
+      return NextResponse.json(
+        {
+          error: `Your plan allows a maximum of ${limit} ${label}. Upgrade to create more.`,
+          plan: resolved.subscriptionPlan,
+        },
+        { status: 403 },
+      );
+    }
   }
 
   let slug: string | null = null;

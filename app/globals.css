@@ -685,3 +685,14 @@
     padding: 0 !important;
   }
 }
+
+/* Last-resort safety net for the narrowest phones: a white-labeled org's custom name
+   (see lib/subscription.ts's getOrgBrand) can be arbitrary/longer text than "Plexo" — the
+   brand name already truncates with an ellipsis at any width (dash-brand-name), but below
+   380px drop it entirely so the icon-only logo never competes with the nav toggle,
+   notification bell, and avatar for space. */
+@media (max-width: 380px) {
+  .dash-brand-name {
+    display: none;
+  }
+}

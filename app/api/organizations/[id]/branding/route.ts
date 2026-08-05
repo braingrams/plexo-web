@@ -19,7 +19,8 @@ async function getMembership(request: NextRequest, organizationId: string) {
 /**
  * GET/PATCH /api/organizations/[id]/branding
  *
- * White-label config for a single organization (name/logo/brandColor), consumed by:
+ * White-label config for a single organization (name/logo/brandColor/whiteLabelEnabled),
+ * consumed by:
  *  - app/dashboard/settings/branding (this org's own owner/admin, gated below)
  *  - app/dashboard/dashboard-shell-{modern,classic}.tsx (dashboard chrome)
  *  - server/auth.ts + app/api/v1/comments (transactional emails)
@@ -42,7 +43,7 @@ export async function GET(
 
   const org = await prisma.organization.findUnique({
     where: { id },
-    select: { name: true, logo: true, brandColor: true },
+    select: { name: true, logo: true, brandColor: true, whiteLabelEnabled: true },
   });
   if (!org) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
@@ -53,7 +54,8 @@ export async function GET(
     name: org.name,
     logo: org.logo,
     brandColor: org.brandColor,
-    whiteLabelEnabled: canWhiteLabel(plan),
+    planAllowsWhiteLabel: canWhiteLabel(plan),
+    whiteLabelEnabled: org.whiteLabelEnabled,
   });
 }
 
@@ -84,9 +86,10 @@ export async function PATCH(
     name?: string;
     logo?: string | null;
     brandColor?: string | null;
+    whiteLabelEnabled?: boolean;
   };
 
-  const data: { name?: string; logo?: string | null; brandColor?: string | null } = {};
+  const data: { name?: string; logo?: string | null; brandColor?: string | null; whiteLabelEnabled?: boolean } = {};
 
   if (typeof body.name === "string") {
     const trimmed = body.name.trim();
@@ -108,6 +111,10 @@ export async function PATCH(
     data.brandColor = trimmed || null;
   }
 
+  if (typeof body.whiteLabelEnabled === "boolean") {
+    data.whiteLabelEnabled = body.whiteLabelEnabled;
+  }
+
   // Writes straight to Prisma rather than auth.api.updateOrganization: better-auth's
   // additionalFields typing only accepts `string | undefined` for brandColor (no
   // `null`), so it can't express "clear the color" — and permission (organization:update)
@@ -116,8 +123,8 @@ export async function PATCH(
   const updated = await prisma.organization.update({
     where: { id },
     data,
-    select: { name: true, logo: true, brandColor: true },
+    select: { name: true, logo: true, brandColor: true, whiteLabelEnabled: true },
   });
 
-  return NextResponse.json({ ...updated, whiteLabelEnabled: true });
+  return NextResponse.json({ ...updated, planAllowsWhiteLabel: true });
 }

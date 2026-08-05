@@ -48,12 +48,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (permissionError) return permissionError;
 
   const features = getTierFeatures(resolved.subscriptionPlan);
-  if (!features.landingPagesEnabled) {
-    return NextResponse.json(
-      { error: "Raw HTML publishing requires a PRO or ULTRA subscription plan." },
-      { status: 403 }
-    );
-  }
 
   const user = await prisma.user.findUnique({
     where: { id: resolved.userId },
@@ -119,12 +113,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       select: { order: true },
     });
     order = (lastSibling?.order ?? -1) + 1;
-  } else if (features.maxTemplates !== -1) {
-    // The plan's template limit counts root/home pages only, matching /api/templates.
-    const templateCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null } });
-    if (templateCount >= features.maxTemplates) {
+  } else {
+    // The plan's landing-page limit counts root/home pages only, matching /api/templates.
+    // Raw uploads always create a LANDING_PAGE, so this checks maxLandingPages.
+    const templateCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: TemplateKind.LANDING_PAGE } });
+    if (templateCount >= features.maxLandingPages) {
       return NextResponse.json(
-        { error: `Template limit reached (${features.maxTemplates}). Upgrade plan to create more pages.` },
+        { error: `Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.` },
         { status: 403 }
       );
     }

@@ -4,6 +4,7 @@ import { prisma } from "@/server/prisma";
 import { headers } from "next/headers";
 import { ensureActiveOrganization } from "@/server/org";
 import { OverviewClient } from "./overview-client";
+import type { TemplateSummary } from "./templates/TemplateCard";
 
 export default async function OverviewPage() {
   const reqHeaders = await headers();
@@ -38,6 +39,33 @@ export default async function OverviewPage() {
     },
   });
 
+  // Front-and-center gallery on the overview page — same query/shape (and same
+  // marketplaceStatus:null exclusion of listing clones) as app/dashboard/templates/page.tsx,
+  // just capped to the most recently-updated few.
+  const recentTemplateRecords = await prisma.template.findMany({
+    where: { organizationId, parentId: null, marketplaceStatus: null },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    take: 8,
+    select: {
+      id: true,
+      name: true,
+      kind: true,
+      compiledHtml: true,
+      createdAt: true,
+      updatedAt: true,
+      _count: { select: { pages: true } },
+    },
+  });
+  const recentTemplates: TemplateSummary[] = recentTemplateRecords.map((record) => ({
+    id: record.id,
+    name: record.name,
+    kind: record.kind,
+    compiledHtml: record.compiledHtml,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+    pageCount: record._count.pages,
+  }));
+
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { name: true, subscriptionPlan: true, pendingPlan: true },
@@ -67,6 +95,7 @@ export default async function OverviewPage() {
         templatesCount={templatesCount}
         domainsCount={domainsCount}
         apiKeysCount={apiKeysCount}
+        recentTemplates={recentTemplates}
       />
     </div>
   );

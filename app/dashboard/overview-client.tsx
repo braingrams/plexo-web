@@ -1,23 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { CustomSelect } from "./domains/domains-client";
-import { Card } from "./_components/Card";
-import { ActivityHeatmap, type HeatmapPoint } from "./_components/ActivityHeatmap";
-import { VisitorDetailsModal } from "./_components/VisitorDetailsModal";
-import { useLayoutMode } from "./layout-mode-context";
-
-type TimelineDay = {
-  date: string;
-  views: number;
-  uniqueVisitors: number;
-};
-
-type TemplateItem = {
-  id: string;
-  name: string;
-};
+import { TemplateCard, type TemplateSummary } from "./templates/TemplateCard";
 
 type Props = {
   userName: string;
@@ -29,7 +14,28 @@ type Props = {
   templatesCount: number;
   domainsCount: number;
   apiKeysCount: number;
+  recentTemplates: TemplateSummary[];
 };
+
+function IconChevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+      strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+function IconPlus() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  );
+}
 
 export function OverviewClient({
   userName,
@@ -41,6 +47,7 @@ export function OverviewClient({
   templatesCount,
   domainsCount,
   apiKeysCount,
+  recentTemplates,
 }: Props) {
   // Onboarding steps calculations
   const steps = [
@@ -54,103 +61,20 @@ export function OverviewClient({
   const onboardingPercentage = Math.round((completedSteps / steps.length) * 100);
   const onboardingComplete = onboardingPercentage === 100;
 
-  // Analytics Filter States
-  const [filterType, setFilterType] = useState<"all" | "published">("all");
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("all");
-  const [loading, setLoading] = useState(true);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  
-  // Data from API
-  const [templates, setTemplates] = useState<TemplateItem[]>([]);
-  const [totalViews, setTotalViews] = useState(0);
-  const [totalUnique, setTotalUnique] = useState(0);
-  const [chartData, setChartData] = useState<TimelineDay[]>([]);
-  const [heatmapData, setHeatmapData] = useState<HeatmapPoint[]>([]);
+  const [stepsExpanded, setStepsExpanded] = useState(false);
 
-  const { mode } = useLayoutMode();
-  const isModern = mode === "MODERN";
+  // Just the "Views (7d)" number for the stat-glance row — Insights (app/dashboard/insights)
+  // owns the full filtered/chart/heatmap fetch independently.
+  const [totalViews, setTotalViews] = useState(0);
 
   useEffect(() => {
-    setLoading(true);
-    const query = new URLSearchParams();
-    if (selectedTemplateId !== "all") {
-      query.set("templateId", selectedTemplateId);
-    } else if (filterType === "published") {
-      query.set("filter", "published");
-    }
-
-    fetch(`/api/v1/analytics?${query.toString()}`)
+    fetch("/api/v1/analytics")
       .then((res) => res.json())
       .then((data) => {
-        if (data.success) {
-          setTotalViews(data.totalViews);
-          setTotalUnique(data.totalUnique);
-          setChartData(data.chartData);
-          setHeatmapData(data.heatmap ?? []);
-          if (data.templates) {
-            setTemplates(data.templates);
-          }
-        }
-        setLoading(false);
+        if (data.success) setTotalViews(data.totalViews);
       })
-      .catch((err) => {
-        console.error("Error loading analytics:", err);
-        setLoading(false);
-      });
-  }, [filterType, selectedTemplateId]);
-
-  const templateOptions = useMemo(() => {
-    const list = [{ label: "All Templates", value: "all" }];
-    templates.forEach((t) => {
-      list.push({ label: t.name, value: t.id });
-    });
-    return list;
-  }, [templates]);
-
-  // Graph plotting variables
-  const width = 700;
-  const height = 240;
-  const paddingLeft = 55;
-  const paddingRight = 30;
-  const paddingTop = 25;
-  const paddingBottom = 40;
-
-  const graphWidth = width - paddingLeft - paddingRight;
-  const graphHeight = height - paddingTop - paddingBottom;
-
-  const maxVal = useMemo(() => {
-    if (chartData.length === 0) return 5;
-    const peak = Math.max(...chartData.map((d) => d.views), ...chartData.map((d) => d.uniqueVisitors));
-    return peak === 0 ? 5 : Math.ceil(peak * 1.15); // Add a small margin overhead
-  }, [chartData]);
-
-  // Generate SVG elements
-  const { pathD, areaD, points, visitorPoints, visitorPathD } = useMemo(() => {
-    if (chartData.length === 0) {
-      return { pathD: "", areaD: "", points: [], visitorPoints: [], visitorPathD: "" };
-    }
-
-    const pts: Array<{ x: number; y: number; val: number }> = [];
-    const vPts: Array<{ x: number; y: number; val: number }> = [];
-
-    chartData.forEach((day, index) => {
-      const x = paddingLeft + (index / (chartData.length - 1)) * graphWidth;
-      const y = paddingTop + graphHeight - (day.views / maxVal) * graphHeight;
-      const vy = paddingTop + graphHeight - (day.uniqueVisitors / maxVal) * graphHeight;
-
-      pts.push({ x, y, val: day.views });
-      vPts.push({ x, y: vy, val: day.uniqueVisitors });
-    });
-
-    const pD = pts.map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-    const vpD = vPts.map((p, idx) => `${idx === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-
-    const aD = pD
-      ? `${pD} L ${paddingLeft + graphWidth} ${paddingTop + graphHeight} L ${paddingLeft} ${paddingTop + graphHeight} Z`
-      : "";
-
-    return { pathD: pD, areaD: aD, points: pts, visitorPoints: vPts, visitorPathD: vpD };
-  }, [chartData, maxVal, graphWidth, graphHeight]);
+      .catch((err) => console.error("Error loading view count:", err));
+  }, []);
 
   return (
     <>
@@ -174,433 +98,202 @@ export function OverviewClient({
         </span>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: isModern ? "repeat(auto-fit, minmax(280px, 1fr))" : "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: "1.5rem",
-          marginBottom: "2rem",
-          width: "100%",
-        }}
-        className="overview-top-row"
-      >
-        {/* Onboarding Checklist Card — replaced with a Workspace Snapshot once setup is complete */}
-        <Card style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          {onboardingComplete ? (
-            <>
-              <div>
-                <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
-                  Workspace Snapshot
-                </h2>
-                <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
-                  Your workspace is fully set up — here&apos;s where things stand.
-                </p>
-              </div>
+      {/* Compact onboarding strip — only while setup isn't complete. No replacement card
+          once it is: the stat-glance row below already covers the same numbers. */}
+      {!onboardingComplete && (
+        <div style={{
+          background: "rgba(255,255,255,0.02)",
+          border: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: 12,
+          marginBottom: "1.5rem",
+          overflow: "hidden",
+        }}>
+          <button
+            type="button"
+            onClick={() => setStepsExpanded((v) => !v)}
+            style={{
+              width: "100%", display: "flex", alignItems: "center", gap: "1rem",
+              padding: "0.85rem 1.1rem", background: "none", border: "none", cursor: "pointer",
+              fontFamily: "inherit", textAlign: "left",
+            }}
+          >
+            <span style={{ fontSize: "0.82rem", fontWeight: 650, color: "#f0f2ff", whiteSpace: "nowrap" }}>
+              Workspace setup — {completedSteps}/{steps.length}
+            </span>
+            <span style={{ flex: 1, height: 5, background: "rgba(255,255,255,0.05)", borderRadius: 999, overflow: "hidden" }}>
+              <span style={{ display: "block", width: `${onboardingPercentage}%`, height: "100%", background: "linear-gradient(90deg, var(--brand), #a78bfa)", borderRadius: 999, transition: "width 0.5s ease" }} />
+            </span>
+            <span style={{ color: "rgba(240,242,255,0.4)", display: "flex", alignItems: "center", flexShrink: 0 }}>
+              <IconChevron open={stepsExpanded} />
+            </span>
+          </button>
 
-              <div className="stat-tile-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", flex: 1 }}>
-                {[
-                  { label: "Templates", value: templatesCount, link: "/dashboard/templates" },
-                  { label: "Live Domains", value: domainsCount, link: "/dashboard/domains" },
-                  { label: "API Keys", value: apiKeysCount, link: "/dashboard/settings" },
-                  { label: "Views (7d)", value: totalViews, link: "/dashboard" },
-                ].map((stat) => (
-                  <Link
-                    key={stat.label}
-                    href={stat.link}
-                    style={{
-                      background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)",
-                      borderRadius: 12, padding: "1rem", textDecoration: "none",
-                      display: "flex", flexDirection: "column", gap: "0.35rem",
-                    }}
-                  >
-                    <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "rgba(240,242,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                      {stat.label}
-                    </span>
-                    <span style={{ fontSize: "1.6rem", fontWeight: 800, color: "#f0f2ff" }}>
-                      {stat.value}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
-                  Onboarding Checklist
-                </h2>
-                <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
-                  Follow these simple steps to deploy your landing pages.
-                </p>
-              </div>
-
-              {/* Progress Bar */}
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", fontWeight: 650, color: "#f0f2ff", marginBottom: "0.5rem" }}>
-                  <span>Workspace Setup Progress</span>
-                  <span style={{ color: "var(--brand)" }}>{onboardingPercentage}%</span>
-                </div>
-                <div style={{ width: "100%", height: 6, background: "rgba(255,255,255,0.04)", borderRadius: 999, overflow: "hidden" }}>
-                  <div style={{ width: `${onboardingPercentage}%`, height: "100%", background: "linear-gradient(90deg, var(--brand), #a78bfa)", borderRadius: 999, transition: "width 0.5s ease" }} />
-                </div>
-              </div>
-
-              {/* Steps List */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                {steps.map((step) => (
-                  <div key={step.id} style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "0.75rem 1rem", borderRadius: 10,
-                    background: step.done ? "rgba(16,185,129,0.03)" : "rgba(255,255,255,0.01)",
-                    border: step.done ? "1px solid rgba(16,185,129,0.1)" : "1px solid rgba(255,255,255,0.04)",
-                    fontSize: "0.82rem"
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                      <div style={{
-                        width: 20, height: 20, borderRadius: "50%",
-                        background: step.done ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.03)",
-                        border: step.done ? "1px solid rgba(16,185,129,0.15)" : "1px solid rgba(255,255,255,0.06)",
-                        display: "grid", placeItems: "center", fontSize: "0.68rem"
-                      }}>
-                        {step.done ? "✓" : ""}
-                      </div>
-                      <span style={{ color: step.done ? "rgba(240,242,255,0.75)" : "rgba(240,242,255,0.45)", fontWeight: step.done ? 600 : 400 }}>
-                        {step.label}
-                      </span>
+          {stepsExpanded && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", padding: "0 1.1rem 1rem" }}>
+              {steps.map((step) => (
+                <div key={step.id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "0.65rem 0.85rem", borderRadius: 10,
+                  background: step.done ? "rgba(16,185,129,0.03)" : "rgba(255,255,255,0.01)",
+                  border: step.done ? "1px solid rgba(16,185,129,0.1)" : "1px solid rgba(255,255,255,0.04)",
+                  fontSize: "0.8rem"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                    <div style={{
+                      width: 18, height: 18, borderRadius: "50%",
+                      background: step.done ? "rgba(16,185,129,0.1)" : "rgba(255,255,255,0.03)",
+                      border: step.done ? "1px solid rgba(16,185,129,0.15)" : "1px solid rgba(255,255,255,0.06)",
+                      display: "grid", placeItems: "center", fontSize: "0.65rem", flexShrink: 0,
+                    }}>
+                      {step.done ? "✓" : ""}
                     </div>
-                    {step.done ? (
-                      <span style={{ color: "#34d399", fontWeight: 700, fontSize: "0.75rem" }}>
-                        Completed
-                      </span>
-                    ) : step.link ? (
-                      <Link href={step.link} style={{ color: "var(--brand)", textDecoration: "none", fontWeight: 700, fontSize: "0.75rem" }}>
-                        {step.linkText}
-                      </Link>
-                    ) : (
-                      <span style={{ color: "rgba(240,242,255,0.25)", fontSize: "0.72rem", fontStyle: "italic" }}>
-                        {step.statusText}
-                      </span>
-                    )}
+                    <span style={{ color: step.done ? "rgba(240,242,255,0.75)" : "rgba(240,242,255,0.45)", fontWeight: step.done ? 600 : 400 }}>
+                      {step.label}
+                    </span>
                   </div>
-                ))}
-              </div>
-            </>
-          )}
-        </Card>
-
-        {/* Plexo Core Capabilities Card */}
-        <Card style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          <div>
-            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
-              Plexo Core Features
-            </h2>
-            <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
-              Explore the advanced features integrated inside your workspace.
-            </p>
-          </div>
-
-          <div className="stat-tile-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", flex: 1 }}>
-            {[
-              { icon: "🎨", title: "Visual Editor", desc: "Drag-and-drop landing page elements & styles." },
-              { icon: "⚡", title: "AI Generation", desc: "Automate builder style structures & typography." },
-              { icon: "🌐", title: "Custom Mapping", desc: "Link subdomains & root custom domains." },
-              { icon: "📈", title: "Analytics Tracker", desc: "Privacy-focused visit logging & metrics." }
-            ].map((cap, i) => (
-              <div key={i} style={{
-                background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.03)",
-                borderRadius: 12, padding: "1rem", display: "flex", flexDirection: "column", gap: "0.4rem"
-              }}>
-                <span style={{ fontSize: "1.3rem" }}>{cap.icon}</span>
-                <h4 style={{ fontSize: "0.85rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>{cap.title}</h4>
-                <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.4)", margin: 0, lineHeight: 1.4 }}>{cap.desc}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {/* Activity Heatmap — Modern layout only */}
-        {isModern && (
-          <Card style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-            <div>
-              <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
-                Activity by Time
-              </h2>
-              <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
-                When your visitors show up, over the last 7 days.
-              </p>
+                  {step.done ? (
+                    <span style={{ color: "#34d399", fontWeight: 700, fontSize: "0.72rem" }}>
+                      Completed
+                    </span>
+                  ) : step.link ? (
+                    <Link href={step.link} style={{ color: "var(--brand)", textDecoration: "none", fontWeight: 700, fontSize: "0.72rem" }}>
+                      {step.linkText}
+                    </Link>
+                  ) : (
+                    <span style={{ color: "rgba(240,242,255,0.25)", fontSize: "0.7rem", fontStyle: "italic" }}>
+                      {step.statusText}
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
-            <ActivityHeatmap data={heatmapData} />
-          </Card>
-        )}
+          )}
+        </div>
+      )}
+
+      {/* Stat-glance row — always visible, not gated behind onboarding completion */}
+      <div className="stat-glance-row" style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(4, 1fr)",
+        gap: "0.85rem",
+        marginBottom: "2rem",
+      }}>
+        {[
+          { label: "Templates", value: templatesCount, link: "/dashboard/templates" },
+          { label: "Live Domains", value: domainsCount, link: "/dashboard/domains" },
+          { label: "API Keys", value: apiKeysCount, link: "/dashboard/settings" },
+          { label: "Views (7d)", value: totalViews, link: "/dashboard/insights" },
+        ].map((stat) => (
+          <Link
+            key={stat.label}
+            href={stat.link}
+            style={{
+              background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 12, padding: "1rem 1.1rem", textDecoration: "none",
+              display: "flex", flexDirection: "column", gap: "0.3rem",
+            }}
+          >
+            <span style={{ fontSize: "0.66rem", fontWeight: 700, color: "rgba(240,242,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              {stat.label}
+            </span>
+            <span style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff" }}>
+              {stat.value}
+            </span>
+          </Link>
+        ))}
       </div>
 
-      {/* Analytics Graph & Timeline Dashboard */}
-      <Card style={{ marginBottom: "2rem" }}>
-        {/* Filters and Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "1.25rem", flexWrap: "wrap", gap: "1rem" }}>
-          <div>
-            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
-              Visitor Insights Graph
-            </h2>
-            <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
-              Total views and unique visits mapped over the last 7 days.
-            </p>
-          </div>
-
-          {/* Filtering controls */}
-          <div className="overview-filter-controls" style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", background: "rgba(255,255,255,0.03)", padding: 4, borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)" }}>
-              <button
-                type="button"
-                onClick={() => { setFilterType("all"); setSelectedTemplateId("all"); }}
-                style={{
-                  padding: "0.35rem 0.75rem", borderRadius: 8, fontSize: "0.78rem", border: "none", fontWeight: 650,
-                  background: filterType === "all" && selectedTemplateId === "all" ? "var(--brand)" : "transparent",
-                  color: filterType === "all" && selectedTemplateId === "all" ? "#fff" : "rgba(240,242,255,0.45)",
-                  cursor: "pointer", transition: "all 0.15s"
-                }}
-              >
-                All Pages
-              </button>
-              <button
-                type="button"
-                onClick={() => { setFilterType("published"); setSelectedTemplateId("all"); }}
-                style={{
-                  padding: "0.35rem 0.75rem", borderRadius: 8, fontSize: "0.78rem", border: "none", fontWeight: 650,
-                  background: filterType === "published" && selectedTemplateId === "all" ? "var(--brand)" : "transparent",
-                  color: filterType === "published" && selectedTemplateId === "all" ? "#fff" : "rgba(240,242,255,0.45)",
-                  cursor: "pointer", transition: "all 0.15s"
-                }}
-              >
-                Published Only
-              </button>
-            </div>
-
-            {/* Template filter list */}
-            {templates.length > 0 && (
-              <div style={{ width: "min(180px, 100%)" }}>
-                <CustomSelect
-                  value={selectedTemplateId}
-                  options={templateOptions}
-                  onChange={(val) => {
-                    setSelectedTemplateId(val);
-                    if (val !== "all") setFilterType("all");
-                  }}
-                />
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setDetailsOpen(true)}
-              disabled={totalViews === 0}
+      {/* Templates — front and center */}
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", marginBottom: "1.25rem" }}>
+        <div>
+          <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.3rem", fontWeight: 800, color: "#f0f2ff", margin: 0 }}>
+            Your Templates
+          </h2>
+          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
+            Recently updated email templates and landing pages.
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: "0.6rem", flexShrink: 0 }}>
+          {recentTemplates.length > 0 && (
+            <Link
+              href="/dashboard/templates"
               style={{
-                padding: "0.5rem 0.9rem", borderRadius: 10, fontSize: "0.78rem", fontWeight: 650,
-                background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.25)",
-                color: totalViews === 0 ? "rgba(240,242,255,0.25)" : "#c4b5fd",
-                cursor: totalViews === 0 ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+                display: "inline-flex", alignItems: "center", padding: "0.6rem 1rem",
+                borderRadius: 9, fontSize: "0.82rem", fontWeight: 650,
+                color: "rgba(240,242,255,0.65)", textDecoration: "none",
+                border: "1px solid rgba(255,255,255,0.1)",
               }}
             >
-              View Details
-            </button>
-          </div>
+              View all →
+            </Link>
+          )}
+          <Link
+            href="/dashboard/templates"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: "0.5rem",
+              padding: "0.6rem 1.1rem", borderRadius: 9, fontWeight: 700, fontSize: "0.82rem",
+              background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
+              color: "#fff", textDecoration: "none",
+              boxShadow: "0 4px 20px var(--brand-glow)",
+            }}
+          >
+            <IconPlus />
+            New Template
+          </Link>
         </div>
+      </div>
 
-        {loading ? (
-          <div style={{ height: 260, display: "grid", placeItems: "center" }}>
-            <div className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
-          </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: "2rem" }} className="analytics-layout-split">
-            {/* Stat indicators card */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem", justifyContent: "center" }}>
-              <div style={{
-                background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)",
-                borderRadius: 12, padding: "1.25rem"
-              }}>
-                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "rgba(240,242,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  Total Page Views
-                </span>
-                <h3 style={{ fontSize: "2rem", fontWeight: 800, color: "#f0f2ff", margin: "0.35rem 0 0" }}>
-                  {totalViews}
-                </h3>
-              </div>
-
-              <div style={{
-                background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)",
-                borderRadius: 12, padding: "1.25rem"
-              }}>
-                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "rgba(240,242,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  Unique Visitors
-                </span>
-                <h3 style={{ fontSize: "2rem", fontWeight: 800, color: "var(--brand)", margin: "0.35rem 0 0" }}>
-                  {totalUnique}
-                </h3>
-              </div>
-            </div>
-
-            {/* SVG Visual Graph */}
-            <div style={{ width: "100%", overflowX: "auto" }}>
-              <div style={{ minWidth: 650 }}>
-                <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
-                  <defs>
-                    <linearGradient id="viewsAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.18" />
-                      <stop offset="100%" stopColor="var(--brand)" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-
-                  {/* Horizontal grid lines */}
-                  {[0, 0.5, 1].map((ratio, i) => {
-                    const y = paddingTop + ratio * graphHeight;
-                    const val = Math.round(maxVal - ratio * maxVal);
-                    return (
-                      <g key={i}>
-                        <line
-                          x1={paddingLeft}
-                          y1={y}
-                          x2={width - paddingRight}
-                          y2={y}
-                          stroke="rgba(255,255,255,0.04)"
-                          strokeWidth="1"
-                          strokeDasharray="4 4"
-                        />
-                        <text
-                          x={paddingLeft - 10}
-                          y={y + 4}
-                          fill="rgba(240,242,255,0.25)"
-                          fontSize="10"
-                          fontFamily="monospace"
-                          textAnchor="end"
-                        >
-                          {val}
-                        </text>
-                      </g>
-                    );
-                  })}
-
-                  {/* Area fill under graph path */}
-                  {areaD && (
-                    <path
-                      d={areaD}
-                      fill="url(#viewsAreaGrad)"
-                    />
-                  )}
-
-                  {/* Line path for Total views */}
-                  {pathD && (
-                    <path
-                      d={pathD}
-                      fill="none"
-                      stroke="var(--brand)"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  )}
-
-                  {/* Line path for Unique visitors */}
-                  {visitorPathD && (
-                    <path
-                      d={visitorPathD}
-                      fill="none"
-                      stroke="#10b981"
-                      strokeWidth="1.8"
-                      strokeDasharray="3 3"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  )}
-
-                  {/* Points / Hover markers */}
-                  {points.map((p, idx) => (
-                    <g key={idx}>
-                      <circle
-                        cx={p.x}
-                        cy={p.y}
-                        r="3.5"
-                        fill="#0b0f19"
-                        stroke="var(--brand)"
-                        strokeWidth="2.5"
-                      />
-                      <text
-                        x={p.x}
-                        y={p.y - 8}
-                        fill="#f0f2ff"
-                        fontSize="9"
-                        fontWeight="700"
-                        fontFamily="monospace"
-                        textAnchor="middle"
-                        style={{ display: p.val === 0 ? "none" : "block" }}
-                      >
-                        {p.val}
-                      </text>
-                    </g>
-                  ))}
-
-                  {/* Date labels for x-axis */}
-                  {chartData.map((day, index) => {
-                    const x = paddingLeft + (index / (chartData.length - 1)) * graphWidth;
-                    return (
-                      <text
-                        key={index}
-                        x={x}
-                        y={height - 15}
-                        fill="rgba(240,242,255,0.3)"
-                        fontSize="10.5"
-                        fontWeight={550}
-                        textAnchor="middle"
-                      >
-                        {day.date}
-                      </text>
-                    );
-                  })}
-                </svg>
-
-                {/* Graph Legend */}
-                <div style={{ display: "flex", gap: "1.5rem", justifyContent: "center", marginTop: "0.25rem" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.78rem" }}>
-                    <div style={{ width: 12, height: 3, background: "var(--brand)", borderRadius: 2 }} />
-                    <span style={{ color: "rgba(240,242,255,0.55)" }}>Total Page Views</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.78rem" }}>
-                    <div style={{ width: 12, height: 3, borderTop: "2px dashed #10b981" }} />
-                    <span style={{ color: "rgba(240,242,255,0.55)" }}>Unique Visitors</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </Card>
-
-      <VisitorDetailsModal
-        open={detailsOpen}
-        onClose={() => setDetailsOpen(false)}
-        templateId={selectedTemplateId}
-        filterType={filterType}
-      />
+      {recentTemplates.length > 0 ? (
+        <div className="overview-templates-grid" style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+          gap: "1.25rem",
+          marginBottom: "2rem",
+        }}>
+          {recentTemplates.map((template) => (
+            <TemplateCard key={template.id} template={template} />
+          ))}
+        </div>
+      ) : (
+        <div style={{
+          padding: "3rem 2rem",
+          textAlign: "center",
+          borderRadius: 16,
+          border: "1px dashed rgba(255,255,255,0.1)",
+          background: "rgba(255,255,255,0.015)",
+          marginBottom: "2rem",
+        }}>
+          <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.05rem", color: "#f0f2ff", marginBottom: "0.5rem" }}>
+            No templates yet.
+          </h3>
+          <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.4)", marginBottom: "1.5rem" }}>
+            Create your first email template or landing page to get started.
+          </p>
+          <Link
+            href="/dashboard/templates"
+            style={{
+              display: "inline-flex", alignItems: "center", gap: "0.5rem",
+              padding: "0.65rem 1.25rem",
+              borderRadius: 10, fontSize: "0.875rem", fontWeight: 700,
+              background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
+              color: "#fff", textDecoration: "none",
+              boxShadow: "0 4px 20px var(--brand-glow)",
+            }}
+          >
+            <IconPlus />
+            Create First Template
+          </Link>
+        </div>
+      )}
 
       <style jsx>{`
-        .spinner {
-          border: 2px solid rgba(255,255,255,0.06);
-          border-top-color: var(--brand);
-          border-radius: 50%;
-          animation: spin 0.65s linear infinite;
-        }
-        @keyframes spin {
-          to { transform: rotate(360deg); }
-        }
-        @media (max-width: 900px) {
-          .overview-top-row {
-            grid-template-columns: 1fr !important;
-          }
-          .analytics-layout-split {
-            grid-template-columns: 1fr !important;
+        @media (max-width: 700px) {
+          .stat-glance-row {
+            grid-template-columns: repeat(2, 1fr) !important;
           }
         }
         @media (max-width: 420px) {
-          .stat-tile-grid {
+          .overview-templates-grid {
             grid-template-columns: 1fr !important;
           }
         }

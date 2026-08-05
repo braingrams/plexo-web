@@ -21,7 +21,9 @@ export function classifyPromptComplexity(mode: AiActionMode, prompt: string): Co
   const wordCount = text.split(/\s+/).filter(Boolean).length;
   const hasHighSignal = HIGH_SIGNAL_PHRASES.some((phrase) => text.includes(phrase));
 
-  if (mode === "generate_layout") {
+  if (mode === "generate_layout" || mode === "edit_raw_html") {
+    // A full-document edit/generation is inherently a large operation — same bias
+    // toward HIGH as generate_layout, rather than the smaller-edit heuristics below.
     return hasHighSignal || wordCount > 40 ? "HIGH" : "MEDIUM";
   }
 

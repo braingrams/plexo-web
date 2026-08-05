@@ -84,12 +84,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       : TemplateKind.LANDING_PAGE;
 
   const features = getTierFeatures(resolved.subscriptionPlan);
-  if (kind === TemplateKind.LANDING_PAGE && !features.landingPagesEnabled) {
-    return NextResponse.json(
-      { error: "Landing page creation requires a PRO or ULTRA subscription plan." },
-      { status: 403 }
-    );
-  }
 
   const name = body.name?.trim() || (kind === TemplateKind.EMAIL ? "AI Generated Email Template" : "AI Generated Landing Page");
   const rawDesignJson = body.designJson;
@@ -133,13 +127,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Check template creation limits — root/home pages only, so a landing page with
-  // several multipage sub-pages still counts as one against this limit, not several.
-  if (features.maxTemplates !== -1) {
-    const templateCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null } });
-    if (templateCount >= features.maxTemplates) {
+  // Check template creation limits — root/home pages only, per kind, so a landing page
+  // with several multipage sub-pages still counts as one against this limit, not several.
+  {
+    const limit = kind === TemplateKind.EMAIL ? features.maxEmailTemplates : features.maxLandingPages;
+    const templateCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind } });
+    if (templateCount >= limit) {
+      const label = kind === TemplateKind.EMAIL ? "email templates" : "landing pages";
       return NextResponse.json(
-        { error: `Template limit reached (${features.maxTemplates}). Upgrade plan to create more pages.` },
+        { error: `Template limit reached (${limit} ${label}). Upgrade plan to create more.` },
         { status: 403 }
       );
     }

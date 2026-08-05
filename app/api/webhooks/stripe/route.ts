@@ -5,7 +5,50 @@ import { Prisma } from "@prisma/client";
 import { grantTopup } from "@/lib/credits/ledger";
 import { getStripe } from "@/lib/stripe";
 import type { SubscriptionPlan } from "@/lib/subscription";
+import { getMarketplaceOwnerUserId } from "@/lib/marketplaceListing";
 import { prisma } from "@/server/prisma";
+
+/**
+ * Credits a marketplace seller their share of a sale, minus the admin-configurable
+ * platform fee (PlatformSettings.marketplaceFeeBps, default 20%). Called only right after
+ * the TemplatePurchase row is successfully created for the first time — a webhook retry
+ * that hits the P2002 catch on that create skips this too, which is correct: both effects
+ * belong to the same one-time sale event.
+ */
+async function creditMarketplaceSeller(sellerUserId: string, priceCents: number, templatePurchaseId: string): Promise<void> {
+  const systemOwnerId = await getMarketplaceOwnerUserId();
+  if (sellerUserId === systemOwnerId) return; // admin-curated listing — no real seller to pay
+
+  const settings = await prisma.platformSettings.upsert({
+    where: { id: "global" },
+    create: { id: "global" },
+    update: {},
+    select: { marketplaceFeeBps: true },
+  });
+  const feeCents = Math.round((priceCents * settings.marketplaceFeeBps) / 10_000);
+  const netAmountCents = priceCents - feeCents;
+
+  await prisma.$transaction(async (tx) => {
+    const user = await tx.user.update({
+      where: { id: sellerUserId },
+      data: { sellerBalanceCents: { increment: netAmountCents } },
+      select: { sellerBalanceCents: true },
+    });
+
+    await tx.sellerLedgerEntry.create({
+      data: {
+        userId: sellerUserId,
+        type: "SALE_CREDIT",
+        grossAmountCents: priceCents,
+        feeCents,
+        netAmountCents,
+        balanceAfterCents: user.sellerBalanceCents,
+        templatePurchaseId,
+        description: "Marketplace sale",
+      },
+    });
+  });
+}
 
 // Idempotency guard for Stripe's at-least-once webhook delivery, same pattern as
 // lib/credits/ledger.ts's grantTopup: claim the event id via a standalone insert BEFORE
@@ -60,9 +103,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (checkoutSession.mode === "payment" && checkoutSession.metadata?.kind === "template_purchase") {
         const templateId = checkoutSession.metadata.templateId;
         const priceCents = Number(checkoutSession.metadata.priceCents ?? 0);
+        const sellerUserId = checkoutSession.metadata?.sellerUserId;
         if (templateId) {
           try {
-            await prisma.templatePurchase.create({
+            const purchase = await prisma.templatePurchase.create({
               data: {
                 userId: plexoUserId,
                 templateId,
@@ -70,9 +114,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
                 stripeSessionId: checkoutSession.id,
               },
             });
+            if (sellerUserId && priceCents > 0) {
+              await creditMarketplaceSeller(sellerUserId, priceCents, purchase.id);
+            }
           } catch (err) {
             // P2002 = already recorded (webhook retry, or the unique userId+templateId
-            // constraint) — anything else is a real failure worth surfacing.
+            // constraint) — anything else is a real failure worth surfacing. Either way,
+            // skip seller-crediting too: a retry means this sale was already credited once.
             if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")) throw err;
           }
         }

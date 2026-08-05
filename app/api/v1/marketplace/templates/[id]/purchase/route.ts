@@ -25,7 +25,7 @@ export async function POST(
   const { id } = await params;
   const template = await prisma.template.findUnique({
     where: { id },
-    select: { id: true, name: true, marketplaceStatus: true, priceCents: true },
+    select: { id: true, name: true, marketplaceStatus: true, priceCents: true, userId: true },
   });
   if (!template || template.marketplaceStatus !== "PUBLISHED") {
     return NextResponse.json({ error: "Template not found." }, { status: 404 });
@@ -80,6 +80,10 @@ export async function POST(
         kind: "template_purchase",
         templateId: id,
         priceCents: String(priceCents),
+        // Consumed by the webhook to credit the seller's marketplace balance — harmless to
+        // always include, even for admin-curated (system-account-owned) listings, since the
+        // webhook skips crediting when this resolves to the marketplace system owner.
+        sellerUserId: template.userId,
       },
       success_url: `${appUrl}/marketplace/${id}?purchase=success`,
       cancel_url: `${appUrl}/marketplace/${id}?purchase=cancelled`,

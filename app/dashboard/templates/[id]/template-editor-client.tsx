@@ -136,10 +136,12 @@ function EditorHeaderLeft({
 	isEmail,
 	templateName,
 	onBack,
+	onConvert,
 }: {
 	isEmail: boolean;
 	templateName: string;
 	onBack: () => void;
+	onConvert?: () => void;
 }) {
 	return (
 		<div
@@ -213,6 +215,27 @@ function EditorHeaderLeft({
 					{isEmail ? <IconMail /> : <IconLayout />}
 					{isEmail ? "Email" : "Page"}
 				</span>
+				{onConvert && (
+					<button
+						type="button"
+						onClick={onConvert}
+						style={{
+							padding: "0.2rem 0.5rem",
+							borderRadius: 6,
+							border: "1px solid rgba(255,255,255,0.1)",
+							background: "transparent",
+							color: "rgba(240,242,255,0.5)",
+							cursor: "pointer",
+							fontFamily: "inherit",
+							fontSize: "0.68rem",
+							fontWeight: 600,
+							whiteSpace: "nowrap",
+							flexShrink: 0,
+						}}
+					>
+						Switch to {isEmail ? "Landing Page" : "Email"}
+					</button>
+				)}
 				<h1
 					style={{
 						fontFamily: "var(--font-heading), sans-serif",
@@ -392,6 +415,9 @@ export function TemplateEditorClient({
 	const [isSaving, setIsSaving] = useState(false);
 	const [saveMessage, setSaveMessage] = useState<string | null>(null);
 	const [saveError, setSaveError] = useState<string | null>(null);
+	const [showConvertModal, setShowConvertModal] = useState(false);
+	const [isConverting, setIsConverting] = useState(false);
+	const [convertError, setConvertError] = useState<string | null>(null);
 	const [showPublishModal, setShowPublishModal] = useState(false);
 	const [modalDomainType, setModalDomainType] = useState<
 		"SUBDOMAIN" | "CUSTOM"
@@ -430,6 +456,30 @@ export function TemplateEditorClient({
 			const payload = (await response.json().catch(() => ({}))) as { error?: string };
 			throw new Error(payload.error ?? "Unable to save template.");
 		}
+	}
+
+	/** Quiet background autosave (PlexoBuilder's own autoSave/autoSaveDuration timer) — persists
+	 * the same way flushSave/handleSave do, but skips the UI side effects that make sense for an
+	 * explicit click and not a silent tick: no saveMessage toast, no router.refresh(), and no
+	 * publish-modal nudge. A persistently-failing autosave still surfaces via saveError so it
+	 * doesn't fail silently forever. */
+	function handleAutoSave(data: { json: TemplateJSON; html: string }): void {
+		fetch(`/api/templates/update/${templateId}`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ designJson: data.json, compiledHtml: data.html }),
+		})
+			.then(async (response) => {
+				if (!response.ok) {
+					const payload = (await response.json().catch(() => ({}))) as { error?: string };
+					throw new Error(payload.error ?? "Unable to save template.");
+				}
+				setSaveError(null);
+			})
+			.catch((err) => {
+				console.warn("Autosave failed:", err);
+				setSaveError(err instanceof Error ? err.message : "Autosave failed.");
+			});
 	}
 
 	async function handleNavigateToPage(pageId: string): Promise<void> {
@@ -480,6 +530,29 @@ export function TemplateEditorClient({
 			);
 		} finally {
 			setIsSaving(false);
+		}
+	}
+
+	async function handleConvertType(): Promise<void> {
+		setConvertError(null);
+		setIsConverting(true);
+		try {
+			const targetKind = isEmail ? "LANDING_PAGE" : "EMAIL";
+			const response = await fetch(`/api/templates/${templateId}/convert-type`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ targetKind }),
+			});
+			const data = (await response.json().catch(() => ({}))) as { error?: string };
+			if (!response.ok) {
+				throw new Error(data.error ?? "Unable to convert template.");
+			}
+			setShowConvertModal(false);
+			router.refresh();
+		} catch (err) {
+			setConvertError(err instanceof Error ? err.message : "Unable to convert template.");
+		} finally {
+			setIsConverting(false);
 		}
 	}
 
@@ -565,6 +638,9 @@ export function TemplateEditorClient({
 					themeFgColor="#ffffff"
 					textColor="#ecfeff"
 					showSaveButton={false}
+					autoSave
+					autoSaveDuration={6000}
+					onSave={handleAutoSave}
 					useAi={useAi}
 					aiProvider={aiProvider}
 					aiTier={aiTier}
@@ -587,7 +663,21 @@ export function TemplateEditorClient({
 						<EditorHeaderLeft
 							isEmail={isEmail}
 							templateName={templateName}
-							onBack={() => router.push("/dashboard/templates")}
+							onBack={() => {
+								// The Templates list is prefetch-cached behind the always-visible nav
+								// link — force a refetch so a just-created/edited template isn't hidden
+								// behind a stale pre-change payload.
+								router.refresh();
+								router.push("/dashboard/templates");
+							}}
+							onConvert={
+								templateParentId
+									? undefined
+									: () => {
+											setConvertError(null);
+											setShowConvertModal(true);
+										}
+							}
 						/>
 					}
 					headerRightContent={
@@ -897,6 +987,118 @@ export function TemplateEditorClient({
 								</button>
 							</div>
 						</form>
+					</div>
+				</div>
+			)}
+
+			{/* ── Convert Type Modal ──────────────────── */}
+			{showConvertModal && (
+				<div
+					style={{
+						position: "fixed",
+						top: 0,
+						left: 0,
+						right: 0,
+						bottom: 0,
+						background: "rgba(3, 7, 18, 0.85)",
+						zIndex: 100,
+						display: "grid",
+						placeItems: "center",
+						backdropFilter: "blur(8px)",
+						animation: "fadeIn 0.2s ease-out",
+					}}
+				>
+					<div
+						style={{
+							background: "#0d1324",
+							border: "1px solid rgba(255,255,255,0.08)",
+							borderRadius: 16,
+							width: "90%",
+							maxWidth: 460,
+							padding: "1.75rem",
+							boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+						}}
+					>
+						<div
+							style={{
+								display: "flex",
+								justifyContent: "space-between",
+								alignItems: "center",
+								marginBottom: "1.25rem",
+							}}
+						>
+							<h2
+								style={{
+									fontSize: "1.2rem",
+									fontWeight: 800,
+									color: "#f0f2ff",
+									fontFamily: "var(--font-heading)",
+								}}
+							>
+								Switch to {isEmail ? "Landing Page" : "Email"}
+							</h2>
+							<button
+								onClick={() => setShowConvertModal(false)}
+								style={{
+									background: "none",
+									border: "none",
+									color: "rgba(240,242,255,0.4)",
+									cursor: "pointer",
+									fontSize: "1.1rem",
+								}}
+							>
+								✕
+							</button>
+						</div>
+
+						<p
+							style={{
+								fontSize: "0.82rem",
+								color: "rgba(240,242,255,0.6)",
+								lineHeight: 1.5,
+								marginBottom: "1.25rem",
+							}}
+						>
+							{isEmail
+								? "This keeps all your content and design — it'll just be recompiled as a landing page instead of an email."
+								: "This keeps all your content and design, but interactive blocks like carousels, videos, timers, menus, and accordions won't animate or respond in email clients — they'll show as static images/snapshots instead."}
+						</p>
+
+						{convertError && (
+							<p style={{ fontSize: "0.78rem", color: "#f87171", margin: "0 0 1rem" }}>
+								⚠️ {convertError}
+							</p>
+						)}
+
+						<div style={{ display: "flex", gap: "0.6rem" }}>
+							<button
+								type="button"
+								onClick={() => setShowConvertModal(false)}
+								className="btn-secondary"
+								style={{ flex: 1, padding: "0.6rem" }}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								disabled={isConverting}
+								onClick={() => void handleConvertType()}
+								className="btn-primary"
+								style={{
+									flex: 1,
+									padding: "0.6rem",
+									display: "inline-flex",
+									alignItems: "center",
+									justifyContent: "center",
+									gap: "0.4rem",
+								}}
+							>
+								{isConverting && (
+									<span className="spinner" style={{ width: 11, height: 11 }} />
+								)}
+								{isConverting ? "Converting…" : "Continue"}
+							</button>
+						</div>
 					</div>
 				</div>
 			)}

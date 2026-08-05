@@ -8,6 +8,12 @@ import { ensureActiveOrganization } from "@/server/org";
 
 import { TemplatesClient } from "./templates-client";
 
+// Always fetch fresh — this route sits behind the always-visible "Templates" nav link, which
+// Next prefetches proactively. Without this, navigating back here after creating/editing a
+// template (e.g. the editor's "← Templates" button) can serve a stale pre-change RSC payload
+// from that prefetch instead of the current list.
+export const dynamic = "force-dynamic";
+
 type TemplateSummary = {
   id: string;
   name: string;
@@ -51,10 +57,12 @@ export default async function TemplatesDashboardPage() {
     redirect("/choose-org");
   }
 
-  // Sub-pages (parentId set) live inside their parent's editor, not as
-  // separate top-level entries here.
+  // Sub-pages (parentId set) live inside their parent's editor, not as separate top-level
+  // entries here. Marketplace listing clones (marketplaceStatus set) live in
+  // /dashboard/marketplace/listings instead — see app/api/templates/route.ts's identical
+  // filter for why.
   const templates = await prisma.template.findMany({
-    where: { organizationId: orgResolution.organizationId, parentId: null },
+    where: { organizationId: orgResolution.organizationId, parentId: null, marketplaceStatus: null },
     // Secondary key matters: the org-backfill migration bulk-updated every template's
     // organizationId in one updateMany, and Prisma's @updatedAt auto-bumps on ANY update
     // through the query engine — so a lot of rows now share the exact same updatedAt
