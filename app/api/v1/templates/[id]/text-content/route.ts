@@ -4,6 +4,13 @@ import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
 import { requirePermission } from "@/server/requirePermission";
 import { extractTextNodes, applyTextEdits, annotateTextNodesForPreview } from "@/lib/htmlTextExtraction";
+import {
+  extractImageNodes,
+  annotateImageNodesForPreview,
+  applyImageEdits,
+  type ImgEdit,
+  type BackgroundEdit,
+} from "@/lib/htmlImageExtraction";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 
 /**
@@ -35,8 +42,11 @@ export async function GET(
   }
 
   const nodes = extractTextNodes(template.compiledHtml);
-  const previewHtml = annotateTextNodesForPreview(template.compiledHtml);
-  return NextResponse.json({ nodes, previewHtml });
+  const imageNodes = extractImageNodes(template.compiledHtml);
+  // Compose text + image annotation into one preview doc — order doesn't matter, each pass
+  // only reads/writes its own attribute namespace (data-ptid vs data-pimg/data-pbg).
+  const previewHtml = annotateImageNodesForPreview(annotateTextNodesForPreview(template.compiledHtml));
+  return NextResponse.json({ nodes, imageNodes, previewHtml });
 }
 
 /**
@@ -70,16 +80,29 @@ export async function PATCH(
     return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
   }
 
-  const body = (await request.json().catch(() => null)) as { edits?: { id?: number; text?: string }[] } | null;
-  const rawEdits = Array.isArray(body?.edits) ? body.edits : null;
-  if (!rawEdits) {
-    return NextResponse.json({ error: "Missing required 'edits' array." }, { status: 400 });
+  const body = (await request.json().catch(() => null)) as {
+    edits?: { id?: number; text?: string }[];
+    imgEdits?: { id?: number; src?: string; width?: number | null; height?: number | null }[];
+    backgroundEdits?: { id?: number; src?: string; backgroundSize?: string | null }[];
+  } | null;
+  const rawEdits = Array.isArray(body?.edits) ? body.edits : [];
+  const rawImgEdits = Array.isArray(body?.imgEdits) ? body.imgEdits : [];
+  const rawBackgroundEdits = Array.isArray(body?.backgroundEdits) ? body.backgroundEdits : [];
+  if (rawEdits.length === 0 && rawImgEdits.length === 0 && rawBackgroundEdits.length === 0) {
+    return NextResponse.json({ error: "No edits provided." }, { status: 400 });
   }
   const edits = rawEdits
     .filter((e): e is { id: number; text: string } => typeof e.id === "number" && typeof e.text === "string")
     .map((e) => ({ id: e.id, text: e.text }));
+  const imgEdits: ImgEdit[] = rawImgEdits
+    .filter((e): e is { id: number; src?: string; width?: number | null; height?: number | null } => typeof e.id === "number")
+    .map((e) => ({ id: e.id, src: e.src, width: e.width, height: e.height }));
+  const backgroundEdits: BackgroundEdit[] = rawBackgroundEdits
+    .filter((e): e is { id: number; src?: string; backgroundSize?: string | null } => typeof e.id === "number")
+    .map((e) => ({ id: e.id, src: e.src, backgroundSize: e.backgroundSize }));
 
-  const updatedHtml = applyTextEdits(template.compiledHtml, edits);
+  let updatedHtml = applyTextEdits(template.compiledHtml, edits);
+  updatedHtml = applyImageEdits(updatedHtml, imgEdits, backgroundEdits);
   await prisma.template.update({
     where: { id: template.id },
     data: { compiledHtml: updatedHtml },
