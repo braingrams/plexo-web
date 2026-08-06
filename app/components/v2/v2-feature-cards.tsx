@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Layers, CheckCircle, FileCode, Terminal } from "lucide-react";
+import { ArrowRight, Layers, CheckCircle, FileCode, Terminal, Rss, Search } from "lucide-react";
 import { Reveal } from "@/app/scroll-fx";
 
 export function V2FeatureCards({ isDark }: { isDark: boolean }) {
@@ -287,6 +287,80 @@ export function V2FeatureCards({ isDark }: { isDark: boolean }) {
                 <div className="text-xs space-y-0.5">
                   <p className="font-extrabold text-white">Page Published</p>
                   <p className="text-slate-400 font-medium">site.plexopages.com is live in 0.4s with SSL enabled</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Reveal>
+
+        {/* CARD 5: Blog & WordPress Migration (Rose/Fuchsia) */}
+        <Reveal delay={0.25}>
+          <div className={`rounded-[36px] p-8 sm:p-12 md:p-16 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center overflow-hidden border shadow-xl transition-colors ${
+            isDark
+              ? "bg-[#1c0f1a] border-rose-900/50 text-white"
+              : "bg-[#fde3ee] border-rose-100 text-slate-950"
+          }`}>
+            <div className="lg:col-span-6 space-y-6">
+              <span className="text-xs font-bold tracking-widest text-rose-400 uppercase">
+                BLOG &amp; WORDPRESS MIGRATION
+              </span>
+
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-[1.1]">
+                Bring your WordPress blog over in minutes, not days
+              </h2>
+
+              <p className={`text-base sm:text-lg font-medium leading-relaxed max-w-lg ${
+                isDark ? "text-slate-300" : "text-slate-700"
+              }`}>
+                Paste your WordPress site&apos;s URL — no plugin, no login, no export file needed. Posts, images, authors, categories, and tags all come across, and every old link 301-redirects automatically so your Google rankings survive the move. Every site gets a full blog built in: drafts, scheduling, comments, and zero-config SEO (sitemaps, structured data, OG images) that WordPress needs plugins for.
+              </p>
+
+              <Link
+                href="/auth/register"
+                className="inline-flex items-center gap-2 text-rose-400 hover:text-rose-300 font-bold text-base transition-colors group"
+              >
+                <span>Import your blog</span>
+                <div className="w-8 h-8 rounded-full border border-rose-400 flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-all">
+                  <ArrowRight className="w-4 h-4" />
+                </div>
+              </Link>
+            </div>
+
+            {/* Import Progress + SEO Checklist UI Mockup */}
+            <div className="lg:col-span-6 relative flex justify-center">
+              <div className="w-full max-w-[420px] bg-slate-950 text-white rounded-3xl p-6 shadow-2xl border border-slate-800 space-y-4">
+                <div className="flex items-center gap-2 border-b border-slate-800 pb-4">
+                  <Rss className="w-5 h-5 text-rose-400" />
+                  <span className="font-bold text-sm">Importing myblog.com</span>
+                  <span className="ml-auto text-xs font-bold text-rose-300 bg-rose-950/80 border border-rose-800 px-2.5 py-1 rounded-full">128 / 140</span>
+                </div>
+
+                <div className="h-2 rounded-full bg-slate-900 overflow-hidden">
+                  <div className="h-full w-[91%] bg-gradient-to-r from-rose-500 to-fuchsia-500 rounded-full" />
+                </div>
+
+                <div className="space-y-2 text-xs font-semibold text-slate-300 pt-2">
+                  {[
+                    ["Posts & pages", "128 imported"],
+                    ["Images & media", "412 re-hosted"],
+                    ["Categories & tags", "18 mapped"],
+                    ["Old links", "301 redirects live"],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
+                      <span className="flex items-center gap-2">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>{label}</span>
+                      </span>
+                      <span className="text-rose-300 font-mono font-bold">{value}</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
+                    <span className="flex items-center gap-2">
+                      <Search className="w-3.5 h-3.5 text-cyan-400" />
+                      SEO
+                    </span>
+                    <span className="text-cyan-300 font-mono font-bold">sitemap, JSON-LD, OG images</span>
+                  </div>
                 </div>
               </div>
             </div>

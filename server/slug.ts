@@ -36,20 +36,78 @@ export function isValidSlugSegment(slug: string): boolean {
 }
 
 /**
+ * "blog" is served by literal Next.js routes at the top level of every site
+ * (app/pub/[domain]/blog/**), which always take precedence over a same-named Template
+ * page one level below a site's root — such a page would be silently unreachable.
+ * Pages nested deeper (e.g. /about/blog) don't collide with anything, so this only
+ * matters for a page whose PARENT is itself a root (home) page.
+ */
+const RESERVED_TOP_LEVEL_PAGE_SLUGS = new Set(["blog"]);
+
+async function parentIsSiteRoot(parentId: string): Promise<boolean> {
+  const parent = await prisma.template.findUnique({ where: { id: parentId }, select: { parentId: true } });
+  return parent !== null && parent.parentId === null;
+}
+
+/** Used by the page-rename API, which sets an explicit slug rather than auto-suffixing it. */
+export async function isReservedTopLevelSlug(parentId: string, slug: string): Promise<boolean> {
+  return RESERVED_TOP_LEVEL_PAGE_SLUGS.has(slug) && (await parentIsSiteRoot(parentId));
+}
+
+/**
  * Appends -2, -3, ... to `base` until it no longer collides with a sibling
  * under `parentId` for this user's page tree (the DB's @@unique([parentId,
  * slug]) is the source of truth; this just avoids a guaranteed-to-fail
  * first attempt so page creation "just works" for non-technical users
- * typing duplicate names like "About" twice).
+ * typing duplicate names like "About" twice). Also treats a reserved
+ * top-level slug (see isReservedTopLevelSlug) as a phantom collision, so
+ * e.g. naming a new home sub-page "Blog" quietly lands on "blog-2" instead
+ * of shadowing the real /blog route.
  */
 export async function ensureUniqueSlug(parentId: string, baseSlugInput: string): Promise<string> {
   const base = slugify(baseSlugInput) || "page";
-  let candidate = base;
-  let suffix = 2;
+  const startReserved = RESERVED_TOP_LEVEL_PAGE_SLUGS.has(base) && (await parentIsSiteRoot(parentId));
+  let candidate = startReserved ? `${base}-2` : base;
+  let suffix = startReserved ? 3 : 2;
   // Small page trees in practice — a handful of round trips is fine.
   while (
     await prisma.template.findFirst({
       where: { parentId, slug: candidate },
+      select: { id: true },
+    })
+  ) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
+const RESERVED_BLOG_POST_SLUGS = new Set(["category", "tag", "author", "page", "feed", "rss"]);
+
+/**
+ * "page" is reserved for a category/tag/author archive's own literal pagination
+ * segment (blog/category/[catSlug]/page/[pageNum], etc.) — a taxonomy item slugged
+ * bare "page" would make /blog/category/page/2 ambiguous between "page 2 of the
+ * archive named 'page'" and "the 'page' sub-path of pagination itself."
+ */
+export function avoidPageReservedSlug(baseSlug: string, kindSuffix: string): string {
+  return baseSlug === "page" ? `page-${kindSuffix}` : baseSlug;
+}
+
+/**
+ * Same idea as ensureUniqueSlug but scoped to BlogPost.@@unique([templateId, slug]),
+ * and rejecting (not auto-suffixing) the words reserved for blog archive routes
+ * (app/pub/[domain]/blog/category|tag|author/**, blog/page/[n], blog/feed.xml) — a
+ * post literally slugged "category" would be permanently shadowed by that route.
+ */
+export async function ensureUniqueBlogSlug(templateId: string, baseSlugInput: string): Promise<string> {
+  const rawBase = slugify(baseSlugInput) || "post";
+  const base = RESERVED_BLOG_POST_SLUGS.has(rawBase) ? `${rawBase}-post` : rawBase;
+  let candidate = base;
+  let suffix = 2;
+  while (
+    await prisma.blogPost.findFirst({
+      where: { templateId, slug: candidate },
       select: { id: true },
     })
   ) {

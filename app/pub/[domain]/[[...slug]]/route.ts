@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import type { Template } from "@prisma/client";
 import { prisma } from "@/server/prisma";
 import { parseUserAgent, extractGeoFromHeaders } from "@/server/analytics";
-import { getPagesDomain } from "@/server/pagesDomain";
 import { resolveHideBranding, canWhiteLabel, getOrganizationOwnerPlan } from "@/lib/subscription";
+import { resolveSite } from "@/lib/pub/resolveSite";
+import { resolveBlogRedirect } from "@/lib/blog/redirects";
 
 function notFoundResponse(): NextResponse {
   return new NextResponse(
@@ -111,39 +112,43 @@ export async function GET(
   const params = await context.params;
   const rawDomain = decodeURIComponent(params.domain);
 
-  // Find the published domain mapping and template (exact lookup first)
-  let published = await prisma.publishedDomain.findUnique({
-    where: { domain: rawDomain },
-    include: {
-      template: true,
-      user: { select: { subscriptionPlan: true, hideBranding: true } },
-      organization: { select: { id: true, logo: true, whiteLabelEnabled: true } },
-    },
-  });
-
-  // middleware.ts already normalizes "xyz.localhost" -> "xyz.{pagesDomain}" before
-  // rewriting here, so this is only a defensive fallback for direct /pub testing.
-  if (!published && rawDomain.endsWith(".localhost")) {
-    const sub = rawDomain.replace(".localhost", "");
-    published = await prisma.publishedDomain.findUnique({
-      where: { domain: `${sub}.${getPagesDomain()}` },
-      include: {
-        template: true,
-        user: { select: { subscriptionPlan: true, hideBranding: true } },
-        organization: { select: { id: true, logo: true, whiteLabelEnabled: true } },
-      },
-    });
-  }
-
-  if (!published) {
+  const siteResult = await resolveSite(rawDomain);
+  if (siteResult.status === "not_found") {
     return notFoundResponse();
   }
-
   // A suspended domain (abuse takedown — see lib/safeBrowsing.ts /
   // app/api/internal/domains/[id]/suspend) serves neither its content nor a plain 404,
   // so visitors and the domain owner both get an unambiguous reason.
-  if (!published.active) {
+  if (siteResult.status === "suspended") {
     return suspendedResponse();
+  }
+  const published = siteResult.published;
+  const slugSegments = params.slug ?? [];
+
+  // WordPress's "Reading Settings: your homepage displays" toggle — when a site has
+  // turned this on, its root path hands off to the blog listing instead of the
+  // builder's own home page. A redirect (not rendering blog HTML inline here) keeps
+  // this route's job simple — the real rendering lives in app/pub/[domain]/blog/**.
+  if (slugSegments.length === 0) {
+    const blogSite = await prisma.blogSite.findUnique({
+      where: { templateId: published.templateId },
+      select: { enabled: true, showOnHomepage: true },
+    });
+    if (blogSite?.enabled && blogSite.showOnHomepage) {
+      return NextResponse.redirect(new URL("/blog", request.url));
+    }
+
+    // WordPress's default "ugly" permalink/shortlink (/?p=123) is a root-path request
+    // with a query string, not a path segment — it would never reach the redirect check
+    // further down (which only runs once path segments exist), so it needs its own look
+    // here. The WordPress importer writes exactly this form to BlogRedirect.fromPath.
+    const wpPostId = new URL(request.url).searchParams.get("p");
+    if (wpPostId) {
+      const redirectTo = await resolveBlogRedirect(published.templateId, `/?p=${wpPostId}`);
+      if (redirectTo) {
+        return NextResponse.redirect(new URL(redirectTo, request.url), 301);
+      }
+    }
   }
 
   // Unified page-tree walk: descend through parentId/slug as far as consecutive
@@ -153,7 +158,6 @@ export async function GET(
   // left over after the walk stops are resolved as an asset path scoped to the last page
   // reached, which is what lets a RAW_UPLOAD page (root or nested) have its own css/js/
   // image files without colliding with another page's same-named files.
-  const slugSegments = params.slug ?? [];
   let cursor: Template = published.template;
   let matchedSegments = 0;
   for (const segment of slugSegments) {
@@ -240,6 +244,18 @@ export async function GET(
         "X-Content-Type-Options": "nosniff",
       },
     });
+  }
+
+  // Nothing in the page tree matched. Before giving up, check whether this is an old
+  // WordPress permalink (or a renamed Plexo page) that should 301 to its new home —
+  // e.g. a WP site's "/2023/04/my-post/" migrated to "/blog/my-post". This is the ONE
+  // place that check needs to live for non-/blog-prefixed old paths: anything already
+  // under literal "/blog" is handled by app/pub/[domain]/blog/[...slug]/page.tsx instead,
+  // since that route takes precedence over this catch-all and never reaches here.
+  const fullRequestedPath = "/" + slugSegments.join("/");
+  const redirectTo = await resolveBlogRedirect(published.templateId, fullRequestedPath);
+  if (redirectTo) {
+    return NextResponse.redirect(new URL(redirectTo, request.url), 301);
   }
 
   // Leftover segments after the walk are an asset path under whichever page the walk

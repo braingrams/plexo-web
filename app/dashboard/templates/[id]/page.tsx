@@ -63,6 +63,7 @@ export default async function TemplateEditorPage(
         parentId: true,
         designJson: true,
         sourceType: true,
+        isBlogLayout: true,
       },
     }),
     prisma.user.findUnique({
@@ -130,6 +131,7 @@ export default async function TemplateEditorPage(
       currentUserId={session.user.id}
       currentUserRole={orgResolution.role}
       organizationId={orgResolution.organizationId}
+      isBlogLayout={template.isBlogLayout}
     />
   );
 }

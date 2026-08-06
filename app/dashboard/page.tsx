@@ -43,7 +43,7 @@ export default async function OverviewPage() {
   // marketplaceStatus:null exclusion of listing clones) as app/dashboard/templates/page.tsx,
   // just capped to the most recently-updated few.
   const recentTemplateRecords = await prisma.template.findMany({
-    where: { organizationId, parentId: null, marketplaceStatus: null },
+    where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false },
     orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     take: 8,
     select: {

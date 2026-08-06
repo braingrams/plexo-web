@@ -23,6 +23,9 @@ export const ac = createAccessControl({
   billing: ["manage"],
   apiKey: ["manage"],
   comment: ["create", "resolve"],
+  // Blog posts/categories/tags/settings — granted alongside template everywhere below,
+  // same Owner/Admin/Editor ladder (a blog post is content ownership, same as a page).
+  blog: ["create", "update", "delete", "publish"],
 } as const);
 
 // Billing stays with whichever member created the organization (the Owner) —
@@ -38,6 +41,7 @@ export const roles = {
     billing: ["manage"],
     apiKey: ["manage"],
     comment: ["create", "resolve"],
+    blog: ["create", "update", "delete", "publish"],
   }),
   admin: ac.newRole({
     member: ["create", "update", "delete"],
@@ -46,10 +50,12 @@ export const roles = {
     domain: ["manage"],
     apiKey: ["manage"],
     comment: ["create", "resolve"],
+    blog: ["create", "update", "delete", "publish"],
   }),
   editor: ac.newRole({
     template: ["create", "update", "delete", "publish"],
     comment: ["create", "resolve"],
+    blog: ["create", "update", "delete", "publish"],
   }),
   commenter: ac.newRole({
     comment: ["create", "resolve"],

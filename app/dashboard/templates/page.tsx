@@ -62,7 +62,7 @@ export default async function TemplatesDashboardPage() {
   // /dashboard/marketplace/listings instead — see app/api/templates/route.ts's identical
   // filter for why.
   const templates = await prisma.template.findMany({
-    where: { organizationId: orgResolution.organizationId, parentId: null, marketplaceStatus: null },
+    where: { organizationId: orgResolution.organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false },
     // Secondary key matters: the org-backfill migration bulk-updated every template's
     // organizationId in one updateMany, and Prisma's @updatedAt auto-bumps on ANY update
     // through the query engine — so a lot of rows now share the exact same updatedAt

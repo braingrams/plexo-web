@@ -11,6 +11,7 @@ import { getPagesDomain } from "@/server/pagesDomain";
 import {
   slugify,
   isValidSlugSegment,
+  isReservedTopLevelSlug,
   ensureUniqueSlug,
   isSameOrAncestor,
   getPageTree,
@@ -1133,6 +1134,12 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
 
           if (Object.keys(data).length === 0) {
             throw new Error("Provide at least one of name, slug, parentTemplateId, or order to update.");
+          }
+
+          const effectiveParentId: string | null = data.parentId ?? existing.parentId;
+          const effectiveSlug: string | null = data.slug ?? existing.slug;
+          if (effectiveSlug && (await isReservedTopLevelSlug(effectiveParentId as string, effectiveSlug))) {
+            throw new Error("That URL is reserved for the site's blog.");
           }
 
           let updated;

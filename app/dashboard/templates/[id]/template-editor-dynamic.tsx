@@ -28,6 +28,7 @@ export type TemplateEditorProps = {
   currentUserId: string;
   currentUserRole: string;
   organizationId: string;
+  isBlogLayout?: boolean;
 };
 
 function EditorSkeleton() {

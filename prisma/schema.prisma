@@ -70,21 +70,21 @@ enum NotificationType {
 // the plugin's access-control statements, not enforced as a DB enum, since better-auth
 // itself treats roles as strings (see roleSchema in its own schema).
 model Organization {
-  id         String   @id @default(uuid()) @db.Uuid
-  name       String
-  slug       String   @unique
-  logo       String?
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String   @unique
+  logo              String?
   // White-label accent color (hex, e.g. "#4f46e5") — null falls back to the default Plexo
   // purple everywhere it's read (dashboard chrome, transactional emails, embedded SDK).
   // Gated to Pro/Ultra: see lib/subscription.ts's canWhiteLabel + getOrganizationOwnerPlan.
-  brandColor String?
+  brandColor        String?
   // Explicit opt-in for replacing the Plexo name/logo/color with the org's own — being on a
   // Pro/Ultra plan only makes this ELIGIBLE (see canWhiteLabel), it does not turn it on by
   // itself. Defaults false for every org, including ones that already had a logo/brandColor
   // set under the old automatic-on-Pro/Ultra behavior.
-  whiteLabelEnabled Boolean @default(false)
-  metadata   String?
-  createdAt  DateTime @default(now())
+  whiteLabelEnabled Boolean  @default(false)
+  metadata          String?
+  createdAt         DateTime @default(now())
 
   members          Member[]
   invitations      Invitation[]
@@ -282,15 +282,16 @@ model User {
 
   memberships            Member[]
   sentInvitations        Invitation[]
-  comments               Comment[]        @relation("CommentAuthor")
-  resolvedComments       Comment[]        @relation("CommentResolvedBy")
+  comments               Comment[]           @relation("CommentAuthor")
+  resolvedComments       Comment[]           @relation("CommentResolvedBy")
   commentMentions        CommentMention[]
-  notifications          Notification[]   @relation("NotificationRecipient")
-  triggeredNotifications Notification[]   @relation("NotificationActor")
-  templatePurchases       TemplatePurchase[]
-  sellerLedger            SellerLedgerEntry[]
-  withdrawalRequests      WithdrawalRequest[]
-  feedback                Feedback[]
+  notifications          Notification[]      @relation("NotificationRecipient")
+  triggeredNotifications Notification[]      @relation("NotificationActor")
+  templatePurchases      TemplatePurchase[]
+  sellerLedger           SellerLedgerEntry[]
+  withdrawalRequests     WithdrawalRequest[]
+  feedback               Feedback[]
+  blogAuthorProfiles     BlogAuthor[]
 }
 
 model CreditLedgerEntry {
@@ -344,17 +345,17 @@ enum SellerLedgerType {
 // 20% platform fee is visible per-sale); net is what actually moved the balance on every
 // row type.
 model SellerLedgerEntry {
-  id                 String           @id @default(uuid()) @db.Uuid
-  userId             String           @db.Uuid
-  type               SellerLedgerType
-  grossAmountCents   Int?
-  feeCents           Int?
-  netAmountCents     Int
-  balanceAfterCents  Int
-  templatePurchaseId String?          @db.Uuid
-  withdrawalRequestId String?         @db.Uuid
-  description        String?
-  createdAt          DateTime         @default(now())
+  id                  String           @id @default(uuid()) @db.Uuid
+  userId              String           @db.Uuid
+  type                SellerLedgerType
+  grossAmountCents    Int?
+  feeCents            Int?
+  netAmountCents      Int
+  balanceAfterCents   Int
+  templatePurchaseId  String?          @db.Uuid
+  withdrawalRequestId String?          @db.Uuid
+  description         String?
+  createdAt           DateTime         @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -374,18 +375,18 @@ enum WithdrawalStatus {
 // rest via lib/crypto.ts's encryptSecret/decryptSecret (same pattern as ApiKey.aiApiKey);
 // bank name is left plain since it isn't independently sensitive.
 model WithdrawalRequest {
-  id                          String           @id @default(uuid()) @db.Uuid
-  userId                      String           @db.Uuid
-  amountCents                 Int
-  encryptedAccountNumber      String
-  encryptedAccountHolderName  String
-  bankName                    String
-  status                      WithdrawalStatus @default(PENDING)
+  id                         String           @id @default(uuid()) @db.Uuid
+  userId                     String           @db.Uuid
+  amountCents                Int
+  encryptedAccountNumber     String
+  encryptedAccountHolderName String
+  bankName                   String
+  status                     WithdrawalStatus @default(PENDING)
   // Required at the app layer when status is set to REJECTED — not a DB constraint.
-  rejectionReason             String?
-  requestedAt                 DateTime         @default(now())
-  processedAt                 DateTime?
-  processedByAdminId          String?          @db.Uuid
+  rejectionReason            String?
+  requestedAt                DateTime         @default(now())
+  processedAt                DateTime?
+  processedByAdminId         String?          @db.Uuid
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -461,16 +462,24 @@ model Template {
   // null marketplaceStatus = an ordinary, non-marketplace Template (nearly all rows).
   // "type" filter on the public page is TemplateKind (kind, above); marketplaceCategory
   // is a free-text tag plexo-admin sets, no separate taxonomy table.
-  marketplaceStatus      MarketplaceStatus?
-  marketplaceCategory    String?
-  marketplaceDescription String?
+  marketplaceStatus          MarketplaceStatus?
+  marketplaceCategory        String?
+  marketplaceDescription     String?
   // Cents; 0 or null = free. Int, not Float, to avoid floating-point cent errors.
-  priceCents             Int?
-  marketplacePublishedAt DateTime?
+  priceCents                 Int?
+  marketplacePublishedAt     DateTime?
   // Optional note an admin may leave when rejecting a user-submitted listing (PENDING_REVIEW
   // -> REJECTED). Not required, unlike WithdrawalRequest.rejectionReason — admin-curated
   // listings never use this at all.
   marketplaceRejectionReason String?
+
+  // A LANDING_PAGE Template a site owner designed as a custom blog layout (via the
+  // builder's isBlogLayout-gated "Blog" block palette) rather than an ordinary page —
+  // referenced by BlogSite.postLayoutTemplateId/listingLayoutTemplateId, never itself
+  // published/visited directly. Excluded from the normal dashboard template list/count
+  // and from maxLandingPages plan-limit counting (see app/api/templates/route.ts) so it
+  // doesn't silently consume a customer's page slot or show up as a stray untitled page.
+  isBlogLayout Boolean @default(false)
 
   user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -481,6 +490,20 @@ model Template {
   assets           TemplateAsset[]
   comments         Comment[]
   purchases        TemplatePurchase[]
+
+  // Blog (see the Blog* models below) — always scoped to the site's ROOT Template
+  // (parentId == null), the same row PublishedDomain already points at.
+  blogSite                 BlogSite?
+  blogAuthors              BlogAuthor[]
+  blogCategories           BlogCategory[]
+  blogTags                 BlogTag[]
+  blogPosts                BlogPost[]
+  blogRedirects            BlogRedirect[]
+  importJobs               ImportJob[]
+  importMediaMaps          ImportMediaMap[]
+  // Reverse side of BlogSite's two named 1:1 layout-template relations — see BlogSite.
+  blogSitePostLayoutFor    BlogSite?        @relation("BlogSitePostLayout")
+  blogSiteListingLayoutFor BlogSite?        @relation("BlogSiteListingLayout")
 
   @@unique([parentId, slug])
   @@index([userId])
@@ -787,4 +810,304 @@ model AdminAuditLog {
   @@index([actorId])
   @@index([targetType, targetId])
   @@index([createdAt])
+}
+
+// ============================================================================
+// Blog
+// ============================================================================
+// A "site" is a root Template (parentId == null) — the same row PublishedDomain
+// points at. Every Blog* model below is scoped by templateId to that root, matching
+// the convention PublishedDomain already uses. The public path is fixed at
+// "<domain>/blog" (not stored anywhere) so it can be served by literal Next.js route
+// segments (app/pub/[domain]/blog/**) that always take routing precedence over the
+// sibling [[...slug]] catch-all — see that route's own comments for why.
+
+enum BlogPostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+model BlogSite {
+  id                String  @id @default(uuid()) @db.Uuid
+  templateId        String  @unique @db.Uuid
+  enabled           Boolean @default(false)
+  title             String  @default("Blog")
+  description       String?
+  postsPerPage      Int     @default(10)
+  defaultCategoryId String? @db.Uuid
+  // WordPress's "Reading Settings: your homepage displays" toggle — when true, the
+  // site's root path ("/") serves the blog listing instead of the builder's own
+  // root page. Enforced in app/pub/[domain]/[[...slug]]/route.ts.
+  showOnHomepage    Boolean @default(false)
+
+  // Basic appearance — enough to approximate a migrated site's old brand without
+  // reimplementing an arbitrary WordPress theme (not portable: it's PHP templates +
+  // theme-specific CSS running on WordPress's own engine). accentColor is validated as a
+  // strict hex string before ever being interpolated into CSS (see lib/pub/blogTheme.tsx's
+  // sanitizeHexColor) — never trust it as pre-sanitized just because it's in the DB.
+  // fontPreset is a closed set of keys (lib/pub/blogTheme.tsx's FONT_STACKS) mapped
+  // server-side to a fixed CSS font-stack, never a raw user-supplied font-family string.
+  accentColor    String?
+  fontPreset     String  @default("sans")
+  logoUrl        String?
+  headerImageUrl String?
+
+  // Custom drag-and-drop layouts (see Template.isBlogLayout above and
+  // lib/pub/blogLayoutRender.ts). Null = use the default built-in theme
+  // (lib/pub/blogTheme.tsx) — always a safe fallback, nothing breaks by leaving these
+  // unset. @unique because a layout Template belongs to at most one site.
+  postLayoutTemplateId    String?   @unique @db.Uuid
+  postLayoutTemplate      Template? @relation("BlogSitePostLayout", fields: [postLayoutTemplateId], references: [id], onDelete: SetNull)
+  listingLayoutTemplateId String?   @unique @db.Uuid
+  listingLayoutTemplate   Template? @relation("BlogSiteListingLayout", fields: [listingLayoutTemplateId], references: [id], onDelete: SetNull)
+
+  // Sitewide master switch — BlogPost.commentsEnabled is a per-post override underneath
+  // this (both must be true for comments to actually show/accept submissions on a post).
+  commentsEnabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+}
+
+// A byline, not an account — may or may not be linked to a real Plexo User. WordPress
+// lets you attribute posts to an author who never logs in; imported posts in particular
+// almost always need this (the WP author rarely maps to a Plexo account).
+model BlogAuthor {
+  id         String   @id @default(uuid()) @db.Uuid
+  templateId String   @db.Uuid
+  userId     String?  @db.Uuid
+  name       String
+  slug       String
+  avatarUrl  String?
+  bio        String?  @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  template Template   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  user     User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  posts    BlogPost[]
+
+  @@unique([templateId, slug])
+  @@index([templateId])
+  @@index([userId])
+}
+
+model BlogCategory {
+  id          String   @id @default(uuid()) @db.Uuid
+  templateId  String   @db.Uuid
+  name        String
+  slug        String
+  description String?
+  parentId    String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  template Template           @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  parent   BlogCategory?      @relation("BlogCategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children BlogCategory[]     @relation("BlogCategoryTree")
+  posts    BlogPostCategory[]
+
+  @@unique([templateId, slug])
+  @@index([templateId])
+  @@index([parentId])
+}
+
+model BlogTag {
+  id         String   @id @default(uuid()) @db.Uuid
+  templateId String   @db.Uuid
+  name       String
+  slug       String
+  createdAt  DateTime @default(now())
+
+  template Template      @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  posts    BlogPostTag[]
+
+  @@unique([templateId, slug])
+  @@index([templateId])
+}
+
+model BlogPost {
+  id                 String         @id @default(uuid()) @db.Uuid
+  templateId         String         @db.Uuid
+  authorId           String?        @db.Uuid
+  title              String
+  slug               String
+  excerpt            String?        @db.Text
+  // Tiptap/ProseMirror JSON — the source of truth the editor round-trips.
+  contentJson        Json
+  // Rendered + sanitized (sanitize-html) HTML cache served to visitors — mirrors
+  // Template.compiledHtml's existing "precompute once, serve cheaply" pattern. MUST be
+  // re-sanitized on every write (editor save AND WordPress import): unlike RAW_UPLOAD's
+  // compiledHtml, this renders on the tenant's real live domain, not an isolated origin.
+  contentHtml        String         @db.Text
+  featuredImageUrl   String?
+  featuredImageAlt   String?
+  status             BlogPostStatus @default(DRAFT)
+  publishedAt        DateTime?
+  scheduledAt        DateTime?
+  metaTitle          String?
+  metaDescription    String?
+  ogImageUrl         String?
+  noindex            Boolean        @default(false)
+  readingTimeMinutes Int?
+  viewCount          Int            @default(0)
+  // Set only by the WordPress importer (the WP numeric post ID). Combined with the
+  // @@unique below, makes every import batch an upsert — safe to retry/resume a batch
+  // without duplicating posts. Null for posts authored directly in Plexo.
+  externalId         String?
+  // Per-post override underneath BlogSite.commentsEnabled's sitewide master switch.
+  commentsEnabled    Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  template   Template           @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  author     BlogAuthor?        @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  categories BlogPostCategory[]
+  tags       BlogPostTag[]
+  comments   BlogComment[]
+
+  @@unique([templateId, slug])
+  @@unique([templateId, externalId])
+  @@index([templateId, status, publishedAt])
+  @@index([authorId])
+}
+
+model BlogPostCategory {
+  postId     String @db.Uuid
+  categoryId String @db.Uuid
+
+  post     BlogPost     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  category BlogCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([postId, categoryId])
+  @@index([categoryId])
+}
+
+model BlogPostTag {
+  postId String @db.Uuid
+  tagId  String @db.Uuid
+
+  post BlogPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  BlogTag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+  @@index([tagId])
+}
+
+enum BlogCommentStatus {
+  PENDING
+  APPROVED
+  SPAM
+  REJECTED
+}
+
+// Public, no-login comment submission — the most adversarial input surface in this app
+// (fully anonymous, unlike post content which always comes from the site owner or the WP
+// importer). Every comment starts PENDING (or auto-SPAM via a crude heuristic — see
+// app/api/blog-comments/route.ts) and is never publicly visible until a site owner
+// approves it from the dashboard; body is plain-text-sanitized (lib/blog/sanitizeComment.ts),
+// no HTML allowlist at all unlike sanitizeBlogHtml.
+model BlogComment {
+  id          String            @id @default(uuid()) @db.Uuid
+  postId      String            @db.Uuid
+  parentId    String?           @db.Uuid
+  authorName  String
+  // Never shown publicly — moderation contact only.
+  authorEmail String
+  body        String            @db.Text
+  status      BlogCommentStatus @default(PENDING)
+  // sha256, same pattern as PageView.ipHash (server/analytics.ts) — raw IP never stored.
+  // Powers the submission endpoint's "N comments per IP per hour" throttle.
+  ipHash      String?
+  createdAt   DateTime          @default(now())
+
+  post    BlogPost      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent  BlogComment?  @relation("BlogCommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies BlogComment[] @relation("BlogCommentReplies")
+
+  @@index([postId, status])
+  @@index([ipHash, createdAt])
+}
+
+// Old-URL -> new-post 301s. Auto-populated by the WordPress importer (one row per
+// historical permalink the REST API reports, plus the WP "shortlink" form /?p={id})
+// so inbound Google/backlink equity survives the migration. Also usable for an
+// in-Plexo slug rename, so that doesn't silently 404 old links either.
+model BlogRedirect {
+  id         String   @id @default(uuid()) @db.Uuid
+  templateId String   @db.Uuid
+  fromPath   String
+  toPath     String
+  createdAt  DateTime @default(now())
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, fromPath])
+  @@index([templateId])
+}
+
+enum ImportSourceType {
+  WP_REST
+  WXR_UPLOAD
+}
+
+enum ImportJobStatus {
+  PENDING
+  DISCOVERING
+  RUNNING
+  PAUSED_ERROR
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// One row per WordPress-migration attempt. Processed incrementally in bounded batches
+// (each invocation does one batch, then self-re-triggers via Next's after() — see
+// lib/blogImport/**) rather than one long-running request, so progress survives a
+// serverless invocation timeout. lastHeartbeatAt is the same stalled-job guard idea as
+// TemplateGenerationJob.lockedAt above (owned by plexo-admin) — a cron sweep uses it to
+// detect and resume a batch chain that died mid-flight without double-processing a
+// still-live one.
+model ImportJob {
+  id              String           @id @default(uuid()) @db.Uuid
+  templateId      String           @db.Uuid
+  sourceType      ImportSourceType
+  sourceUrl       String?
+  wxrBlobUrl      String?
+  status          ImportJobStatus  @default(PENDING)
+  cursor          Json?
+  totalPosts      Int?
+  processedPosts  Int              @default(0)
+  totalMedia      Int?
+  processedMedia  Int              @default(0)
+  errors          Json?
+  lastHeartbeatAt DateTime?
+  createdBy       String?          @db.Uuid
+  startedAt       DateTime?
+  finishedAt      DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([status])
+}
+
+// Dedupes re-hosted WordPress media across retried/resumed import batches, keyed by the
+// OLD media URL, so a rerun never re-downloads/re-uploads the same file twice.
+model ImportMediaMap {
+  id         String   @id @default(uuid()) @db.Uuid
+  templateId String   @db.Uuid
+  sourceUrl  String
+  blobUrl    String
+  createdAt  DateTime @default(now())
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, sourceUrl])
+  @@index([templateId])
 }

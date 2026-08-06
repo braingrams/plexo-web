@@ -121,6 +121,33 @@ export function buildMentionEmail(input: {
   });
 }
 
+/** Notifies a site owner (not the internal builder-canvas Comment flow above — a public, anonymous blog-post comment awaiting moderation). Links to the moderation list rather than a 1-click HMAC approve link (testimonials' pattern) since a site can accumulate many comments at once, better suited to a list view. */
+export function buildNewBlogCommentEmail(input: {
+  commenterName: string;
+  postTitle: string;
+  commentSnippet: string;
+  moderationUrl: string;
+  brand?: EmailBrand;
+}): string {
+  const productName = input.brand?.name ?? "Plexo";
+  const accent = input.brand?.color ?? "#8b5cf6";
+  return emailShell({
+    title: `New comment on "${input.postTitle}" — ${productName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">New comment awaiting review</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        <strong>${input.commenterName}</strong> commented on <strong>${input.postTitle}</strong>:
+      </p>
+      <p style="margin:0 0 28px;font-size:14px;color:#334155;line-height:1.6;text-align:center;background:#f1f5f9;border-radius:10px;padding:16px 20px;">
+        &ldquo;${input.commentSnippet}&rdquo;
+      </p>
+      ${CTA_BUTTON(input.moderationUrl, "Review Comment", accent)}
+      ${FALLBACK_LINK(input.moderationUrl, accent)}
+    `,
+    brand: input.brand,
+  });
+}
+
 export function buildCommentReplyEmail(input: {
   replierName: string;
   templateName: string;

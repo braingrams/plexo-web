@@ -41,6 +41,9 @@ type Props = {
 	currentUserId: string;
 	currentUserRole: string;
 	organizationId: string;
+	// True for a Template created via Blog Settings' "Design custom layout" — shows the
+	// Blog block palette group in PlexoBuilder and an instructional banner here.
+	isBlogLayout?: boolean;
 };
 
 function IconArrowLeft() {
@@ -408,6 +411,7 @@ export function TemplateEditorClient({
 	currentUserId,
 	currentUserRole,
 	organizationId,
+	isBlogLayout,
 }: Props) {
 	const router = useRouter();
 	const searchParams = useSearchParams();
@@ -620,18 +624,36 @@ export function TemplateEditorClient({
 				overflow: "hidden",
 			}}
 		>
-			{templateKind === "LANDING_PAGE" && (
+			{templateKind === "LANDING_PAGE" && !isBlogLayout && (
 				<PagesPanel
 					templateId={templateId}
 					subscriptionPlan={subscriptionPlan}
 					onNavigate={(pageId) => void handleNavigateToPage(pageId)}
 				/>
 			)}
+			{isBlogLayout && (
+				<div
+					style={{
+						padding: "0.6rem 1rem",
+						background: "rgba(139,92,246,0.1)",
+						borderBottom: "1px solid rgba(139,92,246,0.25)",
+						color: "#c4b5fd",
+						fontSize: "0.78rem",
+						textAlign: "center",
+					}}
+				>
+					Designing a custom blog layout — drag in the &quot;Blog&quot; blocks from the panel (Post Title, Post Content,
+					Featured Image, Post Date, Post Author, Categories, Comments{"; or Post List for a listing layout"}) wherever
+					you want your real content to appear. This template needs at least one <strong>Post Content</strong> (or{" "}
+					<strong>Post List</strong>) block to go live.
+				</div>
+			)}
 			<div style={{ flex: 1, overflow: "hidden", background: "#0a0c15" }}>
 				<PlexoBuilder
 					ref={builderRef}
 					apiKey="workspace-internal"
 					mode={isEmail ? "email" : "landing_page"}
+					isBlogLayout={isBlogLayout}
 					initialTemplate={initialDesignJson}
 					backgroundColor="#0b1526"
 					themeBgColor="#8b5cf6"
@@ -644,7 +666,7 @@ export function TemplateEditorClient({
 					useAi={useAi}
 					aiProvider={aiProvider}
 					aiTier={aiTier}
-					allowPublishLandingPage={templateKind === "LANDING_PAGE"}
+					allowPublishLandingPage={templateKind === "LANDING_PAGE" && !isBlogLayout}
 					templateId={templateId}
 					unsplashKey={unsplashKey}
 					pexelsKey={pexelsKey}

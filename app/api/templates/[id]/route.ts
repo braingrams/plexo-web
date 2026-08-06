@@ -5,7 +5,7 @@ import { del } from "@vercel/blob";
 import { prisma } from "@/server/prisma";
 import { resolveUser, removeVercelDomain } from "@/app/api/v1/domains/route";
 import { requirePermission } from "@/server/requirePermission";
-import { isValidSlugSegment, isSameOrAncestor, isValidUuid, slugify, getDescendantIds } from "@/server/slug";
+import { isValidSlugSegment, isReservedTopLevelSlug, isSameOrAncestor, isValidUuid, slugify, getDescendantIds } from "@/server/slug";
 
 type PatchTemplateBody = {
   name?: string;
@@ -91,6 +91,11 @@ export async function PATCH(
 
   if (body.order !== undefined && Number.isFinite(body.order)) {
     data.order = body.order;
+  }
+
+  const effectiveSlug = typeof data.slug === "string" ? data.slug : existing.slug;
+  if (effectiveSlug && (await isReservedTopLevelSlug(nextParentId as string, effectiveSlug))) {
+    return NextResponse.json({ error: "That URL is reserved for the site's blog." }, { status: 400 });
   }
 
   try {

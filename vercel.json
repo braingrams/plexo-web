@@ -10,6 +10,10 @@
     {
       "path": "/api/internal/scan-domains",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/internal/blog-import/resume-stalled",
+      "schedule": "0 12 * * *"
     }
   ]
 }
