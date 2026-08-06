@@ -20,7 +20,7 @@ export function V2Nav({
       <div className="max-w-7xl mx-auto px-4 sm:px-8 md:px-16 h-20 flex items-center justify-between">
         {/* Left Brand Logo */}
         <Link href="/" className="flex items-center gap-2 group">
-          <PlexoLogo size={36} textStyle={{ color: isDark ? "#ffffff" : "#0f172a" }} />
+          <PlexoLogo size={36} href={null} textStyle={{ color: isDark ? "#ffffff" : "#0f172a" }} />
         </Link>
 
         {/* Center Nav Links */}

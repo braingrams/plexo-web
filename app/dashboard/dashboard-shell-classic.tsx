@@ -177,7 +177,7 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
   // room for the fixed sidebar chrome alongside the builder's own responsive layout.
   // Above that breakpoint (see .dash-classic-editor-route rules in globals.css), nothing changes.
   const isEditorRoute = pathname.startsWith("/dashboard/templates/") && pathname !== "/dashboard/templates";
-  const rootClassName = isEditorRoute ? "dash-classic-editor-route" : undefined;
+  const rootClassName = isEditorRoute ? "dash-classic-root dash-classic-editor-route" : "dash-classic-root";
 
   const initials = userName
     .split(" ")

@@ -85,6 +85,44 @@ export function extractTextNodes(html: string): ExtractedTextNode[] {
 }
 
 /**
+ * Re-parses the SAME html the ids came from and reconstructs the identical id sequence
+ * (exactly like extractTextNodes/applyTextEdits), tagging each text node's nearest
+ * containing element with `data-ptid` so the "Text Content" editor's live preview can
+ * locate/highlight/scroll to exactly what a given field edits. Multiple text nodes can
+ * share one containing element (e.g. "Some <a>link</a> text." has two plain-text runs
+ * under the same <p>) — the attribute holds a space-separated list of ids rather than
+ * overwriting, so `[data-ptid~="N"]` still resolves correctly for either one. Also injects
+ * a highlight style block so the preview iframe can toggle `.plexo-active` without needing
+ * inline styles wired through postMessage.
+ */
+export function annotateTextNodesForPreview(html: string): string {
+  const $ = cheerio.load(html);
+  let id = 0;
+
+  const root = $("body").length > 0 ? $("body").get(0)! : $.root().get(0)!;
+  walk($, root, [], (node, ancestors) => {
+    const raw = (node as { data?: string }).data ?? "";
+    const text = raw.trim();
+    if (!text) return;
+    const currentId = id++;
+    const parent = (node as AnyNode).parent;
+    if (!parent || parent.type !== "tag") return;
+    const existing = $(parent).attr("data-ptid");
+    $(parent).attr("data-ptid", existing ? `${existing} ${currentId}` : `${currentId}`);
+  });
+
+  const styleTag =
+    "<style>.plexo-active{outline:3px solid #8b5cf6 !important;outline-offset:2px;border-radius:2px;}</style>";
+  if ($("head").length > 0) {
+    $("head").append(styleTag);
+  } else {
+    $.root().prepend(styleTag);
+  }
+
+  return $.html();
+}
+
+/**
  * Re-parses the SAME html the ids came from and reconstructs the identical id sequence,
  * then overwrites each requested text node's data in place before re-serializing. Ids not
  * present in `edits` are left untouched. Leading/trailing whitespace around the original

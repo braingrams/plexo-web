@@ -551,6 +551,20 @@
 }
 
 @media (max-width: 767px) {
+  /* The root shell is `display:flex` (row) so the desktop sidebar+main sit side by side.
+     The mobile topbar is a third sibling in that same row — without this, it never gets
+     its own line: it's a flex item competing for space with `.dash-classic-main` (which
+     wants to be much wider than the viewport), so flex-shrink squeezes it down to a
+     sliver, and the row's default `align-items:stretch` stretches that sliver to the
+     full height of the tallest sibling — rendering as a tall, narrow, off-center column
+     instead of a short full-width bar. Stacking the row into a column on mobile fixes
+     both: the topbar gets 100% width and its own natural (short) height, with the aside
+     and main following below it (the aside is `position:fixed` so its place in this
+     column doesn't matter — it's positioned by the transform/off-canvas rules below). */
+  .dash-classic-root {
+    flex-direction: column;
+  }
+
   .dash-classic-aside {
     width: 280px !important;
     max-width: 82vw;
@@ -671,6 +685,11 @@
 
   .dash-mobile-nav-toggle {
     display: flex !important;
+    /* Pill nav is hidden at this width, so nothing else has flex:1 to push the
+       trailing icon group to the right — without this the hamburger/feedback/bell/
+       avatar cluster left next to the logo, leaving dead space at the pill's trailing
+       edge. Auto margin on the first trailing item pushes it and everything after it. */
+    margin-left: auto;
   }
 
   .dash-main-modern {

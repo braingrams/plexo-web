@@ -6,6 +6,7 @@ import Link from "next/link";
 import { auth } from "@/server/auth";
 import { getMarketplaceTemplateDetail } from "@/lib/marketplace";
 import { PurchaseAction } from "./PurchaseAction";
+import { PreviewButton } from "./PreviewButton";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
@@ -90,7 +91,7 @@ export default async function MarketplaceTemplateDetailPage({
           {detail.purchaseCount.toLocaleString()} people using this template
         </p>
 
-        <div className="mt-8">
+        <div className="mt-8 flex items-center gap-3">
           <PurchaseAction
             templateId={detail.id}
             isFree={isFree}
@@ -98,6 +99,7 @@ export default async function MarketplaceTemplateDetailPage({
             isLoggedIn={!!session?.user}
             autoUse={autoUse}
           />
+          <PreviewButton templateId={detail.id} />
         </div>
       </div>
     </div>

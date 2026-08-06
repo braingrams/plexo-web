@@ -77,13 +77,27 @@ export async function listMarketplaceTemplates(
 ): Promise<{ templates: MarketplaceListItem[]; total: number; categories: string[]; page: number; pageSize: number }> {
   const page = Math.max(1, filters.page ?? 1);
 
+  // `free` and `q` each need their own OR clause — spreading both directly onto `where`
+  // would collide on the "OR" key (the second spread silently overwrites the first), so
+  // combining "free only" with a search term used to drop the free-only filter entirely.
+  // AND keeps each OR clause distinct.
+  const andClauses: Prisma.TemplateWhereInput[] = [];
+  if (filters.free === true) andClauses.push({ OR: [{ priceCents: null }, { priceCents: 0 }] });
+  if (filters.q) {
+    andClauses.push({
+      OR: [
+        { name: { contains: filters.q, mode: "insensitive" } },
+        { marketplaceDescription: { contains: filters.q, mode: "insensitive" } },
+      ],
+    });
+  }
+
   const where: Prisma.TemplateWhereInput = {
     marketplaceStatus: "PUBLISHED",
     ...(filters.category ? { marketplaceCategory: filters.category } : {}),
     ...(filters.kind ? { kind: filters.kind } : {}),
-    ...(filters.free === true ? { OR: [{ priceCents: null }, { priceCents: 0 }] } : {}),
     ...(filters.free === false ? { priceCents: { gt: 0 } } : {}),
-    ...(filters.q ? { name: { contains: filters.q, mode: "insensitive" } } : {}),
+    ...(andClauses.length ? { AND: andClauses } : {}),
   };
 
   const orderBy: Prisma.TemplateOrderByWithRelationInput =

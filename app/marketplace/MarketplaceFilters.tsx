@@ -13,7 +13,7 @@ export function MarketplaceFilters({
         type="text"
         name="q"
         defaultValue={current.q}
-        placeholder="Search templates…"
+        placeholder="Search by name or description…"
         className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500 w-48"
       />
       <select
@@ -42,7 +42,7 @@ export function MarketplaceFilters({
         defaultValue={current.free ?? ""}
         className="rounded-lg border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-violet-500"
       >
-        <option value="">Free &amp; paid</option>
+        <option value="">All prices</option>
         <option value="true">Free only</option>
         <option value="false">Paid only</option>
       </select>

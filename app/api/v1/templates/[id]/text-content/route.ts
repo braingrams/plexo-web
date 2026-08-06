@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
 import { requirePermission } from "@/server/requirePermission";
-import { extractTextNodes, applyTextEdits } from "@/lib/htmlTextExtraction";
+import { extractTextNodes, applyTextEdits, annotateTextNodesForPreview } from "@/lib/htmlTextExtraction";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 
 /**
@@ -35,7 +35,8 @@ export async function GET(
   }
 
   const nodes = extractTextNodes(template.compiledHtml);
-  return NextResponse.json({ nodes });
+  const previewHtml = annotateTextNodesForPreview(template.compiledHtml);
+  return NextResponse.json({ nodes, previewHtml });
 }
 
 /**

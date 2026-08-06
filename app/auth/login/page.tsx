@@ -171,7 +171,7 @@ export default function LoginPage() {
         {/* Top Header */}
         <div className="relative z-10 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 group">
-            <PlexoLogo size={34} textStyle={{ color: "#ffffff" }} />
+            <PlexoLogo size={34} href={null} textStyle={{ color: "#ffffff" }} />
           </Link>
 
           <Link href="/" className="inline-flex items-center gap-2 text-xs font-extrabold text-slate-300 hover:text-white bg-white/10 border border-white/15 px-4 py-2 rounded-xl backdrop-blur-md transition-all">

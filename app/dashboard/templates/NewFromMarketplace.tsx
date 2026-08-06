@@ -2,6 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { TemplatePreviewModal } from "@/app/marketplace/TemplatePreviewModal";
+
+function IconEye() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
 
 type MarketplaceItem = {
   id: string;
@@ -26,6 +36,7 @@ export function NewFromMarketplace({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,11 +109,8 @@ export function NewFromMarketplace({ onClose }: { onClose: () => void }) {
         {items.map((item) => {
           const isFree = item.priceCents === 0;
           return (
-            <button
+            <div
               key={item.id}
-              type="button"
-              onClick={() => void handleSelect(item)}
-              disabled={busyId === item.id}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -112,24 +120,54 @@ export function NewFromMarketplace({ onClose }: { onClose: () => void }) {
                 borderRadius: 10,
                 border: "1px solid rgba(255,255,255,0.08)",
                 background: "rgba(255,255,255,0.03)",
-                cursor: busyId === item.id ? "wait" : "pointer",
-                textAlign: "left",
-                fontFamily: "inherit",
               }}
             >
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: "block", fontSize: "0.875rem", fontWeight: 600, color: "#f0f2ff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {item.name}
+              <button
+                type="button"
+                onClick={() => void handleSelect(item)}
+                disabled={busyId === item.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  minWidth: 0,
+                  flex: 1,
+                  background: "none",
+                  border: "none",
+                  padding: 0,
+                  cursor: busyId === item.id ? "wait" : "pointer",
+                  textAlign: "left",
+                  fontFamily: "inherit",
+                }}
+              >
+                <span style={{ minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: "0.875rem", fontWeight: 600, color: "#f0f2ff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {item.name}
+                  </span>
+                  <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)" }}>
+                    {item.kind === "LANDING_PAGE" ? "Landing page" : "Email"}
+                    {item.category ? ` · ${item.category}` : ""}
+                  </span>
                 </span>
-                <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)" }}>
-                  {item.kind === "LANDING_PAGE" ? "Landing page" : "Email"}
-                  {item.category ? ` · ${item.category}` : ""}
-                </span>
-              </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewId(item.id)}
+                title="Preview"
+                aria-label={`Preview ${item.name}`}
+                style={{
+                  flexShrink: 0, display: "grid", placeItems: "center",
+                  width: 28, height: 28, borderRadius: 8,
+                  background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+                  color: "rgba(240,242,255,0.6)", cursor: "pointer",
+                }}
+              >
+                <IconEye />
+              </button>
               <span style={{ flexShrink: 0, fontSize: "0.8rem", fontWeight: 700, color: isFree ? "#34d399" : "#f0f2ff" }}>
                 {busyId === item.id ? "Working…" : isFree ? "Free" : `$${(item.priceCents / 100).toFixed(2)}`}
               </span>
-            </button>
+            </div>
           );
         })}
         {!loading && items.length === 0 && (
@@ -138,6 +176,8 @@ export function NewFromMarketplace({ onClose }: { onClose: () => void }) {
           </p>
         )}
       </div>
+
+      {previewId && <TemplatePreviewModal templateId={previewId} onClose={() => setPreviewId(null)} />}
     </div>
   );
 }

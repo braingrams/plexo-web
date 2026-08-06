@@ -59,6 +59,17 @@ function IconTrash() {
   );
 }
 
+function IconBlog() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4h11a5 5 0 0 1 5 5v11" />
+      <path d="M4 4v16h16" />
+      <circle cx="9" cy="15" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M9 4v7M4 15h5" />
+    </svg>
+  );
+}
+
 type Props = {
   template: TemplateSummary;
   /** Omit to hide the delete button — e.g. the Overview page's read-mostly gallery. */
@@ -210,6 +221,26 @@ export function TemplateCard({ template, onDelete }: Props) {
             Open Editor
             <IconArrow />
           </button>
+          {!isEmail && (
+            <button
+              type="button"
+              onClick={() => router.push(`/dashboard/templates/${template.id}/blog`)}
+              title="Manage Blog"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "0.4rem",
+                padding: "0.5rem 0.75rem",
+                borderRadius: 8, border: "1px solid rgba(129,140,248,0.25)", cursor: "pointer",
+                fontSize: "0.8rem", fontWeight: 600,
+                background: "rgba(129,140,248,0.08)",
+                color: "#818cf8",
+                transition: "all 0.15s",
+                fontFamily: "inherit",
+              }}
+            >
+              <IconBlog />
+              Blog
+            </button>
+          )}
           {onDelete && (
             <button
               type="button"

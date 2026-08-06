@@ -384,8 +384,8 @@ export function TemplatesClient({ initialTemplates }: Props) {
                     <IconStore />
                   </span>
                   <span>
-                    <span style={{ display: "block", fontSize: "0.9rem", fontWeight: 700 }}>Start from a template</span>
-                    <span style={{ display: "block", fontSize: "0.78rem", color: "rgba(240,242,255,0.45)" }}>Browse free and premium templates from the marketplace.</span>
+                    <span style={{ display: "block", fontSize: "0.9rem", fontWeight: 700 }}>Browse marketplace</span>
+                    <span style={{ display: "block", fontSize: "0.78rem", color: "rgba(240,242,255,0.45)" }}>Free and premium templates, ready to customize.</span>
                   </span>
                 </button>
 
