@@ -20,11 +20,31 @@ export class ImageGenerationError extends Error {
 export async function generateImage({ apiKey, prompt }: { apiKey: string; prompt: string }): Promise<{ bytes: Buffer; mimeType: string }> {
   const client = new GoogleGenAI({ apiKey });
 
-  const response = await client.models.generateContent({
-    model: MODEL,
-    contents: prompt,
-    config: { responseModalities: [Modality.IMAGE] },
-  });
+  let response;
+  try {
+    response = await client.models.generateContent({
+      model: MODEL,
+      contents: prompt,
+      config: { responseModalities: [Modality.IMAGE] },
+    });
+  } catch (err) {
+    // Google's raw error is a JSON blob with internal quota metric names/links — fine for
+    // logs, not something to hand an end user. RESOURCE_EXHAUSTED with limit: 0 specifically
+    // means the API project has no billing enabled for this model (image generation has no
+    // free tier at all, unlike text), not a transient rate limit — surface that distinction
+    // since "try again later" would be misleading advice for it.
+    const raw = err instanceof Error ? err.message : String(err);
+    console.error("Gemini image generation request failed:", raw);
+    if (raw.includes("RESOURCE_EXHAUSTED") || raw.includes('"code":429')) {
+      const noFreeTier = /free_tier[\s\S]*?limit["':]*\s*0/i.test(raw);
+      throw new ImageGenerationError(
+        noFreeTier
+          ? "Image generation is unavailable — the AI provider account needs billing enabled for image models."
+          : "Image generation is temporarily rate-limited by the AI provider — please try again in a minute.",
+      );
+    }
+    throw new ImageGenerationError("Image generation failed — please try again.");
+  }
 
   const imagePart = response.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data);
   const inlineData = imagePart?.inlineData;

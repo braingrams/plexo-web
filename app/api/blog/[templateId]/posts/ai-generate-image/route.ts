@@ -59,10 +59,8 @@ export async function POST(
     if (err instanceof ImageGenerationError) {
       return NextResponse.json({ error: err.message }, { status: 502 });
     }
-    return NextResponse.json(
-      { error: `Image generation failed: ${err instanceof Error ? err.message : "unknown error"}` },
-      { status: 502 },
-    );
+    console.error("Unexpected image generation error:", err);
+    return NextResponse.json({ error: "Image generation failed — please try again." }, { status: 502 });
   }
 
   const extension = image.mimeType.split("/")[1]?.replace("jpeg", "jpg") || "png";
