@@ -588,8 +588,11 @@ export function TemplateEditorClient({
 			router.refresh();
 
 			// Check if it's a landing page and doesn't have a linked domain (sub-pages
-			// share their site's domain and never get their own, so skip them).
-			if (templateKind === "LANDING_PAGE" && !templateParentId) {
+			// share their site's domain and never get their own, so skip them). Blog
+			// layout templates are never published to their own domain either — they're
+			// only ever rendered as a substituted layout for a blog site (see
+			// lib/pub/blogLayoutRender.ts) — so the nudge would be meaningless there.
+			if (templateKind === "LANDING_PAGE" && !templateParentId && !isBlogLayout) {
 				try {
 					const checkRes = await fetch(
 						`/api/v1/domains?templateId=${templateId}`,
@@ -770,7 +773,7 @@ export function TemplateEditorClient({
 								router.push("/dashboard/templates");
 							}}
 							onConvert={
-								templateParentId
+								templateParentId || isBlogLayout
 									? undefined
 									: () => {
 											setConvertError(null);

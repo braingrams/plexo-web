@@ -329,6 +329,13 @@ const ALLOWED_ATTR = [
   'width', 'height', 'align', 'valign', 'cellpadding', 'cellspacing',
   'border', 'viewbox', 'fill', 'stroke', 'd', 'xmlns',
   'charset', 'name', 'content', 'lang',
+  // data-plexo-id (comment-pin targeting, see CommentLayer.tsx) and data-plexo-blog-*
+  // (the marker divs blog layouts substitute real post/listing content into, see
+  // lib/pub/blogLayoutRender.ts) were being silently stripped by this allowlist — every
+  // saved template lost its data-plexo-* attributes, which is why a custom blog layout's
+  // "ready" status/live substitution never worked even with the required block placed.
+  // 'data-*' is sanitize-html's supported wildcard glob syntax, not a literal attribute name.
+  'data-*',
 ];
 
 const DANGEROUS_URL_SCHEMES = ['javascript:', 'vbscript:', 'data:'];

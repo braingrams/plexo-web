@@ -66,6 +66,7 @@ function TaxonomyList({
 }
 
 type LayoutInfo = { templateId: string; ready: boolean } | null;
+type LayoutCandidate = { layoutTemplateId: string; layoutName: string; siteName: string; updatedAt: string };
 
 function LayoutDesignRow({
   templateId,
@@ -80,14 +81,54 @@ function LayoutDesignRow({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [candidates, setCandidates] = useState<LayoutCandidate[] | null>(null);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
 
-  async function handleDesign() {
+  async function handleDesignNew() {
     setBusy(true);
     try {
       const res = await fetch(`/api/blog/${templateId}/layout/${kind}`, { method: "POST" });
       if (res.ok) {
         const { layoutTemplateId } = await res.json();
         router.push(`/dashboard/templates/${layoutTemplateId}`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleTogglePicker() {
+    const opening = !showPicker;
+    setShowPicker(opening);
+    if (opening && candidates === null) {
+      setLoadingCandidates(true);
+      try {
+        const res = await fetch(`/api/blog/${templateId}/layout/${kind}`);
+        if (res.ok) {
+          const { candidates: fetched } = await res.json();
+          setCandidates(fetched);
+        }
+      } finally {
+        setLoadingCandidates(false);
+      }
+    }
+  }
+
+  async function handleUseExisting(sourceLayoutTemplateId: string) {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/blog/${templateId}/layout/${kind}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceLayoutTemplateId }),
+      });
+      if (res.ok) {
+        const { layoutTemplateId } = await res.json();
+        router.push(`/dashboard/templates/${layoutTemplateId}`);
+      } else {
+        const { error } = await res.json().catch(() => ({}));
+        alert(error ?? "Couldn't use that layout. Try again.");
       }
     } finally {
       setBusy(false);
@@ -106,32 +147,69 @@ function LayoutDesignRow({
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.8rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-      <div>
-        <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff", marginBottom: "0.2rem" }}>{label}</p>
-        <p style={{ fontSize: "0.75rem", color: layout ? (layout.ready ? "#4ade80" : "#f59e0b") : "rgba(240,242,255,0.4)" }}>
-          {!layout ? "Using the default theme" : layout.ready ? "Custom layout live" : "Draft — add the required block to go live"}
-        </p>
+    <div style={{ padding: "0.8rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff", marginBottom: "0.2rem" }}>{label}</p>
+          <p style={{ fontSize: "0.75rem", color: layout ? (layout.ready ? "#4ade80" : "#f59e0b") : "rgba(240,242,255,0.4)" }}>
+            {!layout ? "Using the default theme" : layout.ready ? "Custom layout live" : "Draft — add the required block to go live"}
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          {layout ? (
+            <>
+              <Link
+                href={`/dashboard/templates/${layout.templateId}`}
+                style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.8)", fontSize: "0.78rem", fontWeight: 600, textDecoration: "none" }}
+              >
+                Edit
+              </Link>
+              <button type="button" onClick={handleRemove} disabled={busy} style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}>
+                Remove
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={handleTogglePicker} disabled={busy} style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "rgba(240,242,255,0.8)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}>
+                Use existing…
+              </button>
+              <button type="button" onClick={handleDesignNew} disabled={busy} style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "none", background: "var(--brand)", color: "#fff", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer" }}>
+                {busy ? "Working…" : "Design new"}
+              </button>
+            </>
+          )}
+        </div>
       </div>
-      <div style={{ display: "flex", gap: "0.5rem" }}>
-        {layout ? (
-          <>
-            <Link
-              href={`/dashboard/templates/${layout.templateId}`}
-              style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.8)", fontSize: "0.78rem", fontWeight: 600, textDecoration: "none" }}
-            >
-              Edit
-            </Link>
-            <button type="button" onClick={handleRemove} disabled={busy} style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}>
-              Remove
-            </button>
-          </>
-        ) : (
-          <button type="button" onClick={handleDesign} disabled={busy} style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "none", background: "var(--brand)", color: "#fff", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer" }}>
-            {busy ? "Creating…" : "Design custom layout"}
-          </button>
-        )}
-      </div>
+
+      {showPicker && !layout && (
+        <div style={{ marginTop: "0.75rem", padding: "0.75rem", borderRadius: 8, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+          {loadingCandidates ? (
+            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>Loading…</p>
+          ) : !candidates || candidates.length === 0 ? (
+            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>
+              No other layouts of this kind yet — design one on another site first, or start new here.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              {candidates.map((c) => (
+                <div key={c.layoutTemplateId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+                  <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.8)" }}>
+                    {c.layoutName} <span style={{ color: "rgba(240,242,255,0.4)" }}>— from {c.siteName} · updated {new Date(c.updatedAt).toLocaleDateString()}</span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleUseExisting(c.layoutTemplateId)}
+                    disabled={busy}
+                    style={{ flexShrink: 0, padding: "0.35rem 0.7rem", borderRadius: 6, border: "none", background: "var(--brand)", color: "#fff", fontSize: "0.75rem", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    Use this
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -50,6 +50,7 @@ export async function POST(
       kind: true,
       sourceType: true,
       parentId: true,
+      isBlogLayout: true,
       designJson: true,
       _count: { select: { pages: true } },
     },
@@ -66,6 +67,9 @@ export async function POST(
   }
   if (existing.parentId !== null) {
     return NextResponse.json({ error: "Sub-pages always match their parent page's type and can't be converted independently." }, { status: 400 });
+  }
+  if (existing.isBlogLayout) {
+    return NextResponse.json({ error: "Blog layout templates can't be converted — they're always a landing page layout referenced by a blog site." }, { status: 400 });
   }
 
   const features = getTierFeatures(resolved.subscriptionPlan);
