@@ -104,8 +104,25 @@ export function BlogStyles({ appearance }: { appearance?: BlogAppearance } = {})
         .plexo-post { max-width: 720px; margin: 0 auto; padding: 48px 24px 96px; }
         .plexo-post__cover { width: 100%; max-height: 420px; object-fit: cover; border-radius: 14px; margin-bottom: 32px; }
         .plexo-post__title { font-size: 2.5rem; font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 16px; }
-        .plexo-post__body { font-size: 1.125rem; line-height: 1.75; color: #1f2430; }
-        .plexo-post__body h1, .plexo-post__body h2, .plexo-post__body h3 { letter-spacing: -0.01em; margin-top: 2em; }
+        /* No explicit color here (deliberately) — on a custom layout this is nested inside
+           the blog_content marker div, which carries the color the user picked in the
+           builder's Typography panel as a plain inline style; an explicit color here would
+           be a more specific declaration than that inherited value and silently win over
+           it, which is exactly the "not respecting the page's color" bug. Inheriting from
+           the nearest ancestor with a color (the marker div on a custom layout, or
+           .plexo-blog's own color below on the default theme) is what's wanted either way. */
+        .plexo-post__body { font-size: 1.125rem; line-height: 1.75; }
+        /* Tailwind's global preflight resets h1-h6 to font-weight/font-size: inherit — these
+           need to be set explicitly or headings render visually identical to body text (em
+           units so they still scale with a custom font-size set on the ancestor marker div). */
+        .plexo-post__body h1, .plexo-post__body h2, .plexo-post__body h3,
+        .plexo-post__body h4, .plexo-post__body h5, .plexo-post__body h6 {
+          font-weight: 800; letter-spacing: -0.01em; line-height: 1.3; margin-top: 2em; margin-bottom: 0.5em;
+        }
+        .plexo-post__body h1 { font-size: 1.85em; }
+        .plexo-post__body h2 { font-size: 1.5em; }
+        .plexo-post__body h3 { font-size: 1.25em; }
+        .plexo-post__body h4, .plexo-post__body h5, .plexo-post__body h6 { font-size: 1.05em; }
         .plexo-post__body p { margin: 1.1em 0; }
         .plexo-post__body img { max-width: 100%; border-radius: 10px; }
         .plexo-post__body blockquote { border-left: 3px solid var(--plexo-accent); margin: 1.5em 0; padding: 0.2em 0 0.2em 1.2em; color: #4b5563; font-style: italic; }
@@ -120,21 +137,42 @@ export function BlogStyles({ appearance }: { appearance?: BlogAppearance } = {})
         .plexo-blog__footer { text-align: center; padding: 32px 24px; color: #9ca3af; font-size: 0.85rem; }
         .plexo-comments { max-width: 720px; margin: 0 auto; padding: 32px 24px 96px; }
         .plexo-comments__heading { font-size: 1.35rem; font-weight: 800; margin: 0 0 20px; }
-        .plexo-comments__empty { color: #6b7280; font-size: 0.9rem; }
+        .plexo-comments__empty { color: var(--plexo-comment-meta, #6b7280); font-size: 0.9rem; }
         .plexo-comment { padding: 16px 0; border-top: 1px solid #eee; }
         .plexo-comment--reply { margin-left: 28px; border-top: 1px dashed #eee; }
-        .plexo-comment__meta { font-size: 0.82rem; color: #6b7280; margin-bottom: 6px; }
-        .plexo-comment__meta strong { color: #17181c; }
-        .plexo-comment__body { font-size: 0.92rem; line-height: 1.6; color: #1f2430; }
+        /* The var(--plexo-comment-*, fallback) pattern below (same one --plexo-accent
+           already uses) is what the blog_comments block's own Typography panel writes to,
+           via plain custom properties on its marker div — inherited from there into every
+           nested selector here. Falls back to the original hardcoded colors when there's
+           no custom layout (or the user hasn't touched these controls), so the default
+           theme's look is unchanged. */
+        .plexo-comment__meta { font-size: 0.82rem; color: var(--plexo-comment-meta, #6b7280); margin-bottom: 6px; }
+        .plexo-comment__meta strong { color: var(--plexo-comment-text, #17181c); }
+        .plexo-comment__body { font-size: 0.92rem; line-height: 1.6; color: var(--plexo-comment-text, #1f2430); }
         .plexo-comment__reply-btn { margin-top: 6px; background: none; border: none; padding: 0; color: var(--plexo-accent); font-size: 0.78rem; font-weight: 600; cursor: pointer; }
         .plexo-comment-form { margin-top: 28px; padding-top: 24px; border-top: 1px solid #eee; display: grid; gap: 10px; }
         .plexo-comment-form__hp { position: absolute; left: -9999px; }
         .plexo-comment-form__row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .plexo-comment-form input, .plexo-comment-form textarea { padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; font: inherit; font-size: 0.88rem; }
-        .plexo-comment-form button[type="submit"] { justify-self: start; padding: 9px 20px; border-radius: 8px; border: none; background: var(--plexo-accent); color: #fff; font-weight: 700; font-size: 0.85rem; cursor: pointer; }
-        .plexo-comment-form__replying-to { font-size: 0.8rem; color: #6b7280; margin: 0; }
+        .plexo-comment-form input, .plexo-comment-form textarea {
+          padding: 10px 12px; border-radius: 8px; font: inherit; font-size: 0.88rem;
+          background: var(--plexo-comment-input-bg, #fff);
+          border: 1px solid var(--plexo-comment-input-border, #e5e7eb);
+          color: var(--plexo-comment-input-text, #1f2430);
+        }
+        /* Browser autofill (e.g. a saved name/email) paints its own background over the
+           input, ignoring the site's CSS entirely, unless overridden like this. */
+        .plexo-comment-form input:-webkit-autofill {
+          -webkit-box-shadow: 0 0 0 1000px var(--plexo-comment-input-bg, #fff) inset;
+          -webkit-text-fill-color: var(--plexo-comment-input-text, #1f2430);
+        }
+        .plexo-comment-form button[type="submit"] {
+          justify-self: start; padding: 9px 20px; border-radius: 8px; border: none; font-weight: 700; font-size: 0.85rem; cursor: pointer;
+          background: var(--plexo-comment-button-bg, var(--plexo-accent));
+          color: var(--plexo-comment-button-text, #fff);
+        }
+        .plexo-comment-form__replying-to { font-size: 0.8rem; color: var(--plexo-comment-meta, #6b7280); margin: 0; }
         .plexo-comment-form__replying-to button { background: none; border: none; color: var(--plexo-accent); cursor: pointer; font-size: 0.8rem; }
-        .plexo-comment-form__status { font-size: 0.8rem; color: #6b7280; margin: 0; min-height: 1.2em; }
+        .plexo-comment-form__status { font-size: 0.8rem; color: var(--plexo-comment-meta, #6b7280); margin: 0; min-height: 1.2em; }
         `,
         }}
       />
