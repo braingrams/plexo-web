@@ -268,11 +268,18 @@ const UploadableImage = ImageExtension.extend({
 export function BlogRichTextEditor({
   initialContent,
   onChange,
+  onReady,
   onUploadFile,
   applyContentSignal,
 }: {
   initialContent: unknown;
   onChange: (json: unknown, html: string) => void;
+  /** Fires once, right after the editor mounts with `initialContent` loaded — lets the
+   * parent seed its own `contentHtml` state from the actual rendered document instead of
+   * leaving it empty until the user's first edit fires `onUpdate` (Tiptap never fires
+   * `onUpdate` for the initial content load, only for later transactions). Deliberately
+   * separate from `onChange` so seeding on load doesn't also mark the post dirty. */
+  onReady?: (json: unknown, html: string) => void;
   onUploadFile: (file: File) => Promise<string | null>;
   /** Bump `nonce` to push new HTML into the already-mounted editor from outside (e.g. "AI
    * write for me" replacing the draft) — changing `initialContent` alone wouldn't do
@@ -298,6 +305,12 @@ export function BlogRichTextEditor({
   });
 
   useEffect(() => () => editor?.destroy(), [editor]);
+
+  useEffect(() => {
+    if (editor) onReady?.(editor.getJSON(), editor.getHTML());
+    // Only on the initial mount of this particular editor instance, not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor]);
 
   useEffect(() => {
     if (editor && applyContentSignal) {

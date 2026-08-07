@@ -464,6 +464,10 @@ export function BlogPostEditor({
             setContentHtml(html);
             markDirty();
           }}
+          onReady={(json, html) => {
+            setContentJson(json);
+            setContentHtml(html);
+          }}
         />
 
         <div style={{ ...PANEL, marginTop: "1.5rem" }}>
