@@ -3,11 +3,13 @@ import { prisma } from "@/server/prisma";
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await context.params;
+    
     const template = await prisma.template.findUnique({
-      where: { id: params.id },
+      where: { id: id },
       select: { name: true, kind: true }
     });
 
@@ -47,15 +49,15 @@ export async function GET(
           }}>
             <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={isEmail ? "#a78bfa" : "#818cf8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               {isEmail ? (
-                <>
+                <g>
                   <rect x="2" y="4" width="20" height="16" rx="3"/>
                   <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-                </>
+                </g>
               ) : (
-                <>
+                <g>
                   <rect x="3" y="3" width="18" height="18" rx="3"/>
                   <path d="M3 9h18M9 21V9"/>
-                </>
+                </g>
               )}
             </svg>
           </div>
@@ -93,8 +95,8 @@ export async function GET(
         },
       }
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error generating snapshot:', error);
-    return new Response('Failed to generate snapshot', { status: 500 });
+    return new Response('Failed to generate snapshot: ' + error.message, { status: 500 });
   }
 }
