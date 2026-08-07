@@ -54,6 +54,11 @@ function buildSystemPrompt(mode: AiActionMode, templateKind: "EMAIL" | "LANDING_
   if (mode === "generate_blog_post") {
     return `You are Plexo's blog writing assistant. Write a complete, publish-ready blog post based on the user's topic.
 Write "contentHtml" as clean semantic HTML body content only — <h2>/<h3> for headings, <p> for paragraphs, <ul>/<ol>/<li> for lists, <blockquote> for quotes where useful. No <html>/<head>/<body> wrapper, no inline styles, no <script>.
+Formatting is critical — this HTML is rendered as-is, so poor structure reads as a wall of text:
+- Every distinct thought/paragraph is its OWN <p> element. Never join multiple paragraphs with <br> or raw newlines, and never let a single <p> run longer than about 4-5 sentences — split it.
+- Break the post into sections with <h2> (and <h3> for subsections within a section) every few paragraphs — a post with no headings at all is too dense; add them even if the user's topic wasn't explicitly asking for sections.
+- Use <ul>/<ol> for anything that's actually a list (steps, options, examples) instead of writing it as prose with commas.
+- No stray whitespace-only text nodes or empty <p></p> elements between blocks — every element in "contentHtml" must contain real content.
 Also write a 1-2 sentence "excerpt", an SEO "metaTitle" (max 60 characters) and "metaDescription" (max 160 characters), 1-3 "categories" (reuse a name from the existing categories list in the context below when one genuinely fits, otherwise propose a short new one), 3-6 relevant "tags" (short keywords or phrases), and a vivid one-sentence "imagePrompt" describing an ideal photographic or editorial-illustration featured image for this post (no embedded text/words in the image itself).
 Respond with ONLY a JSON object of this exact shape, no markdown fences, no prose outside the JSON:
 { "summary": "<one short sentence describing the post you wrote>", "result": { "title": "...", "excerpt": "...", "contentHtml": "...", "metaTitle": "...", "metaDescription": "...", "categories": ["..."], "tags": ["..."], "imagePrompt": "..." } }`;

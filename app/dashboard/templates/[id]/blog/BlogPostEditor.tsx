@@ -3,21 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BlogRichTextEditor } from "./BlogRichTextEditor";
-import { AiWriteAssistant } from "./AiWriteAssistant";
+import { AiWriteAssistant, type AiBlogPostResult } from "./AiWriteAssistant";
 import { computeSeoChecklist } from "./seoChecklist";
 import { PageContainer } from "../../../_components/PageContainer";
 import { CustomSelect } from "../../../domains/domains-client";
-
-type AiBlogPostResult = {
-  title: string;
-  excerpt: string;
-  contentHtml: string;
-  metaTitle: string;
-  metaDescription: string;
-  categories: string[];
-  tags: string[];
-  imagePrompt: string;
-};
 
 type Status = "DRAFT" | "SCHEDULED" | "PUBLISHED" | "ARCHIVED";
 
@@ -288,7 +277,10 @@ export function BlogPostEditor({
     }
   }
 
-  async function handleAiGenerate(topic: string): Promise<void> {
+  /** Pure generation — returns the drafted post for the caller to preview. Never touches
+   * editor state, so a result the user doesn't like can be regenerated or dismissed
+   * without ever having clobbered what was already in the editor (see AiWriteAssistant). */
+  async function handleAiGenerate(topic: string): Promise<AiBlogPostResult> {
     const res = await fetch("/api/v1/ai/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": "workspace-internal" },
@@ -308,7 +300,12 @@ export function BlogPostEditor({
       throw new Error(body.error ?? "AI generation failed.");
     }
     const { result } = (await res.json()) as { result: AiBlogPostResult };
+    return result;
+  }
 
+  /** Applies a previously-generated (and now user-approved) draft to the editor's fields,
+   * then kicks off the featured image generation. */
+  async function handleAiInsert(result: AiBlogPostResult): Promise<void> {
     setTitle(result.title);
     setExcerpt(result.excerpt);
     setMetaTitle(result.metaTitle);
@@ -405,7 +402,7 @@ export function BlogPostEditor({
   return (
     <PageContainer className="blog-editor-grid" style={{ paddingTop: 0 }}>
       <div>
-        <AiWriteAssistant onGenerate={handleAiGenerate} />
+        <AiWriteAssistant onGenerate={handleAiGenerate} onInsert={handleAiInsert} />
         <textarea
           value={title}
           onChange={(e) => { setTitle(e.target.value); markDirty(); }}

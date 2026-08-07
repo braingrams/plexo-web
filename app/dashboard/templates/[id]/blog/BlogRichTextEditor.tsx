@@ -318,6 +318,21 @@ export function BlogRichTextEditor({
       <style>{`
         .plexo-editor-prose .ProseMirror { outline: none; color: #f0f2ff; font-size: 1rem; line-height: 1.7; }
         .plexo-editor-prose .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: rgba(240,242,255,0.3); float: left; pointer-events: none; height: 0; }
+        /* Tailwind's preflight resets h1-h6 to font-size:inherit/font-weight:inherit/margin:0
+           and gives p no margin at all — without restoring both here, AI- or hand-written
+           content collapses into one undifferentiated, jammed-together block: headings look
+           identical to body text and paragraphs have no vertical gap between them. */
+        .plexo-editor-prose .ProseMirror p { margin: 0 0 1em; }
+        .plexo-editor-prose .ProseMirror h1, .plexo-editor-prose .ProseMirror h2, .plexo-editor-prose .ProseMirror h3,
+        .plexo-editor-prose .ProseMirror h4, .plexo-editor-prose .ProseMirror h5, .plexo-editor-prose .ProseMirror h6 {
+          color: #f0f2ff; font-weight: 800; line-height: 1.3;
+        }
+        .plexo-editor-prose .ProseMirror h1 { font-size: 1.85em; margin: 1.4em 0 0.5em; }
+        .plexo-editor-prose .ProseMirror h2 { font-size: 1.5em; margin: 1.3em 0 0.5em; }
+        .plexo-editor-prose .ProseMirror h3 { font-size: 1.25em; margin: 1.1em 0 0.4em; }
+        .plexo-editor-prose .ProseMirror h4, .plexo-editor-prose .ProseMirror h5, .plexo-editor-prose .ProseMirror h6 { font-size: 1.05em; margin: 1em 0 0.4em; }
+        .plexo-editor-prose .ProseMirror > *:first-child { margin-top: 0; }
+        .plexo-editor-prose .ProseMirror > *:last-child { margin-bottom: 0; }
         .plexo-editor-prose .ProseMirror img { max-width: 100%; border-radius: 8px; }
         .plexo-editor-prose .ProseMirror ul, .plexo-editor-prose .ProseMirror ol { padding-left: 1.5em; margin: 0.75em 0; }
         .plexo-editor-prose .ProseMirror ul { list-style: disc; }
