@@ -24,6 +24,30 @@ export function hasBlogMarker(compiledHtml: string, name: BlogMarkerName): boole
   return new RegExp(`data-plexo-blog-${name}="true"`).test(compiledHtml);
 }
 
+function unescapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+/**
+ * Reads back the optional "Prefix" text (see plexo-sdk's BlogTextPropertiesAccordion) a
+ * blog_date/blog_author/blog_categories marker was given in the builder — emitted as a
+ * data-plexo-blog-prefix attribute on the marker div itself (see that SDK's compiler.ts),
+ * since real per-post prefix text isn't something the SDK can produce on its own. Matches
+ * the marker's full opening tag first so this can't accidentally read a prefix attribute
+ * belonging to some other, unrelated element elsewhere in the compiled document.
+ */
+export function extractMarkerPrefix(compiledHtml: string, name: BlogMarkerName): string {
+  const openTagMatch = new RegExp(`<div[^>]*data-plexo-blog-${name}="true"[^>]*>`).exec(compiledHtml);
+  if (!openTagMatch) return "";
+  const prefixMatch = /data-plexo-blog-prefix="([^"]*)"/.exec(openTagMatch[0]);
+  return prefixMatch ? unescapeHtmlAttr(prefixMatch[1]) : "";
+}
+
 /**
  * Splices real post/listing HTML fragments into a custom layout's compiled HTML.
  * Preserves each marker div's own attributes (style, etc. — the padding/width/background

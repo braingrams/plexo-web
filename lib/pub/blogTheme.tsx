@@ -96,8 +96,14 @@ export function BlogStyles({ appearance }: { appearance?: BlogAppearance } = {})
         .plexo-post-card__excerpt { color: #4b5563; line-height: 1.6; margin: 0; }
         .plexo-post-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.85rem; color: #6b7280; }
         .plexo-post-meta__avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; background: #e5e7eb; }
-        .plexo-chip { display: inline-block; font-size: 0.75rem; font-weight: 600; color: var(--plexo-accent); background: color-mix(in srgb, var(--plexo-accent) 10%, white); border-radius: 999px; padding: 3px 10px; margin: 2px 4px 2px 0; }
-        .plexo-chip:hover { background: color-mix(in srgb, var(--plexo-accent) 18%, white); text-decoration: none; }
+        /* var(--plexo-categories-*, <fallback>) is what the blog_categories marker's own
+           Typography panel writes (see plexo-sdk's BlogTextPropertiesAccordion) — a plain
+           inline color/font-size/font-weight on that marker div would otherwise be
+           overridden by this class's own declarations, since .plexo-chip is more specific
+           than plain inheritance. Falls back to the original accent-based look everywhere
+           else .plexo-chip appears (post cards, the default theme) where no such ancestor exists. */
+        .plexo-chip { display: inline-block; font-size: var(--plexo-categories-font-size, 0.75rem); font-weight: var(--plexo-categories-font-weight, 600); color: var(--plexo-categories-color, var(--plexo-accent)); background: color-mix(in srgb, var(--plexo-categories-color, var(--plexo-accent)) 10%, white); border-radius: 999px; padding: 3px 10px; margin: 2px 4px 2px 0; }
+        .plexo-chip:hover { background: color-mix(in srgb, var(--plexo-categories-color, var(--plexo-accent)) 18%, white); text-decoration: none; }
         .plexo-pagination { display: flex; justify-content: space-between; margin-top: 40px; gap: 12px; }
         .plexo-pagination a, .plexo-pagination span { padding: 8px 16px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 0.9rem; font-weight: 600; }
         .plexo-pagination span.disabled { color: #c1c5cc; }

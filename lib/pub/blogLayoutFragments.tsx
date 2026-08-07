@@ -41,13 +41,21 @@ function postCardHtml(post: BlogPostCard, basePath: string): string {
     </article>`;
 }
 
+export interface PostFragmentPrefixes {
+  date?: string;
+  author?: string;
+  categories?: string;
+}
+
 /**
  * Builds the marker -> HTML fragment map for a single post, for lib/pub/blogLayoutRender.ts
- * to splice into a custom layout's compiled HTML.
+ * to splice into a custom layout's compiled HTML. `prefixes` comes from
+ * blogLayoutRender.ts's extractMarkerPrefix — the "Prefix" text (e.g. "By ", "Filed under:
+ * ") configured per-marker in the builder, read back out of the layout's own compiled HTML.
  */
-export function buildPostFragments(post: BlogPostDetail, basePath: string, commentsHtml: string) {
+export function buildPostFragments(post: BlogPostDetail, basePath: string, commentsHtml: string, prefixes: PostFragmentPrefixes = {}) {
   const authorHtml = post.author
-    ? `<span>${post.author.avatarUrl ? `<img src="${escapeHtml(post.author.avatarUrl)}" alt="" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:8px;" />` : ""}${escapeHtml(post.author.name)}</span>`
+    ? `<span>${escapeHtml(prefixes.author ?? "")}${post.author.avatarUrl ? `<img src="${escapeHtml(post.author.avatarUrl)}" alt="" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:8px;" />` : ""}${escapeHtml(post.author.name)}</span>`
     : "";
 
   return {
@@ -62,9 +70,9 @@ export function buildPostFragments(post: BlogPostDetail, basePath: string, comme
     featuredImage: post.featuredImageUrl
       ? `<img src="${escapeHtml(post.featuredImageUrl)}" alt="${escapeHtml(post.featuredImageAlt ?? "")}" style="max-width:100%;border-radius:10px;" />`
       : "",
-    date: post.publishedAt ? escapeHtml(formatDate(post.publishedAt)) : "",
+    date: post.publishedAt ? `${escapeHtml(prefixes.date ?? "")}${escapeHtml(formatDate(post.publishedAt))}` : "",
     author: authorHtml,
-    categories: categoryChipsHtml(post, basePath),
+    categories: post.categories.length > 0 ? `${escapeHtml(prefixes.categories ?? "")}${categoryChipsHtml(post, basePath)}` : "",
     comments: commentsHtml,
   };
 }

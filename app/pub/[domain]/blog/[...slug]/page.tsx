@@ -6,7 +6,7 @@ import { resolveBlogRedirect } from "@/lib/blog/redirects";
 import { getPublishedPostBySlug, getRelatedPosts, listApprovedComments } from "@/lib/blog/queries";
 import { postMetadata, postJsonLd } from "@/lib/blog/seo";
 import { BlogStyles, SiteHeader, SiteFooter, PostMeta, CategoryChips, PostCard, JsonLd, Breadcrumbs } from "@/lib/pub/blogTheme";
-import { hasBlogMarker, substituteBlogMarkers } from "@/lib/pub/blogLayoutRender";
+import { hasBlogMarker, substituteBlogMarkers, extractMarkerPrefix } from "@/lib/pub/blogLayoutRender";
 import { buildPostFragments } from "@/lib/pub/blogLayoutFragments";
 import { renderCommentsSection } from "@/lib/pub/renderComments";
 
@@ -61,7 +61,11 @@ export default async function BlogPostPage({ params }: { params: Promise<Params>
     : null;
 
   if (layoutTemplate && hasBlogMarker(layoutTemplate.compiledHtml, "content")) {
-    const fragments = buildPostFragments(post, "/blog", commentsHtml);
+    const fragments = buildPostFragments(post, "/blog", commentsHtml, {
+      date: extractMarkerPrefix(layoutTemplate.compiledHtml, "date"),
+      author: extractMarkerPrefix(layoutTemplate.compiledHtml, "author"),
+      categories: extractMarkerPrefix(layoutTemplate.compiledHtml, "categories"),
+    });
     const html = substituteBlogMarkers(layoutTemplate.compiledHtml, fragments);
     return (
       <>

@@ -3,7 +3,7 @@ import { prisma } from "@/server/prisma";
 import { requireBlogSiteAccess } from "@/lib/blog/pageAuth";
 import { DETAIL_SELECT } from "@/lib/blog/queries";
 import { BlogStyles, SiteHeader, PostMeta, CategoryChips } from "@/lib/pub/blogTheme";
-import { hasBlogMarker, substituteBlogMarkers } from "@/lib/pub/blogLayoutRender";
+import { hasBlogMarker, substituteBlogMarkers, extractMarkerPrefix } from "@/lib/pub/blogLayoutRender";
 import { buildPostFragments } from "@/lib/pub/blogLayoutFragments";
 
 const PREVIEW_BANNER = (status: string) => (
@@ -36,7 +36,11 @@ export default async function BlogPostPreviewPage({ params }: { params: Promise<
     : null;
 
   if (layoutTemplate && hasBlogMarker(layoutTemplate.compiledHtml, "content")) {
-    const fragments = buildPostFragments(post, "/blog", "");
+    const fragments = buildPostFragments(post, "/blog", "", {
+      date: extractMarkerPrefix(layoutTemplate.compiledHtml, "date"),
+      author: extractMarkerPrefix(layoutTemplate.compiledHtml, "author"),
+      categories: extractMarkerPrefix(layoutTemplate.compiledHtml, "categories"),
+    });
     const html = substituteBlogMarkers(layoutTemplate.compiledHtml, fragments);
     return (
       <>
