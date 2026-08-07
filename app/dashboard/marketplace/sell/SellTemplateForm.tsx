@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/app/dashboard/_components/Card";
+import { CustomSelect } from "@/app/_components/CustomSelect";
 
 type TemplateOption = {
   id: string;
@@ -88,17 +89,15 @@ export function SellTemplateForm({ templates, autoPublish }: { templates: Templa
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: "1.25rem" }}>
         <label style={{ display: "block" }}>
           <span style={labelStyle}>Template</span>
-          <select
+          <CustomSelect
             value={templateId}
-            onChange={(e) => setTemplateId(e.target.value)}
-            style={{ ...inputStyle, appearance: "none" }}
-          >
-            {templates.map((t) => (
-              <option key={t.id} value={t.id} disabled={!t.hasContent}>
-                {t.name} ({t.kind === "EMAIL" ? "Email" : "Landing Page"}){!t.hasContent ? " — no content yet" : ""}
-              </option>
-            ))}
-          </select>
+            onChange={setTemplateId}
+            options={templates.map((t) => ({
+              value: t.id,
+              label: `${t.name} (${t.kind === "EMAIL" ? "Email" : "Landing Page"})${!t.hasContent ? " — no content yet" : ""}`,
+              disabled: !t.hasContent,
+            }))}
+          />
         </label>
 
         <label style={{ display: "block" }}>

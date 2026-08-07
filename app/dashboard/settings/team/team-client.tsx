@@ -5,6 +5,7 @@ import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { Card } from "@/app/dashboard/_components/Card";
 import { Avatar } from "@/app/dashboard/_components/Avatar";
+import { CustomSelect } from "@/app/_components/CustomSelect";
 
 type Member = { id: string; userId: string; role: string; name: string; email: string };
 type Invitation = { id: string; email: string; role: string; createdAt: string };
@@ -134,18 +135,13 @@ export function TeamClient({
                 borderRadius: 10, padding: "0.65rem 0.9rem", color: "#f0f2ff", fontSize: "0.85rem",
               }}
             />
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              style={{
-                background: "#090d16", border: "1px solid rgba(255,255,255,0.09)",
-                borderRadius: 10, padding: "0.65rem 0.9rem", color: "#f0f2ff", fontSize: "0.85rem",
-              }}
-            >
-              {INVITABLE_ROLES.map((r) => (
-                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-              ))}
-            </select>
+            <div style={{ minWidth: 160 }}>
+              <CustomSelect
+                value={role}
+                options={INVITABLE_ROLES.map((r) => ({ label: ROLE_LABELS[r], value: r }))}
+                onChange={setRole}
+              />
+            </div>
             <button
               type="submit"
               disabled={inviting}
@@ -216,18 +212,13 @@ export function TeamClient({
 
               {canManageMembers && m.role !== "owner" && m.userId !== currentUserId ? (
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-                  <select
-                    value={m.role}
-                    onChange={(e) => handleRoleChange(m.id, m.userId, e.target.value)}
-                    style={{
-                      background: "#090d16", border: "1px solid rgba(255,255,255,0.09)",
-                      borderRadius: 8, padding: "0.4rem 0.6rem", color: "#f0f2ff", fontSize: "0.78rem",
-                    }}
-                  >
-                    {INVITABLE_ROLES.map((r) => (
-                      <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                    ))}
-                  </select>
+                  <div style={{ minWidth: 140 }}>
+                    <CustomSelect
+                      value={m.role}
+                      options={INVITABLE_ROLES.map((r) => ({ label: ROLE_LABELS[r], value: r }))}
+                      onChange={(value) => handleRoleChange(m.id, m.userId, value)}
+                    />
+                  </div>
                   <button
                     onClick={() => handleRemove(m.id)}
                     style={{ background: "none", border: "none", color: "#f87171", fontSize: "0.78rem", cursor: "pointer" }}

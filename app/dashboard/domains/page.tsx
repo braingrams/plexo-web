@@ -57,6 +57,10 @@ export default async function DomainsPage() {
       organizationId: orgResolution.organizationId,
       kind: "LANDING_PAGE",
       parentId: null,
+      // Blog post/listing layouts are internal-only — Template rows referenced by a
+      // BlogSite's postLayoutTemplateId/listingLayoutTemplateId, never a page a domain
+      // should link to directly (see lib/pub/blogLayoutRender.ts).
+      isBlogLayout: false,
     },
     select: {
       id: true,

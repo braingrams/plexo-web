@@ -116,7 +116,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } else {
     // The plan's landing-page limit counts root/home pages only, matching /api/templates.
     // Raw uploads always create a LANDING_PAGE, so this checks maxLandingPages.
-    const templateCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: TemplateKind.LANDING_PAGE } });
+    const templateCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: TemplateKind.LANDING_PAGE, isBlogLayout: false } });
     if (templateCount >= features.maxLandingPages) {
       return NextResponse.json(
         { error: `Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.` },

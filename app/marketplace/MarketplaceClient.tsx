@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import type { MarketplaceListItem } from "@/lib/marketplace";
+import { CustomSelect } from "@/app/_components/CustomSelect";
 
 type DeviceMode = "desktop" | "tablet" | "mobile";
 
@@ -222,25 +223,29 @@ export function MarketplaceClient({
           </div>
 
           {/* Pricing Select */}
-          <select
-            value={current.free ?? ""}
-            onChange={(e) => updateFilters({ free: e.target.value || undefined })}
-            className="rounded-xl border border-[var(--surface-border)] bg-[var(--bg-1)] px-3.5 py-2 text-xs font-medium text-[var(--text-main)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand-glow)]"
-          >
-            <option value="">All Prices</option>
-            <option value="true">Free Only</option>
-            <option value="false">Paid Only</option>
-          </select>
+          <div style={{ minWidth: 130 }}>
+            <CustomSelect
+              value={current.free ?? ""}
+              onChange={(value) => updateFilters({ free: value || undefined })}
+              options={[
+                { label: "All Prices", value: "" },
+                { label: "Free Only", value: "true" },
+                { label: "Paid Only", value: "false" },
+              ]}
+            />
+          </div>
 
           {/* Sort Select */}
-          <select
-            value={current.sort}
-            onChange={(e) => updateFilters({ sort: e.target.value })}
-            className="rounded-xl border border-[var(--surface-border)] bg-[var(--bg-1)] px-3.5 py-2 text-xs font-medium text-[var(--text-main)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand-glow)]"
-          >
-            <option value="popular">Most Popular</option>
-            <option value="latest">Latest Released</option>
-          </select>
+          <div style={{ minWidth: 150 }}>
+            <CustomSelect
+              value={current.sort}
+              onChange={(value) => updateFilters({ sort: value })}
+              options={[
+                { label: "Most Popular", value: "popular" },
+                { label: "Latest Released", value: "latest" },
+              ]}
+            />
+          </div>
 
           {hasActiveFilters && (
             <button

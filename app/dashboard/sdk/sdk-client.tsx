@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { PageHeader } from "../_components/PageHeader";
 import { Card } from "../_components/Card";
+import { CustomSelect } from "@/app/_components/CustomSelect";
 
 type SimpleKey = {
   id: string;
@@ -134,18 +135,13 @@ const text = compileToPlainText(template.designJson);
           </p>
         ) : (
           <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <select
-              value={selectedKeyId}
-              onChange={(e) => setSelectedKeyId(e.target.value)}
-              className="field-select"
-              style={{ width: "100%", maxWidth: "100%" }}
-            >
-              {initialKeys.map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.name} ({k.maskedKey})
-                </option>
-              ))}
-            </select>
+            <div style={{ flex: "1 1 260px" }}>
+              <CustomSelect
+                value={selectedKeyId}
+                options={initialKeys.map((k) => ({ label: `${k.name} (${k.maskedKey})`, value: k.id }))}
+                onChange={setSelectedKeyId}
+              />
+            </div>
             <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.35)", lineHeight: 1.4 }}>
               The selected key will be injected directly into the copy-paste integration blocks below.
             </span>

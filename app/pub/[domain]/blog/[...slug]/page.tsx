@@ -65,6 +65,11 @@ export default async function BlogPostPage({ params }: { params: Promise<Params>
     const html = substituteBlogMarkers(layoutTemplate.compiledHtml, fragments);
     return (
       <>
+        {/* The substituted fragments (post body, category chips, comments) are styled
+            entirely by BlogStyles' plexo-* classes — they carry no styling of their own.
+            Its selectors are all namespaced (plexo-post__body, plexo-chip, plexo-comments,
+            ...) so they don't collide with the custom layout's own builder-generated markup. */}
+        <BlogStyles appearance={site.blogSite} />
         {/* eslint-disable-next-line react/no-danger */}
         <div dangerouslySetInnerHTML={{ __html: html }} />
         <JsonLd items={postJsonLd(domain, post)} />

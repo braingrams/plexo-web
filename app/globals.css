@@ -961,3 +961,44 @@ select {
     justify-content: center;
   }
 }
+
+/* Dashboard form fields — .field-label/.field-input were referenced by className across
+   several dashboard pages (domains, template publish modal, raw upload) but never actually
+   defined anywhere, so every input/label using them rendered with no styling at all
+   (bare browser default, invisible against the dark background). */
+.field-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.field-input {
+  width: 100%;
+  padding: 0.6rem 0.875rem;
+  border-radius: 9px;
+  border: 1px solid var(--surface-border);
+  background: var(--surface);
+  color: var(--text-main);
+  font-size: 0.875rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.field-input:focus {
+  border-color: var(--brand);
+  background: var(--brand-subtle);
+  box-shadow: 0 0 0 2px var(--brand-glow);
+}
+
+.field-input::placeholder {
+  color: var(--text-faint);
+}
+
+.field-input:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}

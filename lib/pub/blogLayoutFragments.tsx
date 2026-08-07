@@ -52,8 +52,13 @@ export function buildPostFragments(post: BlogPostDetail, basePath: string, comme
 
   return {
     title: escapeHtml(post.title),
-    // Already sanitized HTML (lib/blog/sanitize.ts) — used verbatim.
-    content: post.contentHtml,
+    // Already sanitized HTML (lib/blog/sanitize.ts) — used verbatim. Wrapped in
+    // plexo-post__body so the h1-h6/p/blockquote/img/code typography defined by
+    // BlogStyles (see lib/pub/blogTheme.tsx) applies here too — this fragment has no
+    // styling of its own (it's raw author-written HTML, not a builder element with
+    // per-element inline styles), so without this wrapper class its headings and
+    // paragraphs render with zero visual differentiation on a custom layout.
+    content: `<div class="plexo-post__body">${post.contentHtml}</div>`,
     featuredImage: post.featuredImageUrl
       ? `<img src="${escapeHtml(post.featuredImageUrl)}" alt="${escapeHtml(post.featuredImageAlt ?? "")}" style="max-width:100%;border-radius:10px;" />`
       : "",

@@ -42,6 +42,11 @@ export default async function BlogIndexPage({ params }: { params: Promise<Params
     const html = substituteBlogMarkers(layoutTemplate.compiledHtml, { postList: buildPostListFragment(result.posts, "/blog") });
     return (
       <>
+        {/* The substituted post-card fragments are styled entirely by BlogStyles'
+            plexo-post-card__* classes — they carry no styling of their own. Its selectors
+            are all namespaced so they don't collide with the custom layout's own
+            builder-generated markup. */}
+        <BlogStyles appearance={site.blogSite} />
         {/* eslint-disable-next-line react/no-danger */}
         <div dangerouslySetInnerHTML={{ __html: html }} />
         <JsonLd items={listingJsonLd(domain, site.blogSite, result.posts)} />

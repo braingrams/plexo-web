@@ -7,7 +7,7 @@ import { PageHeader } from "../_components/PageHeader";
 import { PageContainer } from "../_components/PageContainer";
 import { NewFromMarketplace } from "../templates/NewFromMarketplace";
 import { formatDate, IconLayout } from "../templates/TemplateCard";
-import { CustomSelect } from "../domains/domains-client";
+import { CustomSelect } from "../../_components/CustomSelect";
 
 export type BlogSummary = {
   id: string;

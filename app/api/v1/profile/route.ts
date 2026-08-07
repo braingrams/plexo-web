@@ -44,7 +44,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       where: { userId: user.id, kind: "EMAIL" },
     });
     const landingPageCount = await prisma.template.count({
-      where: { userId: user.id, kind: "LANDING_PAGE" },
+      // Blog post/listing layouts are internal-only Template rows, not real pages —
+      // excluded here the same way plan-limit counts exclude them elsewhere.
+      where: { userId: user.id, kind: "LANDING_PAGE", isBlogLayout: false },
     });
 
     const features = getTierFeatures(user.subscriptionPlan);

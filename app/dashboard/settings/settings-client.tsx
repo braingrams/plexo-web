@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../_components/PageHeader";
+import { CustomSelect } from "../../_components/CustomSelect";
 import { BillingSection } from "./billing-section";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
@@ -103,124 +104,11 @@ function IconX() {
   );
 }
 
-function IconChevronDown() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="6 9 12 15 18 9"/>
-    </svg>
-  );
-}
-
 function IconArrowRight() {
   return (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
       <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
     </svg>
-  );
-}
-
-function CustomSelect({
-  value,
-  options,
-  disabled,
-  onChange,
-}: {
-  value: string;
-  options: Array<{ label: string; value: string }>;
-  disabled?: boolean;
-  onChange: (val: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find((o) => o.value === value);
-  return (
-    <div style={{ position: "relative" }}>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => !disabled && setOpen((o) => !o)}
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "0.5rem",
-          padding: "0.6rem 0.875rem",
-          borderRadius: 9,
-          border: open ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.1)",
-          background: open ? "rgba(139,92,246,0.08)" : "rgba(255,255,255,0.05)",
-          color: disabled ? "rgba(240,242,255,0.3)" : "rgba(240,242,255,0.9)",
-          fontFamily: "inherit",
-          fontSize: "0.875rem",
-          fontWeight: 500,
-          cursor: disabled ? "not-allowed" : "pointer",
-          transition: "border-color 0.15s, background 0.15s",
-          boxShadow: open ? "0 0 0 2px rgba(139,92,246,0.15)" : "none",
-        }}
-      >
-        <span>{selected?.label ?? value}</span>
-        <span style={{ color: "rgba(240,242,255,0.4)", transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s", display: "inline-flex" }}>
-          <IconChevronDown />
-        </span>
-      </button>
-
-      {open && (
-        <>
-          {/* Backdrop */}
-          <div
-            style={{ position: "fixed", inset: 0, zIndex: 99 }}
-            onClick={() => setOpen(false)}
-          />
-          {/* Dropdown panel */}
-          <div
-            style={{
-              position: "absolute",
-              top: "calc(100% + 6px)",
-              left: 0, right: 0,
-              zIndex: 100,
-              background: "rgba(18,16,36,0.95)",
-              backdropFilter: "blur(16px)",
-              border: "1px solid rgba(139,92,246,0.3)",
-              borderRadius: 10,
-              overflow: "hidden",
-              boxShadow: "0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(139,92,246,0.15)",
-            }}
-          >
-            {options.map((opt) => {
-              const isActive = opt.value === value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => { onChange(opt.value); setOpen(false); }}
-                  style={{
-                    width: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "0.625rem 0.875rem",
-                    background: isActive ? "rgba(139,92,246,0.12)" : "transparent",
-                    border: "none",
-                    borderBottom: "1px solid rgba(255,255,255,0.05)",
-                    color: isActive ? "#c4b5fd" : "rgba(240,242,255,0.75)",
-                    fontFamily: "inherit",
-                    fontSize: "0.875rem",
-                    fontWeight: isActive ? 600 : 400,
-                    cursor: "pointer",
-                    textAlign: "left",
-                    transition: "background 0.1s, color 0.1s",
-                  }}
-                  onMouseEnter={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; }}
-                  onMouseLeave={(e) => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                >
-                  <span>{opt.label}</span>
-                  {isActive && <span style={{ color: "#8b5cf6", display: "inline-flex" }}><IconCheck /></span>}
-                </button>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
   );
 }
 

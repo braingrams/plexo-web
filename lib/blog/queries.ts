@@ -15,7 +15,7 @@ const CARD_SELECT = {
   tags: { select: { tag: { select: { name: true, slug: true } } } },
 } satisfies Prisma.BlogPostSelect;
 
-const DETAIL_SELECT = {
+export const DETAIL_SELECT = {
   ...CARD_SELECT,
   contentHtml: true,
   metaTitle: true,

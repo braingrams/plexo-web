@@ -6,7 +6,7 @@ import { BlogRichTextEditor } from "./BlogRichTextEditor";
 import { AiWriteAssistant, type AiBlogPostResult } from "./AiWriteAssistant";
 import { computeSeoChecklist } from "./seoChecklist";
 import { PageContainer } from "../../../_components/PageContainer";
-import { CustomSelect } from "../../../domains/domains-client";
+import { CustomSelect } from "../../../../_components/CustomSelect";
 
 type Status = "DRAFT" | "SCHEDULED" | "PUBLISHED" | "ARCHIVED";
 
@@ -507,12 +507,18 @@ export function BlogPostEditor({
       <div>
         <div style={PANEL}>
           <label style={FIELD_LABEL}>Status</label>
-          <select value={status} onChange={(e) => { setStatus(e.target.value as Status); markDirty(); }} style={{ ...FIELD_INPUT, marginBottom: "0.75rem" }}>
-            <option value="DRAFT">Draft</option>
-            <option value="SCHEDULED">Scheduled</option>
-            <option value="PUBLISHED">Published</option>
-            <option value="ARCHIVED">Archived</option>
-          </select>
+          <div style={{ marginBottom: "0.75rem" }}>
+            <CustomSelect
+              value={status}
+              options={[
+                { label: "Draft", value: "DRAFT" },
+                { label: "Scheduled", value: "SCHEDULED" },
+                { label: "Published", value: "PUBLISHED" },
+                { label: "Archived", value: "ARCHIVED" },
+              ]}
+              onChange={(value) => { setStatus(value as Status); markDirty(); }}
+            />
+          </div>
           {status === "SCHEDULED" && (
             <input
               type="datetime-local"

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogTheme";
 import { PageContainer } from "../../../../_components/PageContainer";
-import { CustomSelect } from "../../../../domains/domains-client";
+import { CustomSelect } from "../../../../../_components/CustomSelect";
 
 type Category = { id: string; name: string; slug: string };
 type Tag = { id: string; name: string; slug: string };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { CustomSelect } from "../domains/domains-client";
+import { CustomSelect } from "../../_components/CustomSelect";
 import { Card } from "../_components/Card";
 import { PageHeader } from "../_components/PageHeader";
 import { ActivityHeatmap, type HeatmapPoint } from "../_components/ActivityHeatmap";
