@@ -92,6 +92,9 @@ export function BlogPostEditor({
   // Drives the loading slot in the Featured Image panel — shared between a manual upload
   // and (later) the AI "write for me" image-generation step, just with a different label.
   const [featuredImageStatus, setFeaturedImageStatus] = useState<"uploading" | "generating" | null>(null);
+  const [showImageUrlInput, setShowImageUrlInput] = useState(false);
+  const [imageUrlDraft, setImageUrlDraft] = useState("");
+  const [imageUrlError, setImageUrlError] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>(initialPost?.status ?? "DRAFT");
   const [scheduledAt, setScheduledAt] = useState(initialPost?.scheduledAt?.slice(0, 16) ?? "");
   const [metaTitle, setMetaTitle] = useState(initialPost?.metaTitle ?? "");
@@ -252,6 +255,27 @@ export function BlogPostEditor({
       setFeaturedImageUrl(url);
       markDirty();
     }
+  }
+
+  function handleUseImageUrl() {
+    const url = imageUrlDraft.trim();
+    if (!url) return;
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      setImageUrlError("That doesn't look like a valid URL.");
+      return;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      setImageUrlError("Image URL must start with http:// or https://");
+      return;
+    }
+    setFeaturedImageUrl(url);
+    setImageUrlDraft("");
+    setImageUrlError(null);
+    setShowImageUrlInput(false);
+    markDirty();
   }
 
   async function createCategory(name: string): Promise<Category | null> {
@@ -600,21 +624,58 @@ export function BlogPostEditor({
                 Remove
               </button>
             </div>
+          ) : showImageUrlInput ? (
+            <div>
+              <div style={{ display: "flex", gap: "0.4rem" }}>
+                <input
+                  autoFocus
+                  value={imageUrlDraft}
+                  onChange={(e) => { setImageUrlDraft(e.target.value); setImageUrlError(null); }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleUseImageUrl(); } }}
+                  placeholder="https://example.com/image.jpg"
+                  style={{ ...FIELD_INPUT, flex: 1 }}
+                />
+                <button
+                  type="button"
+                  onClick={handleUseImageUrl}
+                  style={{ padding: "0 0.9rem", borderRadius: 8, border: "1px solid var(--brand)", background: "var(--brand-subtle)", color: "var(--brand)", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer" }}
+                >
+                  Use
+                </button>
+              </div>
+              {imageUrlError && <p style={{ fontSize: "0.72rem", color: "#f87171", marginTop: "0.35rem" }}>{imageUrlError}</p>}
+              <button
+                type="button"
+                onClick={() => { setShowImageUrlInput(false); setImageUrlDraft(""); setImageUrlError(null); }}
+                style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", background: "none", border: "none", cursor: "pointer", marginTop: "0.4rem" }}
+              >
+                Cancel
+              </button>
+            </div>
           ) : (
-            <label
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "center", height: 100, borderRadius: 8,
-                border: "1px dashed rgba(255,255,255,0.2)", cursor: "pointer", fontSize: "0.8rem", color: "rgba(240,242,255,0.5)",
-              }}
-            >
-              Click to upload
-              <input
-                type="file"
-                accept="image/*"
-                style={{ display: "none" }}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFeaturedImageUpload(f); }}
-              />
-            </label>
+            <div>
+              <label
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "center", height: 100, borderRadius: 8,
+                  border: "1px dashed rgba(255,255,255,0.2)", cursor: "pointer", fontSize: "0.8rem", color: "rgba(240,242,255,0.5)",
+                }}
+              >
+                Click to upload
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFeaturedImageUpload(f); }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowImageUrlInput(true)}
+                style={{ display: "block", width: "100%", textAlign: "center", fontSize: "0.75rem", color: "var(--brand)", background: "none", border: "none", cursor: "pointer", marginTop: "0.5rem" }}
+              >
+                Or paste an image URL
+              </button>
+            </div>
           )}
         </div>
 
