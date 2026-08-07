@@ -164,10 +164,18 @@ export function BlogStyles({ appearance }: { appearance?: BlogAppearance } = {})
         .plexo-comment-form__hp { position: absolute; left: -9999px; }
         .plexo-comment-form__row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .plexo-comment-form input, .plexo-comment-form textarea {
+          width: 100%; box-sizing: border-box; min-width: 0;
           padding: 10px 12px; border-radius: 8px; font: inherit; font-size: 0.88rem;
           background: var(--plexo-comment-input-bg, #fff);
           border: 1px solid var(--plexo-comment-input-border, #e5e7eb);
           color: var(--plexo-comment-input-text, #1f2430);
+        }
+        /* Without an explicit width/min-width, a text <input>'s intrinsic sizing refuses to
+           shrink below its content width inside a CSS grid track — the Name/Email row would
+           rather overflow the whole page horizontally on a narrow viewport than let either
+           input get smaller than its placeholder text. */
+        @media (max-width: 480px) {
+          .plexo-comment-form__row { grid-template-columns: 1fr; }
         }
         /* Browser autofill (e.g. a saved name/email) paints its own background over the
            input, ignoring the site's CSS entirely, unless overridden like this. */
