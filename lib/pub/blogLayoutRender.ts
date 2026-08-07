@@ -15,13 +15,20 @@ export const BLOG_MARKER_NAMES = [
 
 export type BlogMarkerName = (typeof BLOG_MARKER_NAMES)[number];
 
+// Case-insensitive: `data-plexo-blog-featuredImage`/`data-plexo-blog-postList` are the
+// canonical camelCase names the SDK's compiler source emits, but any code path that ever
+// round-trips the compiled HTML through real DOM attribute APIs (e.g. `setAttribute`,
+// which the HTML spec lowercases for HTML documents) silently flattens them to
+// `data-plexo-blog-featuredimage`/`data-plexo-blog-postlist` before they're persisted —
+// matching case-insensitively here is what actually makes marker substitution robust to
+// that, rather than depending on every future compile path preserving case exactly.
 function markerRegex(name: BlogMarkerName): RegExp {
-  return new RegExp(`<div([^>]*)data-plexo-blog-${name}="true"([^>]*)></div>`, "g");
+  return new RegExp(`<div([^>]*)data-plexo-blog-${name}="true"([^>]*)></div>`, "gi");
 }
 
 /** Cheap presence check — used to decide whether a layout is "ready" (has somewhere to show the real content) before the public renderer trusts it. */
 export function hasBlogMarker(compiledHtml: string, name: BlogMarkerName): boolean {
-  return new RegExp(`data-plexo-blog-${name}="true"`).test(compiledHtml);
+  return new RegExp(`data-plexo-blog-${name}="true"`, "i").test(compiledHtml);
 }
 
 function unescapeHtmlAttr(value: string): string {
@@ -42,7 +49,7 @@ function unescapeHtmlAttr(value: string): string {
  * belonging to some other, unrelated element elsewhere in the compiled document.
  */
 export function extractMarkerPrefix(compiledHtml: string, name: BlogMarkerName): string {
-  const openTagMatch = new RegExp(`<div[^>]*data-plexo-blog-${name}="true"[^>]*>`).exec(compiledHtml);
+  const openTagMatch = new RegExp(`<div[^>]*data-plexo-blog-${name}="true"[^>]*>`, "i").exec(compiledHtml);
   if (!openTagMatch) return "";
   const prefixMatch = /data-plexo-blog-prefix="([^"]*)"/.exec(openTagMatch[0]);
   return prefixMatch ? unescapeHtmlAttr(prefixMatch[1]) : "";
