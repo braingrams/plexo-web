@@ -3,8 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BlogRichTextEditor } from "./BlogRichTextEditor";
+import { AiWriteAssistant } from "./AiWriteAssistant";
 import { computeSeoChecklist } from "./seoChecklist";
 import { PageContainer } from "../../../_components/PageContainer";
+import { CustomSelect } from "../../../domains/domains-client";
+
+type AiBlogPostResult = {
+  title: string;
+  excerpt: string;
+  contentHtml: string;
+  metaTitle: string;
+  metaDescription: string;
+  categories: string[];
+  tags: string[];
+  imagePrompt: string;
+};
 
 type Status = "DRAFT" | "SCHEDULED" | "PUBLISHED" | "ARCHIVED";
 
@@ -63,6 +76,7 @@ export function BlogPostEditor({
   categories,
   tags: initialTags,
   authors: initialAuthors,
+  currentUserAuthorId,
   siteDomain,
 }: {
   templateId: string;
@@ -70,6 +84,9 @@ export function BlogPostEditor({
   categories: Category[];
   tags: Tag[];
   authors: Author[];
+  /** BlogAuthor row linked to the signed-in user — the default for a brand-new post. An
+   * existing post keeps whatever author it already has saved regardless of this. */
+  currentUserAuthorId: string;
   siteDomain: string | null;
 }) {
   const router = useRouter();
@@ -83,12 +100,15 @@ export function BlogPostEditor({
   const [contentHtml, setContentHtml] = useState("");
   const [featuredImageUrl, setFeaturedImageUrl] = useState(initialPost?.featuredImageUrl ?? "");
   const [featuredImageAlt, setFeaturedImageAlt] = useState(initialPost?.featuredImageAlt ?? "");
+  // Drives the loading slot in the Featured Image panel — shared between a manual upload
+  // and (later) the AI "write for me" image-generation step, just with a different label.
+  const [featuredImageStatus, setFeaturedImageStatus] = useState<"uploading" | "generating" | null>(null);
   const [status, setStatus] = useState<Status>(initialPost?.status ?? "DRAFT");
   const [scheduledAt, setScheduledAt] = useState(initialPost?.scheduledAt?.slice(0, 16) ?? "");
   const [metaTitle, setMetaTitle] = useState(initialPost?.metaTitle ?? "");
   const [metaDescription, setMetaDescription] = useState(initialPost?.metaDescription ?? "");
   const [noindex, setNoindex] = useState(initialPost?.noindex ?? false);
-  const [authorId, setAuthorId] = useState(initialPost?.authorId ?? "");
+  const [authorId, setAuthorId] = useState(initialPost?.authorId || currentUserAuthorId || "");
   const [categoryIds, setCategoryIds] = useState<string[]>(initialPost?.categoryIds ?? []);
   const [tagNames, setTagNames] = useState<string[]>(initialPost?.tagNames ?? []);
   const [tagInput, setTagInput] = useState("");
@@ -101,6 +121,10 @@ export function BlogPostEditor({
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  // Bumping the nonce pushes new HTML into the already-mounted rich text editor — see
+  // BlogRichTextEditor's applyContentSignal prop.
+  const [contentSignal, setContentSignal] = useState<{ html: string; nonce: number } | null>(null);
+  const [aiImageError, setAiImageError] = useState<string | null>(null);
 
   const markDirty = useCallback(() => setDirty(true), []);
 
@@ -219,53 +243,134 @@ export function BlogPostEditor({
     };
   }, [dirty, hasSavableContent, postId, title, contentJson, contentHtml, templateId]);
 
-  async function uploadImage(): Promise<string | null> {
-    return new Promise((resolve) => {
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "image/*";
-      input.onchange = async () => {
-        const file = input.files?.[0];
-        if (!file) return resolve(null);
-        const form = new FormData();
-        form.append("file", file);
-        const res = await fetch(`/api/blog/${templateId}/upload-image`, { method: "POST", body: form });
-        if (!res.ok) {
-          setError("Image upload failed.");
-          return resolve(null);
-        }
-        const { url } = await res.json();
-        resolve(url);
-      };
-      input.click();
-    });
-  }
-
-  async function handleFeaturedImageUpload(file: File) {
+  async function uploadFile(file: File): Promise<string | null> {
     const form = new FormData();
     form.append("file", file);
     const res = await fetch(`/api/blog/${templateId}/upload-image`, { method: "POST", body: form });
-    if (res.ok) {
-      const { url } = await res.json();
+    if (!res.ok) {
+      setError("Image upload failed.");
+      return null;
+    }
+    const { url } = await res.json();
+    return url;
+  }
+
+  async function handleFeaturedImageUpload(file: File) {
+    setFeaturedImageStatus("uploading");
+    const url = await uploadFile(file);
+    setFeaturedImageStatus(null);
+    if (url) {
       setFeaturedImageUrl(url);
       markDirty();
     }
   }
 
-  async function handleAddCategory() {
-    const name = newCategoryName.trim();
-    if (!name) return;
+  async function createCategory(name: string): Promise<Category | null> {
     const res = await fetch(`/api/blog/${templateId}/categories`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     });
-    if (res.ok) {
-      const { category } = await res.json();
-      setAllCategories((prev) => [...prev, category]);
+    if (!res.ok) return null;
+    const { category } = await res.json();
+    setAllCategories((prev) => [...prev, category]);
+    return category;
+  }
+
+  async function handleAddCategory() {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    const category = await createCategory(name);
+    if (category) {
       setCategoryIds((prev) => [...prev, category.id]);
       setNewCategoryName("");
       markDirty();
+    }
+  }
+
+  async function handleAiGenerate(topic: string): Promise<void> {
+    const res = await fetch("/api/v1/ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": "workspace-internal" },
+      body: JSON.stringify({
+        mode: "generate_blog_post",
+        templateKind: "LANDING_PAGE",
+        prompt: topic,
+        context: {
+          existingCategories: allCategories.map((c) => c.name),
+          existingTags: allTags.map((t) => t.name),
+        },
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}) as { error?: string });
+      if (res.status === 402) throw new Error("Insufficient AI credits — top up or configure your own API key in Settings.");
+      throw new Error(body.error ?? "AI generation failed.");
+    }
+    const { result } = (await res.json()) as { result: AiBlogPostResult };
+
+    setTitle(result.title);
+    setExcerpt(result.excerpt);
+    setMetaTitle(result.metaTitle);
+    setMetaDescription(result.metaDescription);
+    setContentHtml(result.contentHtml);
+    setContentSignal({ html: result.contentHtml, nonce: Date.now() });
+    markDirty();
+
+    const resolvedCategoryIds: string[] = [];
+    for (const name of result.categories) {
+      const existing = allCategories.find((c) => c.name.toLowerCase() === name.toLowerCase());
+      if (existing) {
+        resolvedCategoryIds.push(existing.id);
+        continue;
+      }
+      const created = await createCategory(name);
+      if (created) resolvedCategoryIds.push(created.id);
+    }
+    if (resolvedCategoryIds.length > 0) {
+      setCategoryIds((prev) => Array.from(new Set([...prev, ...resolvedCategoryIds])));
+    }
+
+    if (result.tags.length > 0) {
+      setTagNames((prev) => {
+        const lower = new Set(prev.map((t) => t.toLowerCase()));
+        const merged = [...prev];
+        for (const name of result.tags) {
+          if (!lower.has(name.toLowerCase())) {
+            merged.push(name);
+            lower.add(name.toLowerCase());
+          }
+        }
+        return merged;
+      });
+    }
+
+    // The featured image is generated independently — a failure here (including running
+    // out of credit) never discards the text already applied above.
+    setAiImageError(null);
+    setFeaturedImageStatus("generating");
+    try {
+      const imageRes = await fetch(`/api/blog/${templateId}/posts/ai-generate-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: result.imagePrompt }),
+      });
+      if (imageRes.ok) {
+        const { url } = await imageRes.json();
+        setFeaturedImageUrl(url);
+        markDirty();
+      } else {
+        const body = await imageRes.json().catch(() => ({}) as { error?: string });
+        setAiImageError(
+          imageRes.status === 402
+            ? "Not enough credits for the featured image — you can upload one manually."
+            : body.error ?? "Couldn't generate a featured image.",
+        );
+      }
+    } catch {
+      setAiImageError("Couldn't generate a featured image.");
+    } finally {
+      setFeaturedImageStatus(null);
     }
   }
 
@@ -298,8 +403,9 @@ export function BlogPostEditor({
   const permalink = siteDomain ? `${siteDomain}/blog/${slug || "…"}` : `/blog/${slug || "…"}`;
 
   return (
-    <PageContainer style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "1.5rem" }}>
+    <PageContainer className="blog-editor-grid" style={{ paddingTop: 0 }}>
       <div>
+        <AiWriteAssistant onGenerate={handleAiGenerate} />
         <textarea
           value={title}
           onChange={(e) => { setTitle(e.target.value); markDirty(); }}
@@ -329,7 +435,8 @@ export function BlogPostEditor({
 
         <BlogRichTextEditor
           initialContent={contentJson}
-          onUploadImage={uploadImage}
+          onUploadFile={uploadFile}
+          applyContentSignal={contentSignal}
           onChange={(json, html) => {
             setContentJson(json);
             setContentHtml(html);
@@ -456,7 +563,28 @@ export function BlogPostEditor({
 
         <div style={PANEL}>
           <label style={FIELD_LABEL}>Featured Image</label>
-          {featuredImageUrl ? (
+          {aiImageError && (
+            <p style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem", fontSize: "0.75rem", color: "#f59e0b", marginBottom: "0.5rem" }} role="alert">
+              {aiImageError}
+              <button type="button" onClick={() => setAiImageError(null)} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontWeight: 700, flexShrink: 0 }}>×</button>
+            </p>
+          )}
+          {featuredImageStatus ? (
+            <div style={{
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+              height: 100, borderRadius: 8, border: "1px dashed rgba(255,255,255,0.2)",
+            }}>
+              <div style={{
+                width: 22, height: 22, borderRadius: "50%",
+                border: "3px solid rgba(255,255,255,0.15)", borderTopColor: "var(--brand)",
+                animation: "blog-editor-spin 0.7s linear infinite",
+              }} />
+              <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.5)" }}>
+                {featuredImageStatus === "uploading" ? "Uploading…" : "Generating image…"}
+              </span>
+              <style>{`@keyframes blog-editor-spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+          ) : featuredImageUrl ? (
             <div style={{ marginBottom: "0.6rem" }}>
               <img src={featuredImageUrl} alt="" style={{ width: "100%", borderRadius: 8, marginBottom: "0.5rem" }} />
               <input
@@ -536,12 +664,13 @@ export function BlogPostEditor({
 
         <div style={PANEL}>
           <label style={FIELD_LABEL}>Author</label>
-          <select value={authorId} onChange={(e) => { setAuthorId(e.target.value); markDirty(); }} style={{ ...FIELD_INPUT, marginBottom: "0.5rem" }}>
-            <option value="">No author</option>
-            {allAuthors.map((a) => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
+          <div style={{ marginBottom: "0.5rem" }}>
+            <CustomSelect
+              value={authorId}
+              options={[{ label: "No author", value: "" }, ...allAuthors.map((a) => ({ label: a.name, value: a.id }))]}
+              onChange={(value) => { setAuthorId(value); markDirty(); }}
+            />
+          </div>
           <div style={{ display: "flex", gap: "0.4rem" }}>
             <input
               value={newAuthorName}

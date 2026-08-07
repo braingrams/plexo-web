@@ -62,7 +62,15 @@ export default async function TemplatesDashboardPage() {
   // /dashboard/marketplace/listings instead — see app/api/templates/route.ts's identical
   // filter for why.
   const templates = await prisma.template.findMany({
-    where: { organizationId: orgResolution.organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false },
+    where: {
+      organizationId: orgResolution.organizationId,
+      parentId: null,
+      marketplaceStatus: null,
+      isBlogLayout: false,
+      // A site whose blog is set as its homepage is conceptually a blog now, not a
+      // landing-page template — it still shows in /dashboard/blog, just not here.
+      NOT: { blogSite: { is: { enabled: true, showOnHomepage: true } } },
+    },
     // Secondary key matters: the org-backfill migration bulk-updated every template's
     // organizationId in one updateMany, and Prisma's @updatedAt auto-bumps on ANY update
     // through the query engine — so a lot of rows now share the exact same updatedAt

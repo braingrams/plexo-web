@@ -29,7 +29,16 @@ type MarketplaceItem = {
  * templates hand off to the standalone /marketplace/[id] page, which already owns the
  * full Stripe checkout flow.
  */
-export function NewFromMarketplace({ onClose }: { onClose: () => void }) {
+export function NewFromMarketplace({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  /** Called instead of the default redirect once a free template has been cloned into the
+   * caller's account — lets callers outside the Templates page (e.g. the Blog page's "start
+   * from a template" flow) chain their own follow-up step before navigating. */
+  onCreated?: (templateId: string) => void;
+}) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [items, setItems] = useState<MarketplaceItem[]>([]);
@@ -73,6 +82,10 @@ export function NewFromMarketplace({ onClose }: { onClose: () => void }) {
     setBusyId(null);
     if (!res.ok) {
       setError(data.error ?? "Failed to use this template.");
+      return;
+    }
+    if (onCreated) {
+      onCreated(data.template.id);
       return;
     }
     onClose();

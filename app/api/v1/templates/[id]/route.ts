@@ -6,6 +6,53 @@ import { resolveUser } from "../../domains/route";
 import { requirePermission } from "@/server/requirePermission";
 
 /**
+ * GET /api/v1/templates/:id
+ *
+ * Fetches a single template's full details, including designJson — there was previously
+ * no way for an API-key/MCP caller to read a template's content back (list_landing_pages
+ * only returns metadata), which blog layout tooling needs (see plexo-mcp's getBlogLayout
+ * and lib/mcp/blogTools.ts's get_blog_layout) to show the AI/user what's already designed
+ * before replacing it.
+ */
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<NextResponse> {
+  const resolved = await resolveUser(request);
+  if (!resolved) {
+    return NextResponse.json({ error: "Unauthorized. Valid API Key or Session required." }, { status: 401 });
+  }
+
+  const { id } = await context.params;
+  const template = await prisma.template.findFirst({
+    where: { id, organizationId: resolved.organizationId },
+    select: { id: true, name: true, kind: true, isBlogLayout: true, parentId: true, slug: true, designJson: true, compiledHtml: true },
+  });
+  if (!template) {
+    return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });
+  }
+
+  let publishedUrl: string | null = null;
+  if (template.kind === "LANDING_PAGE") {
+    const domain = await prisma.publishedDomain.findFirst({ where: { templateId: template.id }, select: { domain: true } });
+    if (domain) {
+      const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+      publishedUrl = `${protocol}://${domain.domain}`;
+    }
+  }
+
+  const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  return NextResponse.json({
+    templateId: template.id,
+    name: template.name,
+    kind: template.kind,
+    isBlogLayout: template.isBlogLayout,
+    parentTemplateId: template.parentId,
+    slug: template.slug,
+    designJson: template.designJson,
+    editableUrl: `${baseAppUrl}/dashboard/templates/${template.id}`,
+    publishedUrl,
+  });
+}
+
+/**
  * PUT /api/v1/templates/:id
  *
  * Companion to POST /api/v1/publish for AI tools (MCP server, ChatGPT Custom Actions,

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogTheme";
 import { PageContainer } from "../../../../_components/PageContainer";
+import { CustomSelect } from "../../../../domains/domains-client";
 
 type Category = { id: string; name: string; slug: string };
 type Tag = { id: string; name: string; slug: string };
@@ -272,11 +273,11 @@ export function BlogSettingsClient({
           </div>
           <div style={{ flex: 1, minWidth: 180 }}>
             <label style={FIELD_LABEL}>Font</label>
-            <select value={site.fontPreset} onChange={(e) => setSite({ ...site, fontPreset: e.target.value })} style={FIELD_INPUT}>
-              {FONT_PRESET_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+            <CustomSelect
+              value={site.fontPreset}
+              options={FONT_PRESET_OPTIONS}
+              onChange={(value) => setSite({ ...site, fontPreset: value })}
+            />
           </div>
         </div>
 

@@ -18,6 +18,7 @@ import {
   pathForPage,
   getDescendantIds,
 } from "@/server/slug";
+import { BLOG_MCP_TOOLS, BLOG_TOOL_NAMES, handleBlogTool } from "./blogTools";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -255,7 +256,7 @@ EXAMPLE VALID designJson PAYLOAD (hero row, plus a 3-item product grid row):
                                 properties: {
                                   type: {
                                     type: "string",
-                                    enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video"],
+                                    enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video", "accordion", "blog_title", "blog_content", "blog_featured_image", "blog_date", "blog_author", "blog_categories", "blog_comments", "blog_post_list"],
                                   },
                                   style: { type: "object" },
                                   attributes: { type: "object", description: "Component attributes (text, href, src, title, description, links, fields). For type 'html', raw markup goes under 'htmlContent' — NOT 'text'." },
@@ -347,7 +348,7 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page — designJso
                                 properties: {
                                   type: {
                                     type: "string",
-                                    enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video"],
+                                    enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video", "accordion", "blog_title", "blog_content", "blog_featured_image", "blog_date", "blog_author", "blog_categories", "blog_comments", "blog_post_list"],
                                   },
                                   style: { type: "object" },
                                   attributes: {
@@ -643,6 +644,7 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
       },
     },
   },
+  ...BLOG_MCP_TOOLS,
 ];
 
 export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise<NextResponse> {
@@ -1393,8 +1395,13 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           break;
         }
 
-        default:
+        default: {
+          if (BLOG_TOOL_NAMES.has(toolName)) {
+            toolResult = await handleBlogTool(toolName, args, resolved);
+            break;
+          }
           throw new Error(`Unknown tool: ${toolName}`);
+        }
       }
 
       return NextResponse.json({

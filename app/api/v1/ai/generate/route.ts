@@ -24,7 +24,7 @@ function parseBearerToken(authorization: string | null): string | null {
   return trimmed ? trimmed : null;
 }
 
-const VALID_MODES = new Set<AiActionMode>(["edit_element", "edit_layout", "generate_layout", "edit_raw_html"]);
+const VALID_MODES = new Set<AiActionMode>(["edit_element", "edit_layout", "generate_layout", "edit_raw_html", "generate_blog_post"]);
 const VALID_TIERS = new Set(["AUTO", "BASIC", "MEDIUM", "HIGH"]);
 
 interface ResolvedAiKey {
@@ -124,6 +124,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     context?: unknown;
     tier?: string;
     externalUserId?: string;
+    isBlogLayout?: boolean;
   } | null;
 
   if (!body || typeof body.prompt !== "string" || !body.prompt.trim()) {
@@ -256,6 +257,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       mode,
       prompt: body.prompt,
       templateKind: body.templateKind,
+      isBlogLayout: body.isBlogLayout === true,
       context: body.context,
     });
 

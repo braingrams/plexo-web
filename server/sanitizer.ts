@@ -72,7 +72,9 @@ const ElementAttributesSchema = z.object({
 const ElementTypeSchema = z.enum([
   'text', 'button', 'image', 'spacer', 'divider', 'card', 'form_container',
   'input', 'textarea', 'select', 'heading', 'paragraph', 'carousel',
-  'video', 'social', 'menu', 'html', 'table', 'timer', 'icon'
+  'video', 'social', 'menu', 'html', 'table', 'timer', 'icon', 'accordion',
+  'blog_title', 'blog_content', 'blog_featured_image', 'blog_date',
+  'blog_author', 'blog_categories', 'blog_comments', 'blog_post_list'
 ]);
 
 export const ElementJSONSchema = z.object({

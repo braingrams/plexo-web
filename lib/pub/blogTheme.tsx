@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { BlogPostCard } from "@/lib/blog/queries";
+import { GOOGLE_FONTS_LIST, buildGoogleFontHref } from "./googleFonts";
 
 const HEX_COLOR_REGEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const DEFAULT_ACCENT = "#6d28d9";
@@ -14,25 +15,39 @@ function sanitizeHexColor(input?: string | null): string {
   return input && HEX_COLOR_REGEX.test(input) ? input : DEFAULT_ACCENT;
 }
 
-// A closed set of safe, no-external-request font stacks — fontPreset is always one of
-// these keys, never a raw user-supplied font-family string, so there's no injection
-// surface and no webfont loading/perf cost either.
-const FONT_STACKS: Record<string, string> = {
+// The 4 original no-download system stacks, kept as-is for anyone who picked them before
+// the full Google Fonts catalog was added below.
+const SYSTEM_FONT_STACKS: Record<string, string> = {
   sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   serif: 'Georgia, "Times New Roman", Times, serif',
   modern: '"Helvetica Neue", Helvetica, Arial, sans-serif',
   elegant: '"Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif',
 };
 
-export const FONT_PRESET_OPTIONS = [
+const SYSTEM_FONT_OPTIONS = [
   { value: "sans", label: "Sans-serif (default)" },
   { value: "serif", label: "Serif (classic editorial)" },
   { value: "modern", label: "Modern sans" },
   { value: "elegant", label: "Elegant serif" },
 ];
 
+// Every selectable value in the Font dropdown — the 4 system stacks plus the full curated
+// Google Fonts catalog (see googleFonts.ts). Still a closed, code-controlled set (never a
+// raw user-supplied font-family string) even though it's now ~85 entries instead of 4 —
+// see BlogSite.fontPreset's schema comment for why that invariant matters. A Google Font's
+// `value` doubles as its own CSS font stack (it already includes a generic fallback, e.g.
+// "'Roboto', sans-serif"), so no separate stacks table is needed for those.
+export const FONT_PRESET_OPTIONS = [
+  ...SYSTEM_FONT_OPTIONS,
+  ...GOOGLE_FONTS_LIST.map((f) => ({ value: f.value, label: f.label })),
+];
+
+const VALID_FONT_PRESET_VALUES = new Set(FONT_PRESET_OPTIONS.map((o) => o.value));
+
 function resolveFontStack(preset?: string | null): string {
-  return FONT_STACKS[preset ?? "sans"] ?? FONT_STACKS.sans;
+  if (preset && SYSTEM_FONT_STACKS[preset]) return SYSTEM_FONT_STACKS[preset];
+  if (preset && VALID_FONT_PRESET_VALUES.has(preset)) return preset;
+  return SYSTEM_FONT_STACKS.sans;
 }
 
 export interface BlogAppearance {
@@ -52,12 +67,16 @@ export interface BlogAppearance {
 export function BlogStyles({ appearance }: { appearance?: BlogAppearance } = {}) {
   const accent = sanitizeHexColor(appearance?.accentColor);
   const font = resolveFontStack(appearance?.fontPreset);
+  // null for the 4 system stacks (no download needed) or an invalid/legacy value.
+  const googleFontHref = buildGoogleFontHref(font);
 
   return (
-    <style
-      // eslint-disable-next-line react/no-danger
-      dangerouslySetInnerHTML={{
-        __html: `
+    <>
+      {googleFontHref && <link rel="stylesheet" href={googleFontHref} />}
+      <style
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{
+          __html: `
         .plexo-blog { --plexo-accent: ${accent}; --plexo-font: ${font}; font-family: var(--plexo-font); color: #17181c; background: #fff; min-height: 100vh; }
         .plexo-blog a { color: var(--plexo-accent); text-decoration: none; }
         .plexo-blog a:hover { text-decoration: underline; }
@@ -117,8 +136,9 @@ export function BlogStyles({ appearance }: { appearance?: BlogAppearance } = {})
         .plexo-comment-form__replying-to button { background: none; border: none; color: var(--plexo-accent); cursor: pointer; font-size: 0.8rem; }
         .plexo-comment-form__status { font-size: 0.8rem; color: #6b7280; margin: 0; min-height: 1.2em; }
         `,
-      }}
-    />
+        }}
+      />
+    </>
   );
 }
 

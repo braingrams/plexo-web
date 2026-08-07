@@ -4,6 +4,7 @@ import { requirePermission } from "@/server/requirePermission";
 import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
 import { updateBlogPost, deleteBlogPost, type SavePostInput } from "@/lib/blog/savePost";
 import { isValidUuid } from "@/server/slug";
+import { convertWordPressHtmlToTiptapJson } from "@/lib/blogImport/htmlToTiptap";
 
 export async function GET(
   request: NextRequest,
@@ -42,6 +43,12 @@ export async function PATCH(
   const body = (await request.json().catch(() => ({}))) as Partial<SavePostInput>;
   if (body.title !== undefined && !body.title.trim()) {
     return NextResponse.json({ error: "Title can't be empty." }, { status: 400 });
+  }
+
+  // Same auto-conversion as the POST route — a caller updating contentHtml without also
+  // sending pre-built contentJson (e.g. an MCP/AI client) still gets a properly editable post.
+  if (body.contentHtml !== undefined && body.contentJson === undefined) {
+    body.contentJson = convertWordPressHtmlToTiptapJson(body.contentHtml);
   }
 
   const post = await updateBlogPost(resolved.context.templateId, postId, body);

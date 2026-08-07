@@ -1,4 +1,5 @@
 import type { Editor, Range } from "@tiptap/core";
+import { insertImageWithUpload } from "../insertImageWithUpload";
 
 export interface SlashCommandItem {
   title: string;
@@ -7,8 +8,9 @@ export interface SlashCommandItem {
   run: (editor: Editor, range: Range) => void;
 }
 
-/** Executed after uploading an image via the same picker the toolbar's Image button uses. */
-export function buildSlashCommandItems(onUploadImage: () => Promise<string | null>): SlashCommandItem[] {
+/** Image item shares the exact same insert-now-resolve-later flow as the toolbar's Image
+ * button — see insertImageWithUpload.ts. */
+export function buildSlashCommandItems(onUploadFile: (file: File) => Promise<string | null>): SlashCommandItem[] {
   return [
     {
       title: "Heading 1",
@@ -64,9 +66,7 @@ export function buildSlashCommandItems(onUploadImage: () => Promise<string | nul
       keywords: ["image", "photo", "picture", "upload"],
       run: (editor, range) => {
         editor.chain().focus().deleteRange(range).run();
-        onUploadImage().then((url) => {
-          if (url) editor.chain().focus().setImage({ src: url }).run();
-        });
+        insertImageWithUpload(editor, onUploadFile);
       },
     },
   ];

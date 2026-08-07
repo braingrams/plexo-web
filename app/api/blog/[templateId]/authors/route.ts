@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
 import { requirePermission } from "@/server/requirePermission";
 import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
-import { slugify, avoidPageReservedSlug } from "@/server/slug";
+import { generateUniqueAuthorSlug } from "@/lib/blog/authors";
 
 export async function GET(
   request: NextRequest,
@@ -39,15 +39,7 @@ export async function POST(
   const name = body.name?.trim();
   if (!name) return NextResponse.json({ error: "Author name is required." }, { status: 400 });
 
-  const baseSlug = avoidPageReservedSlug(slugify(name) || "author", "author");
-  let slug = baseSlug;
-  let suffix = 2;
-  while (
-    await prisma.blogAuthor.findFirst({ where: { templateId: resolved.context.templateId, slug }, select: { id: true } })
-  ) {
-    slug = `${baseSlug}-${suffix}`;
-    suffix += 1;
-  }
+  const slug = await generateUniqueAuthorSlug(resolved.context.templateId, name);
 
   const author = await prisma.blogAuthor.create({
     data: {

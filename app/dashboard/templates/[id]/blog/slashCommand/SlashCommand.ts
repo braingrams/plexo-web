@@ -71,15 +71,15 @@ function renderMenu(items: SlashCommandItem[], selectedIndex: number, onPick: (i
  * extra positioning library needed). Renders a plain DOM menu rather than a React
  * component since this runs inside a ProseMirror plugin, outside React's render tree.
  */
-export const SlashCommand = Extension.create<{ onUploadImage: () => Promise<string | null> }>({
+export const SlashCommand = Extension.create<{ onUploadFile: (file: File) => Promise<string | null> }>({
   name: "slashCommand",
 
   addOptions() {
-    return { onUploadImage: async () => null };
+    return { onUploadFile: async () => null };
   },
 
   addProseMirrorPlugins() {
-    const items = buildSlashCommandItems(this.options.onUploadImage);
+    const items = buildSlashCommandItems(this.options.onUploadFile);
 
     let selectedIndex = 0;
     let currentItems: SlashCommandItem[] = items;

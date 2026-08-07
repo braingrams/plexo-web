@@ -5,6 +5,7 @@ import { requirePermission } from "@/server/requirePermission";
 import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
 import { createBlogPost, type SavePostInput } from "@/lib/blog/savePost";
 import { effectiveStatus } from "@/lib/blog/queries";
+import { convertWordPressHtmlToTiptapJson } from "@/lib/blogImport/htmlToTiptap";
 
 const LIST_SELECT = {
   id: true,
@@ -72,12 +73,18 @@ export async function POST(
     return NextResponse.json({ error: "Title is required." }, { status: 400 });
   }
 
+  // A caller supplying plain HTML without pre-built Tiptap/ProseMirror JSON (e.g. an
+  // MCP/AI client that only knows semantic HTML, not this app's internal editor format)
+  // still gets a properly editable post — same conversion the WordPress importer uses.
+  const contentHtml = body.contentHtml ?? "";
+  const contentJson = body.contentJson ?? (contentHtml ? convertWordPressHtmlToTiptapJson(contentHtml) : { type: "doc", content: [] });
+
   const post = await createBlogPost(resolved.context.templateId, {
     title: body.title,
     slug: body.slug ?? null,
     excerpt: body.excerpt ?? null,
-    contentJson: body.contentJson ?? { type: "doc", content: [] },
-    contentHtml: body.contentHtml ?? "",
+    contentJson,
+    contentHtml,
     featuredImageUrl: body.featuredImageUrl ?? null,
     featuredImageAlt: body.featuredImageAlt ?? null,
     status: body.status ?? BlogPostStatus.DRAFT,

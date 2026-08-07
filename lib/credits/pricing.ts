@@ -35,6 +35,16 @@ export const MODEL_PRICING: Record<AiProvider, Record<ConcreteTier, ModelRate>> 
   },
 };
 
+// Google's published Imagen 4 per-image price at the time this was written — same
+// "verify against the provider's real billing page before relying on this for actual
+// invoicing" caveat as MODEL_PRICING above. Flat per-image cost, not token-derived, since
+// image generation isn't priced per input/output token the way text models are.
+export const IMAGE_GENERATION_USD_COST = 0.04;
+
+export function imageGenerationCredits(): number {
+  return creditsForUsd(IMAGE_GENERATION_USD_COST);
+}
+
 /** USD value of a single credit — how the configurable credit<->dollar ratio is expressed. */
 function creditUsdValue(): number {
   const raw = process.env.CREDIT_USD_VALUE;

@@ -158,6 +158,46 @@ export async function chargeUsage(
 }
 
 /**
+ * Deducts a fixed credit amount not derived from token usage — e.g. a flat per-image
+ * generation cost. Same allowance-first-then-topup transaction shape as `chargeUsage`,
+ * just without the usage/pricing math since there's no token count to price here.
+ */
+export async function chargeFlatCredits(
+  userId: string,
+  credits: number,
+  description: string,
+): Promise<{ allowanceBalance: number; topupBalance: number }> {
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { allowanceBalance: true, topupBalance: true },
+    });
+
+    const fromAllowance = Math.min(user.allowanceBalance, credits);
+    const fromTopup = credits - fromAllowance;
+    const nextAllowance = user.allowanceBalance - fromAllowance;
+    const nextTopup = user.topupBalance - fromTopup;
+
+    await tx.user.update({
+      where: { id: userId },
+      data: { allowanceBalance: nextAllowance, topupBalance: nextTopup },
+    });
+
+    await tx.creditLedgerEntry.create({
+      data: {
+        userId,
+        type: CreditTransactionType.AI_USAGE,
+        amount: -credits,
+        balanceAfter: nextAllowance + nextTopup,
+        description,
+      },
+    });
+
+    return { allowanceBalance: nextAllowance, topupBalance: nextTopup };
+  });
+}
+
+/**
  * Credits a completed Stripe top-up purchase. Idempotent: the `StripeEvent`
  * insert is a standalone claim performed *before* the transaction that
  * applies the balance change — a Postgres unique-violation aborts the whole

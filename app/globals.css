@@ -558,6 +558,10 @@ select {
    specificity otherwise wins over any class selector.
    ───────────────────────────────────────── */
 
+.dash-classic-nav-group-header:hover {
+  color: rgba(240, 242, 255, 0.7) !important;
+}
+
 .dash-mobile-nav-backdrop {
   position: fixed;
   inset: 0;
@@ -919,5 +923,41 @@ select {
   100% {
     transform: scale(2);
     box-shadow: 0 0 0 0 rgba(139, 92, 246, 0);
+  }
+}
+
+/* Blog post editor: content column + fixed sidebar, stacking to one column on narrow
+   viewports. minmax(0, 1fr) lets the content column shrink below its intrinsic width
+   (a plain 1fr track won't), so the rich text editor doesn't force horizontal overflow. */
+.blog-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 1.5rem;
+}
+
+@media (max-width: 860px) {
+  .blog-editor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Blog list header actions: side-by-side row on desktop, 2-column grid on mobile so
+   each button reads as a clean 50%-width tap target instead of ragged wrapped pills. */
+.blog-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+@media (max-width: 640px) {
+  .blog-actions-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .blog-actions-row > a,
+  .blog-actions-row > button {
+    width: 100%;
+    justify-content: center;
   }
 }

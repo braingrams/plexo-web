@@ -17,12 +17,24 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   // Full-document output (the whole uploaded index.html back), matching the largest
   // existing tier rather than a fresh guess.
   edit_raw_html: 16000,
+  // A full post as HTML plus excerpt/SEO/category/tag/image-prompt metadata — lighter than
+  // a builder layout's nested JSON per token, so a smaller ceiling than edit_layout/
+  // generate_layout is enough for a genuinely long post.
+  generate_blog_post: 6000,
 };
 
-const ALLOWED_ELEMENT_TYPES = [
+const CORE_ELEMENT_TYPES = [
   "text", "button", "image", "spacer", "divider", "card", "form_container",
   "input", "textarea", "select", "heading", "paragraph", "carousel",
-  "video", "social", "menu", "html", "table", "timer", "icon",
+  "video", "social", "menu", "html", "table", "timer", "icon", "accordion",
+];
+
+// Only offered to the model when editing an actual blog post template (isBlogLayout) —
+// these are opaque per-post placeholders resolved at render time, not real page content,
+// so suggesting them on an ordinary landing page/email would just produce dead blocks.
+const BLOG_ELEMENT_TYPES = [
+  "blog_title", "blog_content", "blog_featured_image", "blog_date",
+  "blog_author", "blog_categories", "blog_comments", "blog_post_list",
 ];
 
 function cleanJsonString(raw: string): string {
@@ -36,8 +48,16 @@ function cleanJsonString(raw: string): string {
   return cleaned;
 }
 
-function buildSystemPrompt(mode: AiActionMode, templateKind: "EMAIL" | "LANDING_PAGE"): string {
+function buildSystemPrompt(mode: AiActionMode, templateKind: "EMAIL" | "LANDING_PAGE", isBlogLayout: boolean): string {
   const kindLabel = templateKind === "EMAIL" ? "email template" : "landing page";
+
+  if (mode === "generate_blog_post") {
+    return `You are Plexo's blog writing assistant. Write a complete, publish-ready blog post based on the user's topic.
+Write "contentHtml" as clean semantic HTML body content only — <h2>/<h3> for headings, <p> for paragraphs, <ul>/<ol>/<li> for lists, <blockquote> for quotes where useful. No <html>/<head>/<body> wrapper, no inline styles, no <script>.
+Also write a 1-2 sentence "excerpt", an SEO "metaTitle" (max 60 characters) and "metaDescription" (max 160 characters), 1-3 "categories" (reuse a name from the existing categories list in the context below when one genuinely fits, otherwise propose a short new one), 3-6 relevant "tags" (short keywords or phrases), and a vivid one-sentence "imagePrompt" describing an ideal photographic or editorial-illustration featured image for this post (no embedded text/words in the image itself).
+Respond with ONLY a JSON object of this exact shape, no markdown fences, no prose outside the JSON:
+{ "summary": "<one short sentence describing the post you wrote>", "result": { "title": "...", "excerpt": "...", "contentHtml": "...", "metaTitle": "...", "metaDescription": "...", "categories": ["..."], "tags": ["..."], "imagePrompt": "..." } }`;
+  }
 
   if (mode === "edit_raw_html") {
     return `You are Plexo's builder AI. You edit a complete, self-contained static HTML document (an uploaded site, not a Plexo builder layout) according to the user's instruction.
@@ -57,8 +77,13 @@ Respond with ONLY a JSON object of this exact shape, no markdown fences, no pros
     ? `The canvas is currently empty. Generate a complete new ${kindLabel} layout (rows, columns, elements) that fulfills the user's prompt.`
     : `Modify the given ${kindLabel} layout (add/remove/reorder rows, columns, elements; restyle sections) according to the user's instruction.`;
 
+  const elementTypes = isBlogLayout ? [...CORE_ELEMENT_TYPES, ...BLOG_ELEMENT_TYPES] : CORE_ELEMENT_TYPES;
+  const blogGuidance = isBlogLayout
+    ? ` This is a blog post template — blog_title, blog_content, blog_featured_image, blog_date, blog_author, blog_categories, blog_comments, and blog_post_list are placeholder blocks the renderer fills in per-post; they take no meaningful "attributes" (still include "attributes": {}). Use blog_title and blog_content exactly once each; the rest are optional and normally appear at most once too.`
+    : "";
+
   return `You are Plexo's builder AI. ${modeInstruction}
-Allowed element types: ${ALLOWED_ELEMENT_TYPES.join(", ")}.
+Allowed element types: ${elementTypes.join(", ")}.${blogGuidance}
 Every row, column, and element must include a unique, non-empty "id" string. Every row and element must include "style" (and every element "attributes") as an object — use {} if there is nothing to set, never omit the key. Every column must include a "width" string (e.g. "100%").
 Respond with ONLY a JSON object of this exact shape, no markdown fences, no prose:
 { "summary": "<one or two short sentences describing what you changed or built>", "result": <the full TemplateJSON, i.e. { "body": { "style": {...}, "rows": [...] } }> }`;
@@ -68,6 +93,21 @@ function resultSchemaFor(mode: AiActionMode) {
   if (mode === "edit_raw_html") {
     return z.object({ summary: z.string().max(2000), result: z.string().min(1) });
   }
+  if (mode === "generate_blog_post") {
+    return z.object({
+      summary: z.string().max(2000),
+      result: z.object({
+        title: z.string().min(1).max(200),
+        excerpt: z.string().max(400).optional().default(""),
+        contentHtml: z.string().min(1),
+        metaTitle: z.string().max(70).optional().default(""),
+        metaDescription: z.string().max(200).optional().default(""),
+        categories: z.array(z.string()).max(5).optional().default([]),
+        tags: z.array(z.string()).max(10).optional().default([]),
+        imagePrompt: z.string().min(1).max(500),
+      }),
+    });
+  }
   return z.object({
     summary: z.string().max(2000),
     result: mode === "edit_element" ? ElementJSONSchema : TemplateJSONSchema,
@@ -76,7 +116,7 @@ function resultSchemaFor(mode: AiActionMode) {
 
 /** Drops heavy/irrelevant fields before sending the template to the model — token efficiency. */
 function trimContext(mode: AiActionMode, context: unknown): unknown {
-  if (mode === "edit_element" || mode === "edit_raw_html" || context === null || typeof context !== "object") {
+  if (mode === "edit_element" || mode === "edit_raw_html" || mode === "generate_blog_post" || context === null || typeof context !== "object") {
     return context;
   }
   const clone = JSON.parse(JSON.stringify(context));
@@ -117,6 +157,9 @@ export interface GenerateParams {
   mode: AiActionMode;
   prompt: string;
   templateKind: "EMAIL" | "LANDING_PAGE";
+  /** True only when editing an actual blog post template — gates whether blog_* element
+   * types are offered to the model at all (see BLOG_ELEMENT_TYPES above). */
+  isBlogLayout?: boolean;
   context: unknown;
 }
 
@@ -134,7 +177,7 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
       : (params.tier as ConcreteTier);
 
   const model = resolveModel(params.provider, concreteTier);
-  const systemPrompt = buildSystemPrompt(params.mode, params.templateKind);
+  const systemPrompt = buildSystemPrompt(params.mode, params.templateKind, params.isBlogLayout ?? false);
   const trimmedContext = trimContext(params.mode, params.context);
   const schema = resultSchemaFor(params.mode);
   const maxTokens = MAX_TOKENS[params.mode];
@@ -170,7 +213,7 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
     // LLMs frequently omit structural bookkeeping (id/style/attributes/width) on repeated
     // rows/columns/elements — hydrate the same way MCP/publish/compile/templates callers do
     // before validating, instead of failing the whole response over missing defaults.
-    if (params.mode !== "edit_element" && params.mode !== "edit_raw_html" && parsed && typeof parsed === "object" && "result" in parsed) {
+    if (params.mode !== "edit_element" && params.mode !== "edit_raw_html" && params.mode !== "generate_blog_post" && parsed && typeof parsed === "object" && "result" in parsed) {
       parsed.result = hydrateStructuralDefaults(parsed.result);
     }
     const validated = schema.parse(parsed);

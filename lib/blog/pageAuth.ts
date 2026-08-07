@@ -9,6 +9,8 @@ export interface BlogPageAccess {
   templateName: string;
   organizationId: string;
   userId: string;
+  userName: string;
+  userEmail: string;
   role: string;
 }
 
@@ -42,6 +44,8 @@ export async function requireBlogSiteAccess(templateId: string, redirectPath: st
     templateName: template.name,
     organizationId: orgResolution.organizationId,
     userId: session.user.id,
+    userName: session.user.name ?? "",
+    userEmail: session.user.email ?? "",
     role: orgResolution.role,
   };
 }

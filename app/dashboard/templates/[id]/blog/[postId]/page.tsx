@@ -1,13 +1,15 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/server/prisma";
 import { requireBlogSiteAccess } from "@/lib/blog/pageAuth";
+import { findOrCreateAuthorForUser } from "@/lib/blog/authors";
 import { BlogPostEditor } from "../BlogPostEditor";
 
 export default async function EditBlogPostPage({ params }: { params: Promise<{ id: string; postId: string }> }) {
   const { id, postId } = await params;
   const access = await requireBlogSiteAccess(id, `/dashboard/templates/${id}/blog/${postId}`);
 
-  const [post, categories, tags, authors, domain] = await Promise.all([
+  const [currentUserAuthor, post, categories, tags, authors, domain] = await Promise.all([
+    findOrCreateAuthorForUser(access.templateId, access.userId, access.userName || access.userEmail),
     prisma.blogPost.findFirst({
       where: { id: postId, templateId: access.templateId },
       include: {
@@ -23,9 +25,14 @@ export default async function EditBlogPostPage({ params }: { params: Promise<{ i
 
   if (!post) notFound();
 
+  const allAuthors = authors.some((a) => a.id === currentUserAuthor.id)
+    ? authors
+    : [...authors, currentUserAuthor].sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <BlogPostEditor
       templateId={access.templateId}
+      currentUserAuthorId={currentUserAuthor.id}
       initialPost={{
         id: post.id,
         title: post.title,
@@ -46,7 +53,7 @@ export default async function EditBlogPostPage({ params }: { params: Promise<{ i
       }}
       categories={categories}
       tags={tags}
-      authors={authors}
+      authors={allAuthors}
       siteDomain={domain?.domain ?? null}
     />
   );

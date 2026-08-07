@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
-import { NAV_ITEMS as BASE_NAV_ITEMS } from "./nav-items";
+import { NAV_GROUPS, PINNED_NAV_ITEM } from "./nav-items";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls";
 import { FeedbackButton } from "./_components/FeedbackButton";
@@ -153,9 +153,41 @@ function IconAiMcp() {
   );
 }
 
+function IconPages() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 3H8a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7l-5-4z" />
+      <path d="M14 3v4h5" />
+      <line x1="10" y1="13" x2="16" y2="13" />
+      <line x1="10" y1="17" x2="16" y2="17" />
+    </svg>
+  );
+}
+
+function IconBlog() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 4h11a5 5 0 0 1 5 5v11" />
+      <path d="M4 4v16h16" />
+      <circle cx="9" cy="15" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M9 4v7M4 15h5" />
+    </svg>
+  );
+}
+
+function IconChevronDown() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
 const NAV_ICONS: Record<string, React.ReactNode> = {
   "/dashboard": <IconOverview />,
   "/dashboard/templates": <IconTemplates />,
+  "/dashboard/pages": <IconPages />,
+  "/dashboard/blog": <IconBlog />,
   "/dashboard/insights": <IconInsights />,
   "/dashboard/marketplace": <IconMarketplace />,
   "/dashboard/compile": <IconCompile />,
@@ -166,7 +198,39 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   "/dashboard/profile": <IconProfile />,
 };
 
-const NAV_ITEMS = BASE_NAV_ITEMS.map((item) => ({ ...item, icon: NAV_ICONS[item.href] }));
+function NavLink({ item, pathname, collapsed }: { item: { href: string; label: string }; pathname: string; collapsed: boolean }) {
+  const isActive = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
+  return (
+    <li>
+      <Link
+        href={item.href}
+        title={collapsed ? item.label : undefined}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+          padding: collapsed ? "0.6rem" : "0.6rem 0.75rem",
+          borderRadius: 10,
+          justifyContent: collapsed ? "center" : "flex-start",
+          fontSize: "0.875rem",
+          fontWeight: isActive ? 600 : 500,
+          color: isActive ? "#fff" : "rgba(240,242,255,0.55)",
+          textDecoration: "none",
+          background: isActive ? "linear-gradient(90deg, rgba(139,92,246,0.15), transparent)" : "transparent",
+          borderLeft: isActive && !collapsed ? "3px solid var(--brand)" : "3px solid transparent",
+          boxShadow: isActive ? "inset 0 1px 0 rgba(255,255,255,0.05)" : "none",
+          transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
+        <span style={{ flexShrink: 0 }}>{NAV_ICONS[item.href]}</span>
+        {!collapsed && <span>{item.label}</span>}
+      </Link>
+    </li>
+  );
+}
 
 type Props = {
   children: React.ReactNode;
@@ -188,6 +252,13 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  // Which nav groups are expanded — seeded once from the route active at mount (its group
+  // starts open, the rest start closed) so the sidebar doesn't dump every link on screen at
+  // once. Purely a UI toggle after that; navigating away doesn't auto-collapse a group the
+  // user opened.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(
+    () => new Set(NAV_GROUPS.filter((g) => g.items.some((i) => pathname.startsWith(i.href))).map((g) => g.id))
+  );
   const [isSigningOut, setIsSigningOut] = useState(false);
   // Below 768px the sidebar becomes an off-canvas drawer (see .dash-classic-aside rules
   // in globals.css) triggered by the mobile top bar's hamburger button. Desktop's own
@@ -197,7 +268,10 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
   // The template editor needs its own full viewport below the desktop tier — there's no
   // room for the fixed sidebar chrome alongside the builder's own responsive layout.
   // Above that breakpoint (see .dash-classic-editor-route rules in globals.css), nothing changes.
-  const isEditorRoute = pathname.startsWith("/dashboard/templates/") && pathname !== "/dashboard/templates";
+  // Matches only the editor's own root (/dashboard/templates/<id>), not its "upload" sibling
+  // or any /blog subroutes — those are normal PageContainer pages that still need the sidebar.
+  const editorRouteMatch = pathname.match(/^\/dashboard\/templates\/([^/]+)$/);
+  const isEditorRoute = Boolean(editorRouteMatch && editorRouteMatch[1] !== "upload");
   const rootClassName = isEditorRoute ? "dash-classic-root dash-classic-editor-route" : "dash-classic-root";
 
   const initials = userName
@@ -215,6 +289,15 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
       console.error("Sign out error:", e);
     }
     router.push("/auth/login");
+  }
+
+  function toggleGroup(id: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   const sidebarWidth = collapsed ? 64 : 250;
@@ -416,38 +499,55 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
             </p>
           )}
           <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-            {NAV_ITEMS.map((item) => {
-              const isActive = item.href === "/dashboard"
-                ? pathname === "/dashboard"
-                : pathname.startsWith(item.href);
+            <NavLink item={PINNED_NAV_ITEM} pathname={pathname} collapsed={collapsed} />
+
+            {NAV_GROUPS.map((group) => {
+              const isOpen = collapsed || openGroups.has(group.id);
+              const groupHasActive = group.items.some((i) => pathname.startsWith(i.href));
               return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    title={collapsed ? item.label : undefined}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.75rem",
-                      padding: collapsed ? "0.6rem" : "0.6rem 0.75rem",
-                      borderRadius: 10,
-                      justifyContent: collapsed ? "center" : "flex-start",
-                      fontSize: "0.875rem",
-                      fontWeight: isActive ? 600 : 500,
-                      color: isActive ? "#fff" : "rgba(240,242,255,0.55)",
-                      textDecoration: "none",
-                      background: isActive ? "linear-gradient(90deg, rgba(139,92,246,0.15), transparent)" : "transparent",
-                      borderLeft: isActive && !collapsed ? "3px solid var(--brand)" : "3px solid transparent",
-                      boxShadow: isActive ? "inset 0 1px 0 rgba(255,255,255,0.05)" : "none",
-                      transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      position: "relative",
-                    }}
-                  >
-                    <span style={{ flexShrink: 0 }}>{item.icon}</span>
-                    {!collapsed && <span>{item.label}</span>}
-                  </Link>
+                <li key={group.id} style={{ marginTop: "0.3rem" }}>
+                  {!collapsed && (
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.id)}
+                      aria-expanded={isOpen}
+                      className="dash-classic-nav-group-header"
+                      style={{
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "0.5rem",
+                        padding: "0.4rem 0.5rem",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        fontSize: "0.68rem",
+                        fontWeight: 700,
+                        letterSpacing: "0.09em",
+                        textTransform: "uppercase",
+                        color: groupHasActive ? "rgba(240,242,255,0.5)" : "rgba(240,242,255,0.28)",
+                        transition: "color 0.15s",
+                      }}
+                    >
+                      <span>{group.label}</span>
+                      <span style={{
+                        display: "inline-flex",
+                        transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+                        transition: "transform 0.2s",
+                      }}>
+                        <IconChevronDown />
+                      </span>
+                    </button>
+                  )}
+                  {isOpen && (
+                    <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "0.2rem", marginTop: collapsed ? 0 : "0.1rem" }}>
+                      {group.items.map((item) => (
+                        <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} />
+                      ))}
+                    </ul>
+                  )}
                 </li>
               );
             })}

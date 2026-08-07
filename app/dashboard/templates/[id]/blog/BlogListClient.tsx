@@ -84,12 +84,12 @@ export function BlogListClient({
 
   return (
     <PageContainer>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.5rem" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: "1.5rem" }}>
         <div>
           <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.25rem" }}>Blog</h1>
           <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)" }}>{templateName}</p>
         </div>
-        <div style={{ display: "flex", gap: "0.6rem" }}>
+        <div className="blog-actions-row">
           <Link
             href={`/dashboard/templates/${templateId}/blog/import`}
             style={{

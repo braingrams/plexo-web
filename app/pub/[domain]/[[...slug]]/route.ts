@@ -126,16 +126,28 @@ export async function GET(
   const slugSegments = params.slug ?? [];
 
   // WordPress's "Reading Settings: your homepage displays" toggle — when a site has
-  // turned this on, its root path hands off to the blog listing instead of the
-  // builder's own home page. A redirect (not rendering blog HTML inline here) keeps
-  // this route's job simple — the real rendering lives in app/pub/[domain]/blog/**.
+  // turned this on, its root path serves the blog listing IN PLACE (bare domain stays in
+  // the address bar), not a redirect to /blog. /pub/[domain]/blog/page.tsx is a normal
+  // React Server Component page — nothing this route handler can invoke directly and get
+  // HTML back from, RSC only renders through Next's own page pipeline — so we self-fetch
+  // it through the exact same public URL a visitor would use; middleware rewrites that
+  // request to /pub/{domain}/blog the same way it rewrote this one, and we relay its
+  // response back verbatim as our own. The client's original request/URL never changes.
   if (slugSegments.length === 0) {
     const blogSite = await prisma.blogSite.findUnique({
       where: { templateId: published.templateId },
       select: { enabled: true, showOnHomepage: true },
     });
     if (blogSite?.enabled && blogSite.showOnHomepage) {
-      return NextResponse.redirect(new URL("/blog", request.url));
+      const blogResponse = await fetch(new URL("/blog", request.url));
+      // Relaying a fetch() response's headers verbatim is a known footgun: fetch already
+      // transparently decompresses the body, but leaves the original content-encoding/
+      // content-length headers in place — forwarded as-is, the client tries to decode an
+      // already-decoded body and gets a garbled/truncated page.
+      const headers = new Headers(blogResponse.headers);
+      headers.delete("content-encoding");
+      headers.delete("content-length");
+      return new NextResponse(blogResponse.body, { status: blogResponse.status, headers });
     }
 
     // WordPress's default "ugly" permalink/shortlink (/?p=123) is a root-path request
