@@ -87,6 +87,13 @@ const JSON_LD = {
       logo: `${SITE_URL}/icon`,
     },
     {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      name: "Plexo",
+      url: SITE_URL,
+      publisher: { "@id": `${SITE_URL}/#organization` },
+    },
+    {
       "@type": "SoftwareApplication",
       name: "Plexo",
       url: SITE_URL,
