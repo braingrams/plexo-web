@@ -4,6 +4,7 @@ import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
 import { DomainsClient } from "./domains-client";
 import { headers } from "next/headers";
+import { PageContainer } from "../_components/PageContainer";
 
 export default async function DomainsPage() {
   const reqHeaders = await headers();
@@ -79,13 +80,13 @@ export default async function DomainsPage() {
   }));
 
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 1500, margin: "0 auto" }}>
+    <PageContainer>
       <DomainsClient
         initialDomains={domains}
         landingPages={landingPages}
         plan={user.subscriptionPlan}
         customLimit={user.customDomainLimit}
       />
-    </div>
+    </PageContainer>
   );
 }

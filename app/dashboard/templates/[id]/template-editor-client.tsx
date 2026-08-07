@@ -135,6 +135,80 @@ function IconLayout() {
 	);
 }
 
+function IconCheck() {
+	return (
+		<svg
+			width="13"
+			height="13"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2.4"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<polyline points="20 6 9 17 4 12" />
+		</svg>
+	);
+}
+
+function IconClose() {
+	return (
+		<svg
+			width="14"
+			height="14"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2.2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<line x1="18" y1="6" x2="6" y2="18" />
+			<line x1="6" y1="6" x2="18" y2="18" />
+		</svg>
+	);
+}
+
+function IconWarning() {
+	return (
+		<svg
+			width="13"
+			height="13"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+			<line x1="12" y1="9" x2="12" y2="13" />
+			<line x1="12" y1="17" x2="12.01" y2="17" />
+		</svg>
+	);
+}
+
+function IconRocket() {
+	return (
+		<svg
+			width="16"
+			height="16"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+		>
+			<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+			<path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+			<path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+			<path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+		</svg>
+	);
+}
+
 function EditorHeaderLeft({
 	isEmail,
 	templateName,
@@ -312,9 +386,12 @@ function EditorHeaderRight({
 						fontSize: "0.78rem",
 						color: "#34d399",
 						whiteSpace: "nowrap",
+						display: "inline-flex",
+						alignItems: "center",
+						gap: "0.3rem",
 					}}
 				>
-					✓ {saveMessage}
+					<IconCheck /> {saveMessage}
 				</span>
 			)}
 			{saveError && (
@@ -775,9 +852,12 @@ export function TemplateEditorClient({
 									fontWeight: 800,
 									color: "#f0f2ff",
 									fontFamily: "var(--font-heading)",
+									display: "flex",
+									alignItems: "center",
+									gap: "0.5rem",
 								}}
 							>
-								🚀 Publish Landing Page
+								<IconRocket /> Publish Landing Page
 							</h2>
 							<button
 								onClick={() => setShowPublishModal(false)}
@@ -786,10 +866,11 @@ export function TemplateEditorClient({
 									border: "none",
 									color: "rgba(240,242,255,0.4)",
 									cursor: "pointer",
-									fontSize: "1.1rem",
+									display: "flex",
+									alignItems: "center",
 								}}
 							>
-								✕
+								<IconClose />
 							</button>
 						</div>
 
@@ -963,14 +1044,14 @@ export function TemplateEditorClient({
 							)}
 
 							{modalError && (
-								<p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0 }}>
-									⚠️ {modalError}
+								<p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}>
+									<IconWarning /> {modalError}
 								</p>
 							)}
 
 							{modalSuccess && (
-								<p style={{ fontSize: "0.78rem", color: "#34d399", margin: 0 }}>
-									✓ {modalSuccess}
+								<p style={{ fontSize: "0.78rem", color: "#34d399", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}>
+									<IconCheck /> {modalSuccess}
 								</p>
 							)}
 
@@ -1066,10 +1147,11 @@ export function TemplateEditorClient({
 									border: "none",
 									color: "rgba(240,242,255,0.4)",
 									cursor: "pointer",
-									fontSize: "1.1rem",
+									display: "flex",
+									alignItems: "center",
 								}}
 							>
-								✕
+								<IconClose />
 							</button>
 						</div>
 
@@ -1087,8 +1169,8 @@ export function TemplateEditorClient({
 						</p>
 
 						{convertError && (
-							<p style={{ fontSize: "0.78rem", color: "#f87171", margin: "0 0 1rem" }}>
-								⚠️ {convertError}
+							<p style={{ fontSize: "0.78rem", color: "#f87171", margin: "0 0 1rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+								<IconWarning /> {convertError}
 							</p>
 						)}
 

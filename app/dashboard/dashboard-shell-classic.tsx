@@ -124,6 +124,25 @@ function IconOverview() {
   );
 }
 
+function IconInsights() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v18h18" />
+      <path d="M7 14l4-4 3 3 5-6" />
+    </svg>
+  );
+}
+
+function IconMarketplace() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 8l1.5-4h13L20 8" />
+      <path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8z" />
+      <path d="M9 12a3 3 0 0 0 6 0" />
+    </svg>
+  );
+}
+
 function IconAiMcp() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -137,6 +156,8 @@ function IconAiMcp() {
 const NAV_ICONS: Record<string, React.ReactNode> = {
   "/dashboard": <IconOverview />,
   "/dashboard/templates": <IconTemplates />,
+  "/dashboard/insights": <IconInsights />,
+  "/dashboard/marketplace": <IconMarketplace />,
   "/dashboard/compile": <IconCompile />,
   "/dashboard/sdk": <IconSdk />,
   "/dashboard/domains": <IconDomains />,
@@ -159,10 +180,10 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
   const brandName = orgBranding?.name ?? "Plexo";
   const brandVars: React.CSSProperties = orgBranding?.color
     ? ({
-        "--brand": orgBranding.color,
-        "--brand-deep": darken(orgBranding.color, 0.12),
-        "--brand-glow": toRgba(orgBranding.color, 0.35),
-      } as React.CSSProperties)
+      "--brand": orgBranding.color,
+      "--brand-deep": darken(orgBranding.color, 0.12),
+      "--brand-glow": toRgba(orgBranding.color, 0.35),
+    } as React.CSSProperties)
     : {};
   const pathname = usePathname();
   const router = useRouter();
@@ -196,7 +217,10 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
     router.push("/auth/login");
   }
 
-  const sidebarWidth = collapsed ? 64 : 240;
+  const sidebarWidth = collapsed ? 64 : 250;
+  // Extra breathing room between the fixed sidebar and the main content column —
+  // without it, page content butts directly against the sidebar's right edge.
+  const contentGutter = 24;
 
   // Close the mobile drawer whenever the route changes (navigating counts as "done").
   useEffect(() => {
@@ -252,12 +276,17 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
           width: sidebarWidth,
           display: "flex",
           flexDirection: "column",
-          background: "rgba(13,15,26,0.98)",
-          borderRight: "1px solid rgba(255,255,255,0.07)",
-          backdropFilter: "blur(20px)",
+          background: "rgba(10, 11, 16, 0.55)",
+          borderRight: "1px solid rgba(255,255,255,0.04)",
+          backdropFilter: "blur(30px)",
           WebkitBackdropFilter: "blur(20px)",
           transition: "width 0.25s cubic-bezier(0.4,0,0.2,1)",
           overflow: "hidden",
+          // Keeps content clear of the notch/home-indicator in standalone/PWA mode
+          // (see viewportFit:"cover" in app/layout.tsx) while the background above
+          // still paints all the way to the true screen edge.
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
         }}
         aria-label="Dashboard navigation"
       >
@@ -405,11 +434,12 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
                       justifyContent: collapsed ? "center" : "flex-start",
                       fontSize: "0.875rem",
                       fontWeight: isActive ? 600 : 500,
-                      color: isActive ? "var(--brand)" : "rgba(240,242,255,0.55)",
+                      color: isActive ? "#fff" : "rgba(240,242,255,0.55)",
                       textDecoration: "none",
-                      background: isActive ? "var(--brand-subtle)" : "transparent",
-                      borderLeft: isActive && !collapsed ? "2px solid var(--brand)" : "2px solid transparent",
-                      transition: "background 0.15s, color 0.15s",
+                      background: isActive ? "linear-gradient(90deg, rgba(139,92,246,0.15), transparent)" : "transparent",
+                      borderLeft: isActive && !collapsed ? "3px solid var(--brand)" : "3px solid transparent",
+                      boxShadow: isActive ? "inset 0 1px 0 rgba(255,255,255,0.05)" : "none",
+                      transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       position: "relative",
@@ -435,9 +465,9 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
             justifyContent: collapsed ? "center" : "space-between",
             gap: "0.4rem", marginBottom: "0.5rem",
           }}>
-            {!collapsed && <OrgSwitcher organizationName={organizationName} />}
+            {!collapsed && <OrgSwitcher organizationName={organizationName} anchor="left" />}
             <FeedbackButton />
-            <NotificationBell />
+            <NotificationBell anchor="left" />
           </div>
           {!collapsed && (
             <div style={{
@@ -502,7 +532,8 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
           >
             {isSigningOut ? (
               <>
-                <style dangerouslySetInnerHTML={{ __html: `
+                <style dangerouslySetInnerHTML={{
+                  __html: `
                   @keyframes logout-spin {
                     to { transform: rotate(360deg); }
                   }
@@ -528,8 +559,8 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
         className="dash-classic-main"
         style={{
           flex: 1,
-          marginLeft: `calc(${sidebarWidth}px + max(0px, calc((100vw - 1500px) / 2)))`,
-          maxWidth: `calc(1500px - ${sidebarWidth}px)`,
+          marginLeft: `calc(${sidebarWidth + contentGutter}px + max(0px, calc((100vw - 1500px) / 2)))`,
+          maxWidth: `calc(1500px - ${sidebarWidth + contentGutter}px)`,
           minHeight: "100vh",
           transition: "margin-left 0.25s cubic-bezier(0.4,0,0.2,1)",
           background: "var(--bg)",

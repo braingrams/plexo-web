@@ -12,6 +12,13 @@ import "./globals.css";
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Without this, iOS in standalone/PWA mode (see app/manifest.ts's display:"standalone")
+  // leaves the notch/status-bar and home-indicator areas outside the page's own viewport,
+  // so it paints them with its own black background instead of ours — showing as a margin
+  // around fixed-position chrome like the dashboard sidebar. "cover" extends our viewport
+  // (and its background) under those areas; safe-area-inset padding below keeps content
+  // clear of them without losing the edge-to-edge background.
+  viewportFit: "cover",
 };
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL?.startsWith("http")

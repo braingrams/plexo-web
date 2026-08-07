@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogTheme";
+import { PageContainer } from "../../../../_components/PageContainer";
 
 type Category = { id: string; name: string; slug: string };
 type Tag = { id: string; name: string; slug: string };
@@ -201,7 +202,7 @@ export function BlogSettingsClient({
   }
 
   return (
-    <div style={{ padding: "2rem", maxWidth: 720, margin: "0 auto" }}>
+    <PageContainer>
       <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "1.5rem" }}>Blog Settings</h1>
 
       <div style={PANEL}>
@@ -340,6 +341,6 @@ export function BlogSettingsClient({
         <label style={FIELD_LABEL}>Authors</label>
         <TaxonomyList templateId={templateId} kind="authors" items={authors} onDeleted={(id) => setAuthors((prev) => prev.filter((a) => a.id !== id))} />
       </div>
-    </div>
+    </PageContainer>
   );
 }

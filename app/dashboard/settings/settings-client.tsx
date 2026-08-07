@@ -111,6 +111,14 @@ function IconChevronDown() {
   );
 }
 
+function IconArrowRight() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+    </svg>
+  );
+}
+
 function CustomSelect({
   value,
   options,
@@ -1083,9 +1091,9 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
                     </div>
                     <a
                       href="/dashboard/integrations"
-                      style={{ fontSize: "0.75rem", color: "var(--brand)", textDecoration: "underline", display: "inline-block" }}
+                      style={{ fontSize: "0.75rem", color: "var(--brand)", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
                     >
-                      View the full webhook integration guide (payload shapes, signature verification, endpoints to implement) →
+                      View the full webhook integration guide (payload shapes, signature verification, endpoints to implement) <IconArrowRight />
                     </a>
                     </>
                     )}

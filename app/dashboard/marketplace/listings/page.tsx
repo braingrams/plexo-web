@@ -7,6 +7,7 @@ import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
 import { Card } from "@/app/dashboard/_components/Card";
+import { PageContainer } from "@/app/dashboard/_components/PageContainer";
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   PENDING_REVIEW: { label: "Pending review", color: "#f59e0b" },
@@ -42,7 +43,7 @@ export default async function MyListingsPage() {
   });
 
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 900, margin: "0 auto" }}>
+    <PageContainer>
       <PageHeader
         eyebrow="Marketplace"
         title="My listings"
@@ -99,6 +100,6 @@ export default async function MyListingsPage() {
           })}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

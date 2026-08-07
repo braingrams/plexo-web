@@ -282,7 +282,7 @@ export default function CompileClientPage() {
   );
 
   return (
-    <div style={{ fontFamily: "Inter, sans-serif", color: "#f1f5f9" }} className="flex flex-col gap-4 sm:gap-6 max-w-7xl mx-auto py-2 sm:py-4">
+    <div style={{ fontFamily: "Inter, sans-serif", color: "#f1f5f9" }} className="flex flex-col gap-4 sm:gap-6">
       {/* Title */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">Compile Studio</h1>

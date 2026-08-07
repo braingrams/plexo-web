@@ -49,6 +49,32 @@ function IconPlus() {
   );
 }
 
+function IconArrowLeft() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 12H5M12 5l-7 7 7 7" />
+    </svg>
+  );
+}
+
+function IconWarning() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -317,8 +343,8 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
         padding: "0.85rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
-          <Link href="/dashboard/templates" style={{ color: "rgba(240,242,255,0.4)", textDecoration: "none", fontSize: "0.8rem" }}>
-            ← Templates
+          <Link href="/dashboard/templates" style={{ color: "rgba(240,242,255,0.4)", textDecoration: "none", fontSize: "0.8rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+            <IconArrowLeft /> Templates
           </Link>
           <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>{templateName}</span>
           <span style={{
@@ -356,8 +382,8 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-          {saveError && <span style={{ color: "#f87171", fontSize: "0.78rem" }}>⚠️ {saveError}</span>}
-          {savedFlash && <span style={{ color: "#34d399", fontSize: "0.78rem" }}>✓ Saved</span>}
+          {saveError && <span style={{ color: "#f87171", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}><IconWarning /> {saveError}</span>}
+          {savedFlash && <span style={{ color: "#34d399", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}><IconCheck /> Saved</span>}
           <input
             ref={replaceInputRef}
             type="file"
@@ -550,7 +576,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
                 Any domain already linked to this site stays linked — it'll just serve the new content. This cannot be undone.
               </p>
             </div>
-            {replaceError && <p style={{ fontSize: "0.8rem", color: "#f87171", margin: 0 }}>⚠️ {replaceError}</p>}
+            {replaceError && <p style={{ fontSize: "0.8rem", color: "#f87171", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}><IconWarning /> {replaceError}</p>}
             <div style={{ display: "flex", gap: "0.75rem" }}>
               <button
                 type="button"
@@ -652,7 +678,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
                 background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "#f0f2ff",
               }}
             />
-            {addFileError && <p style={{ fontSize: "0.8rem", color: "#f87171", margin: 0 }}>⚠️ {addFileError}</p>}
+            {addFileError && <p style={{ fontSize: "0.8rem", color: "#f87171", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}><IconWarning /> {addFileError}</p>}
             <div style={{ display: "flex", gap: "0.75rem" }}>
               <button
                 type="button"

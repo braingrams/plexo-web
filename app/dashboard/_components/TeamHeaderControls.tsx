@@ -1,36 +1,105 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { authClient } from "@/lib/auth-client";
 
-const DROPDOWN_STYLE: React.CSSProperties = {
-  position: "absolute",
-  top: "calc(100% + 0.6rem)",
-  right: 0,
-  width: 280,
-  background: "rgba(13,15,26,0.98)",
-  border: "1px solid rgba(255,255,255,0.09)",
-  borderRadius: 14,
-  boxShadow: "0 24px 60px -12px rgba(0,0,0,0.6)",
-  backdropFilter: "blur(20px)",
-  WebkitBackdropFilter: "blur(20px)",
-  padding: "0.5rem",
-  zIndex: 60,
-};
+/** Visual chrome shared by every header dropdown — positioning is applied separately
+ * (see useAnchoredDropdown) since these are portaled to <body>, not absolutely
+ * positioned relative to their trigger. */
+function dropdownLookStyle(width: number): React.CSSProperties {
+  return {
+    width,
+    background: "rgba(13,15,26,0.98)",
+    border: "1px solid rgba(255,255,255,0.09)",
+    borderRadius: 14,
+    boxShadow: "0 24px 60px -12px rgba(0,0,0,0.6)",
+    backdropFilter: "blur(20px)",
+    WebkitBackdropFilter: "blur(20px)",
+    padding: "0.5rem",
+  };
+}
 
-function useOutsideClick(onOutside: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
+/**
+ * Positions a dropdown via a portal to document.body instead of `position: absolute`
+ * inside the trigger. The classic sidebar clips overflow (`overflow: hidden`) and also
+ * sets `backdrop-filter` on the sidebar itself, which creates a new containing block for
+ * `position: fixed` descendants too — so nothing short of a portal actually escapes it;
+ * a dropdown positioned relative to a sidebar trigger would get clipped at the sidebar's
+ * own edge no matter which CSS position mode it used.
+ *
+ * `anchor` picks which side of the trigger the popup hangs from. "right" suits triggers
+ * near the right edge of the screen with room to spare on their left (the modern shell's
+ * top-right topbar). "left" suits Classic's sidebar triggers, which sit near the left
+ * edge with a narrow sidebar and the whole rest of the viewport to their right.
+ */
+type DropdownCoords = { top?: number; bottom?: number; left?: number; right?: number };
+
+function coordsEqual(a: DropdownCoords | null, b: DropdownCoords): boolean {
+  return !!a && a.top === b.top && a.bottom === b.bottom && a.left === b.left && a.right === b.right;
+}
+
+function useAnchoredDropdown(anchor: "left" | "right") {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState<DropdownCoords | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Decides above-vs-below using the popover's actual rendered height once it has one
+  // (0 on the very first call, right when it opens, before anything's painted — that's
+  // fine, it just means this defaults to "below" until the layout effect below remeasures
+  // against real content).
+  const computeCoords = useCallback((): DropdownCoords | null => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const horizontal = anchor === "left" ? { left: rect.left } : { right: window.innerWidth - rect.right };
+    const popoverHeight = popoverRef.current?.getBoundingClientRect().height ?? 0;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const flipUp = popoverHeight > 0 && spaceBelow < popoverHeight + 16 && spaceAbove > spaceBelow;
+    return flipUp
+      ? { bottom: window.innerHeight - rect.top + 10, ...horizontal }
+      : { top: rect.bottom + 10, ...horizontal };
+  }, [anchor]);
+
+  useEffect(() => {
+    if (!open) return;
+    setCoords(computeCoords());
+    function handle() {
+      setCoords(computeCoords());
+    }
+    window.addEventListener("scroll", handle, true);
+    window.addEventListener("resize", handle);
+    return () => {
+      window.removeEventListener("scroll", handle, true);
+      window.removeEventListener("resize", handle);
+    };
+  }, [open, computeCoords]);
+
+  // Runs once the popover is actually in the DOM (after the effect above sets an initial
+  // "below" guess) so it can remeasure against real content and flip above the trigger if
+  // it doesn't fit — settles after one extra pass since the flip decision, and therefore
+  // `coords`, stops changing once it's already correct.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const next = computeCoords();
+    if (next) setCoords((prev) => (coordsEqual(prev, next) ? prev : next));
+  }, [open, coords, computeCoords]);
+
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onOutside();
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target) || popoverRef.current?.contains(target)) return;
+      setOpen(false);
     }
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [onOutside]);
-  return ref;
+  }, []);
+
+  return { open, setOpen, triggerRef, popoverRef, coords };
 }
 
 /**
@@ -72,10 +141,9 @@ export function useOrgList() {
   return { orgs, loaded, load, switchTo };
 }
 
-export function OrgSwitcher({ organizationName }: { organizationName: string }) {
-  const [open, setOpen] = useState(false);
+export function OrgSwitcher({ organizationName, anchor = "right" }: { organizationName: string; anchor?: "left" | "right" }) {
   const { orgs, loaded, load, switchTo: switchToOrg } = useOrgList();
-  const ref = useOutsideClick(() => setOpen(false));
+  const { open, setOpen, triggerRef, popoverRef, coords } = useAnchoredDropdown(anchor);
 
   useEffect(() => {
     if (open) load();
@@ -87,7 +155,7 @@ export function OrgSwitcher({ organizationName }: { organizationName: string }) 
   }
 
   return (
-    <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
+    <div ref={triggerRef} style={{ position: "relative", flexShrink: 0 }}>
       <button
         onClick={() => setOpen((v) => !v)}
         style={{
@@ -102,8 +170,8 @@ export function OrgSwitcher({ organizationName }: { organizationName: string }) 
         <span style={{ opacity: 0.5, fontSize: "0.65rem" }}>▾</span>
       </button>
 
-      {open && (
-        <div style={DROPDOWN_STYLE}>
+      {open && coords && createPortal(
+        <div ref={popoverRef} style={{ position: "fixed", zIndex: 1000, ...coords, ...dropdownLookStyle(280) }}>
           <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.4)", padding: "0.4rem 0.6rem" }}>
             Switch organization
           </p>
@@ -135,7 +203,8 @@ export function OrgSwitcher({ organizationName }: { organizationName: string }) 
           >
             Manage team →
           </Link>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
@@ -158,12 +227,11 @@ const NOTIFICATION_LABEL: Record<string, string> = {
   INVITE_ACCEPTED: "accepted your invite",
 };
 
-export function NotificationBell() {
+export function NotificationBell({ anchor = "right" }: { anchor?: "left" | "right" } = {}) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const ref = useOutsideClick(() => setOpen(false));
+  const { open, setOpen, triggerRef, popoverRef, coords } = useAnchoredDropdown(anchor);
 
   async function load() {
     const res = await fetch("/api/v1/notifications").then((r) => r.json()).catch(() => null);
@@ -204,7 +272,7 @@ export function NotificationBell() {
   }
 
   return (
-    <div ref={ref} style={{ position: "relative", flexShrink: 0 }}>
+    <div ref={triggerRef} style={{ position: "relative", flexShrink: 0 }}>
       <button
         onClick={() => setOpen((v) => !v)}
         aria-label="Notifications"
@@ -228,8 +296,11 @@ export function NotificationBell() {
         )}
       </button>
 
-      {open && (
-        <div style={{ ...DROPDOWN_STYLE, width: 320, maxHeight: 360, overflowY: "auto" }}>
+      {open && coords && createPortal(
+        <div
+          ref={popoverRef}
+          style={{ position: "fixed", zIndex: 1000, maxHeight: 360, overflowY: "auto", ...coords, ...dropdownLookStyle(320) }}
+        >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.3rem 0.6rem 0.5rem" }}>
             <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#f0f2ff" }}>Notifications</span>
             {unreadCount > 0 && (
@@ -263,7 +334,8 @@ export function NotificationBell() {
               </span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

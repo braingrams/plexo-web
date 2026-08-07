@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "../_components/PageHeader";
+import { PageContainer } from "../_components/PageContainer";
 import { NewFromMarketplace } from "./NewFromMarketplace";
 import { TemplateCard, IconMail, IconLayout, type TemplateKind, type TemplateSummary } from "./TemplateCard";
 
@@ -147,7 +148,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
   }
 
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 1500, margin: "0 auto" }}>
+    <PageContainer>
       <PageHeader
         eyebrow="Workspace"
         title="Your Templates"
@@ -645,6 +646,6 @@ export function TemplatesClient({ initialTemplates }: Props) {
           }
         }
       `}</style>
-    </div>
+    </PageContainer>
   );
 }

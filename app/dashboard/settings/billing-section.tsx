@@ -5,6 +5,14 @@ import { useState } from "react";
 
 type LedgerEntryType = "MONTHLY_GRANT" | "TOPUP_PURCHASE" | "AI_USAGE" | "REFUND" | "ADJUSTMENT";
 
+function IconSparkle() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />
+    </svg>
+  );
+}
+
 type LedgerEntry = {
   id: string;
   type: LedgerEntryType;
@@ -214,8 +222,8 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
               </button>
             )}
             {plan === "ULTRA" && (
-              <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#34d399", padding: "0.5rem 0.9rem", borderRadius: 9, background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)" }}>
-                Current Plan: ULTRA ✨
+              <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#34d399", padding: "0.5rem 0.9rem", borderRadius: 9, background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                Current Plan: ULTRA <IconSparkle />
               </span>
             )}
             <button

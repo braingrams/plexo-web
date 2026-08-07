@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BlogRichTextEditor } from "./BlogRichTextEditor";
 import { computeSeoChecklist } from "./seoChecklist";
+import { PageContainer } from "../../../_components/PageContainer";
 
 type Status = "DRAFT" | "SCHEDULED" | "PUBLISHED" | "ARCHIVED";
 
@@ -36,6 +37,24 @@ const PANEL: React.CSSProperties = { border: "1px solid rgba(255,255,255,0.08)",
 
 function slugifyClient(input: string): string {
   return input.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").replace(/-{2,}/g, "-");
+}
+
+function IconCheck() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function IconWarning() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
 }
 
 export function BlogPostEditor({
@@ -279,7 +298,7 @@ export function BlogPostEditor({
   const permalink = siteDomain ? `${siteDomain}/blog/${slug || "…"}` : `/blog/${slug || "…"}`;
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "1.5rem", padding: "2rem", maxWidth: 1200, margin: "0 auto" }}>
+    <PageContainer style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "1.5rem" }}>
       <div>
         <textarea
           value={title}
@@ -373,7 +392,7 @@ export function BlogPostEditor({
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {computeSeoChecklist({ title, metaTitle, metaDescription, excerpt, featuredImageUrl, featuredImageAlt, contentHtml }).map((item, i) => (
               <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "0.8rem", marginBottom: "0.5rem", color: item.level === "good" ? "#4ade80" : "#f59e0b" }}>
-                <span>{item.level === "good" ? "✓" : "⚠"}</span>
+                <span style={{ display: "inline-flex" }}>{item.level === "good" ? <IconCheck /> : <IconWarning />}</span>
                 <span style={{ color: "rgba(240,242,255,0.75)" }}>{item.label}</span>
               </li>
             ))}
@@ -534,6 +553,6 @@ export function BlogPostEditor({
           </div>
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }

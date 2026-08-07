@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { PageContainer } from "../../../_components/PageContainer";
 
 type PostRow = {
   id: string;
@@ -82,7 +83,7 @@ export function BlogListClient({
   }
 
   return (
-    <div style={{ padding: "2rem", maxWidth: 1000, margin: "0 auto" }}>
+    <PageContainer>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.5rem" }}>
         <div>
           <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.25rem" }}>Blog</h1>
@@ -217,6 +218,6 @@ export function BlogListClient({
           ))}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Card } from "../_components/Card";
 import { PageHeader } from "../_components/PageHeader";
+import { PageContainer } from "../_components/PageContainer";
 import { useLayoutMode, type LayoutMode } from "../layout-mode-context";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -50,6 +51,14 @@ function IconCalendar() {
       <rect x="3" y="4" width="18" height="18" rx="2"/>
       <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
       <line x1="3" y1="10" x2="21" y2="10"/>
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
     </svg>
   );
 }
@@ -104,7 +113,7 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
   }
 
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 1500, margin: "0 auto" }}>
+    <PageContainer>
       <PageHeader
         eyebrow="Account"
         title="Your Profile"
@@ -259,8 +268,8 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
               </p>
             )}
             {notice && (
-              <p style={{ fontSize: "0.82rem", color: "#34d399" }}>
-                ✓ {notice}
+              <p style={{ fontSize: "0.82rem", color: "#34d399", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                <IconCheck /> {notice}
               </p>
             )}
 
@@ -301,7 +310,7 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
 
       {/* Dashboard layout preference */}
       <LayoutModeSection />
-    </div>
+    </PageContainer>
   );
 }
 
@@ -360,7 +369,7 @@ function LayoutModeSection() {
                       fontSize: "0.7rem", fontWeight: 700,
                     }}
                   >
-                    ✓
+                    <IconCheck />
                   </span>
                 )}
               </div>

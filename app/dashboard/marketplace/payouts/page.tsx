@@ -5,6 +5,7 @@ import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
 import { Card } from "@/app/dashboard/_components/Card";
+import { PageContainer } from "@/app/dashboard/_components/PageContainer";
 import { WithdrawalForm } from "./WithdrawalForm";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -44,7 +45,7 @@ export default async function PayoutsPage() {
   const keepPercent = ((10_000 - feeBps) / 100).toFixed(feeBps % 100 === 0 ? 0 : 2);
 
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 900, margin: "0 auto" }}>
+    <PageContainer>
       <PageHeader eyebrow="Marketplace" title="Payouts" subtitle="Your marketplace earnings and withdrawal history." />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1.5rem", marginBottom: "2rem" }}>
@@ -117,6 +118,6 @@ export default async function PayoutsPage() {
           ))}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

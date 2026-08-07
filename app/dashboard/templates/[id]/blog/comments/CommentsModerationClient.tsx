@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { PageContainer } from "../../../../_components/PageContainer";
 
 type Status = "PENDING" | "APPROVED" | "SPAM" | "REJECTED";
 
@@ -67,7 +68,7 @@ export function CommentsModerationClient({ templateId, initialComments }: { temp
   const counts = comments.reduce<Record<string, number>>((acc, c) => { acc[c.status] = (acc[c.status] ?? 0) + 1; return acc; }, {});
 
   return (
-    <div style={{ padding: "2rem", maxWidth: 900, margin: "0 auto" }}>
+    <PageContainer>
       <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "1.5rem" }}>Comments</h1>
 
       <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
@@ -137,6 +138,6 @@ export function CommentsModerationClient({ templateId, initialComments }: { temp
           })}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

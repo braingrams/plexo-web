@@ -1,27 +1,22 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { X, Monitor, Tablet, Smartphone, ExternalLink, Loader2 } from "lucide-react";
 
-function IconClose() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
-}
+type DeviceMode = "desktop" | "tablet" | "mobile";
 
-/**
- * Full-screen preview modal for a marketplace listing — fetches compiledHtml on demand
- * from /api/v1/marketplace/templates/:id/preview and renders it in a decorative
- * (non-interactive) sandboxed iframe, same isolation as the dashboard's own template
- * thumbnails (app/dashboard/templates/TemplateCard.tsx): no allow-scripts / allow-same-
- * origin, since compiledHtml can be raw, unsanitized RAW_UPLOAD HTML.
- */
-export function TemplatePreviewModal({ templateId, onClose }: { templateId: string; onClose: () => void }) {
+export function TemplatePreviewModal({
+  templateId,
+  onClose,
+}: {
+  templateId: string;
+  onClose: () => void;
+}) {
   const [html, setHtml] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [device, setDevice] = useState<DeviceMode>("desktop");
 
   useEffect(() => {
     let cancelled = false;
@@ -53,55 +48,124 @@ export function TemplatePreviewModal({ templateId, onClose }: { templateId: stri
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
+  const deviceWidths: Record<DeviceMode, string> = {
+    desktop: "100%",
+    tablet: "768px",
+    mobile: "375px",
+  };
+
   return (
     <div
       onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 9999,
-        display: "flex", flexDirection: "column", padding: "3vh 4vw",
-      }}
+      className="fixed inset-0 z-[9999] bg-[var(--bg)]/80 backdrop-blur-md flex flex-col p-4 md:p-6 animate-in fade-in duration-200"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
-          display: "flex", flexDirection: "column", flex: 1,
-          background: "#0f1422", border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 16, overflow: "hidden", boxShadow: "0 30px 100px rgba(0,0,0,0.6)",
-        }}
+        className="flex flex-col flex-1 max-w-7xl mx-auto w-full bg-[var(--bg-1)] border border-[var(--surface-border)] rounded-2xl overflow-hidden shadow-2xl"
       >
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "0.85rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.08)",
-        }}>
-          <span style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.7)" }}>
-            {name ? <>Previewing <strong style={{ color: "#f0f2ff" }}>{name}</strong></> : "Loading preview…"}
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close preview"
-            style={{ background: "none", border: "none", color: "rgba(240,242,255,0.6)", cursor: "pointer", padding: "0.25rem" }}
-          >
-            <IconClose />
-          </button>
+        {/* Modal Top Control Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-[var(--bg-2)] border-b border-[var(--surface-border)]">
+          {/* Template Info */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-rose-500/80" />
+              <div className="w-3 h-3 rounded-full bg-amber-500/80" />
+              <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+            </div>
+            <span className="text-xs font-semibold text-[var(--text-muted)]">
+              {name ? (
+                <>
+                  Previewing <strong className="text-[var(--text-main)] font-bold">{name}</strong>
+                </>
+              ) : (
+                "Loading template preview…"
+              )}
+            </span>
+          </div>
+
+          {/* Device Switcher Controls */}
+          <div className="flex items-center gap-1 bg-[var(--surface)] p-1 rounded-xl border border-[var(--surface-border)]">
+            <button
+              type="button"
+              onClick={() => setDevice("desktop")}
+              title="Desktop View"
+              className={`p-1.5 rounded-lg text-xs font-medium transition-all ${
+                device === "desktop"
+                  ? "bg-[var(--brand)] text-white shadow-sm"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              }`}
+            >
+              <Monitor className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDevice("tablet")}
+              title="Tablet View"
+              className={`p-1.5 rounded-lg text-xs font-medium transition-all ${
+                device === "tablet"
+                  ? "bg-[var(--brand)] text-white shadow-sm"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              }`}
+            >
+              <Tablet className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDevice("mobile")}
+              title="Mobile View"
+              className={`p-1.5 rounded-lg text-xs font-medium transition-all ${
+                device === "mobile"
+                  ? "bg-[var(--brand)] text-white shadow-sm"
+                  : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
+              }`}
+            >
+              <Smartphone className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Right Header Actions */}
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/marketplace/${templateId}`}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[var(--brand)] text-xs font-semibold text-white hover:opacity-90 transition-opacity"
+            >
+              Use Template
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close preview"
+              className="p-1.5 rounded-xl text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--surface)] transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        <div style={{ flex: 1, minHeight: 0, position: "relative", background: "#fff" }}>
+        {/* Viewport Frame Container */}
+        <div className="flex-1 min-h-0 relative bg-[var(--bg)] flex items-center justify-center p-4 overflow-hidden">
           {error ? (
-            <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", color: "#f87171", background: "#0f1422", fontSize: "0.85rem" }}>
-              {error}
+            <div className="flex flex-col items-center justify-center gap-2 text-rose-400 text-sm">
+              <p>{error}</p>
             </div>
           ) : html === null ? (
-            <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "#0f1422", color: "rgba(240,242,255,0.4)", fontSize: "0.85rem" }}>
-              Loading preview…
+            <div className="flex flex-col items-center justify-center gap-3 text-[var(--text-muted)] text-sm">
+              <Loader2 className="w-6 h-6 animate-spin text-[var(--brand)]" />
+              <span>Rendering template preview...</span>
             </div>
           ) : (
-            <iframe
-              title={`Preview ${name ?? ""}`}
-              srcDoc={html}
-              sandbox=""
-              style={{ width: "100%", height: "100%", border: "none" }}
-            />
+            <div
+              style={{ width: deviceWidths[device] }}
+              className="h-full transition-all duration-300 ease-out bg-white rounded-xl shadow-2xl overflow-hidden border border-[var(--surface-border)]"
+            >
+              <iframe
+                title={`Preview ${name ?? ""}`}
+                srcDoc={html}
+                sandbox=""
+                className="w-full h-full border-none"
+              />
+            </div>
           )}
         </div>
       </div>

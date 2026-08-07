@@ -6,6 +6,7 @@ import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
 import { canWhiteLabel, getOrganizationOwnerPlan } from "@/lib/subscription";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
+import { PageContainer } from "@/app/dashboard/_components/PageContainer";
 import { BrandingForm } from "./branding-form";
 
 export default async function BrandingSettingsPage() {
@@ -29,7 +30,7 @@ export default async function BrandingSettingsPage() {
   ]);
 
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 900, margin: "0 auto" }}>
+    <PageContainer>
       <PageHeader
         eyebrow="Organization"
         title="Branding"
@@ -44,6 +45,6 @@ export default async function BrandingSettingsPage() {
         initialLogo={org.logo}
         initialBrandColor={org.brandColor}
       />
-    </div>
+    </PageContainer>
   );
 }

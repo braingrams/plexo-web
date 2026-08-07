@@ -3,14 +3,9 @@ import { TemplateKind } from "@prisma/client";
 
 import { listMarketplaceTemplates } from "@/lib/marketplace";
 import { MarketplaceFilters } from "../../marketplace/MarketplaceFilters";
-import { TemplateCard } from "../../marketplace/TemplateCard";
+import { MarketplaceRowExpandGrid } from "../../marketplace/MarketplaceRowExpandGrid";
+import { PageContainer } from "../_components/PageContainer";
 
-/**
- * In-app mirror of the public app/marketplace browse page — same data/components, just
- * rendered inside the dashboard shell so a logged-in user can discover templates without
- * leaving the app. Clicking a template still lands on the standalone /marketplace/[id]
- * page, which already owns the full buy/claim/use flow (PurchaseAction).
- */
 export default async function DashboardMarketplacePage({
   searchParams,
 }: {
@@ -32,15 +27,24 @@ export default async function DashboardMarketplacePage({
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+  // Category counts map
+  const categoryCounts = templates.reduce((acc, t) => {
+    if (t.category) {
+      acc[t.category] = (acc[t.category] || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<string, number>);
+
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 1200, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", marginBottom: "2rem" }}>
+    <PageContainer>
+      {/* Header Bar */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", marginBottom: "2rem" }}>
         <div>
-          <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff" }}>
-            Template marketplace
+          <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.75rem", fontWeight: 800, color: "var(--text-main)" }}>
+            Template Marketplace
           </h1>
-          <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.5)", marginTop: "0.25rem" }}>
-            {total.toLocaleString()} template{total === 1 ? "" : "s"} — free and premium, ready to publish.
+          <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
+            Explore ready-made email and landing page templates. Hover any template card to stretch it full-width within its row.
           </p>
         </div>
         <div style={{ display: "flex", gap: "0.6rem", flexShrink: 0 }}>
@@ -48,9 +52,9 @@ export default async function DashboardMarketplacePage({
             href="/dashboard/marketplace/listings"
             style={{
               display: "inline-flex", alignItems: "center", padding: "0.6rem 1.1rem",
-              borderRadius: 9, fontWeight: 650, fontSize: "0.82rem",
-              border: "1px solid rgba(255,255,255,0.1)", color: "rgba(240,242,255,0.75)",
-              textDecoration: "none",
+              borderRadius: 10, fontWeight: 600, fontSize: "0.82rem",
+              border: "1px solid var(--surface-border)", color: "var(--text-main)",
+              background: "var(--surface)", textDecoration: "none",
             }}
           >
             My listings
@@ -59,9 +63,9 @@ export default async function DashboardMarketplacePage({
             href="/dashboard/marketplace/payouts"
             style={{
               display: "inline-flex", alignItems: "center", padding: "0.6rem 1.1rem",
-              borderRadius: 9, fontWeight: 650, fontSize: "0.82rem",
-              border: "1px solid rgba(255,255,255,0.1)", color: "rgba(240,242,255,0.75)",
-              textDecoration: "none",
+              borderRadius: 10, fontWeight: 600, fontSize: "0.82rem",
+              border: "1px solid var(--surface-border)", color: "var(--text-main)",
+              background: "var(--surface)", textDecoration: "none",
             }}
           >
             Payouts
@@ -70,9 +74,9 @@ export default async function DashboardMarketplacePage({
             href="/dashboard/marketplace/sell"
             style={{
               display: "inline-flex", alignItems: "center", padding: "0.6rem 1.1rem",
-              borderRadius: 9, fontWeight: 700, fontSize: "0.82rem",
-              background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-              color: "#fff", textDecoration: "none",
+              borderRadius: 10, fontWeight: 700, fontSize: "0.82rem",
+              background: "var(--brand)", color: "#fff", textDecoration: "none",
+              boxShadow: "0 4px 12px var(--brand-glow)",
             }}
           >
             Sell a template
@@ -80,25 +84,28 @@ export default async function DashboardMarketplacePage({
         </div>
       </div>
 
-      <MarketplaceFilters
-        categories={categories}
-        current={{ category: sp.category, kind: sp.kind, free: sp.free, q: sp.q, sort }}
-      />
-
-      <div className="templates-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1.25rem", marginTop: "1.5rem" }}>
-        {templates.map((t) => (
-          <TemplateCard key={t.id} template={t} />
-        ))}
+      {/* Filter Controls Panel */}
+      <div style={{ marginBottom: "2rem" }}>
+        <MarketplaceFilters
+          categories={categories}
+          categoryCounts={categoryCounts}
+          totalCount={total}
+          current={{ category: sp.category, kind: sp.kind, free: sp.free, q: sp.q, sort }}
+        />
       </div>
 
-      {templates.length === 0 && (
-        <div style={{ textAlign: "center", color: "rgba(240,242,255,0.4)", padding: "5rem 0", fontSize: "0.875rem" }}>
+      {/* Row-Chunked Expandable Grid */}
+      {templates.length > 0 ? (
+        <MarketplaceRowExpandGrid templates={templates} />
+      ) : (
+        <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "5rem 0", fontSize: "0.875rem" }}>
           No templates match those filters.
         </div>
       )}
 
+      {/* Pagination Bar */}
       {totalPages > 1 && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", marginTop: "2.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", marginTop: "3rem" }}>
           {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => {
             const params = new URLSearchParams({
               ...(sp.category ? { category: sp.category } : {}),
@@ -113,11 +120,14 @@ export default async function DashboardMarketplacePage({
                 key={p}
                 href={`/dashboard/marketplace?${params.toString()}`}
                 style={{
-                  borderRadius: 8,
-                  padding: "0.4rem 0.9rem",
+                  borderRadius: 10,
+                  padding: "0.5rem 1rem",
                   fontSize: "0.85rem",
-                  background: p === page ? "var(--brand)" : "rgba(255,255,255,0.04)",
-                  color: p === page ? "#fff" : "rgba(240,242,255,0.5)",
+                  fontWeight: 600,
+                  background: p === page ? "var(--brand)" : "var(--surface)",
+                  color: p === page ? "#fff" : "var(--text-muted)",
+                  border: "1px solid var(--surface-border)",
+                  textDecoration: "none",
                 }}
               >
                 {p}
@@ -126,6 +136,6 @@ export default async function DashboardMarketplacePage({
           })}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

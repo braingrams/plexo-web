@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRef } from "react";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, Sparkles, Mail, Globe } from "lucide-react";
 import { Reveal, gsap, useGSAP, useReducedMotion } from "@/app/scroll-fx";
 
 export function V2Hero({ isDark }: { isDark: boolean }) {
@@ -71,7 +71,7 @@ export function V2Hero({ isDark }: { isDark: boolean }) {
               <div className="flex items-center justify-between text-[11px] font-mono text-purple-300">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-purple-400" />
-                  ✉️ email-template.mjml
+                  <Mail className="w-3 h-3" /> email-template.mjml
                 </span>
                 <span className="text-white/60">MJML 4.0</span>
               </div>
@@ -84,7 +84,7 @@ export function V2Hero({ isDark }: { isDark: boolean }) {
               <div className="flex items-center justify-between text-[11px] font-mono text-cyan-300">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                  🌐 landing-page.tsx
+                  <Globe className="w-3 h-3" /> landing-page.tsx
                 </span>
                 <span className="text-emerald-400 font-bold">100% Responsive</span>
               </div>

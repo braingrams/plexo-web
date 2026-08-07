@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, Palette, Layers, ArrowRight } from "lucide-react";
+import { Sparkles, Palette, Layers, ArrowRight, Check } from "lucide-react";
 import { Reveal } from "@/app/scroll-fx";
 
 export function V2StrataSection({ isDark }: { isDark: boolean }) {
@@ -97,7 +97,7 @@ export function V2StrataSection({ isDark }: { isDark: boolean }) {
               </div>
 
               <div className="bg-slate-950 text-emerald-400 p-4 rounded-2xl border border-slate-800 font-mono text-xs font-bold flex items-center justify-between">
-                <span>✔ 100% Brand Consistent</span>
+                <span className="flex items-center gap-1"><Check className="w-3.5 h-3.5" /> 100% Brand Consistent</span>
                 <Sparkles className="w-4 h-4" />
               </div>
             </div>
@@ -154,8 +154,8 @@ export function V2StrataSection({ isDark }: { isDark: boolean }) {
                       </div>
                     </div>
 
-                    <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2.5 py-1 rounded-full">
-                      ✔ Synced
+                    <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                      <Check className="w-2.5 h-2.5" /> Synced
                     </span>
                   </div>
 

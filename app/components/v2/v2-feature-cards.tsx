@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Layers, CheckCircle, FileCode, Terminal, Rss, Search } from "lucide-react";
+import { ArrowRight, Layers, CheckCircle, FileCode, Terminal, Rss, Search, Zap, Plug, Wrench } from "lucide-react";
 import { Reveal } from "@/app/scroll-fx";
 
 export function V2FeatureCards({ isDark }: { isDark: boolean }) {
@@ -94,8 +94,8 @@ export function V2FeatureCards({ isDark }: { isDark: boolean }) {
                 <div className="space-y-2 font-mono text-xs text-slate-300 bg-slate-900/80 p-4 rounded-2xl border border-slate-800">
                   <p className="text-purple-400">&gt; @plexo generate --type landing-page</p>
                   <p className="text-slate-400">Analyzing brand tokens and components...</p>
-                  <p className="text-emerald-400 font-bold">✔ Generated 4 sections in 0.8s</p>
-                  <p className="text-cyan-300 font-bold">✔ Linked to yourdomain.com</p>
+                  <p className="text-emerald-400 font-bold flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Generated 4 sections in 0.8s</p>
+                  <p className="text-cyan-300 font-bold flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" /> Linked to yourdomain.com</p>
                 </div>
               </div>
 
@@ -142,14 +142,14 @@ export function V2FeatureCards({ isDark }: { isDark: boolean }) {
               {/* 3D Floating Tool Spheres */}
               <div className="absolute -bottom-8 -right-8 w-72 h-72 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-600/30 blur-2xl pointer-events-none" />
               <div className="absolute bottom-6 right-6 flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-slate-900 shadow-xl flex items-center justify-center text-xs font-extrabold text-purple-300 border border-purple-700 animate-bounce">
-                  AI ⚡
+                <div className="w-12 h-12 rounded-full bg-slate-900 shadow-xl flex items-center justify-center gap-0.5 text-xs font-extrabold text-purple-300 border border-purple-700 animate-bounce">
+                  AI <Zap className="w-3 h-3" />
                 </div>
-                <div className="w-14 h-14 rounded-full bg-slate-900 shadow-xl flex items-center justify-center text-xs font-extrabold text-indigo-300 border border-indigo-700">
-                  MCP 🔌
+                <div className="w-14 h-14 rounded-full bg-slate-900 shadow-xl flex items-center justify-center gap-0.5 text-xs font-extrabold text-indigo-300 border border-indigo-700">
+                  MCP <Plug className="w-3 h-3" />
                 </div>
-                <div className="w-12 h-12 rounded-full bg-slate-900 shadow-xl flex items-center justify-center text-xs font-extrabold text-cyan-300 border border-cyan-700 animate-pulse">
-                  SDK 🛠️
+                <div className="w-12 h-12 rounded-full bg-slate-900 shadow-xl flex items-center justify-center gap-0.5 text-xs font-extrabold text-cyan-300 border border-cyan-700 animate-pulse">
+                  SDK <Wrench className="w-3 h-3" />
                 </div>
               </div>
             </div>

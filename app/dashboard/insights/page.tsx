@@ -3,6 +3,7 @@ import { auth } from "@/server/auth";
 import { headers } from "next/headers";
 import { ensureActiveOrganization } from "@/server/org";
 import { InsightsClient } from "./insights-client";
+import { PageContainer } from "../_components/PageContainer";
 
 export default async function InsightsPage() {
   const reqHeaders = await headers();
@@ -18,8 +19,8 @@ export default async function InsightsPage() {
   }
 
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 1500, margin: "0 auto" }}>
+    <PageContainer>
       <InsightsClient />
-    </div>
+    </PageContainer>
   );
 }

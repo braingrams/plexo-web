@@ -7,6 +7,7 @@ import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
 
 import { SettingsClient } from "./settings-client";
+import { PageContainer } from "../_components/PageContainer";
 
 type SettingsApiKey = {
   id: string;
@@ -91,7 +92,7 @@ export default async function DashboardSettingsPage() {
   ]);
 
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 1500, margin: "0 auto" }}>
+    <PageContainer>
       <SettingsClient
         initialApiKeys={apiKeys.map(serializeApiKey)}
         initialManageLandingPagePublishing={user.manageLandingPagePublishing}
@@ -110,6 +111,6 @@ export default async function DashboardSettingsPage() {
           })),
         }}
       />
-    </div>
+    </PageContainer>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 export type TemplateKind = "EMAIL" | "LANDING_PAGE";
@@ -81,6 +82,7 @@ type Props = {
  * "front and center" gallery so the two always look identical. */
 export function TemplateCard({ template, onDelete }: Props) {
   const router = useRouter();
+  const [imageError, setImageError] = useState(false);
   const isEmail = template.kind === "EMAIL";
 
   return (
@@ -113,48 +115,35 @@ export function TemplateCard({ template, onDelete }: Props) {
         overflow: "hidden",
         borderBottom: "1px solid rgba(255,255,255,0.05)",
       }}>
-        {template.compiledHtml ? (
-          <div style={{
-            width: "300%",
-            height: "300%",
-            transform: "scale(0.333333)",
-            transformOrigin: "0 0",
-            pointerEvents: "none",
-            position: "absolute",
-            top: 0,
-            left: 0,
-          }}>
-            <iframe
-              srcDoc={template.compiledHtml}
-              title={`Preview ${template.name}`}
-              // Empty sandbox (no tokens, notably no allow-scripts / allow-same-origin):
-              // this is a decorative visual snapshot, not an interactive preview, and
-              // compiledHtml can be raw/unsanitized user HTML now (RAW_UPLOAD templates)
-              // — it must never execute here with this page's own privileges.
-              sandbox=""
-              style={{
-                width: "100%",
-                height: "100%",
-                border: "none",
-                background: "#ffffff",
-              }}
-            />
-          </div>
-        ) : (
-          <div style={{
-            width: "100%",
-            height: "100%",
+        {template.compiledHtml && !imageError ? (
+          <img
+            src={`/api/v1/templates/${template.id}/snapshot`}
+            alt={`Preview of ${template.name}`}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              objectPosition: "top center",
+              border: "none",
+            }}
+            onError={() => setImageError(true)}
+          />
+        ) : null}
+        
+        {/* Fallback displayed if no compiledHtml or if img fails to load */}
+        <div style={{
+          display: (template.compiledHtml && !imageError) ? "none" : "flex",
+          width: "100%",
+          height: "100%",
             background: isEmail
               ? "linear-gradient(135deg,rgba(139,92,246,0.12) 0%,rgba(252,6,148,0.03) 100%)"
               : "linear-gradient(135deg,rgba(129,140,248,0.12) 0%,rgba(129,140,248,0.03) 100%)",
-            display: "flex",
             alignItems: "center",
             justifyContent: "center",
             color: isEmail ? "var(--brand)" : "#818cf8",
           }}>
             {isEmail ? <IconMail /> : <IconLayout />}
           </div>
-        )}
 
         {/* Overlay Badge */}
         <span style={{
@@ -203,20 +192,23 @@ export function TemplateCard({ template, onDelete }: Props) {
             </span>
           )}
         </p>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <button
             type="button"
             onClick={() => router.push(`/dashboard/templates/${template.id}`)}
             style={{
-              display: "inline-flex", alignItems: "center", gap: "0.5rem",
-              padding: "0.5rem 1rem",
-              borderRadius: 8, border: "none", cursor: "pointer",
-              fontSize: "0.8rem", fontWeight: 600,
-              background: "var(--brand-subtle)",
+              flex: 1,
+              display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+              padding: "0.6rem 1rem",
+              borderRadius: 10, border: "none", cursor: "pointer",
+              fontSize: "0.85rem", fontWeight: 700,
+              background: "rgba(139, 92, 246, 0.15)",
               color: "var(--brand)",
-              transition: "background 0.15s",
+              transition: "all 0.2s",
               fontFamily: "inherit",
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139, 92, 246, 0.25)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139, 92, 246, 0.15)"; }}
           >
             Open Editor
             <IconArrow />
@@ -227,18 +219,17 @@ export function TemplateCard({ template, onDelete }: Props) {
               onClick={() => router.push(`/dashboard/templates/${template.id}/blog`)}
               title="Manage Blog"
               style={{
-                display: "inline-flex", alignItems: "center", gap: "0.4rem",
-                padding: "0.5rem 0.75rem",
-                borderRadius: 8, border: "1px solid rgba(129,140,248,0.25)", cursor: "pointer",
-                fontSize: "0.8rem", fontWeight: 600,
-                background: "rgba(129,140,248,0.08)",
-                color: "#818cf8",
-                transition: "all 0.15s",
-                fontFamily: "inherit",
+                width: "38px", height: "38px",
+                display: "grid", placeItems: "center",
+                borderRadius: 10, border: "1px solid rgba(16, 185, 129, 0.2)", cursor: "pointer",
+                background: "rgba(16, 185, 129, 0.1)",
+                color: "#10b981",
+                transition: "all 0.2s",
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(16, 185, 129, 0.2)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(16, 185, 129, 0.1)"; }}
             >
               <IconBlog />
-              Blog
             </button>
           )}
           {onDelete && (
@@ -247,15 +238,15 @@ export function TemplateCard({ template, onDelete }: Props) {
               onClick={() => onDelete(template)}
               title="Delete Template"
               style={{
-                display: "inline-flex", alignItems: "center", gap: "0.4rem",
-                padding: "0.55rem 0.75rem",
-                borderRadius: 8, border: "1px solid rgba(239, 68, 68, 0.25)", cursor: "pointer",
-                fontSize: "0.8rem", fontWeight: 600,
+                width: "38px", height: "38px",
+                display: "grid", placeItems: "center",
+                borderRadius: 10, border: "1px solid rgba(239, 68, 68, 0.2)", cursor: "pointer",
                 background: "rgba(239, 68, 68, 0.1)",
                 color: "#f87171",
-                transition: "all 0.15s",
-                fontFamily: "inherit",
+                transition: "all 0.2s",
               }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239, 68, 68, 0.2)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)"; }}
             >
               <IconTrash />
             </button>

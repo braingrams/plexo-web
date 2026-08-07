@@ -11,7 +11,7 @@ export function PreviewButton({ templateId }: { templateId: string }) {
       <button
         type="button"
         onClick={() => setPreviewing(true)}
-        className="rounded-lg border border-slate-700 px-5 py-2.5 text-sm font-semibold text-slate-200 hover:border-slate-500 hover:text-white"
+        className="rounded-xl border border-slate-800 bg-slate-900/80 px-6 py-3 text-sm font-semibold text-slate-200 hover:border-slate-700 hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2"
       >
         Preview
       </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot } from "lucide-react";
+import { Bot, Zap, FileText } from "lucide-react";
 import { Reveal } from "@/app/scroll-fx";
 
 export function V2CommunitySection({ isDark }: { isDark: boolean }) {
@@ -18,7 +18,7 @@ export function V2CommunitySection({ isDark }: { isDark: boolean }) {
             {/* Left Text Column */}
             <div className="lg:col-span-6 space-y-6">
               <div className="text-4xl sm:text-5xl select-none">
-                ⚡
+                <Zap className="w-10 h-10 sm:w-12 sm:h-12" strokeWidth={1.8} />
               </div>
 
               <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-[1.1]">
@@ -47,17 +47,17 @@ export function V2CommunitySection({ isDark }: { isDark: boolean }) {
 
                 <div className="grid grid-cols-3 gap-3 pt-2 text-center text-xs font-mono">
                   <div className="bg-slate-900 p-3 rounded-2xl border border-slate-800 space-y-1">
-                    <span className="text-xl block">⚡</span>
+                    <span className="flex justify-center"><Zap className="w-5 h-5" /></span>
                     <span className="font-bold text-white block">Visual</span>
                     <span className="text-[10px] text-slate-400">Canvas</span>
                   </div>
                   <div className="bg-slate-900 p-3 rounded-2xl border border-slate-800 space-y-1">
-                    <span className="text-xl block">📄</span>
+                    <span className="flex justify-center"><FileText className="w-5 h-5" /></span>
                     <span className="font-bold text-white block">Raw Code</span>
                     <span className="text-[10px] text-slate-400">HTML/CSS</span>
                   </div>
                   <div className="bg-slate-900 p-3 rounded-2xl border border-slate-800 space-y-1">
-                    <span className="text-xl block">🤖</span>
+                    <span className="flex justify-center"><Bot className="w-5 h-5" /></span>
                     <span className="font-bold text-white block">AI Agent</span>
                     <span className="text-[10px] text-slate-400">MCP Sync</span>
                   </div>

@@ -5,6 +5,7 @@ import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
+import { PageContainer } from "@/app/dashboard/_components/PageContainer";
 import { TeamClient } from "./team-client";
 
 export default async function TeamSettingsPage() {
@@ -32,7 +33,7 @@ export default async function TeamSettingsPage() {
   ]);
 
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 900, margin: "0 auto" }}>
+    <PageContainer>
       <PageHeader
         eyebrow="Organization"
         title="Team"
@@ -56,6 +57,6 @@ export default async function TeamSettingsPage() {
           createdAt: i.createdAt.toISOString(),
         }))}
       />
-    </div>
+    </PageContainer>
   );
 }

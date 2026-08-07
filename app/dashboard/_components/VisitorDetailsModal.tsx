@@ -26,6 +26,15 @@ function deviceLabel(deviceType: string | null): string {
   return deviceType[0].toUpperCase() + deviceType.slice(1);
 }
 
+function IconClose() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
 const LIMIT = 25;
 
 /** Paginated drill-down into individual page views — backs "view visitor details" on the
@@ -106,9 +115,9 @@ export function VisitorDetailsModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(240,242,255,0.5)", fontSize: "1.1rem", padding: "0.25rem", lineHeight: 1 }}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(240,242,255,0.5)", padding: "0.25rem", lineHeight: 1, display: "grid", placeItems: "center" }}
           >
-            ✕
+            <IconClose />
           </button>
         </div>
 

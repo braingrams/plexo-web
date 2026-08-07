@@ -20,6 +20,7 @@ export interface MarketplaceListItem {
   priceCents: number;
   publishedAt: Date | null;
   purchaseCount: number;
+  compiledHtml?: string | null;
 }
 
 const PAGE_SIZE = 24;
@@ -41,6 +42,7 @@ export async function getMarketplaceTemplateDetail(id: string, userId: string | 
       marketplaceDescription: true,
       priceCents: true,
       marketplacePublishedAt: true,
+      compiledHtml: true,
       _count: { select: { purchases: true } },
     },
   });
@@ -63,6 +65,7 @@ export async function getMarketplaceTemplateDetail(id: string, userId: string | 
     priceCents: template.priceCents ?? 0,
     publishedAt: template.marketplacePublishedAt,
     purchaseCount: template._count.purchases,
+    compiledHtml: template.compiledHtml,
     owned,
   };
 }
@@ -117,6 +120,7 @@ export async function listMarketplaceTemplates(
         marketplaceDescription: true,
         priceCents: true,
         marketplacePublishedAt: true,
+        compiledHtml: true,
         _count: { select: { purchases: true } },
       },
     }),
@@ -138,6 +142,7 @@ export async function listMarketplaceTemplates(
       priceCents: t.priceCents ?? 0,
       publishedAt: t.marketplacePublishedAt,
       purchaseCount: t._count.purchases,
+      compiledHtml: t.compiledHtml,
     })),
     total,
     categories: categoryRows.map((c) => c.marketplaceCategory).filter((c): c is string => !!c),

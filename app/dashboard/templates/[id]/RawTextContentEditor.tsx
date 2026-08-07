@@ -17,6 +17,137 @@ type ActiveField =
 type ImgDraft = { src: string; width: number | null; height: number | null };
 type BgDraft = { src: string; backgroundSize: string | null };
 
+function IconWarning() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function IconLock({ locked }: { locked: boolean }) {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      {locked ? (
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      ) : (
+        <path d="M8 11V7a4 4 0 0 1 7.6-1.8" />
+      )}
+    </svg>
+  );
+}
+
+function IconChevronDown() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+const BG_SIZE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "", label: "Default" },
+  { value: "cover", label: "Cover (fill, cropped)" },
+  { value: "contain", label: "Contain (fit, no crop)" },
+  { value: "auto", label: "Auto (original size)" },
+  { value: "100% 100%", label: "Stretch to fit" },
+];
+
+/** Custom-built dropdown instead of a native <select> — the native popup is drawn by the
+ * OS/browser using its own light/dark heuristic, not this page's CSS, so it was popping
+ * open unreadable (near-white text on a white background) regardless of color-scheme
+ * hints. Rendering the option list ourselves guarantees it always matches the app's
+ * dark theme. */
+function BackgroundSizeSelect({
+  value,
+  onChange,
+  onFocus,
+}: {
+  value: string | null;
+  onChange: (value: string | null) => void;
+  onFocus: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = BG_SIZE_OPTIONS.find((o) => o.value === (value ?? "")) ?? BG_SIZE_OPTIONS[0];
+
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={() => {
+          onFocus();
+          setOpen((v) => !v);
+        }}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: "rgba(255,255,255,0.04)",
+          border: open ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 7, color: "#f0f2ff", padding: "0.35rem 0.5rem", fontSize: "0.78rem",
+          outline: "none", fontFamily: "inherit", cursor: "pointer",
+        }}
+      >
+        <span>{selected.label}</span>
+        <span style={{ color: "rgba(240,242,255,0.4)", display: "inline-flex", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+          <IconChevronDown />
+        </span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 20,
+          background: "rgba(18,16,36,0.98)", border: "1px solid rgba(139,92,246,0.3)",
+          borderRadius: 8, overflow: "hidden", boxShadow: "0 12px 30px rgba(0,0,0,0.5)",
+        }}>
+          {BG_SIZE_OPTIONS.map((opt) => {
+            const isActive = opt.value === (value ?? "");
+            return (
+              <button
+                key={opt.value || "default"}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value || null);
+                  setOpen(false);
+                }}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "0.5rem 0.6rem", background: isActive ? "rgba(139,92,246,0.15)" : "transparent",
+                  border: "none", color: isActive ? "#c4b5fd" : "rgba(240,242,255,0.8)",
+                  fontSize: "0.78rem", fontWeight: isActive ? 600 : 400, textAlign: "left", cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {opt.label}
+                {isActive && <IconCheck />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ATTR_FOR_KIND: Record<"text" | "img" | "background", string> = {
   text: "data-ptid",
   img: "data-pimg",
@@ -387,8 +518,8 @@ export function RawTextContentEditor({ templateId }: Props) {
           markup. Click a field to see exactly where it is on the page.
         </p>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-          {saveError && <span style={{ color: "#f87171", fontSize: "0.78rem" }}>⚠️ {saveError}</span>}
-          {savedFlash && <span style={{ color: "#34d399", fontSize: "0.78rem" }}>✓ Saved</span>}
+          {saveError && <span style={{ color: "#f87171", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}><IconWarning /> {saveError}</span>}
+          {savedFlash && <span style={{ color: "#34d399", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}><IconCheck /> Saved</span>}
           <button
             type="button"
             disabled={!dirty || saving}
@@ -494,7 +625,7 @@ export function RawTextContentEditor({ templateId }: Props) {
                                   cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0,
                                 }}
                               >
-                                {lockAspect[node.id] ? "🔒" : "🔓"}
+                                <IconLock locked={!!lockAspect[node.id]} />
                               </button>
                             </div>
                           </div>
@@ -547,23 +678,11 @@ export function RawTextContentEditor({ templateId }: Props) {
                               }}
                             />
                             {node.supportsResize && (
-                              <select
-                                value={draft.backgroundSize ?? ""}
+                              <BackgroundSizeSelect
+                                value={draft.backgroundSize}
                                 onFocus={() => setActiveField({ kind: "background", id: node.id })}
-                                onChange={(e) => handleBgChange(node, { backgroundSize: e.target.value || null })}
-                                style={{
-                                  width: "100%", background: "rgba(255,255,255,0.04)",
-                                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7,
-                                  color: "#f0f2ff", padding: "0.35rem 0.5rem", fontSize: "0.78rem",
-                                  outline: "none", fontFamily: "inherit",
-                                }}
-                              >
-                                <option value="">Default</option>
-                                <option value="cover">Cover (fill, cropped)</option>
-                                <option value="contain">Contain (fit, no crop)</option>
-                                <option value="auto">Auto (original size)</option>
-                                <option value="100% 100%">Stretch to fit</option>
-                              </select>
+                                onChange={(value) => handleBgChange(node, { backgroundSize: value })}
+                              />
                             )}
                           </div>
                         </div>
@@ -634,6 +753,15 @@ export function RawTextContentEditor({ templateId }: Props) {
           flex: 1, minWidth: 0, borderLeft: "1px solid rgba(255,255,255,0.08)",
           background: "#fff", position: "relative",
         }}>
+          <div style={{
+            position: "absolute", top: 0, left: 0, right: 0, zIndex: 1,
+            padding: "0.4rem 0.75rem", fontSize: "0.72rem", lineHeight: 1.4,
+            background: "rgba(17,19,31,0.85)", color: "rgba(240,242,255,0.6)",
+            backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+          }}>
+            Static preview — scripts are disabled here for safety, so JS-driven behavior (mobile menus,
+            toggles, sliders) won&apos;t run. Use <strong>Preview</strong> above for the fully interactive page.
+          </div>
           {previewHtml !== null && (
             <iframe
               ref={iframeRef}
@@ -642,7 +770,8 @@ export function RawTextContentEditor({ templateId }: Props) {
               onLoad={handlePreviewLoad}
               // allow-same-origin (no allow-scripts) — read/write DOM access is needed to
               // highlight/scroll/live-patch text and images, but nothing in this untrusted
-              // page can execute.
+              // page can execute. See the banner above this iframe: that's also why anything
+              // JS-driven in the previewed page (mobile nav toggles, etc.) won't behave live.
               sandbox="allow-same-origin"
               style={{ width: "100%", height: "100%", border: "none" }}
             />

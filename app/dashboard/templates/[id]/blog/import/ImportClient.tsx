@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { PageContainer } from "../../../../_components/PageContainer";
 
 type JobStatus = "PENDING" | "DISCOVERING" | "RUNNING" | "PAUSED_ERROR" | "COMPLETED" | "FAILED" | "CANCELLED";
 
@@ -84,7 +85,7 @@ export function ImportClient({
   const progressPct = job?.totalPosts ? Math.min(100, Math.round((job.processedPosts / job.totalPosts) * 100)) : job?.status === "COMPLETED" ? 100 : 0;
 
   return (
-    <div style={{ padding: "2rem", maxWidth: 640, margin: "0 auto" }}>
+    <PageContainer>
       <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.25rem" }}>Import from WordPress</h1>
       <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginBottom: "1.5rem" }}>
         Migrating into <strong>{templateName}</strong>. Paste your WordPress site&apos;s URL — no export file, no login needed. If your
@@ -186,6 +187,6 @@ export function ImportClient({
           )}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }

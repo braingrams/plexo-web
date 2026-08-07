@@ -13,6 +13,23 @@ function IconFeedback() {
   );
 }
 
+function IconClose() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
 /** Small icon-button + modal for submitting product feedback — placed next to
  * NotificationBell in both dashboard shells (the one spot already shared across layout
  * modes), so it doesn't need separate nav-item plumbing per shell. */
@@ -93,16 +110,16 @@ export function FeedbackButton() {
               </h2>
               <button
                 onClick={close}
-                style={{ background: "none", border: "none", color: "rgba(240,242,255,0.4)", cursor: "pointer", fontSize: "1.1rem" }}
+                style={{ background: "none", border: "none", color: "rgba(240,242,255,0.4)", cursor: "pointer", display: "flex", alignItems: "center" }}
               >
-                ✕
+                <IconClose />
               </button>
             </div>
 
             {submitted ? (
               <div>
-                <p style={{ fontSize: "0.85rem", color: "#34d399", marginBottom: "1.25rem" }}>
-                  ✓ Thanks — your feedback has been sent to the team.
+                <p style={{ fontSize: "0.85rem", color: "#34d399", marginBottom: "1.25rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                  <IconCheck /> Thanks — your feedback has been sent to the team.
                 </p>
                 <button
                   type="button"

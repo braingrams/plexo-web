@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { ensureActiveOrganization } from "@/server/org";
 import { OverviewClient } from "./overview-client";
 import type { TemplateSummary } from "./templates/TemplateCard";
+import { PageContainer } from "./_components/PageContainer";
 
 export default async function OverviewPage() {
   const reqHeaders = await headers();
@@ -84,7 +85,7 @@ export default async function OverviewPage() {
   }
 
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 1500, margin: "0 auto" }}>
+    <PageContainer>
       <OverviewClient
         userName={user.name}
         plan={user.subscriptionPlan}
@@ -97,6 +98,6 @@ export default async function OverviewPage() {
         apiKeysCount={apiKeysCount}
         recentTemplates={recentTemplates}
       />
-    </div>
+    </PageContainer>
   );
 }

@@ -88,7 +88,7 @@ export function PurchaseAction({
       <button
         onClick={handleClick}
         disabled={pending}
-        className="rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-500 disabled:opacity-50"
+        className="rounded-xl bg-violet-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-600/30 hover:bg-violet-500 hover:scale-105 transition-all disabled:opacity-50"
       >
         {pending ? "Working…" : owned ? "Use this template" : isFree ? "Get this template" : "Buy this template"}
       </button>

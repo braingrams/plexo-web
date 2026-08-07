@@ -5,6 +5,7 @@ import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
 import { SdkClient } from "./sdk-client";
+import { PageContainer } from "../_components/PageContainer";
 
 export default async function DashboardSdkPage() {
   const requestHeaders = await headers();
@@ -34,8 +35,8 @@ export default async function DashboardSdkPage() {
   });
 
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 1500, margin: "0 auto" }}>
+    <PageContainer>
       <SdkClient initialKeys={apiKeys} />
-    </div>
+    </PageContainer>
   );
 }

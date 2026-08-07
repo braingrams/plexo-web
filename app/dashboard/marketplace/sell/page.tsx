@@ -5,6 +5,7 @@ import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
+import { PageContainer } from "@/app/dashboard/_components/PageContainer";
 import { SellTemplateForm } from "./SellTemplateForm";
 
 export default async function SellTemplatePage() {
@@ -35,7 +36,7 @@ export default async function SellTemplatePage() {
   const keepPercent = ((10_000 - feeBps) / 100).toFixed(feeBps % 100 === 0 ? 0 : 2);
 
   return (
-    <div style={{ padding: "2rem 8px", maxWidth: 640, margin: "0 auto" }}>
+    <PageContainer>
       <PageHeader
         eyebrow="Marketplace"
         title="Sell a template"
@@ -49,6 +50,6 @@ export default async function SellTemplatePage() {
         templates={templates.map((t) => ({ id: t.id, name: t.name, kind: t.kind, hasContent: !!t.compiledHtml.trim() }))}
         autoPublish={autoPublish}
       />
-    </div>
+    </PageContainer>
   );
 }

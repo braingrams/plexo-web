@@ -87,6 +87,38 @@ function IconSwitch() {
 	);
 }
 
+function IconHome() {
+	return (
+		<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M3 11l9-8 9 8" /><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10" />
+		</svg>
+	);
+}
+
+function IconEdit() {
+	return (
+		<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
+		</svg>
+	);
+}
+
+function IconSparkle() {
+	return (
+		<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+			<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />
+		</svg>
+	);
+}
+
+function IconArrowRight() {
+	return (
+		<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+			<line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+		</svg>
+	);
+}
+
 function slugify(input: string): string {
 	return input
 		.trim()
@@ -215,8 +247,8 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 						<span key={node.id} style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
 							{idx > 0 && <span style={{ color: "rgba(240,242,255,0.25)", fontSize: "0.75rem" }}>/</span>}
 							{isLast ? (
-								<span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#f0f2ff" }}>
-									{idx === 0 ? "🏠 " : ""}{node.name}
+								<span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#f0f2ff", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+									{idx === 0 && <IconHome />}{node.name}
 								</span>
 							) : (
 								<button
@@ -225,9 +257,10 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 									style={{
 										fontSize: "0.78rem", fontWeight: 500, color: "rgba(240,242,255,0.55)",
 										background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "inherit",
+										display: "inline-flex", alignItems: "center", gap: "0.25rem",
 									}}
 								>
-									{idx === 0 ? "🏠 " : ""}{node.name}
+									{idx === 0 && <IconHome />}{node.name}
 								</button>
 							)}
 						</span>
@@ -248,7 +281,7 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 						fontSize: "0.72rem", color: "var(--brand)", fontWeight: 600,
 						background: "var(--brand-subtle)", padding: "0.3rem 0.6rem", borderRadius: 999,
 					}}>
-						Turn this into a multi-page site →
+						Turn this into a multi-page site <IconArrowRight />
 						<button
 							type="button"
 							onClick={() => setNudgeDismissed(true)}
@@ -667,8 +700,8 @@ function ManagePagesModal({
 									fontFamily: "inherit", padding: "0.1rem 0",
 								}}
 							>
-								<span style={{ fontSize: "0.85rem", fontWeight: isCurrent ? 700 : 500, color: "#f0f2ff" }}>
-									{isHome ? "🏠 " : ""}{node.name}
+								<span style={{ fontSize: "0.85rem", fontWeight: isCurrent ? 700 : 500, color: "#f0f2ff", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+									{isHome && <IconHome />}{node.name}
 									{node.sourceType === "RAW_UPLOAD" && (
 										<span style={{
 											marginLeft: "0.4rem", fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.04em",
@@ -734,7 +767,7 @@ function ManagePagesModal({
 									onClick={() => { setRenamingId(node.id); setRenameName(node.name); setRenameSlug(node.slug ?? ""); }}
 									style={iconBtn}
 								>
-									✎
+									<IconEdit />
 								</button>
 								<button type="button" title="Delete" onClick={() => setDeleteTarget(node)} style={{ ...iconBtn, color: "#f87171" }}>
 									<IconTrash />
@@ -794,8 +827,8 @@ function ManagePagesModal({
 
 				<div style={{ flex: 1, overflowY: "auto", padding: "0.75rem" }}>
 					{!isUltra && (
-						<div style={{ margin: "0.25rem 0.25rem 0.75rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "var(--brand-subtle)", border: "1px solid rgba(139,92,246,0.25)", fontSize: "0.8rem", color: "rgba(240,242,255,0.8)" }}>
-							✨ Multi-page sites (adding, duplicating pages) require an <strong>Ultra</strong> plan. Existing pages remain fully usable below.
+						<div style={{ margin: "0.25rem 0.25rem 0.75rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "var(--brand-subtle)", border: "1px solid rgba(139,92,246,0.25)", fontSize: "0.8rem", color: "rgba(240,242,255,0.8)", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+							<IconSparkle /> <span>Multi-page sites (adding, duplicating pages) require an <strong>Ultra</strong> plan. Existing pages remain fully usable below.</span>
 						</div>
 					)}
 					{root && renderNode(root, 0)}

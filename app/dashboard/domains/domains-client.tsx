@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 
@@ -104,6 +104,43 @@ function IconChevronDown() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="6 9 12 15 18 9"/>
+    </svg>
+  );
+}
+
+function IconClose() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function IconSettingsGear() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
+function IconWarningLarge({ width = 22, height = 22 }: { width?: number; height?: number }) {
+  return (
+    <svg width={width} height={height} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+function IconInfo() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
     </svg>
   );
 }
@@ -248,7 +285,7 @@ export function CustomSelect({
                   }}
                 >
                   <span>{opt.label}</span>
-                  {isActive && <span style={{ color: "#a78bfa" }}>✓</span>}
+                  {isActive && <span style={{ color: "#a78bfa", display: "flex", alignItems: "center" }}><IconCheck /></span>}
                 </button>
               );
             })}
@@ -681,7 +718,13 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                 border: "1px solid rgba(139,92,246,0.15)",
                 boxShadow: "0 0 30px rgba(139,92,246,0.06)"
               }}>
-                <span style={{ fontSize: "1.9rem" }}>🌐</span>
+                <span style={{ display: "flex" }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="2" y1="12" x2="22" y2="12" />
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                  </svg>
+                </span>
               </div>
               <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.5rem" }}>
                 No active domains linked
@@ -921,12 +964,12 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                 type="button"
                 onClick={() => setIsDrawerOpen(false)}
                 style={{
-                  background: "none", border: "none", cursor: "pointer", fontSize: "1.3rem", color: "rgba(240,242,255,0.35)",
-                  padding: "0.25rem", transition: "color 0.15s", lineHeight: 1
+                  background: "none", border: "none", cursor: "pointer", color: "rgba(240,242,255,0.35)",
+                  padding: "0.25rem", transition: "color 0.15s", lineHeight: 1, display: "flex", alignItems: "center"
                 }}
                 className="domain-link-hover"
               >
-                ✕
+                <IconClose />
               </button>
             </div>
 
@@ -1030,13 +1073,13 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                     border: "1px solid rgba(139,92,246,0.12)", borderRadius: 10, fontSize: "0.75rem",
                     color: "rgba(240,242,255,0.7)", lineHeight: 1.45
                   }}>
-                    <p style={{ fontWeight: 700, color: "#a5b4fc", marginBottom: "0.5rem" }}>
-                      ⚙️ DNS Setup Instructions
+                    <p style={{ fontWeight: 700, color: "#a5b4fc", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <IconSettingsGear /> DNS Setup Instructions
                     </p>
                     <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.45)", marginBottom: "0.75rem" }}>
                       Log into your domain registrar (GoDaddy, Namecheap, Cloudflare, etc.) and add this record to your DNS settings:
                     </p>
-                    
+
                     <div style={{ background: "rgba(0,0,0,0.25)", borderRadius: 8, padding: "0.6rem 0.75rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "0.35rem", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", color: "rgba(240,242,255,0.3)" }}>
                         <span style={{ width: "25%" }}>Record Type</span>
@@ -1055,7 +1098,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                             style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", alignSelf: "center" }}
                             title="Copy Host"
                           >
-                            {copiedField === 'host' ? "✓" : <IconCopy />}
+                            {copiedField === 'host' ? <IconCheck /> : <IconCopy />}
                           </button>
                         </span>
                         <span style={{ width: "40%", color: "var(--brand)", fontWeight: 600, textAlign: "right", wordBreak: "break-all", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.25rem" }}>
@@ -1066,7 +1109,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                             style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", alignSelf: "center" }}
                             title="Copy Target"
                           >
-                            {copiedField === 'target' ? "✓" : <IconCopy />}
+                            {copiedField === 'target' ? <IconCheck /> : <IconCopy />}
                           </button>
                         </span>
                       </div>
@@ -1092,14 +1135,14 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
 
               {/* Error / Success messages */}
               {errorMsg && (
-                <p style={{ fontSize: "0.8rem", color: "#f87171", margin: 0 }}>
-                  ⚠️ {errorMsg}
+                <p style={{ fontSize: "0.8rem", color: "#f87171", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                  <IconWarningLarge width={14} height={14} /> {errorMsg}
                 </p>
               )}
 
               {successMsg && (
-                <p style={{ fontSize: "0.8rem", color: "#34d399", margin: 0 }}>
-                  ✓ {successMsg}
+                <p style={{ fontSize: "0.8rem", color: "#34d399", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                  <IconCheck /> {successMsg}
                 </p>
               )}
 
@@ -1168,7 +1211,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
               background: "rgba(239, 68, 68, 0.1)",
               display: "grid", placeItems: "center", flexShrink: 0
             }}>
-              <span style={{ color: "#ef4444", fontSize: "1.3rem", fontWeight: 700 }}>⚠️</span>
+              <span style={{ color: "#ef4444", display: "flex" }}><IconWarningLarge /></span>
             </div>
 
             <div>
@@ -1250,9 +1293,10 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
             <div style={{
               width: 48, height: 48, borderRadius: "50%",
               background: "rgba(139, 92, 246, 0.1)",
-              display: "grid", placeItems: "center", margin: "0 auto"
+              display: "grid", placeItems: "center", margin: "0 auto",
+              color: "var(--brand)",
             }}>
-              <span style={{ fontSize: "1.3rem" }}>ℹ️</span>
+              <IconInfo />
             </div>
             <div>
               <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#f0f2ff", margin: 0 }}>
