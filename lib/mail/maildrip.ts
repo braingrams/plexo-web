@@ -1,5 +1,9 @@
 import { darken } from "@/lib/color";
 
+const SITE_URL = process.env.NEXT_PUBLIC_APP_URL?.startsWith("http")
+  ? process.env.NEXT_PUBLIC_APP_URL
+  : "https://plexo.charisol.io";
+
 const maildripApiUrl =
   process.env.MAILDRIP_API_URL ?? "https://api.maildrip.io/api/v1/emails/transaction";
 const maildripApiKey = process.env.MAILDRIP_API_KEY;
@@ -52,9 +56,9 @@ export type EmailBrand = {
 /**
  * Shared branded card shell used by every transactional email (verification, password
  * reset, invites, mention/reply notifications) so the logo/header/card markup lives in
- * exactly one place instead of being copy-pasted per email. Falls back to the Plexo mark
- * when `brand` is omitted — account-security emails (verification, password reset) always
- * omit it intentionally, see lib/mail/templates.ts.
+ * exactly one place instead of being copy-pasted per email. Falls back to the real Plexo
+ * mark when `brand` is omitted entirely — account-security emails (verification, password
+ * reset) always omit it intentionally, see lib/mail/templates.ts.
  */
 export function emailShell(input: {
   title: string;
@@ -65,9 +69,19 @@ export function emailShell(input: {
   const accent = input.brand?.color ?? "#8b5cf6";
   const accentDeep = input.brand?.color ? darken(accent, 0.12) : "#7c3aed";
   const brandName = input.brand?.name ?? "Plexo";
+  // Plexo's own default mark uses app/icon.tsx's real rendered PNG (already hosted at this
+  // exact URL -- see app/layout.tsx's JSON-LD logo field for the same reference) rather than
+  // an inline <svg>: Gmail (web + app) has no support at all for embedded/inline SVG on any
+  // platform, so every account-security email's logo was silently invisible there. A
+  // branded-but-logo-less org (has a name/color override, no logoUrl yet) keeps the existing
+  // generic gradient-mark placeholder unchanged -- that's a distinct, pre-existing case this
+  // fix isn't meant to touch, since showing Plexo's own logo there would undercut the whole
+  // point of white-labeling.
   const logoMarkup = input.brand?.logoUrl
     ? `<img src="${input.brand.logoUrl}" width="36" height="36" alt="${brandName}" style="display:block;border-radius:8px;object-fit:cover;" />`
-    : `<table cellpadding="0" cellspacing="0">
+    : !input.brand
+      ? `<img src="${SITE_URL}/icon" width="36" height="36" alt="Plexo" style="display:block;border-radius:8px;" />`
+      : `<table cellpadding="0" cellspacing="0">
                 <tr>
                   <td style="width:36px;height:36px;background:linear-gradient(135deg,${accent},${accentDeep});border-radius:8px;text-align:center;vertical-align:middle;">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;margin-top:2px;">
