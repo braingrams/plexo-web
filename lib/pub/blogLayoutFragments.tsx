@@ -67,8 +67,13 @@ export function buildPostFragments(post: BlogPostDetail, basePath: string, comme
     // per-element inline styles), so without this wrapper class its headings and
     // paragraphs render with zero visual differentiation on a custom layout.
     content: `<div class="plexo-post__body">${post.contentHtml}</div>`,
+    // Full width + auto height by default (not just max-width, which leaves a smaller
+    // source image at its natural size instead of stretching to fill the marker). Height/
+    // fit/radius are all CSS custom properties (var(--plexo-featuredimage-*, <fallback>))
+    // so BlogFeaturedImagePropertiesAccordion in the SDK builder can override them — same
+    // inherited-from-the-marker-div pattern as --plexo-comment-*/--plexo-postlist-*.
     featuredImage: post.featuredImageUrl
-      ? `<img src="${escapeHtml(post.featuredImageUrl)}" alt="${escapeHtml(post.featuredImageAlt ?? "")}" style="max-width:100%;border-radius:10px;" />`
+      ? `<img src="${escapeHtml(post.featuredImageUrl)}" alt="${escapeHtml(post.featuredImageAlt ?? "")}" style="display:block;width:100%;height:var(--plexo-featuredimage-height, auto);object-fit:var(--plexo-featuredimage-fit, cover);border-radius:var(--plexo-featuredimage-radius, 10px);" />`
       : "",
     date: post.publishedAt ? `${escapeHtml(prefixes.date ?? "")}${escapeHtml(formatDate(post.publishedAt))}` : "",
     author: authorHtml,
