@@ -72,6 +72,7 @@ export function V2Footer({ isDark }: { isDark: boolean }) {
         <div className="space-y-3">
           <span className="font-extrabold tracking-wider uppercase text-slate-400 block">RESOURCES &amp; LEGAL</span>
           <ul className="space-y-2 text-slate-400 font-medium">
+            <li><Link href="/releases" className="hover:text-white transition-colors">Releases</Link></li>
             <li><Link href="#faq" className="hover:text-white transition-colors">FAQ</Link></li>
             <li><Link href="/auth/login" className="hover:text-white transition-colors">Sign In</Link></li>
             <li><Link href="/auth/register" className="hover:text-white transition-colors">Create Account</Link></li>
