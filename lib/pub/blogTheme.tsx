@@ -88,13 +88,17 @@ export function BlogStyles({ appearance }: { appearance?: BlogAppearance } = {})
         .plexo-blog__description { color: #6b7280; font-size: 1.05rem; margin: 0; }
         .plexo-blog__main { max-width: 860px; margin: 0 auto; padding: 24px 24px 80px; }
         .plexo-blog__grid { display: grid; gap: 32px; }
-        .plexo-post-card { display: grid; gap: 12px; padding-bottom: 28px; border-bottom: 1px solid #eee; }
+        /* var(--plexo-postlist-*, <fallback>) is what the blog_post_list marker's own
+           "Post Card Styles" panel writes (see plexo-sdk's BlogPostListPropertiesAccordion)
+           — falls back to the original look everywhere else this markup appears (the
+           default theme's own listing page, which has no such ancestor). */
+        .plexo-post-card { display: grid; gap: 12px; padding-bottom: 28px; border-bottom: 1px solid #eee; background: var(--plexo-postlist-card-bg, transparent); }
         .plexo-post-card:last-child { border-bottom: none; }
         .plexo-post-card__image { width: 100%; aspect-ratio: 2/1; object-fit: cover; border-radius: 12px; background: #f3f4f6; }
-        .plexo-post-card__title { font-size: 1.5rem; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
-        .plexo-post-card__title a { color: #17181c; }
-        .plexo-post-card__excerpt { color: #4b5563; line-height: 1.6; margin: 0; }
-        .plexo-post-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.85rem; color: #6b7280; }
+        .plexo-post-card__title { font-size: var(--plexo-postlist-title-font-size, 1.5rem); font-weight: var(--plexo-postlist-title-font-weight, 700); margin: 0; letter-spacing: -0.01em; }
+        .plexo-post-card__title a { color: var(--plexo-postlist-title-color, #17181c); }
+        .plexo-post-card__excerpt { color: var(--plexo-postlist-excerpt-color, #4b5563); font-size: var(--plexo-postlist-excerpt-font-size, 1rem); line-height: 1.6; margin: 0; }
+        .plexo-post-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.85rem; color: var(--plexo-postlist-meta-color, #6b7280); }
         .plexo-post-meta__avatar { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; background: #e5e7eb; }
         /* var(--plexo-categories-*, <fallback>) is what the blog_categories marker's own
            Typography panel writes (see plexo-sdk's BlogTextPropertiesAccordion) — a plain
@@ -141,7 +145,7 @@ export function BlogStyles({ appearance }: { appearance?: BlogAppearance } = {})
         .plexo-breadcrumbs a:hover { color: var(--plexo-accent); }
         .plexo-breadcrumbs__sep { margin: 0 8px; color: #d1d5db; }
         .plexo-blog__footer { text-align: center; padding: 32px 24px; color: #9ca3af; font-size: 0.85rem; }
-        .plexo-comments { max-width: 720px; margin: 0 auto; padding: 32px 24px 96px; }
+        .plexo-comments { max-width: 720px; margin: 0 auto; padding: 32px 24px 96px; font-family: var(--plexo-comment-font-family, inherit); }
         .plexo-comments__heading { font-size: 1.35rem; font-weight: 800; margin: 0 0 20px; }
         .plexo-comments__empty { color: var(--plexo-comment-meta, #6b7280); font-size: 0.9rem; }
         .plexo-comment { padding: 16px 0; border-top: 1px solid #eee; }
@@ -154,7 +158,7 @@ export function BlogStyles({ appearance }: { appearance?: BlogAppearance } = {})
            theme's look is unchanged. */
         .plexo-comment__meta { font-size: 0.82rem; color: var(--plexo-comment-meta, #6b7280); margin-bottom: 6px; }
         .plexo-comment__meta strong { color: var(--plexo-comment-text, #17181c); }
-        .plexo-comment__body { font-size: 0.92rem; line-height: 1.6; color: var(--plexo-comment-text, #1f2430); }
+        .plexo-comment__body { font-size: var(--plexo-comment-font-size, 0.92rem); line-height: 1.6; color: var(--plexo-comment-text, #1f2430); }
         .plexo-comment__reply-btn { margin-top: 6px; background: none; border: none; padding: 0; color: var(--plexo-accent); font-size: 0.78rem; font-weight: 600; cursor: pointer; }
         .plexo-comment-form { margin-top: 28px; padding-top: 24px; border-top: 1px solid #eee; display: grid; gap: 10px; }
         .plexo-comment-form__hp { position: absolute; left: -9999px; }
