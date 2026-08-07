@@ -88,7 +88,6 @@ export function BlogPostEditor({
   const [contentJson, setContentJson] = useState<unknown>(initialPost?.contentJson ?? null);
   const [contentHtml, setContentHtml] = useState("");
   const [featuredImageUrl, setFeaturedImageUrl] = useState(initialPost?.featuredImageUrl ?? "");
-  const [featuredImageAlt, setFeaturedImageAlt] = useState(initialPost?.featuredImageAlt ?? "");
   // Drives the loading slot in the Featured Image panel — shared between a manual upload
   // and (later) the AI "write for me" image-generation step, just with a different label.
   const [featuredImageStatus, setFeaturedImageStatus] = useState<"uploading" | "generating" | null>(null);
@@ -161,7 +160,9 @@ export function BlogPostEditor({
           contentJson: contentJson ?? { type: "doc", content: [{ type: "paragraph" }] },
           contentHtml,
           featuredImageUrl: featuredImageUrl || null,
-          featuredImageAlt: featuredImageAlt || null,
+          // Alt text always mirrors the post title rather than asking for a separate one —
+          // one less required field, and the title is already a reasonable description.
+          featuredImageAlt: featuredImageUrl ? title.trim() || null : null,
           status: overrideStatus ?? status,
           scheduledAt: (overrideStatus ?? status) === "SCHEDULED" && scheduledAt ? new Date(scheduledAt).toISOString() : null,
           metaTitle: metaTitle || null,
@@ -198,7 +199,7 @@ export function BlogPostEditor({
         setSaving(false);
       }
     },
-    [title, slug, excerpt, contentJson, contentHtml, featuredImageUrl, featuredImageAlt, status, scheduledAt, metaTitle, metaDescription, noindex, authorId, categoryIds, tagNames, allTags, postId, templateId, router],
+    [title, slug, excerpt, contentJson, contentHtml, featuredImageUrl, status, scheduledAt, metaTitle, metaDescription, noindex, authorId, categoryIds, tagNames, allTags, postId, templateId, router],
   );
 
   // Autosave-as-draft — fires from the very first keystroke on a brand-new post (not
@@ -518,7 +519,7 @@ export function BlogPostEditor({
         <div style={PANEL}>
           <label style={FIELD_LABEL}>SEO Checklist</label>
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-            {computeSeoChecklist({ title, metaTitle, metaDescription, excerpt, featuredImageUrl, featuredImageAlt, contentHtml }).map((item, i) => (
+            {computeSeoChecklist({ title, metaTitle, metaDescription, excerpt, featuredImageUrl, featuredImageAlt: title, contentHtml }).map((item, i) => (
               <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "0.8rem", marginBottom: "0.5rem", color: item.level === "good" ? "#4ade80" : "#f59e0b" }}>
                 <span style={{ display: "inline-flex" }}>{item.level === "good" ? <IconCheck /> : <IconWarning />}</span>
                 <span style={{ color: "rgba(240,242,255,0.75)" }}>{item.label}</span>
@@ -613,13 +614,14 @@ export function BlogPostEditor({
             </div>
           ) : featuredImageUrl ? (
             <div style={{ marginBottom: "0.6rem" }}>
-              <img src={featuredImageUrl} alt="" style={{ width: "100%", borderRadius: 8, marginBottom: "0.5rem" }} />
-              <input
-                value={featuredImageAlt}
-                onChange={(e) => { setFeaturedImageAlt(e.target.value); markDirty(); }}
-                placeholder="Alt text (for SEO & accessibility)"
-                style={{ ...FIELD_INPUT, marginBottom: "0.4rem" }}
+              <img
+                src={featuredImageUrl}
+                alt={title}
+                style={{ width: "100%", borderRadius: 8, marginBottom: "0.5rem" }}
+                onError={() => setImageUrlError("Couldn't load an image from that URL.")}
+                onLoad={() => setImageUrlError(null)}
               />
+              {imageUrlError && <p style={{ fontSize: "0.72rem", color: "#f87171", marginBottom: "0.4rem" }}>{imageUrlError}</p>}
               <button type="button" onClick={() => { setFeaturedImageUrl(""); markDirty(); }} style={{ fontSize: "0.75rem", color: "#f87171", background: "none", border: "none", cursor: "pointer" }}>
                 Remove
               </button>
