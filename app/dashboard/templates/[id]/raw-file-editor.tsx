@@ -190,9 +190,19 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
   const newFileInputRef = useRef<HTMLInputElement | null>(null);
   const uploadFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const loadFiles = useCallback(() => {
-    setLoading(true);
-    setLoadError(null);
+  // `silent` skips the loading/error/activePath side effects — used for a background
+  // refresh (see RawTextContentEditor's onSaved below) where toggling `loading` would hit
+  // this component's `if (loading) return <div>Loading files…</div>` guard further down and
+  // unmount EVERYTHING under it, including the Text Content tab's live-patched preview
+  // iframe and all its in-memory state — confirmed as exactly why a Text Content save was
+  // making that preview appear to "lose" the edit it had just shown, until a full page
+  // reload remounted it fresh. A silent refresh still needs to update `files`/`edits` (the
+  // Code tab's own snapshot the toolbar's "Preview" button reads from) without any of that.
+  const loadFiles = useCallback((opts?: { silent?: boolean }) => {
+    if (!opts?.silent) {
+      setLoading(true);
+      setLoadError(null);
+    }
     return fetch(`/api/v1/templates/${templateId}/files`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load files.");
@@ -206,10 +216,14 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
         }
         setEdits(initial);
         setSavedContent(initial);
-        setActivePath("index.html");
+        if (!opts?.silent) setActivePath("index.html");
       })
-      .catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load files."))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!opts?.silent) setLoadError(err instanceof Error ? err.message : "Failed to load files.");
+      })
+      .finally(() => {
+        if (!opts?.silent) setLoading(false);
+      });
   }, [templateId]);
 
   useEffect(() => {
@@ -634,7 +648,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
             // loadFiles() replaces `edits` wholesale, which would silently discard an
             // in-progress Code tab edit to some OTHER file (only index.html's dirtiness
             // blocks switching to this tab, so e.g. a dirty css/styles.css could coexist).
-            if (!anyDirty) void loadFiles();
+            if (!anyDirty) void loadFiles({ silent: true });
           }}
         />
       )}

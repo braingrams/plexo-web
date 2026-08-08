@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -110,7 +110,12 @@ export function ColorSwatchPicker({ value, onChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parsed.h, parsed.s, parsed.v]);
 
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so this runs BEFORE the browser paints the newly-opened
+  // panel — otherwise it renders once at panelPos's stale default, top:0/left:0, and only
+  // snaps to the real position a frame later, a visible flash/glitch at the corner of the
+  // screen. The click handler below also seeds panelPos synchronously for the same reason,
+  // so this effect's first run (on open) is normally just confirming what's already correct.
+  useLayoutEffect(() => {
     if (!isOpen) return;
     function reposition() {
       const rect = triggerRef.current?.getBoundingClientRect();
@@ -220,7 +225,17 @@ export function ColorSwatchPicker({ value, onChange }: Props) {
       <button
         ref={triggerRef}
         type="button"
-        onClick={() => setIsOpen((v) => !v)}
+        onClick={() => {
+          if (!isOpen) {
+            const rect = triggerRef.current?.getBoundingClientRect();
+            if (rect) {
+              const panelWidth = 224;
+              const left = Math.min(Math.max(8, rect.left), window.innerWidth - panelWidth - 8);
+              setPanelPos({ top: rect.bottom + 6, left });
+            }
+          }
+          setIsOpen((v) => !v);
+        }}
         title="Pick a color"
         style={{
           position: "relative", width: 28, height: 28, borderRadius: 7, flexShrink: 0,
