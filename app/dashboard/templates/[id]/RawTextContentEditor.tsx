@@ -64,6 +64,40 @@ function IconChevronDown() {
   );
 }
 
+/** Clickable accordion header shared by every collapsible field group (Images, Colors, each
+ * individual structural Text section) — caller supplies the label's own text styling
+ * (section-heading vs. section-title look) so this stays purely about the toggle affordance. */
+function CollapsibleHeader({
+  label,
+  labelStyle,
+  collapsed,
+  onToggle,
+}: {
+  label: string;
+  labelStyle: React.CSSProperties;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      style={{
+        display: "flex", alignItems: "center", gap: "0.4rem", width: "100%",
+        background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left",
+      }}
+    >
+      <span style={{
+        display: "inline-flex", flexShrink: 0, color: "rgba(240,242,255,0.4)",
+        transform: collapsed ? "rotate(-90deg)" : "none", transition: "transform 0.15s",
+      }}>
+        <IconChevronDown />
+      </span>
+      <span style={labelStyle}>{label}</span>
+    </button>
+  );
+}
+
 /** Points left by default; pass "right" to mirror it — used for both panels' collapse/expand
  * affordances so only one shape needs maintaining. */
 function IconChevron({ direction = "left" }: { direction?: "left" | "right" }) {
@@ -289,6 +323,10 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
   // every place that color is used. A color used in only one section stays at index 0 no
   // matter how many times it's clicked, since (0 + 1) % 1 === 0.
   const [colorSectionIndex, setColorSectionIndex] = useState<Record<number, number>>({});
+  // Accordion state for the top-level field groups (Images, Colors, and each individual
+  // structural Text section) — each collapses independently, keyed by a stable string id
+  // rather than array index so toggling one doesn't shift if the underlying lists reorder.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [lockAspect, setLockAspect] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -650,6 +688,15 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
     setColorSectionIndex((prev) => ({ ...prev, [node.id]: (targetSection + 1) % node.sections.length }));
   }
 
+  function toggleGroup(key: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   const textDirty =
     nodes?.some((n) => drafts[n.id] !== n.text || (n.href !== undefined && hrefDrafts[n.id] !== n.href)) ?? false;
   const imgDirty = imgNodes.some((n) => {
@@ -816,8 +863,14 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
               <div className="raw-text-editor-fields" style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "1.25rem" }}>
           {(imgGroups.length > 0 || bgGroups.length > 0) && (
             <div style={{ marginBottom: "1.75rem" }}>
-              <p style={sectionHeadingStyle}>Images</p>
-
+              <CollapsibleHeader
+                label="Images"
+                labelStyle={{ ...sectionHeadingStyle, marginBottom: 0 }}
+                collapsed={collapsedGroups.has("images")}
+                onToggle={() => toggleGroup("images")}
+              />
+              {!collapsedGroups.has("images") && (
+                <div style={{ marginTop: "0.6rem" }}>
               {imgGroups.map((group, gi) => (
                 <div key={`img-${gi}`} style={{ marginBottom: "1rem" }}>
                   <p style={fieldLabelStyle}>
@@ -968,12 +1021,21 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                   </div>
                 </div>
               ))}
+                </div>
+              )}
             </div>
           )}
 
           {(colorNodes?.length ?? 0) > 0 && (
             <div style={{ marginBottom: "1.75rem" }}>
-              <p style={sectionHeadingStyle}>Colors</p>
+              <CollapsibleHeader
+                label="Colors"
+                labelStyle={{ ...sectionHeadingStyle, marginBottom: 0 }}
+                collapsed={collapsedGroups.has("colors")}
+                onToggle={() => toggleGroup("colors")}
+              />
+              {!collapsedGroups.has("colors") && (
+                <div style={{ marginTop: "0.6rem" }}>
               <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", margin: "0 0 0.75rem" }}>
                 One swatch per unique color — changing it updates every place on the page that uses it.
               </p>
@@ -1014,15 +1076,27 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                   );
                 })}
               </div>
+                </div>
+              )}
             </div>
           )}
 
           {sectionGroups.length > 0 && (
             <div>
               <p style={sectionHeadingStyle}>Text, by section</p>
-              {sectionGroups.map((section, si) => (
+              {sectionGroups.map((section, si) => {
+                const key = `text-${si}`;
+                const isCollapsed = collapsedGroups.has(key);
+                return (
                 <div key={si} className="raw-text-editor-section" style={{ marginBottom: "1.75rem" }}>
-                  <p style={sectionTitleStyle}>{section.label}</p>
+                  <CollapsibleHeader
+                    label={section.label}
+                    labelStyle={{ ...sectionTitleStyle, marginBottom: 0 }}
+                    collapsed={isCollapsed}
+                    onToggle={() => toggleGroup(key)}
+                  />
+                  {!isCollapsed && (
+                    <div style={{ marginTop: "0.65rem" }}>
                   {section.labelGroups.map((group, gi) => (
                     <div key={gi} style={{ marginBottom: "1.1rem" }}>
                       <p style={fieldLabelStyle}>
@@ -1101,8 +1175,11 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                       </div>
                     </div>
                   ))}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
               </div>
