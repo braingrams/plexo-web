@@ -91,6 +91,40 @@ function getLanguageExtension(path: string) {
   return html();
 }
 
+type FileGroupKey = "html" | "css" | "js" | "other";
+
+const FILE_GROUP_LABELS: Record<FileGroupKey, string> = {
+  html: "Pages",
+  css: "Styles",
+  js: "Scripts",
+  other: "Assets",
+};
+
+function categorizeFile(path: string): FileGroupKey {
+  const ext = path.toLowerCase().split(".").pop() ?? "";
+  if (ext === "html" || ext === "htm") return "html";
+  if (ext === "css") return "css";
+  if (ext === "js" || ext === "mjs" || ext === "cjs") return "js";
+  return "other";
+}
+
+/** Groups the flat file list by type (a plain alphabetical sort across the whole list
+ * interleaves e.g. "contact.html", "css/styles.css", "destinations.html" purely because "c"
+ * sorts before "d") — HTML pages first, then styles, then scripts, then everything else,
+ * alphabetical within each group; index.html always leads the HTML group regardless of
+ * alphabetical order, since it's the site's actual entry point. */
+function groupFilesByType(files: FileEntry[]): { key: FileGroupKey; files: FileEntry[] }[] {
+  const buckets: Record<FileGroupKey, FileEntry[]> = { html: [], css: [], js: [], other: [] };
+  for (const f of files) buckets[categorizeFile(f.path)].push(f);
+  buckets.html.sort((a, b) => (a.path === "index.html" ? -1 : b.path === "index.html" ? 1 : a.path.localeCompare(b.path)));
+  buckets.css.sort((a, b) => a.path.localeCompare(b.path));
+  buckets.js.sort((a, b) => a.path.localeCompare(b.path));
+  buckets.other.sort((a, b) => a.path.localeCompare(b.path));
+  return (["html", "css", "js", "other"] as const)
+    .map((key) => ({ key, files: buckets[key] }))
+    .filter((group) => group.files.length > 0);
+}
+
 // Matches the app's dark shell (#0b0f19 background) instead of oneDark's default panel color,
 // so the editor doesn't look like a mismatched widget dropped into the page.
 const editorTheme = EditorView.theme(
@@ -183,6 +217,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
     () => (activeFile ? getLanguageExtension(activeFile.path) : html()),
     [activeFile]
   );
+  const fileGroups = useMemo(() => groupFilesByType(files), [files]);
   const isDirty = useCallback(
     (path: string) => edits[path] !== undefined && edits[path] !== savedContent[path],
     [edits, savedContent]
@@ -489,25 +524,36 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
               <IconPlus /> Add
             </button>
           </div>
-          {files.map((f) => (
-            <button
-              key={f.path}
-              type="button"
-              onClick={() => setActivePath(f.path)}
-              style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
-                padding: "0.6rem 0.9rem", background: f.path === activePath ? "rgba(139,92,246,0.1)" : "none",
-                border: "none", borderLeft: f.path === activePath ? "2px solid var(--brand)" : "2px solid transparent",
-                color: f.path === activePath ? "#f0f2ff" : "rgba(240,242,255,0.6)",
-                fontSize: "0.8rem", textAlign: "left", cursor: "pointer", fontFamily: "monospace",
-              }}
-              title={`${f.path} — ${formatSize(f.size)}`}
-            >
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.path}</span>
-              {f.editable && isDirty(f.path) && (
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b", flexShrink: 0, marginLeft: "0.4rem" }} />
-              )}
-            </button>
+          {fileGroups.map((group) => (
+            <div key={group.key}>
+              <div style={{
+                padding: "0.55rem 0.9rem 0.25rem",
+                fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
+                color: "rgba(240,242,255,0.3)",
+              }}>
+                {FILE_GROUP_LABELS[group.key]}
+              </div>
+              {group.files.map((f) => (
+                <button
+                  key={f.path}
+                  type="button"
+                  onClick={() => setActivePath(f.path)}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
+                    padding: "0.6rem 0.9rem", background: f.path === activePath ? "rgba(139,92,246,0.1)" : "none",
+                    border: "none", borderLeft: f.path === activePath ? "2px solid var(--brand)" : "2px solid transparent",
+                    color: f.path === activePath ? "#f0f2ff" : "rgba(240,242,255,0.6)",
+                    fontSize: "0.8rem", textAlign: "left", cursor: "pointer", fontFamily: "monospace",
+                  }}
+                  title={`${f.path} — ${formatSize(f.size)}`}
+                >
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.path}</span>
+                  {f.editable && isDirty(f.path) && (
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b", flexShrink: 0, marginLeft: "0.4rem" }} />
+                  )}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
 

@@ -3,7 +3,7 @@ import type { FileEntry } from "@/app/api/v1/templates/[id]/files/route";
 // Resolves a reference found inside `fromPath` against the site's flat relative-path
 // namespace (e.g. dir "css", ref "../images/logo.png" -> "images/logo.png"), the same
 // way a browser would resolve it when the file is actually served at its real path.
-function resolveRelativePath(fromPath: string, ref: string): string {
+export function resolveRelativePath(fromPath: string, ref: string): string {
   const dir = fromPath.includes("/") ? fromPath.slice(0, fromPath.lastIndexOf("/")) : "";
   const clean = ref.split(/[?#]/)[0];
   const parts = (dir ? dir.split("/") : []).concat(clean.split("/"));
@@ -16,7 +16,7 @@ function resolveRelativePath(fromPath: string, ref: string): string {
   return stack.join("/");
 }
 
-function isExternalRef(ref: string): boolean {
+export function isExternalRef(ref: string): boolean {
   return /^([a-z]+:)?\/\//i.test(ref) || ref.startsWith("data:") || ref.startsWith("#") || ref.startsWith("mailto:") || ref.startsWith("tel:");
 }
 

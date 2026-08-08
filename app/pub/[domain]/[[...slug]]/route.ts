@@ -180,21 +180,35 @@ export async function GET(
   }
   const remainingSegments = slugSegments.slice(matchedSegments);
 
-  if (remainingSegments.length === 0) {
-    // `cursor` is the requested page itself (the domain root, or a matched descendant).
-    // A browser resolves a page's relative links against its OWN url's directory — for
-    // "/about" (no trailing slash) that directory is "/", not "/about/", which would
-    // make about's own "style.css" collide with the root's. Redirecting to "/about/" was
-    // the first approach here, but Next.js's own trailingSlash:false normalization
-    // immediately redirects it right back to "/about", producing an infinite loop —
-    // confirmed by actually running this. Injecting <base href="/about/"> into the served
-    // HTML gets the same relative-resolution fix without touching the visited URL at all,
-    // so there's no conflict with Next's routing. Only matters for RAW_UPLOAD pages
-    // nested under another page — BUILDER pages have no page-owned asset files to
-    // namespace, and the domain root itself has no "directory" to disambiguate from.
+  // A raw-uploaded page's own root document is never itself a TemplateAsset — the zip
+  // importer always excludes it, storing it as this Template's compiledHtml instead (see
+  // ExtractedSite.indexHtml in server/rawUpload.ts) — so a link that literally targets
+  // "index.html"/"index.htm"/"index" (a common way an uploaded site links back to its own
+  // home, and the exact convention every static host already treats as equivalent to the
+  // directory root) can never match a TemplateAsset row and would otherwise always fall
+  // through to the 404 below. Treat it as an alias for the page itself, same as how
+  // "about.html"/"about" already both resolve identically further down.
+  const INDEX_ALIASES = new Set(["index.html", "index.htm", "index"]);
+  const isIndexAlias = remainingSegments.length === 1 && INDEX_ALIASES.has(remainingSegments[0].toLowerCase());
+
+  if (remainingSegments.length === 0 || isIndexAlias) {
+    // `cursor` is the requested page itself (the domain root, or a matched descendant) —
+    // `pageSegments` is its OWN path, excluding any trailing index.html/index alias segment
+    // matched above, which isn't a real subdirectory. A browser resolves a page's relative
+    // links against its OWN url's directory — for "/about" (no trailing slash) that
+    // directory is "/", not "/about/", which would make about's own "style.css" collide
+    // with the root's. Redirecting to "/about/" was the first approach here, but Next.js's
+    // own trailingSlash:false normalization immediately redirects it right back to
+    // "/about", producing an infinite loop — confirmed by actually running this. Injecting
+    // <base href="/about/"> into the served HTML gets the same relative-resolution fix
+    // without touching the visited URL at all, so there's no conflict with Next's routing.
+    // Only matters for RAW_UPLOAD pages nested under another page — BUILDER pages have no
+    // page-owned asset files to namespace, and the domain root itself has no "directory" to
+    // disambiguate from.
+    const pageSegments = slugSegments.slice(0, matchedSegments);
     const isNestedRawPage = cursor.id !== published.templateId && cursor.sourceType === "RAW_UPLOAD";
     let html = isNestedRawPage
-      ? injectBaseHref(cursor.compiledHtml, `/${slugSegments.join("/")}/`)
+      ? injectBaseHref(cursor.compiledHtml, `/${pageSegments.join("/")}/`)
       : cursor.compiledHtml;
 
     // "Hosted with Plexo" bar — BUILDER pages only (RAW_UPLOAD is arbitrary uploaded HTML,

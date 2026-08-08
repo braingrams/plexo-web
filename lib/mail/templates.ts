@@ -1,6 +1,6 @@
 import { emailShell, type EmailBrand } from "./maildrip";
 
-const CTA_BUTTON = (href: string, label: string, color = "#8b5cf6", colorDeep = "#7c3aed") => `
+export const CTA_BUTTON = (href: string, label: string, color = "#8b5cf6", colorDeep = "#7c3aed") => `
   <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 32px auto;">
     <tr>
       <td style="border-radius:10px;background:linear-gradient(135deg,${color},${colorDeep});text-align:center;">

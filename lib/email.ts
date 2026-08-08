@@ -1,6 +1,20 @@
 import nodemailer from "nodemailer";
 import { createHmac } from "node:crypto";
 
+import { emailShell } from "@/lib/mail/maildrip";
+import { CTA_BUTTON } from "@/lib/mail/templates";
+
+/**
+ * Every admin-notification email below goes through emailShell (logo at top, same card/
+ * spacing/typography as every customer-facing email — verification, invites, mentions,
+ * etc.) instead of each function carrying its own hand-rolled <!DOCTYPE html>/<style> block.
+ * Previously these used a separate dark theme with no logo at all, so an admin's inbox had
+ * two visually unrelated "kinds" of Plexo email — this puts everything on the one shared
+ * template. No `brand` override is ever passed here: these go to ADMIN_EMAIL (Charisol
+ * staff), never a customer, so there's no white-labeling concept to apply — always the
+ * real Plexo mark.
+ */
+
 const MODERATION_SECRET = process.env.MODERATION_SECRET || process.env.AI_KEY_ENCRYPTION_SECRET || "plexo_testimonial_moderation_secret_key";
 
 /**
@@ -18,6 +32,75 @@ export function generateModerationToken(id: string, action: "approve" | "reject"
 export function verifyModerationToken(id: string, action: "approve" | "reject", token: string): boolean {
   const expected = generateModerationToken(id, action);
   return expected === token;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function badge(label: string, bg: string, color: string): string {
+  return `<span style="display:inline-block;background:${bg};color:${color};font-size:12px;font-weight:700;padding:6px 14px;border-radius:9999px;letter-spacing:0.3px;text-transform:uppercase;margin-bottom:20px;">${label}</span>`;
+}
+
+function detailsBlock(rows: string): string {
+  return `<div style="margin:20px 0;padding:16px 20px;background:#f1f5f9;border-radius:10px;text-align:left;font-size:14px;color:#334155;line-height:1.8;">${rows}</div>`;
+}
+
+function detailRow(label: string, value: string): string {
+  return `<p style="margin:0;"><strong style="color:#0f172a;">${label}:</strong> ${value}</p>`;
+}
+
+function twoButtonRow(
+  leftHref: string, leftLabel: string, leftColor: string,
+  rightHref: string, rightLabel: string, rightColor: string,
+): string {
+  return `
+  <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 24px auto;">
+    <tr>
+      <td style="padding:0 6px;">
+        <table cellpadding="0" cellspacing="0"><tr><td style="border-radius:10px;background:${leftColor};">
+          <a href="${leftHref}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">${leftLabel}</a>
+        </td></tr></table>
+      </td>
+      <td style="padding:0 6px;">
+        <table cellpadding="0" cellspacing="0"><tr><td style="border-radius:10px;background:${rightColor};">
+          <a href="${rightHref}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">${rightLabel}</a>
+        </td></tr></table>
+      </td>
+    </tr>
+  </table>`;
+}
+
+async function deliver(params: { to: string; subject: string; html: string; logLabel: string; logLines: string[] }): Promise<void> {
+  if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: Number(process.env.SMTP_PORT) === 465,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || `"Plexo Notifications" <noreply@plexopages.com>`,
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+    });
+  } else {
+    console.log("--------------------------------------------------");
+    console.log(`[${params.logLabel}]`);
+    console.log(`To: ${params.to}`);
+    for (const line of params.logLines) console.log(line);
+    console.log("--------------------------------------------------");
+  }
 }
 
 export type SendTestimonialEmailParams = {
@@ -39,88 +122,34 @@ export async function sendTestimonialNotificationEmail(testimonial: SendTestimon
 
   const approveToken = generateModerationToken(testimonial.id, "approve");
   const rejectToken = generateModerationToken(testimonial.id, "reject");
-
   const approveUrl = `${baseUrl}/api/testimonials/moderate?id=${testimonial.id}&action=approve&token=${approveToken}`;
   const rejectUrl = `${baseUrl}/api/testimonials/moderate?id=${testimonial.id}&action=reject&token=${rejectToken}`;
 
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 30px; margin: 0; }
-          .card { max-width: 600px; margin: 0 auto; background-color: #121724; border: 1px solid #2d3748; border-radius: 20px; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-          .badge { display: inline-block; background-color: #6b3bf9; color: #ffffff; font-size: 11px; font-weight: 800; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; }
-          h2 { font-size: 24px; font-weight: 800; margin-top: 0; color: #ffffff; }
-          .quote-box { background-color: #090d16; border-left: 4px solid #6b3bf9; padding: 20px; border-radius: 12px; margin: 20px 0; font-style: italic; color: #e2e8f0; line-height: 1.6; }
-          .details { margin-bottom: 24px; color: #a0aec0; font-size: 14px; line-height: 1.8; }
-          .details strong { color: #ffffff; }
-          .btn-container { display: flex; gap: 16px; margin-top: 28px; }
-          .btn-approve { display: inline-block; background-color: #10b981; color: #ffffff !important; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-size: 14px; text-align: center; }
-          .btn-reject { display: inline-block; background-color: #ef4444; color: #ffffff !important; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-size: 14px; text-align: center; }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <span class="badge">New Testimonial Submitted</span>
-          <h2>A new review requires your approval</h2>
-          
-          <div class="quote-box">
-            &ldquo;${testimonial.quote}&rdquo;
-          </div>
+  const html = emailShell({
+    title: "New Testimonial Submitted",
+    bodyHtml: `
+      ${badge("New Testimonial Submitted", "#ede9fe", "#7c3aed")}
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A new review requires your approval</h1>
+      <p style="margin:0 0 8px;font-size:15px;color:#334155;line-height:1.6;font-style:italic;background:#f1f5f9;border-radius:10px;padding:16px 20px;text-align:left;">
+        &ldquo;${escapeHtml(testimonial.quote)}&rdquo;
+      </p>
+      ${detailsBlock([
+        detailRow("Author", escapeHtml(testimonial.name)),
+        detailRow("Role &amp; Company", `${escapeHtml(testimonial.role)}${testimonial.company ? ` at ${escapeHtml(testimonial.company)}` : ""}`),
+        detailRow("Rating", `${"&#9733;".repeat(testimonial.rating)} (${testimonial.rating}/5)`),
+        testimonial.avatarUrl ? detailRow("Avatar URL", `<a href="${escapeHtml(testimonial.avatarUrl)}" style="color:#7c3aed;">${escapeHtml(testimonial.avatarUrl)}</a>`) : "",
+      ].filter(Boolean).join(""))}
+      ${twoButtonRow(approveUrl, "Approve & Publish", "#10b981", rejectUrl, "Reject", "#ef4444")}
+    `,
+  });
 
-          <div class="details">
-            <p><strong>Author:</strong> ${testimonial.name}</p>
-            <p><strong>Role &amp; Company:</strong> ${testimonial.role}${testimonial.company ? ` at ${testimonial.company}` : ''}</p>
-            <p><strong>Rating:</strong> ${'★'.repeat(testimonial.rating)} (${testimonial.rating}/5)</p>
-            ${testimonial.avatarUrl ? `<p><strong>Avatar URL:</strong> <a href="${testimonial.avatarUrl}" style="color: #818cf8">${testimonial.avatarUrl}</a></p>` : ''}
-          </div>
-
-          <div class="btn-container">
-            <a href="${approveUrl}" class="btn-approve">✔ Approve &amp; Publish Instantly</a>
-            <a href="${rejectUrl}" class="btn-reject">✖ Reject Testimonial</a>
-          </div>
-        </div>
-      </body>
-    </html>
-  `;
-
-  // Use SMTP transporter if configured
-  if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || `"Plexo Notifications" <noreply@plexopages.com>`,
-      to: adminEmail,
-      subject: `[Plexo Review] New Testimonial from ${testimonial.name}`,
-      html: htmlContent,
-    });
-  } else {
-    console.log("--------------------------------------------------");
-    console.log(`[TESTIMONIAL EMAIL NOTIFICATION LOG]`);
-    console.log(`To: ${adminEmail}`);
-    console.log(`Approve Link: ${approveUrl}`);
-    console.log(`Reject Link: ${rejectUrl}`);
-    console.log("--------------------------------------------------");
-  }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+  await deliver({
+    to: adminEmail,
+    subject: `[Plexo Review] New Testimonial from ${testimonial.name}`,
+    html,
+    logLabel: "TESTIMONIAL EMAIL NOTIFICATION LOG",
+    logLines: [`Approve Link: ${approveUrl}`, `Reject Link: ${rejectUrl}`],
+  });
 }
 
 export type SendFeedbackEmailParams = {
@@ -138,62 +167,26 @@ export type SendFeedbackEmailParams = {
 export async function sendFeedbackNotificationEmail(feedback: SendFeedbackEmailParams) {
   const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM || "admin@plexopages.com";
 
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 30px; margin: 0; }
-          .card { max-width: 600px; margin: 0 auto; background-color: #121724; border: 1px solid #2d3748; border-radius: 20px; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-          .badge { display: inline-block; background-color: #6b3bf9; color: #ffffff; font-size: 11px; font-weight: 800; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; }
-          h2 { font-size: 24px; font-weight: 800; margin-top: 0; color: #ffffff; }
-          .quote-box { background-color: #090d16; border-left: 4px solid #6b3bf9; padding: 20px; border-radius: 12px; margin: 20px 0; color: #e2e8f0; line-height: 1.6; white-space: pre-wrap; }
-          .details { margin-bottom: 8px; color: #a0aec0; font-size: 14px; line-height: 1.8; }
-          .details strong { color: #ffffff; }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <span class="badge">New Feedback</span>
-          <h2>A user submitted feedback</h2>
+  const html = emailShell({
+    title: "New Feedback",
+    bodyHtml: `
+      ${badge("New Feedback", "#ede9fe", "#7c3aed")}
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A user submitted feedback</h1>
+      ${detailsBlock([
+        detailRow("From", `${escapeHtml(feedback.userName)} (${escapeHtml(feedback.userEmail)})`),
+        feedback.pageUrl ? detailRow("Page", escapeHtml(feedback.pageUrl)) : "",
+      ].filter(Boolean).join(""))}
+      <p style="margin:0;font-size:14px;color:#334155;line-height:1.6;white-space:pre-wrap;background:#f1f5f9;border-radius:10px;padding:16px 20px;text-align:left;">${escapeHtml(feedback.message)}</p>
+    `,
+  });
 
-          <div class="details">
-            <p><strong>From:</strong> ${escapeHtml(feedback.userName)} (${escapeHtml(feedback.userEmail)})</p>
-            ${feedback.pageUrl ? `<p><strong>Page:</strong> ${escapeHtml(feedback.pageUrl)}</p>` : ""}
-          </div>
-
-          <div class="quote-box">${escapeHtml(feedback.message)}</div>
-        </div>
-      </body>
-    </html>
-  `;
-
-  if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || `"Plexo Notifications" <noreply@plexopages.com>`,
-      to: adminEmail,
-      subject: `[Plexo Feedback] New feedback from ${feedback.userName}`,
-      html: htmlContent,
-    });
-  } else {
-    console.log("--------------------------------------------------");
-    console.log(`[FEEDBACK EMAIL NOTIFICATION LOG]`);
-    console.log(`To: ${adminEmail}`);
-    console.log(`From: ${feedback.userName} (${feedback.userEmail})`);
-    console.log(`Message: ${feedback.message}`);
-    console.log("--------------------------------------------------");
-  }
+  await deliver({
+    to: adminEmail,
+    subject: `[Plexo Feedback] New feedback from ${feedback.userName}`,
+    html,
+    logLabel: "FEEDBACK EMAIL NOTIFICATION LOG",
+    logLines: [`From: ${feedback.userName} (${feedback.userEmail})`, `Message: ${feedback.message}`],
+  });
 }
 
 export type SendWithdrawalRequestEmailParams = {
@@ -216,64 +209,27 @@ export async function sendWithdrawalRequestNotificationEmail(withdrawal: SendWit
   const reviewUrl = `${adminAppUrl}/withdrawals`;
   const amount = (withdrawal.amountCents / 100).toFixed(2);
 
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 30px; margin: 0; }
-          .card { max-width: 600px; margin: 0 auto; background-color: #121724; border: 1px solid #2d3748; border-radius: 20px; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-          .badge { display: inline-block; background-color: #6b3bf9; color: #ffffff; font-size: 11px; font-weight: 800; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; }
-          h2 { font-size: 24px; font-weight: 800; margin-top: 0; color: #ffffff; }
-          .details { margin-bottom: 24px; color: #a0aec0; font-size: 14px; line-height: 1.8; }
-          .details strong { color: #ffffff; }
-          .btn-review { display: inline-block; background-color: #6b3bf9; color: #ffffff !important; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-size: 14px; text-align: center; margin-top: 20px; }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <span class="badge">New Withdrawal Request</span>
-          <h2>A seller has requested a payout</h2>
+  const html = emailShell({
+    title: "New Withdrawal Request",
+    bodyHtml: `
+      ${badge("New Withdrawal Request", "#ede9fe", "#7c3aed")}
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A seller has requested a payout</h1>
+      ${detailsBlock([
+        detailRow("Requested by", `${escapeHtml(withdrawal.userName)} (${escapeHtml(withdrawal.userEmail)})`),
+        detailRow("Amount", `$${amount}`),
+        detailRow("Bank", escapeHtml(withdrawal.bankName)),
+      ].join(""))}
+      ${CTA_BUTTON(reviewUrl, "Review in Admin")}
+    `,
+  });
 
-          <div class="details">
-            <p><strong>Requested by:</strong> ${withdrawal.userName} (${withdrawal.userEmail})</p>
-            <p><strong>Amount:</strong> $${amount}</p>
-            <p><strong>Bank:</strong> ${withdrawal.bankName}</p>
-          </div>
-
-          <a href="${reviewUrl}" class="btn-review">Review in Admin →</a>
-        </div>
-      </body>
-    </html>
-  `;
-
-  if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || `"Plexo Notifications" <noreply@plexopages.com>`,
-      to: adminEmail,
-      subject: `[Plexo Payout] Withdrawal requested by ${withdrawal.userName}`,
-      html: htmlContent,
-    });
-  } else {
-    console.log("--------------------------------------------------");
-    console.log(`[WITHDRAWAL REQUEST EMAIL NOTIFICATION LOG]`);
-    console.log(`To: ${adminEmail}`);
-    console.log(`Requested by: ${withdrawal.userName} (${withdrawal.userEmail})`);
-    console.log(`Amount: $${amount}`);
-    console.log(`Review: ${reviewUrl}`);
-    console.log("--------------------------------------------------");
-  }
+  await deliver({
+    to: adminEmail,
+    subject: `[Plexo Payout] Withdrawal requested by ${withdrawal.userName}`,
+    html,
+    logLabel: "WITHDRAWAL REQUEST EMAIL NOTIFICATION LOG",
+    logLines: [`Requested by: ${withdrawal.userName} (${withdrawal.userEmail})`, `Amount: $${amount}`, `Review: ${reviewUrl}`],
+  });
 }
 
 export type SendScriptAccessRequestEmailParams = {
@@ -295,63 +251,30 @@ export async function sendScriptAccessRequestNotificationEmail(req: SendScriptAc
   const adminAppUrl = process.env.ADMIN_APP_URL || "http://localhost:3001";
   const reviewUrl = `${adminAppUrl}/script-access-requests`;
 
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 30px; margin: 0; }
-          .card { max-width: 600px; margin: 0 auto; background-color: #121724; border: 1px solid #2d3748; border-radius: 20px; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-          .badge { display: inline-block; background-color: #6b3bf9; color: #ffffff; font-size: 11px; font-weight: 800; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; }
-          h2 { font-size: 24px; font-weight: 800; margin-top: 0; color: #ffffff; }
-          .details { margin-bottom: 24px; color: #a0aec0; font-size: 14px; line-height: 1.8; }
-          .details strong { color: #ffffff; }
-          .btn-review { display: inline-block; background-color: #6b3bf9; color: #ffffff !important; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-size: 14px; text-align: center; margin-top: 20px; }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <span class="badge">Full Script Preview Requested</span>
-          <h2>A user wants scripts enabled in their template preview</h2>
+  const html = emailShell({
+    title: "Full Script Preview Requested",
+    bodyHtml: `
+      ${badge("Full Script Preview Requested", "#ede9fe", "#7c3aed")}
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A user wants scripts enabled in their template preview</h1>
+      ${detailsBlock([
+        detailRow("Requested by", `${escapeHtml(req.userName)} (${escapeHtml(req.userEmail)})`),
+        detailRow("Template", escapeHtml(req.templateName)),
+        req.reason ? detailRow("Reason", escapeHtml(req.reason)) : "",
+      ].filter(Boolean).join(""))}
+      ${CTA_BUTTON(reviewUrl, "Review in Admin")}
+    `,
+  });
 
-          <div class="details">
-            <p><strong>Requested by:</strong> ${escapeHtml(req.userName)} (${escapeHtml(req.userEmail)})</p>
-            <p><strong>Template:</strong> ${escapeHtml(req.templateName)}</p>
-            ${req.reason ? `<p><strong>Reason:</strong> ${escapeHtml(req.reason)}</p>` : ""}
-          </div>
-
-          <a href="${reviewUrl}" class="btn-review">Review in Admin →</a>
-        </div>
-      </body>
-    </html>
-  `;
-
-  if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || `"Plexo Notifications" <noreply@plexopages.com>`,
-      to: adminEmail,
-      subject: `[Plexo] Full script preview requested — ${req.templateName}`,
-      html: htmlContent,
-    });
-  } else {
-    console.log("--------------------------------------------------");
-    console.log(`[SCRIPT ACCESS REQUEST EMAIL NOTIFICATION LOG]`);
-    console.log(`To: ${adminEmail}`);
-    console.log(`Requested by: ${req.userName} (${req.userEmail})`);
-    console.log(`Template: ${req.templateName} (${req.templateId})`);
-    if (req.reason) console.log(`Reason: ${req.reason}`);
-    console.log(`Review: ${reviewUrl}`);
-    console.log("--------------------------------------------------");
-  }
+  await deliver({
+    to: adminEmail,
+    subject: `[Plexo] Full script preview requested — ${req.templateName}`,
+    html,
+    logLabel: "SCRIPT ACCESS REQUEST EMAIL NOTIFICATION LOG",
+    logLines: [
+      `Requested by: ${req.userName} (${req.userEmail})`,
+      `Template: ${req.templateName} (${req.templateId})`,
+      ...(req.reason ? [`Reason: ${req.reason}`] : []),
+      `Review: ${reviewUrl}`,
+    ],
+  });
 }

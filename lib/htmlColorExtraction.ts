@@ -101,15 +101,23 @@ function isExtractableColor(value: string): boolean {
   return v.toLowerCase() in NAMED_COLORS;
 }
 
-/** Scans every `<style>` block for `--custom-property: <color>` declarations (almost always
- * in `:root`, but not assumed) — this is how most hand-built templates actually define a
- * "theme color" (`--teal: #0e7c7b;`, then `var(--teal)` everywhere), so resolving these is
- * the difference between a page's real brand colors showing up here at all versus being
- * invisible because every usage is a var() reference rather than a literal value. */
-function collectCssVarDefinitions($: cheerio.CheerioAPI): Map<string, string> {
+/** A linked stylesheet (`<link rel="stylesheet" href="css/styles.css">`) for a multi-file
+ * RAW_UPLOAD template — its CSS lives in a separate TemplateAsset (Vercel Blob), never in
+ * compiledHtml, so callers (the API route) must fetch each one's text content themselves and
+ * pass it in here. Without this, everything in this file only ever "saw" inline `<style>`
+ * blocks — for a template whose CSS (often including every `:root` variable definition) is
+ * entirely in a linked file, that meant color extraction found nothing at all. */
+export type ExternalStylesheet = { path: string; content: string };
+
+/** Scans every `<style>` block AND every linked stylesheet for `--custom-property: <color>`
+ * declarations (almost always in `:root`, but not assumed) — this is how most hand-built
+ * templates actually define a "theme color" (`--teal: #0e7c7b;`, then `var(--teal)`
+ * everywhere), so resolving these is the difference between a page's real brand colors
+ * showing up here at all versus being invisible because every usage is a var() reference
+ * rather than a literal value. */
+function collectCssVarDefinitions($: cheerio.CheerioAPI, externalStylesheets: ExternalStylesheet[]): Map<string, string> {
   const defs = new Map<string, string>();
-  $("style").each((_, styleEl) => {
-    const cssText = $(styleEl).html() ?? "";
+  function scan(cssText: string) {
     let parsed;
     try {
       parsed = postcss.parse(cssText);
@@ -121,7 +129,9 @@ function collectCssVarDefinitions($: cheerio.CheerioAPI): Map<string, string> {
       if (!prop.startsWith("--")) return;
       if (isExtractableColor(decl.value)) defs.set(prop, decl.value.trim());
     });
-  });
+  }
+  $("style").each((_, styleEl) => scan($(styleEl).html() ?? ""));
+  for (const sheet of externalStylesheets) scan(sheet.content);
   return defs;
 }
 
@@ -208,7 +218,12 @@ function sectionForSelector($: cheerio.CheerioAPI, selector: string, topLevelSec
 
 type ColorOccurrence =
   | { kind: "inline"; index: number; section: string; viaVar?: string }
-  | { kind: "css"; index: number; section: string; viaVar?: string };
+  | { kind: "css"; index: number; section: string; viaVar?: string }
+  // A declaration inside a LINKED stylesheet (TemplateAsset), not an inline <style> block —
+  // `index` is scoped to that one file (each external file gets its own counter, reset per
+  // file), so `path` is required to know which file it refers to. Rewriting this occurrence
+  // means rewriting that file's OWN content, returned separately — see applyColorEdits.
+  | { kind: "external-css"; path: string; index: number; section: string; viaVar?: string };
 
 export type ExtractedColorNode = {
   id: number;
@@ -224,11 +239,11 @@ export type ExtractedColorNode = {
  * deterministic order applyColorEdits re-walks, grouping by normalized color value. Both
  * functions must visit occurrences in IDENTICAL order for the id correlation between a GET
  * and a later PATCH to hold. */
-export function extractColorNodes(html: string): ExtractedColorNode[] {
+export function extractColorNodes(html: string, externalStylesheets: ExternalStylesheet[] = []): ExtractedColorNode[] {
   const $ = cheerio.load(html);
   const root = $("body").length > 0 ? $("body").get(0)! : $.root().get(0)!;
   const topLevelSections = computeTopLevelSections($, root);
-  const varDefs = collectCssVarDefinitions($);
+  const varDefs = collectCssVarDefinitions($, externalStylesheets);
 
   const byKey = new Map<string, { value: string; sections: string[]; sectionSet: Set<string>; occurrences: ColorOccurrence[] }>();
 
@@ -281,6 +296,29 @@ export function extractColorNodes(html: string): ExtractedColorNode[] {
     });
   });
 
+  for (const sheet of externalStylesheets) {
+    let parsed;
+    try {
+      parsed = postcss.parse(sheet.content);
+    } catch {
+      continue;
+    }
+    let externalIndex = 0;
+    parsed.walkDecls((decl) => {
+      const prop = decl.prop.toLowerCase();
+      if (!COLOR_PROPS.has(prop)) return;
+      const classified = classifyColorValue(decl.value, varDefs);
+      if (!classified) return;
+      const rule = decl.parent;
+      const selector = rule && rule.type === "rule" ? (rule as Rule).selector : "";
+      // Selector resolution is against the MAIN document's DOM regardless of which file the
+      // rule physically lives in — the selector targets page elements either way.
+      const section = selector ? sectionForSelector($, selector, topLevelSections) : "Content";
+      record(classified.resolved, section, { kind: "external-css", path: sheet.path, index: externalIndex, section, viaVar: classified.viaVar });
+      externalIndex++;
+    });
+  }
+
   return Array.from(byKey.values()).map((entry, id) => ({
     id,
     value: entry.value,
@@ -301,26 +339,35 @@ export function extractColorNodes(html: string): ExtractedColorNode[] {
  * originally-CSS-rule color once tagged. Re-derives ids by calling extractColorNodes against
  * this same html, then re-walks in the identical order to place the tags.
  */
-export function annotateColorNodesForPreview(html: string): string {
-  const nodes = extractColorNodes(html);
+export function annotateColorNodesForPreview(html: string, externalStylesheets: ExternalStylesheet[] = []): string {
+  const nodes = extractColorNodes(html, externalStylesheets);
   // Each occurrence's tag needs the color's id AND which of that color's sections THIS
   // particular occurrence belongs to (as an index into node.sections) — that's what lets
   // the editor's click-to-scroll cycle through a color's sections one at a time, rather than
   // only ever jumping to whichever element happens to be first in the DOM.
   const inlineTagByIndex = new Map<number, { id: number; sectionIndex: number }>();
   const cssTagByIndex = new Map<number, { id: number; sectionIndex: number }>();
+  const externalTagByIndex = new Map<string, Map<number, { id: number; sectionIndex: number }>>();
   for (const node of nodes) {
     for (const occ of node.occurrences) {
       const sectionIndex = node.sections.indexOf(occ.section);
       const tag = { id: node.id, sectionIndex };
       if (occ.kind === "inline") inlineTagByIndex.set(occ.index, tag);
-      else cssTagByIndex.set(occ.index, tag);
+      else if (occ.kind === "css") cssTagByIndex.set(occ.index, tag);
+      else {
+        let byIndex = externalTagByIndex.get(occ.path);
+        if (!byIndex) {
+          byIndex = new Map();
+          externalTagByIndex.set(occ.path, byIndex);
+        }
+        byIndex.set(occ.index, tag);
+      }
     }
   }
 
   const $ = cheerio.load(html);
   const root = $("body").length > 0 ? $("body").get(0)! : $.root().get(0)!;
-  const varDefs = collectCssVarDefinitions($);
+  const varDefs = collectCssVarDefinitions($, externalStylesheets);
 
   function appendTag(el: Element, id: number, prop: string, sectionIndex: number) {
     const token = `${id}:${prop}:${sectionIndex}`;
@@ -366,30 +413,75 @@ export function annotateColorNodesForPreview(html: string): string {
     });
   });
 
+  for (const sheet of externalStylesheets) {
+    let parsed;
+    try {
+      parsed = postcss.parse(sheet.content);
+    } catch {
+      continue;
+    }
+    const byIndex = externalTagByIndex.get(sheet.path);
+    let externalIndex = 0;
+    parsed.walkDecls((decl) => {
+      const prop = decl.prop.toLowerCase();
+      if (!COLOR_PROPS.has(prop) || !classifyColorValue(decl.value, varDefs)) return;
+      const rule = decl.parent;
+      const selector = rule && rule.type === "rule" ? (rule as Rule).selector : "";
+      const tag = byIndex?.get(externalIndex);
+      if (tag && selector) {
+        try {
+          $(selector).each((__, matchedEl) => appendTag(matchedEl as Element, tag.id, prop, tag.sectionIndex));
+        } catch {
+          // Selector syntax cheerio can't match (e.g. :hover) — nothing to tag for this
+          // occurrence, id sequence below still advances consistently.
+        }
+      }
+      externalIndex++;
+    });
+  }
+
   return $.html();
 }
 
 export type ColorEdit = { id: number; value: string };
 
+export type ApplyColorEditsResult = {
+  html: string;
+  /** path -> new full CSS text, one entry per linked stylesheet that had an edited
+   * declaration or variable definition rewritten — empty when every edit landed in
+   * compiledHtml itself. Callers must persist each of these back to that TemplateAsset. */
+  updatedStylesheets: Record<string, string>;
+};
+
 /**
  * Re-derives the same id -> occurrences mapping extractColorNodes produced (by calling it
- * against this same html), then re-walks fresh to rewrite every occurrence belonging to an
- * edited color — this is the "theme color" behavior: one edit updates every inline style and
- * every CSS declaration that held that value, wherever on the page it was.
+ * against this same html + externalStylesheets), then re-walks fresh to rewrite every
+ * occurrence belonging to an edited color — this is the "theme color" behavior: one edit
+ * updates every inline style, every inline <style> declaration, and every linked stylesheet
+ * declaration that held that value, wherever on the page it was. Linked-stylesheet edits are
+ * returned separately (updatedStylesheets) rather than spliced into the returned html, since
+ * their real content lives in a different file entirely.
  */
-export function applyColorEdits(html: string, edits: ColorEdit[]): string {
-  if (edits.length === 0) return html;
+export function applyColorEdits(
+  html: string,
+  edits: ColorEdit[],
+  externalStylesheets: ExternalStylesheet[] = [],
+): ApplyColorEditsResult {
+  if (edits.length === 0) return { html, updatedStylesheets: {} };
 
-  const nodes = extractColorNodes(html);
+  const nodes = extractColorNodes(html, externalStylesheets);
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
 
   const inlineTargets = new Map<number, string>();
   const cssTargets = new Map<number, string>();
+  const externalTargets = new Map<string, Map<number, string>>();
   // Occurrences that came from a var(--x) reference are never rewritten at their own site —
   // doing so would detach that one usage from the shared variable while leaving every other
   // reference (and the variable itself) untouched, breaking the theming instead of editing
   // it. Rewriting the variable's OWN definition is the correct edit: every var(--x) reference
   // picks up the new value automatically via the normal CSS cascade, with nothing else to touch.
+  // A variable can in principle be defined in more than one CSS source; every definition
+  // found gets rewritten, not just the first, so nothing keeps the old value by accident.
   const varTargets = new Map<string, string>();
   for (const edit of edits) {
     const node = nodeById.get(edit.id);
@@ -399,16 +491,25 @@ export function applyColorEdits(html: string, edits: ColorEdit[]): string {
         varTargets.set(occ.viaVar, edit.value);
       } else if (occ.kind === "inline") {
         inlineTargets.set(occ.index, edit.value);
-      } else {
+      } else if (occ.kind === "css") {
         cssTargets.set(occ.index, edit.value);
+      } else {
+        let byIndex = externalTargets.get(occ.path);
+        if (!byIndex) {
+          byIndex = new Map();
+          externalTargets.set(occ.path, byIndex);
+        }
+        byIndex.set(occ.index, edit.value);
       }
     }
   }
-  if (inlineTargets.size === 0 && cssTargets.size === 0 && varTargets.size === 0) return html;
+  if (inlineTargets.size === 0 && cssTargets.size === 0 && varTargets.size === 0 && externalTargets.size === 0) {
+    return { html, updatedStylesheets: {} };
+  }
 
   const $ = cheerio.load(html);
   const root = $("body").length > 0 ? $("body").get(0)! : $.root().get(0)!;
-  const varDefs = collectCssVarDefinitions($);
+  const varDefs = collectCssVarDefinitions($, externalStylesheets);
 
   let inlineIndex = 0;
   walkElements($, root, [], (el) => {
@@ -465,5 +566,36 @@ export function applyColorEdits(html: string, edits: ColorEdit[]): string {
     if (changed) $(styleEl).text(parsed.toString());
   });
 
-  return $.html();
+  const updatedStylesheets: Record<string, string> = {};
+  for (const sheet of externalStylesheets) {
+    let parsed;
+    try {
+      parsed = postcss.parse(sheet.content);
+    } catch {
+      continue;
+    }
+    const byIndex = externalTargets.get(sheet.path);
+    let changed = false;
+    let externalIndex = 0;
+    parsed.walkDecls((decl) => {
+      const prop = decl.prop.toLowerCase();
+      if (COLOR_PROPS.has(prop) && classifyColorValue(decl.value, varDefs)) {
+        const newValue = byIndex?.get(externalIndex);
+        if (newValue !== undefined) {
+          decl.value = newValue;
+          changed = true;
+        }
+        externalIndex++;
+        return;
+      }
+      const propTrimmed = decl.prop.trim();
+      if (propTrimmed.startsWith("--") && varTargets.has(propTrimmed)) {
+        decl.value = varTargets.get(propTrimmed)!;
+        changed = true;
+      }
+    });
+    if (changed) updatedStylesheets[sheet.path] = parsed.toString();
+  }
+
+  return { html: $.html(), updatedStylesheets };
 }
