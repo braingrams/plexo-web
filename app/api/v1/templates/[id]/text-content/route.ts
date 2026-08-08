@@ -21,6 +21,7 @@ import {
   type ExternalStylesheet,
 } from "@/lib/htmlColorExtraction";
 import { rewriteAssetReferencesForPreview } from "@/lib/htmlAssetRewrite";
+import { forceRevealAnimationsForPreview } from "@/lib/htmlRevealPreview";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 
 /**
@@ -92,15 +93,21 @@ export async function GET(
   // data-pcolor attributes already being present, since their own walks key off text nodes /
   // img tags, not this attribute.
   //
-  // rewriteAssetReferencesForPreview goes LAST and only affects this disposable preview
-  // copy — a multi-file upload's <link href="css/styles.css">/<img src="...">/etc. are
-  // relative paths with nothing to resolve against inside a sandboxed srcDoc iframe (no
-  // real URL of its own), so without this the whole page would render completely unstyled.
-  const previewHtml = rewriteAssetReferencesForPreview(
-    annotateImageNodesForPreview(
-      annotateTextNodesForPreview(annotateColorNodesForPreview(template.compiledHtml, externalStylesheets)),
+  // rewriteAssetReferencesForPreview and forceRevealAnimationsForPreview both go LAST and
+  // only affect this disposable preview copy: the former because a multi-file upload's
+  // <link href="css/styles.css">/<img src="...">/etc. are relative paths with nothing to
+  // resolve against inside a sandboxed srcDoc iframe (no real URL of its own), and the
+  // latter because this preview deliberately never runs page JS — see
+  // htmlRevealPreview.ts's doc comment — so any scroll-triggered "reveal" section would
+  // otherwise stay invisible forever.
+  const previewHtml = forceRevealAnimationsForPreview(
+    rewriteAssetReferencesForPreview(
+      annotateImageNodesForPreview(
+        annotateTextNodesForPreview(annotateColorNodesForPreview(template.compiledHtml, externalStylesheets)),
+      ),
+      template.assets,
+      externalStylesheets,
     ),
-    template.assets,
     externalStylesheets,
   );
   return NextResponse.json({ nodes, imageNodes, colorNodes, previewHtml });

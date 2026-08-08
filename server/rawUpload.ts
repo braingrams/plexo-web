@@ -76,6 +76,22 @@ export function contentTypeFor(path: string): string {
   return mime.getType(path) || "application/octet-stream";
 }
 
+/**
+ * Turns an extra root-level HTML filename from a zip upload into a human page name — e.g.
+ * "about-us.html" -> "About Us". Used only when auto-splitting a multi-page zip upload into
+ * separate Template pages (see upload-raw/route.ts) — the resulting name is always editable
+ * afterward via rename, so this just needs to be a reasonable starting guess.
+ */
+export function humanizePageFilename(path: string): string {
+  const base = path.replace(/\.(html?|htm)$/i, "").replace(/[-_]+/g, " ").trim();
+  if (!base) return "Page";
+  return base
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 export function validateSingleHtmlUpload(filename: string, buffer: Buffer): ExtractedSite {
   const ext = extensionOf(filename);
   if (ext !== "html" && ext !== "htm") {
