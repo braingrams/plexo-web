@@ -173,7 +173,15 @@ export async function GET(
   let cursor: Template = published.template;
   let matchedSegments = 0;
   for (const segment of slugSegments) {
-    const child = await prisma.template.findFirst({ where: { parentId: cursor.id, slug: segment } });
+    let child = await prisma.template.findFirst({ where: { parentId: cursor.id, slug: segment } });
+    // A zip's own nav links a sibling page as "about.html" (that's the literal href baked
+    // into the uploaded HTML — see upload-raw/route.ts's auto-split, which turns an extra
+    // root-level .html file into a page whose slug is the bare name, "about"), so a segment
+    // ending in .html/.htm that doesn't match any child verbatim gets a second look with
+    // that suffix stripped before this walk gives up on it.
+    if (!child && /\.html?$/i.test(segment)) {
+      child = await prisma.template.findFirst({ where: { parentId: cursor.id, slug: segment.replace(/\.html?$/i, "") } });
+    }
     if (!child) break;
     cursor = child;
     matchedSegments++;
