@@ -3,7 +3,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ExtractedTextNode } from "@/lib/htmlTextExtraction";
 import type { ExtractedImageNode, ExtractedImgNode, ExtractedBackgroundNode } from "@/lib/htmlImageExtraction";
+import type { ExtractedColorNode } from "@/lib/htmlColorExtraction";
 import { ScriptAccessControl } from "./ScriptAccessControl";
+import { ColorSwatchPicker } from "./ColorSwatchPicker";
 
 export type RawTextContentEditorHandle = {
   save: () => Promise<void>;
@@ -275,11 +277,13 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
 ) {
   const [nodes, setNodes] = useState<ExtractedTextNode[] | null>(null);
   const [imageNodes, setImageNodes] = useState<ExtractedImageNode[] | null>(null);
+  const [colorNodes, setColorNodes] = useState<ExtractedColorNode[] | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [hrefDrafts, setHrefDrafts] = useState<Record<number, string>>({});
   const [imgDrafts, setImgDrafts] = useState<Record<number, ImgDraft>>({});
   const [bgDrafts, setBgDrafts] = useState<Record<number, BgDraft>>({});
+  const [colorDrafts, setColorDrafts] = useState<Record<number, string>>({});
   const [lockAspect, setLockAspect] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -333,10 +337,11 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
         if (!res.ok) throw new Error("Failed to load text content.");
         return res.json();
       })
-      .then((data: { nodes: ExtractedTextNode[]; imageNodes: ExtractedImageNode[]; previewHtml: string }) => {
+      .then((data: { nodes: ExtractedTextNode[]; imageNodes: ExtractedImageNode[]; colorNodes: ExtractedColorNode[]; previewHtml: string }) => {
         if (cancelled) return;
         setNodes(data.nodes);
         setImageNodes(data.imageNodes);
+        setColorNodes(data.colorNodes);
         setPreviewHtml(data.previewHtml);
         setDrafts(Object.fromEntries(data.nodes.map((n) => [n.id, n.text])));
         setHrefDrafts(
@@ -344,6 +349,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
             data.nodes.filter((n) => n.href !== undefined).map((n) => [n.id, n.href as string]),
           ),
         );
+        setColorDrafts(Object.fromEntries(data.colorNodes.map((n) => [n.id, n.value])));
         const imgD: Record<number, ImgDraft> = {};
         const bgD: Record<number, BgDraft> = {};
         const lock: Record<number, boolean> = {};
@@ -593,6 +599,10 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
     });
   }
 
+  function handleColorChange(node: ExtractedColorNode, value: string) {
+    setColorDrafts((prev) => ({ ...prev, [node.id]: value }));
+  }
+
   const textDirty =
     nodes?.some((n) => drafts[n.id] !== n.text || (n.href !== undefined && hrefDrafts[n.id] !== n.href)) ?? false;
   const imgDirty = imgNodes.some((n) => {
@@ -603,7 +613,8 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
     const d = bgDrafts[n.id];
     return d && (d.src !== n.src || d.backgroundSize !== n.backgroundSize);
   });
-  const dirty = textDirty || imgDirty || bgDirty;
+  const colorDirty = colorNodes?.some((n) => colorDrafts[n.id] !== n.value) ?? false;
+  const dirty = textDirty || imgDirty || bgDirty || colorDirty;
 
   async function handleSave() {
     if (!nodes) return;
@@ -629,11 +640,14 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
           return d && (d.src !== n.src || d.backgroundSize !== n.backgroundSize);
         })
         .map((n) => ({ id: n.id, ...bgDrafts[n.id] }));
+      const colorEdits = (colorNodes ?? [])
+        .filter((n) => colorDrafts[n.id] !== n.value)
+        .map((n) => ({ id: n.id, value: colorDrafts[n.id] }));
 
       const res = await fetch(`/api/v1/templates/${templateId}/text-content`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ edits, imgEdits, backgroundEdits }),
+        body: JSON.stringify({ edits, imgEdits, backgroundEdits, colorEdits }),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload.error ?? "Save failed.");
@@ -653,6 +667,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
             : { ...n, ...bgDrafts[n.id] },
         ) ?? null,
       );
+      setColorNodes((prev) => prev?.map((n) => ({ ...n, value: colorDrafts[n.id] ?? n.value })) ?? null);
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1500);
     } catch (err) {
@@ -682,10 +697,10 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
       </div>
     );
   }
-  if ((!nodes || nodes.length === 0) && imgNodes.length === 0 && bgNodes.length === 0) {
+  if ((!nodes || nodes.length === 0) && imgNodes.length === 0 && bgNodes.length === 0 && (colorNodes?.length ?? 0) === 0) {
     return (
       <div style={{ flex: 1, display: "grid", placeItems: "center", color: "rgba(240,242,255,0.4)" }}>
-        No editable text or images found in this page.
+        No editable text, images, or colors found in this page.
       </div>
     );
   }
@@ -906,6 +921,50 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {(colorNodes?.length ?? 0) > 0 && (
+            <div style={{ marginBottom: "1.75rem" }}>
+              <p style={sectionHeadingStyle}>Colors</p>
+              <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", margin: "0 0 0.75rem" }}>
+                One swatch per unique color — changing it updates every place on the page that uses it.
+              </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
+                {(colorNodes ?? []).map((node) => {
+                  const value = colorDrafts[node.id] ?? node.value;
+                  const changed = value !== node.value;
+                  return (
+                    <div
+                      key={node.id}
+                      style={{
+                        display: "flex", flexDirection: "column", gap: "0.4rem", width: 168,
+                        padding: "0.55rem", borderRadius: 10,
+                        border: changed ? "1px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                        background: "rgba(255,255,255,0.02)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <ColorSwatchPicker value={value} onChange={(v) => handleColorChange(node, v)} />
+                        <input
+                          type="text"
+                          value={value}
+                          onChange={(e) => handleColorChange(node, e.target.value)}
+                          style={{
+                            flex: 1, minWidth: 0, background: "rgba(255,255,255,0.04)",
+                            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7,
+                            color: "#f0f2ff", padding: "0.3rem 0.5rem", fontSize: "0.72rem",
+                            outline: "none", fontFamily: "monospace",
+                          }}
+                        />
+                      </div>
+                      <p style={{ fontSize: "0.65rem", color: "rgba(240,242,255,0.35)", margin: 0, lineHeight: 1.4 }}>
+                        {node.sections.join(" · ")}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

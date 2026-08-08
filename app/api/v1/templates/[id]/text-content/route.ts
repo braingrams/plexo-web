@@ -11,6 +11,7 @@ import {
   type ImgEdit,
   type BackgroundEdit,
 } from "@/lib/htmlImageExtraction";
+import { extractColorNodes, applyColorEdits, type ColorEdit } from "@/lib/htmlColorExtraction";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 
 /**
@@ -43,10 +44,11 @@ export async function GET(
 
   const nodes = extractTextNodes(template.compiledHtml);
   const imageNodes = extractImageNodes(template.compiledHtml);
+  const colorNodes = extractColorNodes(template.compiledHtml);
   // Compose text + image annotation into one preview doc — order doesn't matter, each pass
   // only reads/writes its own attribute namespace (data-ptid vs data-pimg/data-pbg).
   const previewHtml = annotateImageNodesForPreview(annotateTextNodesForPreview(template.compiledHtml));
-  return NextResponse.json({ nodes, imageNodes, previewHtml });
+  return NextResponse.json({ nodes, imageNodes, colorNodes, previewHtml });
 }
 
 /**
@@ -84,11 +86,13 @@ export async function PATCH(
     edits?: { id?: number; text?: string; href?: string }[];
     imgEdits?: { id?: number; src?: string; width?: number | null; height?: number | null }[];
     backgroundEdits?: { id?: number; src?: string; backgroundSize?: string | null }[];
+    colorEdits?: { id?: number; value?: string }[];
   } | null;
   const rawEdits = Array.isArray(body?.edits) ? body.edits : [];
   const rawImgEdits = Array.isArray(body?.imgEdits) ? body.imgEdits : [];
   const rawBackgroundEdits = Array.isArray(body?.backgroundEdits) ? body.backgroundEdits : [];
-  if (rawEdits.length === 0 && rawImgEdits.length === 0 && rawBackgroundEdits.length === 0) {
+  const rawColorEdits = Array.isArray(body?.colorEdits) ? body.colorEdits : [];
+  if (rawEdits.length === 0 && rawImgEdits.length === 0 && rawBackgroundEdits.length === 0 && rawColorEdits.length === 0) {
     return NextResponse.json({ error: "No edits provided." }, { status: 400 });
   }
   const edits = rawEdits
@@ -100,9 +104,13 @@ export async function PATCH(
   const backgroundEdits: BackgroundEdit[] = rawBackgroundEdits
     .filter((e): e is { id: number; src?: string; backgroundSize?: string | null } => typeof e.id === "number")
     .map((e) => ({ id: e.id, src: e.src, backgroundSize: e.backgroundSize }));
+  const colorEdits: ColorEdit[] = rawColorEdits
+    .filter((e): e is { id: number; value: string } => typeof e.id === "number" && typeof e.value === "string")
+    .map((e) => ({ id: e.id, value: e.value }));
 
   let updatedHtml = applyTextEdits(template.compiledHtml, edits);
   updatedHtml = applyImageEdits(updatedHtml, imgEdits, backgroundEdits);
+  updatedHtml = applyColorEdits(updatedHtml, colorEdits);
   await prisma.template.update({
     where: { id: template.id },
     data: { compiledHtml: updatedHtml },

@@ -73,7 +73,7 @@ function sectionKeywordLabel(tag: string, cls: string, idAttr: string): string |
  * shell numbers the actual content sections 1, 2, 3… instead of collapsing them all into one
  * "Section 1" that happens to be the entire <main>.
  */
-function computeTopLevelSections($: cheerio.CheerioAPI, bodyRoot: AnyNode): Map<Element, string> {
+export function computeTopLevelSections($: cheerio.CheerioAPI, bodyRoot: AnyNode): Map<Element, string> {
   const mainChild = $(bodyRoot)
     .contents()
     .toArray()
@@ -91,7 +91,7 @@ function computeTopLevelSections($: cheerio.CheerioAPI, bodyRoot: AnyNode): Map<
   return map;
 }
 
-function sectionForAncestors(
+export function sectionForAncestors(
   $: cheerio.CheerioAPI,
   ancestors: Element[],
   topLevelSections: Map<Element, string>,
