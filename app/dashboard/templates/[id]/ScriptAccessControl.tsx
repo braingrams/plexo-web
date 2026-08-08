@@ -111,6 +111,21 @@ export function ScriptAccessControl({ templateId, onModeChange }: Props) {
     }
   }
 
+  async function endEarly() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/templates/${templateId}/script-access`, { method: "PATCH" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error ?? "Failed to end script access early.");
+      await fetchStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to end script access early.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   if (!data) return null;
 
   const rowStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", flexWrap: "wrap" };
@@ -131,6 +146,15 @@ export function ScriptAccessControl({ templateId, onModeChange }: Props) {
         <span style={{ color: "#34d399", fontWeight: 700 }}>
           Full interactive preview active — {localSeconds !== null ? formatMMSS(localSeconds) : "…"} remaining
         </span>
+        {error && <span style={{ color: "#f87171" }}>{error}</span>}
+        <button
+          type="button"
+          onClick={() => void endEarly()}
+          disabled={submitting}
+          style={{ ...buttonStyle, background: "none", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.6)" }}
+        >
+          End early — back to editable preview
+        </button>
       </div>
     );
   }

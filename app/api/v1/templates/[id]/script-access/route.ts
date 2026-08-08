@@ -151,3 +151,45 @@ export async function POST(
 
   return NextResponse.json({ request: { id: created.id, status: created.status, requestedAt: created.requestedAt } }, { status: 201 });
 }
+
+/**
+ * PATCH /api/v1/templates/:id/script-access
+ *
+ * Voluntarily ends the currently active grant early (sets expiresAt to now), so an editor
+ * isn't stuck with click-to-scroll/highlight/live-patch paused for the rest of an approved
+ * window they no longer need — see ScriptAccessControl.tsx's "End early" control. Only
+ * meaningful while a request is APPROVED and still active; a no-op error otherwise.
+ */
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+): Promise<NextResponse> {
+  const resolved = await resolveUser(request);
+  if (!resolved) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  if (permissionError) return permissionError;
+
+  const { id } = await context.params;
+  const template = await prisma.template.findFirst({
+    where: { id, organizationId: resolved.organizationId },
+    select: { id: true },
+  });
+  if (!template) {
+    return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });
+  }
+
+  const active = await prisma.scriptAccessRequest.findFirst({
+    where: { templateId: id, status: "APPROVED", expiresAt: { gt: new Date() } },
+    orderBy: { requestedAt: "desc" },
+  });
+  if (!active) {
+    return NextResponse.json({ error: "No active script access grant to end." }, { status: 400 });
+  }
+
+  await prisma.scriptAccessRequest.update({ where: { id: active.id }, data: { expiresAt: new Date() } });
+
+  return NextResponse.json({ success: true });
+}

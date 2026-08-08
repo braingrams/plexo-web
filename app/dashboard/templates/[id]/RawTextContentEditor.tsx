@@ -57,6 +57,92 @@ function IconChevronDown() {
   );
 }
 
+/** Points left by default; pass "right" to mirror it — used for both panels' collapse/expand
+ * affordances so only one shape needs maintaining. */
+function IconChevron({ direction = "left" }: { direction?: "left" | "right" }) {
+  return (
+    <svg
+      width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+      strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: direction === "right" ? "rotate(180deg)" : undefined }}
+    >
+      <polyline points="15 18 9 12 15 6" />
+    </svg>
+  );
+}
+
+function IconDesktop() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="13" rx="2" />
+      <line x1="8" y1="21" x2="16" y2="21" />
+      <line x1="12" y1="17" x2="12" y2="21" />
+    </svg>
+  );
+}
+
+function IconTablet() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="2" width="14" height="20" rx="2" />
+      <line x1="11" y1="18" x2="13" y2="18" />
+    </svg>
+  );
+}
+
+function IconMobile() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="7" y="2" width="10" height="20" rx="2" />
+      <line x1="11" y1="18" x2="13" y2="18" />
+    </svg>
+  );
+}
+
+type DeviceMode = "desktop" | "tablet" | "mobile";
+
+const DEVICE_WIDTHS: Record<DeviceMode, string> = {
+  desktop: "100%",
+  tablet: "820px",
+  mobile: "390px",
+};
+
+const DEVICE_OPTIONS: Array<{ key: DeviceMode; icon: React.ReactNode; title: string }> = [
+  { key: "desktop", icon: <IconDesktop />, title: "Desktop width" },
+  { key: "tablet", icon: <IconTablet />, title: "Tablet width" },
+  { key: "mobile", icon: <IconMobile />, title: "Mobile width" },
+];
+
+/** Segmented control that constrains the preview iframe's width so the page's own responsive
+ * CSS reacts as it would at that viewport size — this only simulates viewport width, not a
+ * real device (no touch/UA emulation), which is all "see what it looks like on mobile" needs
+ * for a CSS-driven layout check. */
+function DeviceToggle({ value, onChange }: { value: DeviceMode; onChange: (device: DeviceMode) => void }) {
+  return (
+    <div style={{ display: "flex", gap: "0.15rem", background: "rgba(255,255,255,0.06)", borderRadius: 8, padding: "0.15rem", flexShrink: 0 }}>
+      {DEVICE_OPTIONS.map((opt) => {
+        const active = value === opt.key;
+        return (
+          <button
+            key={opt.key}
+            type="button"
+            title={opt.title}
+            onClick={() => onChange(opt.key)}
+            style={{
+              display: "grid", placeItems: "center", width: 26, height: 22, borderRadius: 6, border: "none",
+              background: active ? "rgba(139,92,246,0.4)" : "transparent",
+              color: active ? "#fff" : "rgba(240,242,255,0.55)",
+              cursor: "pointer",
+            }}
+          >
+            {opt.icon}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 const BG_SIZE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "", label: "Default" },
   { value: "cover", label: "Cover (fill, cropped)" },
@@ -199,6 +285,11 @@ export function RawTextContentEditor({ templateId }: Props) {
   // DOM access into the iframe (highlight/scroll/live-patch/drag-resize) can't work, since that
   // needs allow-same-origin. See the effects/handlers below guarded on this flag.
   const [scriptsActive, setScriptsActive] = useState(false);
+  // At most one side collapsed at a time — a single enum instead of two independent
+  // booleans means "collapse the other side" while one is already collapsed just swaps
+  // which one is hidden, rather than risking both collapsed and nothing visible.
+  const [collapsedSide, setCollapsedSide] = useState<"none" | "fields" | "preview">("none");
+  const [device, setDevice] = useState<DeviceMode>("desktop");
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   // Registered by each field's wrapper element so a click inside the preview can scroll the
@@ -389,6 +480,12 @@ export function RawTextContentEditor({ templateId }: Props) {
     if (!doc) return;
 
     function onClick(e: MouseEvent) {
+      // This is a static, non-interactive preview — a click on a link or submit button
+      // should only ever scroll the matching field into view below, never actually follow
+      // the href or submit a form (both of which are native browser behaviors that fire
+      // regardless of allow-scripts, so they'd otherwise navigate the iframe away from the
+      // preview entirely).
+      e.preventDefault();
       const clicked = e.target as HTMLElement | null;
       if (!clicked) return;
       for (const kind of ["text", "img", "background"] as const) {
@@ -643,7 +740,34 @@ export function RawTextContentEditor({ templateId }: Props) {
       </div>
 
       <div className="raw-text-editor-split" style={{ flex: 1, minHeight: 0, display: "flex" }}>
-        <div className="raw-text-editor-fields" style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "1.25rem", maxWidth: 520 }}>
+        <div
+          className={collapsedSide === "fields" ? "raw-text-editor-collapsed-strip" : undefined}
+          style={
+            collapsedSide === "fields"
+              ? { width: 36, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(255,255,255,0.02)", borderRight: "1px solid rgba(255,255,255,0.08)" }
+              : { flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }
+          }
+          onClick={collapsedSide === "fields" ? () => setCollapsedSide("none") : undefined}
+          title={collapsedSide === "fields" ? "Expand fields panel" : undefined}
+        >
+          {collapsedSide === "fields" ? (
+            <IconChevron direction="right" />
+          ) : (
+            <>
+              <div style={{ flexShrink: 0, display: "flex", justifyContent: "flex-end", padding: "0.3rem 0.6rem", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <button
+                  type="button"
+                  onClick={() => setCollapsedSide("fields")}
+                  title="Collapse fields panel"
+                  style={{
+                    display: "grid", placeItems: "center", width: 24, height: 22, borderRadius: 6,
+                    border: "1px solid rgba(255,255,255,0.1)", background: "none", color: "rgba(240,242,255,0.5)", cursor: "pointer",
+                  }}
+                >
+                  <IconChevron direction="left" />
+                </button>
+              </div>
+              <div className="raw-text-editor-fields" style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "1.25rem", maxWidth: 520 }}>
           {(imgGroups.length > 0 || bgGroups.length > 0) && (
             <div style={{ marginBottom: "1.75rem" }}>
               <p style={sectionHeadingStyle}>Images</p>
@@ -889,18 +1013,31 @@ export function RawTextContentEditor({ templateId }: Props) {
               ))}
             </div>
           )}
+              </div>
+            </>
+          )}
         </div>
 
-        <div className="raw-text-editor-preview" style={{
-          flex: 1, minWidth: 0, borderLeft: "1px solid rgba(255,255,255,0.08)",
-          background: "#fff", position: "relative",
-        }}>
+        <div
+          className={collapsedSide === "preview" ? "raw-text-editor-collapsed-strip" : "raw-text-editor-preview"}
+          style={
+            collapsedSide === "preview"
+              ? { width: 36, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(255,255,255,0.02)" }
+              : { flex: 1, minWidth: 0, borderLeft: "1px solid rgba(255,255,255,0.08)", background: "#fff", position: "relative", display: "flex", flexDirection: "column" }
+          }
+          onClick={collapsedSide === "preview" ? () => setCollapsedSide("none") : undefined}
+          title={collapsedSide === "preview" ? "Expand preview panel" : undefined}
+        >
+          {collapsedSide === "preview" ? (
+            <IconChevron direction="left" />
+          ) : (
+            <>
           <div style={{
-            position: "absolute", top: 0, left: 0, right: 0, zIndex: 1,
+            flexShrink: 0, display: "flex", alignItems: "center", gap: "0.5rem",
             padding: "0.4rem 0.75rem", fontSize: "0.72rem", lineHeight: 1.4,
             background: "rgba(17,19,31,0.85)", color: "rgba(240,242,255,0.6)",
-            backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
           }}>
+            <span style={{ flex: 1, minWidth: 0 }}>
             {scriptsActive ? (
               <>Full interactive preview active — JS-driven behavior (mobile menus, toggles, sliders) works, but
               field click-to-scroll, highlight, live-typing preview, and image drag-resize are paused while this
@@ -910,27 +1047,59 @@ export function RawTextContentEditor({ templateId }: Props) {
               toggles, sliders) won&apos;t run. Use <strong>Preview</strong> above for the fully interactive page,
               or request full script preview below.</>
             )}
+            </span>
+            <DeviceToggle value={device} onChange={setDevice} />
+            <button
+              type="button"
+              onClick={() => setCollapsedSide("preview")}
+              title="Collapse preview panel"
+              style={{
+                display: "grid", placeItems: "center", width: 24, height: 22, borderRadius: 6, flexShrink: 0,
+                border: "1px solid rgba(255,255,255,0.15)", background: "none", color: "rgba(240,242,255,0.6)", cursor: "pointer",
+              }}
+            >
+              <IconChevron direction="right" />
+            </button>
           </div>
-          {previewHtml !== null && (
-            <iframe
-              // Changing key forces React to unmount + remount a fresh iframe element — a
-              // live iframe's sandbox attribute doesn't retroactively re-apply to content
-              // that already started running, so switching modes needs a real reload.
-              key={scriptsActive ? "scripted" : "sandboxed"}
-              ref={iframeRef}
-              title="Live preview"
-              srcDoc={previewHtml}
-              onLoad={handlePreviewLoad}
-              // Sandboxed mode: allow-same-origin (no allow-scripts) — DOM access for
-              // highlight/scroll/live-patch, nothing in the untrusted page can execute.
-              // Full script preview mode: allow-scripts WITHOUT allow-same-origin — the
-              // same safe, opaque-origin pattern the "Preview" modal in raw-file-editor.tsx
-              // already uses. Deliberately never both together: allow-same-origin on a
-              // srcDoc iframe resolves to THIS app's own origin, so combining it with
-              // allow-scripts would let untrusted uploaded JS reach the dashboard's session.
-              sandbox={scriptsActive ? "allow-scripts" : "allow-same-origin"}
-              style={{ width: "100%", height: "100%", border: "none" }}
-            />
+          <div
+            className="raw-text-editor-device-frame"
+            style={{
+              flex: 1, minHeight: 0, overflow: "auto", display: "flex", justifyContent: "center",
+              background: device === "desktop" ? "#fff" : "#e2e2e6",
+            }}
+          >
+            <div
+              style={{
+                width: DEVICE_WIDTHS[device],
+                minWidth: device === "desktop" ? undefined : DEVICE_WIDTHS[device],
+                height: "100%", flexShrink: 0, background: "#fff",
+                boxShadow: device === "desktop" ? "none" : "0 0 0 1px rgba(0,0,0,0.08), 0 12px 30px rgba(0,0,0,0.15)",
+              }}
+            >
+              {previewHtml !== null && (
+                <iframe
+                  // Changing key forces React to unmount + remount a fresh iframe element — a
+                  // live iframe's sandbox attribute doesn't retroactively re-apply to content
+                  // that already started running, so switching modes needs a real reload.
+                  key={scriptsActive ? "scripted" : "sandboxed"}
+                  ref={iframeRef}
+                  title="Live preview"
+                  srcDoc={previewHtml}
+                  onLoad={handlePreviewLoad}
+                  // Sandboxed mode: allow-same-origin (no allow-scripts) — DOM access for
+                  // highlight/scroll/live-patch, nothing in the untrusted page can execute.
+                  // Full script preview mode: allow-scripts WITHOUT allow-same-origin — the
+                  // same safe, opaque-origin pattern the "Preview" modal in raw-file-editor.tsx
+                  // already uses. Deliberately never both together: allow-same-origin on a
+                  // srcDoc iframe resolves to THIS app's own origin, so combining it with
+                  // allow-scripts would let untrusted uploaded JS reach the dashboard's session.
+                  sandbox={scriptsActive ? "allow-scripts" : "allow-same-origin"}
+                  style={{ width: "100%", height: "100%", border: "none" }}
+                />
+              )}
+            </div>
+          </div>
+            </>
           )}
         </div>
       </div>
@@ -947,6 +1116,14 @@ export function RawTextContentEditor({ templateId }: Props) {
             border-left: none !important;
             border-top: 1px solid rgba(255, 255, 255, 0.08);
             min-height: 320px;
+          }
+          .raw-text-editor-collapsed-strip {
+            width: 100% !important;
+            height: 36px !important;
+            flex-direction: row !important;
+          }
+          .raw-text-editor-device-frame {
+            min-height: 260px;
           }
         }
         @media (max-width: 640px) {
