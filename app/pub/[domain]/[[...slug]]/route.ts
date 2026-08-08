@@ -89,18 +89,33 @@ function injectFavicon(html: string, logoUrl: string): string {
   return html;
 }
 
-// Only ever called for BUILDER pages (platform-compiled, well-formed HTML) — never
-// RAW_UPLOAD content, where an arbitrary uploaded page could contain a literal "</body>"
-// string inside a <script> block or string literal that isn't the real closing tag and
-// would corrupt this splice. See the call site below for the sourceType gate.
+// Applies to BUILDER and RAW_UPLOAD pages alike. RAW_UPLOAD content is arbitrary uploaded
+// HTML, which could contain a literal "</body>" string inside a <script>/<style> block or
+// string literal that isn't the real closing tag — naively splicing at the first textual
+// match risks landing mid-script and corrupting it. Masking out every <script>/<style>
+// block's own contents before searching (replacing them with same-length blanks, so every
+// other offset lines up 1:1 with the real, untouched `html`) means a fake "</body>" inside
+// one can never be mistaken for the real tag, while every byte OUTSIDE the insertion point
+// still reaches the browser exactly as uploaded — a full HTML reparse/reserialize (cheerio,
+// used for the disposable Text Content preview) isn't used here because this is the actual
+// serving path, and RAW_UPLOAD content is meant to be served byte-for-byte as uploaded.
 function injectBrandingBar(html: string, ctaHref: string): string {
   const bar = `<div style="position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;gap:12px;padding:10px 16px;background:#0b0f19;color:#f0f2ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;line-height:1;border-top:1px solid rgba(255,255,255,0.08);box-shadow:0 -4px 20px rgba(0,0,0,0.35);">
   <span>Hosted with <strong>Plexo</strong>.</span>
   <a href="${ctaHref}" target="_blank" rel="noopener" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;padding:6px 14px;border-radius:8px;font-weight:700;text-decoration:none;">Host yours now</a>
 </div>`;
-  const bodyCloseMatch = html.match(/<\/body>/i);
-  if (bodyCloseMatch && bodyCloseMatch.index !== undefined) {
-    return html.slice(0, bodyCloseMatch.index) + bar + html.slice(bodyCloseMatch.index);
+  const maskedHtml = html.replace(
+    /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
+    (block) => " ".repeat(block.length),
+  );
+  let insertAt = -1;
+  const bodyCloseRe = /<\/body\s*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = bodyCloseRe.exec(maskedHtml)) !== null) {
+    insertAt = match.index; // last real match wins — see doc comment above
+  }
+  if (insertAt !== -1) {
+    return html.slice(0, insertAt) + bar + html.slice(insertAt);
   }
   return html + bar;
 }
@@ -219,13 +234,13 @@ export async function GET(
       ? injectBaseHref(cursor.compiledHtml, `/${pageSegments.join("/")}/`)
       : cursor.compiledHtml;
 
-    // "Hosted with Plexo" bar — BUILDER pages only (RAW_UPLOAD is arbitrary uploaded HTML,
-    // see injectBrandingBar's comment for why splicing into that specifically is unsafe),
-    // and only when the owning account isn't entitled to (or hasn't turned on) branding
-    // removal. Keyed on the page's own sourceType, not published.type (SUBDOMAIN vs CUSTOM
-    // is an orthogonal distinction) — a FREE user's page should show this everywhere it's
-    // served, custom domain or not.
-    if (cursor.sourceType !== "RAW_UPLOAD" && !resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
+    // "Hosted with Plexo" bar — BUILDER and RAW_UPLOAD pages alike (see injectBrandingBar's
+    // doc comment for how it stays safe against RAW_UPLOAD's arbitrary HTML), shown only
+    // when the owning account isn't entitled to (or hasn't turned on) branding removal.
+    // Keyed on the page's own sourceType conceptually, not published.type (SUBDOMAIN vs
+    // CUSTOM is an orthogonal distinction) — a FREE user's page should show this everywhere
+    // it's served, custom domain or not.
+    if (!resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
       html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
     }

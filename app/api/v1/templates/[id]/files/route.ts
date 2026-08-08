@@ -19,7 +19,10 @@ export type FileEntry = {
   size: number;
   editable: boolean;
   content?: string; // present only for editable (text) files
-  url?: string; // present only for non-editable (binary) files — the real public blob URL
+  // The real, publicly-fetchable blob URL — present for every asset-backed file (editable
+  // or not); absent only for the synthetic "index.html" entry, which has no TemplateAsset
+  // row of its own (its content lives in Template.compiledHtml instead).
+  url?: string;
 };
 
 /**
@@ -74,6 +77,11 @@ export async function GET(
           size: asset.size,
           editable: true,
           content,
+          // Also carried for editable files (not just binary ones) — buildPreviewHtml
+          // prefers this real URL over minting a client-side blob: URL whenever a file
+          // hasn't actually been edited, since that's the one guaranteed to load inside
+          // the Preview modal's sandboxed iframe.
+          url: asset.blobUrl,
         });
       } else {
         files.push({
@@ -208,7 +216,8 @@ export async function POST(
     contentType: asset.contentType,
     size: asset.size,
     editable,
-    ...(editable ? { content: buffer.toString("utf8") } : { url: asset.blobUrl }),
+    url: asset.blobUrl,
+    ...(editable ? { content: buffer.toString("utf8") } : {}),
   };
 
   return NextResponse.json({ success: true, file });

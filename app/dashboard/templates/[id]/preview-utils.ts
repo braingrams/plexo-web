@@ -67,14 +67,29 @@ export function buildPreviewHtml(
   const createdUrls: string[] = [];
   const pathToUrl = new Map<string, string>();
 
-  for (const f of files) {
-    if (!f.editable && f.url) pathToUrl.set(f.path, f.url);
-  }
-
-  const rootFile = files.find((f) => f.path === rootPath);
   const otherEditable = files.filter((f) => f.editable && f.path !== rootPath);
 
+  for (const f of files) {
+    if (!f.editable && f.url) {
+      pathToUrl.set(f.path, f.url);
+      continue;
+    }
+    // An editable file with no unsaved edit gets its real, publicly-fetchable blob URL
+    // instead of a freshly-minted blob: one — this modal's iframe deliberately runs with
+    // `sandbox="allow-scripts"` and NO `allow-same-origin` (an opaque origin, so any script
+    // the previewed page runs can't reach the dashboard's own session), and a blob: URL
+    // created by this document isn't reliably fetchable from a child frame with a
+    // different/opaque origin. The real https:// URL has no such restriction. Only an
+    // ACTUAL unsaved edit still needs a blob: URL, since there's no other way to preview
+    // content that was never saved.
+    if (f.editable && f.path !== rootPath && f.url) {
+      const current = edits[f.path] ?? f.content ?? "";
+      if (current === (f.content ?? "")) pathToUrl.set(f.path, f.url);
+    }
+  }
+
   for (const f of otherEditable) {
+    if (pathToUrl.has(f.path)) continue; // unedited — already mapped to its real URL above
     let content = edits[f.path] ?? f.content ?? "";
     if (f.path.toLowerCase().endsWith(".css")) {
       content = rewriteCssRefs(content, f.path, pathToUrl);
@@ -85,6 +100,7 @@ export function buildPreviewHtml(
     pathToUrl.set(f.path, url);
   }
 
+  const rootFile = files.find((f) => f.path === rootPath);
   const rootContent = rootFile ? (edits[rootPath] ?? rootFile.content ?? "") : "";
   const html = rewriteHtmlRefs(rootContent, rootPath, pathToUrl);
 
