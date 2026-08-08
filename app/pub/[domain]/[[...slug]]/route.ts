@@ -333,15 +333,26 @@ export async function GET(
   if (!asset) {
     return notFoundResponse();
   }
-  const assetRes = await fetch(asset.blobUrl);
+  // no-store: an edit (e.g. a Text Content color change) overwrites this exact blob URL in
+  // place rather than minting a new one, so a cached `fetch()` result here would keep
+  // serving the pre-edit bytes even though the database and blob storage both already
+  // have the new content — confirmed as the cause of a saved color edit not showing up on
+  // the live site until a hard reload.
+  const assetRes = await fetch(asset.blobUrl, { cache: "no-store" });
   if (!assetRes.ok || !assetRes.body) {
     return notFoundResponse();
   }
-  return new NextResponse(assetRes.body, {
-    headers: {
-      "Content-Type": asset.contentType,
-      "X-Content-Type-Options": "nosniff",
-      "Cache-Control": "public, max-age=3600",
-    },
+  const headers = new Headers({
+    "Content-Type": asset.contentType,
+    "X-Content-Type-Options": "nosniff",
+    // Short-lived + revalidated rather than a blind long max-age, for the same reason as
+    // the no-store fetch above — a stale-while-revalidate window keeps repeat requests fast
+    // without risking a visitor's BROWSER cache hiding a real content change for an hour.
+    "Cache-Control": "public, max-age=60, must-revalidate, stale-while-revalidate=300",
   });
+  const etag = assetRes.headers.get("etag");
+  if (etag) headers.set("ETag", etag);
+  const lastModified = assetRes.headers.get("last-modified");
+  if (lastModified) headers.set("Last-Modified", lastModified);
+  return new NextResponse(assetRes.body, { headers });
 }
