@@ -22,6 +22,14 @@ import { computeTopLevelSections, sectionForAncestors } from "./htmlTextExtracti
 const COLOR_PROPS = new Set([
   "color",
   "background-color",
+  // The `background` SHORTHAND too — not to decompose it, but because "background: <color>"
+  // with nothing else in the value (no url(), gradient, position, etc.) is an extremely
+  // common way solid background colors actually get written, often MORE common than the
+  // longhand. classifyColorValue only ever matches when the ENTIRE value is a single color
+  // token or a bare var() reference, so a real multi-part shorthand ("url(...) center/cover"
+  // or "#fff url(...)") still correctly falls through as unextractable — this only catches
+  // the pure-color case, never risks misreading a mixed shorthand.
+  "background",
   "border-color",
   "border-top-color",
   "border-right-color",
@@ -78,9 +86,12 @@ const HEX_RE = /^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 const RGB_RE = /^rgba?\(([^)]+)\)$/i;
 const HSL_RE = /^hsla?\(([^)]+)\)$/i;
 const NOT_A_CONCRETE_COLOR_RE = /^(inherit|initial|unset|revert|revert-layer|currentcolor|none|auto)$/i;
+const VAR_REF_RE = /^var\(\s*(--[a-zA-Z0-9_-]+)\s*(?:,\s*([\s\S]+))?\)$/i;
 
-/** True if `value` is a concrete, editable color — not a keyword like `inherit`/`currentColor`
- * or a `var(--x)` reference, which a color picker has nothing meaningful to show for. */
+/** True if `value` is a concrete, editable color outright — a literal hex/rgb/hsl/named
+ * value. Does NOT resolve `var(--x)` references (see resolveVarRef/classifyColorValue for
+ * that) — this only judges a value taken at face value, which is also exactly what's needed
+ * to decide whether a `--custom-property: value` DEFINITION itself is a color. */
 function isExtractableColor(value: string): boolean {
   const v = value.trim();
   if (!v || v.includes("var(") || v.includes("calc(")) return false;
@@ -88,6 +99,57 @@ function isExtractableColor(value: string): boolean {
   if (HEX_RE.test(v)) return true;
   if (RGB_RE.test(v) || HSL_RE.test(v)) return true;
   return v.toLowerCase() in NAMED_COLORS;
+}
+
+/** Scans every `<style>` block for `--custom-property: <color>` declarations (almost always
+ * in `:root`, but not assumed) — this is how most hand-built templates actually define a
+ * "theme color" (`--teal: #0e7c7b;`, then `var(--teal)` everywhere), so resolving these is
+ * the difference between a page's real brand colors showing up here at all versus being
+ * invisible because every usage is a var() reference rather than a literal value. */
+function collectCssVarDefinitions($: cheerio.CheerioAPI): Map<string, string> {
+  const defs = new Map<string, string>();
+  $("style").each((_, styleEl) => {
+    const cssText = $(styleEl).html() ?? "";
+    let parsed;
+    try {
+      parsed = postcss.parse(cssText);
+    } catch {
+      return;
+    }
+    parsed.walkDecls((decl) => {
+      const prop = decl.prop.trim();
+      if (!prop.startsWith("--")) return;
+      if (isExtractableColor(decl.value)) defs.set(prop, decl.value.trim());
+    });
+  });
+  return defs;
+}
+
+/** If `value` is a `var(--x)` (optionally with a fallback) reference, resolves it against
+ * already-collected variable definitions, falling back to the reference's own fallback value
+ * when the variable itself isn't defined anywhere we can see. Returns null for anything that
+ * isn't a var() reference at all, or resolves to nothing usable. */
+function resolveVarRef(value: string, varDefs: Map<string, string>): { varName: string; resolved: string } | null {
+  const match = VAR_REF_RE.exec(value.trim());
+  if (!match) return null;
+  const varName = match[1];
+  const defined = varDefs.get(varName);
+  if (defined !== undefined) return { varName, resolved: defined };
+  const fallback = match[2]?.trim();
+  if (fallback && isExtractableColor(fallback)) return { varName, resolved: fallback };
+  return null;
+}
+
+/** The single classification step every walk (extract/annotate/apply) must use identically —
+ * either this is a var() reference that resolves to a concrete color, or it's a concrete
+ * color outright. Returns null for anything else (inherit, unresolvable var(), calc(), …),
+ * meaning "don't count this as an occurrence at all" — callers must only advance their
+ * position counters when this returns non-null, or extraction/annotation/apply drift apart. */
+function classifyColorValue(value: string, varDefs: Map<string, string>): { resolved: string; viaVar?: string } | null {
+  const varRef = resolveVarRef(value, varDefs);
+  if (varRef) return { resolved: varRef.resolved, viaVar: varRef.varName };
+  if (isExtractableColor(value)) return { resolved: value };
+  return null;
 }
 
 function normalizeColorKey(value: string): string {
@@ -145,8 +207,8 @@ function sectionForSelector($: cheerio.CheerioAPI, selector: string, topLevelSec
 }
 
 type ColorOccurrence =
-  | { kind: "inline"; index: number; section: string }
-  | { kind: "css"; index: number; section: string };
+  | { kind: "inline"; index: number; section: string; viaVar?: string }
+  | { kind: "css"; index: number; section: string; viaVar?: string };
 
 export type ExtractedColorNode = {
   id: number;
@@ -166,6 +228,7 @@ export function extractColorNodes(html: string): ExtractedColorNode[] {
   const $ = cheerio.load(html);
   const root = $("body").length > 0 ? $("body").get(0)! : $.root().get(0)!;
   const topLevelSections = computeTopLevelSections($, root);
+  const varDefs = collectCssVarDefinitions($);
 
   const byKey = new Map<string, { value: string; sections: string[]; sectionSet: Set<string>; occurrences: ColorOccurrence[] }>();
 
@@ -188,8 +251,10 @@ export function extractColorNodes(html: string): ExtractedColorNode[] {
     const style = parseStyleAttr($(el).attr("style"));
     const section = sectionForAncestors($, [...ancestors, el], topLevelSections);
     for (const prop of Object.keys(style)) {
-      if (!COLOR_PROPS.has(prop) || !isExtractableColor(style[prop])) continue;
-      record(style[prop], section, { kind: "inline", index: inlineIndex, section });
+      if (!COLOR_PROPS.has(prop)) continue;
+      const classified = classifyColorValue(style[prop], varDefs);
+      if (!classified) continue;
+      record(classified.resolved, section, { kind: "inline", index: inlineIndex, section, viaVar: classified.viaVar });
       inlineIndex++;
     }
   });
@@ -205,11 +270,13 @@ export function extractColorNodes(html: string): ExtractedColorNode[] {
     }
     parsed.walkDecls((decl) => {
       const prop = decl.prop.toLowerCase();
-      if (!COLOR_PROPS.has(prop) || !isExtractableColor(decl.value)) return;
+      if (!COLOR_PROPS.has(prop)) return;
+      const classified = classifyColorValue(decl.value, varDefs);
+      if (!classified) return;
       const rule = decl.parent;
       const selector = rule && rule.type === "rule" ? (rule as Rule).selector : "";
       const section = selector ? sectionForSelector($, selector, topLevelSections) : "Content";
-      record(decl.value, section, { kind: "css", index: cssIndex, section });
+      record(classified.resolved, section, { kind: "css", index: cssIndex, section, viaVar: classified.viaVar });
       cssIndex++;
     });
   });
@@ -253,6 +320,7 @@ export function annotateColorNodesForPreview(html: string): string {
 
   const $ = cheerio.load(html);
   const root = $("body").length > 0 ? $("body").get(0)! : $.root().get(0)!;
+  const varDefs = collectCssVarDefinitions($);
 
   function appendTag(el: Element, id: number, prop: string, sectionIndex: number) {
     const token = `${id}:${prop}:${sectionIndex}`;
@@ -264,7 +332,7 @@ export function annotateColorNodesForPreview(html: string): string {
   walkElements($, root, [], (el) => {
     const style = parseStyleAttr($(el).attr("style"));
     for (const prop of Object.keys(style)) {
-      if (!COLOR_PROPS.has(prop) || !isExtractableColor(style[prop])) continue;
+      if (!COLOR_PROPS.has(prop) || !classifyColorValue(style[prop], varDefs)) continue;
       const tag = inlineTagByIndex.get(inlineIndex);
       if (tag) appendTag(el, tag.id, prop, tag.sectionIndex);
       inlineIndex++;
@@ -282,7 +350,7 @@ export function annotateColorNodesForPreview(html: string): string {
     }
     parsed.walkDecls((decl) => {
       const prop = decl.prop.toLowerCase();
-      if (!COLOR_PROPS.has(prop) || !isExtractableColor(decl.value)) return;
+      if (!COLOR_PROPS.has(prop) || !classifyColorValue(decl.value, varDefs)) return;
       const rule = decl.parent;
       const selector = rule && rule.type === "rule" ? (rule as Rule).selector : "";
       const tag = cssTagByIndex.get(cssIndex);
@@ -317,25 +385,37 @@ export function applyColorEdits(html: string, edits: ColorEdit[]): string {
 
   const inlineTargets = new Map<number, string>();
   const cssTargets = new Map<number, string>();
+  // Occurrences that came from a var(--x) reference are never rewritten at their own site —
+  // doing so would detach that one usage from the shared variable while leaving every other
+  // reference (and the variable itself) untouched, breaking the theming instead of editing
+  // it. Rewriting the variable's OWN definition is the correct edit: every var(--x) reference
+  // picks up the new value automatically via the normal CSS cascade, with nothing else to touch.
+  const varTargets = new Map<string, string>();
   for (const edit of edits) {
     const node = nodeById.get(edit.id);
     if (!node) continue;
     for (const occ of node.occurrences) {
-      if (occ.kind === "inline") inlineTargets.set(occ.index, edit.value);
-      else cssTargets.set(occ.index, edit.value);
+      if (occ.viaVar) {
+        varTargets.set(occ.viaVar, edit.value);
+      } else if (occ.kind === "inline") {
+        inlineTargets.set(occ.index, edit.value);
+      } else {
+        cssTargets.set(occ.index, edit.value);
+      }
     }
   }
-  if (inlineTargets.size === 0 && cssTargets.size === 0) return html;
+  if (inlineTargets.size === 0 && cssTargets.size === 0 && varTargets.size === 0) return html;
 
   const $ = cheerio.load(html);
   const root = $("body").length > 0 ? $("body").get(0)! : $.root().get(0)!;
+  const varDefs = collectCssVarDefinitions($);
 
   let inlineIndex = 0;
   walkElements($, root, [], (el) => {
     const style = parseStyleAttr($(el).attr("style"));
     let changed = false;
     for (const prop of Object.keys(style)) {
-      if (!COLOR_PROPS.has(prop) || !isExtractableColor(style[prop])) continue;
+      if (!COLOR_PROPS.has(prop) || !classifyColorValue(style[prop], varDefs)) continue;
       const newValue = inlineTargets.get(inlineIndex);
       if (newValue !== undefined) {
         style[prop] = newValue;
@@ -364,13 +444,23 @@ export function applyColorEdits(html: string, edits: ColorEdit[]): string {
     let changed = false;
     parsed.walkDecls((decl) => {
       const prop = decl.prop.toLowerCase();
-      if (!COLOR_PROPS.has(prop) || !isExtractableColor(decl.value)) return;
-      const newValue = cssTargets.get(cssIndex);
-      if (newValue !== undefined) {
-        decl.value = newValue;
+      if (COLOR_PROPS.has(prop) && classifyColorValue(decl.value, varDefs)) {
+        const newValue = cssTargets.get(cssIndex);
+        if (newValue !== undefined) {
+          decl.value = newValue;
+          changed = true;
+        }
+        cssIndex++;
+        return;
+      }
+      // Not a tracked color property/value — still check whether THIS declaration is the
+      // definition of an edited variable (`--teal: ...`), independent of the cssIndex
+      // sequence above, since custom-property definitions were never part of that count.
+      const propTrimmed = decl.prop.trim();
+      if (propTrimmed.startsWith("--") && varTargets.has(propTrimmed)) {
+        decl.value = varTargets.get(propTrimmed)!;
         changed = true;
       }
-      cssIndex++;
     });
     if (changed) $(styleEl).text(parsed.toString());
   });
