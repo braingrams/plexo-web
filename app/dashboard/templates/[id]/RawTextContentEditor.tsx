@@ -1218,10 +1218,16 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
           onClick={collapsedSide === "preview" ? () => setCollapsedSide("none") : undefined}
           title={collapsedSide === "preview" ? "Expand preview panel" : undefined}
         >
-          {collapsedSide === "preview" ? (
-            <IconChevron direction="left" />
-          ) : (
-            <>
+          {collapsedSide === "preview" && <IconChevron direction="left" />}
+          {/* Always mounted, regardless of collapsedSide — only `display` toggles below.
+              Unmounting this (the previous approach: swapping it out entirely for the
+              chevron strip above) discarded every live DOM patch applied directly to the
+              iframe's document — color/text/image edits, INCLUDING already-saved ones —
+              since a freshly remounted iframe reloads from `previewHtml`, a one-time
+              snapshot that's never kept in sync with those patches. Confirmed as exactly why
+              collapsing then re-expanding this panel made a saved color edit appear to
+              revert until it was re-applied. */}
+          <div style={{ display: collapsedSide === "preview" ? "none" : "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
           <div style={{
             flexShrink: 0, display: "flex", alignItems: "center", gap: "0.5rem",
             padding: "0.4rem 0.75rem", fontSize: "0.72rem", lineHeight: 1.4,
@@ -1289,8 +1295,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
               )}
             </div>
           </div>
-            </>
-          )}
+          </div>
         </div>
       </div>
 

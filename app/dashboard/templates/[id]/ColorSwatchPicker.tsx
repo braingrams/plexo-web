@@ -136,10 +136,20 @@ export function ColorSwatchPicker({ value, onChange }: Props) {
     function handleScroll() {
       setIsOpen(false);
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    window.addEventListener("scroll", handleScroll, true);
+    // Deferred by a tick: attaching this SAME render pass (synchronously, as part of the
+    // click that just opened the panel) risks the listener still being live for that very
+    // click's own mousedown under React StrictMode's double-effect invocation in dev, or
+    // simply from firing before the triggering event has fully finished dispatching —
+    // either way it reads as the panel needing two or three clicks before it "sticks" open,
+    // since each open immediately self-closes. A zero-delay timeout guarantees this can only
+    // ever react to a LATER, genuinely separate interaction.
+    const attachTimer = setTimeout(() => {
+      document.addEventListener("mousedown", handleClickOutside);
+      window.addEventListener("scroll", handleScroll, true);
+    }, 0);
     window.addEventListener("resize", reposition);
     return () => {
+      clearTimeout(attachTimer);
       document.removeEventListener("mousedown", handleClickOutside);
       window.removeEventListener("scroll", handleScroll, true);
       window.removeEventListener("resize", reposition);
