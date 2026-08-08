@@ -24,6 +24,13 @@ type Props = {
    * single top-level Save button (raw-file-editor.tsx) can reflect this tab's state instead
    * of this component rendering its own — save() below is what that button actually calls. */
   onStatusChange?: (status: RawTextContentSaveStatus) => void;
+  /** Fires right after a successful save — this tab's edits (text/image/color) live in this
+   * component's own state, entirely separate from raw-file-editor.tsx's `files`/`edits`
+   * (the Code tab's own snapshot, loaded once at mount). Without this, the toolbar's
+   * top-level "Preview" button — built from that Code tab snapshot — would keep showing the
+   * PRE-edit page even after a save actually persisted, until an unrelated action (or a full
+   * page reload) happened to refetch it. */
+  onSaved?: () => void;
 };
 
 type ActiveField =
@@ -306,7 +313,7 @@ function findPreviewElements(doc: Document, kind: "text" | "img" | "background",
 }
 
 export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props>(function RawTextContentEditor(
-  { templateId, onStatusChange },
+  { templateId, onStatusChange, onSaved },
   ref,
 ) {
   const [nodes, setNodes] = useState<ExtractedTextNode[] | null>(null);
@@ -575,16 +582,29 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
   function handleDraftChange(node: ExtractedTextNode, value: string) {
     setDrafts((prev) => ({ ...prev, [node.id]: value }));
 
-    // Only live-patch the preview when this element's data-ptid is exactly this one id —
-    // if it's shared with sibling text runs (space-separated), overwriting textContent
-    // would blow away nested markup (e.g. "Some <a>link</a> text."), so leave those as
-    // highlight-and-scroll only, not live-typed.
     const doc = iframeRef.current?.contentDocument;
     if (!doc || !previewReady || scriptsActive) return;
     const target = doc.querySelector(`[data-ptid~="${node.id}"]`);
-    if (target && target.getAttribute("data-ptid") === String(node.id)) {
+    if (!target) return;
+
+    const idList = (target.getAttribute("data-ptid") ?? "").split(" ").filter(Boolean);
+    if (idList.length === 1) {
       target.textContent = value;
+      return;
     }
+    // Shared data-ptid: more than one plain-text run lives directly under this element
+    // (e.g. "Every stamp,<br>seat & suitcase, <em>sorted.</em>" — two heading lines split
+    // by a <br>, or "Some <a>link</a> text."). Overwriting the WHOLE element's textContent
+    // would blow away that sibling markup, so only the Nth non-whitespace text-node CHILD is
+    // patched — same left-to-right document order annotateTextNodesForPreview walked when
+    // it built this id list, so position-in-list lines up with position-among-text-children.
+    const position = idList.indexOf(String(node.id));
+    if (position === -1) return;
+    const textChildren = Array.from(target.childNodes).filter(
+      (n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? "").trim() !== ""
+    );
+    const textNode = textChildren[position];
+    if (textNode) textNode.textContent = value;
   }
 
   function handleHrefChange(node: ExtractedTextNode, value: string) {
@@ -764,6 +784,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
       setColorNodes((prev) => prev?.map((n) => ({ ...n, value: colorDrafts[n.id] ?? n.value })) ?? null);
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1500);
+      onSaved?.();
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Save failed.");
     } finally {

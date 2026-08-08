@@ -623,7 +623,20 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
       )}
 
       {activeMode === "text" && (
-        <RawTextContentEditor ref={textContentRef} templateId={templateId} onStatusChange={setTextContentStatus} />
+        <RawTextContentEditor
+          ref={textContentRef}
+          templateId={templateId}
+          onStatusChange={setTextContentStatus}
+          onSaved={() => {
+            // Refetch so the toolbar's "Preview" button (built from this Code tab's own
+            // files/edits snapshot) picks up what was just saved instead of showing stale
+            // pre-edit content — but only when there's nothing unsaved here to lose:
+            // loadFiles() replaces `edits` wholesale, which would silently discard an
+            // in-progress Code tab edit to some OTHER file (only index.html's dirtiness
+            // blocks switching to this tab, so e.g. a dirty css/styles.css could coexist).
+            if (!anyDirty) void loadFiles();
+          }}
+        />
       )}
 
       {activeMode === "ai" && (
