@@ -275,3 +275,83 @@ export async function sendWithdrawalRequestNotificationEmail(withdrawal: SendWit
     console.log("--------------------------------------------------");
   }
 }
+
+export type SendScriptAccessRequestEmailParams = {
+  id: string;
+  userEmail: string;
+  userName: string;
+  templateId: string;
+  templateName: string;
+  reason?: string | null;
+};
+
+/**
+ * Notifies ADMIN_EMAIL that a user wants full-script (unsandboxed) preview access for a
+ * RAW_UPLOAD template's Text Content tab. Like withdrawals, there's no 1-click link —
+ * approving requires staff to pick a duration, so it goes through plexo-admin's review UI.
+ */
+export async function sendScriptAccessRequestNotificationEmail(req: SendScriptAccessRequestEmailParams) {
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM || "admin@plexopages.com";
+  const adminAppUrl = process.env.ADMIN_APP_URL || "http://localhost:3001";
+  const reviewUrl = `${adminAppUrl}/script-access-requests`;
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0b0f19; color: #ffffff; padding: 30px; margin: 0; }
+          .card { max-width: 600px; margin: 0 auto; background-color: #121724; border: 1px solid #2d3748; border-radius: 20px; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+          .badge { display: inline-block; background-color: #6b3bf9; color: #ffffff; font-size: 11px; font-weight: 800; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; }
+          h2 { font-size: 24px; font-weight: 800; margin-top: 0; color: #ffffff; }
+          .details { margin-bottom: 24px; color: #a0aec0; font-size: 14px; line-height: 1.8; }
+          .details strong { color: #ffffff; }
+          .btn-review { display: inline-block; background-color: #6b3bf9; color: #ffffff !important; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-size: 14px; text-align: center; margin-top: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <span class="badge">Full Script Preview Requested</span>
+          <h2>A user wants scripts enabled in their template preview</h2>
+
+          <div class="details">
+            <p><strong>Requested by:</strong> ${escapeHtml(req.userName)} (${escapeHtml(req.userEmail)})</p>
+            <p><strong>Template:</strong> ${escapeHtml(req.templateName)}</p>
+            ${req.reason ? `<p><strong>Reason:</strong> ${escapeHtml(req.reason)}</p>` : ""}
+          </div>
+
+          <a href="${reviewUrl}" class="btn-review">Review in Admin →</a>
+        </div>
+      </body>
+    </html>
+  `;
+
+  if (process.env.SMTP_HOST && process.env.SMTP_USER) {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: Number(process.env.SMTP_PORT) === 465,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || `"Plexo Notifications" <noreply@plexopages.com>`,
+      to: adminEmail,
+      subject: `[Plexo] Full script preview requested — ${req.templateName}`,
+      html: htmlContent,
+    });
+  } else {
+    console.log("--------------------------------------------------");
+    console.log(`[SCRIPT ACCESS REQUEST EMAIL NOTIFICATION LOG]`);
+    console.log(`To: ${adminEmail}`);
+    console.log(`Requested by: ${req.userName} (${req.userEmail})`);
+    console.log(`Template: ${req.templateName} (${req.templateId})`);
+    if (req.reason) console.log(`Reason: ${req.reason}`);
+    console.log(`Review: ${reviewUrl}`);
+    console.log("--------------------------------------------------");
+  }
+}

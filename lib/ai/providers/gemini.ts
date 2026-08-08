@@ -61,5 +61,9 @@ export async function generate({
       inputTokens: interaction.usage?.total_input_tokens,
       outputTokens: interaction.usage?.total_output_tokens,
     },
+    // "incomplete" is the Interactions API's status for a response cut short by
+    // max_output_tokens (verified against @google/genai's InteractionStatus union in
+    // genai.d.ts, alongside "completed"/"failed"/"cancelled"/etc.).
+    truncated: interaction.status === "incomplete",
   };
 }

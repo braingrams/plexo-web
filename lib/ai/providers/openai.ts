@@ -35,5 +35,6 @@ export async function generate({
       inputTokens: response.usage?.prompt_tokens,
       outputTokens: response.usage?.completion_tokens,
     },
+    truncated: response.choices[0]?.finish_reason === "length",
   };
 }

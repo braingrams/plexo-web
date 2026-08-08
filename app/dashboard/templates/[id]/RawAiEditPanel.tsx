@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Props = {
   templateId: string;
@@ -53,6 +53,17 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
   const [error, setError] = useState<string | null>(null);
   const [insufficientCredits, setInsufficientCredits] = useState(false);
   const [result, setResult] = useState<{ summary: string; html: string } | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-grow the composer as the instruction wraps onto more lines, instead of staying
+  // pinned at rows={1} and forcing the user to scroll within a one-line box — capped so a
+  // very long paste scrolls inside the box rather than pushing the send button off-screen.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+  }, [prompt]);
 
   async function handleGenerate() {
     if (!prompt.trim()) {
@@ -103,9 +114,9 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto" }}>
       {!result ? (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem", gap: "1.5rem" }}>
+        <div className="raw-ai-empty" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem 1.25rem", gap: "1.5rem" }}>
           <h2 style={{
-            fontFamily: "var(--font-heading), sans-serif", fontSize: "1.6rem", fontWeight: 700,
+            fontFamily: "var(--font-heading), sans-serif", fontSize: "clamp(1.2rem, 5vw, 1.6rem)", fontWeight: 700,
             color: "#f0f2ff", textAlign: "center", margin: 0,
           }}>
             What would you like to change?
@@ -118,6 +129,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
               display: "flex", alignItems: "flex-end", gap: "0.5rem",
             }}>
               <textarea
+                ref={textareaRef}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={(e) => {
@@ -132,7 +144,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
                 style={{
                   flex: 1, background: "none", border: "none", resize: "none",
                   color: "#f0f2ff", fontSize: "0.95rem", outline: "none", fontFamily: "inherit",
-                  lineHeight: 1.5, padding: "0.4rem 0",
+                  lineHeight: 1.5, padding: "0.4rem 0", maxHeight: 200, overflowY: "auto",
                 }}
               />
               <button
@@ -176,7 +188,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
           </p>
         </div>
       ) : (
-        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "0.75rem", padding: "1.25rem", maxWidth: 900, margin: "0 auto", width: "100%" }}>
+        <div className="raw-ai-result" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "0.75rem", padding: "1.25rem", maxWidth: 900, margin: "0 auto", width: "100%" }}>
           <p style={{ fontSize: "0.8rem", color: "#34d399", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}><IconCheck /> {result.summary}</p>
           <iframe
             srcDoc={result.html}
@@ -184,7 +196,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
             sandbox=""
             style={{ flex: 1, minHeight: 240, width: "100%", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, background: "#fff" }}
           />
-          <div style={{ display: "flex", gap: "0.6rem" }}>
+          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
             <button
               type="button"
               onClick={() => onApply(result.html)}
@@ -213,6 +225,18 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
           </p>
         </div>
       )}
+
+      <style jsx>{`
+        @media (max-width: 480px) {
+          .raw-ai-empty {
+            padding: 1.25rem 0.85rem !important;
+            gap: 1.1rem !important;
+          }
+          .raw-ai-result {
+            padding: 0.85rem !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

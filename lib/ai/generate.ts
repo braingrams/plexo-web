@@ -14,14 +14,23 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   edit_element: 4000,
   edit_layout: 16000,
   generate_layout: 16000,
-  // Full-document output (the whole uploaded index.html back), matching the largest
-  // existing tier rather than a fresh guess.
-  edit_raw_html: 16000,
+  // Full-document output (the whole uploaded index.html back). Raised from the previous
+  // 16000: the model returns the ENTIRE document as one JSON string, so anything beyond a
+  // small page routinely hit that ceiling mid-string, producing an unparseable truncated
+  // response ("Unterminated string in JSON..."). See TRUNCATED_RETRY_CAP below for the
+  // further adaptive bump this mode's edits get if even this isn't enough.
+  edit_raw_html: 32000,
   // A full post as HTML plus excerpt/SEO/category/tag/image-prompt metadata — lighter than
   // a builder layout's nested JSON per token, so a smaller ceiling than edit_layout/
   // generate_layout is enough for a genuinely long post.
   generate_blog_post: 6000,
 };
+
+/** Ceiling for the one-time adaptive retry when a response comes back truncated (see
+ * TruncatedResponseError below) — doubling maxTokens is only useful up to what the model
+ * actually supports, and every provider/tier resolveModel can pick from currently supports
+ * at least this many output tokens. */
+const TRUNCATED_RETRY_CAP = 64000;
 
 const CORE_ELEMENT_TYPES = [
   "text", "button", "image", "spacer", "divider", "card", "form_container",
@@ -175,6 +184,17 @@ class ProviderCallError extends Error {
   }
 }
 
+/** Thrown when the provider itself reports the response was cut short by its output-token
+ * ceiling (see the `truncated` flag each provider module sets) — caught separately from a
+ * genuine JSON.parse/schema error so the retry can hand the model a bigger budget instead of
+ * uselessly re-asking it to "fix" JSON that was never going to be complete at the same limit. */
+class TruncatedResponseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TruncatedResponseError";
+  }
+}
+
 export async function generateBuilderAction(params: GenerateParams): Promise<GenerateOutcome> {
   const concreteTier: ConcreteTier =
     params.tier === "AUTO"
@@ -187,24 +207,26 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
   const schema = resultSchemaFor(params.mode);
   const maxTokens = MAX_TOKENS[params.mode];
 
-  const attempt = async (extraNote?: string): Promise<GenerateOutcome> => {
+  const attempt = async (opts?: { extraNote?: string; maxTokensOverride?: number }): Promise<GenerateOutcome> => {
     // Raw HTML is embedded directly rather than JSON.stringify'd — stringifying would
     // escape every quote/newline in the document, burning tokens and making the markup
     // harder for the model to read as an actual document rather than a JSON string.
     const contextBlock = params.mode === "edit_raw_html"
       ? `Current HTML document:\n${(trimmedContext as { html: string }).html}`
       : `Current JSON:\n${JSON.stringify(trimmedContext)}`;
-    const userPrompt = `${extraNote ? `${extraNote}\n\n` : ""}User instruction: ${params.prompt}\n\n${contextBlock}`;
+    const userPrompt = `${opts?.extraNote ? `${opts.extraNote}\n\n` : ""}User instruction: ${params.prompt}\n\n${contextBlock}`;
+    const tokensForThisCall = opts?.maxTokensOverride ?? maxTokens;
     let text: string;
     let usage: ProviderCallResult["usage"];
+    let truncated: ProviderCallResult["truncated"];
     try {
-      ({ text, usage } = await callProvider(
+      ({ text, usage, truncated } = await callProvider(
         params.provider,
         model,
         params.apiKey,
         systemPrompt,
         userPrompt,
-        maxTokens,
+        tokensForThisCall,
       ));
     } catch (err) {
       // Auth/network/rate-limit failures from the provider are not the model
@@ -212,6 +234,11 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
       // don't burn a retry re-asking the provider to "fix its JSON".
       const reason = err instanceof Error ? err.message : "unknown error";
       throw new ProviderCallError(`AI provider request failed: ${reason}`);
+    }
+    if (truncated) {
+      throw new TruncatedResponseError(
+        `the response was cut off before it finished (hit the ${tokensForThisCall}-token output limit)`,
+      );
     }
     const cleaned = cleanJsonString(text);
     const parsed = JSON.parse(cleaned);
@@ -231,13 +258,25 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
     if (firstError instanceof ProviderCallError) {
       throw firstError;
     }
-    // Layout JSON is large and occasionally malformed — one retry with the error fed back.
     try {
+      if (firstError instanceof TruncatedResponseError) {
+        // The content itself was cut short, not malformed — retrying with the same budget
+        // would just get cut off at the same point, so bump it instead of sending a
+        // "fix your JSON" note (there's nothing to fix, there's more to generate).
+        const biggerTokens = Math.min(maxTokens * 2, TRUNCATED_RETRY_CAP);
+        return await attempt({ maxTokensOverride: biggerTokens });
+      }
+      // Layout JSON is large and occasionally malformed — one retry with the error fed back.
       const reason = firstError instanceof Error ? firstError.message : "parse error";
-      return await attempt(`Your previous response was invalid (${reason}). Return ONLY the corrected JSON object, with no markdown fences.`);
+      return await attempt({ extraNote: `Your previous response was invalid (${reason}). Return ONLY the corrected JSON object, with no markdown fences.` });
     } catch (secondError) {
       if (secondError instanceof ProviderCallError) {
         throw secondError;
+      }
+      if (secondError instanceof TruncatedResponseError) {
+        throw new Error(
+          "the AI response was cut off before it finished, even after increasing the output limit — try a shorter or more targeted instruction",
+        );
       }
       const reason = secondError instanceof Error ? secondError.message : "unknown error";
       throw new Error(`AI response could not be parsed: ${reason}`);

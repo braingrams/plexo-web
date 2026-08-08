@@ -338,22 +338,23 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
         onNavigate={(pageId) => { if (pageId !== templateId) router.push(`/dashboard/templates/${pageId}`); }}
       />
       {/* Toolbar */}
-      <div style={{
+      <div className="raw-editor-toolbar" style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "0.85rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
-          <Link href="/dashboard/templates" style={{ color: "rgba(240,242,255,0.4)", textDecoration: "none", fontSize: "0.8rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+        <div className="raw-editor-toolbar-left" style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
+          <Link href="/dashboard/templates" style={{ color: "rgba(240,242,255,0.4)", textDecoration: "none", fontSize: "0.8rem", display: "inline-flex", alignItems: "center", gap: "0.3rem", flexShrink: 0 }}>
             <IconArrowLeft /> Templates
           </Link>
-          <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>{templateName}</span>
+          <span style={{ fontWeight: 700, fontSize: "0.95rem", whiteSpace: "nowrap" }}>{templateName}</span>
           <span style={{
             fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase",
             color: "#818cf8", background: "rgba(99,102,241,0.1)", padding: "0.15rem 0.5rem", borderRadius: 5,
+            whiteSpace: "nowrap", flexShrink: 0,
           }}>
             Raw Upload
           </span>
-          <div style={{ display: "flex", gap: "0.3rem", marginLeft: "0.5rem" }}>
+          <div className="raw-editor-mode-tabs" style={{ display: "flex", gap: "0.3rem", marginLeft: "0.5rem" }}>
             {([
               { key: "code", label: "Code" },
               { key: "text", label: "Text Content" },
@@ -373,6 +374,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
                     border: activeMode === tab.key ? "1px solid rgba(139,92,246,0.3)" : "1px solid rgba(255,255,255,0.1)",
                     color: disabled ? "rgba(240,242,255,0.25)" : activeMode === tab.key ? "#c4b5fd" : "rgba(240,242,255,0.6)",
                     cursor: disabled ? "not-allowed" : "pointer",
+                    whiteSpace: "nowrap", flexShrink: 0,
                   }}
                 >
                   {tab.label}
@@ -381,7 +383,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
             })}
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+        <div className="raw-editor-toolbar-right" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
           {saveError && <span style={{ color: "#f87171", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}><IconWarning /> {saveError}</span>}
           {savedFlash && <span style={{ color: "#34d399", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}><IconCheck /> Saved</span>}
           <input
@@ -436,9 +438,9 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
 
       {/* Body */}
       {activeMode === "code" && (
-      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+      <div className="raw-editor-code-body" style={{ display: "flex", flex: 1, minHeight: 0 }}>
         {/* File list sidebar */}
-        <div style={{ width: 220, borderRight: "1px solid rgba(255,255,255,0.08)", overflowY: "auto", flexShrink: 0, display: "flex", flexDirection: "column" }}>
+        <div className="raw-editor-sidebar" style={{ width: 220, borderRight: "1px solid rgba(255,255,255,0.08)", overflowY: "auto", flexShrink: 0, display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.6rem 0.9rem 0.4rem" }}>
             <span style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "rgba(240,242,255,0.35)" }}>
               Files
@@ -565,8 +567,9 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
           />
           <div style={{
             position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-            width: "100%", maxWidth: 440, background: "#16142c", border: "1px solid rgba(239,68,68,0.25)",
-            borderRadius: 16, padding: "2rem", zIndex: 10001, display: "flex", flexDirection: "column", gap: "1.25rem",
+            width: "calc(100% - 2rem)", maxWidth: 440, background: "#16142c", border: "1px solid rgba(239,68,68,0.25)",
+            borderRadius: 16, padding: "clamp(1.25rem, 5vw, 2rem)", zIndex: 10001, display: "flex", flexDirection: "column", gap: "1.25rem",
+            maxHeight: "calc(100vh - 2rem)", overflowY: "auto",
           }}>
             <div>
               <h3 style={{ fontSize: "1.1rem", fontWeight: 800, margin: 0 }}>Replace all files?</h3>
@@ -608,8 +611,9 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
           />
           <div style={{
             position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-            width: "100%", maxWidth: 420, background: "#16142c", border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 16, padding: "2rem", zIndex: 10001, display: "flex", flexDirection: "column", gap: "1.1rem",
+            width: "calc(100% - 2rem)", maxWidth: 420, background: "#16142c", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 16, padding: "clamp(1.25rem, 5vw, 2rem)", zIndex: 10001, display: "flex", flexDirection: "column", gap: "1.1rem",
+            maxHeight: "calc(100vh - 2rem)", overflowY: "auto",
           }}>
             <div>
               <h3 style={{ fontSize: "1.05rem", fontWeight: 800, margin: 0 }}>Add a file</h3>
@@ -705,6 +709,45 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
           </div>
         </>
       )}
+
+      <style jsx>{`
+        @media (max-width: 900px) {
+          .raw-editor-toolbar {
+            flex-wrap: wrap;
+            gap: 0.6rem;
+          }
+          .raw-editor-toolbar-left {
+            flex-wrap: wrap;
+            gap: 0.5rem;
+          }
+          .raw-editor-toolbar-right {
+            flex-wrap: wrap;
+            width: 100%;
+            justify-content: flex-start;
+          }
+          .raw-editor-mode-tabs {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+          }
+        }
+        @media (max-width: 700px) {
+          .raw-editor-code-body {
+            flex-direction: column;
+          }
+          .raw-editor-sidebar {
+            width: 100% !important;
+            max-height: 180px;
+            border-right: none !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          }
+        }
+        @media (max-width: 480px) {
+          .raw-editor-toolbar {
+            padding: 0.65rem 0.85rem !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -30,5 +30,6 @@ export async function generate({
       inputTokens: response.usage?.input_tokens,
       outputTokens: response.usage?.output_tokens,
     },
+    truncated: response.stop_reason === "max_tokens",
   };
 }

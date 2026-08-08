@@ -282,14 +282,15 @@ model User {
 
   memberships            Member[]
   sentInvitations        Invitation[]
-  comments               Comment[]           @relation("CommentAuthor")
-  resolvedComments       Comment[]           @relation("CommentResolvedBy")
+  comments               Comment[]             @relation("CommentAuthor")
+  resolvedComments       Comment[]             @relation("CommentResolvedBy")
   commentMentions        CommentMention[]
-  notifications          Notification[]      @relation("NotificationRecipient")
-  triggeredNotifications Notification[]      @relation("NotificationActor")
+  notifications          Notification[]        @relation("NotificationRecipient")
+  triggeredNotifications Notification[]        @relation("NotificationActor")
   templatePurchases      TemplatePurchase[]
   sellerLedger           SellerLedgerEntry[]
   withdrawalRequests     WithdrawalRequest[]
+  scriptAccessRequests   ScriptAccessRequest[]
   feedback               Feedback[]
   blogAuthorProfiles     BlogAuthor[]
 }
@@ -394,6 +395,44 @@ model WithdrawalRequest {
   @@index([status])
 }
 
+enum ScriptAccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// A request to run a RAW_UPLOAD template's uploaded JavaScript live inside the Text
+// Content tab's preview iframe — normally sandboxed (allow-same-origin, no allow-scripts)
+// for safety, see RawTextContentEditor.tsx. Requires Charisol staff approval since granting
+// it means switching that iframe to allow-scripts (opaque origin) for a bounded window.
+// "Expired" is intentionally NOT a stored status: a request is active iff
+// status == APPROVED && expiresAt > now(), checked at read time — same pattern as
+// Invitation.expiresAt. No cron job needed.
+model ScriptAccessRequest {
+  id                 String                    @id @default(uuid()) @db.Uuid
+  templateId         String                    @db.Uuid
+  userId             String                    @db.Uuid
+  // Optional short reason the requester gave — shown to the reviewing admin.
+  reason             String?
+  status             ScriptAccessRequestStatus @default(PENDING)
+  requestedAt        DateTime                  @default(now())
+  processedAt        DateTime?
+  processedByAdminId String?                   @db.Uuid
+  // Staff-entered minutes at approval time — null until approved.
+  approvedMinutes    Int?
+  // Set at approval = processedAt + approvedMinutes. Null while PENDING/REJECTED.
+  expiresAt          DateTime?
+  // Required at the app layer when status is set to REJECTED — not a DB constraint.
+  rejectionReason    String?
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([userId])
+  @@index([status])
+}
+
 model ApiKey {
   id             String    @id @default(uuid()) @db.Uuid
   userId         String    @db.Uuid
@@ -481,15 +520,16 @@ model Template {
   // doesn't silently consume a customer's page slot or show up as a stray untitled page.
   isBlogLayout Boolean @default(false)
 
-  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  parent           Template?          @relation("TemplatePages", fields: [parentId], references: [id], onDelete: Cascade)
-  pages            Template[]         @relation("TemplatePages")
-  publishedDomains PublishedDomain[]
-  pageViews        PageView[]
-  assets           TemplateAsset[]
-  comments         Comment[]
-  purchases        TemplatePurchase[]
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent               Template?             @relation("TemplatePages", fields: [parentId], references: [id], onDelete: Cascade)
+  pages                Template[]            @relation("TemplatePages")
+  publishedDomains     PublishedDomain[]
+  pageViews            PageView[]
+  assets               TemplateAsset[]
+  comments             Comment[]
+  purchases            TemplatePurchase[]
+  scriptAccessRequests ScriptAccessRequest[]
 
   // Blog (see the Blog* models below) — always scoped to the site's ROOT Template
   // (parentId == null), the same row PublishedDomain already points at.

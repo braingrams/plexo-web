@@ -81,7 +81,7 @@ export async function PATCH(
   }
 
   const body = (await request.json().catch(() => null)) as {
-    edits?: { id?: number; text?: string }[];
+    edits?: { id?: number; text?: string; href?: string }[];
     imgEdits?: { id?: number; src?: string; width?: number | null; height?: number | null }[];
     backgroundEdits?: { id?: number; src?: string; backgroundSize?: string | null }[];
   } | null;
@@ -92,8 +92,8 @@ export async function PATCH(
     return NextResponse.json({ error: "No edits provided." }, { status: 400 });
   }
   const edits = rawEdits
-    .filter((e): e is { id: number; text: string } => typeof e.id === "number" && typeof e.text === "string")
-    .map((e) => ({ id: e.id, text: e.text }));
+    .filter((e): e is { id: number; text: string; href?: string } => typeof e.id === "number" && typeof e.text === "string")
+    .map((e) => ({ id: e.id, text: e.text, ...(typeof e.href === "string" ? { href: e.href } : {}) }));
   const imgEdits: ImgEdit[] = rawImgEdits
     .filter((e): e is { id: number; src?: string; width?: number | null; height?: number | null } => typeof e.id === "number")
     .map((e) => ({ id: e.id, src: e.src, width: e.width, height: e.height }));
