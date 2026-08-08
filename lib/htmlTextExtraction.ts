@@ -194,6 +194,14 @@ export function annotateTextNodesForPreview(html: string): string {
     $(parent).attr("data-ptid", existing ? `${existing} ${currentId}` : `${currentId}`);
   });
 
+  // Strip every link's destination so clicking one in this preview can never navigate the
+  // iframe away, no matter the click-handling timing — RawTextContentEditor's reverse
+  // click-to-scroll listener also calls preventDefault, but removing href here is the one
+  // guaranteed-correct fix: a browser will not navigate an <a> that has no href at all,
+  // regardless of any event-handling edge case. The real href stays intact in compiledHtml
+  // and the "Link URL" field — this only affects this disposable preview copy.
+  $("a[href]").removeAttr("href");
+
   const styleTag =
     "<style>.plexo-active{outline:3px solid #8b5cf6 !important;outline-offset:2px;border-radius:2px;}</style>";
   if ($("head").length > 0) {

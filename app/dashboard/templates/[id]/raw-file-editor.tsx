@@ -11,7 +11,7 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import type { FileEntry } from "@/app/api/v1/templates/[id]/files/route";
 import { buildPreviewHtml } from "./preview-utils";
 import { PagesPanel } from "./PagesPanel";
-import { RawTextContentEditor } from "./RawTextContentEditor";
+import { RawTextContentEditor, type RawTextContentEditorHandle, type RawTextContentSaveStatus } from "./RawTextContentEditor";
 import { RawAiEditPanel } from "./RawAiEditPanel";
 
 type Props = {
@@ -118,6 +118,18 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savedFlash, setSavedFlash] = useState(false);
 
+  // The Text Content tab has no Save button of its own — this toolbar's one Save button
+  // dispatches to either the code editor's own save (below) or this, depending on
+  // activeMode. textContentStatus mirrors that tab's dirty/saving/error/savedFlash state,
+  // reported up via RawTextContentEditor's onStatusChange.
+  const textContentRef = useRef<RawTextContentEditorHandle>(null);
+  const [textContentStatus, setTextContentStatus] = useState<RawTextContentSaveStatus>({
+    dirty: false,
+    saving: false,
+    error: null,
+    savedFlash: false,
+  });
+
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewHtml, setPreviewHtml] = useState("");
   const [previewRootPath, setPreviewRootPath] = useState("index.html");
@@ -176,6 +188,24 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
     [edits, savedContent]
   );
   const anyDirty = files.some((f) => f.editable && isDirty(f.path));
+
+  // The one toolbar Save button dispatches by tab: Code saves index.html/whatever file is
+  // open, Text Content saves via the ref exposed by RawTextContentEditor, AI has no save of
+  // its own (applying switches you to Code, which is saved from there).
+  const toolbarSaving = activeMode === "text" ? textContentStatus.saving : saving;
+  const toolbarSaveError = activeMode === "text" ? textContentStatus.error : saveError;
+  const toolbarSavedFlash = activeMode === "text" ? textContentStatus.savedFlash : savedFlash;
+  const toolbarCanSave =
+    activeMode === "text"
+      ? textContentStatus.dirty && !textContentStatus.saving
+      : activeMode === "code"
+        ? !!activePath && isDirty(activePath) && !saving
+        : false;
+
+  function handleToolbarSave() {
+    if (activeMode === "text") void textContentRef.current?.save();
+    else if (activeMode === "code" && activePath) void handleSave(activePath);
+  }
 
   async function handleSave(path: string) {
     setSaving(true);
@@ -316,12 +346,12 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
-        if (activePath && isDirty(activePath)) void handleSave(activePath);
+        if (toolbarCanSave) handleToolbarSave();
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activePath, edits, savedContent]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [toolbarCanSave, handleToolbarSave]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
     return <div style={{ padding: "3rem", color: "rgba(240,242,255,0.5)" }}>Loading files…</div>;
@@ -384,8 +414,8 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
           </div>
         </div>
         <div className="raw-editor-toolbar-right" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-          {saveError && <span style={{ color: "#f87171", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}><IconWarning /> {saveError}</span>}
-          {savedFlash && <span style={{ color: "#34d399", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}><IconCheck /> Saved</span>}
+          {toolbarSaveError && <span style={{ color: "#f87171", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}><IconWarning /> {toolbarSaveError}</span>}
+          {toolbarSavedFlash && <span style={{ color: "#34d399", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}><IconCheck /> Saved</span>}
           <input
             ref={replaceInputRef}
             type="file"
@@ -420,18 +450,18 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
           </button>
           <button
             type="button"
-            disabled={!activePath || !isDirty(activePath) || saving}
-            onClick={() => void handleSave(activePath)}
+            disabled={!toolbarCanSave}
+            onClick={handleToolbarSave}
             className="btn-primary"
             style={{
               padding: "0.45rem 1.1rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700,
               background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
               border: "none", color: "#fff",
-              cursor: !activePath || !isDirty(activePath) || saving ? "default" : "pointer",
-              opacity: !activePath || !isDirty(activePath) || saving ? 0.5 : 1,
+              cursor: !toolbarCanSave ? "default" : "pointer",
+              opacity: !toolbarCanSave ? 0.5 : 1,
             }}
           >
-            {saving ? "Saving…" : "Save"}
+            {toolbarSaving ? "Saving…" : "Save"}
           </button>
         </div>
       </div>
@@ -512,7 +542,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
       )}
 
       {activeMode === "text" && (
-        <RawTextContentEditor templateId={templateId} />
+        <RawTextContentEditor ref={textContentRef} templateId={templateId} onStatusChange={setTextContentStatus} />
       )}
 
       {activeMode === "ai" && (

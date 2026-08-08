@@ -1,12 +1,27 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ExtractedTextNode } from "@/lib/htmlTextExtraction";
 import type { ExtractedImageNode, ExtractedImgNode, ExtractedBackgroundNode } from "@/lib/htmlImageExtraction";
 import { ScriptAccessControl } from "./ScriptAccessControl";
 
+export type RawTextContentEditorHandle = {
+  save: () => Promise<void>;
+};
+
+export type RawTextContentSaveStatus = {
+  dirty: boolean;
+  saving: boolean;
+  error: string | null;
+  savedFlash: boolean;
+};
+
 type Props = {
   templateId: string;
+  /** Reports dirty/saving/error/savedFlash whenever any of them change, so the parent's
+   * single top-level Save button (raw-file-editor.tsx) can reflect this tab's state instead
+   * of this component rendering its own — save() below is what that button actually calls. */
+  onStatusChange?: (status: RawTextContentSaveStatus) => void;
 };
 
 type ActiveField =
@@ -17,16 +32,6 @@ type ActiveField =
 
 type ImgDraft = { src: string; width: number | null; height: number | null };
 type BgDraft = { src: string; backgroundSize: string | null };
-
-function IconWarning() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-      <line x1="12" y1="9" x2="12" y2="13" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  );
-}
 
 function IconCheck() {
   return (
@@ -264,7 +269,10 @@ function findPreviewElements(doc: Document, kind: "text" | "img" | "background",
   return Array.from(doc.querySelectorAll(`[${ATTR_FOR_KIND[kind]}~="${id}"]`));
 }
 
-export function RawTextContentEditor({ templateId }: Props) {
+export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props>(function RawTextContentEditor(
+  { templateId, onStatusChange },
+  ref,
+) {
   const [nodes, setNodes] = useState<ExtractedTextNode[] | null>(null);
   const [imageNodes, setImageNodes] = useState<ExtractedImageNode[] | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
@@ -654,6 +662,12 @@ export function RawTextContentEditor({ templateId }: Props) {
     }
   }
 
+  useImperativeHandle(ref, () => ({ save: handleSave }));
+
+  useEffect(() => {
+    onStatusChange?.({ dirty, saving, error: saveError, savedFlash });
+  }, [dirty, saving, saveError, savedFlash, onStatusChange]);
+
   if (loading) {
     return (
       <div style={{ flex: 1, display: "grid", placeItems: "center", color: "rgba(240,242,255,0.4)" }}>
@@ -697,36 +711,6 @@ export function RawTextContentEditor({ templateId }: Props) {
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-      <div className="raw-text-editor-header" style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0.75rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0,
-      }}>
-        <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.5)", margin: 0 }}>
-          Every piece of visible text and every image on this page, grouped by where it sits on
-          the page — edit and save without touching markup. Click a field to see exactly where
-          it is on the page, or click the page to jump to its field.
-        </p>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexShrink: 0 }}>
-          {saveError && <span style={{ color: "#f87171", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}><IconWarning /> {saveError}</span>}
-          {savedFlash && <span style={{ color: "#34d399", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}><IconCheck /> Saved</span>}
-          <button
-            type="button"
-            disabled={!dirty || saving}
-            onClick={() => void handleSave()}
-            className="btn-primary"
-            style={{
-              padding: "0.45rem 1.1rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700,
-              background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-              border: "none", color: "#fff",
-              cursor: !dirty || saving ? "default" : "pointer",
-              opacity: !dirty || saving ? 0.5 : 1,
-            }}
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
-        </div>
-      </div>
-
       <div style={{
         padding: "0.5rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0,
       }}>
@@ -767,7 +751,7 @@ export function RawTextContentEditor({ templateId }: Props) {
                   <IconChevron direction="left" />
                 </button>
               </div>
-              <div className="raw-text-editor-fields" style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "1.25rem", maxWidth: 520 }}>
+              <div className="raw-text-editor-fields" style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "1.25rem" }}>
           {(imgGroups.length > 0 || bgGroups.length > 0) && (
             <div style={{ marginBottom: "1.75rem" }}>
               <p style={sectionHeadingStyle}>Images</p>
@@ -1109,9 +1093,6 @@ export function RawTextContentEditor({ templateId }: Props) {
           .raw-text-editor-split {
             flex-direction: column;
           }
-          .raw-text-editor-fields {
-            max-width: none !important;
-          }
           .raw-text-editor-preview {
             border-left: none !important;
             border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -1127,14 +1108,6 @@ export function RawTextContentEditor({ templateId }: Props) {
           }
         }
         @media (max-width: 640px) {
-          .raw-text-editor-header {
-            flex-direction: column;
-            align-items: stretch;
-            gap: 0.6rem;
-          }
-          .raw-text-editor-header > div {
-            justify-content: flex-end;
-          }
           .raw-text-editor-fields {
             padding: 0.85rem !important;
           }
@@ -1149,12 +1122,7 @@ export function RawTextContentEditor({ templateId }: Props) {
             row-gap: 0.35rem;
           }
         }
-        @media (max-width: 420px) {
-          .raw-text-editor-header p {
-            font-size: 0.75rem !important;
-          }
-        }
       `}</style>
     </div>
   );
-}
+});
