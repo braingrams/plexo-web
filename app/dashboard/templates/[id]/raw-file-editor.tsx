@@ -57,6 +57,14 @@ function IconArrowLeft() {
   );
 }
 
+function IconChevronDown() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
 function IconWarning() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -218,6 +226,17 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
     [activeFile]
   );
   const fileGroups = useMemo(() => groupFilesByType(files), [files]);
+  // Starts empty (every group expanded) — collapsing is a per-session convenience, not
+  // something worth persisting, same as RawTextContentEditor's Images/Colors accordions.
+  const [collapsedFileGroups, setCollapsedFileGroups] = useState<Set<FileGroupKey>>(new Set());
+  function toggleFileGroup(key: FileGroupKey) {
+    setCollapsedFileGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
   const isDirty = useCallback(
     (path: string) => edits[path] !== undefined && edits[path] !== savedContent[path],
     [edits, savedContent]
@@ -524,37 +543,53 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
               <IconPlus /> Add
             </button>
           </div>
-          {fileGroups.map((group) => (
-            <div key={group.key}>
-              <div style={{
-                padding: "0.55rem 0.9rem 0.25rem",
-                fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-                color: "rgba(240,242,255,0.3)",
-              }}>
-                {FILE_GROUP_LABELS[group.key]}
-              </div>
-              {group.files.map((f) => (
+          {fileGroups.map((group) => {
+            const isCollapsed = collapsedFileGroups.has(group.key);
+            return (
+              <div key={group.key}>
                 <button
-                  key={f.path}
                   type="button"
-                  onClick={() => setActivePath(f.path)}
+                  onClick={() => toggleFileGroup(group.key)}
                   style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
-                    padding: "0.6rem 0.9rem", background: f.path === activePath ? "rgba(139,92,246,0.1)" : "none",
-                    border: "none", borderLeft: f.path === activePath ? "2px solid var(--brand)" : "2px solid transparent",
-                    color: f.path === activePath ? "#f0f2ff" : "rgba(240,242,255,0.6)",
-                    fontSize: "0.8rem", textAlign: "left", cursor: "pointer", fontFamily: "monospace",
+                    display: "flex", alignItems: "center", gap: "0.3rem", width: "100%",
+                    padding: "0.55rem 0.9rem 0.25rem",
+                    background: "none", border: "none", cursor: "pointer", textAlign: "left",
+                    fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
+                    color: "rgba(240,242,255,0.3)",
                   }}
-                  title={`${f.path} — ${formatSize(f.size)}`}
                 >
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.path}</span>
-                  {f.editable && isDirty(f.path) && (
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b", flexShrink: 0, marginLeft: "0.4rem" }} />
-                  )}
+                  <span style={{
+                    display: "inline-flex", flexShrink: 0,
+                    transform: isCollapsed ? "rotate(-90deg)" : "none", transition: "transform 0.15s",
+                  }}>
+                    <IconChevronDown />
+                  </span>
+                  {FILE_GROUP_LABELS[group.key]}
+                  <span style={{ fontWeight: 500, color: "rgba(240,242,255,0.2)" }}>{group.files.length}</span>
                 </button>
-              ))}
-            </div>
-          ))}
+                {!isCollapsed && group.files.map((f) => (
+                  <button
+                    key={f.path}
+                    type="button"
+                    onClick={() => setActivePath(f.path)}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
+                      padding: "0.6rem 0.9rem", background: f.path === activePath ? "rgba(139,92,246,0.1)" : "none",
+                      border: "none", borderLeft: f.path === activePath ? "2px solid var(--brand)" : "2px solid transparent",
+                      color: f.path === activePath ? "#f0f2ff" : "rgba(240,242,255,0.6)",
+                      fontSize: "0.8rem", textAlign: "left", cursor: "pointer", fontFamily: "monospace",
+                    }}
+                    title={`${f.path} — ${formatSize(f.size)}`}
+                  >
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.path}</span>
+                    {f.editable && isDirty(f.path) && (
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b", flexShrink: 0, marginLeft: "0.4rem" }} />
+                    )}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
         </div>
 
         {/* Editor / binary preview pane */}

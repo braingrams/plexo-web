@@ -101,6 +101,7 @@ export async function GET(
       annotateTextNodesForPreview(annotateColorNodesForPreview(template.compiledHtml, externalStylesheets)),
     ),
     template.assets,
+    externalStylesheets,
   );
   return NextResponse.json({ nodes, imageNodes, colorNodes, previewHtml });
 }
