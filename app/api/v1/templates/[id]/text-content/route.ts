@@ -11,7 +11,7 @@ import {
   type ImgEdit,
   type BackgroundEdit,
 } from "@/lib/htmlImageExtraction";
-import { extractColorNodes, applyColorEdits, type ColorEdit } from "@/lib/htmlColorExtraction";
+import { extractColorNodes, annotateColorNodesForPreview, applyColorEdits, type ColorEdit } from "@/lib/htmlColorExtraction";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 
 /**
@@ -45,9 +45,17 @@ export async function GET(
   const nodes = extractTextNodes(template.compiledHtml);
   const imageNodes = extractImageNodes(template.compiledHtml);
   const colorNodes = extractColorNodes(template.compiledHtml);
-  // Compose text + image annotation into one preview doc — order doesn't matter, each pass
-  // only reads/writes its own attribute namespace (data-ptid vs data-pimg/data-pbg).
-  const previewHtml = annotateImageNodesForPreview(annotateTextNodesForPreview(template.compiledHtml));
+  // Compose color + text + image annotation into one preview doc. Color goes first and
+  // against the pristine html specifically: annotateColorNodesForPreview re-derives ids by
+  // calling extractColorNodes on whatever html it's given, and that MUST be the same html
+  // colorNodes above was computed from for the ids to line up — running it after the other
+  // two passes would still happen to work today (neither touches style attributes/blocks in
+  // a way that shifts color ordering), but doing color first removes the need to rely on
+  // that. Text/image annotation are unaffected by data-pcolor attributes already being
+  // present, since their own walks key off text nodes / img tags, not this attribute.
+  const previewHtml = annotateImageNodesForPreview(
+    annotateTextNodesForPreview(annotateColorNodesForPreview(template.compiledHtml)),
+  );
   return NextResponse.json({ nodes, imageNodes, colorNodes, previewHtml });
 }
 

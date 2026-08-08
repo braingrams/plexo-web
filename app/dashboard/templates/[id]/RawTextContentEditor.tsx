@@ -284,6 +284,11 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
   const [imgDrafts, setImgDrafts] = useState<Record<number, ImgDraft>>({});
   const [bgDrafts, setBgDrafts] = useState<Record<number, BgDraft>>({});
   const [colorDrafts, setColorDrafts] = useState<Record<number, string>>({});
+  // Which of a color's sections (index into node.sections) clicking its card should jump to
+  // NEXT — advances by one each click, wrapping back to 0, so repeated clicks cycle through
+  // every place that color is used. A color used in only one section stays at index 0 no
+  // matter how many times it's clicked, since (0 + 1) % 1 === 0.
+  const [colorSectionIndex, setColorSectionIndex] = useState<Record<number, number>>({});
   const [lockAspect, setLockAspect] = useState<Record<number, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -601,6 +606,48 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
 
   function handleColorChange(node: ExtractedColorNode, value: string) {
     setColorDrafts((prev) => ({ ...prev, [node.id]: value }));
+
+    // Every element this color's occurrences touch — whether the color originally came from
+    // an inline style or a <style> block rule — was tagged "id:property" tokens (space-
+    // separated if it carries more than one) by annotateColorNodesForPreview. Setting the
+    // property inline here visually overrides any underlying CSS rule via ordinary
+    // specificity, so this works uniformly for both origins without rewriting <style> text.
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc || !previewReady || scriptsActive) return;
+    doc.querySelectorAll("[data-pcolor]").forEach((el) => {
+      const tokens = (el.getAttribute("data-pcolor") ?? "").split(" ");
+      for (const token of tokens) {
+        const [idStr, prop] = token.split(":");
+        if (prop && Number(idStr) === node.id) {
+          (el as HTMLElement).style.setProperty(prop, value);
+        }
+      }
+    });
+  }
+
+  // Clicking a color's card scrolls the preview to the next section that color is used in
+  // (wrapping back to the first after the last), so repeated clicks step through every
+  // location one at a time rather than always landing on the same spot.
+  function handleColorCardClick(node: ExtractedColorNode) {
+    const doc = iframeRef.current?.contentDocument;
+    if (!doc || !previewReady || scriptsActive || node.sections.length === 0) return;
+
+    const targetSection = colorSectionIndex[node.id] ?? 0;
+    const matches: HTMLElement[] = [];
+    doc.querySelectorAll("[data-pcolor]").forEach((el) => {
+      const tokens = (el.getAttribute("data-pcolor") ?? "").split(" ");
+      const hit = tokens.some((token) => {
+        const [idStr, , sectionIndexStr] = token.split(":");
+        return Number(idStr) === node.id && Number(sectionIndexStr) === targetSection;
+      });
+      if (hit) matches.push(el as HTMLElement);
+    });
+
+    doc.querySelectorAll(".plexo-active").forEach((el) => el.classList.remove("plexo-active"));
+    matches.forEach((el) => el.classList.add("plexo-active"));
+    matches[0]?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    setColorSectionIndex((prev) => ({ ...prev, [node.id]: (targetSection + 1) % node.sections.length }));
   }
 
   const textDirty =
@@ -937,9 +984,11 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                   return (
                     <div
                       key={node.id}
+                      onClick={() => handleColorCardClick(node)}
+                      title="Click to scroll the preview to where this color is used"
                       style={{
                         display: "flex", flexDirection: "column", gap: "0.4rem", width: 168,
-                        padding: "0.55rem", borderRadius: 10,
+                        padding: "0.55rem", borderRadius: 10, cursor: "pointer",
                         border: changed ? "1px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.08)",
                         background: "rgba(255,255,255,0.02)",
                       }}

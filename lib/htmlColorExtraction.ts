@@ -144,7 +144,9 @@ function sectionForSelector($: cheerio.CheerioAPI, selector: string, topLevelSec
   }
 }
 
-type ColorOccurrence = { kind: "inline"; index: number } | { kind: "css"; index: number };
+type ColorOccurrence =
+  | { kind: "inline"; index: number; section: string }
+  | { kind: "css"; index: number; section: string };
 
 export type ExtractedColorNode = {
   id: number;
@@ -187,7 +189,7 @@ export function extractColorNodes(html: string): ExtractedColorNode[] {
     const section = sectionForAncestors($, [...ancestors, el], topLevelSections);
     for (const prop of Object.keys(style)) {
       if (!COLOR_PROPS.has(prop) || !isExtractableColor(style[prop])) continue;
-      record(style[prop], section, { kind: "inline", index: inlineIndex });
+      record(style[prop], section, { kind: "inline", index: inlineIndex, section });
       inlineIndex++;
     }
   });
@@ -207,7 +209,7 @@ export function extractColorNodes(html: string): ExtractedColorNode[] {
       const rule = decl.parent;
       const selector = rule && rule.type === "rule" ? (rule as Rule).selector : "";
       const section = selector ? sectionForSelector($, selector, topLevelSections) : "Content";
-      record(decl.value, section, { kind: "css", index: cssIndex });
+      record(decl.value, section, { kind: "css", index: cssIndex, section });
       cssIndex++;
     });
   });
@@ -218,6 +220,85 @@ export function extractColorNodes(html: string): ExtractedColorNode[] {
     sections: entry.sections,
     occurrences: entry.occurrences,
   }));
+}
+
+/**
+ * Tags every element a color occurrence affects with `data-pcolor` — one `id:property` token
+ * per occurrence, space-separated if an element carries more than one (either several colors,
+ * or the same color used for two different properties on that element). This is what lets the
+ * "Text Content" editor's live preview recolor instantly while dragging the picker: for a
+ * CSS-rule-based occurrence, every element that selector matches gets the SAME token, so
+ * setting that property inline on each one (which the caller does, not this function) visually
+ * overrides the underlying rule via ordinary inline-style specificity — no need to rewrite the
+ * <style> block's text at edit time, and no distinction between an originally-inline vs
+ * originally-CSS-rule color once tagged. Re-derives ids by calling extractColorNodes against
+ * this same html, then re-walks in the identical order to place the tags.
+ */
+export function annotateColorNodesForPreview(html: string): string {
+  const nodes = extractColorNodes(html);
+  // Each occurrence's tag needs the color's id AND which of that color's sections THIS
+  // particular occurrence belongs to (as an index into node.sections) — that's what lets
+  // the editor's click-to-scroll cycle through a color's sections one at a time, rather than
+  // only ever jumping to whichever element happens to be first in the DOM.
+  const inlineTagByIndex = new Map<number, { id: number; sectionIndex: number }>();
+  const cssTagByIndex = new Map<number, { id: number; sectionIndex: number }>();
+  for (const node of nodes) {
+    for (const occ of node.occurrences) {
+      const sectionIndex = node.sections.indexOf(occ.section);
+      const tag = { id: node.id, sectionIndex };
+      if (occ.kind === "inline") inlineTagByIndex.set(occ.index, tag);
+      else cssTagByIndex.set(occ.index, tag);
+    }
+  }
+
+  const $ = cheerio.load(html);
+  const root = $("body").length > 0 ? $("body").get(0)! : $.root().get(0)!;
+
+  function appendTag(el: Element, id: number, prop: string, sectionIndex: number) {
+    const token = `${id}:${prop}:${sectionIndex}`;
+    const existing = $(el).attr("data-pcolor");
+    $(el).attr("data-pcolor", existing ? `${existing} ${token}` : token);
+  }
+
+  let inlineIndex = 0;
+  walkElements($, root, [], (el) => {
+    const style = parseStyleAttr($(el).attr("style"));
+    for (const prop of Object.keys(style)) {
+      if (!COLOR_PROPS.has(prop) || !isExtractableColor(style[prop])) continue;
+      const tag = inlineTagByIndex.get(inlineIndex);
+      if (tag) appendTag(el, tag.id, prop, tag.sectionIndex);
+      inlineIndex++;
+    }
+  });
+
+  let cssIndex = 0;
+  $("style").each((_, styleEl) => {
+    const cssText = $(styleEl).html() ?? "";
+    let parsed;
+    try {
+      parsed = postcss.parse(cssText);
+    } catch {
+      return;
+    }
+    parsed.walkDecls((decl) => {
+      const prop = decl.prop.toLowerCase();
+      if (!COLOR_PROPS.has(prop) || !isExtractableColor(decl.value)) return;
+      const rule = decl.parent;
+      const selector = rule && rule.type === "rule" ? (rule as Rule).selector : "";
+      const tag = cssTagByIndex.get(cssIndex);
+      if (tag && selector) {
+        try {
+          $(selector).each((__, matchedEl) => appendTag(matchedEl as Element, tag.id, prop, tag.sectionIndex));
+        } catch {
+          // Selector syntax cheerio can't match (e.g. :hover) — nothing to tag for this
+          // occurrence, id sequence below still advances consistently.
+        }
+      }
+      cssIndex++;
+    });
+  });
+
+  return $.html();
 }
 
 export type ColorEdit = { id: number; value: string };
