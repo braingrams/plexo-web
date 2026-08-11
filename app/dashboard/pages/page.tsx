@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
+import { getTierFeatures } from "@/lib/subscription";
 
 import { PagesOverviewClient } from "./PagesOverviewClient";
 
@@ -24,6 +25,9 @@ export default async function PagesOverviewPage() {
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
+
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { subscriptionPlan: true } });
+  const isUltra = getTierFeatures(user?.subscriptionPlan).multiPageSitesEnabled;
 
   // Root landing-page templates with at least one sub-page — i.e. multi-site templates,
   // regardless of whether they've been published to a domain yet. Mirrors the root-template
@@ -59,6 +63,7 @@ export default async function PagesOverviewPage() {
 
   return (
     <PagesOverviewClient
+      isUltra={isUltra}
       pages={templates.map((t) => ({
         id: t.id,
         name: t.name,
