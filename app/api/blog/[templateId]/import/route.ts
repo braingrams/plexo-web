@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { after } from "next/server";
 import { put, BlobError } from "@vercel/blob";
 import { ImportJobStatus, ImportMediaHandling, ImportSourceType } from "@prisma/client";
 import { prisma } from "@/server/prisma";
@@ -7,7 +6,6 @@ import { requirePermission } from "@/server/requirePermission";
 import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
 import { checkWordPressReachable, normalizeSiteUrl } from "@/lib/blogImport/wpClient";
 import { parseWxr } from "@/lib/blogImport/wxrParser";
-import { continueImportChain } from "@/lib/blogImport/continueChain";
 
 const MAX_WXR_BYTES = 50 * 1024 * 1024;
 
@@ -27,10 +25,6 @@ function rehostCapError(totalPosts: number): NextResponse {
     },
     { status: 400 },
   );
-}
-
-function triggerFirstBatch(jobId: string) {
-  after(() => continueImportChain(jobId));
 }
 
 export async function GET(
@@ -104,7 +98,6 @@ async function createWxrJob(request: NextRequest, templateId: string, userId: st
     },
   });
 
-  triggerFirstBatch(job.id);
   return NextResponse.json({ job }, { status: 201 });
 }
 
@@ -143,7 +136,6 @@ async function createRestJob(request: NextRequest, templateId: string, userId: s
     },
   });
 
-  triggerFirstBatch(job.id);
   return NextResponse.json({ job }, { status: 201 });
 }
 

@@ -6,13 +6,16 @@ import { isAuthorizedAdmin } from "@/server/adminAuth";
 const STALL_THRESHOLD_MS = 5 * 60 * 1000;
 
 /**
- * Backstop for a self-triggering batch chain (app/api/internal/blog-import/process) that
- * died mid-flight — a crashed invocation, a dropped after() continuation, or a
- * transient error that paused the job. Same pattern as app/api/internal/scan-domains:
- * a Vercel Cron entry (see vercel.json) hitting this on a schedule. On Hobby's daily-max
- * cron frequency this is a once-a-day safety net, not the primary continuation
- * mechanism — after() resuming itself immediately is what makes an import feel instant
- * in the common case where nothing crashes.
+ * Backstop for an import whose tab isn't open — normally a job is driven batch-by-batch by
+ * the dashboard tab itself (app/dashboard/templates/[id]/blog/import/ImportClient.tsx), so
+ * "stalled" here just means nobody's watching, not that anything crashed. Same pattern as
+ * app/api/internal/scan-domains: a Vercel Cron entry (see vercel.json) hitting this on a
+ * schedule. Each stalled job gets one call to app/api/internal/blog-import/process, which
+ * now loops through as many batches as it can in a single invocation (time-boxed, no
+ * further HTTP calls) rather than the old self-triggering chain — that pattern tripped
+ * Vercel's own loop protection (508) after a handful of hops on anything but a small
+ * import. On Hobby's daily-max cron frequency this is a once-a-day catch-up, not a tight
+ * polling loop.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const cronSecret = process.env.CRON_SECRET;

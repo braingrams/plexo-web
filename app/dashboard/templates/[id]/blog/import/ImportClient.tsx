@@ -60,9 +60,14 @@ export function ImportClient({
   const [retrying, setRetrying] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stepError, setStepError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Tracks which job this tab is actively driving batches for — the browser calling the
+  // step endpoint in a loop (instead of the server re-triggering itself over HTTP) is what
+  // actually advances the import now; see the comment on the retry route for why.
+  const stepLoopJobIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!job || TERMINAL_STATUSES.includes(job.status)) {
@@ -95,6 +100,54 @@ export function ImportClient({
     tickRef.current = setInterval(() => setNow(Date.now()), 1000);
     return () => { if (tickRef.current) clearInterval(tickRef.current); };
   }, [job]);
+
+  async function stepOnce(jobId: string): Promise<{ done: boolean; status: JobStatus } | null> {
+    try {
+      const res = await fetch(`/api/blog/${templateId}/import/${jobId}/retry`, { method: "POST" });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return { done: Boolean(data.done), status: data.status as JobStatus };
+    } catch {
+      return null;
+    }
+  }
+
+  // Drives an import to completion by repeatedly calling the step endpoint from the
+  // browser — deliberately not a server-side self-continuation, since a function
+  // re-triggering itself over HTTP reads as a request loop to Vercel's loop protection
+  // and gets cut off with a 508 after a handful of hops. Safe to call again for a job
+  // that's already being driven (e.g. from the Retry button) — it's a no-op in that case.
+  async function runStepLoop(jobId: string) {
+    if (stepLoopJobIdRef.current === jobId) return;
+    stepLoopJobIdRef.current = jobId;
+    setStepError(null);
+    try {
+      for (;;) {
+        if (stepLoopJobIdRef.current !== jobId) return;
+        const result = await stepOnce(jobId);
+        if (!result) {
+          setStepError("Lost connection while importing — click Retry now to continue.");
+          return;
+        }
+        // A batch that came back paused needs a human to notice before we hammer it
+        // again; "done" covers both real completion and another tab/process already
+        // owning this job's progress, in which case backing off here is correct.
+        if (result.done || result.status === "PAUSED_ERROR") return;
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+    } finally {
+      if (stepLoopJobIdRef.current === jobId) stepLoopJobIdRef.current = null;
+    }
+  }
+
+  useEffect(() => {
+    if (!job || TERMINAL_STATUSES.includes(job.status)) return;
+    runStepLoop(job.id);
+    return () => {
+      if (stepLoopJobIdRef.current === job.id) stepLoopJobIdRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [job?.id]);
 
   async function handleStart() {
     if (mode === "url" && !url.trim()) return;
@@ -150,11 +203,7 @@ export function ImportClient({
     if (!job) return;
     setRetrying(true);
     try {
-      const res = await fetch(`/api/blog/${templateId}/import/${job.id}/retry`, { method: "POST" });
-      if (res.ok) {
-        const data = await res.json();
-        setJob({ ...job, status: data.status ?? "RUNNING", lastHeartbeatAt: new Date().toISOString() });
-      }
+      await runStepLoop(job.id);
     } finally {
       setRetrying(false);
     }
@@ -163,21 +212,20 @@ export function ImportClient({
   const progressPct = job?.totalPosts ? Math.min(100, Math.round((job.processedPosts / job.totalPosts) * 100)) : job?.status === "COMPLETED" ? 100 : 0;
 
   const heartbeatMs = job?.lastHeartbeatAt ? now - new Date(job.lastHeartbeatAt).getTime() : null;
+  // With progress now driven by this tab's own step loop, a stale heartbeat while RUNNING
+  // means the loop genuinely isn't making progress right now (e.g. the tab was backgrounded
+  // and the browser throttled its timers) rather than a server-side chain having broken.
   const isStale = job?.status === "RUNNING" && heartbeatMs !== null && heartbeatMs > STALE_HEARTBEAT_MS;
-  // A recorded chain-continuation failure (see continueImportChain) means the batch loop
-  // has already stopped, even if the heartbeat is still recent — don't make the user wait
-  // out the staleness window to see Retry when we already know it's broken.
-  const chainBroken = job?.errors.some((e) => e.startsWith("Couldn't continue the import automatically")) ?? false;
-  const showRetry = job?.status === "PAUSED_ERROR" || isStale || chainBroken;
+  const showRetry = job?.status === "PAUSED_ERROR" || isStale || !!stepError;
   const showCancel = job && !TERMINAL_STATUSES.includes(job.status);
 
   let statusLine = job ? STATUS_TEXT[job.status] : "";
   if (job?.status === "PAUSED_ERROR" && heartbeatMs !== null) {
-    statusLine = `Paused after an error, ${formatElapsed(heartbeatMs)}. Retries automatically, or retry now below.`;
-  } else if (chainBroken) {
-    statusLine = "Stopped — couldn't continue automatically. Click Retry now below.";
+    statusLine = `Paused after an error, ${formatElapsed(heartbeatMs)}. Click Retry now to continue, or it resumes automatically within a day.`;
+  } else if (stepError) {
+    statusLine = stepError;
   } else if (isStale && heartbeatMs !== null) {
-    statusLine = `No update for ${formatElapsed(heartbeatMs)} — this may be stuck. Retry now below, or it will resume automatically.`;
+    statusLine = `No update for ${formatElapsed(heartbeatMs)} — keep this tab open, or click Retry now.`;
   } else if (job && heartbeatMs !== null && !TERMINAL_STATUSES.includes(job.status)) {
     statusLine = `${STATUS_TEXT[job.status]} (last update ${formatElapsed(heartbeatMs)})`;
   }
@@ -276,6 +324,8 @@ export function ImportClient({
           </button>
           <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)", marginTop: "0.9rem" }}>
             We&apos;ll pull your published posts, categories, tags, authors, and images — and set up redirects so your old links keep working.
+            Keep this tab open while it runs; if you close it, progress pauses and picks back up automatically once a day, or you can come
+            back and click Retry now.
           </p>
         </div>
       )}
