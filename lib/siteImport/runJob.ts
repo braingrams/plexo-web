@@ -45,7 +45,7 @@ function deriveNameFromUrl(url: string): string {
 }
 
 /** Runs DETECTING+DISCOVERING as one combined step (both are cheap, single-pass operations — see doc comment below) and writes the resulting SiteImportPage rows. */
-async function runDetectAndDiscover(job: { id: string; sourceUrl: string; platform: SiteImportPlatform }, errors: string[]): Promise<void> {
+async function runDetectAndDiscover(job: { id: string; sourceUrl: string; platform: SiteImportPlatform }, warnings: string[]): Promise<void> {
   const homepageRes = await safeFetch(job.sourceUrl, { headers: { Accept: "text/html" } });
   if (!homepageRes.ok) throw new Error(`Couldn't reach ${job.sourceUrl} (${homepageRes.status}).`);
   const homepageHtml = await homepageRes.text();
@@ -69,11 +69,22 @@ async function runDetectAndDiscover(job: { id: string; sourceUrl: string; platfo
     skipDuplicates: true,
   });
 
-  for (const ex of excluded) errors.push(`${ex.reason}: ${ex.url}`);
+  // "Excluded" is routine, expected scope-limiting (a big site hitting the page cap is the
+  // common case, easily hundreds of URLs) — never real errors, so they go to warnings, not
+  // errors[]. Page-cap exclusions are summarized as one count rather than one line per URL
+  // (confirmed against a real 900+-page site: one-line-per-URL made the report screen look
+  // like something had gone badly wrong when nothing had). robots.txt exclusions are
+  // typically few and specific enough to be worth listing individually.
+  const capExcluded = excluded.filter((ex) => ex.reason === "page cap reached");
+  const otherExcluded = excluded.filter((ex) => ex.reason !== "page cap reached");
+  if (capExcluded.length > 0) {
+    warnings.push(`${capExcluded.length} additional page(s) were beyond the ${maxPages}-page import cap and weren't imported.`);
+  }
+  for (const ex of otherExcluded) warnings.push(`${ex.reason}: ${ex.url}`);
 
   await prisma.siteImportJob.update({
     where: { id: job.id },
-    data: { platform, totalPages: discovered.length, phase: SiteImportPhase.FETCHING },
+    data: { platform, totalPages: discovered.length, phase: SiteImportPhase.FETCHING, warnings },
   });
 }
 
@@ -312,12 +323,13 @@ export async function processSiteImportStep(jobId: string): Promise<{ done: bool
 
   const job = (await prisma.siteImportJob.findUnique({ where: { id: jobId } }))!;
   const errors = asStringArray(job.errors);
+  const warnings = asStringArray(job.warnings);
 
   try {
     let resultPhase: SiteImportPhase;
 
     if (job.phase === SiteImportPhase.PENDING || job.phase === SiteImportPhase.DETECTING || job.phase === SiteImportPhase.DISCOVERING) {
-      await runDetectAndDiscover(job, errors);
+      await runDetectAndDiscover(job, warnings);
       resultPhase = SiteImportPhase.FETCHING;
     } else if (job.phase === SiteImportPhase.FETCHING) {
       if (!job.createdBy) throw new Error("Import job is missing its creator.");

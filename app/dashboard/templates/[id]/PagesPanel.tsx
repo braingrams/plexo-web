@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getTierFeatures } from "@/lib/subscription";
+import { SiteImportPanel } from "./site-import/SiteImportPanel";
 
 type SourceType = "BUILDER" | "RAW_UPLOAD";
 
@@ -380,6 +381,9 @@ function ManagePagesModal({
 	// AUP gate, so accepting inline can resubmit the exact same upload instead of losing it
 	// and forcing a trip to a separate page.
 	const [aupPending, setAupPending] = useState<{ parentId: string; file: File } | null>(null);
+	// Whether the root node's "Add page" inline slot is showing the import-a-website flow
+	// instead of the plain "new blank page" name field — see the SiteImportPanel render below.
+	const [importOpen, setImportOpen] = useState(false);
 	const uploadInputRef = useRef<HTMLInputElement | null>(null);
 	const router = useRouter();
 
@@ -731,7 +735,7 @@ function ManagePagesModal({
 									<button
 										type="button"
 										title="Add DnD sub-page"
-										onClick={() => { setAddParentId(node.id); setNewPageName(""); }}
+										onClick={() => { setAddParentId(node.id); setNewPageName(""); setImportOpen(false); }}
 										style={iconBtn}
 									>
 										<IconPlus />
@@ -788,17 +792,38 @@ function ManagePagesModal({
 				</div>
 
 				{addParentId === node.id && (
-					<div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginLeft: (depth + 1) * 20, padding: "0.4rem 0.6rem" }}>
-						<input
-							autoFocus
-							placeholder="New page name (e.g. About Us)"
-							value={newPageName}
-							onChange={(e) => setNewPageName(e.target.value)}
-							onKeyDown={(e) => { if (e.key === "Enter") void createPage(node.id); }}
-							style={inputStyle}
-						/>
-						<button type="button" onClick={() => void createPage(node.id)} disabled={busy || !newPageName.trim()} style={smallBtnPrimary}>Add</button>
-						<button type="button" onClick={() => setAddParentId(null)} style={smallBtn}>Cancel</button>
+					<div style={{ marginLeft: (depth + 1) * 20, padding: "0.4rem 0.6rem" }}>
+						{importOpen && node.id === rootId ? (
+							<SiteImportPanel
+								templateId={rootId}
+								onImported={() => void onReload()}
+								onClose={() => { setImportOpen(false); setAddParentId(null); }}
+							/>
+						) : (
+							<>
+								<div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+									<input
+										autoFocus
+										placeholder="New page name (e.g. About Us)"
+										value={newPageName}
+										onChange={(e) => setNewPageName(e.target.value)}
+										onKeyDown={(e) => { if (e.key === "Enter") void createPage(node.id); }}
+										style={inputStyle}
+									/>
+									<button type="button" onClick={() => void createPage(node.id)} disabled={busy || !newPageName.trim()} style={smallBtnPrimary}>Add</button>
+									<button type="button" onClick={() => setAddParentId(null)} style={smallBtn}>Cancel</button>
+								</div>
+								{node.id === rootId && (
+									<button
+										type="button"
+										onClick={() => setImportOpen(true)}
+										style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", marginTop: "0.5rem", background: "none", border: "none", padding: 0, color: "var(--brand)", fontSize: "0.74rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+									>
+										<IconGlobe /> or import a website instead
+									</button>
+								)}
+							</>
+						)}
 					</div>
 				)}
 
@@ -852,17 +877,10 @@ function ManagePagesModal({
 					<div style={{ padding: "0.6rem 1.25rem 1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
 						<button
 							type="button"
-							onClick={() => { setAddParentId(rootId); setNewPageName(""); }}
+							onClick={() => { setAddParentId(rootId); setNewPageName(""); setImportOpen(false); }}
 							style={{ ...smallBtn, width: "100%", justifyContent: "center", padding: "0.55rem", fontSize: "0.8rem" }}
 						>
 							<IconPlus /> Add top-level page
-						</button>
-						<button
-							type="button"
-							onClick={() => router.push(`/dashboard/templates/${rootId}/site-import`)}
-							style={{ ...smallBtn, width: "100%", justifyContent: "center", padding: "0.55rem", fontSize: "0.8rem" }}
-						>
-							<IconGlobe /> Import a website
 						</button>
 					</div>
 				)}
