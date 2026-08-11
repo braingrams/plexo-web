@@ -1,4 +1,4 @@
-import { BlogPostStatus, ImportJobStatus, ImportSourceType } from "@prisma/client";
+import { BlogPostStatus, ImportJobStatus, ImportMediaHandling, ImportSourceType } from "@prisma/client";
 import { prisma } from "@/server/prisma";
 import { fetchWordPressPostsPage } from "./wpClient";
 import { parseWxr, wxrDateToIso } from "./wxrParser";
@@ -12,6 +12,10 @@ import { createRedirectsForImportedPost } from "./redirects";
 // sequential-ish network round trip even with internal concurrency) — kept small so one
 // batch comfortably finishes well inside a serverless function's time budget.
 const POSTS_PER_BATCH = 5;
+
+// A batch's claim on a job (see processImportBatch) is released as soon as the batch
+// finishes — this is only a backstop for an invocation that died without releasing it.
+const STALE_LOCK_MS = 5 * 60 * 1000;
 
 interface RestCursor {
   page: number;
@@ -44,8 +48,13 @@ function asErrorArray(value: unknown): string[] {
   return Array.isArray(value) ? (value as string[]) : [];
 }
 
-/** The shared work for one post, regardless of which source produced it: dedupe taxonomy/author, rehost media, convert content, upsert, and write redirects. */
-async function importOnePost(templateId: string, post: NormalizedImportPost, errors: string[]): Promise<void> {
+/** The shared work for one post, regardless of which source produced it: dedupe taxonomy/author, rehost media (if enabled), convert content, upsert, and write redirects. */
+async function importOnePost(
+  templateId: string,
+  post: NormalizedImportPost,
+  mediaHandling: ImportMediaHandling,
+  errors: string[],
+): Promise<void> {
   const [categoryIds, tagIds, authorId] = await Promise.all([
     Promise.all(post.categoryNames.map((name) => findOrCreateCategory(templateId, name))),
     Promise.all(post.tagNames.map((name) => findOrCreateTag(templateId, name))),
@@ -57,12 +66,18 @@ async function importOnePost(templateId: string, post: NormalizedImportPost, err
     errors.push(`"${post.title}": removed unsupported shortcode(s) ${shortcodes.slice(0, 3).join(", ")} — please check this post.`);
   }
 
-  const imageUrls = [post.featuredImageUrl, ...extractImageUrls(post.contentHtml)].filter((u): u is string => Boolean(u));
-  const mediaMap = await rehostMediaUrls(templateId, imageUrls, errors);
-  const rewrittenHtml = rewriteImageUrls(post.contentHtml, mediaMap);
+  // RETAIN keeps every <img src> and the featured image pointed at the source site — no
+  // network calls, no Blob writes. REHOST downloads and re-uploads each image once.
+  let rewrittenHtml = post.contentHtml;
+  let featuredImageUrl = post.featuredImageUrl;
+  if (mediaHandling === ImportMediaHandling.REHOST) {
+    const imageUrls = [post.featuredImageUrl, ...extractImageUrls(post.contentHtml)].filter((u): u is string => Boolean(u));
+    const mediaMap = await rehostMediaUrls(templateId, imageUrls, errors);
+    rewrittenHtml = rewriteImageUrls(post.contentHtml, mediaMap);
+    featuredImageUrl = post.featuredImageUrl ? mediaMap.get(post.featuredImageUrl) ?? post.featuredImageUrl : null;
+  }
   const contentJson = convertWordPressHtmlToTiptapJson(rewrittenHtml);
   const contentHtml = tiptapJsonToHtml(contentJson);
-  const featuredImageUrl = post.featuredImageUrl ? mediaMap.get(post.featuredImageUrl) ?? post.featuredImageUrl : null;
 
   const existing = await findPostByExternalId(templateId, post.externalId);
   const savePayload = {
@@ -94,6 +109,7 @@ async function runRestBatch(
   templateId: string,
   sourceUrl: string,
   cursor: RestCursor,
+  mediaHandling: ImportMediaHandling,
   errors: string[],
 ): Promise<{ processed: number; nextCursor: RestCursor; done: boolean; totalPosts: number }> {
   const { posts, totalPages, totalPosts } = await fetchWordPressPostsPage(sourceUrl, cursor.page, cursor.perPage);
@@ -119,6 +135,7 @@ async function runRestBatch(
           featuredImageUrl: wpPost.featuredMedia?.url ?? null,
           featuredImageAlt: wpPost.featuredMedia?.alt || null,
         },
+        mediaHandling,
         errors,
       );
       processed += 1;
@@ -135,6 +152,7 @@ async function runWxrBatch(
   templateId: string,
   wxrBlobUrl: string,
   cursor: WxrCursor,
+  mediaHandling: ImportMediaHandling,
   errors: string[],
 ): Promise<{ processed: number; nextCursor: WxrCursor; done: boolean; totalPosts: number }> {
   const res = await fetch(wxrBlobUrl);
@@ -163,6 +181,7 @@ async function runWxrBatch(
           featuredImageUrl: wxrPost.featuredImageUrl,
           featuredImageAlt: null,
         },
+        mediaHandling,
         errors,
       );
       processed += 1;
@@ -184,21 +203,42 @@ async function runWxrBatch(
  * Processes exactly one bounded batch of an import job (from either source type) and
  * returns whether the job is now finished. Safe to call repeatedly/concurrently-adjacent
  * for the SAME job — every post is upserted by (templateId, externalId), so a retried
- * batch (e.g. the stalled-job cron re-triggering a chain that died mid-batch) never
- * duplicates posts; ImportMediaMap gives the same idempotency for re-downloaded media.
+ * batch never duplicates posts. Overlapping invocations (e.g. the stalled-job cron
+ * re-triggering a chain that's actually still alive, just slow) are additionally guarded
+ * by an atomic claim on `processing`: only one invocation can hold the job at a time, so
+ * two invocations never race the same ImportMediaMap check / Vercel Blob upload for the
+ * same cursor.
  */
 export async function processImportBatch(jobId: string): Promise<{ done: boolean; status: ImportJobStatus }> {
-  const job = await prisma.importJob.findUnique({ where: { id: jobId } });
-  if (!job) return { done: true, status: ImportJobStatus.CANCELLED };
-  if (job.status === ImportJobStatus.COMPLETED || job.status === ImportJobStatus.CANCELLED || job.status === ImportJobStatus.FAILED) {
-    return { done: true, status: job.status };
+  const existing = await prisma.importJob.findUnique({ where: { id: jobId } });
+  if (!existing) return { done: true, status: ImportJobStatus.CANCELLED };
+  if (existing.status === ImportJobStatus.COMPLETED || existing.status === ImportJobStatus.CANCELLED || existing.status === ImportJobStatus.FAILED) {
+    return { done: true, status: existing.status };
   }
 
-  const errors = asErrorArray(job.errors);
-  await prisma.importJob.update({
-    where: { id: jobId },
-    data: { status: ImportJobStatus.RUNNING, lastHeartbeatAt: new Date(), startedAt: job.startedAt ?? new Date() },
+  const claim = await prisma.importJob.updateMany({
+    where: {
+      id: jobId,
+      // Anything not already terminal (checked above) is claimable — this must mirror the
+      // early-return terminal check, otherwise a status left out here (e.g. PAUSED_ERROR)
+      // would silently become unclaimable forever, breaking both the stalled-job cron and
+      // manual retry.
+      status: { in: [ImportJobStatus.PENDING, ImportJobStatus.DISCOVERING, ImportJobStatus.RUNNING, ImportJobStatus.PAUSED_ERROR] },
+      OR: [{ processing: false }, { lastHeartbeatAt: null }, { lastHeartbeatAt: { lt: new Date(Date.now() - STALE_LOCK_MS) } }],
+    },
+    data: { processing: true, status: ImportJobStatus.RUNNING, lastHeartbeatAt: new Date(), startedAt: existing.startedAt ?? new Date() },
   });
+  if (claim.count === 0) {
+    // Either another invocation genuinely owns this job right now, or it just finished/was
+    // cancelled between our two reads — either way, this invocation has nothing to do, and
+    // reports itself "done" so callers don't schedule a redundant continuation on top of
+    // whichever invocation actually holds the claim.
+    const current = await prisma.importJob.findUnique({ where: { id: jobId } });
+    return { done: true, status: current?.status ?? ImportJobStatus.CANCELLED };
+  }
+
+  const job = (await prisma.importJob.findUnique({ where: { id: jobId } }))!;
+  const errors = asErrorArray(job.errors);
 
   try {
     let result: { processed: number; nextCursor: unknown; done: boolean; totalPosts: number };
@@ -206,11 +246,11 @@ export async function processImportBatch(jobId: string): Promise<{ done: boolean
     if (job.sourceType === ImportSourceType.WP_REST) {
       if (!job.sourceUrl) throw new Error("Missing source URL.");
       const cursor = (job.cursor as unknown as RestCursor) ?? { page: 1, perPage: POSTS_PER_BATCH };
-      result = await runRestBatch(job.templateId, job.sourceUrl, cursor, errors);
+      result = await runRestBatch(job.templateId, job.sourceUrl, cursor, job.mediaHandling, errors);
     } else {
       if (!job.wxrBlobUrl) throw new Error("Missing uploaded export file.");
       const cursor = (job.cursor as unknown as WxrCursor) ?? { offset: 0, batchSize: POSTS_PER_BATCH };
-      result = await runWxrBatch(job.templateId, job.wxrBlobUrl, cursor, errors);
+      result = await runWxrBatch(job.templateId, job.wxrBlobUrl, cursor, job.mediaHandling, errors);
     }
 
     const status = result.done ? ImportJobStatus.COMPLETED : ImportJobStatus.RUNNING;
@@ -218,6 +258,7 @@ export async function processImportBatch(jobId: string): Promise<{ done: boolean
       where: { id: jobId },
       data: {
         status,
+        processing: false,
         cursor: result.nextCursor as object,
         processedPosts: job.processedPosts + result.processed,
         totalPosts: job.totalPosts ?? result.totalPosts,
@@ -232,7 +273,7 @@ export async function processImportBatch(jobId: string): Promise<{ done: boolean
     errors.push(`Batch failed: ${err instanceof Error ? err.message : String(err)}`);
     await prisma.importJob.update({
       where: { id: jobId },
-      data: { status: ImportJobStatus.PAUSED_ERROR, errors, lastHeartbeatAt: new Date() },
+      data: { status: ImportJobStatus.PAUSED_ERROR, processing: false, errors, lastHeartbeatAt: new Date() },
     });
     return { done: false, status: ImportJobStatus.PAUSED_ERROR };
   }

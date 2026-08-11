@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { ImportJobStatus } from "@prisma/client";
 import { isAuthorizedAdmin } from "@/server/adminAuth";
 import { processImportBatch } from "@/lib/blogImport/runBatch";
+import { continueImportChain } from "@/lib/blogImport/continueChain";
 
 /**
  * Processes exactly one batch, then — if the job is still healthy and not finished —
@@ -36,19 +37,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   if (!result.done && result.status === ImportJobStatus.RUNNING) {
     const jobId = body.jobId;
-    after(async () => {
-      const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-      const cronSecret = process.env.CRON_SECRET;
-      if (!cronSecret) return; // no self-continuation possible without a shared secret configured
-      await fetch(`${base}/api/internal/blog-import/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${cronSecret}` },
-        body: JSON.stringify({ jobId }),
-      }).catch(() => {
-        // A dropped self-continuation isn't fatal — the stalled-job cron backstop
-        // (app/api/internal/blog-import/resume-stalled) picks it back up from lastHeartbeatAt.
-      });
-    });
+    after(() => continueImportChain(jobId));
   }
 
   return NextResponse.json({ done: result.done, status: result.status });

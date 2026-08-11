@@ -23,6 +23,7 @@ export default async function BlogImportPage({ params }: { params: Promise<{ id:
               totalPosts: activeJob.totalPosts,
               processedPosts: activeJob.processedPosts,
               errors: Array.isArray(activeJob.errors) ? (activeJob.errors as string[]) : [],
+              lastHeartbeatAt: activeJob.lastHeartbeatAt ? activeJob.lastHeartbeatAt.toISOString() : null,
             }
           : null
       }

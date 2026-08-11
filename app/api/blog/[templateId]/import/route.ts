@@ -1,28 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { put, BlobError } from "@vercel/blob";
-import { ImportJobStatus, ImportSourceType } from "@prisma/client";
+import { ImportJobStatus, ImportMediaHandling, ImportSourceType } from "@prisma/client";
 import { prisma } from "@/server/prisma";
 import { requirePermission } from "@/server/requirePermission";
 import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
 import { checkWordPressReachable, normalizeSiteUrl } from "@/lib/blogImport/wpClient";
 import { parseWxr } from "@/lib/blogImport/wxrParser";
+import { continueImportChain } from "@/lib/blogImport/continueChain";
 
 const MAX_WXR_BYTES = 50 * 1024 * 1024;
 
+// Rehosting downloads + re-uploads every image to Vercel Blob — bounded to small imports
+// so a full-site migration can't rack up unbounded storage/time. Larger imports must use
+// Retain (keep hotlinking the source site's media) instead.
+const MAX_REHOST_POSTS = 10;
+
+function parseMediaHandling(value: FormDataEntryValue | string | null): ImportMediaHandling {
+  return value === "REHOST" ? ImportMediaHandling.REHOST : ImportMediaHandling.RETAIN;
+}
+
+function rehostCapError(totalPosts: number): NextResponse {
+  return NextResponse.json(
+    {
+      error: `Rehost is only available for imports of ${MAX_REHOST_POSTS} posts or fewer (this site has ${totalPosts} published posts). Choose "Retain original media" instead.`,
+    },
+    { status: 400 },
+  );
+}
+
 function triggerFirstBatch(jobId: string) {
-  after(async () => {
-    const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    const cronSecret = process.env.CRON_SECRET;
-    if (!cronSecret) return;
-    await fetch(`${base}/api/internal/blog-import/process`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${cronSecret}` },
-      body: JSON.stringify({ jobId }),
-    }).catch(() => {
-      // Not fatal — the stalled-job cron backstop will pick this job up from lastHeartbeatAt.
-    });
-  });
+  after(() => continueImportChain(jobId));
 }
 
 export async function GET(
@@ -51,6 +59,8 @@ async function createWxrJob(request: NextRequest, templateId: string, userId: st
     return NextResponse.json({ error: `That export file exceeds the ${MAX_WXR_BYTES / 1024 / 1024}MB limit.` }, { status: 400 });
   }
 
+  const mediaHandling = parseMediaHandling(form?.get("mediaHandling") ?? null);
+
   const buffer = Buffer.from(await uploaded.arrayBuffer());
   const xmlText = buffer.toString("utf8");
 
@@ -62,6 +72,9 @@ async function createWxrJob(request: NextRequest, templateId: string, userId: st
   }
   if (totalPosts === 0) {
     return NextResponse.json({ error: "No published posts found in that export file." }, { status: 400 });
+  }
+  if (mediaHandling === ImportMediaHandling.REHOST && totalPosts > MAX_REHOST_POSTS) {
+    return rehostCapError(totalPosts);
   }
 
   const localDevToken = process.env.BLOB_READ_WRITE_TOKEN; // OIDC covers real deployments — see upload-raw/route.ts
@@ -84,6 +97,7 @@ async function createWxrJob(request: NextRequest, templateId: string, userId: st
       sourceType: ImportSourceType.WXR_UPLOAD,
       wxrBlobUrl,
       status: ImportJobStatus.PENDING,
+      mediaHandling,
       totalPosts,
       createdBy: userId,
       cursor: { offset: 0, batchSize: 5 },
@@ -95,10 +109,11 @@ async function createWxrJob(request: NextRequest, templateId: string, userId: st
 }
 
 async function createRestJob(request: NextRequest, templateId: string, userId: string): Promise<NextResponse> {
-  const body = (await request.json().catch(() => ({}))) as { sourceUrl?: string };
+  const body = (await request.json().catch(() => ({}))) as { sourceUrl?: string; mediaHandling?: string };
   if (!body.sourceUrl?.trim()) {
     return NextResponse.json({ error: "Enter your WordPress site's URL." }, { status: 400 });
   }
+  const mediaHandling = parseMediaHandling(body.mediaHandling ?? null);
 
   const sourceUrl = normalizeSiteUrl(body.sourceUrl);
   const check = await checkWordPressReachable(sourceUrl);
@@ -111,6 +126,9 @@ async function createRestJob(request: NextRequest, templateId: string, userId: s
       { status: 400 },
     );
   }
+  if (mediaHandling === ImportMediaHandling.REHOST && (check.totalPosts === undefined || check.totalPosts > MAX_REHOST_POSTS)) {
+    return rehostCapError(check.totalPosts ?? MAX_REHOST_POSTS + 1);
+  }
 
   const job = await prisma.importJob.create({
     data: {
@@ -118,6 +136,7 @@ async function createRestJob(request: NextRequest, templateId: string, userId: s
       sourceType: ImportSourceType.WP_REST,
       sourceUrl,
       status: ImportJobStatus.PENDING,
+      mediaHandling,
       totalPosts: check.totalPosts ?? null,
       createdBy: userId,
       cursor: { page: 1, perPage: 5 },

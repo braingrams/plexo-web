@@ -59,6 +59,7 @@ export async function rehostMediaUrls(templateId: string, urls: string[], errors
           const blob = await put(key, buffer, {
             access: "public",
             contentType,
+            allowOverwrite: true, // key is a hash of sourceUrl — a "collision" is always identical content, so overwriting is always safe
             ...(localDevToken ? { token: localDevToken } : {}),
           });
 
