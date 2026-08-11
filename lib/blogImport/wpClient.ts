@@ -1,3 +1,5 @@
+import { safeFetch } from "@/lib/siteImport/fetchSafe";
+
 export interface WpPost {
   id: number;
   dateGmt: string;
@@ -25,7 +27,7 @@ export async function checkWordPressReachable(baseUrl: string): Promise<{ reacha
   try {
     const url = new URL("/wp-json/wp/v2/posts", normalizeSiteUrl(baseUrl));
     url.searchParams.set("per_page", "1");
-    const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+    const res = await safeFetch(url.toString(), { headers: { Accept: "application/json" } });
     if (!res.ok) return { reachable: false };
     const total = res.headers.get("x-wp-total");
     return { reachable: true, totalPosts: total ? Number.parseInt(total, 10) : undefined };
@@ -54,6 +56,29 @@ type WpRawPost = {
   };
 };
 
+function mapWpRawPost(p: WpRawPost): WpPost {
+  const embedded = p._embedded ?? {};
+  const media = embedded["wp:featuredmedia"]?.[0];
+  const authorRaw = embedded.author?.[0];
+  const flatTerms = (embedded["wp:term"] ?? []).flat();
+
+  return {
+    id: p.id,
+    dateGmt: p.date_gmt,
+    modifiedGmt: p.modified_gmt,
+    slug: p.slug,
+    link: p.link,
+    status: p.status,
+    title: p.title.rendered,
+    contentHtml: p.content.rendered,
+    excerptHtml: p.excerpt.rendered,
+    featuredMedia: media && !media.code && media.source_url ? { url: media.source_url, alt: media.alt_text ?? "" } : null,
+    author: authorRaw && !authorRaw.code ? { id: authorRaw.id, name: authorRaw.name, avatarUrl: authorRaw.avatar_urls?.["96"] } : null,
+    categories: flatTerms.filter((t) => t.taxonomy === "category").map((t) => ({ id: t.id, name: t.name })),
+    tags: flatTerms.filter((t) => t.taxonomy === "post_tag").map((t) => ({ id: t.id, name: t.name })),
+  };
+}
+
 /**
  * One page of a WordPress site's published posts via its public REST API — no auth
  * needed since we're only ever reading what's already public. `_embed=1` pulls
@@ -72,7 +97,7 @@ export async function fetchWordPressPostsPage(
   url.searchParams.set("orderby", "id");
   url.searchParams.set("order", "asc");
 
-  const res = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+  const res = await safeFetch(url.toString(), { headers: { Accept: "application/json" } });
   if (!res.ok) {
     // WordPress 400s ("rest_post_invalid_page_number") once you page past the end —
     // that's just "no more posts," not a real error.
@@ -86,28 +111,22 @@ export async function fetchWordPressPostsPage(
   const totalPosts = totalPostsHeader ? Number.parseInt(totalPostsHeader, 10) : 0;
   const raw = (await res.json()) as WpRawPost[];
 
-  const posts: WpPost[] = raw.map((p) => {
-    const embedded = p._embedded ?? {};
-    const media = embedded["wp:featuredmedia"]?.[0];
-    const authorRaw = embedded.author?.[0];
-    const flatTerms = (embedded["wp:term"] ?? []).flat();
+  return { posts: raw.map(mapWpRawPost), totalPages: Math.max(totalPages, page), totalPosts };
+}
 
-    return {
-      id: p.id,
-      dateGmt: p.date_gmt,
-      modifiedGmt: p.modified_gmt,
-      slug: p.slug,
-      link: p.link,
-      status: p.status,
-      title: p.title.rendered,
-      contentHtml: p.content.rendered,
-      excerptHtml: p.excerpt.rendered,
-      featuredMedia: media && !media.code && media.source_url ? { url: media.source_url, alt: media.alt_text ?? "" } : null,
-      author: authorRaw && !authorRaw.code ? { id: authorRaw.id, name: authorRaw.name, avatarUrl: authorRaw.avatar_urls?.["96"] } : null,
-      categories: flatTerms.filter((t) => t.taxonomy === "category").map((t) => ({ id: t.id, name: t.name })),
-      tags: flatTerms.filter((t) => t.taxonomy === "post_tag").map((t) => ({ id: t.id, name: t.name })),
-    };
-  });
+/**
+ * Fetches a single published post by its slug (the last path segment of its permalink) —
+ * used by site-import's WordPress adapter to get full-fidelity content for a post URL that
+ * was discovered generically (sitemap/feed) rather than via fetchWordPressPostsPage's own
+ * pagination.
+ */
+export async function fetchWordPressPostBySlug(baseUrl: string, slug: string): Promise<WpPost | null> {
+  const url = new URL("/wp-json/wp/v2/posts", normalizeSiteUrl(baseUrl));
+  url.searchParams.set("slug", slug);
+  url.searchParams.set("_embed", "1");
 
-  return { posts, totalPages: Math.max(totalPages, page), totalPosts };
+  const res = await safeFetch(url.toString(), { headers: { Accept: "application/json" } });
+  if (!res.ok) return null;
+  const raw = (await res.json()) as WpRawPost[];
+  return raw.length > 0 ? mapWpRawPost(raw[0]) : null;
 }

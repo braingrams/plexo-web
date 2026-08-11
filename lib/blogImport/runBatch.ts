@@ -1,5 +1,6 @@
 import { BlogPostStatus, ImportJobStatus, ImportMediaHandling, ImportSourceType } from "@prisma/client";
 import { prisma } from "@/server/prisma";
+import { safeFetch } from "@/lib/siteImport/fetchSafe";
 import { fetchWordPressPostsPage } from "./wpClient";
 import { parseWxr, wxrDateToIso } from "./wxrParser";
 import { findOrCreateCategory, findOrCreateTag, findOrCreateAuthor } from "./taxonomy";
@@ -155,7 +156,7 @@ async function runWxrBatch(
   mediaHandling: ImportMediaHandling,
   errors: string[],
 ): Promise<{ processed: number; nextCursor: WxrCursor; done: boolean; totalPosts: number }> {
-  const res = await fetch(wxrBlobUrl);
+  const res = await safeFetch(wxrBlobUrl);
   if (!res.ok) throw new Error(`Couldn't re-read the uploaded export file (${res.status}).`);
   const xml = await res.text();
   const parsed = parseWxr(xml);

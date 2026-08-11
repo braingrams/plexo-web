@@ -79,6 +79,16 @@ function IconUpload() {
 	);
 }
 
+function IconGlobe() {
+	return (
+		<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+			<circle cx="12" cy="12" r="10" />
+			<line x1="2" y1="12" x2="22" y2="12" />
+			<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+		</svg>
+	);
+}
+
 function IconSwitch() {
 	return (
 		<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -839,13 +849,20 @@ function ManagePagesModal({
 				)}
 
 				{isUltra && (
-					<div style={{ padding: "0.6rem 1.25rem 1rem" }}>
+					<div style={{ padding: "0.6rem 1.25rem 1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
 						<button
 							type="button"
 							onClick={() => { setAddParentId(rootId); setNewPageName(""); }}
 							style={{ ...smallBtn, width: "100%", justifyContent: "center", padding: "0.55rem", fontSize: "0.8rem" }}
 						>
 							<IconPlus /> Add top-level page
+						</button>
+						<button
+							type="button"
+							onClick={() => router.push(`/dashboard/templates/${rootId}/site-import`)}
+							style={{ ...smallBtn, width: "100%", justifyContent: "center", padding: "0.55rem", fontSize: "0.8rem" }}
+						>
+							<IconGlobe /> Import a website
 						</button>
 					</div>
 				)}

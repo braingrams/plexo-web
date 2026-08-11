@@ -1,6 +1,7 @@
 import { put } from "@vercel/blob";
 import pLimit from "p-limit";
 import { prisma } from "@/server/prisma";
+import { safeFetch } from "@/lib/siteImport/fetchSafe";
 
 // WordPress media libraries commonly hold multi-megabyte photos straight from a
 // phone/DSLR — generous, but bounded so one oversized file can't blow the batch's time
@@ -43,7 +44,7 @@ export async function rehostMediaUrls(templateId: string, urls: string[], errors
     toFetch.map((sourceUrl) =>
       limit(async () => {
         try {
-          const res = await fetch(sourceUrl);
+          const res = await safeFetch(sourceUrl);
           if (!res.ok) {
             errors.push(`Media download failed (${res.status}): ${sourceUrl}`);
             return;

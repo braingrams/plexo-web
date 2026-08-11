@@ -541,6 +541,7 @@ model Template {
   blogRedirects            BlogRedirect[]
   importJobs               ImportJob[]
   importMediaMaps          ImportMediaMap[]
+  siteImportJobs           SiteImportJob[]
   // Reverse side of BlogSite's two named 1:1 layout-template relations — see BlogSite.
   blogSitePostLayoutFor    BlogSite?        @relation("BlogSitePostLayout")
   blogSiteListingLayoutFor BlogSite?        @relation("BlogSiteListingLayout")
@@ -1160,4 +1161,131 @@ model ImportMediaMap {
 
   @@unique([templateId, sourceUrl])
   @@index([templateId])
+}
+
+enum SiteImportPlatform {
+  WORDPRESS
+  SQUARESPACE
+  WIX
+  WEBFLOW
+  UNKNOWN // detection failed, or user picked "generic HTML site"
+}
+
+enum SiteImportPhase {
+  PENDING
+  DETECTING
+  DISCOVERING
+  FETCHING
+  REWRITING
+  COMPLETED
+  PAUSED_ERROR
+  FAILED
+  CANCELLED
+}
+
+enum SiteImportPageOutcome {
+  PENDING
+  PAGE_CREATED // became a Template
+  POST_CREATED // became a BlogPost
+  SKIPPED_DUPLICATE
+  FAILED
+  EXCLUDED // discovered but out of scope (page cap, robots.txt disallow)
+}
+
+// One row per "import a website" attempt — the whole-site analogue of ImportJob, covering
+// both the raw-page clone and (optionally) the structured blog-post import in one job, since
+// discovery/fetch/asset/link-rewrite machinery is identical for both outputs; only the final
+// write target (Template vs BlogPost) differs per discovered page. Deliberately a SEPARATE
+// model from ImportJob, not an extension of it: ImportJob's cursor/fields are wp-rest/wxr
+// post-batch shaped end to end, with no notion of "page" output or a DETECT->REWRITE phase
+// machine. WordPress-blog-only import keeps using ImportJob, unmodified, as its own simpler
+// path off the Blog Details screen.
+model SiteImportJob {
+  id             String @id @default(uuid()) @db.Uuid
+  templateId     String @db.Uuid // destination site's ROOT Template (parentId == null)
+  organizationId String @db.Uuid // denormalized from Template for cheap org-scoped rate-limit queries
+  sourceUrl      String // normalized homepage URL of the site being cloned
+
+  platform        SiteImportPlatform  @default(UNKNOWN)
+  importBlogPosts Boolean             @default(false)
+  mediaHandling   ImportMediaHandling @default(REHOST) // REHOST default: see assetInternalize.ts doc comment
+  phase           SiteImportPhase     @default(PENDING)
+  processing      Boolean             @default(false)
+  lastHeartbeatAt DateTime?
+
+  // Per-import attestation (distinct from the account-level raw-upload AUP acceptance — this
+  // is about authorization for THIS specific external domain). Required before FETCHING.
+  ownershipAttestedAt DateTime?
+  ownershipAttestedBy String?   @db.Uuid
+
+  urlMap Json? // Record<normalizedSourceUrl, newPlexoPath>, built during FETCHING, consumed by REWRITING
+
+  totalPages      Int?
+  processedPages  Int  @default(0)
+  totalAssets     Int?
+  processedAssets Int  @default(0)
+
+  errors   Json? // string[], same convention as ImportJob.errors
+  warnings Json? // string[] surfaced in the final report
+
+  createdBy  String?   @db.Uuid
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  template   Template              @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  pages      SiteImportPage[]
+  assetBlobs SiteImportAssetBlob[]
+
+  @@index([templateId])
+  @@index([organizationId])
+  @@index([phase])
+}
+
+// One row per URL discovered during DISCOVERING — the unit of work FETCHING iterates over
+// (claim query: WHERE jobId = ? AND outcome = 'PENDING'), and the durable per-page record
+// backing the final report and REWRITING's link-target lookups.
+model SiteImportPage {
+  id        String @id @default(uuid()) @db.Uuid
+  jobId     String @db.Uuid
+  sourceUrl String
+
+  isBlogPost              Boolean               @default(false) // classification result from DISCOVERING
+  outcome                 SiteImportPageOutcome @default(PENDING)
+  createdTemplateId       String?               @db.Uuid // set when outcome = PAGE_CREATED
+  createdBlogPostId       String?               @db.Uuid // set when outcome = POST_CREATED
+  usedHeadless            Boolean               @default(false)
+  heuristicExtraction     Boolean               @default(false) // Readability-extracted, not platform-API-sourced
+  interactiveFeatureFlags Json? // string[], e.g. ["wix-form","wix-search"]
+  rewrittenAt             DateTime? // set once REWRITING has processed this row
+  error                   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  job SiteImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, sourceUrl])
+  @@index([jobId, outcome])
+}
+
+// Content-addressed cache for crawled assets, scoped to one job. Lets many pages within the
+// same imported site that reference identical bytes (a shared theme stylesheet, a logo) share
+// one physical Blob upload instead of re-uploading per page — see assetInternalize.ts. Does
+// not touch TemplateAsset's own (templateId, path) semantics at all; this only decides what
+// blobUrl a TemplateAsset row points at.
+model SiteImportAssetBlob {
+  id          String   @id @default(uuid()) @db.Uuid
+  jobId       String   @db.Uuid
+  sha256      String // hex digest of the asset's bytes
+  blobUrl     String
+  contentType String
+  size        Int
+  createdAt   DateTime @default(now())
+
+  job SiteImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, sha256])
+  @@index([jobId])
 }

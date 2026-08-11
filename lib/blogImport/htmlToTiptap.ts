@@ -26,15 +26,23 @@ function stripWordPressCruft(html: string): string {
 }
 
 /**
- * Converts one WordPress post's rendered HTML (the REST API's `content.rendered` field)
- * into Tiptap/ProseMirror JSON, for storage as BlogPost.contentJson. Runs server-side via
- * @tiptap/html's happy-dom-backed generateJSON (no browser involved) — see that
- * package's own docs for why happy-dom is required. The result is sanitized again by
- * savePost.ts /sanitize.ts on write, same as any other content source.
+ * Converts any already-extracted post-body HTML into Tiptap/ProseMirror JSON, for storage as
+ * BlogPost.contentJson. Runs server-side via @tiptap/html's happy-dom-backed generateJSON (no
+ * browser involved) — see that package's own docs for why happy-dom is required. The result is
+ * sanitized again by savePost.ts/sanitize.ts on write, same as any other content source.
+ *
+ * `stripWpCruft` is opt-in (only WordPress content has Gutenberg block comments/shortcodes to
+ * strip) so site-import's Squarespace/Readability-sourced posts (see lib/siteImport/) can share
+ * this same conversion without WordPress-specific preprocessing running on non-WP HTML.
  */
-export function convertWordPressHtmlToTiptapJson(rawHtml: string): unknown {
-  const cleaned = sanitizeBlogHtml(stripWordPressCruft(rawHtml));
+export function convertHtmlToTiptapJson(rawHtml: string, opts: { stripWpCruft?: boolean } = {}): unknown {
+  const cleaned = sanitizeBlogHtml(opts.stripWpCruft ? stripWordPressCruft(rawHtml) : rawHtml);
   return generateJSON(cleaned || "<p></p>", EXTENSIONS);
+}
+
+/** Converts one WordPress post's rendered HTML (the REST API's `content.rendered` field) — thin wrapper over convertHtmlToTiptapJson with WP-specific cruft stripping. */
+export function convertWordPressHtmlToTiptapJson(rawHtml: string): unknown {
+  return convertHtmlToTiptapJson(rawHtml, { stripWpCruft: true });
 }
 
 /** Renders Tiptap JSON back to HTML — the same round-trip the hand-authored editor does via editor.getHTML(), so imported and hand-written posts store contentHtml identically. */
