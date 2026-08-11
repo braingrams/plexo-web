@@ -164,12 +164,18 @@ export function ImportClient({
 
   const heartbeatMs = job?.lastHeartbeatAt ? now - new Date(job.lastHeartbeatAt).getTime() : null;
   const isStale = job?.status === "RUNNING" && heartbeatMs !== null && heartbeatMs > STALE_HEARTBEAT_MS;
-  const showRetry = job?.status === "PAUSED_ERROR" || isStale;
+  // A recorded chain-continuation failure (see continueImportChain) means the batch loop
+  // has already stopped, even if the heartbeat is still recent — don't make the user wait
+  // out the staleness window to see Retry when we already know it's broken.
+  const chainBroken = job?.errors.some((e) => e.startsWith("Couldn't continue the import automatically")) ?? false;
+  const showRetry = job?.status === "PAUSED_ERROR" || isStale || chainBroken;
   const showCancel = job && !TERMINAL_STATUSES.includes(job.status);
 
   let statusLine = job ? STATUS_TEXT[job.status] : "";
   if (job?.status === "PAUSED_ERROR" && heartbeatMs !== null) {
     statusLine = `Paused after an error, ${formatElapsed(heartbeatMs)}. Retries automatically, or retry now below.`;
+  } else if (chainBroken) {
+    statusLine = "Stopped — couldn't continue automatically. Click Retry now below.";
   } else if (isStale && heartbeatMs !== null) {
     statusLine = `No update for ${formatElapsed(heartbeatMs)} — this may be stuck. Retry now below, or it will resume automatically.`;
   } else if (job && heartbeatMs !== null && !TERMINAL_STATUSES.includes(job.status)) {

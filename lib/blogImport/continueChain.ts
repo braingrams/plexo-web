@@ -1,5 +1,17 @@
 import { prisma } from "@/server/prisma";
 
+// Vercel's loop protection can reject a function calling itself with a 508 once it looks
+// like a runaway self-referential chain — observed on this exact self-continuation
+// pattern after a handful of hops. Spacing hops out is an attempt to look less like a
+// tight loop to whatever heuristic is doing that detection; it's unverified whether this
+// actually avoids the 508 (if the detector counts hops rather than elapsed time, this
+// delay won't help) — kept small so it doesn't risk the function's own execution budget.
+const CHAIN_DELAY_MS = 3000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Fires the next batch of an already-started import job as a fire-and-forget HTTP
  * self-call — meant to be invoked from inside next/server's after(), after the response
@@ -10,6 +22,7 @@ import { prisma } from "@/server/prisma";
  * stale heartbeat in the UI) rather than just looking frozen with no explanation.
  */
 export async function continueImportChain(jobId: string): Promise<void> {
+  await sleep(CHAIN_DELAY_MS);
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
