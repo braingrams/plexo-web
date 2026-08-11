@@ -110,6 +110,13 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
   }
 
   const canSubmit = prompt.trim().length > 0 && !generating;
+  // Rough, deliberately approximate size read — the whole page is sent as context and the
+  // model returns the whole page back (mode "edit_raw_html" has the largest MAX_TOKENS
+  // ceiling of any AI action for exactly this reason), so credit cost scales with page size
+  // in a way no other AI action in the app does. ~50KB is a generous "this is a real page,
+  // not a stub" threshold, not a precise token count.
+  const pageSizeKb = Math.round(currentHtml.length / 1024);
+  const isLargePage = currentHtml.length > 50_000;
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto" }}>
@@ -183,8 +190,15 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
             )}
           </div>
 
-          <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.3)", textAlign: "center", maxWidth: 480, margin: 0 }}>
-            The AI edits the full page and shows you the result before anything is saved.
+          <p style={{
+            fontSize: "0.75rem", textAlign: "center", maxWidth: 480, margin: 0,
+            color: isLargePage ? "#f59e0b" : "rgba(240,242,255,0.3)",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem",
+          }}>
+            {isLargePage && <IconWarning />}
+            {isLargePage
+              ? `This page is fairly large (~${pageSizeKb}KB) — the whole thing is sent to the AI and back, so this edit will use a lot of AI credits.`
+              : "The AI edits the full page and shows you the result before anything is saved. Larger pages use more AI credits per edit."}
           </p>
         </div>
       ) : (

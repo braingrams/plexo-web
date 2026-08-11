@@ -149,7 +149,9 @@ const editorTheme = EditorView.theme(
 
 export function RawFileEditor({ templateId, templateName, templateKind, subscriptionPlan, useAi, aiProvider, aiTier }: Props) {
   const router = useRouter();
-  const [activeMode, setActiveMode] = useState<"code" | "text" | "ai">("code");
+  // Text Content is the friendlier, non-technical default for a freshly-opened raw page —
+  // Code is a step down into the file tree for people who actually want to touch markup.
+  const [activeMode, setActiveMode] = useState<"code" | "text" | "ai">("text");
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [savedContent, setSavedContent] = useState<Record<string, string>>({});
@@ -454,17 +456,18 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
           </span>
           <div className="raw-editor-mode-tabs" style={{ display: "flex", gap: "0.3rem", marginLeft: "0.5rem" }}>
             {([
-              { key: "code", label: "Code" },
               { key: "text", label: "Text Content" },
+              { key: "code", label: "Code" },
               { key: "ai", label: "AI Edit" },
             ] as const).map((tab) => {
               const disabled = tab.key !== "code" && isDirty("index.html");
+              const aiCostHint = tab.key === "ai" ? "Uses AI credits — the whole page is sent and returned, so larger pages cost more per edit." : undefined;
               return (
                 <button
                   key={tab.key}
                   type="button"
                   disabled={disabled}
-                  title={disabled ? "Save your code changes to index.html first" : undefined}
+                  title={disabled ? "Save your code changes to index.html first" : aiCostHint}
                   onClick={() => setActiveMode(tab.key)}
                   style={{
                     padding: "0.35rem 0.75rem", borderRadius: 7, fontSize: "0.78rem", fontWeight: 600,
