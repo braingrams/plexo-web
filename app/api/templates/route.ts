@@ -6,6 +6,7 @@ import { getTierFeatures } from "@/lib/subscription";
 import { ensureUniqueSlug } from "@/server/slug";
 import { resolveUser } from "@/app/api/v1/domains/route";
 import { requirePermission } from "@/server/requirePermission";
+import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
 
 type TemplateSummary = {
   id: string;
@@ -24,6 +25,12 @@ type CreateTemplateBody = {
   // instead of appearing as its own top-level dashboard entry.
   parentId?: string;
   slug?: string;
+  // When given, creates a RAW_UPLOAD sub-page (served as-is) instead of a blank
+  // BUILDER one — see plexo-mcp's create_landing_page_subpage tool. Mutually
+  // exclusive with the default blank-BUILDER behavior; requires acceptAup on an
+  // account's first raw page, same as /api/v1/templates/upload-raw.
+  htmlContent?: string;
+  acceptAup?: boolean;
 };
 
 const BLANK_TEMPLATE_SHELL = {
@@ -163,6 +170,43 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     order = (lastSibling?.order ?? -1) + 1;
   }
 
+  const rawHtmlContent = typeof body.htmlContent === "string" ? body.htmlContent : null;
+  if (rawHtmlContent !== null) {
+    if (kind !== TemplateKind.LANDING_PAGE) {
+      return NextResponse.json({ error: "htmlContent is only supported for landing pages, not email templates." }, { status: 400 });
+    }
+    try {
+      validateRawHtmlContent(rawHtmlContent);
+    } catch (err) {
+      if (err instanceof RawUploadValidationError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      throw err;
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: resolved.userId }, select: { aupAcceptedAt: true } });
+    if (!user?.aupAcceptedAt) {
+      if (body.acceptAup !== true) {
+        return NextResponse.json({
+          error: "You must accept the Acceptable Use Policy before publishing unsanitized HTML.",
+          requiresAupAcceptance: true,
+          aupUrl: "/legal/acceptable-use",
+        }, { status: 403 });
+      }
+      await prisma.user.update({ where: { id: resolved.userId }, data: { aupAcceptedAt: new Date() } });
+    }
+
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentUploadCount = await prisma.template.count({
+      where: { userId: resolved.userId, sourceType: "RAW_UPLOAD", createdAt: { gte: since } },
+    });
+    if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
+      return NextResponse.json({
+        error: `You've reached the raw-upload limit of ${RAW_UPLOAD_DAILY_LIMIT} per 24 hours. Try again later.`,
+      }, { status: 429 });
+    }
+  }
+
   const template = await prisma.template.create({
     data: {
       userId: resolved.userId,
@@ -172,8 +216,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       parentId,
       slug,
       order,
-      designJson: BLANK_TEMPLATE_SHELL,
-      compiledHtml: "",
+      ...(rawHtmlContent !== null
+        ? { sourceType: "RAW_UPLOAD" as const, designJson: {}, compiledHtml: rawHtmlContent }
+        : { designJson: BLANK_TEMPLATE_SHELL, compiledHtml: "" }),
     },
     select: {
       id: true,

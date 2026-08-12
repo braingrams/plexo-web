@@ -105,6 +105,30 @@ export function validateSingleHtmlUpload(filename: string, buffer: Buffer): Extr
   return { indexHtml: buffer.toString("utf8"), assets: [] };
 }
 
+/**
+ * Same validation as validateSingleHtmlUpload, but for HTML supplied inline as a string
+ * (an MCP tool's htmlContent argument, or a JSON request body) instead of an uploaded
+ * File — there's no zip/multi-file equivalent for this path, single self-contained
+ * documents only.
+ */
+export function validateRawHtmlContent(html: string): void {
+  if (typeof html !== "string" || html.trim().length === 0) {
+    throw new RawUploadValidationError("htmlContent is required and cannot be empty.");
+  }
+  const byteLength = Buffer.byteLength(html, "utf8");
+  if (byteLength > MAX_SINGLE_FILE_BYTES) {
+    throw new RawUploadValidationError(
+      `htmlContent exceeds the ${MAX_SINGLE_FILE_BYTES / 1024 / 1024}MB per-page limit.`
+    );
+  }
+}
+
+// Per-account cap on RAW_UPLOAD template creation via any path (dashboard upload, REST
+// JSON body, or MCP tools) — a plain DB count query rather than a dedicated rate-limit
+// store, since there's no Redis/Upstash in this stack yet. Fine at current scale; swap
+// for a token-bucket in Upstash if raw uploads get high-volume.
+export const RAW_UPLOAD_DAILY_LIMIT = 15;
+
 export async function extractZipUpload(buffer: Buffer): Promise<ExtractedSite> {
   if (buffer.byteLength > MAX_TOTAL_UPLOAD_BYTES) {
     throw new RawUploadValidationError(

@@ -6,6 +6,7 @@ import { requirePermission } from "@/server/requirePermission";
 import {
   extractZipUpload,
   validateSingleHtmlUpload,
+  validateRawHtmlContent,
   RawUploadValidationError,
   type ExtractedSite,
 } from "@/server/rawUpload";
@@ -14,13 +15,18 @@ import { scanPublishedDomain } from "@/lib/safeBrowsing";
 /**
  * POST /api/v1/templates/:id/replace-upload
  *
- * Wholesale-replaces every file on an existing RAW_UPLOAD template with a freshly
- * uploaded .html/.htm or .zip — same validation as the initial upload (server/rawUpload.ts),
- * still unsanitized by design. Unlike creating a new template via /upload-raw, this keeps
- * the same template id, so any domain already linked to it (PublishedDomain.templateId)
- * stays linked with no re-linking step.
+ * Wholesale-replaces every file on an existing RAW_UPLOAD template with freshly supplied
+ * content — same validation as the initial upload (server/rawUpload.ts), still unsanitized
+ * by design. Unlike creating a new template via /upload-raw, this keeps the same template
+ * id, so any domain already linked to it (PublishedDomain.templateId) stays linked with no
+ * re-linking step.
  *
- * multipart/form-data fields: file (required), name (optional, renames the template).
+ * Two request shapes:
+ *   - multipart/form-data { file, name? } — file is a .html/.htm or .zip File.
+ *   - application/json { htmlContent, name? } — a single self-contained HTML document for
+ *     programmatic/MCP callers with no real file to upload; no zip/multi-file equivalent on
+ *     this path (any existing multi-file assets are dropped, same as a fresh single-file
+ *     upload replacing a multi-file one via the multipart path).
  */
 export async function POST(
   request: NextRequest,
@@ -43,23 +49,37 @@ export async function POST(
     return NextResponse.json({ error: "Only raw-upload templates can be replaced this way." }, { status: 400 });
   }
 
-  const form = await request.formData().catch(() => null);
-  if (!form) {
-    return NextResponse.json({ error: "Expected multipart/form-data." }, { status: 400 });
-  }
+  const isMultipart = (request.headers.get("content-type") ?? "").includes("multipart/form-data");
 
-  const file = form.get("file");
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Missing required 'file' field." }, { status: 400 });
-  }
-  const name = (form.get("name") as string | null)?.trim();
-
-  const buffer = Buffer.from(await file.arrayBuffer());
+  let name: string | undefined;
   let site: ExtractedSite;
   try {
-    site = file.name.toLowerCase().endsWith(".zip")
-      ? await extractZipUpload(buffer)
-      : validateSingleHtmlUpload(file.name, buffer);
+    if (isMultipart) {
+      const form = await request.formData().catch(() => null);
+      if (!form) {
+        return NextResponse.json({ error: "Expected multipart/form-data." }, { status: 400 });
+      }
+      const file = form.get("file");
+      if (!(file instanceof File)) {
+        return NextResponse.json({ error: "Missing required 'file' field." }, { status: 400 });
+      }
+      name = (form.get("name") as string | null)?.trim() || undefined;
+      const buffer = Buffer.from(await file.arrayBuffer());
+      site = file.name.toLowerCase().endsWith(".zip")
+        ? await extractZipUpload(buffer)
+        : validateSingleHtmlUpload(file.name, buffer);
+    } else {
+      const body = await request.json().catch(() => null);
+      if (!body || typeof body.htmlContent !== "string") {
+        return NextResponse.json(
+          { error: "Expected multipart/form-data with a 'file' field, or a JSON body with 'htmlContent'." },
+          { status: 400 }
+        );
+      }
+      validateRawHtmlContent(body.htmlContent);
+      name = typeof body.name === "string" ? body.name.trim() || undefined : undefined;
+      site = { indexHtml: body.htmlContent, assets: [] };
+    }
   } catch (err) {
     if (err instanceof RawUploadValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });

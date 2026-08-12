@@ -10,17 +10,14 @@ import { ensureUniqueSlug, isValidUuid } from "@/server/slug";
 import {
   extractZipUpload,
   validateSingleHtmlUpload,
+  validateRawHtmlContent,
   RawUploadValidationError,
   extensionOf,
   humanizePageFilename,
+  RAW_UPLOAD_DAILY_LIMIT,
   type ExtractedSite,
   type ExtractedAsset,
 } from "@/server/rawUpload";
-
-// Per-account cap on RAW_UPLOAD template creation — a plain DB count query rather than a
-// dedicated rate-limit store, since there's no Redis/Upstash in this stack yet. Fine at
-// current scale; swap for a token-bucket in Upstash if raw uploads get high-volume.
-const RAW_UPLOAD_DAILY_LIMIT = 15;
 
 /**
  * POST /api/v1/templates/upload-raw
@@ -31,15 +28,19 @@ const RAW_UPLOAD_DAILY_LIMIT = 15;
  * lives on the isolated plexopages.io origin (see server/pagesDomain.ts), never on the
  * dashboard's own domain, and carries no ambient cookies/session.
  *
- * multipart/form-data fields:
- *   name       (optional) display name for the template
- *   file       required — a .html/.htm or .zip File
- *   acceptAup  "true" — required on an account's first raw upload (see /legal/acceptable-use)
- *   parentId   (optional) an existing LANDING_PAGE template's id — when present, this
- *              upload becomes a sub-page under it (e.g. an uploaded "about" page next to
- *              a DnD-built home page) instead of a new top-level site. Mixed-mode sites
- *              are supported page-by-page: each page's own sourceType decides how /pub
- *              serves it, independent of its siblings — see app/pub/[domain]/[[...slug]].
+ * Two request shapes:
+ *   - multipart/form-data { name?, file, acceptAup, parentId? } — file is a .html/.htm or
+ *     .zip File; acceptAup is the string "true".
+ *   - application/json { name?, htmlContent, acceptAup?, parentId? } — for programmatic/MCP
+ *     callers with no real file to upload. htmlContent is a single self-contained HTML
+ *     document (no zip/multi-file equivalent on this path); acceptAup is a boolean.
+ *
+ * acceptAup is required — "true" — on an account's first raw upload (see
+ * /legal/acceptable-use). parentId is optional: an existing LANDING_PAGE template's id —
+ * when present, this upload becomes a sub-page under it (e.g. an uploaded "about" page next
+ * to a DnD-built home page) instead of a new top-level site. Mixed-mode sites are supported
+ * page-by-page: each page's own sourceType decides how /pub serves it, independent of its
+ * siblings — see app/pub/[domain]/[[...slug]].
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const resolved = await resolveUser(request);
@@ -57,12 +58,41 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     select: { aupAcceptedAt: true },
   });
 
-  const form = await request.formData().catch(() => null);
-  if (!form) {
-    return NextResponse.json({ error: "Expected multipart/form-data." }, { status: 400 });
+  const isMultipart = (request.headers.get("content-type") ?? "").includes("multipart/form-data");
+
+  let file: File | null = null;
+  let htmlContent: string | null = null;
+  let acceptAup: boolean;
+  let rawName: string | null;
+  let parentIdInput: string | null;
+
+  if (isMultipart) {
+    const form = await request.formData().catch(() => null);
+    if (!form) {
+      return NextResponse.json({ error: "Expected multipart/form-data." }, { status: 400 });
+    }
+    const uploaded = form.get("file");
+    if (!(uploaded instanceof File)) {
+      return NextResponse.json({ error: "Missing required 'file' field." }, { status: 400 });
+    }
+    file = uploaded;
+    acceptAup = form.get("acceptAup") === "true";
+    rawName = (form.get("name") as string | null)?.trim() || null;
+    parentIdInput = (form.get("parentId") as string | null)?.trim() || null;
+  } else {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body.htmlContent !== "string") {
+      return NextResponse.json(
+        { error: "Expected multipart/form-data with a 'file' field, or a JSON body with 'htmlContent'." },
+        { status: 400 }
+      );
+    }
+    htmlContent = body.htmlContent;
+    acceptAup = body.acceptAup === true;
+    rawName = typeof body.name === "string" ? body.name.trim() : null;
+    parentIdInput = typeof body.parentId === "string" ? body.parentId.trim() : null;
   }
 
-  const acceptAup = form.get("acceptAup") === "true";
   if (!user?.aupAcceptedAt) {
     if (!acceptAup) {
       return NextResponse.json({
@@ -77,14 +107,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
   }
 
-  const file = form.get("file");
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Missing required 'file' field." }, { status: 400 });
-  }
-
-  const name = (form.get("name") as string | null)?.trim() || file.name.replace(/\.(html?|zip)$/i, "") || "Uploaded Site";
-
-  const parentIdInput = (form.get("parentId") as string | null)?.trim() || null;
+  const name = rawName || file?.name.replace(/\.(html?|zip)$/i, "") || "Uploaded Site";
   let slug: string | null = null;
   let order = 0;
   if (parentIdInput) {
@@ -141,12 +164,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }, { status: 429 });
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
   let site: ExtractedSite;
   try {
-    site = file.name.toLowerCase().endsWith(".zip")
-      ? await extractZipUpload(buffer)
-      : validateSingleHtmlUpload(file.name, buffer);
+    if (file) {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      site = file.name.toLowerCase().endsWith(".zip")
+        ? await extractZipUpload(buffer)
+        : validateSingleHtmlUpload(file.name, buffer);
+    } else {
+      validateRawHtmlContent(htmlContent!);
+      site = { indexHtml: htmlContent!, assets: [] };
+    }
   } catch (err) {
     if (err instanceof RawUploadValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });

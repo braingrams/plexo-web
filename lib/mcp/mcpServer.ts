@@ -18,6 +18,8 @@ import {
   pathForPage,
   getDescendantIds,
 } from "@/server/slug";
+import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
+import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { BLOG_MCP_TOOLS, BLOG_TOOL_NAMES, handleBlogTool } from "./blogTools";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
@@ -49,6 +51,36 @@ function validateDesignJson(rawDesignJson: any): any {
     throw new Error(`designJson failed schema validation: ${formatValidationIssues(validation.error)}. ${SCHEMA_HINT}`);
   }
   return validation.data;
+}
+
+/**
+ * Shared gate for every path that creates a RAW_UPLOAD page (create_raw_landing_page,
+ * publish_raw_landing_page, and the raw branch of create_landing_page_subpage) — mirrors
+ * the REST /api/v1/templates/upload-raw route's AUP-acceptance and daily-rate-limit checks
+ * exactly, since MCP is a second front door onto the same unsanitized-HTML capability.
+ * Throws an actionable error (fed back to the calling AI) rather than silently proceeding
+ * or silently accepting on the account's behalf.
+ */
+async function assertRawUploadAllowed(userId: string, acceptAup: boolean): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { aupAcceptedAt: true } });
+  if (!user?.aupAcceptedAt) {
+    if (!acceptAup) {
+      throw new Error(
+        "This creates a page that serves unsanitized HTML/CSS/JS as-is — the account must accept the " +
+        "Acceptable Use Policy first (see /legal/acceptable-use). Show the user this policy and only retry " +
+        "this call with acceptAup: true once they've explicitly agreed."
+      );
+    }
+    await prisma.user.update({ where: { id: userId }, data: { aupAcceptedAt: new Date() } });
+  }
+
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const recentUploadCount = await prisma.template.count({
+    where: { userId, sourceType: "RAW_UPLOAD", createdAt: { gte: since } },
+  });
+  if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
+    throw new Error(`You've reached the raw-upload limit of ${RAW_UPLOAD_DAILY_LIMIT} per 24 hours. Try again later.`);
+  }
 }
 
 /**
@@ -404,6 +436,8 @@ Map the returned tokens into designJson style fields: color-type tokens into bac
     name: "update_template",
     description: `Edits an existing landing page or email template in place, under the same template ID. Recompiles and re-saves the HTML from the new designJson — the editable URL stays the same, and for a published landing page the live URL and domain are unchanged too (this does not publish/unpublish or change the domain; call publish_landing_page again with a domain for that).
 
+This is for drag-and-drop BUILDER pages only — it REJECTS a page created via create_raw_landing_page/publish_raw_landing_page/create_landing_page_subpage's htmlContent option. Use update_raw_landing_page for those instead. If unsure which kind an existing page is, check its sourceType via list_landing_pages/get_landing_page_pages first.
+
 Uses the SAME fully-hydrated layout schema as publish_landing_page/create_email_template — designJson MUST be { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [{ "id", "type", "style", "attributes" }] }] }] } }. There is no shorthand row format; rows without a 'columns' array are rejected, and this replaces the ENTIRE designJson — to edit one section, fetch the current template's designJson first (via list_landing_pages/list_email_templates, or the Plexo dashboard) and send back the full modified tree, not just the changed part. See publish_landing_page's description for a full worked example.`,
     inputSchema: {
       type: "object",
@@ -429,6 +463,30 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page/create_email_
     },
   },
   {
+    name: "update_raw_landing_page",
+    description: `Replaces an existing RAW_UPLOAD page's HTML in place, under the same template ID — the editable URL, live URL, and domain (if published) are all unchanged. This is for pages created via create_raw_landing_page/publish_raw_landing_page/create_landing_page_subpage's htmlContent option ONLY — it REJECTS a drag-and-drop BUILDER page (use update_template for those). If unsure which kind an existing page is, check its sourceType via list_landing_pages/get_landing_page_pages first.
+
+This replaces the ENTIRE HTML document, not a patch — send back the full modified document. Same 1MB single-document scope as create_raw_landing_page.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the raw-upload page to update — the templateId returned by create_raw_landing_page, publish_raw_landing_page, list_landing_pages, or get_landing_page_pages.",
+        },
+        htmlContent: {
+          type: "string",
+          description: "The FULL replacement raw HTML document (up to 1MB) — not a partial patch.",
+        },
+        name: {
+          type: "string",
+          description: "Optional new title for the page. Omit to keep the existing name.",
+        },
+      },
+      required: ["templateId", "htmlContent"],
+    },
+  },
+  {
     name: "create_landing_page",
     description: `Creates and saves a landing page template WITHOUT publishing it to a domain — use this when the user wants to build a page (or start a multi-page site) first and go live later. Call publish_existing_landing_page afterward with the returned templateId to link a subdomain or custom domain whenever they're ready. To create a page AND publish it in one step, use publish_landing_page instead.
 
@@ -446,6 +504,63 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page — designJso
         },
       },
       required: ["name", "designJson"],
+    },
+  },
+  {
+    name: "create_raw_landing_page",
+    description: `Creates a landing page from a RAW HTML document you supply directly, WITHOUT publishing it to a domain — for when the user wants a page built from hand-written or externally-sourced HTML/CSS/JS instead of Plexo's drag-and-drop builder. The page is served byte-for-byte as given, completely unsanitized (no designJson, no compilation) — this is a DIFFERENT storage mode from create_landing_page/publish_landing_page/update_template, which are for the drag-and-drop BUILDER pages built from designJson. Do NOT use this tool for a page you want to build with designJson — use create_landing_page instead.
+
+Scope: a single self-contained HTML document only (inline or CDN-linked CSS/JS), up to 1MB — no zip/multi-file sites with separate local asset files (that's a dashboard-only "import a website" feature with no MCP equivalent yet).
+
+Because this serves unsanitized content, the account must accept the Acceptable Use Policy once — see the acceptAup argument. Call publish_existing_landing_page afterward with the returned templateId to link a subdomain or custom domain, or use publish_raw_landing_page to create and publish in one step. To edit this page's HTML later, use update_raw_landing_page (NOT update_template — that tool now rejects raw-upload pages).`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Title of the landing page (e.g. 'Kicks Store').",
+        },
+        htmlContent: {
+          type: "string",
+          description: "The full, self-contained raw HTML document to serve as-is (up to 1MB). Inline or CDN-linked CSS/JS only — no separate local asset files.",
+        },
+        acceptAup: {
+          type: "boolean",
+          description: "Pass true ONLY after explicitly telling the user this publishes unsanitized HTML/CSS/JS as-is and getting their confirmation of the Acceptable Use Policy (/legal/acceptable-use). Not needed once the account has accepted it once before.",
+        },
+      },
+      required: ["name", "htmlContent"],
+    },
+  },
+  {
+    name: "publish_raw_landing_page",
+    description: `Creates, and publishes to a domain, a landing page from a RAW HTML document you supply directly — the combined create+publish equivalent of create_raw_landing_page. See create_raw_landing_page's description for the unsanitized-content, AUP, and scope caveats (single self-contained HTML document, up to 1MB, no zip/multi-file sites). For drag-and-drop BUILDER pages built from designJson, use publish_landing_page instead — this tool is a different storage mode.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Title of the landing page (e.g. 'Kicks Store').",
+        },
+        htmlContent: {
+          type: "string",
+          description: "The full, self-contained raw HTML document to serve as-is (up to 1MB). Inline or CDN-linked CSS/JS only — no separate local asset files.",
+        },
+        acceptAup: {
+          type: "boolean",
+          description: "Pass true ONLY after explicitly telling the user this publishes unsanitized HTML/CSS/JS as-is and getting their confirmation of the Acceptable Use Policy (/legal/acceptable-use). Not needed once the account has accepted it once before.",
+        },
+        domain: {
+          type: "string",
+          description: "Subdomain slug (e.g. 'kicks') or custom domain ('kicks.com').",
+        },
+        type: {
+          type: "string",
+          enum: ["SUBDOMAIN", "CUSTOM"],
+          description: "Domain routing type. Inferred from the domain string if omitted.",
+        },
+      },
+      required: ["name", "htmlContent", "domain"],
     },
   },
   {
@@ -473,9 +588,9 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page — designJso
   },
   {
     name: "create_landing_page_subpage",
-    description: `Adds a new page nested under an existing landing page, reachable at <site domain>/<slug> — or nested deeper (e.g. /blog/post-1) if parentTemplateId is itself a sub-page rather than the home page. This is how a single landing page becomes a multi-page site. No separate publish step is needed for sub-pages: they automatically become reachable once the site's home page has a domain linked (see publish_existing_landing_page). Requires an Ultra subscription plan — sub-pages are otherwise unlimited per site once enabled (the plan's template limit only counts home pages, not their sub-pages).
+    description: `Adds a new page nested under an existing landing page, reachable at <site domain>/<slug> — or nested deeper (e.g. /blog/post-1) if parentTemplateId is itself a sub-page rather than the home page. This is how a single landing page becomes a multi-page site (BUILDER and RAW_UPLOAD pages can be freely mixed within the same site — each page's own sourceType is independent of its siblings). No separate publish step is needed for sub-pages: they automatically become reachable once the site's home page has a domain linked (see publish_existing_landing_page). Requires an Ultra subscription plan — sub-pages are otherwise unlimited per site once enabled (the plan's template limit only counts home pages, not their sub-pages).
 
-designJson is optional — omit it to create a blank page (fill it in afterward with update_template using the returned templateId), or provide it to populate content in the same call. Uses the same fully-hydrated layout schema as publish_landing_page.`,
+Provide EITHER designJson (a drag-and-drop BUILDER sub-page) OR htmlContent (a raw-HTML sub-page, same unsanitized/AUP/1MB caveats as create_raw_landing_page) — not both. Omit both to create a blank BUILDER page (fill it in afterward with update_template using the returned templateId). Edit an existing sub-page's content afterward with update_template (BUILDER) or update_raw_landing_page (RAW_UPLOAD) depending on which mode it was created with.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -493,7 +608,15 @@ designJson is optional — omit it to create a blank page (fill it in afterward 
         },
         designJson: {
           type: "object",
-          description: "Optional. Plexo layout schema object — same shape as publish_landing_page's designJson. Omit to create a blank page.",
+          description: "Optional. Plexo layout schema object — same shape as publish_landing_page's designJson. Creates a drag-and-drop BUILDER sub-page. Omit (along with htmlContent) to create a blank BUILDER page. Mutually exclusive with htmlContent.",
+        },
+        htmlContent: {
+          type: "string",
+          description: "Optional. A full, self-contained raw HTML document (up to 1MB) to serve as-is. Creates a RAW_UPLOAD sub-page instead of a BUILDER one. Mutually exclusive with designJson.",
+        },
+        acceptAup: {
+          type: "boolean",
+          description: "Only relevant when htmlContent is given. Pass true ONLY after explicitly telling the user this publishes unsanitized HTML/CSS/JS as-is and getting their confirmation of the Acceptable Use Policy (/legal/acceptable-use). Not needed once the account has accepted it once before.",
         },
       },
       required: ["parentTemplateId", "name"],
@@ -835,10 +958,13 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
 
           const existing = await prisma.template.findFirst({
             where: { id: templateId, organizationId: resolved.organizationId },
-            select: { id: true, kind: true, name: true },
+            select: { id: true, kind: true, name: true, sourceType: true },
           });
           if (!existing) {
             throw new Error(`No template found with id "${templateId}" in this account. Use list_landing_pages or list_email_templates to look up the correct id.`);
+          }
+          if (existing.sourceType === "RAW_UPLOAD") {
+            throw new Error(`"${existing.name}" was created via raw upload (create_raw_landing_page/publish_raw_landing_page) — use update_raw_landing_page to edit its HTML instead.`);
           }
 
           let rawDesignJson = args.designJson;
@@ -936,6 +1062,118 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           break;
         }
 
+        case "create_raw_landing_page":
+        case "publish_raw_landing_page": {
+          const htmlContent = typeof args.htmlContent === "string" ? args.htmlContent : "";
+          try {
+            validateRawHtmlContent(htmlContent);
+          } catch (err) {
+            if (err instanceof RawUploadValidationError) throw new Error(err.message);
+            throw err;
+          }
+
+          await assertRawUploadAllowed(resolved.userId, args.acceptAup === true);
+
+          const features = getTierFeatures(resolved.subscriptionPlan);
+          const rootCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: "LANDING_PAGE" } });
+          if (rootCount >= features.maxLandingPages) {
+            throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
+          }
+
+          const name = typeof args.name === "string" && args.name.trim() ? args.name.trim() : "AI Landing Page";
+          const template = await prisma.template.create({
+            data: {
+              userId: resolved.userId,
+              organizationId: resolved.organizationId,
+              name,
+              kind: "LANDING_PAGE",
+              sourceType: "RAW_UPLOAD",
+              designJson: {},
+              compiledHtml: htmlContent,
+            },
+          });
+
+          const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+          const editableUrl = `${baseAppUrl}/dashboard/templates/${template.id}`;
+
+          const rawDomain = typeof args.domain === "string" ? args.domain.trim() : "";
+          if (!rawDomain) {
+            toolResult = {
+              success: true,
+              templateId: template.id,
+              name: template.name,
+              editableUrl,
+              publishedUrl: null,
+              ...(toolName === "create_raw_landing_page"
+                ? { message: "Raw-HTML page created without publishing. Call publish_existing_landing_page with this templateId when ready to go live." }
+                : {}),
+            };
+            break;
+          }
+
+          const domainType = args.type === "SUBDOMAIN" || args.type === "CUSTOM" ? args.type : undefined;
+          const { finalDomain, publishedUrl } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
+          toolResult = {
+            success: true,
+            templateId: template.id,
+            name: template.name,
+            domain: finalDomain,
+            publishedUrl,
+            editableUrl,
+          };
+          break;
+        }
+
+        case "update_raw_landing_page": {
+          const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+          if (!templateId) {
+            throw new Error("templateId is required to update a raw-upload page.");
+          }
+          const htmlContent = typeof args.htmlContent === "string" ? args.htmlContent : "";
+          try {
+            validateRawHtmlContent(htmlContent);
+          } catch (err) {
+            if (err instanceof RawUploadValidationError) throw new Error(err.message);
+            throw err;
+          }
+
+          const existing = await prisma.template.findFirst({
+            where: { id: templateId, organizationId: resolved.organizationId },
+            select: { id: true, name: true, kind: true, sourceType: true },
+          });
+          if (!existing) {
+            throw new Error(`No template found with id "${templateId}" in this account. Use list_landing_pages to look up the correct id.`);
+          }
+          if (existing.sourceType !== "RAW_UPLOAD") {
+            throw new Error(`"${existing.name}" was created via the drag-and-drop builder — use update_template to edit its content instead.`);
+          }
+
+          const name = typeof args.name === "string" && args.name.trim() ? args.name.trim() : existing.name;
+          const updated = await prisma.template.update({
+            where: { id: existing.id },
+            data: { name, compiledHtml: htmlContent },
+          });
+
+          const linkedDomains = await prisma.publishedDomain.findMany({
+            where: { templateId: updated.id },
+            select: { id: true, domain: true },
+          });
+          for (const d of linkedDomains) {
+            void scanPublishedDomain(d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
+          }
+
+          const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+          const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+          toolResult = {
+            success: true,
+            templateId: updated.id,
+            name: updated.name,
+            editableUrl: `${baseAppUrl}/dashboard/templates/${updated.id}`,
+            publishedUrl: linkedDomains[0] ? `${protocol}://${linkedDomains[0].domain}` : null,
+          };
+          break;
+        }
+
         case "publish_existing_landing_page": {
           const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
           if (!templateId) {
@@ -992,6 +1230,8 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw new Error("Only landing pages can have sub-pages.");
           }
 
+          const rawHtmlContent = typeof args.htmlContent === "string" ? args.htmlContent : "";
+
           let rawDesignJson = args.designJson;
           if (typeof rawDesignJson === "string") {
             try {
@@ -1000,10 +1240,25 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
               rawDesignJson = null;
             }
           }
+          if (rawHtmlContent && rawDesignJson && typeof rawDesignJson === "object") {
+            throw new Error("Provide either htmlContent or designJson, not both.");
+          }
 
           let designJson: any;
           let compiledHtml: string;
-          if (rawDesignJson && typeof rawDesignJson === "object") {
+          let sourceType: "BUILDER" | "RAW_UPLOAD" = "BUILDER";
+          if (rawHtmlContent) {
+            try {
+              validateRawHtmlContent(rawHtmlContent);
+            } catch (err) {
+              if (err instanceof RawUploadValidationError) throw new Error(err.message);
+              throw err;
+            }
+            await assertRawUploadAllowed(resolved.userId, args.acceptAup === true);
+            sourceType = "RAW_UPLOAD";
+            designJson = {};
+            compiledHtml = rawHtmlContent;
+          } else if (rawDesignJson && typeof rawDesignJson === "object") {
             designJson = validateDesignJson(rawDesignJson);
             if (designJson.body.style) {
               designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
@@ -1027,6 +1282,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
               organizationId: resolved.organizationId,
               name,
               kind: "LANDING_PAGE",
+              sourceType,
               parentId: parentTemplateId,
               slug,
               order: (lastSibling?.order ?? -1) + 1,
@@ -1340,7 +1596,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
         case "list_landing_pages": {
           const templates = await prisma.template.findMany({
             where: { organizationId: resolved.organizationId, kind: "LANDING_PAGE" },
-            select: { id: true, name: true, parentId: true, slug: true, createdAt: true, updatedAt: true },
+            select: { id: true, name: true, parentId: true, slug: true, sourceType: true, createdAt: true, updatedAt: true },
           });
           const domains = await prisma.publishedDomain.findMany({
             where: { organizationId: resolved.organizationId },

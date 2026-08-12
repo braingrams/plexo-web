@@ -85,10 +85,16 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
   const existing = await prisma.template.findFirst({
     where: { id, organizationId: resolved.organizationId },
-    select: { id: true, kind: true, name: true },
+    select: { id: true, kind: true, name: true, sourceType: true },
   });
   if (!existing) {
     return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });
+  }
+  if (existing.sourceType === "RAW_UPLOAD") {
+    return NextResponse.json(
+      { error: `"${existing.name}" was created via raw upload — use POST /api/v1/templates/${id}/replace-upload to edit its HTML instead.` },
+      { status: 400 }
+    );
   }
 
   const body = await request.json().catch(() => ({}));
