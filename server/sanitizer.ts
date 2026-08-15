@@ -1,5 +1,11 @@
-import sanitizeHtmlLib from 'sanitize-html';
+// Re-exported under its original name (sanitizeHtml) so every existing call site here keeps
+// working unchanged — the actual allowlist/logic now lives in one place (the SDK) instead of
+// being hand-duplicated across both repos. See @charisol/plexo-sdk's sanitizeCompiledHtml.ts
+// for the full rationale; this used to be a local copy of exactly that file.
+import { sanitizeCompiledHtml as sanitizeHtml } from '@charisol/plexo-sdk/sanitize';
 import { z } from 'zod';
+
+export { sanitizeHtml };
 
 // ==========================================
 // 1. Types & Interfaces
@@ -253,147 +259,11 @@ export function formatValidationIssues(error: z.ZodError): string {
 // ==========================================
 // 4. HTML & Style Sanitizers
 // ==========================================
-
-/**
- * Sanitizes an inline CSS style declaration string to prevent injection
- */
-function sanitizeStyleString(style: string): string {
-  const declarations = style.split(';');
-  const cleanDeclarations: string[] = [];
-
-  const blockedProperties = new Set([
-    'position',
-    'z-index',
-    'top',
-    'left',
-    'right',
-    'bottom',
-    'behavior',
-    'pointer-events',
-  ]);
-
-  for (const decl of declarations) {
-    if (!decl.trim()) continue;
-    const colonIndex = decl.indexOf(':');
-    if (colonIndex === -1) continue;
-
-    const property = decl.slice(0, colonIndex).trim().toLowerCase();
-    const value = decl.slice(colonIndex + 1).trim();
-
-    if (blockedProperties.has(property)) {
-      continue;
-    }
-
-    const valueLower = value.toLowerCase();
-    if (
-      valueLower.includes('javascript:') ||
-      valueLower.includes('vbscript:') ||
-      valueLower.includes('expression') ||
-      valueLower.includes('url(') ||
-      valueLower.includes('@import') ||
-      valueLower.includes('-moz-binding') ||
-      valueLower.includes('behavior') ||
-      /\\/g.test(value)
-    ) {
-      continue;
-    }
-
-    if (property.includes('margin') && value.includes('-')) {
-      continue;
-    }
-
-    cleanDeclarations.push(`${property}: ${value}`);
-  }
-
-  return cleanDeclarations.join('; ');
-}
-
-// compileToHTML() returns a full document (<!DOCTYPE>, <html>, <head> with <title>/<meta>/a
-// base <style> block, <body>) — not a content fragment — so the allowlist must include the
-// document shell or sanitize-html strips it, silently dropping the base font/flex CSS and
-// leaking <title>'s text as visible body content (both exactly reproduced the reported bug).
-// 'script' is deliberately NOT allowed: compileToHTML interpolates body.style.customJs into a
-// raw, unescaped <script> tag, and customJs is a free-form string with no schema restriction
-// (StyleRecordSchema accepts any string under any key) — an AI/external caller could otherwise
-// smuggle arbitrary JS into the published page via that field.
-const ALLOWED_TAGS = [
-  'html', 'head', 'body', 'title', 'meta', 'style',
-  'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-  'a', 'img', 'button', 'svg', 'path', 'table', 'thead', 'tbody',
-  'tr', 'th', 'td', 'hr', 'br', 'ul', 'ol', 'li', 'section', 'article',
-  'main', 'header', 'footer', 'aside'
-];
-
-const ALLOWED_ATTR = [
-  'href', 'src', 'alt', 'class', 'id', 'style', 'title', 'target', 'rel',
-  'width', 'height', 'align', 'valign', 'cellpadding', 'cellspacing',
-  'border', 'viewbox', 'fill', 'stroke', 'd', 'xmlns',
-  'charset', 'name', 'content', 'lang',
-  // data-plexo-id (comment-pin targeting, see CommentLayer.tsx) and data-plexo-blog-*
-  // (the marker divs blog layouts substitute real post/listing content into, see
-  // lib/pub/blogLayoutRender.ts) were being silently stripped by this allowlist — every
-  // saved template lost its data-plexo-* attributes, which is why a custom blog layout's
-  // "ready" status/live substitution never worked even with the required block placed.
-  // 'data-*' is sanitize-html's supported wildcard glob syntax, not a literal attribute name.
-  'data-*',
-];
-
-const DANGEROUS_URL_SCHEMES = ['javascript:', 'vbscript:', 'data:'];
-
-/**
- * Purifies raw HTML against XSS/DOM Cloaking with strict tag and attribute whitelists.
- *
- * Uses sanitize-html (a pure-JS parser, no DOM) rather than DOMPurify+jsdom — jsdom pulls
- * in a chain of packages (html-encoding-sniffer, cssstyle) that keep introducing ESM-only
- * sub-dependencies incompatible with Turbopack's external-module loader (ERR_REQUIRE_ESM at
- * runtime, not build time, so it only surfaces once this code path is actually hit).
- */
-export function sanitizeHtml(html: string): string {
-  // sanitize-html has no concept of a doctype declaration and silently drops it — without it
-  // the published page renders in the browser's quirks mode instead of standards mode.
-  const hasDoctype = /^\s*<!doctype\s+html\s*>/i.test(html);
-
-  const sanitized = sanitizeHtmlLib(html, {
-    allowedTags: ALLOWED_TAGS,
-    allowedAttributes: { '*': ALLOWED_ATTR },
-    allowVulnerableTags: true, // 'style' is a plain attribute here, not the <style> element
-    transformTags: {
-      '*': (tagName, attribs) => {
-        const nextAttribs = { ...attribs };
-
-        // Force secure links
-        if (tagName === 'a') {
-          nextAttribs.target = '_blank';
-          nextAttribs.rel = 'noopener noreferrer';
-        }
-
-        for (const urlAttr of ['href', 'src']) {
-          const value = nextAttribs[urlAttr];
-          if (typeof value === 'string') {
-            const trimmed = value.trim().toLowerCase();
-            if (DANGEROUS_URL_SCHEMES.some((scheme) => trimmed.startsWith(scheme))) {
-              delete nextAttribs[urlAttr];
-            }
-          }
-        }
-
-        // Strict inline CSS sanitization
-        if (typeof nextAttribs.style === 'string') {
-          const sanitizedStyle = sanitizeStyleString(nextAttribs.style);
-          if (sanitizedStyle) {
-            nextAttribs.style = sanitizedStyle;
-          } else {
-            delete nextAttribs.style;
-          }
-        }
-
-        return { tagName, attribs: nextAttribs };
-      },
-    },
-  });
-
-  return hasDoctype ? `<!DOCTYPE html>\n${sanitized}` : sanitized;
-}
+//
+// Moved to @charisol/plexo-sdk's sanitizeCompiledHtml.ts (imported above as `sanitizeHtml`) —
+// this used to be a hand-duplicated copy of that same allowlist/logic, which is exactly the
+// kind of two-repos-drifting-apart risk this consolidation removes. See that file for the
+// full ALLOWED_TAGS/ALLOWED_ATTR/style-sanitization implementation and rationale.
 
 // ==========================================
 // 5. Main Payload Sanitizer Function
