@@ -476,6 +476,13 @@ model Template {
   sourceType     TemplateSourceType @default(BUILDER)
   designJson     Json
   compiledHtml   String             @db.Text
+  // Which @charisol/plexo-sdk version produced the current compiledHtml, and when — lets a
+  // bad SDK release's affected rows be identified precisely (`sdkVersion` range + `compiledAt`
+  // window) without adding any field to designJson itself, which would be silently stripped by
+  // this app's own designJson Zod validator (server/sanitizer.ts) on the very next save. Both
+  // nullable: rows written before this column existed simply have no recorded version.
+  sdkVersion     String?
+  compiledAt     DateTime?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
@@ -542,15 +549,35 @@ model Template {
   importJobs               ImportJob[]
   importMediaMaps          ImportMediaMap[]
   siteImportJobs           SiteImportJob[]
+  revisions                TemplateRevision[]
   // Reverse side of BlogSite's two named 1:1 layout-template relations — see BlogSite.
-  blogSitePostLayoutFor    BlogSite?        @relation("BlogSitePostLayout")
-  blogSiteListingLayoutFor BlogSite?        @relation("BlogSiteListingLayout")
+  blogSitePostLayoutFor    BlogSite?          @relation("BlogSitePostLayout")
+  blogSiteListingLayoutFor BlogSite?          @relation("BlogSiteListingLayout")
 
   @@unique([parentId, slug])
   @@index([userId])
   @@index([organizationId])
   @@index([parentId])
   @@index([marketplaceStatus])
+}
+
+// Point-in-time snapshot of a Template's designJson/compiledHtml, written on every real
+// (dirty-gated) save. Exists so a bad @charisol/plexo-sdk release can be rolled back per
+// template — restore a row's prior bytes directly — without ever needing to bulk-recompile
+// every stored compiledHtml, which would risk changing already-published pages that no one
+// asked to change. Retention-limited (see the cleanup job referenced wherever this is written)
+// rather than kept forever, since this is a rollback safety net, not an audit trail.
+model TemplateRevision {
+  id           String   @id @default(uuid()) @db.Uuid
+  templateId   String   @db.Uuid
+  designJson   Json
+  compiledHtml String   @db.Text
+  sdkVersion   String
+  createdAt    DateTime @default(now())
+
+  template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, createdAt])
 }
 
 enum MarketplaceStatus {
