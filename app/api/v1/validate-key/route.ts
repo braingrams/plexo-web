@@ -38,9 +38,9 @@ async function resolveSdkBranding(
  *
  * Responses:
  *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA", useAi: boolean, aiProvider: string, aiTier: string, manageLandingPagePublishing: boolean, canvasFidelity: "legacy" | "compiled", branding?: { name: string, logoUrl?: string, brandColor?: string } }
- *   canvasFidelity is resolved from the PLEXO_CANVAS_FIDELITY_ALLOWLIST env var (see
- *   lib/canvasFidelity.ts) -- 'compiled' only for accounts explicitly allowlisted during the
- *   canvas-rewrite project's rollout, 'legacy' for everyone else.
+ *   canvasFidelity is resolved via lib/canvasFidelity.ts -- 'compiled' for everyone, the
+ *   canvas-rewrite project's standard now; 'legacy' only if the emergency kill switch
+ *   (PLEXO_CANVAS_FIDELITY_FORCE_LEGACY) is set.
  *   branding is present only for orgs entitled to (and who've configured) white-labeling —
  *   see resolveSdkBranding below and plexo-sdk's useApiKeyValidation.ts, which consumes it.
  *   400 { valid: false, error: "API key is required." }
