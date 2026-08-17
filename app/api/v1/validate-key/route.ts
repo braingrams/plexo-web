@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
 import { resolveManageLandingPagePublishing, canWhiteLabel, getOrganizationOwnerPlan } from "@/lib/subscription";
+import { resolveCanvasFidelity } from "@/lib/canvasFidelity";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -36,7 +37,10 @@ async function resolveSdkBranding(
  *   x-api-key: <raw api key> | "workspace-internal"
  *
  * Responses:
- *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA", useAi: boolean, aiProvider: string, aiTier: string, manageLandingPagePublishing: boolean, branding?: { name: string, logoUrl?: string, brandColor?: string } }
+ *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA", useAi: boolean, aiProvider: string, aiTier: string, manageLandingPagePublishing: boolean, canvasFidelity: "legacy" | "compiled", branding?: { name: string, logoUrl?: string, brandColor?: string } }
+ *   canvasFidelity is resolved from the PLEXO_CANVAS_FIDELITY_ALLOWLIST env var (see
+ *   lib/canvasFidelity.ts) -- 'compiled' only for accounts explicitly allowlisted during the
+ *   canvas-rewrite project's rollout, 'legacy' for everyone else.
  *   branding is present only for orgs entitled to (and who've configured) white-labeling —
  *   see resolveSdkBranding below and plexo-sdk's useApiKeyValidation.ts, which consumes it.
  *   400 { valid: false, error: "API key is required." }
@@ -60,6 +64,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     let aiTier = "AUTO";
     let aiAccessMode = "SYSTEM";
     let manageLandingPagePublishing = false;
+    let canvasFidelity: ReturnType<typeof resolveCanvasFidelity> = "legacy";
     let branding: Awaited<ReturnType<typeof resolveSdkBranding>>;
 
     if (rawKey === "workspace-internal") {
@@ -76,6 +81,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const user = await (prisma.user.findUnique as any)({
         where: { id: session.user.id },
         select: {
+          email: true,
           subscriptionPlan: true,
           manageLandingPagePublishing: true,
           apiKeys: {
@@ -96,6 +102,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
       subscriptionPlan = user.subscriptionPlan ?? "FREE";
       manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user.manageLandingPagePublishing);
+      canvasFidelity = resolveCanvasFidelity([session.user.id, user.email]);
       if (user.apiKeys?.[0]) {
         useAi = user.apiKeys[0].useAi;
         aiProvider = user.apiKeys[0].aiProvider;
@@ -142,11 +149,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       // Fetch the owner's subscription plan separately to avoid nested-select type issues
       const user = await (prisma.user.findUnique as any)({
         where: { id: apiKey.userId },
-        select: { subscriptionPlan: true, manageLandingPagePublishing: true },
+        select: { email: true, subscriptionPlan: true, manageLandingPagePublishing: true },
       });
 
       subscriptionPlan = user?.subscriptionPlan ?? "FREE";
       manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user?.manageLandingPagePublishing);
+      canvasFidelity = resolveCanvasFidelity([apiKey.userId, apiKey.organizationId, user?.email]);
       useAi = apiKey.useAi;
       aiProvider = apiKey.aiProvider;
       aiTier = apiKey.aiTier;
@@ -168,6 +176,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       aiTier,
       aiAccessMode,
       manageLandingPagePublishing,
+      canvasFidelity,
       ...(branding ? { branding } : {}),
     });
   } catch (err) {
