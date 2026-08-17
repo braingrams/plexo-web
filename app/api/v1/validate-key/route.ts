@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
 import { resolveManageLandingPagePublishing, canWhiteLabel, getOrganizationOwnerPlan } from "@/lib/subscription";
-import { resolveCanvasFidelity } from "@/lib/canvasFidelity";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -37,10 +36,14 @@ async function resolveSdkBranding(
  *   x-api-key: <raw api key> | "workspace-internal"
  *
  * Responses:
- *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA", useAi: boolean, aiProvider: string, aiTier: string, manageLandingPagePublishing: boolean, canvasFidelity: "legacy" | "compiled", branding?: { name: string, logoUrl?: string, brandColor?: string } }
- *   canvasFidelity is resolved via lib/canvasFidelity.ts -- 'compiled' for everyone, the
- *   canvas-rewrite project's standard now; 'legacy' only if the emergency kill switch
- *   (PLEXO_CANVAS_FIDELITY_FORCE_LEGACY) is set.
+ *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA", useAi: boolean, aiProvider: string, aiTier: string, manageLandingPagePublishing: boolean, branding?: { name: string, logoUrl?: string, brandColor?: string } }
+ *   Deliberately does NOT return a canvasFidelity field -- that used to gate the compiled
+ *   canvas behind an app-specific allowlist, a leftover from canary-rollout scaffolding built
+ *   before the SDK's own default ('auto') resolved to 'compiled' unconditionally. plexo-sdk's
+ *   useApiKeyValidation.ts already treats a missing/absent canvasFidelity as "no override" and
+ *   falls through to that SDK-level default -- so omitting the field entirely is exactly what
+ *   a normal SDK integration (one that's never heard of this endpoint's history) looks like,
+ *   not a special case this app has to maintain forever.
  *   branding is present only for orgs entitled to (and who've configured) white-labeling —
  *   see resolveSdkBranding below and plexo-sdk's useApiKeyValidation.ts, which consumes it.
  *   400 { valid: false, error: "API key is required." }
@@ -64,7 +67,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     let aiTier = "AUTO";
     let aiAccessMode = "SYSTEM";
     let manageLandingPagePublishing = false;
-    let canvasFidelity: ReturnType<typeof resolveCanvasFidelity> = "legacy";
     let branding: Awaited<ReturnType<typeof resolveSdkBranding>>;
 
     if (rawKey === "workspace-internal") {
@@ -102,7 +104,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
       subscriptionPlan = user.subscriptionPlan ?? "FREE";
       manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user.manageLandingPagePublishing);
-      canvasFidelity = resolveCanvasFidelity([session.user.id, user.email]);
       if (user.apiKeys?.[0]) {
         useAi = user.apiKeys[0].useAi;
         aiProvider = user.apiKeys[0].aiProvider;
@@ -154,7 +155,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
       subscriptionPlan = user?.subscriptionPlan ?? "FREE";
       manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user?.manageLandingPagePublishing);
-      canvasFidelity = resolveCanvasFidelity([apiKey.userId, apiKey.organizationId, user?.email]);
       useAi = apiKey.useAi;
       aiProvider = apiKey.aiProvider;
       aiTier = apiKey.aiTier;
@@ -176,7 +176,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       aiTier,
       aiAccessMode,
       manageLandingPagePublishing,
-      canvasFidelity,
       ...(branding ? { branding } : {}),
     });
   } catch (err) {
