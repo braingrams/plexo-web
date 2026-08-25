@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/server/prisma";
 
 function formatNaira(minor: number): string {
@@ -38,7 +39,8 @@ function StatTile({ label, value, tint, icon }: { label: string; value: string; 
 export default async function CommerceOverviewPage({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = await params;
 
-  const [productCount, orderCount, salesTotal, upcomingBookingCount, lowStockCount, recentOrders] = await Promise.all([
+  const [settings, productCount, orderCount, salesTotal, upcomingBookingCount, lowStockCount, recentOrders] = await Promise.all([
+    prisma.commerceSettings.findUnique({ where: { templateId }, select: { enabled: true } }),
     prisma.commerceProduct.count({ where: { templateId, active: true } }),
     prisma.commerceOrder.count({ where: { templateId, status: "PAID" } }),
     prisma.commerceOrder.aggregate({ where: { templateId, status: "PAID" }, _sum: { amountMinor: true } }),
@@ -64,6 +66,26 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
           Products, bookings, and orders for this site.
         </p>
       </div>
+
+      {!settings?.enabled && (
+        <Link
+          href={`/dashboard/commerce/${templateId}/settings`}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem",
+            background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.3)",
+            borderRadius: 12, padding: "0.8rem 1.1rem", marginBottom: "1.25rem",
+            fontSize: "0.83rem", color: "#c4b5fd", textDecoration: "none",
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
+            </svg>
+            Commerce is off — nothing here shows up on your storefront until you connect Paystack and enable it in Settings.
+          </span>
+          <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>Go to Settings →</span>
+        </Link>
+      )}
 
       {lowStockCount > 0 && (
         <div style={{

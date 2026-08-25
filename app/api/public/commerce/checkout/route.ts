@@ -48,7 +48,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const { productId, quantity: rawQuantity, scheduledStart: rawScheduledStart, customerEmail, customerName, customerPhone, deliveryMethod } = body;
+  const { productId, quantity: rawQuantity, scheduledStart: rawScheduledStart, customerEmail, customerName, customerPhone, deliveryMethod, discountCode: rawDiscountCode } = body;
 
   if (typeof productId !== "string" || !productId) {
     return NextResponse.json({ error: "productId is required." }, { status: 400 });
@@ -117,7 +117,35 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const deliveryMethodValue =
     product.kind === "PHYSICAL" && (deliveryMethod === "PICKUP" || deliveryMethod === "COURIER") ? deliveryMethod : null;
 
-  const amountMinor = product.priceMinor * quantity;
+  const subtotalMinor = product.priceMinor * quantity;
+
+  // Fast, non-authoritative pre-check — a clean error for an obviously-bad code before
+  // ever opening a transaction. The atomic claim inside the transaction below is what
+  // actually enforces usageLimit under concurrency; this is just early rejection.
+  let discount: Awaited<ReturnType<typeof prisma.commerceDiscountCode.findUnique>> = null;
+  const normalizedDiscountCode = typeof rawDiscountCode === "string" ? rawDiscountCode.trim().toUpperCase() : "";
+  if (normalizedDiscountCode) {
+    discount = await prisma.commerceDiscountCode.findUnique({ where: { templateId_code: { templateId, code: normalizedDiscountCode } } });
+    const invalid =
+      !discount ||
+      !discount.active ||
+      (discount.expiresAt && discount.expiresAt.getTime() <= Date.now()) ||
+      (discount.usageLimit !== null && discount.usedCount >= discount.usageLimit);
+    if (invalid) {
+      return NextResponse.json({ error: "That discount code isn't valid." }, { status: 400 });
+    }
+  }
+
+  const discountAmountMinor = discount
+    ? discount.type === "PERCENT"
+      ? Math.round((subtotalMinor * discount.value) / 100)
+      : Math.min(discount.value, subtotalMinor)
+    : 0;
+  const amountMinor = subtotalMinor - discountAmountMinor;
+
+  if (amountMinor <= 0) {
+    return NextResponse.json({ error: "This discount would reduce the order to zero — pick a smaller code or a larger order." }, { status: 400 });
+  }
 
   let order: CommerceOrder | null = null;
   let lastError: unknown = null;
@@ -131,6 +159,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   class OutOfStockError extends Error {}
   class OrderCodeCollisionError extends Error {}
   class SlotTakenError extends Error {}
+  class InvalidDiscountError extends Error {}
 
   for (let attempt = 0; attempt < 5 && !order; attempt++) {
     const orderNumber = generateOrderNumber();
@@ -149,6 +178,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           }
         }
 
+        if (discount) {
+          // Atomic guarded claim, not read-then-write — a raw UPDATE because Prisma's
+          // query API can't express "usedCount < usageLimit" (comparing two columns of the
+          // same row) any other way. Zero rows affected means someone else just spent the
+          // last use (or it went inactive/expired) between the pre-check above and now.
+          const claimed = await tx.$executeRaw`
+            UPDATE "CommerceDiscountCode"
+            SET "usedCount" = "usedCount" + 1
+            WHERE id = ${discount.id}
+              AND active = true
+              AND ("expiresAt" IS NULL OR "expiresAt" > now())
+              AND ("usageLimit" IS NULL OR "usedCount" < "usageLimit")
+          `;
+          if (claimed === 0) {
+            throw new InvalidDiscountError();
+          }
+        }
+
         const createdOrder = await tx.commerceOrder
           .create({
             data: {
@@ -160,6 +207,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
               customerPhone: typeof customerPhone === "string" ? customerPhone : null,
               deliveryMethod: deliveryMethodValue,
               deliveryFeeMinor: 0,
+              discountCode: discount?.code ?? null,
+              discountAmountMinor,
               amountMinor,
               currency: product.currency,
               paystackMode: settings.paystackMode,
@@ -231,6 +280,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (err instanceof OutOfStockError) {
         return NextResponse.json({ error: `Only ${product.stockQuantity ?? 0} left in stock.` }, { status: 409 });
       }
+      if (err instanceof InvalidDiscountError) {
+        return NextResponse.json({ error: "That discount code isn't valid." }, { status: 400 });
+      }
       throw err;
     }
   }
@@ -275,6 +327,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         // permanently squat that slot and make it unbookable by anyone, forever. The order
         // itself keeps the full history (status FAILED); only the slot-holding row goes.
         await tx.commerceBooking.deleteMany({ where: { orderId: order.id } });
+      }
+      if (discount) {
+        // Release the claimed use — a failed-to-even-start payment shouldn't burn a
+        // customer's discount code.
+        await tx.commerceDiscountCode.update({ where: { id: discount.id }, data: { usedCount: { decrement: 1 } } });
       }
     });
     return NextResponse.json({ error: "Unable to start payment. Please try again." }, { status: 502 });

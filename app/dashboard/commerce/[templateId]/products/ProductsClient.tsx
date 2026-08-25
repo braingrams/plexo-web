@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 export type ProductSummary = {
   id: string;
@@ -61,6 +61,8 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProductSummary | null>(null);
+  const mainFileInputRef = useRef<HTMLInputElement>(null);
+  const galleryFileInputRef = useRef<HTMLInputElement>(null);
 
   const apiBase = `/api/v1/commerce/${templateId}/products`;
 
@@ -351,36 +353,82 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
               )}
 
               <FieldLabel label="Main image">
-                <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                  {form.imageUrl && <img src={form.imageUrl} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />}
-                  <input
-                    type="file" accept="image/*" disabled={uploading}
-                    onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f, "main"); }}
-                    style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.6)" }}
-                  />
-                </div>
+                <input ref={mainFileInputRef} type="file" accept="image/*" disabled={uploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f, "main"); e.target.value = ""; }} style={{ display: "none" }} />
+                {form.imageUrl ? (
+                  <div
+                    onClick={() => mainFileInputRef.current?.click()}
+                    style={{
+                      position: "relative", width: 120, height: 120, borderRadius: 12, overflow: "hidden",
+                      cursor: uploading ? "wait" : "pointer", border: "1px solid rgba(255,255,255,0.1)",
+                    }}
+                  >
+                    <img src={form.imageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    <div style={{
+                      position: "absolute", left: 0, right: 0, bottom: 0, padding: "0.3rem 0",
+                      background: "linear-gradient(to top, rgba(0,0,0,0.7), transparent)",
+                      textAlign: "center", color: "#fff", fontSize: "0.68rem", fontWeight: 600,
+                    }}>
+                      Change
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setForm((p) => ({ ...p, imageUrl: "" })); }}
+                      style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: "50%", background: "rgba(0,0,0,0.6)", color: "#fff", border: "none", cursor: "pointer", fontSize: "0.75rem", lineHeight: 1 }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => mainFileInputRef.current?.click()}
+                    disabled={uploading}
+                    style={{
+                      width: 120, height: 120, borderRadius: 12, cursor: uploading ? "wait" : "pointer",
+                      border: "1.5px dashed rgba(139,92,246,0.35)", background: "rgba(139,92,246,0.05)",
+                      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.4rem",
+                      color: "var(--brand)", fontFamily: "inherit", transition: "background 0.15s, border-color 0.15s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.1)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.6)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.05)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.35)"; }}
+                  >
+                    <IconUploadImage />
+                    <span style={{ fontSize: "0.72rem", fontWeight: 600 }}>{uploading ? "Uploading…" : "Click to upload"}</span>
+                  </button>
+                )}
               </FieldLabel>
 
               <FieldLabel label="Gallery images">
-                <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
+                <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
                   {form.galleryImageUrls.map((url, i) => (
-                    <div key={i} style={{ position: "relative" }}>
-                      <img src={url} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover" }} />
+                    <div key={i} style={{ position: "relative", width: 72, height: 72, borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
+                      <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                       <button
                         type="button"
                         onClick={() => setForm((p) => ({ ...p, galleryImageUrls: p.galleryImageUrls.filter((_, idx) => idx !== i) }))}
-                        style={{ position: "absolute", top: -6, right: -6, width: 18, height: 18, borderRadius: "50%", background: "#ef4444", color: "#fff", border: "none", cursor: "pointer", fontSize: "0.7rem", lineHeight: 1 }}
+                        style={{ position: "absolute", top: 3, right: 3, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,0.65)", color: "#fff", border: "none", cursor: "pointer", fontSize: "0.7rem", lineHeight: 1 }}
                       >
                         ×
                       </button>
                     </div>
                   ))}
+                  <input ref={galleryFileInputRef} type="file" accept="image/*" disabled={uploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f, "gallery"); e.target.value = ""; }} style={{ display: "none" }} />
+                  <button
+                    type="button"
+                    onClick={() => galleryFileInputRef.current?.click()}
+                    disabled={uploading}
+                    style={{
+                      width: 72, height: 72, borderRadius: 10, cursor: uploading ? "wait" : "pointer",
+                      border: "1.5px dashed rgba(139,92,246,0.35)", background: "rgba(139,92,246,0.05)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "var(--brand)", fontFamily: "inherit", transition: "background 0.15s, border-color 0.15s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.1)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.6)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.05)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.35)"; }}
+                  >
+                    <IconPlusSmall />
+                  </button>
                 </div>
-                <input
-                  type="file" accept="image/*" disabled={uploading}
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f, "gallery"); }}
-                  style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.6)" }}
-                />
               </FieldLabel>
 
               {otherProducts.length > 0 && (
@@ -458,6 +506,24 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
         </div>
       )}
     </div>
+  );
+}
+
+function IconUploadImage() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <circle cx="9" cy="9" r="1.5" />
+      <path d="m21 15-5-5-9 9" />
+    </svg>
+  );
+}
+
+function IconPlusSmall() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
   );
 }
 

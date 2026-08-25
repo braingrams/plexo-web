@@ -52,6 +52,58 @@ export async function initializePaystackTransaction(
   };
 }
 
+export interface PaystackCustomer {
+  id: number;
+  customerCode: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  createdAt: string;
+}
+
+export interface PaystackCustomerPage {
+  customers: PaystackCustomer[];
+  total: number;
+  page: number;
+  pageCount: number;
+}
+
+/**
+ * Lists customers who've transacted with this site's Paystack account — the source of
+ * truth for "who's paid us," rather than re-deriving a customer list purely from our own
+ * CommerceOrder rows (Paystack already tracks this per merchant account).
+ */
+export async function listPaystackCustomers(params: { secretKey: string; page?: number; perPage?: number }): Promise<PaystackCustomerPage> {
+  const page = params.page ?? 1;
+  const perPage = params.perPage ?? 25;
+  const response = await fetch(`${PAYSTACK_BASE_URL}/customer?page=${page}&perPage=${perPage}`, {
+    headers: { Authorization: `Bearer ${params.secretKey}` },
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.status) {
+    throw new Error(payload?.message ?? `Paystack customer list failed (${response.status}).`);
+  }
+
+  const customers: PaystackCustomer[] = (payload.data ?? []).map((c: Record<string, unknown>) => ({
+    id: c.id as number,
+    customerCode: c.customer_code as string,
+    email: c.email as string,
+    firstName: (c.first_name as string) || null,
+    lastName: (c.last_name as string) || null,
+    phone: (c.phone as string) || null,
+    createdAt: c.createdAt as string,
+  }));
+
+  return {
+    customers,
+    total: payload.meta?.total ?? customers.length,
+    page: payload.meta?.page ?? page,
+    pageCount: payload.meta?.pageCount ?? 1,
+  };
+}
+
 /**
  * Refunds a transaction (fully, or partially when `amountMinor` is given) with the
  * merchant's own secret key. Throws on any non-2xx or `status: false` response — the
