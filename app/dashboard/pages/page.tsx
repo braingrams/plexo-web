@@ -7,6 +7,7 @@ import { ensureActiveOrganization } from "@/server/org";
 import { getTierFeatures } from "@/lib/subscription";
 
 import { PagesOverviewClient } from "./PagesOverviewClient";
+import { PagesShell } from "../_components/PagesShell";
 
 // Same reasoning as the Templates page: this route sits behind an always-visible nav link
 // that Next prefetches proactively, so force-dynamic avoids serving a stale pre-change RSC
@@ -62,16 +63,18 @@ export default async function PagesOverviewPage() {
   });
 
   return (
-    <PagesOverviewClient
-      isUltra={isUltra}
-      pages={templates.map((t) => ({
-        id: t.id,
-        name: t.name,
-        compiledHtml: t.compiledHtml,
-        updatedAt: t.updatedAt.toISOString(),
-        pageCount: t._count.pages,
-        domains: t.publishedDomains.map((d) => d.domain),
-      }))}
-    />
+    <PagesShell>
+      <PagesOverviewClient
+        isUltra={isUltra}
+        pages={templates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          compiledHtml: t.compiledHtml,
+          updatedAt: t.updatedAt.toISOString(),
+          pageCount: t._count.pages,
+          domains: t.publishedDomains.map((d) => d.domain),
+        }))}
+      />
+    </PagesShell>
   );
 }

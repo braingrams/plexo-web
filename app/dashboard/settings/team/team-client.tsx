@@ -14,6 +14,7 @@ const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
   admin: "Admin",
   editor: "Editor",
+  blogger: "Blogger",
   commenter: "Commenter",
   viewer: "Viewer",
 };
@@ -21,13 +22,14 @@ const ROLE_LABELS: Record<string, string> = {
 const ROLE_DESCRIPTIONS: Record<string, string> = {
   admin: "Manage members, templates, domains, and API keys.",
   editor: "Create, edit, publish, and comment on templates.",
+  blogger: "Write and publish blog posts only — no page or commerce access.",
   commenter: "View templates and leave comments.",
   viewer: "View templates and comment threads only.",
 };
 
 // Owner isn't offered on invite — ownership transfer is a separate, deliberate action,
 // not something granted through the regular invite flow.
-const INVITABLE_ROLES = ["admin", "editor", "commenter", "viewer"];
+const INVITABLE_ROLES = ["admin", "editor", "blogger", "commenter", "viewer"];
 
 export function TeamClient({
   currentUserId,

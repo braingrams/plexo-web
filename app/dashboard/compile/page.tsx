@@ -1,11 +1,11 @@
 import React from "react";
 import CompileClientPage from "./compile-client";
-import { PageContainer } from "../_components/PageContainer";
+import { SettingsShell } from "../_components/SettingsShell";
 
 export default function DashboardCompilePage() {
   return (
-    <PageContainer>
+    <SettingsShell>
       <CompileClientPage />
-    </PageContainer>
+    </SettingsShell>
   );
 }

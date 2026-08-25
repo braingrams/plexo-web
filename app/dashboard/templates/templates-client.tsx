@@ -4,8 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "../_components/PageHeader";
-import { PageContainer } from "../_components/PageContainer";
-import { NewFromMarketplace } from "./NewFromMarketplace";
+import { MarketplaceBrowseModal } from "./MarketplaceBrowseModal";
 import { TemplateCard, IconMail, IconLayout, type TemplateKind, type TemplateSummary } from "./TemplateCard";
 
 type CreatePayload = {
@@ -61,7 +60,7 @@ function IconUpload() {
 }
 
 type FilterKind = "ALL" | TemplateKind;
-type ModalStep = "choose" | "blank" | "gallery";
+type ModalStep = "choose" | "blank";
 
 export function TemplatesClient({ initialTemplates }: Props) {
   const router = useRouter();
@@ -70,6 +69,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [modalStep, setModalStep] = useState<ModalStep>("choose");
+  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [templateKind, setTemplateKind] = useState<TemplateKind>("EMAIL");
   const [isCreating, setIsCreating] = useState(false);
@@ -148,12 +148,28 @@ export function TemplatesClient({ initialTemplates }: Props) {
   }
 
   return (
-    <PageContainer>
+    <>
       <PageHeader
         eyebrow="Workspace"
         title="Your Templates"
         action={
           <div style={{ display: "flex", gap: "0.6rem" }}>
+            <button
+              type="button"
+              onClick={() => setMarketplaceOpen(true)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                padding: "0.65rem 1.2rem",
+                borderRadius: 10, fontWeight: 600, fontSize: "0.875rem",
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: "#f0f2ff", cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              <IconStore />
+              Marketplace
+            </button>
             <button
               id="create-template-btn"
               type="button"
@@ -314,7 +330,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
           onClick={(e) => { if (e.target === e.currentTarget) { setModalOpen(false); } }}
         >
           <div style={{
-            width: modalStep === "gallery" ? "min(100%,560px)" : "min(100%,480px)",
+            width: "min(100%,480px)",
             background: "#0d0f1a",
             border: "1px solid rgba(255,255,255,0.12)",
             borderRadius: 20,
@@ -329,7 +345,6 @@ export function TemplatesClient({ initialTemplates }: Props) {
                 <h2 id="create-modal-title" style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.35rem", fontWeight: 800, color: "#f0f2ff" }}>
                   {modalStep === "choose" && "How do you want to start?"}
                   {modalStep === "blank" && "Configure your canvas"}
-                  {modalStep === "gallery" && "Start from a template"}
                 </h2>
               </div>
               <button
@@ -372,7 +387,10 @@ export function TemplatesClient({ initialTemplates }: Props) {
 
                 <button
                   type="button"
-                  onClick={() => setModalStep("gallery")}
+                  onClick={() => {
+                    setModalOpen(false);
+                    setMarketplaceOpen(true);
+                  }}
                   style={{
                     display: "flex", alignItems: "center", gap: "0.85rem",
                     padding: "1rem", borderRadius: 12,
@@ -537,19 +555,6 @@ export function TemplatesClient({ initialTemplates }: Props) {
                 </div>
               </>
             )}
-
-            {modalStep === "gallery" && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setModalStep("choose")}
-                  style={{ background: "none", border: "none", color: "rgba(240,242,255,0.45)", cursor: "pointer", fontSize: "0.8rem", padding: 0, marginBottom: "1rem", fontFamily: "inherit" }}
-                >
-                  ← Back
-                </button>
-                <NewFromMarketplace onClose={() => setModalOpen(false)} />
-              </>
-            )}
           </div>
         </div>
       )}
@@ -639,6 +644,10 @@ export function TemplatesClient({ initialTemplates }: Props) {
         </div>
       )}
 
+      {marketplaceOpen && (
+        <MarketplaceBrowseModal onClose={() => setMarketplaceOpen(false)} />
+      )}
+
       <style jsx>{`
         @media (max-width: 480px) {
           .templates-grid {
@@ -646,6 +655,6 @@ export function TemplatesClient({ initialTemplates }: Props) {
           }
         }
       `}</style>
-    </PageContainer>
+    </>
   );
 }

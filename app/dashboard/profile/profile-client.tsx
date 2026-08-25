@@ -3,7 +3,6 @@
 import { FormEvent, useState } from "react";
 import { Card } from "../_components/Card";
 import { PageHeader } from "../_components/PageHeader";
-import { PageContainer } from "../_components/PageContainer";
 import { useLayoutMode, type LayoutMode } from "../layout-mode-context";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -113,7 +112,7 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
   }
 
   return (
-    <PageContainer>
+    <>
       <PageHeader
         eyebrow="Account"
         title="Your Profile"
@@ -310,7 +309,7 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
 
       {/* Dashboard layout preference */}
       <LayoutModeSection />
-    </PageContainer>
+    </>
   );
 }
 

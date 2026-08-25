@@ -7,6 +7,7 @@ import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
 
 import { TemplatesClient } from "./templates-client";
+import { PagesShell } from "../_components/PagesShell";
 
 // Always fetch fresh — this route sits behind the always-visible "Templates" nav link, which
 // Next prefetches proactively. Without this, navigating back here after creating/editing a
@@ -89,5 +90,9 @@ export default async function TemplatesDashboardPage() {
     },
   });
 
-  return <TemplatesClient initialTemplates={templates.map(serializeTemplate)} />;
+  return (
+    <PagesShell>
+      <TemplatesClient initialTemplates={templates.map(serializeTemplate)} />
+    </PagesShell>
+  );
 }

@@ -94,6 +94,20 @@ model Organization {
   uploadedImages   UploadedImage[]
   comments         Comment[]
   notifications    Notification[]
+
+  // Plexo Commerce
+  commerceCategories             CommerceCategory[]
+  commerceProducts               CommerceProduct[]
+  commerceProductRelations       CommerceProductRelation[]
+  commerceDiscountCodes          CommerceDiscountCode[]
+  commerceAvailabilityRules      CommerceAvailabilityRule[]
+  commerceAvailabilityExceptions CommerceAvailabilityException[]
+  commerceCarts                  CommerceCart[]
+  commerceOrders                 CommerceOrder[]
+  commerceBookings               CommerceBooking[]
+  commerceSettings               CommerceSettings?
+  paystackWebhookEvents          PaystackWebhookEvent[]
+  commerceProductReviews         CommerceProductReview[]
 }
 
 model Member {
@@ -1315,4 +1329,385 @@ model SiteImportAssetBlob {
 
   @@unique([jobId, sha256])
   @@index([jobId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Plexo Commerce — products, booking calendar, cart/checkout, Paystack.
+// Every org brings its own Paystack keys (CommerceSettings); nothing here is
+// scoped to Plexo's own platform account. See the Plexo Commerce plan for the
+// full checkout/webhook/availability flow this data model supports.
+// ─────────────────────────────────────────────────────────────────────────
+
+model CommerceCategory {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String
+  slug           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products     CommerceProduct[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+enum CommerceProductKind {
+  PHYSICAL
+  SERVICE
+}
+
+model CommerceProduct {
+  id               String              @id @default(uuid()) @db.Uuid
+  organizationId   String              @db.Uuid
+  categoryId       String?             @db.Uuid
+  name             String
+  slug             String
+  description      String?
+  imageUrl         String?
+  // Small array of additional image URLs — the detail page's thumbnail strip.
+  galleryImageUrls Json?
+  kind             CommerceProductKind @default(PHYSICAL)
+  priceMinor       Int // kobo
+  currency         String              @default("NGN")
+  // Physical products only — null means "not tracked" (SERVICE rows always leave this
+  // null so a consultation never shows a stock badge). Decremented atomically at
+  // checkout under a `stockQuantity >= quantity` guard — see the Commerce plan's
+  // "no overselling stock" hardening note.
+  stockQuantity    Int?
+  // Services only.
+  durationMinutes  Int?
+
+  // Product pages are high commercial-intent — they get their own SEO fields from day
+  // one rather than inheriting only a bare <title>, the same gap flagged for ordinary
+  // builder pages.
+  metaTitle       String?
+  metaDescription String?
+  ogImageUrl      String?
+
+  active      Boolean   @default(true)
+  suspendedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category     CommerceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  orderItems             CommerceOrderItem[]
+  cartItems              CommerceCartItem[]
+  bookings               CommerceBooking[]
+  availabilityRules      CommerceAvailabilityRule[]
+  availabilityExceptions CommerceAvailabilityException[]
+  reviews                CommerceProductReview[]
+  // Two named relations because CommerceProductRelation has two FKs pointing back at
+  // this same model (the "from" product and the "related" product it's paired with).
+  relatedFrom            CommerceProductRelation[]       @relation("CommerceProductRelationsFrom")
+  relatedTo              CommerceProductRelation[]       @relation("CommerceProductRelationsTo")
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@index([categoryId])
+}
+
+// "Frequently bought together" — a short, staff-curated list per product (2-3 rows),
+// not a recommendation engine. Simple and correct for a catalog this size.
+model CommerceProductRelation {
+  id               String   @id @default(uuid()) @db.Uuid
+  organizationId   String   @db.Uuid
+  productId        String   @db.Uuid
+  relatedProductId String   @db.Uuid
+  createdAt        DateTime @default(now())
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        CommerceProduct @relation("CommerceProductRelationsFrom", fields: [productId], references: [id], onDelete: Cascade)
+  relatedProduct CommerceProduct @relation("CommerceProductRelationsTo", fields: [relatedProductId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, relatedProductId])
+  @@index([organizationId])
+}
+
+enum CommerceDiscountType {
+  PERCENT
+  FIXED
+}
+
+// Fast-follow feature (see the Commerce plan) — modeled now since it's cheap alongside
+// everything else, admin CRUD + checkout-time validation come later.
+model CommerceDiscountCode {
+  id             String               @id @default(uuid()) @db.Uuid
+  organizationId String               @db.Uuid
+  code           String
+  type           CommerceDiscountType
+  value          Int
+  active         Boolean              @default(true)
+  expiresAt      DateTime?
+  usageLimit     Int?
+  usedCount      Int                  @default(0)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Unique per org, not globally — two different Helimax-sized orgs can both run "WELCOME10".
+  @@unique([organizationId, code])
+  @@index([organizationId])
+}
+
+model CommerceAvailabilityRule {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  productId      String   @db.Uuid
+  dayOfWeek      Int // 0 (Sunday) – 6 (Saturday)
+  startMinute    Int // minutes from midnight, in `timezone`
+  endMinute      Int
+  timezone       String   @default("Africa/Lagos")
+  createdAt      DateTime @default(now())
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([productId])
+}
+
+// One-off closures (holidays etc.) — v1 doesn't need custom-hours overrides, just
+// closed/open for a given date.
+model CommerceAvailabilityException {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  productId      String   @db.Uuid
+  date           DateTime @db.Date
+  closed         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, date])
+  @@index([organizationId])
+}
+
+enum CommerceCartStatus {
+  OPEN
+  CONVERTED
+  ABANDONED
+}
+
+// Server-persisted cart, identified by a cartToken in an httpOnly cookie — no customer
+// accounts needed. customerEmail is captured as soon as the checkout details step asks
+// for it, even before payment — the foundation for abandoned-cart recovery later.
+model CommerceCart {
+  id             String             @id @default(uuid()) @db.Uuid
+  organizationId String             @db.Uuid
+  cartToken      String             @unique
+  customerEmail  String?
+  status         CommerceCartStatus @default(OPEN)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items        CommerceCartItem[]
+  order        CommerceOrder?
+
+  @@index([organizationId])
+}
+
+model CommerceCartItem {
+  id                     String   @id @default(uuid()) @db.Uuid
+  cartId                 String   @db.Uuid
+  productId              String   @db.Uuid
+  quantity               Int      @default(1)
+  unitPriceMinorSnapshot Int
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  cart    CommerceCart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+  @@index([cartId])
+}
+
+enum CommerceOrderStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+// Deliberately a separate axis from CommerceOrderStatus — a PAID order can still be
+// sitting unpacked; payment state and fulfillment state answer different questions.
+enum CommerceOrderFulfillmentStatus {
+  UNFULFILLED
+  PROCESSING
+  READY_FOR_PICKUP
+  SHIPPED
+  COMPLETED
+}
+
+enum CommerceDeliveryMethod {
+  PICKUP
+  COURIER
+}
+
+enum CommercePaystackMode {
+  TEST
+  LIVE
+}
+
+model CommerceOrder {
+  id             String  @id @default(uuid()) @db.Uuid
+  // Denormalized rather than derived through cart/product lookups, for cheap
+  // org-scoped queries — same rationale as SiteImportJob.organizationId.
+  organizationId String  @db.Uuid
+  // Short human-facing code (e.g. "HLX-10482") — what the order-confirmation block and
+  // a customer's own order-tracking lookup show. Separate from the internal id.
+  orderNumber    String  @unique
+  cartId         String? @unique @db.Uuid
+
+  customerEmail String
+  customerName  String?
+  customerPhone String?
+
+  deliveryMethod      CommerceDeliveryMethod?
+  deliveryFeeMinor    Int                     @default(0)
+  discountCode        String?
+  discountAmountMinor Int                     @default(0)
+  amountMinor         Int
+  currency            String                  @default("NGN")
+
+  status            CommerceOrderStatus            @default(PENDING)
+  fulfillmentStatus CommerceOrderFulfillmentStatus @default(UNFULFILLED)
+
+  // Stamped at creation from the org's CommerceSettings.paystackMode at that moment, so
+  // flipping an org from test to live mid-flight can't cross-contaminate confirmation.
+  paystackMode             CommercePaystackMode
+  paystackReference        String               @unique
+  paystackAuthorizationUrl String?
+
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cart         CommerceCart?       @relation(fields: [cartId], references: [id], onDelete: SetNull)
+  items        CommerceOrderItem[]
+  booking      CommerceBooking?
+
+  @@index([organizationId])
+  @@index([customerEmail])
+}
+
+model CommerceOrderItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  orderId        String   @db.Uuid
+  productId      String   @db.Uuid
+  nameSnapshot   String
+  unitPriceMinor Int
+  quantity       Int      @default(1)
+  createdAt      DateTime @default(now())
+
+  order   CommerceOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product CommerceProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+enum CommerceBookingStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+model CommerceBooking {
+  id             String                @id @default(uuid()) @db.Uuid
+  organizationId String                @db.Uuid
+  orderId        String                @unique @db.Uuid
+  productId      String                @db.Uuid
+  scheduledStart DateTime
+  scheduledEnd   DateTime
+  status         CommerceBookingStatus @default(PENDING_PAYMENT)
+  // A PENDING_PAYMENT booking older than this doesn't block the slot for anyone else —
+  // someone started checkout and never finished. Swept by the expire-stale-holds cron.
+  holdExpiresAt  DateTime?
+  notes          String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        CommerceOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Concurrency-safe: two visitors racing for the same slot can't both get a row here —
+  // the DB itself rejects the second insert. See the Commerce plan's hardening note.
+  @@unique([productId, scheduledStart])
+  @@index([organizationId])
+}
+
+model CommerceSettings {
+  id             String @id @default(uuid()) @db.Uuid
+  organizationId String @unique @db.Uuid
+
+  paystackPublicKey          String?
+  paystackSecretKeyEncrypted String?
+  paystackMode               CommercePaystackMode @default(TEST)
+
+  // Nullable — Commerce can send receipts through the org's own MailDrip account (this
+  // field set) or, until that exists, through Plexo's shared platform MailDrip key; the
+  // group to tag is always org-specific regardless of which account sends the mail.
+  maildripApiKeyEncrypted String?
+  maildripPaidGroupId     String?
+
+  notificationEmail String?
+  // Master switch — gates whether the published page shell injects commerce.js at all,
+  // same layered-gate shape as BlogSite.enabled.
+  enabled           Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// Idempotency guard for the Paystack webhook — id is Paystack's own transaction id
+// (event.data.id). A unique-constraint failure on create means "already handled," ack
+// and stop. Same defensive shape as claimStripeEvent.
+model PaystackWebhookEvent {
+  id             String   @id
+  organizationId String   @db.Uuid
+  receivedAt     DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+enum CommerceReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Fast-follow feature (see the Commerce plan) — moderated, same shape as MailDrip's own
+// comment moderation: pending until an admin approves.
+model CommerceProductReview {
+  id             String               @id @default(uuid()) @db.Uuid
+  organizationId String               @db.Uuid
+  productId      String               @db.Uuid
+  customerEmail  String
+  rating         Int
+  body           String?
+  status         CommerceReviewStatus @default(PENDING)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([productId])
 }

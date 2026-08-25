@@ -10,11 +10,17 @@ export function MarketplaceFilters({
   categoryCounts,
   totalCount,
   current,
+  onFilterChange,
 }: {
   categories: string[];
   categoryCounts?: Record<string, number>;
   totalCount?: number;
   current: { category?: string; kind?: string; free?: string; q?: string; sort: string };
+  // When provided, filter changes are reported here instead of pushing a URL — for a
+  // client-driven browser (e.g. the marketplace modal embedded in the Templates page)
+  // that fetches its own data and isn't the standalone /marketplace route. The standalone
+  // page omits this and keeps the original router-push/URL-param behavior unchanged.
+  onFilterChange?: (params: { category?: string; kind?: string; free?: string; q?: string; sort?: string }) => void;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -24,8 +30,6 @@ export function MarketplaceFilters({
 
   const updateFilters = useCallback(
     (newParams: Record<string, string | undefined>) => {
-      const params = new URLSearchParams();
-
       const merged = {
         category: current.category,
         kind: current.kind,
@@ -35,6 +39,12 @@ export function MarketplaceFilters({
         ...newParams,
       };
 
+      if (onFilterChange) {
+        onFilterChange(merged);
+        return;
+      }
+
+      const params = new URLSearchParams();
       Object.entries(merged).forEach(([key, val]) => {
         if (val !== undefined && val !== "" && val !== "all") {
           params.set(key, val);
@@ -45,7 +55,7 @@ export function MarketplaceFilters({
         router.push(`${pathname}?${params.toString()}`);
       });
     },
-    [current, pathname, router, searchValue]
+    [current, pathname, router, searchValue, onFilterChange]
   );
 
   const hasActiveFilters = Boolean(
@@ -54,6 +64,10 @@ export function MarketplaceFilters({
 
   const clearAllFilters = () => {
     setSearchValue("");
+    if (onFilterChange) {
+      onFilterChange({ category: undefined, kind: undefined, free: undefined, q: undefined, sort: current.sort });
+      return;
+    }
     startTransition(() => {
       router.push(pathname);
     });

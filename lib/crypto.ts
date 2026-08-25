@@ -68,3 +68,17 @@ export function encryptBankDetail(plainText: string): string {
 export function decryptBankDetail(encoded: string): string {
   return decryptWithKey(encoded, deriveKey(requireEnv("BANK_DETAILS_ENCRYPTION_SECRET")));
 }
+
+/**
+ * Encrypts/decrypts a Commerce org's own Paystack secret key — another DELIBERATELY
+ * separate secret (PAYSTACK_KEY_ENCRYPTION_SECRET), same isolation rationale as
+ * encryptBankDetail: a leak of the AI-key or bank-detail secret must never expose a
+ * customer's Paystack credentials, and vice versa.
+ */
+export function encryptPaystackKey(plainText: string): string {
+  return encryptWithKey(plainText, deriveKey(requireEnv("PAYSTACK_KEY_ENCRYPTION_SECRET")));
+}
+
+export function decryptPaystackKey(encoded: string): string {
+  return decryptWithKey(encoded, deriveKey(requireEnv("PAYSTACK_KEY_ENCRYPTION_SECRET")));
+}

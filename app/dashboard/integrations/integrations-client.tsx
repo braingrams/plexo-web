@@ -18,8 +18,6 @@ import {
   ChevronRight,
   Info,
 } from "lucide-react";
-import { PageContainer } from "../_components/PageContainer";
-
 type IntegrationClientProps = {
   user: {
     name: string;
@@ -108,7 +106,7 @@ POST {yourWebhookUrl}/ai-charge
   -> deduplicate on requestId — retried a few times on failure/timeout`;
 
   return (
-    <PageContainer className="space-y-6 font-sans text-[#f0f2ff]">
+    <div className="space-y-6 font-sans text-[#f0f2ff]">
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/10">
         <div>
@@ -556,6 +554,6 @@ POST {yourWebhookUrl}/ai-charge
           </div>
         </div>
       )}
-    </PageContainer>
+    </div>
   );
 }

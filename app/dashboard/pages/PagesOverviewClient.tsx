@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "../_components/PageHeader";
-import { PageContainer } from "../_components/PageContainer";
 import { formatDate } from "../templates/TemplateCard";
 import { SiteImportPanel } from "../templates/[id]/site-import/SiteImportPanel";
 
@@ -270,7 +269,7 @@ export function PagesOverviewClient({ pages, isUltra }: { pages: PublishedPageSu
   const refresh = () => router.refresh();
 
   return (
-    <PageContainer>
+    <>
       <PageHeader
         eyebrow="Content"
         title="Pages"
@@ -316,6 +315,6 @@ export function PagesOverviewClient({ pages, isUltra }: { pages: PublishedPageSu
           ))}
         </div>
       )}
-    </PageContainer>
+    </>
   );
 }

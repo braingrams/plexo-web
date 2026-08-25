@@ -4,17 +4,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
-import { NAV_GROUPS, PINNED_NAV_ITEM } from "./nav-items";
+import { NAV_ITEMS } from "./nav-items";
 import { Avatar } from "./_components/Avatar";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { NotificationBell, OrgSwitcher } from "./_components/TeamHeaderControls";
 import { FeedbackButton } from "./_components/FeedbackButton";
 import type { OrgBranding } from "./dashboard-shell";
 import { darken, toRgba } from "@/lib/color";
-
-// Settings/Profile already live in the avatar account menu below — surfacing them again as
-// their own topbar group would just duplicate that menu.
-const TOPBAR_NAV_GROUPS = NAV_GROUPS.filter((g) => g.id !== "account");
 
 function IconChevronDown() {
   return (
@@ -92,10 +88,6 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
   // in globals.css). Above that breakpoint nothing changes.
   const [navMenuOpen, setNavMenuOpen] = useState(false);
   const navMenuRef = useRef<HTMLDivElement>(null);
-  // Desktop-only: which pill-nav group's dropdown panel is open (at most one at a time —
-  // it's a transient popover, not a persistent layout like the Classic sidebar's groups).
-  const [openGroupId, setOpenGroupId] = useState<string | null>(null);
-  const groupRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // The template editor needs its own full viewport below the desktop tier — there's no
   // room for the floating topbar/padding chrome alongside the builder's own responsive
@@ -115,19 +107,14 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
       if (navMenuRef.current && !navMenuRef.current.contains(e.target as Node)) {
         setNavMenuOpen(false);
       }
-      const openRef = openGroupId ? groupRefs.current[openGroupId] : null;
-      if (openRef && !openRef.contains(e.target as Node)) {
-        setOpenGroupId(null);
-      }
     }
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [openGroupId]);
+  }, []);
 
-  // Close the mobile nav dropdown / open group popover whenever the route changes.
+  // Close the mobile nav dropdown whenever the route changes.
   useEffect(() => {
     setNavMenuOpen(false);
-    setOpenGroupId(null);
   }, [pathname]);
 
   async function handleSignOut() {
@@ -185,75 +172,26 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
         </Link>
 
         <nav className="dash-pill-nav" style={{ overflowX: "auto" }} aria-label="Dashboard navigation">
-          <Link
-            href={PINNED_NAV_ITEM.href}
-            className={`dash-pill-nav-item${pathname === "/dashboard" ? " active" : ""}`}
-          >
-            {PINNED_NAV_ITEM.label}
-          </Link>
-
-          {TOPBAR_NAV_GROUPS.map((group) => {
-            const isActive = group.items.some((i) => pathname.startsWith(i.href));
-            const isOpen = openGroupId === group.id;
+          {NAV_ITEMS.map((item) => {
+            const isActive = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
             return (
-              <div
-                key={group.id}
-                ref={(el) => { groupRefs.current[group.id] = el; }}
-                style={{ position: "relative", flexShrink: 0 }}
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`dash-pill-nav-item${isActive ? " active" : ""}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
               >
-                <button
-                  type="button"
-                  onClick={() => setOpenGroupId((cur) => (cur === group.id ? null : group.id))}
-                  aria-expanded={isOpen}
-                  className={`dash-pill-nav-item${isActive ? " active" : ""}`}
-                  style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", border: "none", background: "none", cursor: "pointer", fontFamily: "inherit" }}
-                >
-                  {group.label}
-                  <span style={{ display: "inline-flex", transform: isOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s" }}>
-                    <IconChevronDown />
+                {item.label}
+                {item.badge && (
+                  <span style={{
+                    fontSize: "9.5px", fontWeight: 700, letterSpacing: "0.04em",
+                    color: "#c084fc", background: "rgba(196,132,252,0.16)",
+                    padding: "2px 6px", borderRadius: 100,
+                  }}>
+                    {item.badge.toUpperCase()}
                   </span>
-                </button>
-
-                {isOpen && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "calc(100% + 0.75rem)",
-                      left: 0,
-                      width: "min(220px, calc(100vw - 3rem))",
-                      background: "rgba(13,15,26,0.98)",
-                      border: "1px solid rgba(255,255,255,0.09)",
-                      borderRadius: 16,
-                      boxShadow: "0 24px 60px -12px rgba(0,0,0,0.6)",
-                      backdropFilter: "blur(20px)",
-                      WebkitBackdropFilter: "blur(20px)",
-                      padding: "0.5rem",
-                      zIndex: 50,
-                    }}
-                  >
-                    {group.items.map((item) => {
-                      const itemActive = pathname.startsWith(item.href);
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          onClick={() => setOpenGroupId(null)}
-                          style={{
-                            display: "flex", alignItems: "center",
-                            padding: "0.6rem 0.65rem", borderRadius: 10,
-                            fontSize: "0.85rem", fontWeight: itemActive ? 600 : 500,
-                            color: itemActive ? "var(--brand)" : "rgba(240,242,255,0.7)",
-                            background: itemActive ? "var(--brand-subtle)" : "transparent",
-                            textDecoration: "none",
-                          }}
-                        >
-                          {item.label}
-                        </Link>
-                      );
-                    })}
-                  </div>
                 )}
-              </div>
+              </Link>
             );
           })}
         </nav>
@@ -289,52 +227,35 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
                 zIndex: 50,
               }}
             >
-              <Link
-                href={PINNED_NAV_ITEM.href}
-                onClick={() => setNavMenuOpen(false)}
-                style={{
-                  display: "flex", alignItems: "center",
-                  padding: "0.6rem 0.65rem", borderRadius: 10,
-                  fontSize: "0.85rem", fontWeight: pathname === "/dashboard" ? 600 : 500,
-                  color: pathname === "/dashboard" ? "var(--brand)" : "rgba(240,242,255,0.7)",
-                  background: pathname === "/dashboard" ? "var(--brand-subtle)" : "transparent",
-                  textDecoration: "none",
-                }}
-              >
-                {PINNED_NAV_ITEM.label}
-              </Link>
-
-              {TOPBAR_NAV_GROUPS.map((group) => (
-                <div key={group.id} style={{ marginTop: "0.35rem" }}>
-                  <p style={{
-                    fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.09em",
-                    textTransform: "uppercase", color: "rgba(240,242,255,0.3)",
-                    padding: "0.35rem 0.65rem 0.2rem",
-                  }}>
-                    {group.label}
-                  </p>
-                  {group.items.map((item) => {
-                    const isActive = pathname.startsWith(item.href);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        onClick={() => setNavMenuOpen(false)}
-                        style={{
-                          display: "flex", alignItems: "center",
-                          padding: "0.6rem 0.65rem", borderRadius: 10,
-                          fontSize: "0.85rem", fontWeight: isActive ? 600 : 500,
-                          color: isActive ? "var(--brand)" : "rgba(240,242,255,0.7)",
-                          background: isActive ? "var(--brand-subtle)" : "transparent",
-                          textDecoration: "none",
-                        }}
-                      >
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              ))}
+              {NAV_ITEMS.map((item) => {
+                const isActive = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setNavMenuOpen(false)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "0.5rem",
+                      padding: "0.6rem 0.65rem", borderRadius: 10,
+                      fontSize: "0.85rem", fontWeight: isActive ? 600 : 500,
+                      color: isActive ? "var(--brand)" : "rgba(240,242,255,0.7)",
+                      background: isActive ? "var(--brand-subtle)" : "transparent",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {item.label}
+                    {item.badge && (
+                      <span style={{
+                        fontSize: "9.5px", fontWeight: 700, letterSpacing: "0.04em",
+                        color: "#c084fc", background: "rgba(196,132,252,0.16)",
+                        padding: "2px 6px", borderRadius: 100,
+                      }}>
+                        {item.badge.toUpperCase()}
+                      </span>
+                    )}
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>
@@ -440,7 +361,7 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
 
       {/* ── MAIN CONTENT ─────────────────────────── */}
       <div className="dash-main-modern">
-        <div className="dash-main-modern-inner" style={{ maxWidth: 1500, margin: "0 auto" }}>
+        <div className="dash-main-modern-inner" style={{ maxWidth: 1920, margin: "0 auto" }}>
           <div className="dash-modern-banner">
             <LayoutSwitchBanner />
           </div>

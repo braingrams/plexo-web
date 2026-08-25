@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { ProfileClient } from "./profile-client";
+import { SettingsShell } from "../_components/SettingsShell";
 
 export default async function ProfilePage() {
   const requestHeaders = await headers();
@@ -29,12 +30,14 @@ export default async function ProfilePage() {
   }
 
   return (
-    <ProfileClient
-      userId={user.id}
-      initialName={user.name ?? ""}
-      email={user.email ?? ""}
-      subscriptionPlan={user.subscriptionPlan ?? "FREE"}
-      memberSince={user.createdAt.toISOString()}
-    />
+    <SettingsShell>
+      <ProfileClient
+        userId={user.id}
+        initialName={user.name ?? ""}
+        email={user.email ?? ""}
+        subscriptionPlan={user.subscriptionPlan ?? "FREE"}
+        memberSince={user.createdAt.toISOString()}
+      />
+    </SettingsShell>
   );
 }

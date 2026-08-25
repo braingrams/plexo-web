@@ -1,45 +1,18 @@
-export type NavItem = { href: string; label: string };
-export type NavGroup = { id: string; label: string; items: NavItem[] };
+export type NavItem = { href: string; label: string; badge?: string };
 
-export const PINNED_NAV_ITEM: NavItem = { href: "/dashboard", label: "Overview" };
-
-export const NAV_GROUPS: NavGroup[] = [
-  {
-    id: "content",
-    label: "Content",
-    items: [
-      { href: "/dashboard/templates", label: "Templates" },
-      { href: "/dashboard/pages", label: "Pages" },
-      { href: "/dashboard/blog", label: "Blog" },
-      { href: "/dashboard/marketplace", label: "Marketplace" },
-    ],
-  },
-  {
-    id: "grow",
-    label: "Grow",
-    items: [
-      { href: "/dashboard/insights", label: "Insights" },
-      { href: "/dashboard/domains", label: "Domains" },
-    ],
-  },
-  {
-    id: "developer",
-    label: "Developer",
-    items: [
-      { href: "/dashboard/compile", label: "Compile" },
-      { href: "/dashboard/sdk", label: "SDK Client" },
-      { href: "/dashboard/integrations", label: "AI & MCP Skills" },
-    ],
-  },
-  {
-    id: "account",
-    label: "Account",
-    items: [
-      { href: "/dashboard/settings", label: "Settings" },
-      { href: "/dashboard/profile", label: "Profile" },
-    ],
-  },
+// Flat, top-level nav — no collapsible groups/dropdowns. Everything that used to live in a
+// "Content"/"Grow"/"Developer"/"Account" group now lives inside that section's own shell
+// (see SettingsShell for Profile/Settings/Compile/SDK Client/AI & MCP Skills/Insights,
+// PagesShell for Pages/Templates, CommerceNav for the Commerce module) — the top-level list
+// only names the sections themselves.
+// Marketplace is deliberately not a top-level item — it's reachable from inside Pages'
+// Templates view (the "Browse marketplace" entry point in the New Template flow, plus a
+// direct link in the Templates toolbar), not as its own primary destination.
+export const NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Overview" },
+  { href: "/dashboard/pages", label: "Pages" },
+  { href: "/dashboard/blog", label: "Blog" },
+  { href: "/dashboard/commerce", label: "Commerce", badge: "New" },
+  { href: "/dashboard/domains", label: "Domains" },
+  { href: "/dashboard/settings", label: "Settings" },
 ];
-
-// Flat view for consumers that just need "every nav item" regardless of grouping.
-export const NAV_ITEMS: NavItem[] = [PINNED_NAV_ITEM, ...NAV_GROUPS.flatMap((g) => g.items)];

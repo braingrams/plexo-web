@@ -4,6 +4,7 @@ import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
 import IntegrationsClient from "./integrations-client";
+import { SettingsShell } from "../_components/SettingsShell";
 
 export default async function IntegrationsPage() {
   const reqHeaders = await headers();
@@ -35,13 +36,15 @@ export default async function IntegrationsPage() {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexobuilder.com";
 
   return (
-    <IntegrationsClient
-      user={{
-        name: session.user.name ?? "Plexo User",
-        email: session.user.email,
-      }}
-      apiKeys={apiKeys}
-      baseUrl={baseUrl}
-    />
+    <SettingsShell>
+      <IntegrationsClient
+        user={{
+          name: session.user.name ?? "Plexo User",
+          email: session.user.email,
+        }}
+        apiKeys={apiKeys}
+        baseUrl={baseUrl}
+      />
+    </SettingsShell>
   );
 }

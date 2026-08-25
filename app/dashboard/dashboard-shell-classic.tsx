@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth-client";
-import { NAV_GROUPS, PINNED_NAV_ITEM } from "./nav-items";
+import { NAV_ITEMS } from "./nav-items";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls";
 import { FeedbackButton } from "./_components/FeedbackButton";
@@ -175,6 +175,16 @@ function IconBlog() {
   );
 }
 
+function IconCommerce() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l2-5h14l2 5" />
+      <path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z" />
+      <path d="M9 13a3 3 0 0 0 6 0" />
+    </svg>
+  );
+}
+
 function IconChevronDown() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -188,6 +198,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   "/dashboard/templates": <IconTemplates />,
   "/dashboard/pages": <IconPages />,
   "/dashboard/blog": <IconBlog />,
+  "/dashboard/commerce": <IconCommerce />,
   "/dashboard/insights": <IconInsights />,
   "/dashboard/marketplace": <IconMarketplace />,
   "/dashboard/compile": <IconCompile />,
@@ -198,7 +209,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   "/dashboard/profile": <IconProfile />,
 };
 
-function NavLink({ item, pathname, collapsed }: { item: { href: string; label: string }; pathname: string; collapsed: boolean }) {
+function NavLink({ item, pathname, collapsed }: { item: { href: string; label: string; badge?: string }; pathname: string; collapsed: boolean }) {
   const isActive = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
   return (
     <li>
@@ -216,10 +227,8 @@ function NavLink({ item, pathname, collapsed }: { item: { href: string; label: s
           fontWeight: isActive ? 600 : 500,
           color: isActive ? "#fff" : "rgba(240,242,255,0.55)",
           textDecoration: "none",
-          background: isActive ? "linear-gradient(90deg, rgba(139,92,246,0.15), transparent)" : "transparent",
-          borderLeft: isActive && !collapsed ? "3px solid var(--brand)" : "3px solid transparent",
-          boxShadow: isActive ? "inset 0 1px 0 rgba(255,255,255,0.05)" : "none",
-          transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+          background: isActive ? "rgba(139,92,246,0.12)" : "transparent",
+          transition: "background 0.15s ease, color 0.15s ease",
           whiteSpace: "nowrap",
           overflow: "hidden",
           position: "relative",
@@ -227,6 +236,20 @@ function NavLink({ item, pathname, collapsed }: { item: { href: string; label: s
       >
         <span style={{ flexShrink: 0 }}>{NAV_ICONS[item.href]}</span>
         {!collapsed && <span>{item.label}</span>}
+        {!collapsed && item.badge && (
+          <span style={{
+            marginLeft: "auto",
+            fontSize: "9.5px",
+            fontWeight: 700,
+            letterSpacing: "0.04em",
+            color: "#c084fc",
+            background: "rgba(196,132,252,0.16)",
+            padding: "2px 6px",
+            borderRadius: 100,
+          }}>
+            {item.badge.toUpperCase()}
+          </span>
+        )}
       </Link>
     </li>
   );
@@ -252,13 +275,6 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  // Which nav groups are expanded — seeded once from the route active at mount (its group
-  // starts open, the rest start closed) so the sidebar doesn't dump every link on screen at
-  // once. Purely a UI toggle after that; navigating away doesn't auto-collapse a group the
-  // user opened.
-  const [openGroups, setOpenGroups] = useState<Set<string>>(
-    () => new Set(NAV_GROUPS.filter((g) => g.items.some((i) => pathname.startsWith(i.href))).map((g) => g.id))
-  );
   const [isSigningOut, setIsSigningOut] = useState(false);
   // Below 768px the sidebar becomes an off-canvas drawer (see .dash-classic-aside rules
   // in globals.css) triggered by the mobile top bar's hamburger button. Desktop's own
@@ -289,15 +305,6 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
       console.error("Sign out error:", e);
     }
     router.push("/auth/login");
-  }
-
-  function toggleGroup(id: string) {
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
   }
 
   const sidebarWidth = collapsed ? 64 : 250;
@@ -351,19 +358,17 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
         style={{
           position: "fixed",
           top: 0, bottom: 0,
-          // Pinned to the true viewport edge up to 1500px wide (max(0, ...) is 0 below that,
-          // same as before). Past 1500px the whole shell (this + main content) should read as
-          // a centered 1500px-wide app, not stretch the sidebar to the raw viewport edge.
-          left: "max(0px, calc((100vw - 1500px) / 2))",
+          // Pinned to the true viewport edge up to 1920px wide (max(0, ...) is 0 below that,
+          // same as before). Past 1920px the whole shell (this + main content) should read as
+          // a centered 1920px-wide app, not stretch the sidebar to the raw viewport edge.
+          left: "max(0px, calc((100vw - 1920px) / 2))",
           zIndex: 40,
           width: sidebarWidth,
           display: "flex",
           flexDirection: "column",
-          background: "rgba(10, 11, 16, 0.55)",
-          borderRight: "1px solid rgba(255,255,255,0.04)",
-          backdropFilter: "blur(30px)",
-          WebkitBackdropFilter: "blur(20px)",
-          transition: "width 0.25s cubic-bezier(0.4,0,0.2,1)",
+          background: "#08090f",
+          borderRight: "1px solid rgba(255,255,255,0.08)",
+          transition: "width 0.2s ease",
           overflow: "hidden",
           // Keeps content clear of the notch/home-indicator in standalone/PWA mode
           // (see viewportFit:"cover" in app/layout.tsx) while the background above
@@ -398,7 +403,6 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
                   width: 30, height: 30, borderRadius: 8,
                   background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
                   display: "grid", placeItems: "center",
-                  boxShadow: "0 0 14px var(--brand-glow)",
                   flexShrink: 0,
                 }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
@@ -431,7 +435,6 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
                 width: 30, height: 30, borderRadius: 8,
                 background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
                 display: "grid", placeItems: "center",
-                boxShadow: "0 0 14px var(--brand-glow)",
               }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
                   <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
@@ -499,58 +502,9 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
             </p>
           )}
           <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-            <NavLink item={PINNED_NAV_ITEM} pathname={pathname} collapsed={collapsed} />
-
-            {NAV_GROUPS.map((group) => {
-              const isOpen = collapsed || openGroups.has(group.id);
-              const groupHasActive = group.items.some((i) => pathname.startsWith(i.href));
-              return (
-                <li key={group.id} style={{ marginTop: "0.3rem" }}>
-                  {!collapsed && (
-                    <button
-                      type="button"
-                      onClick={() => toggleGroup(group.id)}
-                      aria-expanded={isOpen}
-                      className="dash-classic-nav-group-header"
-                      style={{
-                        width: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: "0.5rem",
-                        padding: "0.4rem 0.5rem",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                        fontSize: "0.68rem",
-                        fontWeight: 700,
-                        letterSpacing: "0.09em",
-                        textTransform: "uppercase",
-                        color: groupHasActive ? "rgba(240,242,255,0.5)" : "rgba(240,242,255,0.28)",
-                        transition: "color 0.15s",
-                      }}
-                    >
-                      <span>{group.label}</span>
-                      <span style={{
-                        display: "inline-flex",
-                        transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-                        transition: "transform 0.2s",
-                      }}>
-                        <IconChevronDown />
-                      </span>
-                    </button>
-                  )}
-                  {isOpen && (
-                    <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "0.2rem", marginTop: collapsed ? 0 : "0.1rem" }}>
-                      {group.items.map((item) => (
-                        <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} />
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              );
-            })}
+            {NAV_ITEMS.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} collapsed={collapsed} />
+            ))}
           </ul>
         </nav>
 
@@ -659,14 +613,14 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
         className="dash-classic-main"
         style={{
           flex: 1,
-          marginLeft: `calc(${sidebarWidth + contentGutter}px + max(0px, calc((100vw - 1500px) / 2)))`,
-          maxWidth: `calc(1500px - ${sidebarWidth + contentGutter}px)`,
+          marginLeft: `calc(${sidebarWidth + contentGutter}px + max(0px, calc((100vw - 1920px) / 2)))`,
+          maxWidth: `calc(1920px - ${sidebarWidth + contentGutter}px)`,
           minHeight: "100vh",
           transition: "margin-left 0.25s cubic-bezier(0.4,0,0.2,1)",
           background: "var(--bg)",
         }}
       >
-        <div className="dash-classic-banner" style={{ padding: "2rem 8px 0", maxWidth: 1500, margin: "0 auto" }}>
+        <div className="dash-classic-banner" style={{ padding: "2rem 8px 0", maxWidth: 1920, margin: "0 auto" }}>
           <LayoutSwitchBanner />
         </div>
         {children}
