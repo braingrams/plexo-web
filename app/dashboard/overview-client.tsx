@@ -1,77 +1,76 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
-import { TemplateCard, type TemplateSummary } from "./templates/TemplateCard";
-import { TrafficChart, type TimelineDay } from "./_components/TrafficChart";
-import { ActivityHeatmap, type HeatmapPoint } from "./_components/ActivityHeatmap";
+import type { TemplateKind } from "@prisma/client";
 
-type Props = {
-  userName: string;
-  plan: string;
-  hasTemplates: boolean;
-  hasDomains: boolean;
-  hasApiKeys: boolean;
-  hasViews: boolean;
-  templatesCount: number;
-  domainsCount: number;
-  apiKeysCount: number;
-  recentTemplates: TemplateSummary[];
+export type OverviewTemplateRow = {
+  id: string;
+  name: string;
+  kind: TemplateKind;
+  updatedAt: string;
+  pageCount: number;
+  isLive: boolean;
 };
 
-function IconPlus() {
+export type NeedsAttentionItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  actionLabel: string;
+  href: string;
+  tone: "warning" | "info";
+};
+
+export type ActivityItem = {
+  id: string;
+  text: string;
+  when: string;
+};
+
+type Props = {
+  organizationName: string;
+  plan: string;
+  templatesCount: number;
+  liveTemplatesCount: number;
+  domainsCount: number;
+  unverifiedDomainsCount: number;
+  apiKeysCount: number;
+  /** Page views in the 7-day window before the current one — lets the client compute a
+   * real trend percentage once the current window's total arrives from /api/v1/analytics. */
+  previousViews7d: number;
+  recentTemplates: OverviewTemplateRow[];
+  needsAttention: NeedsAttentionItem[];
+  recentActivity: ActivityItem[];
+};
+
+type TimelineDay = { date: string; views: number; uniqueVisitors: number };
+
+const hairline = "rgba(255,255,255,0.09)";
+const hairlineSoft = "rgba(255,255,255,0.055)";
+
+function IconTrendUp() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <polyline points="6 11 12 5 18 11" />
     </svg>
   );
 }
 
-function IconLayers() {
+function IconTrendDown() {
   return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" />
-    </svg>
-  );
-}
-
-function IconKey() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-    </svg>
-  );
-}
-
-function IconEyeSmall() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-function IconArrowRight() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-    </svg>
-  );
-}
-
-function IconSparkle() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 2z" />
-      <path d="M19 3v3M20.5 4.5H17.5" />
-      <path d="M5 17v2.5M6.25 18.25H3.75" />
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <polyline points="6 13 12 19 18 13" />
     </svg>
   );
 }
 
 function IconMarketplace() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ec4899" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
       <path d="M4 8l1.5-4h13L20 8" />
       <path d="M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8z" />
       <path d="M9 12a3 3 0 0 0 6 0" />
@@ -79,398 +78,448 @@ function IconMarketplace() {
   );
 }
 
-function IconGlobe() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" />
-      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-    </svg>
-  );
-}
-
 function IconBrain() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
       <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
       <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
     </svg>
   );
 }
 
-function IconBook() {
+function IconSdk() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="16 18 22 12 16 6" />
+      <polyline points="8 6 2 12 8 18" />
     </svg>
   );
 }
 
-function Sparkline({ data }: { data: TimelineDay[] }) {
-  const { d, points } = useMemo(() => {
-    if (data.length === 0) return { d: "", points: [] as { x: number; y: number }[] };
-    const w = 100;
-    const h = 28;
-    const max = Math.max(1, ...data.map((p) => p.views));
-    const pts = data.map((p, i) => ({
-      x: (i / Math.max(1, data.length - 1)) * w,
-      y: h - (p.views / max) * (h - 4) - 2,
+function timeAgo(iso: string): string {
+  const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
+
+function TrafficChart({ chartData }: { chartData: TimelineDay[] }) {
+  const width = 900;
+  const height = 168;
+  const top = 14;
+  const baseline = 138;
+  const plotHeight = baseline - top;
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
+  const { pathD, areaD, points, maxVal } = useMemo(() => {
+    if (chartData.length === 0) {
+      return { pathD: "", areaD: "", points: [] as { x: number; y: number }[], maxVal: 0 };
+    }
+    const max = Math.max(1, ...chartData.map((d) => d.views));
+    const step = width / Math.max(1, chartData.length - 1);
+    const pts = chartData.map((d, i) => ({
+      x: i * step,
+      y: top + plotHeight - (d.views / max) * plotHeight,
     }));
-    return { d: pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" "), points: pts };
-  }, [data]);
+    const line = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+    const area = line ? `${line} L ${pts[pts.length - 1].x} ${baseline} L ${pts[0].x} ${baseline} Z` : "";
+    return { pathD: line, areaD: area, points: pts, maxVal: max };
+  }, [chartData]);
 
-  if (!d) return null;
-  return (
-    <svg width="100%" height="28" viewBox="0 0 100 28" preserveAspectRatio="none" style={{ display: "block" }}>
-      <path d={d} fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      {points.length > 0 && <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="2.5" fill="#fff" style={{ filter: "drop-shadow(0 0 4px var(--brand))" }} />}
-    </svg>
-  );
-}
+  const activeIndex = hoverIndex ?? points.length - 1;
+  const active = points[activeIndex];
+  const activeDay = chartData[activeIndex];
+  const gridLines = [0.25, 0.5, 0.75].map((r) => top + plotHeight * r);
 
-function greeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 5) return "System online, working late";
-  if (hour < 12) return "System online, good morning";
-  if (hour < 18) return "System online, good afternoon";
-  return "System online, good evening";
-}
-
-// Reusable Holographic Card with Mouse Tracking
-function HolographicCard({ children, className, style, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  const [mousePos, setMousePos] = useState({ x: 50, y: 50 });
-  const ref = useRef<HTMLDivElement>(null);
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!ref.current) return;
-    const rect = ref.current.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    setMousePos({ x, y });
-
-    // Subtle 3D tilt effect
-    const rotateY = ((e.clientX - rect.left) / rect.width - 0.5) * 10;
-    const rotateX = ((e.clientY - rect.top) / rect.height - 0.5) * -10;
-    ref.current.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) scale3d(1.02, 1.02, 1.02)`;
-  };
-
-  const handleMouseLeave = () => {
-    if (!ref.current) return;
-    ref.current.style.transform = "perspective(1000px) rotateX(0) rotateY(0) scale3d(1, 1, 1)";
-  };
+  function handleMove(e: ReactMouseEvent<SVGSVGElement>) {
+    if (!svgRef.current || points.length === 0) return;
+    const rect = svgRef.current.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    const idx = Math.round(ratio * (points.length - 1));
+    setHoverIndex(Math.min(points.length - 1, Math.max(0, idx)));
+  }
 
   return (
-    <div
-      ref={ref}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      className={`holographic-card ${className || ""}`}
-      style={{
-        "--mouse-x": `${mousePos.x}%`,
-        "--mouse-y": `${mousePos.y}%`,
-        ...style,
-      } as React.CSSProperties}
-      {...props}
-    >
-      {children}
-    </div>
-  );
-}
-
-// Very Concise & Slim Action Pill for Launchpad
-function ActionPill({ title, icon, colorStart, colorEnd, href, delayClass }: { title: string, icon: React.ReactNode, colorStart: string, colorEnd: string, href: string, delayClass: string }) {
-  return (
-    <Link
-      href={href}
-      className={`bento-enter ${delayClass}`}
-      style={{
-        textDecoration: "none",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "0.5rem",
-        padding: "0.4rem 0.75rem",
-        borderRadius: "12px",
-        background: `linear-gradient(135deg, ${colorStart} 0%, ${colorEnd} 100%)`,
-        border: "1px solid transparent",
-        boxShadow: `0 4px 12px ${colorStart}20`,
-        transition: "all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
-        color: "#fff",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-2px)";
-        e.currentTarget.style.boxShadow = `0 8px 20px ${colorStart}50`;
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.boxShadow = `0 4px 12px ${colorStart}20`;
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, opacity: 0.95 }}>
-        {icon}
+    <>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6, minHeight: 34 }}>
+        {activeDay && (
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 650, color: "var(--text-main)" }}>
+              {activeDay.views.toLocaleString()} views
+            </div>
+            <div style={{ fontSize: "10.5px", color: "var(--text-faint)" }}>
+              {hoverIndex === null ? "latest" : "on"} &middot; {activeDay.date}
+            </div>
+          </div>
+        )}
       </div>
-      <span style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.02em" }}>{title}</span>
-    </Link>
-  );
-}
-
-function getAiContext(props: Props, totalViews: number, chartData: TimelineDay[]): string {
-  if (!props.hasTemplates) {
-    return "I noticed you haven't initialized any blueprints yet. Recommend navigating to the Marketplace to discover our top-performing layouts.";
-  }
-  if (!props.hasDomains) {
-    return `Your workspace holds ${props.templatesCount} templates, but no custom domains are active. Connect a domain to establish brand authority.`;
-  }
-  if (totalViews > 0 && !props.hasApiKeys) {
-    return `Traffic detected (${totalViews.toLocaleString()} views). Unlock programmatic access and advanced endpoints by generating an API Key.`;
-  }
-  if (totalViews > 1000) {
-    return `Incredible velocity. Views have exceeded ${totalViews.toLocaleString()}. Recommend deploying edge caching optimizations on active domains.`;
-  }
-  if (chartData.length > 0 && chartData[chartData.length - 1].views > 100) {
-    return "Recent surge in traffic detected. The energy matrix indicates high engagement periods. Maintain your current trajectory.";
-  }
-  return `All systems operational. ${props.templatesCount} templates deployed, endpoints responding within optimal latency.`;
-}
-
-// AI Terminal Co-Pilot Widget (Context Aware)
-function AiTerminal({ contextText }: { contextText: string }) {
-  const [displayed, setDisplayed] = useState("");
-
-  useEffect(() => {
-    setDisplayed("");
-    let i = 0;
-    const interval = setInterval(() => {
-      setDisplayed(contextText.slice(0, i));
-      i++;
-      if (i > contextText.length) clearInterval(interval);
-    }, 35);
-    return () => clearInterval(interval);
-  }, [contextText]);
-
-  return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "var(--brand)" }}>
-        <IconSparkle />
-        <span style={{ fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase" }}>Co-Pilot Active</span>
+      <svg
+        ref={svgRef}
+        width="100%"
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        style={{ display: "block", cursor: points.length > 1 ? "crosshair" : "default" }}
+        onMouseMove={handleMove}
+        onMouseLeave={() => setHoverIndex(null)}
+      >
+        <defs>
+          <linearGradient id="overviewChartFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {gridLines.map((y) => (
+          <line key={y} x1="0" y1={y} x2={width} y2={y} stroke={hairlineSoft} strokeWidth="1" />
+        ))}
+        <line x1="0" y1={baseline} x2={width} y2={baseline} stroke={hairline} strokeWidth="1" />
+        {areaD && <path d={areaD} fill="url(#overviewChartFill)" />}
+        {pathD && (
+          <path d={pathD} fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        )}
+        {active && hoverIndex !== null && (
+          <line x1={active.x} y1={top} x2={active.x} y2={baseline} stroke="rgba(139,92,246,0.35)" strokeWidth="1" strokeDasharray="3 3" />
+        )}
+        {active && (
+          <circle
+            cx={active.x}
+            cy={active.y}
+            r={hoverIndex === null ? 3 : 4.5}
+            fill={hoverIndex === null ? "#8b5cf6" : "#0d0f1a"}
+            stroke="#8b5cf6"
+            strokeWidth={hoverIndex === null ? 0 : 2}
+          />
+        )}
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10 }}>
+        {chartData.map((d, i) => (
+          <span
+            key={d.date}
+            style={{
+              fontSize: "10.5px",
+              color: i === activeIndex ? "var(--text-main)" : "var(--text-muted)",
+              fontWeight: i === activeIndex ? 650 : 400,
+            }}
+          >
+            {d.date}
+          </span>
+        ))}
       </div>
-      <div className="typing-cursor" style={{ fontFamily: "var(--font-mono)", fontSize: "0.85rem", color: "#e2e8f0", lineHeight: 1.5, marginTop: "0.75rem", flex: 1 }}>
-        {displayed}
-      </div>
-      {displayed.length === contextText.length && (
-        <button style={{
-          background: "rgba(139, 92, 246, 0.15)", border: "1px solid rgba(139, 92, 246, 0.3)",
-          color: "#a78bfa", padding: "0.4rem 0.75rem", borderRadius: 8, fontSize: "0.75rem", fontWeight: 600,
-          cursor: "pointer", display: "inline-block", width: "fit-content", marginTop: "1rem", transition: "background 0.2s"
-        }}>
-          Apply tokens
-        </button>
+      {maxVal === 0 && (
+        <p style={{ marginTop: 10, fontSize: "12.5px", color: "var(--text-faint)" }}>No views recorded in this window yet.</p>
       )}
-    </div>
+    </>
   );
+}
+
+function toneColor(tone: "warning" | "info"): string {
+  return tone === "warning" ? "var(--warning)" : "#38bdf8";
+}
+
+function kindLabel(kind: TemplateKind): string {
+  return kind === "LANDING_PAGE" ? "Landing Page" : "Email";
 }
 
 export function OverviewClient(props: Props) {
-  const { userName, plan, hasTemplates, hasDomains, hasApiKeys, hasViews, templatesCount, domainsCount, apiKeysCount, recentTemplates } = props;
+  const {
+    organizationName,
+    plan,
+    templatesCount,
+    liveTemplatesCount,
+    domainsCount,
+    unverifiedDomainsCount,
+    apiKeysCount,
+    previousViews7d,
+    recentTemplates,
+    needsAttention,
+    recentActivity,
+  } = props;
 
-  const [totalViews, setTotalViews] = useState(0);
   const [chartData, setChartData] = useState<TimelineDay[]>([]);
-  const [heatmapData, setHeatmapData] = useState<HeatmapPoint[]>([]);
-  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [totalViews, setTotalViews] = useState<number | null>(null);
+  const [loadingViews, setLoadingViews] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     fetch("/api/v1/analytics")
       .then((res) => res.json())
       .then((data) => {
-        if (data.success) {
-          setTotalViews(data.totalViews);
-          setChartData(data.chartData ?? []);
-          setHeatmapData(data.heatmap ?? []);
-        }
+        if (cancelled || !data.success) return;
+        setChartData(data.chartData ?? []);
+        setTotalViews(data.totalViews ?? 0);
       })
-      .catch((err) => console.error("Error loading analytics:", err))
-      .finally(() => setAnalyticsLoading(false));
+      .catch(() => {
+        if (!cancelled) setTotalViews(0);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingViews(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const hasAnyViews = chartData.some((d) => d.views > 0);
-  const aiContextText = useMemo(() => getAiContext(props, totalViews, chartData), [props, totalViews, chartData]);
+  const viewsTrendPct = useMemo(() => {
+    if (totalViews === null || previousViews7d <= 0) return null;
+    return ((totalViews - previousViews7d) / previousViews7d) * 100;
+  }, [totalViews, previousViews7d]);
 
   return (
-    <div style={{ paddingBottom: "2rem" }}>
-      <div className="bento-grid">
-
-        {/* Row 1: Hero (Span 3) + AI Co-Pilot (Span 1) */}
-        <HolographicCard className="bento-col-span-3 bento-enter" style={{ background: "linear-gradient(135deg, rgba(139,92,246,0.1), rgba(15,20,34,0.6) 80%)" }}>
-          <div style={{ position: "absolute", top: -100, right: -100, width: 400, height: 400, background: "radial-gradient(circle, rgba(139,92,246,0.2) 0%, transparent 70%)", filter: "blur(40px)", zIndex: -1 }} />
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", height: "100%", flexDirection: "column" }}>
-            <div>
-              <span style={{
-                fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase",
-                color: "var(--brand)", display: "flex", alignItems: "center", gap: "0.4rem"
-              }}>
-                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981", boxShadow: "0 0 10px #10b981" }} />
-                {greeting()}
-              </span>
-              <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "clamp(1.8rem, 4vw, 2.6rem)", fontWeight: 800, color: "#fff", letterSpacing: "-0.03em", lineHeight: 1.1, margin: "0.75rem 0 0.5rem" }}>
-                Welcome back, {userName}
-              </h1>
-              <p style={{ fontSize: "0.9rem", color: "rgba(255,255,255,0.6)", maxWidth: 500, margin: 0 }}>
-                All systems nominal. Your {plan} workspace is operating at peak efficiency.
-              </p>
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "2rem" }}>
-              <Link
-                href="/dashboard/templates"
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: "0.5rem",
-                  padding: "0.75rem 1.4rem", borderRadius: 12, fontWeight: 700, fontSize: "0.85rem",
-                  background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
-                  color: "#fff", textDecoration: "none",
-                  boxShadow: "0 10px 30px var(--brand-glow), inset 0 1px 0 rgba(255,255,255,0.2)",
-                  transition: "transform 0.2s, box-shadow 0.2s"
-                }}
-              >
-                <IconPlus />
-                Initialize New Template
-              </Link>
-            </div>
-          </div>
-        </HolographicCard>
-
-        {/* AI Co-Pilot Terminal */}
-        <HolographicCard className="bento-enter delay-100" style={{ background: "rgba(10, 11, 16, 0.6)", border: "1px solid rgba(139, 92, 246, 0.2)" }}>
-          <AiTerminal contextText={aiContextText} />
-        </HolographicCard>
-
-        {/* Restored KPIs Row */}
-        <HolographicCard className="bento-enter delay-200">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-            <span style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)" }}>Templates</span>
-            <span style={{ color: "var(--brand)" }}><IconLayers /></span>
-          </div>
-          <span style={{ fontSize: "2rem", fontWeight: 800, color: "#fff", display: "block" }}>{templatesCount}</span>
-          <Link href="/dashboard/templates" style={{ fontSize: "0.75rem", color: "var(--brand)", marginTop: "auto", display: "inline-flex", alignItems: "center", gap: "0.3rem", textDecoration: "none", fontWeight: 600 }}>
-            Manage <IconArrowRight />
-          </Link>
-        </HolographicCard>
-
-        <HolographicCard className="bento-enter delay-300">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-            <span style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)" }}>Live Domains</span>
-            <span style={{ color: "#38bdf8" }}><IconGlobe /></span>
-          </div>
-          <span style={{ fontSize: "2rem", fontWeight: 800, color: "#fff", display: "block" }}>{domainsCount}</span>
-          <Link href="/dashboard/domains" style={{ fontSize: "0.75rem", color: "#38bdf8", marginTop: "auto", display: "inline-flex", alignItems: "center", gap: "0.3rem", textDecoration: "none", fontWeight: 600 }}>
-            Configure <IconArrowRight />
-          </Link>
-        </HolographicCard>
-
-        <HolographicCard className="bento-enter delay-400">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-            <span style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)" }}>API Keys</span>
-            <span style={{ color: "#f59e0b" }}><IconKey /></span>
-          </div>
-          <span style={{ fontSize: "2rem", fontWeight: 800, color: "#fff", display: "block" }}>{apiKeysCount}</span>
-          <Link href="/dashboard/settings" style={{ fontSize: "0.75rem", color: "#f59e0b", marginTop: "auto", display: "inline-flex", alignItems: "center", gap: "0.3rem", textDecoration: "none", fontWeight: 600 }}>
-            View Tokens <IconArrowRight />
-          </Link>
-        </HolographicCard>
-
-        <HolographicCard className="bento-enter delay-400">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-            <span style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.4)" }}>Views (7d)</span>
-            <span style={{ color: "#10b981" }}><IconEyeSmall /></span>
-          </div>
-          <span style={{ fontSize: "2rem", fontWeight: 800, color: "#fff", display: "block", marginBottom: "0.5rem" }}>{totalViews.toLocaleString()}</span>
-          <Sparkline data={chartData} />
-        </HolographicCard>
-
-
-
-        {/* Row 3: Traffic Pulse & Heatmap */}
-        <HolographicCard className="bento-col-span-2 bento-enter delay-500" style={{ minHeight: 300, display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem", zIndex: 1 }}>
-            <div>
-              <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#fff", margin: 0, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                Traffic Pulse <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--brand)", boxShadow: "0 0 10px var(--brand)" }} />
-              </h2>
-              <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.5)", margin: "0.25rem 0 0" }}>Live global activity across your assets.</p>
-            </div>
-            <Link href="/dashboard/insights" style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}>Open Scanner</Link>
-          </div>
-
-          <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "flex-end", paddingBottom: "1rem" }}>
-            {/* Ambient Pulse Effect in Background */}
-            <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", opacity: 0.2, zIndex: 0 }}>
-              <div style={{ position: "relative", width: 100, height: 100 }}>
-                <div className="radar-pulse" />
-                <div className="radar-pulse" style={{ animationDelay: "1s" }} />
-              </div>
-            </div>
-            <div style={{ width: "100%", zIndex: 1 }}>
-              {analyticsLoading ? (
-                <div style={{ height: 150, display: "grid", placeItems: "center", color: "rgba(255,255,255,0.3)" }}>Calibrating sensors…</div>
-              ) : hasAnyViews ? (
-                <TrafficChart chartData={chartData} height={180} />
-              ) : (
-                <div style={{ height: 150, display: "grid", placeItems: "center", color: "rgba(255,255,255,0.3)" }}>No signatures detected.</div>
-              )}
-            </div>
-          </div>
-        </HolographicCard>
-
-        <HolographicCard className="bento-col-span-2 bento-enter delay-500" style={{ minHeight: 300 }}>
-          <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#fff", margin: 0 }}>Energy Matrix</h2>
-          <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.5)", margin: "0.25rem 0 1.5rem" }}>Temporal visitor density.</p>
-          <div style={{ flex: 1 }}>
-            <ActivityHeatmap data={heatmapData} />
-          </div>
-        </HolographicCard>
+    <div style={{ color: "var(--text-main)" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: "2.5rem" }}>
+        <div>
+          <h1 style={{ margin: "0 0 6px", fontSize: "30px", fontWeight: 700, letterSpacing: "-0.02em" }}>Overview</h1>
+          <p style={{ margin: 0, fontSize: "13.5px", color: "var(--text-muted)" }}>
+            {organizationName} &middot; {plan} plan
+          </p>
+        </div>
+        <Link
+          href="/dashboard/new"
+          style={{
+            fontSize: "13px",
+            fontWeight: 650,
+            color: "var(--bg)",
+            background: "var(--text-main)",
+            padding: "9px 16px",
+            borderRadius: 7,
+            textDecoration: "none",
+          }}
+        >
+          Host a site
+        </Link>
       </div>
 
-      {/* Launchpad Quick Actions (Exactly 5rem tall) */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "0.5rem", margin: "1.25rem 0", height: "4rem" }}>
-        <ActionPill title="Explore Marketplace" icon={<IconMarketplace />} colorStart="#ec4899" colorEnd="#f43f5e" href="/dashboard/marketplace" delayClass="delay-500" />
-        <ActionPill title="Configure Domains" icon={<IconGlobe />} colorStart="#0ea5e9" colorEnd="#3b82f6" href="/dashboard/domains" delayClass="delay-600" />
-        <ActionPill title="AI Integrations" icon={<IconBrain />} colorStart="#8b5cf6" colorEnd="#6366f1" href="/dashboard/integrations" delayClass="delay-600" />
-        <ActionPill title="Read the Blog" icon={<IconBook />} colorStart="#10b981" colorEnd="#14b8a6" href="/dashboard/blog" delayClass="delay-700" />
+      {/* Stat strip */}
+      <div style={{ height: 1, background: hairline }} />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", padding: "26px 0" }}>
+        <div style={{ paddingRight: 32 }}>
+          <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
+            Templates
+          </div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
+            {templatesCount}
+          </div>
+          <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
+            <span style={{ color: "var(--success)", fontWeight: 650 }}>{liveTemplatesCount}</span> live
+          </div>
+        </div>
+        <div style={{ padding: "0 32px", borderLeft: `1px solid ${hairlineSoft}` }}>
+          <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
+            Live domains
+          </div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
+            {domainsCount}
+          </div>
+          <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
+            {unverifiedDomainsCount > 0 ? (
+              <>
+                <span style={{ color: "var(--warning)", fontWeight: 650 }}>{unverifiedDomainsCount}</span> pending verification
+              </>
+            ) : (
+              "All verified"
+            )}
+          </div>
+        </div>
+        <div style={{ padding: "0 32px", borderLeft: `1px solid ${hairlineSoft}` }}>
+          <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
+            Views &middot; 7d
+          </div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
+            {loadingViews ? "—" : (totalViews ?? 0).toLocaleString()}
+          </div>
+          <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
+            {viewsTrendPct === null ? (
+              "vs previous 7d"
+            ) : (
+              <>
+                <span
+                  style={{
+                    color: viewsTrendPct >= 0 ? "var(--success)" : "var(--danger)",
+                    fontWeight: 650,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 3,
+                  }}
+                >
+                  {viewsTrendPct >= 0 ? <IconTrendUp /> : <IconTrendDown />}
+                  {Math.abs(viewsTrendPct).toFixed(1)}%
+                </span>{" "}
+                vs previous 7d
+              </>
+            )}
+          </div>
+        </div>
+        <div style={{ paddingLeft: 32, borderLeft: `1px solid ${hairlineSoft}` }}>
+          <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
+            API keys
+          </div>
+          <div style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
+            {apiKeysCount}
+          </div>
+          <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
+            <Link href="/dashboard/settings" style={{ color: "var(--brand)", fontWeight: 600 }}>
+              View keys
+            </Link>
+          </div>
+        </div>
       </div>
+      <div style={{ height: 1, background: hairline }} />
 
-      <div className="bento-grid">
-        {/* Row 4: Restored Templates Grid (Dense Layout inside Bento) */}
-        <HolographicCard className="bento-col-span-4 bento-enter delay-600">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#fff", margin: 0 }}>Active Blueprints</h2>
-            {recentTemplates.length > 0 && (
-              <Link href="/dashboard/templates" style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--brand)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
-                View Database <IconArrowRight />
-              </Link>
+      {/* Traffic + Needs attention */}
+      <div style={{ display: "flex", alignItems: "stretch", padding: "32px 0" }}>
+        <div style={{ flex: "0 0 65%", paddingRight: 40 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 22 }}>
+            <span style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+              Traffic &middot; 7 days
+            </span>
+            <Link href="/dashboard/insights" style={{ fontSize: "12.5px", fontWeight: 650, color: "var(--brand)", textDecoration: "none" }}>
+              Open Insights &rarr;
+            </Link>
+          </div>
+          <TrafficChart chartData={chartData} />
+        </div>
+
+        <div style={{ width: 1, background: hairline, alignSelf: "stretch" }} />
+
+        <div style={{ flex: 1, paddingLeft: 40 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
+            <span style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+              Needs attention
+            </span>
+            {needsAttention.length > 0 && (
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-muted)" }}>{needsAttention.length}</span>
             )}
           </div>
 
-          {recentTemplates.length > 0 ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem" }}>
-              {recentTemplates.map((template) => (
-                <TemplateCard key={template.id} template={template} />
+          {needsAttention.length === 0 ? (
+            <p style={{ fontSize: "12.5px", color: "var(--text-faint)", margin: 0 }}>All caught up — nothing needs your attention.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {needsAttention.map((item, i) => (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: "13px 0",
+                    borderTop: `1px solid ${hairlineSoft}`,
+                    borderBottom: i === needsAttention.length - 1 ? `1px solid ${hairlineSoft}` : undefined,
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                    <span style={{ fontSize: "13px", fontWeight: 650 }}>{item.title}</span>
+                    <Link
+                      href={item.href}
+                      style={{
+                        fontSize: "11.5px",
+                        fontWeight: 700,
+                        color: toneColor(item.tone),
+                        textTransform: "uppercase",
+                        letterSpacing: "0.03em",
+                        textDecoration: "none",
+                      }}
+                    >
+                      {item.actionLabel}
+                    </Link>
+                  </div>
+                  <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{item.subtitle}</div>
+                </div>
               ))}
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* Recent templates + Activity */}
+      <div style={{ display: "flex", alignItems: "stretch", padding: "0 0 32px" }}>
+        <div style={{ flex: "0 0 65%", paddingRight: 40 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 18 }}>
+            <span style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+              Recent templates
+            </span>
+            <Link href="/dashboard/templates" style={{ fontSize: "12.5px", fontWeight: 650, color: "var(--brand)", textDecoration: "none" }}>
+              View all &rarr;
+            </Link>
+          </div>
+
+          <div style={{ display: "flex", paddingBottom: 10, borderBottom: `1px solid ${hairline}` }}>
+            <span style={{ flex: 1, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)" }}>Name</span>
+            <span style={{ width: 100, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)" }}>Type</span>
+            <span style={{ width: 60, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)", textAlign: "right" }}>Pages</span>
+            <span style={{ width: 90, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)", textAlign: "right" }}>Updated</span>
+          </div>
+
+          {recentTemplates.length === 0 ? (
+            <p style={{ fontSize: "12.5px", color: "var(--text-faint)", padding: "16px 0 0" }}>No templates yet.</p>
           ) : (
-            <div style={{ textAlign: "center", padding: "4rem 2rem", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: 16 }}>
-              <h3 style={{ fontSize: "1.1rem", color: "#fff", margin: "0 0 0.5rem" }}>No blueprints found.</h3>
-              <p style={{ fontSize: "0.85rem", color: "rgba(255,255,255,0.5)", marginBottom: "1.5rem" }}>Initialize your first template to populate this sector.</p>
-              <Link href="/dashboard/templates" style={{
-                display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.7rem 1.4rem",
-                borderRadius: 10, fontSize: "0.85rem", fontWeight: 700,
-                background: "rgba(139,92,246,0.2)", color: "#a78bfa", textDecoration: "none",
-                border: "1px solid rgba(139,92,246,0.3)", transition: "background 0.2s"
-              }}>
-                <IconPlus /> Initialize Template
+            recentTemplates.map((t, i) => (
+              <Link
+                key={t.id}
+                href={`/dashboard/templates/${t.id}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  padding: "13px 0",
+                  borderBottom: i === recentTemplates.length - 1 ? undefined : `1px solid ${hairlineSoft}`,
+                  textDecoration: "none",
+                  color: "inherit",
+                }}
+              >
+                <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 9, fontSize: "13.5px", fontWeight: 600 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.isLive ? "var(--success)" : "var(--text-faint)", flexShrink: 0 }} />
+                  {t.name}
+                </span>
+                <span style={{ width: 100, fontSize: "12.5px", color: "var(--text-muted)" }}>{kindLabel(t.kind)}</span>
+                <span style={{ width: 60, fontSize: "12.5px", color: "var(--text-muted)", textAlign: "right", fontFamily: "var(--font-mono)" }}>
+                  {t.kind === "LANDING_PAGE" ? t.pageCount + 1 : "—"}
+                </span>
+                <span style={{ width: 90, fontSize: "12.5px", color: "var(--text-faint)", textAlign: "right" }}>{timeAgo(t.updatedAt)}</span>
               </Link>
+            ))
+          )}
+        </div>
+
+        <div style={{ width: 1, background: hairline, alignSelf: "stretch" }} />
+
+        <div style={{ flex: 1, paddingLeft: 40 }}>
+          <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 18 }}>
+            Activity
+          </div>
+          {recentActivity.length === 0 ? (
+            <p style={{ fontSize: "12.5px", color: "var(--text-faint)", margin: 0 }}>Nothing to show yet.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
+              {recentActivity.map((item) => (
+                <div key={item.id} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-muted)", flexShrink: 0, minWidth: 50 }}>
+                    {timeAgo(item.when)}
+                  </span>
+                  <span style={{ fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.5 }}>{item.text}</span>
+                </div>
+              ))}
             </div>
           )}
-        </HolographicCard>
+        </div>
+      </div>
 
+      {/* Footer discovery links */}
+      <div style={{ height: 1, background: hairline, marginTop: 4 }} />
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 28, paddingTop: 22 }}>
+        <Link href="/dashboard/marketplace" style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: "12.5px", fontWeight: 600, color: "var(--text-muted)", textDecoration: "none" }}>
+          <IconMarketplace /> Marketplace
+        </Link>
+        <Link href="/dashboard/integrations" style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: "12.5px", fontWeight: 600, color: "var(--text-muted)", textDecoration: "none" }}>
+          <IconBrain /> AI integrations
+        </Link>
+        <Link href="/dashboard/sdk" style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: "12.5px", fontWeight: 600, color: "var(--text-muted)", textDecoration: "none" }}>
+          <IconSdk /> API &amp; SDK
+        </Link>
       </div>
     </div>
   );
