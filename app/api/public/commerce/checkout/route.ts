@@ -6,6 +6,8 @@ import { prisma } from "@/server/prisma";
 import { resolveSite } from "@/lib/pub/resolveSite";
 import { decryptPaystackKey } from "@/lib/crypto";
 import { initializePaystackTransaction } from "@/lib/paystack";
+import { isSlotAvailable } from "@/lib/commerce/availability";
+import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimit";
 
 function generateOrderNumber(): string {
   return `ORD-${randomBytes(4).toString("hex").toUpperCase()}`;
@@ -23,9 +25,7 @@ function isValidEmail(email: string): boolean {
  * Starts a Commerce purchase or service booking: creates a PENDING order (+ booking hold,
  * for services) and hands back a Paystack hosted-checkout URL to redirect the visitor to.
  * Unauthenticated by necessity (any site visitor hits this) — see the Commerce plan's
- * "production hardening" notes; rate limiting on this endpoint is a follow-up (step 3),
- * everything else here (server-computed pricing, atomic stock/slot guards, mode integrity)
- * is not.
+ * "production hardening" notes.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const hostname = (request.headers.get("host") ?? "").split(":")[0];
@@ -35,6 +35,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   const { templateId, organization } = siteResult.published;
   const organizationId = organization.id;
+
+  const allowed = await checkCommerceRateLimit(`commerce:checkout:${templateId}:${clientIp(request)}`, 10);
+  if (!allowed) {
+    return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
+  }
 
   let body: Record<string, unknown>;
   try {
@@ -81,6 +86,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "scheduledStart must be a valid future date." }, { status: 400 });
     }
     scheduledEnd = new Date(scheduledStart.getTime() + (product.durationMinutes ?? 60) * 60_000);
+
+    // Recompute availability server-side — never trust a client-supplied slot. This is
+    // defense in depth alongside the DB unique-constraint race guard below: it rejects a
+    // slot that was never open in the first place (outside business hours, a closed date),
+    // even when nobody else is racing for it.
+    const [rules, exceptions, existingBookings] = await Promise.all([
+      prisma.commerceAvailabilityRule.findMany({
+        where: { productId: product.id },
+        select: { dayOfWeek: true, startMinute: true, endMinute: true, timezone: true },
+      }),
+      prisma.commerceAvailabilityException.findMany({
+        where: { productId: product.id, closed: true },
+        select: { date: true, closed: true },
+      }),
+      prisma.commerceBooking.findMany({
+        where: {
+          productId: product.id,
+          OR: [{ status: "CONFIRMED" }, { status: "PENDING_PAYMENT", holdExpiresAt: { gt: new Date() } }],
+        },
+        select: { scheduledStart: true, scheduledEnd: true },
+      }),
+    ]);
+
+    if (!isSlotAvailable({ scheduledStart, scheduledEnd, rules, exceptions, existingBookings })) {
+      return NextResponse.json({ error: "That time isn't available for booking." }, { status: 400 });
+    }
   }
 
   const deliveryMethodValue =
@@ -153,6 +184,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           });
 
         if (product.kind === "SERVICE" && scheduledStart && scheduledEnd) {
+          // A previous visitor's abandoned hold on this EXACT slot doesn't get cleaned up
+          // until the expire-stale-holds cron next runs (daily — see vercel.json), but a
+          // slot listing already treats it as free the moment holdExpiresAt passes (see
+          // lib/commerce/availability.ts's query filter). Clearing it inline here, right
+          // before claiming the slot, means correctness never depends on cron cadence —
+          // the cron becomes pure housekeeping (stock restoration, general cleanup), not
+          // something a real booking attempt can be silently blocked behind for a day.
+          await tx.commerceBooking.deleteMany({
+            where: { productId: product.id, scheduledStart, status: "PENDING_PAYMENT", holdExpiresAt: { lt: new Date() } },
+          });
+
           // @@unique([productId, scheduledStart]) is the actual race guard — a second
           // concurrent request for the same slot fails here at the database, not
           // "usually" in application logic.
@@ -228,7 +270,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         await tx.commerceProduct.update({ where: { id: product.id }, data: { stockQuantity: { increment: quantity } } });
       }
       if (product.kind === "SERVICE") {
-        await tx.commerceBooking.updateMany({ where: { orderId: order.id }, data: { status: "CANCELLED", holdExpiresAt: null } });
+        // Deleted, not status-flipped to CANCELLED: @@unique([productId, scheduledStart])
+        // has no notion of status, so a row left behind here — even cancelled — would
+        // permanently squat that slot and make it unbookable by anyone, forever. The order
+        // itself keeps the full history (status FAILED); only the slot-holding row goes.
+        await tx.commerceBooking.deleteMany({ where: { orderId: order.id } });
       }
     });
     return NextResponse.json({ error: "Unable to start payment. Please try again." }, { status: 502 });

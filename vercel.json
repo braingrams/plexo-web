@@ -18,6 +18,10 @@
     {
       "path": "/api/internal/site-import/resume-stalled",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/internal/commerce/expire-stale-holds",
+      "schedule": "0 14 * * *"
     }
   ]
 }
