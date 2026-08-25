@@ -82,3 +82,16 @@ export function encryptPaystackKey(plainText: string): string {
 export function decryptPaystackKey(encoded: string): string {
   return decryptWithKey(encoded, deriveKey(requireEnv("PAYSTACK_KEY_ENCRYPTION_SECRET")));
 }
+
+/**
+ * Encrypts/decrypts a Commerce site's own MailDrip API key — another DELIBERATELY separate
+ * secret (MAILDRIP_KEY_ENCRYPTION_SECRET), same isolation rationale as the other three: a
+ * leak of any one of these secrets must never expose what the others protect.
+ */
+export function encryptMaildripKey(plainText: string): string {
+  return encryptWithKey(plainText, deriveKey(requireEnv("MAILDRIP_KEY_ENCRYPTION_SECRET")));
+}
+
+export function decryptMaildripKey(encoded: string): string {
+  return decryptWithKey(encoded, deriveKey(requireEnv("MAILDRIP_KEY_ENCRYPTION_SECRET")));
+}

@@ -1,0 +1,236 @@
+import { NextRequest, NextResponse } from "next/server";
+import { randomBytes } from "node:crypto";
+import { Prisma, type CommerceOrder } from "@prisma/client";
+
+import { prisma } from "@/server/prisma";
+import { resolveSite } from "@/lib/pub/resolveSite";
+import { decryptPaystackKey } from "@/lib/crypto";
+import { initializePaystackTransaction } from "@/lib/paystack";
+
+function generateOrderNumber(): string {
+  return `ORD-${randomBytes(4).toString("hex").toUpperCase()}`;
+}
+
+function generatePaystackReference(): string {
+  return `plx_${randomBytes(12).toString("hex")}`;
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+/**
+ * Starts a Commerce purchase or service booking: creates a PENDING order (+ booking hold,
+ * for services) and hands back a Paystack hosted-checkout URL to redirect the visitor to.
+ * Unauthenticated by necessity (any site visitor hits this) — see the Commerce plan's
+ * "production hardening" notes; rate limiting on this endpoint is a follow-up (step 3),
+ * everything else here (server-computed pricing, atomic stock/slot guards, mode integrity)
+ * is not.
+ */
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const hostname = (request.headers.get("host") ?? "").split(":")[0];
+  const siteResult = await resolveSite(hostname);
+  if (siteResult.status !== "ok") {
+    return NextResponse.json({ error: "Site not found." }, { status: 404 });
+  }
+  const { templateId, organization } = siteResult.published;
+  const organizationId = organization.id;
+
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) ?? {};
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  const { productId, quantity: rawQuantity, scheduledStart: rawScheduledStart, customerEmail, customerName, customerPhone, deliveryMethod } = body;
+
+  if (typeof productId !== "string" || !productId) {
+    return NextResponse.json({ error: "productId is required." }, { status: 400 });
+  }
+  if (typeof customerEmail !== "string" || !isValidEmail(customerEmail)) {
+    return NextResponse.json({ error: "A valid customerEmail is required." }, { status: 400 });
+  }
+
+  const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
+  if (!settings || !settings.enabled || !settings.paystackSecretKeyEncrypted || !settings.paystackPublicKey) {
+    return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
+  }
+
+  // Never trust a client-supplied price — the only thing read from the request body that
+  // ends up in amountMinor is which product and how many, resolved against this row.
+  const product = await prisma.commerceProduct.findFirst({
+    where: { id: productId, templateId, active: true },
+  });
+  if (!product) {
+    return NextResponse.json({ error: "Product not found." }, { status: 404 });
+  }
+
+  let quantity = 1;
+  let scheduledStart: Date | null = null;
+  let scheduledEnd: Date | null = null;
+
+  if (product.kind === "PHYSICAL") {
+    quantity = typeof rawQuantity === "number" && Number.isInteger(rawQuantity) && rawQuantity > 0 ? rawQuantity : 1;
+  } else {
+    if (typeof rawScheduledStart !== "string") {
+      return NextResponse.json({ error: "scheduledStart is required to book this service." }, { status: 400 });
+    }
+    scheduledStart = new Date(rawScheduledStart);
+    if (Number.isNaN(scheduledStart.getTime()) || scheduledStart.getTime() <= Date.now()) {
+      return NextResponse.json({ error: "scheduledStart must be a valid future date." }, { status: 400 });
+    }
+    scheduledEnd = new Date(scheduledStart.getTime() + (product.durationMinutes ?? 60) * 60_000);
+  }
+
+  const deliveryMethodValue =
+    product.kind === "PHYSICAL" && (deliveryMethod === "PICKUP" || deliveryMethod === "COURIER") ? deliveryMethod : null;
+
+  const amountMinor = product.priceMinor * quantity;
+
+  let order: CommerceOrder | null = null;
+  let lastError: unknown = null;
+
+  // Sentinels for the three distinct failure modes below, thrown at the exact call site
+  // that hit them — NOT classified afterward by inspecting the caught error's `meta`.
+  // The Neon driver adapter's P2002 errors carry `meta: { modelName, driverAdapterError }`
+  // with no `target` field at all (unlike the classic Prisma error shape), so matching on
+  // meta.target silently misclassifies every collision here and lets it escape as an
+  // uncaught 500 — catching each Prisma call individually sidesteps that entirely.
+  class OutOfStockError extends Error {}
+  class OrderCodeCollisionError extends Error {}
+  class SlotTakenError extends Error {}
+
+  for (let attempt = 0; attempt < 5 && !order; attempt++) {
+    const orderNumber = generateOrderNumber();
+    const reference = generatePaystackReference();
+    try {
+      order = await prisma.$transaction(async (tx) => {
+        if (product.kind === "PHYSICAL" && product.stockQuantity !== null) {
+          // Guarded update, not read-then-write: zero rows affected means someone else
+          // already took the remaining stock, not "usually did" — see the Commerce plan.
+          const stockUpdate = await tx.commerceProduct.updateMany({
+            where: { id: product.id, stockQuantity: { gte: quantity } },
+            data: { stockQuantity: { decrement: quantity } },
+          });
+          if (stockUpdate.count === 0) {
+            throw new OutOfStockError();
+          }
+        }
+
+        const createdOrder = await tx.commerceOrder
+          .create({
+            data: {
+              templateId,
+              organizationId,
+              orderNumber,
+              customerEmail,
+              customerName: typeof customerName === "string" ? customerName : null,
+              customerPhone: typeof customerPhone === "string" ? customerPhone : null,
+              deliveryMethod: deliveryMethodValue,
+              deliveryFeeMinor: 0,
+              amountMinor,
+              currency: product.currency,
+              paystackMode: settings.paystackMode,
+              paystackReference: reference,
+              items: {
+                create: [
+                  {
+                    productId: product.id,
+                    nameSnapshot: product.name,
+                    unitPriceMinor: product.priceMinor,
+                    quantity,
+                  },
+                ],
+              },
+            },
+          })
+          .catch((err) => {
+            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+              throw new OrderCodeCollisionError();
+            }
+            throw err;
+          });
+
+        if (product.kind === "SERVICE" && scheduledStart && scheduledEnd) {
+          // @@unique([productId, scheduledStart]) is the actual race guard — a second
+          // concurrent request for the same slot fails here at the database, not
+          // "usually" in application logic.
+          await tx.commerceBooking
+            .create({
+              data: {
+                templateId,
+                organizationId,
+                orderId: createdOrder.id,
+                productId: product.id,
+                scheduledStart,
+                scheduledEnd,
+                holdExpiresAt: new Date(Date.now() + 15 * 60_000),
+              },
+            })
+            .catch((err) => {
+              if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+                throw new SlotTakenError();
+              }
+              throw err;
+            });
+        }
+
+        return createdOrder;
+      });
+    } catch (err) {
+      lastError = err;
+      if (err instanceof OrderCodeCollisionError) {
+        continue; // collision on a random code — retry with a fresh one
+      }
+      if (err instanceof SlotTakenError) {
+        return NextResponse.json({ error: "That time slot was just booked by someone else. Please pick another." }, { status: 409 });
+      }
+      if (err instanceof OutOfStockError) {
+        return NextResponse.json({ error: `Only ${product.stockQuantity ?? 0} left in stock.` }, { status: 409 });
+      }
+      throw err;
+    }
+  }
+
+  if (!order) {
+    throw lastError instanceof Error ? lastError : new Error("Failed to create Commerce order after retries.");
+  }
+
+  const secretKey = decryptPaystackKey(settings.paystackSecretKeyEncrypted);
+
+  try {
+    const result = await initializePaystackTransaction({
+      secretKey,
+      email: customerEmail,
+      amountMinor,
+      reference: order.paystackReference,
+      callbackUrl: `${request.nextUrl.origin}/?order=${order.orderNumber}`,
+      metadata: { orderId: order.id, orderNumber: order.orderNumber, templateId },
+    });
+
+    await prisma.commerceOrder.update({
+      where: { id: order.id },
+      data: { paystackAuthorizationUrl: result.authorizationUrl },
+    });
+
+    return NextResponse.json({
+      orderNumber: order.orderNumber,
+      reference: order.paystackReference,
+      authorizationUrl: result.authorizationUrl,
+    });
+  } catch {
+    // Paystack itself rejected the initialize call — mark the order FAILED rather than
+    // leaving a PENDING order with no way to ever get paid, and release anything it held.
+    await prisma.$transaction(async (tx) => {
+      await tx.commerceOrder.update({ where: { id: order.id }, data: { status: "FAILED" } });
+      if (product.kind === "PHYSICAL" && product.stockQuantity !== null) {
+        await tx.commerceProduct.update({ where: { id: product.id }, data: { stockQuantity: { increment: quantity } } });
+      }
+      if (product.kind === "SERVICE") {
+        await tx.commerceBooking.updateMany({ where: { orderId: order.id }, data: { status: "CANCELLED", holdExpiresAt: null } });
+      }
+    });
+    return NextResponse.json({ error: "Unable to start payment. Please try again." }, { status: 502 });
+  }
+}
