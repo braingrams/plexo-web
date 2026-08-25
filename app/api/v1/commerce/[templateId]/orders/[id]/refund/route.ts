@@ -1,0 +1,48 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/server/prisma";
+import { requirePermission } from "@/server/requirePermission";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
+import { decryptPaystackKey } from "@/lib/crypto";
+import { refundPaystackTransaction } from "@/lib/paystack";
+
+/**
+ * Refunds a paid order via Paystack. Deliberately does NOT auto-restock or free a booking
+ * slot — whether a refunded item goes back into inventory (damaged goods vs. a change of
+ * mind) is a judgment call the plan leaves to a separate, deliberate admin action, not
+ * something a refund click should assume either way.
+ */
+export async function POST(
+  request: NextRequest,
+  context: { params: Promise<{ templateId: string; id: string }> },
+): Promise<NextResponse> {
+  const { templateId, id } = await context.params;
+  const resolved = await resolveCommerceAdmin(request, templateId);
+  if (resolved.error) return resolved.error;
+  const { role } = resolved.context;
+
+  const permissionError = await requirePermission(request.headers, role, { commerce: ["update"] });
+  if (permissionError) return permissionError;
+
+  const order = await prisma.commerceOrder.findFirst({ where: { id, templateId } });
+  if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
+  if (order.status !== "PAID") {
+    return NextResponse.json({ error: `Only a PAID order can be refunded (this one is ${order.status}).` }, { status: 400 });
+  }
+
+  const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
+  if (!settings?.paystackSecretKeyEncrypted) {
+    return NextResponse.json({ error: "Paystack isn't configured for this site." }, { status: 400 });
+  }
+
+  try {
+    await refundPaystackTransaction({
+      secretKey: decryptPaystackKey(settings.paystackSecretKeyEncrypted),
+      reference: order.paystackReference,
+    });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Refund failed." }, { status: 502 });
+  }
+
+  const updated = await prisma.commerceOrder.update({ where: { id }, data: { status: "REFUNDED" } });
+  return NextResponse.json({ order: updated });
+}

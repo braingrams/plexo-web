@@ -51,3 +51,28 @@ export async function initializePaystackTransaction(
     reference: payload.data.reference,
   };
 }
+
+/**
+ * Refunds a transaction (fully, or partially when `amountMinor` is given) with the
+ * merchant's own secret key. Throws on any non-2xx or `status: false` response — the
+ * caller decides how to surface that (the refund route leaves the order PAID rather than
+ * marking it REFUNDED on a failed call).
+ */
+export async function refundPaystackTransaction(params: { secretKey: string; reference: string; amountMinor?: number }): Promise<void> {
+  const response = await fetch(`${PAYSTACK_BASE_URL}/refund`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${params.secretKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      transaction: params.reference,
+      ...(params.amountMinor !== undefined ? { amount: params.amountMinor } : {}),
+    }),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.status) {
+    throw new Error(payload?.message ?? `Paystack refund failed (${response.status}).`);
+  }
+}

@@ -1,11 +1,31 @@
-import { ComingSoonPanel } from "../../_components/ComingSoonPanel";
+import { prisma } from "@/server/prisma";
+import { OrdersClient, type OrderSummary } from "./OrdersClient";
 
-export default function CommerceOrdersPage() {
-  return (
-    <ComingSoonPanel
-      title="Orders"
-      description="Every order, its payment and fulfillment status, and a refund action — the Overview page's recent-orders list moves here once there's enough volume to need its own page."
-      icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.8"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" /><path d="M14 2v6h6" /></svg>}
-    />
-  );
+export default async function CommerceOrdersPage({ params }: { params: Promise<{ templateId: string }> }) {
+  const { templateId } = await params;
+
+  const orders = await prisma.commerceOrder.findMany({
+    where: { templateId },
+    orderBy: { createdAt: "desc" },
+    take: 25,
+    include: {
+      items: { select: { nameSnapshot: true, quantity: true, unitPriceMinor: true } },
+      booking: { select: { scheduledStart: true, status: true } },
+    },
+  });
+
+  const initialOrders: OrderSummary[] = orders.map((o) => ({
+    id: o.id,
+    orderNumber: o.orderNumber,
+    status: o.status,
+    fulfillmentStatus: o.fulfillmentStatus,
+    amountMinor: o.amountMinor,
+    customerEmail: o.customerEmail,
+    customerName: o.customerName,
+    createdAt: o.createdAt.toISOString(),
+    items: o.items,
+    booking: o.booking ? { scheduledStart: o.booking.scheduledStart.toISOString(), status: o.booking.status } : null,
+  }));
+
+  return <OrdersClient templateId={templateId} initialOrders={initialOrders} initialTotal={initialOrders.length} />;
 }
