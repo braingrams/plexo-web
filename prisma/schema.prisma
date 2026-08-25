@@ -105,7 +105,8 @@ model Organization {
   commerceCarts                  CommerceCart[]
   commerceOrders                 CommerceOrder[]
   commerceBookings               CommerceBooking[]
-  commerceSettings               CommerceSettings?
+  // One row per site now (CommerceSettings.templateId is the unique key), not per org.
+  commerceSettings               CommerceSettings[]
   paystackWebhookEvents          PaystackWebhookEvent[]
   commerceProductReviews         CommerceProductReview[]
 }
@@ -567,6 +568,22 @@ model Template {
   // Reverse side of BlogSite's two named 1:1 layout-template relations — see BlogSite.
   blogSitePostLayoutFor    BlogSite?          @relation("BlogSitePostLayout")
   blogSiteListingLayoutFor BlogSite?          @relation("BlogSiteListingLayout")
+
+  // Plexo Commerce — scoped per SITE (this root Template), not per organization, same
+  // reasoning as Blog: an org can own multiple sites, each needing its own catalog and
+  // its own Paystack keys. Always scoped to the site's ROOT Template (parentId == null).
+  commerceSettings               CommerceSettings?
+  commerceCategories             CommerceCategory[]
+  commerceProducts               CommerceProduct[]
+  commerceProductRelations       CommerceProductRelation[]
+  commerceDiscountCodes          CommerceDiscountCode[]
+  commerceAvailabilityRules      CommerceAvailabilityRule[]
+  commerceAvailabilityExceptions CommerceAvailabilityException[]
+  commerceCarts                  CommerceCart[]
+  commerceOrders                 CommerceOrder[]
+  commerceBookings               CommerceBooking[]
+  paystackWebhookEvents          PaystackWebhookEvent[]
+  commerceProductReviews         CommerceProductReview[]
 
   @@unique([parentId, slug])
   @@index([userId])
@@ -1340,16 +1357,22 @@ model SiteImportAssetBlob {
 
 model CommerceCategory {
   id             String   @id @default(uuid()) @db.Uuid
+  // Primary scope: the site this catalog belongs to (a root Template). organizationId is
+  // denormalized alongside it, same rationale as SiteImportJob.organizationId — cheap
+  // org-wide queries without joining through Template.
+  templateId     String   @db.Uuid
   organizationId String   @db.Uuid
   name           String
   slug           String
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  template     Template          @relation(fields: [templateId], references: [id], onDelete: Cascade)
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   products     CommerceProduct[]
 
-  @@unique([organizationId, slug])
+  @@unique([templateId, slug])
+  @@index([templateId])
   @@index([organizationId])
 }
 
@@ -1360,6 +1383,10 @@ enum CommerceProductKind {
 
 model CommerceProduct {
   id               String              @id @default(uuid()) @db.Uuid
+  // Primary scope: the site this product is sold on (a root Template) — see
+  // CommerceCategory's comment. organizationId stays denormalized for cheap org-wide
+  // queries (e.g. a future "all products across every site" admin view).
+  templateId       String              @db.Uuid
   organizationId   String              @db.Uuid
   categoryId       String?             @db.Uuid
   name             String
@@ -1391,6 +1418,7 @@ model CommerceProduct {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  template     Template          @relation(fields: [templateId], references: [id], onDelete: Cascade)
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   category     CommerceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
@@ -1405,7 +1433,8 @@ model CommerceProduct {
   relatedFrom            CommerceProductRelation[]       @relation("CommerceProductRelationsFrom")
   relatedTo              CommerceProductRelation[]       @relation("CommerceProductRelationsTo")
 
-  @@unique([organizationId, slug])
+  @@unique([templateId, slug])
+  @@index([templateId])
   @@index([organizationId])
   @@index([categoryId])
 }
@@ -1414,16 +1443,19 @@ model CommerceProduct {
 // not a recommendation engine. Simple and correct for a catalog this size.
 model CommerceProductRelation {
   id               String   @id @default(uuid()) @db.Uuid
+  templateId       String   @db.Uuid
   organizationId   String   @db.Uuid
   productId        String   @db.Uuid
   relatedProductId String   @db.Uuid
   createdAt        DateTime @default(now())
 
+  template       Template        @relation(fields: [templateId], references: [id], onDelete: Cascade)
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product        CommerceProduct @relation("CommerceProductRelationsFrom", fields: [productId], references: [id], onDelete: Cascade)
   relatedProduct CommerceProduct @relation("CommerceProductRelationsTo", fields: [relatedProductId], references: [id], onDelete: Cascade)
 
   @@unique([productId, relatedProductId])
+  @@index([templateId])
   @@index([organizationId])
 }
 
@@ -1436,6 +1468,7 @@ enum CommerceDiscountType {
 // everything else, admin CRUD + checkout-time validation come later.
 model CommerceDiscountCode {
   id             String               @id @default(uuid()) @db.Uuid
+  templateId     String               @db.Uuid
   organizationId String               @db.Uuid
   code           String
   type           CommerceDiscountType
@@ -1447,15 +1480,19 @@ model CommerceDiscountCode {
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 
+  template     Template     @relation(fields: [templateId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  // Unique per org, not globally — two different Helimax-sized orgs can both run "WELCOME10".
-  @@unique([organizationId, code])
+  // Unique per site, not globally — two different sites (even under the same org) can
+  // both run "WELCOME10".
+  @@unique([templateId, code])
+  @@index([templateId])
   @@index([organizationId])
 }
 
 model CommerceAvailabilityRule {
   id             String   @id @default(uuid()) @db.Uuid
+  templateId     String   @db.Uuid
   organizationId String   @db.Uuid
   productId      String   @db.Uuid
   dayOfWeek      Int // 0 (Sunday) – 6 (Saturday)
@@ -1464,9 +1501,11 @@ model CommerceAvailabilityRule {
   timezone       String   @default("Africa/Lagos")
   createdAt      DateTime @default(now())
 
+  template     Template        @relation(fields: [templateId], references: [id], onDelete: Cascade)
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product      CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
 
+  @@index([templateId])
   @@index([organizationId])
   @@index([productId])
 }
@@ -1475,16 +1514,19 @@ model CommerceAvailabilityRule {
 // closed/open for a given date.
 model CommerceAvailabilityException {
   id             String   @id @default(uuid()) @db.Uuid
+  templateId     String   @db.Uuid
   organizationId String   @db.Uuid
   productId      String   @db.Uuid
   date           DateTime @db.Date
   closed         Boolean  @default(true)
   createdAt      DateTime @default(now())
 
+  template     Template        @relation(fields: [templateId], references: [id], onDelete: Cascade)
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product      CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@unique([productId, date])
+  @@index([templateId])
   @@index([organizationId])
 }
 
@@ -1499,6 +1541,7 @@ enum CommerceCartStatus {
 // for it, even before payment — the foundation for abandoned-cart recovery later.
 model CommerceCart {
   id             String             @id @default(uuid()) @db.Uuid
+  templateId     String             @db.Uuid
   organizationId String             @db.Uuid
   cartToken      String             @unique
   customerEmail  String?
@@ -1506,10 +1549,12 @@ model CommerceCart {
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 
+  template     Template           @relation(fields: [templateId], references: [id], onDelete: Cascade)
   organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   items        CommerceCartItem[]
   order        CommerceOrder?
 
+  @@index([templateId])
   @@index([organizationId])
 }
 
@@ -1559,8 +1604,9 @@ enum CommercePaystackMode {
 
 model CommerceOrder {
   id             String  @id @default(uuid()) @db.Uuid
-  // Denormalized rather than derived through cart/product lookups, for cheap
-  // org-scoped queries — same rationale as SiteImportJob.organizationId.
+  // Primary scope: the site the visitor bought from. organizationId stays denormalized
+  // alongside it, for cheap org-scoped queries — same rationale as SiteImportJob.organizationId.
+  templateId     String  @db.Uuid
   organizationId String  @db.Uuid
   // Short human-facing code (e.g. "HLX-10482") — what the order-confirmation block and
   // a customer's own order-tracking lookup show. Separate from the internal id.
@@ -1591,11 +1637,13 @@ model CommerceOrder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  template     Template            @relation(fields: [templateId], references: [id], onDelete: Cascade)
   organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   cart         CommerceCart?       @relation(fields: [cartId], references: [id], onDelete: SetNull)
   items        CommerceOrderItem[]
   booking      CommerceBooking?
 
+  @@index([templateId])
   @@index([organizationId])
   @@index([customerEmail])
 }
@@ -1625,6 +1673,7 @@ enum CommerceBookingStatus {
 
 model CommerceBooking {
   id             String                @id @default(uuid()) @db.Uuid
+  templateId     String                @db.Uuid
   organizationId String                @db.Uuid
   orderId        String                @unique @db.Uuid
   productId      String                @db.Uuid
@@ -1638,6 +1687,7 @@ model CommerceBooking {
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
 
+  template     Template        @relation(fields: [templateId], references: [id], onDelete: Cascade)
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   order        CommerceOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product      CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -1645,12 +1695,16 @@ model CommerceBooking {
   // Concurrency-safe: two visitors racing for the same slot can't both get a row here —
   // the DB itself rejects the second insert. See the Commerce plan's hardening note.
   @@unique([productId, scheduledStart])
+  @@index([templateId])
   @@index([organizationId])
 }
 
+// One row per SITE (root Template), not per organization — an org with several sites can
+// run a separate storefront (own Paystack account, own MailDrip group) on each one.
 model CommerceSettings {
   id             String @id @default(uuid()) @db.Uuid
-  organizationId String @unique @db.Uuid
+  templateId     String @unique @db.Uuid
+  organizationId String @db.Uuid
 
   paystackPublicKey          String?
   paystackSecretKeyEncrypted String?
@@ -1670,19 +1724,27 @@ model CommerceSettings {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  template     Template     @relation(fields: [templateId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
 }
 
 // Idempotency guard for the Paystack webhook — id is Paystack's own transaction id
 // (event.data.id). A unique-constraint failure on create means "already handled," ack
-// and stop. Same defensive shape as claimStripeEvent.
+// and stop. Same defensive shape as claimStripeEvent. Scoped by templateId because
+// Paystack keys (and therefore the webhook URL) are per-site, not per-org — see
+// CommerceSettings.
 model PaystackWebhookEvent {
   id             String   @id
+  templateId     String   @db.Uuid
   organizationId String   @db.Uuid
   receivedAt     DateTime @default(now())
 
+  template     Template     @relation(fields: [templateId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
+  @@index([templateId])
   @@index([organizationId])
 }
 
@@ -1696,6 +1758,7 @@ enum CommerceReviewStatus {
 // comment moderation: pending until an admin approves.
 model CommerceProductReview {
   id             String               @id @default(uuid()) @db.Uuid
+  templateId     String               @db.Uuid
   organizationId String               @db.Uuid
   productId      String               @db.Uuid
   customerEmail  String
@@ -1705,9 +1768,11 @@ model CommerceProductReview {
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 
+  template     Template        @relation(fields: [templateId], references: [id], onDelete: Cascade)
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   product      CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
 
+  @@index([templateId])
   @@index([organizationId])
   @@index([productId])
 }

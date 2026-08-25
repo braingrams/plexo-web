@@ -1,16 +1,6 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/server/auth";
-import { ensureActiveOrganization } from "@/server/org";
-import { headers } from "next/headers";
-import { ComingSoonPanel } from "../_components/ComingSoonPanel";
+import { ComingSoonPanel } from "../../_components/ComingSoonPanel";
 
-export default async function CommerceSettingsPage() {
-  const reqHeaders = await headers();
-  const session = await auth.api.getSession({ headers: reqHeaders });
-  if (!session?.user) redirect("/auth/login");
-  const orgResolution = await ensureActiveOrganization(reqHeaders, session.user.id);
-  if (orgResolution.status === "needs-choice") redirect("/choose-org");
-
+export default function CommerceSettingsPage() {
   return (
     <ComingSoonPanel
       title="Commerce settings"

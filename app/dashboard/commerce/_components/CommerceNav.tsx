@@ -74,27 +74,30 @@ function IconSettings() {
   );
 }
 
-const SUB_NAV: SubNavItem[] = [
-  { href: "/dashboard/commerce", label: "Overview", icon: <IconOverview /> },
-  { href: "/dashboard/commerce/products", label: "Products", icon: <IconProducts /> },
-  { href: "/dashboard/commerce/orders", label: "Orders", icon: <IconOrders /> },
-  { href: "/dashboard/commerce/availability", label: "Availability", icon: <IconAvailability /> },
-  { href: "/dashboard/commerce/customers", label: "Customers", icon: <IconCustomers /> },
-  { href: "/dashboard/commerce/discounts", label: "Discounts", icon: <IconDiscounts /> },
-  { href: "/dashboard/commerce/settings", label: "Settings", icon: <IconSettings /> },
-];
-
 /** The Commerce shell's own sub-navigation — nested inside the main Plexo sidebar, same
- * idea as Bumpa/Shopify's "you're inside a module now" secondary rail. Every /dashboard/commerce/*
- * route shares this via app/dashboard/commerce/layout.tsx. */
-export function CommerceNav() {
+ * idea as Bumpa/Shopify's "you're inside a module now" secondary rail. Every hop stays
+ * under the current site's /dashboard/commerce/[templateId]/* segment, since Commerce is
+ * scoped per site (own catalog, own Paystack keys) — see CommerceSiteSwitcher for how the
+ * active site itself gets picked. */
+export function CommerceNav({ templateId }: { templateId: string }) {
   const pathname = usePathname();
+  const base = `/dashboard/commerce/${templateId}`;
+
+  const subNav: SubNavItem[] = [
+    { href: base, label: "Overview", icon: <IconOverview /> },
+    { href: `${base}/products`, label: "Products", icon: <IconProducts /> },
+    { href: `${base}/orders`, label: "Orders", icon: <IconOrders /> },
+    { href: `${base}/availability`, label: "Availability", icon: <IconAvailability /> },
+    { href: `${base}/customers`, label: "Customers", icon: <IconCustomers /> },
+    { href: `${base}/discounts`, label: "Discounts", icon: <IconDiscounts /> },
+    { href: `${base}/settings`, label: "Settings", icon: <IconSettings /> },
+  ];
 
   return (
     <nav aria-label="Commerce navigation" style={{ width: 190, flexShrink: 0 }}>
       <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-        {SUB_NAV.map((item) => {
-          const isActive = item.href === "/dashboard/commerce" ? pathname === item.href : pathname.startsWith(item.href);
+        {subNav.map((item) => {
+          const isActive = item.href === base ? pathname === item.href : pathname.startsWith(item.href);
           return (
             <li key={item.href}>
               <Link
