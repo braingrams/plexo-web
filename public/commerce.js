@@ -1,0 +1,899 @@
+/*!
+ * Plexo Commerce runtime.
+ *
+ * Injected by the page shell (app/pub/[domain]/[[...slug]]/route.ts) only when
+ * CommerceSettings.enabled is true for the site — a page with Commerce off pays nothing
+ * extra. Finds every data-plexo-commerce-* marker div a native block (or a hand-embedded
+ * snippet) left in the compiled HTML and fills it with real, live data client-side. Plain
+ * vanilla JS, no build step, no framework, no dependency on anything else this page loads
+ * — sanitizeCompiledHtml.ts strips <script> tags from the compiled body itself, so this
+ * file is the ONLY place Commerce's client behavior can live.
+ *
+ * Styling is deliberately neutral (not Helimax-specific, or any other single site's
+ * brand) — this runs on every Commerce-enabled Plexo site. A site-level "Commerce
+ * appearance" setting (accent color, font) would be a reasonable fast-follow, mirroring
+ * BlogSite.accentColor/fontPreset, but isn't built yet.
+ */
+(function () {
+  "use strict";
+
+  var STYLE_ID = "plexo-commerce-style";
+  var CART_EVENT = "plexo:cart-updated";
+
+  // ---------------------------------------------------------------------
+  // Shared helpers
+  // ---------------------------------------------------------------------
+
+  function injectStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+    var css = [
+      ".pc-root{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;box-sizing:border-box;}",
+      ".pc-root *{box-sizing:border-box;}",
+      ".pc-muted{color:#6b7280;}",
+      ".pc-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#111827;color:#fff;border:none;padding:12px 20px;font-size:14px;font-weight:600;cursor:pointer;border-radius:4px;font-family:inherit;line-height:1.2;}",
+      ".pc-btn:hover{background:#1f2937;}",
+      ".pc-btn:disabled{opacity:0.5;cursor:not-allowed;}",
+      ".pc-btn-outline{background:transparent;color:#111827;border:1.5px solid #d1d5db;}",
+      ".pc-btn-outline:hover{background:#f9fafb;}",
+      ".pc-input{width:100%;padding:11px 13px;font-size:14px;border:1px solid #d1d5db;border-radius:4px;font-family:inherit;color:#111827;background:#fff;}",
+      ".pc-input:focus{outline:2px solid #111827;outline-offset:-1px;}",
+      ".pc-label{display:block;font-size:12px;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:6px;}",
+      ".pc-card{background:#fff;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;}",
+      ".pc-error{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px 14px;border-radius:4px;font-size:13.5px;margin:10px 0;}",
+      ".pc-badge{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:3px 8px;border-radius:3px;}",
+      ".pc-badge-ok{background:#ecfdf5;color:#047857;}",
+      ".pc-badge-low{background:#fffbeb;color:#b45309;}",
+      ".pc-badge-out{background:#fef2f2;color:#b91c1c;}",
+      ".pc-grid{display:grid;gap:20px;}",
+      ".pc-spin{width:22px;height:22px;border-radius:50%;border:2.5px solid #e5e7eb;border-top-color:#111827;animation:pc-spin 0.7s linear infinite;}",
+      "@keyframes pc-spin{to{transform:rotate(360deg);}}",
+      ".pc-pill{display:inline-flex;align-items:center;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:600;border:1px solid #d1d5db;background:#fff;color:#374151;cursor:pointer;}",
+      ".pc-pill.active{background:#111827;color:#fff;border-color:#111827;}",
+      ".pc-slot{text-align:center;padding:9px 4px;border:1.5px solid #d1d5db;border-radius:4px;font-size:12.5px;cursor:pointer;background:#fff;}",
+      ".pc-slot.active{background:#111827;color:#fff;border-color:#111827;}",
+      ".pc-slot[disabled]{opacity:0.35;cursor:not-allowed;}",
+    ].join("\n");
+    var style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = css;
+    document.head.appendChild(style);
+  }
+
+  function api(path, opts) {
+    opts = opts || {};
+    var headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+    return fetch(path, Object.assign({ credentials: "same-origin" }, opts, { headers: headers })).then(function (res) {
+      return res
+        .json()
+        .catch(function () {
+          return {};
+        })
+        .then(function (data) {
+          if (!res.ok) throw new Error(data.error || "Something went wrong. Please try again.");
+          return data;
+        });
+    });
+  }
+
+  function money(minor, currency) {
+    currency = currency || "NGN";
+    var major = (minor || 0) / 100;
+    if (currency === "NGN") {
+      return "₦" + major.toLocaleString("en-NG", { minimumFractionDigits: major % 1 === 0 ? 0 : 2, maximumFractionDigits: 2 });
+    }
+    try {
+      return new Intl.NumberFormat(undefined, { style: "currency", currency: currency }).format(major);
+    } catch (e) {
+      return currency + " " + major.toFixed(2);
+    }
+  }
+
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    attrs = attrs || {};
+    Object.keys(attrs).forEach(function (key) {
+      var val = attrs[key];
+      if (val === null || val === undefined) return;
+      if (key === "style" && typeof val === "object") {
+        Object.keys(val).forEach(function (prop) {
+          node.style[prop] = val[prop];
+        });
+      } else if (key === "html") {
+        node.innerHTML = val;
+      } else if (key.indexOf("on") === 0 && typeof val === "function") {
+        node.addEventListener(key.slice(2).toLowerCase(), val);
+      } else if (key === "class") {
+        node.className = val;
+      } else {
+        node.setAttribute(key, val);
+      }
+    });
+    (children || []).forEach(function (child) {
+      if (child === null || child === undefined || child === false) return;
+      node.appendChild(typeof child === "string" || typeof child === "number" ? document.createTextNode(String(child)) : child);
+    });
+    return node;
+  }
+
+  function clear(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  // The marker div's own authored `height`/`minHeight` (set by whoever placed the block,
+  // in the editor, as a reasonable empty-state placeholder size) is not a runtime layout
+  // constraint — real rendered content (an image plus name plus price plus a button, say)
+  // can easily need more room than an empty placeholder did, and a fixed `height` on the
+  // marker would silently clip it. Every render function calls this before painting real
+  // content so the block always grows to fit what it actually contains.
+  function prepareNode(node) {
+    node.className = (node.className || "") + " pc-root";
+    node.style.height = "auto";
+    node.style.overflow = "visible";
+  }
+
+  function showSpinner(node) {
+    clear(node);
+    prepareNode(node);
+    node.appendChild(el("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", padding: "40px", minHeight: "160px" } }, [el("div", { class: "pc-spin" })]));
+  }
+
+  function showError(node, message) {
+    clear(node);
+    prepareNode(node);
+    node.appendChild(el("div", { class: "pc-error" }, [message]));
+  }
+
+  function stockBadge(stockQuantity) {
+    if (stockQuantity === null || stockQuantity === undefined) return el("span", { class: "pc-badge pc-badge-ok" }, ["In Stock"]);
+    if (stockQuantity <= 0) return el("span", { class: "pc-badge pc-badge-out" }, ["Out of Stock"]);
+    if (stockQuantity <= 5) return el("span", { class: "pc-badge pc-badge-low" }, ["Low Stock"]);
+    return el("span", { class: "pc-badge pc-badge-ok" }, ["In Stock"]);
+  }
+
+  function broadcastCart(snapshot) {
+    document.dispatchEvent(new CustomEvent(CART_EVENT, { detail: snapshot }));
+    document.querySelectorAll("[data-plexo-cart-count]").forEach(function (badge) {
+      var count = (snapshot.items || []).reduce(function (sum, item) {
+        return sum + item.quantity;
+      }, 0);
+      badge.textContent = String(count);
+      badge.style.display = count > 0 ? "" : "none";
+    });
+  }
+
+  function addToCart(productId, quantity) {
+    return api("/api/public/commerce/cart/items", { method: "POST", body: JSON.stringify({ productId: productId, quantity: quantity || 1 }) }).then(function (snapshot) {
+      broadcastCart(snapshot);
+      return snapshot;
+    });
+  }
+
+  function fetchCart() {
+    return api("/api/public/commerce/cart");
+  }
+
+  // ---------------------------------------------------------------------
+  // product — a single Buy card
+  // ---------------------------------------------------------------------
+
+  function renderProduct(node) {
+    var productId = node.getAttribute("data-plexo-product-id");
+    if (!productId) return;
+    showSpinner(node);
+    api("/api/public/commerce/products/" + encodeURIComponent(productId))
+      .then(function (data) {
+        var p = data.product;
+        var qty = 1;
+        clear(node);
+        prepareNode(node);
+        node.style.padding = node.style.padding || "0";
+
+        var qtyLabel;
+        var addBtn;
+
+        function buildQtyRow() {
+          return el("div", { style: { display: "flex", alignItems: "center", gap: "0", width: "fit-content", border: "1px solid #d1d5db", borderRadius: "4px" } }, [
+            el(
+              "button",
+              {
+                class: "pc-btn-outline",
+                style: { border: "none", borderRight: "1px solid #d1d5db", borderRadius: "0", width: "38px", height: "38px", padding: "0" },
+                onclick: function () {
+                  if (qty > 1) qty -= 1;
+                  qtyLabel.textContent = String(qty);
+                },
+              },
+              ["–"]
+            ),
+            (qtyLabel = el("span", { style: { width: "44px", textAlign: "center", fontSize: "14px" } }, [String(qty)])),
+            el(
+              "button",
+              {
+                class: "pc-btn-outline",
+                style: { border: "none", borderLeft: "1px solid #d1d5db", borderRadius: "0", width: "38px", height: "38px", padding: "0" },
+                onclick: function () {
+                  qty += 1;
+                  qtyLabel.textContent = String(qty);
+                },
+              },
+              ["+"]
+            ),
+          ]);
+        }
+
+        var isService = p.kind === "SERVICE";
+        var body = [
+          p.imageUrl ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "220px", objectFit: "cover", display: "block" } }) : null,
+          el("div", { style: { padding: "20px", display: "flex", flexDirection: "column", gap: "12px" } }, [
+            el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" } }, [
+              el("h3", { style: { margin: "0", fontSize: "17px", fontWeight: "700", color: "#111827" } }, [p.name]),
+              isService ? null : stockBadge(p.stockQuantity),
+            ]),
+            p.description ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13.5px", lineHeight: "1.55" } }, [p.description]) : null,
+            el("div", { style: { fontSize: "18px", fontWeight: "700", color: "#111827" } }, [money(p.priceMinor, p.currency), isService && p.durationMinutes ? el("span", { class: "pc-muted", style: { fontWeight: "500", fontSize: "13px" } }, [" · " + p.durationMinutes + " min"]) : null]),
+            isService
+              ? el("a", { class: "pc-btn", href: "#" + node.getAttribute("data-plexo-id"), onclick: function (e) { e.preventDefault(); var target = document.querySelector('[data-plexo-commerce-booking][data-plexo-service-id="' + p.id + '"]'); if (target) target.scrollIntoView({ behavior: "smooth", block: "center" }); } }, ["Book this service"])
+              : el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
+                  buildQtyRow(),
+                  (addBtn = el(
+                    "button",
+                    {
+                      class: "pc-btn",
+                      disabled: p.stockQuantity === 0 ? "disabled" : null,
+                      onclick: function () {
+                        addBtn.disabled = true;
+                        addBtn.textContent = "Adding…";
+                        addToCart(p.id, qty)
+                          .then(function () {
+                            addBtn.textContent = "Added ✓";
+                            setTimeout(function () {
+                              addBtn.textContent = "Add to Cart";
+                              addBtn.disabled = false;
+                            }, 1400);
+                          })
+                          .catch(function (err) {
+                            addBtn.textContent = "Add to Cart";
+                            addBtn.disabled = false;
+                            alert(err.message);
+                          });
+                      },
+                    },
+                    ["Add to Cart"]
+                  )),
+                ]),
+          ]),
+        ];
+        node.appendChild(el("div", { class: "pc-card", style: { height: "100%" } }, body));
+      })
+      .catch(function (err) {
+        showError(node, err.message);
+      });
+  }
+
+  // ---------------------------------------------------------------------
+  // booking — a single consultation-booking card with its calendar
+  // ---------------------------------------------------------------------
+
+  function renderBooking(node) {
+    var serviceId = node.getAttribute("data-plexo-service-id");
+    if (!serviceId) return;
+    showSpinner(node);
+
+    Promise.all([api("/api/public/commerce/products/" + encodeURIComponent(serviceId)), api("/api/public/commerce/availability?productId=" + encodeURIComponent(serviceId))])
+      .then(function (results) {
+        var product = results[0].product;
+        var slots = results[1].slots || [];
+        clear(node);
+        prepareNode(node);
+
+        var selectedSlot = null;
+        var slotButtons = [];
+        var confirmBtn, nameInput, emailInput, phoneInput, errorBox;
+
+        var byDay = {};
+        var dayOrder = [];
+        slots.forEach(function (s) {
+          var d = new Date(s.start);
+          var key = d.toDateString();
+          if (!byDay[key]) {
+            byDay[key] = [];
+            dayOrder.push(key);
+          }
+          byDay[key].push(s);
+        });
+
+        var slotGrid = el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } });
+        if (dayOrder.length === 0) {
+          slotGrid.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13.5px" } }, ["No open times in the next two weeks — please check back soon or reach out directly."]));
+        } else {
+          dayOrder.slice(0, 6).forEach(function (key) {
+            var daySlots = byDay[key];
+            var d = new Date(daySlots[0].start);
+            var dayLabel = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+            var row = el("div", {}, [
+              el("div", { style: { fontSize: "11.5px", fontWeight: "700", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" } }, [dayLabel]),
+              el(
+                "div",
+                { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(70px, 1fr))", gap: "8px" } },
+                daySlots.map(function (slot) {
+                  var t = new Date(slot.start).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+                  var btn = el(
+                    "button",
+                    {
+                      class: "pc-slot",
+                      onclick: function () {
+                        selectedSlot = slot;
+                        slotButtons.forEach(function (b) {
+                          b.classList.remove("active");
+                        });
+                        btn.classList.add("active");
+                        confirmBtn.disabled = false;
+                      },
+                    },
+                    [t]
+                  );
+                  slotButtons.push(btn);
+                  return btn;
+                })
+              ),
+            ]);
+            slotGrid.appendChild(row);
+          });
+        }
+
+        function field(label, type) {
+          var input = el("input", { class: "pc-input", type: type || "text" });
+          return { wrap: el("div", {}, [el("label", { class: "pc-label" }, [label]), input]), input: input };
+        }
+        var nameField = field("Full name");
+        var emailField = field("Email", "email");
+        var phoneField = field("Phone");
+        nameInput = nameField.input;
+        emailInput = emailField.input;
+        phoneInput = phoneField.input;
+
+        confirmBtn = el(
+          "button",
+          {
+            class: "pc-btn",
+            disabled: "disabled",
+            style: { width: "100%" },
+            onclick: function () {
+              if (errorBox) errorBox.remove();
+              if (!selectedSlot) return;
+              if (!emailInput.value || emailInput.value.indexOf("@") === -1) {
+                errorBox = el("div", { class: "pc-error" }, ["Please enter a valid email."]);
+                confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
+                return;
+              }
+              confirmBtn.disabled = true;
+              confirmBtn.textContent = "Booking…";
+              api("/api/public/commerce/checkout", {
+                method: "POST",
+                body: JSON.stringify({
+                  productId: product.id,
+                  scheduledStart: selectedSlot.start,
+                  customerName: nameInput.value || undefined,
+                  customerEmail: emailInput.value,
+                  customerPhone: phoneInput.value || undefined,
+                }),
+              })
+                .then(function (result) {
+                  window.location.href = result.authorizationUrl;
+                })
+                .catch(function (err) {
+                  confirmBtn.disabled = false;
+                  confirmBtn.textContent = "Confirm & Pay — " + money(product.priceMinor, product.currency);
+                  errorBox = el("div", { class: "pc-error" }, [err.message]);
+                  confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
+                });
+            },
+          },
+          ["Confirm & Pay — " + money(product.priceMinor, product.currency)]
+        );
+
+        node.appendChild(
+          el("div", { class: "pc-card", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "20px" } }, [
+            el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" } }, [
+              el("h3", { style: { margin: "0", fontSize: "17px", fontWeight: "700", color: "#111827" } }, ["Choose a time"]),
+              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, [product.durationMinutes ? product.durationMinutes + " min" : ""]),
+            ]),
+            slotGrid,
+            el("div", { style: { height: "1px", background: "#e5e7eb" } }),
+            nameField.wrap,
+            emailField.wrap,
+            phoneField.wrap,
+            confirmBtn,
+          ])
+        );
+      })
+      .catch(function (err) {
+        showError(node, err.message);
+      });
+  }
+
+  // ---------------------------------------------------------------------
+  // shop_grid — category-pilled, searchable product grid
+  // ---------------------------------------------------------------------
+
+  function renderShopGrid(node) {
+    showSpinner(node);
+    api("/api/public/commerce/products")
+      .then(function (data) {
+        var allProducts = (data.products || []).filter(function (p) {
+          return p.kind === "PHYSICAL";
+        });
+        var categories = data.categories || [];
+        var activeCategory = null;
+        var searchTerm = "";
+
+        clear(node);
+        prepareNode(node);
+
+        var grid = el("div", { class: "pc-grid", style: { gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" } });
+
+        function renderCards() {
+          clear(grid);
+          var filtered = allProducts.filter(function (p) {
+            var matchesCategory = !activeCategory || (p.category && p.category.slug === activeCategory);
+            var matchesSearch = !searchTerm || p.name.toLowerCase().indexOf(searchTerm.toLowerCase()) !== -1;
+            return matchesCategory && matchesSearch;
+          });
+          if (filtered.length === 0) {
+            grid.appendChild(el("p", { class: "pc-muted", style: { gridColumn: "1 / -1" } }, ["No products match — try a different filter."]));
+            return;
+          }
+          filtered.forEach(function (p) {
+            var addBtn;
+            grid.appendChild(
+              el("div", { class: "pc-card", style: { display: "flex", flexDirection: "column" } }, [
+                p.imageUrl
+                  ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "160px", objectFit: "cover", display: "block" } })
+                  : el("div", { style: { width: "100%", height: "160px", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: "13px" } }, [p.name]),
+                el("div", { style: { padding: "14px", display: "flex", flexDirection: "column", gap: "8px", flex: "1" } }, [
+                  el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" } }, [
+                    el("span", { style: { fontSize: "14px", fontWeight: "600", color: "#111827" } }, [p.name]),
+                    stockBadge(p.stockQuantity),
+                  ]),
+                  el("div", { style: { fontSize: "14.5px", fontWeight: "700", color: "#111827", marginTop: "auto" } }, [money(p.priceMinor, p.currency)]),
+                  (addBtn = el(
+                    "button",
+                    {
+                      class: "pc-btn",
+                      style: { width: "100%", fontSize: "13px", padding: "9px 14px" },
+                      disabled: p.stockQuantity === 0 ? "disabled" : null,
+                      onclick: function () {
+                        addBtn.disabled = true;
+                        addBtn.textContent = "Adding…";
+                        addToCart(p.id, 1)
+                          .then(function () {
+                            addBtn.textContent = "Added ✓";
+                            setTimeout(function () {
+                              addBtn.textContent = "Add to Cart";
+                              addBtn.disabled = p.stockQuantity === 0;
+                            }, 1400);
+                          })
+                          .catch(function (err) {
+                            addBtn.disabled = false;
+                            addBtn.textContent = "Add to Cart";
+                            alert(err.message);
+                          });
+                      },
+                    },
+                    [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart"]
+                  )),
+                ]),
+              ])
+            );
+          });
+        }
+
+        var controls = el("div", { style: { display: "flex", flexDirection: "column", gap: "14px", marginBottom: "20px" } });
+        if (categories.length > 0) {
+          var pillRow = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap" } });
+          var allPill = el(
+            "span",
+            {
+              class: "pc-pill active",
+              onclick: function () {
+                activeCategory = null;
+                Array.prototype.forEach.call(pillRow.children, function (p) {
+                  p.classList.remove("active");
+                });
+                allPill.classList.add("active");
+                renderCards();
+              },
+            },
+            ["All"]
+          );
+          pillRow.appendChild(allPill);
+          categories.forEach(function (cat) {
+            var pill = el(
+              "span",
+              {
+                class: "pc-pill",
+                onclick: function () {
+                  activeCategory = cat.slug;
+                  Array.prototype.forEach.call(pillRow.children, function (p) {
+                    p.classList.remove("active");
+                  });
+                  pill.classList.add("active");
+                  renderCards();
+                },
+              },
+              [cat.name]
+            );
+            pillRow.appendChild(pill);
+          });
+          controls.appendChild(pillRow);
+        }
+        controls.appendChild(
+          el("input", {
+            class: "pc-input",
+            placeholder: "Search products…",
+            style: { maxWidth: "320px" },
+            oninput: function (e) {
+              searchTerm = e.target.value;
+              renderCards();
+            },
+          })
+        );
+
+        node.appendChild(controls);
+        node.appendChild(grid);
+        renderCards();
+      })
+      .catch(function (err) {
+        showError(node, err.message);
+      });
+  }
+
+  // ---------------------------------------------------------------------
+  // cart_summary — line items, quantities, subtotal
+  // ---------------------------------------------------------------------
+
+  function renderCartSummary(node) {
+    function paint(snapshot) {
+      clear(node);
+      prepareNode(node);
+      if (!snapshot.items || snapshot.items.length === 0) {
+        node.appendChild(
+          el("div", { style: { padding: "40px 20px", textAlign: "center", display: "flex", flexDirection: "column", gap: "12px", alignItems: "center" } }, [
+            el("p", { class: "pc-muted", style: { margin: "0", fontSize: "14px" } }, ["Your cart is empty."]),
+            el("a", { class: "pc-btn-outline pc-btn", href: "#", onclick: function (e) { e.preventDefault(); history.back(); } }, ["Continue shopping"]),
+          ])
+        );
+        return;
+      }
+      var list = el(
+        "div",
+        { style: { display: "flex", flexDirection: "column" } },
+        snapshot.items.map(function (item) {
+          var qtyLabel;
+          return el("div", { style: { display: "flex", alignItems: "center", gap: "14px", padding: "16px 0", borderBottom: "1px solid #e5e7eb" } }, [
+            item.imageUrl
+              ? el("img", { src: item.imageUrl, alt: item.name, style: { width: "56px", height: "56px", objectFit: "cover", borderRadius: "4px", flexShrink: "0" } })
+              : el("div", { style: { width: "56px", height: "56px", background: "#f3f4f6", borderRadius: "4px", flexShrink: "0" } }),
+            el("div", { style: { flex: "1", minWidth: "0" } }, [
+              el("div", { style: { fontSize: "14px", fontWeight: "600", color: "#111827" } }, [item.name]),
+              !item.inStock ? el("div", { style: { fontSize: "12px", color: "#b91c1c" } }, ["No longer in stock"]) : null,
+              el("div", { style: { display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" } }, [
+                el(
+                  "button",
+                  {
+                    class: "pc-btn-outline",
+                    style: { width: "26px", height: "26px", padding: "0", fontSize: "13px" },
+                    onclick: function () {
+                      updateQty(item.itemId, item.quantity - 1).then(paint);
+                    },
+                  },
+                  ["–"]
+                ),
+                (qtyLabel = el("span", { style: { fontSize: "13px", minWidth: "18px", textAlign: "center" } }, [String(item.quantity)])),
+                el(
+                  "button",
+                  {
+                    class: "pc-btn-outline",
+                    style: { width: "26px", height: "26px", padding: "0", fontSize: "13px" },
+                    onclick: function () {
+                      updateQty(item.itemId, item.quantity + 1).then(paint);
+                    },
+                  },
+                  ["+"]
+                ),
+                el(
+                  "button",
+                  {
+                    style: { background: "none", border: "none", color: "#9ca3af", fontSize: "12px", cursor: "pointer", marginLeft: "8px", textDecoration: "underline" },
+                    onclick: function () {
+                      updateQty(item.itemId, 0).then(paint);
+                    },
+                  },
+                  ["Remove"]
+                ),
+              ]),
+            ]),
+            el("div", { style: { fontSize: "14px", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" } }, [money(item.lineTotalMinor, snapshot.currency)]),
+          ]);
+        })
+      );
+      node.appendChild(list);
+      node.appendChild(
+        el("div", { style: { display: "flex", justifyContent: "space-between", padding: "18px 0 0", fontSize: "16px", fontWeight: "700", color: "#111827" } }, [el("span", {}, ["Subtotal"]), el("span", {}, [money(snapshot.subtotalMinor, snapshot.currency)])])
+      );
+    }
+
+    function updateQty(itemId, quantity) {
+      return api("/api/public/commerce/cart/items/" + encodeURIComponent(itemId), { method: "PATCH", body: JSON.stringify({ quantity: quantity }) }).then(function (snapshot) {
+        broadcastCart(snapshot);
+        return snapshot;
+      });
+    }
+
+    showSpinner(node);
+    fetchCart().then(paint).catch(function (err) {
+      showError(node, err.message);
+    });
+    document.addEventListener(CART_EVENT, function (e) {
+      paint(e.detail);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // checkout_flow — delivery, contact, discount, pay
+  // ---------------------------------------------------------------------
+
+  function renderCheckoutFlow(node) {
+    showSpinner(node);
+    fetchCart()
+      .then(function (cart) {
+        clear(node);
+        prepareNode(node);
+
+        if (!cart.items || cart.items.length === 0) {
+          node.appendChild(el("p", { class: "pc-muted", style: { fontSize: "14px" } }, ["Your cart is empty — add something before checking out."]));
+          return;
+        }
+
+        var deliveryMethod = "PICKUP";
+        var COURIER_FEE_MINOR = 150000;
+        var errorBox = null;
+        var payBtn, totalLabel;
+
+        function computeTotal() {
+          return cart.subtotalMinor + (deliveryMethod === "COURIER" ? COURIER_FEE_MINOR : 0);
+        }
+        function refreshTotal() {
+          totalLabel.textContent = money(computeTotal(), cart.currency);
+          payBtn.textContent = "Pay with Paystack — " + money(computeTotal(), cart.currency);
+        }
+
+        function deliveryOption(value, label, feeText) {
+          var wrap = el(
+            "div",
+            {
+              style: { border: "1.5px solid " + (value === deliveryMethod ? "#111827" : "#e5e7eb"), borderRadius: "4px", padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" },
+              onclick: function () {
+                deliveryMethod = value;
+                Array.prototype.forEach.call(node.querySelectorAll("[data-pc-delivery-option]"), function (o) {
+                  o.style.borderColor = "#e5e7eb";
+                });
+                wrap.style.borderColor = "#111827";
+                refreshTotal();
+              },
+              "data-pc-delivery-option": "true",
+            },
+            [el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#111827" } }, [label]), el("span", { class: "pc-muted", style: { fontSize: "12px" } }, [feeText])]
+          );
+          return wrap;
+        }
+
+        function field(label, type) {
+          var input = el("input", { class: "pc-input", type: type || "text" });
+          return { wrap: el("div", {}, [el("label", { class: "pc-label" }, [label]), input]), input: input };
+        }
+        var nameField = field("Full name");
+        var emailField = field("Email", "email");
+        var phoneField = field("Phone");
+        var discountField = field("Discount code (optional)");
+
+        payBtn = el(
+          "button",
+          {
+            class: "pc-btn",
+            style: { width: "100%" },
+            onclick: function () {
+              if (errorBox) {
+                errorBox.remove();
+                errorBox = null;
+              }
+              if (!emailField.input.value || emailField.input.value.indexOf("@") === -1) {
+                errorBox = el("div", { class: "pc-error" }, ["Please enter a valid email."]);
+                payBtn.parentNode.insertBefore(errorBox, payBtn);
+                return;
+              }
+              payBtn.disabled = true;
+              payBtn.textContent = "Starting payment…";
+              api("/api/public/commerce/checkout/cart", {
+                method: "POST",
+                body: JSON.stringify({
+                  customerName: nameField.input.value || undefined,
+                  customerEmail: emailField.input.value,
+                  customerPhone: phoneField.input.value || undefined,
+                  deliveryMethod: deliveryMethod,
+                  discountCode: discountField.input.value || undefined,
+                }),
+              })
+                .then(function (result) {
+                  window.location.href = result.authorizationUrl;
+                })
+                .catch(function (err) {
+                  payBtn.disabled = false;
+                  refreshTotal();
+                  errorBox = el("div", { class: "pc-error" }, [err.message]);
+                  payBtn.parentNode.insertBefore(errorBox, payBtn);
+                });
+            },
+          },
+          ["Pay with Paystack"]
+        );
+
+        node.appendChild(
+          el("div", { style: { display: "flex", flexDirection: "column", gap: "22px" } }, [
+            el("div", {}, [
+              el("div", { class: "pc-label", style: { marginBottom: "10px" } }, ["Delivery"]),
+              el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [deliveryOption("PICKUP", "Pickup", "Free"), deliveryOption("COURIER", "Courier delivery", "from " + money(COURIER_FEE_MINOR, cart.currency))]),
+            ]),
+            nameField.wrap,
+            emailField.wrap,
+            phoneField.wrap,
+            discountField.wrap,
+            el("div", { style: { height: "1px", background: "#e5e7eb" } }),
+            el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "16px", fontWeight: "700", color: "#111827" } }, [el("span", {}, ["Total"]), (totalLabel = el("span", {}, [money(computeTotal(), cart.currency)]))]),
+            payBtn,
+            el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, ["Secured by Paystack"]),
+          ])
+        );
+        refreshTotal();
+      })
+      .catch(function (err) {
+        showError(node, err.message);
+      });
+  }
+
+  // ---------------------------------------------------------------------
+  // order_confirmation — thank-you screen
+  // ---------------------------------------------------------------------
+
+  function renderOrderConfirmation(node) {
+    var params = new URLSearchParams(window.location.search);
+    var orderNumber = params.get("order");
+    var email = params.get("email");
+    if (!orderNumber || !email) {
+      showError(node, "No order to show here yet.");
+      return;
+    }
+    showSpinner(node);
+    api("/api/public/commerce/orders/lookup?orderNumber=" + encodeURIComponent(orderNumber) + "&email=" + encodeURIComponent(email))
+      .then(function (data) {
+        var order = data.order;
+        clear(node);
+        prepareNode(node);
+        node.appendChild(
+          el("div", { class: "pc-card", style: { padding: "28px", display: "flex", flexDirection: "column", gap: "18px" } }, [
+            el("div", { style: { display: "flex", alignItems: "center", gap: "10px" } }, [
+              el("span", { style: { background: "#111827", color: "#fff", fontSize: "11px", fontWeight: "700", padding: "5px 10px", borderRadius: "3px", letterSpacing: "0.04em" } }, [order.orderNumber]),
+              el("span", { class: "pc-badge " + (order.status === "PAID" ? "pc-badge-ok" : order.status === "PENDING" ? "pc-badge-low" : "pc-badge-out") }, [order.status]),
+            ]),
+            el(
+              "div",
+              { style: { display: "flex", flexDirection: "column" } },
+              order.items.map(function (item) {
+                return el("div", { style: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e5e7eb", fontSize: "13.5px" } }, [
+                  el("span", {}, [item.nameSnapshot + " × " + item.quantity]),
+                  el("span", { style: { fontWeight: "600" } }, [money(item.unitPriceMinor * item.quantity, order.currency)]),
+                ]);
+              })
+            ),
+            order.booking
+              ? el("div", { class: "pc-muted", style: { fontSize: "13px" } }, ["Scheduled for " + new Date(order.booking.scheduledStart).toLocaleString()])
+              : null,
+            el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "16px", fontWeight: "700", color: "#111827" } }, [el("span", {}, ["Total"]), el("span", {}, [money(order.amountMinor, order.currency)])]),
+            el("a", { class: "pc-btn", href: "/track-order?order=" + encodeURIComponent(order.orderNumber) + "&email=" + encodeURIComponent(email), style: { textAlign: "center", textDecoration: "none" } }, ["Track my order"]),
+          ])
+        );
+      })
+      .catch(function (err) {
+        showError(node, err.message);
+      });
+  }
+
+  // ---------------------------------------------------------------------
+  // order_tracking — order-number + email lookup, status timeline
+  // ---------------------------------------------------------------------
+
+  var FULFILLMENT_STEPS = ["UNFULFILLED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "COMPLETED"];
+  var FULFILLMENT_LABELS = { UNFULFILLED: "Order placed", PROCESSING: "Processing", READY_FOR_PICKUP: "Ready for pickup", SHIPPED: "Shipped", COMPLETED: "Completed" };
+
+  function renderOrderTracking(node) {
+    prepareNode(node);
+    clear(node);
+
+    var params = new URLSearchParams(window.location.search);
+    var orderField = el("input", { class: "pc-input", placeholder: "Order number (e.g. ORD-4F2A9C1B)", value: params.get("order") || "" });
+    var emailField = el("input", { class: "pc-input", type: "email", placeholder: "Email used at checkout", value: params.get("email") || "" });
+    var resultBox = el("div", {});
+    var searchBtn;
+
+    function search() {
+      if (!orderField.value || !emailField.value) return;
+      clear(resultBox);
+      showSpinner(resultBox);
+      api("/api/public/commerce/orders/lookup?orderNumber=" + encodeURIComponent(orderField.value.trim()) + "&email=" + encodeURIComponent(emailField.value.trim()))
+        .then(function (data) {
+          var order = data.order;
+          clear(resultBox);
+          if (order.status !== "PAID") {
+            resultBox.appendChild(el("div", { class: "pc-error", style: { background: "#fffbeb", borderColor: "#fde68a", color: "#92400e" } }, ["This order hasn't been paid for yet."]));
+            return;
+          }
+          var isCancelled = order.status === "CANCELLED" || order.status === "REFUNDED";
+          var currentIndex = FULFILLMENT_STEPS.indexOf(order.fulfillmentStatus);
+          resultBox.appendChild(
+            el("div", { class: "pc-card", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "18px" } }, [
+              el("div", { style: { fontSize: "13px" } }, ["Order ", el("strong", {}, [order.orderNumber])]),
+              isCancelled
+                ? el("div", { class: "pc-badge pc-badge-out" }, [order.status])
+                : el(
+                    "div",
+                    { style: { display: "flex", alignItems: "center" } },
+                    FULFILLMENT_STEPS.map(function (step, i) {
+                      var done = i <= currentIndex;
+                      return el("div", { style: { display: "flex", alignItems: "center", flex: i < FULFILLMENT_STEPS.length - 1 ? "1" : "0 0 auto" } }, [
+                        el("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", minWidth: "70px" } }, [
+                          el("div", { style: { width: "16px", height: "16px", borderRadius: "50%", background: done ? "#111827" : "#e5e7eb" } }),
+                          el("div", { style: { fontSize: "10.5px", color: done ? "#111827" : "#9ca3af", textAlign: "center", fontWeight: done ? "700" : "500" } }, [FULFILLMENT_LABELS[step]]),
+                        ]),
+                        i < FULFILLMENT_STEPS.length - 1 ? el("div", { style: { flex: "1", height: "2px", background: i < currentIndex ? "#111827" : "#e5e7eb", margin: "0 4px 20px" } }) : null,
+                      ]);
+                    })
+                  ),
+            ])
+          );
+        })
+        .catch(function (err) {
+          clear(resultBox);
+          resultBox.appendChild(el("div", { class: "pc-error" }, [err.message]));
+        });
+    }
+
+    searchBtn = el("button", { class: "pc-btn", onclick: search }, ["Track"]);
+    node.appendChild(
+      el("div", { style: { display: "flex", flexDirection: "column", gap: "14px", maxWidth: "440px", margin: "0 auto", width: "100%" } }, [orderField, emailField, searchBtn, resultBox])
+    );
+
+    if (params.get("order") && params.get("email")) search();
+  }
+
+  // ---------------------------------------------------------------------
+  // Boot
+  // ---------------------------------------------------------------------
+
+  function init() {
+    injectStyles();
+    document.querySelectorAll("[data-plexo-commerce-product]").forEach(renderProduct);
+    document.querySelectorAll("[data-plexo-commerce-booking]").forEach(renderBooking);
+    document.querySelectorAll("[data-plexo-commerce-shopGrid]").forEach(renderShopGrid);
+    document.querySelectorAll("[data-plexo-commerce-cartSummary]").forEach(renderCartSummary);
+    document.querySelectorAll("[data-plexo-commerce-checkoutFlow]").forEach(renderCheckoutFlow);
+    document.querySelectorAll("[data-plexo-commerce-orderConfirmation]").forEach(renderOrderConfirmation);
+    document.querySelectorAll("[data-plexo-commerce-orderTracking]").forEach(renderOrderTracking);
+    fetchCart().then(broadcastCart).catch(function () {});
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();

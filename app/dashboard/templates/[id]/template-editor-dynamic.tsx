@@ -30,6 +30,7 @@ export type TemplateEditorProps = {
   organizationId: string;
   isBlogLayout?: boolean;
   commerceEnabled?: boolean;
+  rootTemplateId: string;
 };
 
 function EditorSkeleton() {

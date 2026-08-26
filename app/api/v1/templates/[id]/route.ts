@@ -4,6 +4,7 @@ import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { resolveUser } from "../../domains/route";
 import { requirePermission } from "@/server/requirePermission";
+import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayout";
 
 /**
  * GET /api/v1/templates/:id
@@ -85,7 +86,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
   const existing = await prisma.template.findFirst({
     where: { id, organizationId: resolved.organizationId },
-    select: { id: true, kind: true, name: true, sourceType: true },
+    select: { id: true, kind: true, name: true, sourceType: true, parentId: true },
   });
   if (!existing) {
     return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });
@@ -123,7 +124,8 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
   let compiledHtml: string;
   try {
-    compiledHtml = sanitizeHtml(compileToHTML(designJson));
+    const forCompile = existing.kind === "LANDING_PAGE" ? await compileWithSiteLayout(existing, designJson) : designJson;
+    compiledHtml = sanitizeHtml(compileToHTML(forCompile));
   } catch (err) {
     return NextResponse.json(
       { error: `Failed to compile designJson into HTML: ${err instanceof Error ? err.message : "Malformed structure"}` },
@@ -135,6 +137,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     where: { id: existing.id },
     data: { name, designJson, compiledHtml },
   });
+  await onTemplateSaved(existing.id);
 
   const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const editableUrl = `${baseAppUrl}/dashboard/templates/${updated.id}`;

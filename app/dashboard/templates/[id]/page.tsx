@@ -6,6 +6,7 @@ import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { getTierFeatures } from "@/lib/subscription";
 import { ensureActiveOrganization } from "@/server/org";
+import { findRootTemplateId } from "@/lib/siteLayout";
 
 import { TemplateEditorDynamic } from "./template-editor-dynamic";
 import { RawFileEditor } from "./raw-file-editor";
@@ -89,17 +90,11 @@ export default async function TemplateEditorPage(
     notFound();
   }
 
-  // Commerce is scoped per SITE (the root Template — parentId null), not per page, so a
-  // sub-page's editor needs to walk up to the root to know whether to show the Commerce
-  // block palette. Most sites are only one level deep, but the page tree can nest further.
-  let rootTemplateId = template.id;
-  let walkParentId = template.parentId;
-  while (walkParentId) {
-    const parent = await prisma.template.findUnique({ where: { id: walkParentId }, select: { id: true, parentId: true } });
-    if (!parent) break;
-    rootTemplateId = parent.id;
-    walkParentId = parent.parentId;
-  }
+  // Commerce (and Site Layout) are scoped per SITE (the root Template — parentId null),
+  // not per page, so a sub-page's editor needs to walk up to the root to know whether to
+  // show the Commerce block palette / where to link Site Layout. Most sites are only one
+  // level deep, but the page tree can nest further.
+  const rootTemplateId = await findRootTemplateId(template.id, template.parentId);
   const commerceSettings = await prisma.commerceSettings.findUnique({
     where: { templateId: rootTemplateId },
     select: { enabled: true },
@@ -149,6 +144,7 @@ export default async function TemplateEditorPage(
       organizationId={orgResolution.organizationId}
       isBlogLayout={template.isBlogLayout}
       commerceEnabled={commerceSettings?.enabled ?? false}
+      rootTemplateId={rootTemplateId}
     />
   );
 }

@@ -73,7 +73,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // templates — they live in /dashboard/marketplace/listings instead of cluttering this
   // list with a second, non-editable-in-the-same-way copy of the same content.
   const templates = await prisma.template.findMany({
-    where: { organizationId: resolved.organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false },
+    where: { organizationId: resolved.organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false },
     // Tie-break on createdAt — see app/dashboard/templates/page.tsx's identical comment:
     // the org-backfill migration's updateMany bumped every template's updatedAt to the
     // same instant via Prisma's @updatedAt, so ties need a secondary sort to avoid
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // The plan's template limit counts root/home pages only, per kind — a page with
     // five sub-pages still counts as one landing page against this limit, not six.
     const limit = kind === TemplateKind.LANDING_PAGE ? features.maxLandingPages : features.maxEmailTemplates;
-    const count = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind, isBlogLayout: false } });
+    const count = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind, isBlogLayout: false, isSiteLayoutFragment: false } });
     if (count >= limit) {
       const label = kind === TemplateKind.LANDING_PAGE ? "landing pages" : "email templates";
       return NextResponse.json(

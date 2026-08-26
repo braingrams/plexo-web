@@ -299,7 +299,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       email: customerEmail,
       amountMinor,
       reference: order.paystackReference,
-      callbackUrl: `${request.nextUrl.origin}/?order=${order.orderNumber}`,
+      // Same reasoning as the cart checkout route: email travels alongside order because
+      // the strict order-lookup endpoint requires both together, and /order-confirmation
+      // (not "/") is the default landing spot for a site with a dedicated confirmation
+      // page — see the Commerce plan's runtime section.
+      callbackUrl: `${request.nextUrl.origin}/order-confirmation?order=${order.orderNumber}&email=${encodeURIComponent(customerEmail)}`,
       metadata: { orderId: order.id, orderNumber: order.orderNumber, templateId },
     });
 

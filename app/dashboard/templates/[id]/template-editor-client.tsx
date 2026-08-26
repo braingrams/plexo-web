@@ -9,6 +9,7 @@
  */
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
 	PlexoBuilder,
@@ -48,6 +49,10 @@ type Props = {
 	// Commerce block palette group in PlexoBuilder. Resolved server-side in page.tsx by
 	// walking up to the root, since Commerce is scoped per site, not per page.
 	commerceEnabled?: boolean;
+	// This page's site's root Template id — same walk as commerceEnabled, reused here to
+	// link to /dashboard/templates/{root}/site-layout regardless of how deep the current
+	// page sits in the site's page tree.
+	rootTemplateId: string;
 };
 
 function IconArrowLeft() {
@@ -343,6 +348,7 @@ function EditorHeaderRight({
 	onSave,
 	commentsOpen,
 	onToggleComments,
+	siteLayoutHref,
 }: {
 	saveMessage: string | null;
 	saveError: string | null;
@@ -351,6 +357,7 @@ function EditorHeaderRight({
 	onSave: () => void;
 	commentsOpen: boolean;
 	onToggleComments: () => void;
+	siteLayoutHref?: string;
 }) {
 	return (
 		<div
@@ -361,6 +368,27 @@ function EditorHeaderRight({
 				flexShrink: 0,
 			}}
 		>
+			{siteLayoutHref && (
+				<Link
+					href={siteLayoutHref}
+					style={{
+						display: "inline-flex",
+						alignItems: "center",
+						gap: "0.4rem",
+						padding: "0.45rem 0.8rem",
+						borderRadius: 9,
+						border: "1px solid rgba(255,255,255,0.1)",
+						color: "rgba(240,242,255,0.6)",
+						fontSize: "0.8rem",
+						fontWeight: 600,
+						whiteSpace: "nowrap",
+						textDecoration: "none",
+					}}
+				>
+					Site Layout
+				</Link>
+			)}
+
 			<button
 				type="button"
 				onClick={onToggleComments}
@@ -494,6 +522,7 @@ export function TemplateEditorClient({
 	organizationId,
 	isBlogLayout,
 	commerceEnabled,
+	rootTemplateId,
 }: Props) {
 	const router = useRouter();
 	const searchParams = useSearchParams();
@@ -800,6 +829,7 @@ export function TemplateEditorClient({
 								setCommentsOpen((v) => !v);
 								setPendingPin(null);
 							}}
+							siteLayoutHref={!isEmail ? `/dashboard/templates/${rootTemplateId}/site-layout` : undefined}
 						/>
 					}
 					{...({ __internalPlan: subscriptionPlan } as any)}

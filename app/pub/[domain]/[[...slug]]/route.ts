@@ -120,6 +120,30 @@ function injectBrandingBar(html: string, ctaHref: string): string {
   return html + bar;
 }
 
+// Plexo Commerce's runtime — the marker divs product/booking/shop_grid/etc. compile to
+// (see plexo-sdk's compiler.ts) carry no inline <script> of their own (sanitizeCompiledHtml.ts
+// strips script tags from the compiled body itself, BUILDER or RAW_UPLOAD), so this is
+// injected outside that sanitized body, the same way as injectBrandingBar below — a
+// Commerce-disabled site never gets this tag at all, see the call site's CommerceSettings
+// gate.
+function injectCommerceScript(html: string): string {
+  const scriptTag = `<script src="/commerce.js" defer></script>`;
+  const maskedHtml = html.replace(
+    /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
+    (block) => " ".repeat(block.length),
+  );
+  let insertAt = -1;
+  const bodyCloseRe = /<\/body\s*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = bodyCloseRe.exec(maskedHtml)) !== null) {
+    insertAt = match.index;
+  }
+  if (insertAt !== -1) {
+    return html.slice(0, insertAt) + scriptTag + html.slice(insertAt);
+  }
+  return html + scriptTag;
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ domain: string; slug?: string[] }> }
@@ -256,6 +280,18 @@ export async function GET(
       if (canWhiteLabel(ownerPlan)) {
         html = injectFavicon(html, published.organization.logo);
       }
+    }
+
+    // Plexo Commerce runtime — layered gate, same shape as the blog-homepage check above:
+    // a site with Commerce off (the default) never gets this script, so it costs nothing.
+    // Scoped to the SITE's root Template (published.templateId), not the current page —
+    // Commerce is a per-site setting, same as CommerceSettings itself.
+    const commerceSettings = await prisma.commerceSettings.findUnique({
+      where: { templateId: published.templateId },
+      select: { enabled: true },
+    });
+    if (commerceSettings?.enabled) {
+      html = injectCommerceScript(html);
     }
 
     // Record analytics view asynchronously (does not block client response)

@@ -109,6 +109,9 @@ model Organization {
   commerceSettings               CommerceSettings[]
   paystackWebhookEvents          PaystackWebhookEvent[]
   commerceProductReviews         CommerceProductReview[]
+
+  // One row per site (SiteLayout.templateId is the unique key), same shape as commerceSettings.
+  siteLayouts SiteLayout[]
 }
 
 model Member {
@@ -542,6 +545,13 @@ model Template {
   // doesn't silently consume a customer's page slot or show up as a stray untitled page.
   isBlogLayout Boolean @default(false)
 
+  // A small ordinary LANDING_PAGE Template used as a site's shared header or footer (see
+  // SiteLayout below) rather than a page in its own right — same "never itself
+  // published/visited directly, excluded from the normal page list/count" shape as
+  // isBlogLayout, just for SiteLayout.headerTemplateId/footerTemplateId instead of
+  // BlogSite.postLayoutTemplateId/listingLayoutTemplateId.
+  isSiteLayoutFragment Boolean @default(false)
+
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent               Template?             @relation("TemplatePages", fields: [parentId], references: [id], onDelete: Cascade)
@@ -568,6 +578,14 @@ model Template {
   // Reverse side of BlogSite's two named 1:1 layout-template relations — see BlogSite.
   blogSitePostLayoutFor    BlogSite?          @relation("BlogSitePostLayout")
   blogSiteListingLayoutFor BlogSite?          @relation("BlogSiteListingLayout")
+
+  // Shared header/footer applied to every ordinary page on this site — see SiteLayout.
+  // Always scoped to the site's ROOT Template (parentId == null).
+  siteLayout          SiteLayout? @relation("SiteLayoutSite")
+  // Reverse side of SiteLayout's two named 1:1 layout-template relations, mirroring
+  // blogSitePostLayoutFor/blogSiteListingLayoutFor above.
+  siteLayoutHeaderFor SiteLayout? @relation("SiteLayoutHeader")
+  siteLayoutFooterFor SiteLayout? @relation("SiteLayoutFooter")
 
   // Plexo Commerce — scoped per SITE (this root Template), not per organization, same
   // reasoning as Blog: an org can own multiple sites, each needing its own catalog and
@@ -970,6 +988,37 @@ model BlogSite {
   updatedAt DateTime @updatedAt
 
   template Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+}
+
+// Shared header/footer applied to every ordinary page on a site — authored once in the
+// builder as two small row documents, spliced around each page's own designJson at
+// compile time (see lib/siteLayout.ts). Same layered-gate shape as BlogSite.enabled /
+// CommerceSettings.enabled — disabled (the default) costs nothing, every page compiles
+// exactly as it did before this model existed. Always scoped to the site's ROOT Template
+// (parentId == null), never a sub-page.
+model SiteLayout {
+  id             String  @id @default(uuid()) @db.Uuid
+  templateId     String  @unique @db.Uuid
+  organizationId String  @db.Uuid
+  enabled        Boolean @default(false)
+
+  // Each points at an ordinary Template (isSiteLayoutFragment: true) designed in the same
+  // builder as any other page — null = nothing authored yet on that side; an enabled
+  // SiteLayout with a null header (or footer) simply contributes nothing there. Same
+  // "separate reusable Template, referenced by id" shape as
+  // BlogSite.postLayoutTemplateId/listingLayoutTemplateId.
+  headerTemplateId String?   @unique @db.Uuid
+  headerTemplate   Template? @relation("SiteLayoutHeader", fields: [headerTemplateId], references: [id], onDelete: SetNull)
+  footerTemplateId String?   @unique @db.Uuid
+  footerTemplate   Template? @relation("SiteLayoutFooter", fields: [footerTemplateId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  template     Template     @relation("SiteLayoutSite", fields: [templateId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
 }
 
 // A byline, not an account — may or may not be linked to a real Plexo User. WordPress

@@ -67,7 +67,7 @@ export default async function TemplatesDashboardPage() {
       organizationId: orgResolution.organizationId,
       parentId: null,
       marketplaceStatus: null,
-      isBlogLayout: false,
+      isBlogLayout: false, isSiteLayoutFragment: false,
       // A site whose blog is set as its homepage is conceptually a blog now, not a
       // landing-page template — it still shows in /dashboard/blog, just not here.
       NOT: { blogSite: { is: { enabled: true, showOnHomepage: true } } },
