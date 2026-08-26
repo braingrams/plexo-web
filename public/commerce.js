@@ -274,46 +274,94 @@
           return;
         }
 
-        var body = [
-          p.imageUrl ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "220px", objectFit: "cover", display: "block" } }) : null,
-          el("div", { style: { padding: "20px", display: "flex", flexDirection: "column", gap: "12px" } }, [
-            el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" } }, [
-              el("h3", { class: "pc-serif", style: { margin: "0", fontSize: "18px", fontWeight: "600", color: "#16233F" } }, [p.name]),
-              stockBadge(p.stockQuantity),
-            ]),
-            p.description ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13.5px", lineHeight: "1.55" } }, [p.description]) : null,
-            el("div", { class: "pc-mono", style: { fontSize: "16px", color: "#16233F" } }, [money(p.priceMinor, p.currency)]),
-            el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
-              buildQtyRow(),
-              (addBtn = el(
-                "button",
-                {
-                  class: "pc-btn",
-                  disabled: p.stockQuantity === 0 ? "disabled" : null,
-                  onclick: function () {
-                    addBtn.disabled = true;
-                    addBtn.textContent = "Adding…";
-                    addToCart(p.id, qty)
-                      .then(function () {
-                        addBtn.textContent = "Added ✓";
-                        setTimeout(function () {
-                          addBtn.textContent = "Add to Cart";
+        // "teaser" mode: the dark navy card treatment used for the Home shop teaser
+        // section — same real add-to-cart behavior as the default light card, just
+        // themed to sit correctly on a navy section instead of looking like a stray
+        // white box. A product with no imageUrl yet gets a themed gradient placeholder
+        // (its name lettered over it) rather than silently showing no image at all.
+        var teaser = node.getAttribute("data-plexo-commerce-mode") === "teaser";
+        var media = p.imageUrl
+          ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "200px", objectFit: "cover", display: "block" } })
+          : teaser
+            ? el("div", { style: { height: "200px", background: "linear-gradient(160deg,#1F3B2A,#2E7D52)", display: "flex", alignItems: "center", justifyContent: "center" } }, [el("span", { class: "pc-serif", style: { fontSize: "15px", color: "#D7F0DF" } }, [p.name])])
+            : null;
+
+        var body = teaser
+          ? [
+              media,
+              el("div", { style: { padding: "20px", display: "flex", flexDirection: "column", gap: "8px" } }, [
+                el("span", { style: { fontSize: "14.5px", fontWeight: "600", color: "#FBFAF6" } }, [p.name]),
+                el("span", { class: "pc-mono", style: { fontSize: "13px", color: "#E3B23C" } }, [money(p.priceMinor, p.currency)]),
+                (addBtn = el(
+                  "button",
+                  {
+                    class: "pc-btn pc-btn-gold",
+                    style: { width: "100%", fontSize: "13px", padding: "9px 14px", marginTop: "4px" },
+                    disabled: p.stockQuantity === 0 ? "disabled" : null,
+                    onclick: function () {
+                      addBtn.disabled = true;
+                      addBtn.textContent = "Adding…";
+                      addToCart(p.id, 1)
+                        .then(function () {
+                          addBtn.textContent = "Added ✓";
+                          setTimeout(function () {
+                            addBtn.textContent = "Add to Cart";
+                            addBtn.disabled = p.stockQuantity === 0;
+                          }, 1400);
+                        })
+                        .catch(function (err) {
                           addBtn.disabled = false;
-                        }, 1400);
-                      })
-                      .catch(function (err) {
-                        addBtn.textContent = "Add to Cart";
-                        addBtn.disabled = false;
-                        alert(err.message);
-                      });
+                          addBtn.textContent = "Add to Cart";
+                          alert(err.message);
+                        });
+                    },
                   },
-                },
-                ["Add to Cart"]
-              )),
-            ]),
-          ]),
-        ];
-        node.appendChild(el("div", { class: "pc-card", style: { height: "100%" } }, body));
+                  [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart"]
+                )),
+              ]),
+            ]
+          : [
+              media,
+              el("div", { style: { padding: "20px", display: "flex", flexDirection: "column", gap: "12px" } }, [
+                el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" } }, [
+                  el("h3", { class: "pc-serif", style: { margin: "0", fontSize: "18px", fontWeight: "600", color: "#16233F" } }, [p.name]),
+                  stockBadge(p.stockQuantity),
+                ]),
+                p.description ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13.5px", lineHeight: "1.55" } }, [p.description]) : null,
+                el("div", { class: "pc-mono", style: { fontSize: "16px", color: "#16233F" } }, [money(p.priceMinor, p.currency)]),
+                el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
+                  buildQtyRow(),
+                  (addBtn = el(
+                    "button",
+                    {
+                      class: "pc-btn",
+                      disabled: p.stockQuantity === 0 ? "disabled" : null,
+                      onclick: function () {
+                        addBtn.disabled = true;
+                        addBtn.textContent = "Adding…";
+                        addToCart(p.id, qty)
+                          .then(function () {
+                            addBtn.textContent = "Added ✓";
+                            setTimeout(function () {
+                              addBtn.textContent = "Add to Cart";
+                              addBtn.disabled = false;
+                            }, 1400);
+                          })
+                          .catch(function (err) {
+                            addBtn.textContent = "Add to Cart";
+                            addBtn.disabled = false;
+                            alert(err.message);
+                          });
+                      },
+                    },
+                    ["Add to Cart"]
+                  )),
+                ]),
+              ]),
+            ];
+        node.appendChild(
+          el("div", { style: Object.assign({ height: "100%", overflow: "hidden" }, teaser ? { background: "#1E2F52", border: "1px solid rgba(227,178,60,0.16)" } : { background: "#fff", border: "1px solid #E4E1D6" }) }, body)
+        );
       })
       .catch(function (err) {
         showError(node, err.message);
@@ -929,6 +977,26 @@
   // Boot
   // ---------------------------------------------------------------------
 
+  // Not a native SDK marker family (no plexo-sdk change needed for this) — just a plain
+  // `data-plexo-commerce-product-count` attribute a hand-authored page can drop on any
+  // element (e.g. inside "View all N products") to have this runtime keep the number
+  // live against the real catalog, instead of a count baked in at generation time that
+  // silently goes stale the moment a product is added or removed.
+  function renderProductCounts() {
+    var nodes = document.querySelectorAll("[data-plexo-commerce-product-count]");
+    if (nodes.length === 0) return;
+    api("/api/public/commerce/products")
+      .then(function (data) {
+        var count = (data.products || []).filter(function (p) {
+          return p.kind === "PHYSICAL";
+        }).length;
+        nodes.forEach(function (n) {
+          n.textContent = String(count);
+        });
+      })
+      .catch(function () {});
+  }
+
   function init() {
     injectStyles();
     document.querySelectorAll("[data-plexo-commerce-product]").forEach(renderProduct);
@@ -938,6 +1006,7 @@
     document.querySelectorAll("[data-plexo-commerce-checkoutFlow]").forEach(renderCheckoutFlow);
     document.querySelectorAll("[data-plexo-commerce-orderConfirmation]").forEach(renderOrderConfirmation);
     document.querySelectorAll("[data-plexo-commerce-orderTracking]").forEach(renderOrderTracking);
+    renderProductCounts();
     fetchCart().then(broadcastCart).catch(function () {});
   }
 
