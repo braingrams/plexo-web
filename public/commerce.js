@@ -58,10 +58,7 @@
       ".pc-badge-low{background:#FBEFD8;color:#8A5A22;}",
       ".pc-badge-out{background:#F3E4E1;color:#8C3A2E;}",
       ".pc-grid{display:grid;gap:24px;}",
-      ".pc-grid-4{display:grid;gap:20px;grid-template-columns:repeat(4, minmax(0, 1fr));}",
-      "@media (max-width:900px){.pc-grid-4{grid-template-columns:repeat(2, minmax(0, 1fr));}}",
-      "@media (max-width:520px){.pc-grid-4{grid-template-columns:1fr;}}",
-      ".pc-select{padding:12px 14px;font-size:13.5px;border:1px solid #E4E1D6;border-radius:0;font-family:'Public Sans',sans-serif;color:#1B2333;background:#FFFFFF;}",
+      ".pc-select{padding:12px 32px 12px 14px;font-size:13.5px;border:1px solid #E4E1D6;border-radius:0;font-family:'Public Sans',sans-serif;color:#1B2333;background-color:#FFFFFF;appearance:none;-webkit-appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23565F72' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 12px center;}",
       ".pc-newsletter-input::placeholder{color:#8FA0C4;}",
       ".pc-spin{width:22px;height:22px;border-radius:50%;border:2.5px solid #E4E1D6;border-top-color:#16233F;animation:pc-spin 0.7s linear infinite;}",
       "@keyframes pc-spin{to{transform:rotate(360deg);}}",
@@ -71,7 +68,19 @@
       ".pc-slot:hover{border-color:#E3B23C;}",
       ".pc-slot.active{background:#E3B23C;color:#16233F;border-color:#E3B23C;font-weight:600;}",
       ".pc-slot[disabled]{opacity:0.35;cursor:not-allowed;}",
-    ].join("\n");
+    ];
+    // Generic pc-grid-cols-N (N 1-6) — the shop_grid marker's itemsPerRow setting (see
+    // ShopGridPropertiesAccordion in plexo-sdk) picks one of these rather than a single
+    // hardcoded column count, in both storeMode and curated mode. Caps at 2 columns on
+    // tablet and 1 on mobile regardless of the desktop count, same idea as every other
+    // responsive grid on this site.
+    for (var gridN = 1; gridN <= 6; gridN++) {
+      css.push(".pc-grid-cols-" + gridN + "{display:grid;gap:20px;grid-template-columns:repeat(" + gridN + ", minmax(0, 1fr));}");
+      css.push("@media (max-width:900px){.pc-grid-cols-" + gridN + "{grid-template-columns:repeat(" + Math.min(gridN, 2) + ", minmax(0, 1fr));}}");
+      css.push("@media (max-width:520px){.pc-grid-cols-" + gridN + "{grid-template-columns:1fr;}}");
+    }
+    css.push("@media (max-width:640px){.pc-shop-controls{flex-direction:column;align-items:stretch;}.pc-shop-controls-right{flex-direction:column;width:100%;margin-left:0 !important;}.pc-select,.pc-shop-search{width:100% !important;}}");
+    css = css.join("\n");
     var style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = css;
@@ -596,9 +605,25 @@
     }
   }
 
-  var SHOP_PAGE_SIZE = 12;
+  // Clamped 1-6 to match the pc-grid-cols-N classes injectStyles() generates — any
+  // number outside that range falls back to the sensible default rather than emitting a
+  // class that doesn't exist.
+  function clampGridCols(raw, fallback) {
+    var n = parseInt(raw, 10);
+    if (!isFinite(n) || n < 1) return fallback;
+    return Math.min(6, n);
+  }
+  function clampPageSize(raw, fallback) {
+    var n = parseInt(raw, 10);
+    if (!isFinite(n) || n < 1) return fallback;
+    return Math.min(96, n);
+  }
 
   function renderShopGridStore(node) {
+    var itemsPerRow = clampGridCols(node.getAttribute("data-plexo-commerce-items-per-row"), 4);
+    var pageSize = clampPageSize(node.getAttribute("data-plexo-commerce-items-per-page"), 12);
+    var dark = node.getAttribute("data-plexo-commerce-mode") === "dark";
+
     showSpinner(node);
     api("/api/public/commerce/products")
       .then(function (data) {
@@ -625,7 +650,7 @@
           return;
         }
 
-        var grid = el("div", { class: "pc-grid pc-grid-4" });
+        var grid = el("div", { class: "pc-grid pc-grid-cols-" + itemsPerRow });
         var pager = el("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: "16px", marginTop: "28px" } });
 
         function matchesStock(p) {
@@ -646,11 +671,11 @@
             grid.appendChild(el("p", { class: "pc-muted", style: { gridColumn: "1 / -1" } }, ["No products match — try a different filter."]));
             return;
           }
-          var totalPages = Math.max(1, Math.ceil(filtered.length / SHOP_PAGE_SIZE));
+          var totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
           if (page > totalPages) page = totalPages;
-          var start = (page - 1) * SHOP_PAGE_SIZE;
-          filtered.slice(start, start + SHOP_PAGE_SIZE).forEach(function (p) {
-            grid.appendChild(shopCard(p));
+          var start = (page - 1) * pageSize;
+          filtered.slice(start, start + pageSize).forEach(function (p) {
+            grid.appendChild(shopCard(p, dark));
           });
           if (totalPages > 1) {
             var prevBtn, nextBtn;
@@ -677,7 +702,7 @@
           renderCards();
         }
 
-        var controls = el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "14px", marginBottom: "24px" } });
+        var controls = el("div", { class: "pc-shop-controls", style: { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "14px", marginBottom: "24px" } });
 
         var pillRow = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap" } });
         if (categories.length > 0) {
@@ -717,7 +742,7 @@
           });
         }
 
-        var rightControls = el("div", { style: { display: "flex", gap: "10px", flexWrap: "wrap", marginLeft: "auto" } }, [
+        var rightControls = el("div", { class: "pc-shop-controls-right", style: { display: "flex", gap: "10px", flexWrap: "wrap", marginLeft: "auto" } }, [
           el(
             "select",
             {
@@ -734,7 +759,7 @@
             ]
           ),
           el("input", {
-            class: "pc-input",
+            class: "pc-input pc-shop-search",
             placeholder: "Search products…",
             style: { width: "220px" },
             oninput: function (e) {
@@ -763,10 +788,10 @@
   function renderShopGridCurated(node) {
     var category = node.getAttribute("data-plexo-commerce-category") || "";
     var sort = node.getAttribute("data-plexo-commerce-sort") || "";
-    var limit = parseInt(node.getAttribute("data-plexo-commerce-limit"), 10) || 6;
-    var itemsPerRow = parseInt(node.getAttribute("data-plexo-commerce-items-per-row"), 10) || 3;
+    var limit = clampPageSize(node.getAttribute("data-plexo-commerce-limit"), 6);
+    var itemsPerRow = clampGridCols(node.getAttribute("data-plexo-commerce-items-per-row"), 3);
     var paginated = node.getAttribute("data-plexo-commerce-paginated") === "true";
-    var itemsPerPage = parseInt(node.getAttribute("data-plexo-commerce-items-per-page"), 10) || limit;
+    var itemsPerPage = clampPageSize(node.getAttribute("data-plexo-commerce-items-per-page"), limit);
     var dark = node.getAttribute("data-plexo-commerce-mode") === "dark";
     var categoryParam = category || sort || "";
     var page = 1;
@@ -793,7 +818,7 @@
         return p.kind === "PHYSICAL";
       });
       var total = data.total || 0;
-      var grid = el("div", { class: "pc-grid", style: { gridTemplateColumns: "repeat(" + itemsPerRow + ", minmax(0, 1fr))" } });
+      var grid = el("div", { class: "pc-grid pc-grid-cols-" + itemsPerRow });
 
       var slots = paginated ? itemsPerPage : limit;
       for (var i = 0; i < Math.min(products.length, slots); i++) {

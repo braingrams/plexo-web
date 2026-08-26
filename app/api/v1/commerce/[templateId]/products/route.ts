@@ -37,8 +37,15 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
     include: { category: { select: { id: true, name: true } } },
     orderBy: { createdAt: "desc" },
   });
+  // Powers the shop_grid block's properties-panel "Show" dropdown (a real category, or
+  // best-seller/most-recent) — same shape the public products endpoint already returns.
+  const categories = await prisma.commerceCategory.findMany({
+    where: { templateId },
+    select: { id: true, name: true, slug: true },
+    orderBy: { name: "asc" },
+  });
 
-  return NextResponse.json({ products });
+  return NextResponse.json({ products, categories });
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
