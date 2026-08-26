@@ -27,30 +27,35 @@
   function injectStyles() {
     if (document.getElementById(STYLE_ID)) return;
     var css = [
-      ".pc-root{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;box-sizing:border-box;}",
+      ".pc-root{font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;color:#1B2333;}",
       ".pc-root *{box-sizing:border-box;}",
-      ".pc-muted{color:#6b7280;}",
-      ".pc-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#111827;color:#fff;border:none;padding:12px 20px;font-size:14px;font-weight:600;cursor:pointer;border-radius:4px;font-family:inherit;line-height:1.2;}",
-      ".pc-btn:hover{background:#1f2937;}",
+      ".pc-mono{font-family:'IBM Plex Mono',monospace;}",
+      ".pc-serif{font-family:'Fraunces',serif;}",
+      ".pc-muted{color:#565F72;}",
+      ".pc-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#16233F;color:#FBFAF6;border:none;padding:14px 22px;font-size:14.5px;font-weight:600;cursor:pointer;border-radius:2px;font-family:'Public Sans',sans-serif;line-height:1.2;}",
+      ".pc-btn:hover{background:#1E2F52;}",
       ".pc-btn:disabled{opacity:0.5;cursor:not-allowed;}",
-      ".pc-btn-outline{background:transparent;color:#111827;border:1.5px solid #d1d5db;}",
-      ".pc-btn-outline:hover{background:#f9fafb;}",
-      ".pc-input{width:100%;padding:11px 13px;font-size:14px;border:1px solid #d1d5db;border-radius:4px;font-family:inherit;color:#111827;background:#fff;}",
-      ".pc-input:focus{outline:2px solid #111827;outline-offset:-1px;}",
-      ".pc-label{display:block;font-size:12px;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:6px;}",
-      ".pc-card{background:#fff;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;}",
-      ".pc-error{background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:10px 14px;border-radius:4px;font-size:13.5px;margin:10px 0;}",
-      ".pc-badge{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:3px 8px;border-radius:3px;}",
-      ".pc-badge-ok{background:#ecfdf5;color:#047857;}",
-      ".pc-badge-low{background:#fffbeb;color:#b45309;}",
-      ".pc-badge-out{background:#fef2f2;color:#b91c1c;}",
-      ".pc-grid{display:grid;gap:20px;}",
-      ".pc-spin{width:22px;height:22px;border-radius:50%;border:2.5px solid #e5e7eb;border-top-color:#111827;animation:pc-spin 0.7s linear infinite;}",
+      ".pc-btn-gold{background:#E3B23C;color:#16233F;}",
+      ".pc-btn-gold:hover{background:#F6E7C3;}",
+      ".pc-btn-outline{background:transparent;color:#16233F;border:1.5px solid #E4E1D6;}",
+      ".pc-btn-outline:hover{background:#F3F1EA;}",
+      ".pc-input{width:100%;padding:14px 16px;font-size:14px;border:1px solid #E4E1D6;border-radius:0;font-family:'Public Sans',sans-serif;color:#1B2333;background:#FFFFFF;}",
+      ".pc-input:focus{outline:1.5px solid #16233F;outline-offset:-1px;}",
+      ".pc-label{display:block;font-size:12.5px;font-weight:600;color:#16233F;margin-bottom:8px;}",
+      ".pc-card{background:#FFFFFF;border:1px solid #E4E1D6;border-radius:0;overflow:hidden;}",
+      ".pc-error{background:#F3E4E1;border:1px solid #E3B8AE;color:#8C3A2E;padding:10px 14px;border-radius:2px;font-size:13.5px;margin:10px 0;}",
+      ".pc-badge{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:500;letter-spacing:0.05em;text-transform:uppercase;padding:4px 8px;border-radius:0;}",
+      ".pc-badge-ok{background:#E4F0E7;color:#1F5C3C;}",
+      ".pc-badge-low{background:#FBEFD8;color:#8A5A22;}",
+      ".pc-badge-out{background:#F3E4E1;color:#8C3A2E;}",
+      ".pc-grid{display:grid;gap:24px;}",
+      ".pc-spin{width:22px;height:22px;border-radius:50%;border:2.5px solid #E4E1D6;border-top-color:#16233F;animation:pc-spin 0.7s linear infinite;}",
       "@keyframes pc-spin{to{transform:rotate(360deg);}}",
-      ".pc-pill{display:inline-flex;align-items:center;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:600;border:1px solid #d1d5db;background:#fff;color:#374151;cursor:pointer;}",
-      ".pc-pill.active{background:#111827;color:#fff;border-color:#111827;}",
-      ".pc-slot{text-align:center;padding:9px 4px;border:1.5px solid #d1d5db;border-radius:4px;font-size:12.5px;cursor:pointer;background:#fff;}",
-      ".pc-slot.active{background:#111827;color:#fff;border-color:#111827;}",
+      ".pc-pill{display:inline-flex;align-items:center;padding:9px 18px;border-radius:100px;font-size:13px;font-weight:500;border:1px solid #E4E1D6;background:#fff;color:#3C4356;cursor:pointer;}",
+      ".pc-pill.active{background:#16233F;color:#FBFAF6;border-color:#16233F;font-weight:600;}",
+      ".pc-slot{text-align:center;padding:8px 0;border:1.5px solid #E4E1D6;border-radius:0;font-family:'IBM Plex Mono',monospace;font-size:10.5px;cursor:pointer;background:#fff;color:#16233F;}",
+      ".pc-slot:hover{border-color:#E3B23C;}",
+      ".pc-slot.active{background:#E3B23C;color:#16233F;border-color:#E3B23C;font-weight:600;}",
       ".pc-slot[disabled]{opacity:0.35;cursor:not-allowed;}",
     ].join("\n");
     var style = document.createElement("style");
@@ -179,6 +184,10 @@
   function renderProduct(node) {
     var productId = node.getAttribute("data-plexo-product-id");
     if (!productId) return;
+    // "bare" mode: the surrounding hand-authored page (e.g. Product Detail) already shows
+    // the name/price/description/badge itself — this renders only the interactive
+    // qty-stepper + Add to Cart control, not a second copy of the card chrome.
+    var bare = node.getAttribute("data-plexo-commerce-mode") === "bare";
     showSpinner(node);
     api("/api/public/commerce/products/" + encodeURIComponent(productId))
       .then(function (data) {
@@ -192,12 +201,12 @@
         var addBtn;
 
         function buildQtyRow() {
-          return el("div", { style: { display: "flex", alignItems: "center", gap: "0", width: "fit-content", border: "1px solid #d1d5db", borderRadius: "4px" } }, [
+          return el("div", { style: { display: "flex", alignItems: "center", gap: "0", width: "fit-content", border: "1px solid #E4E1D6" } }, [
             el(
               "button",
               {
                 class: "pc-btn-outline",
-                style: { border: "none", borderRight: "1px solid #d1d5db", borderRadius: "0", width: "38px", height: "38px", padding: "0" },
+                style: { border: "none", borderRight: "1px solid #E4E1D6", width: "44px", height: "44px", padding: "0", fontSize: "18px" },
                 onclick: function () {
                   if (qty > 1) qty -= 1;
                   qtyLabel.textContent = String(qty);
@@ -205,12 +214,12 @@
               },
               ["–"]
             ),
-            (qtyLabel = el("span", { style: { width: "44px", textAlign: "center", fontSize: "14px" } }, [String(qty)])),
+            (qtyLabel = el("span", { class: "pc-mono", style: { width: "52px", textAlign: "center", fontSize: "14px" } }, [String(qty)])),
             el(
               "button",
               {
                 class: "pc-btn-outline",
-                style: { border: "none", borderLeft: "1px solid #d1d5db", borderRadius: "0", width: "38px", height: "38px", padding: "0" },
+                style: { border: "none", borderLeft: "1px solid #E4E1D6", width: "44px", height: "44px", padding: "0", fontSize: "18px" },
                 onclick: function () {
                   qty += 1;
                   qtyLabel.textContent = String(qty);
@@ -222,45 +231,86 @@
         }
 
         var isService = p.kind === "SERVICE";
+
+        if (isService) {
+          node.appendChild(
+            el("a", { class: "pc-btn pc-btn-gold", href: "#" + node.getAttribute("data-plexo-id"), style: bare ? { width: "100%" } : {}, onclick: function (e) { e.preventDefault(); var target = document.querySelector('[data-plexo-commerce-booking][data-plexo-service-id="' + p.id + '"]'); if (target) target.scrollIntoView({ behavior: "smooth", block: "center" }); } }, ["Book this service"])
+          );
+          return;
+        }
+
+        if (bare) {
+          node.appendChild(
+            el("div", { style: { display: "flex", flexDirection: "column", gap: "12px" } }, [
+              buildQtyRow(),
+              (addBtn = el(
+                "button",
+                {
+                  class: "pc-btn",
+                  style: { width: "100%", padding: "17px 0", fontSize: "15px" },
+                  disabled: p.stockQuantity === 0 ? "disabled" : null,
+                  onclick: function () {
+                    addBtn.disabled = true;
+                    addBtn.textContent = "Adding…";
+                    addToCart(p.id, qty)
+                      .then(function () {
+                        addBtn.textContent = "Added ✓";
+                        setTimeout(function () {
+                          addBtn.textContent = "Add to Cart — " + money(p.priceMinor * qty, p.currency);
+                          addBtn.disabled = false;
+                        }, 1400);
+                      })
+                      .catch(function (err) {
+                        addBtn.textContent = "Add to Cart — " + money(p.priceMinor * qty, p.currency);
+                        addBtn.disabled = false;
+                        alert(err.message);
+                      });
+                  },
+                },
+                [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart — " + money(p.priceMinor, p.currency)]
+              )),
+            ])
+          );
+          return;
+        }
+
         var body = [
           p.imageUrl ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "220px", objectFit: "cover", display: "block" } }) : null,
           el("div", { style: { padding: "20px", display: "flex", flexDirection: "column", gap: "12px" } }, [
             el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" } }, [
-              el("h3", { style: { margin: "0", fontSize: "17px", fontWeight: "700", color: "#111827" } }, [p.name]),
-              isService ? null : stockBadge(p.stockQuantity),
+              el("h3", { class: "pc-serif", style: { margin: "0", fontSize: "18px", fontWeight: "600", color: "#16233F" } }, [p.name]),
+              stockBadge(p.stockQuantity),
             ]),
             p.description ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13.5px", lineHeight: "1.55" } }, [p.description]) : null,
-            el("div", { style: { fontSize: "18px", fontWeight: "700", color: "#111827" } }, [money(p.priceMinor, p.currency), isService && p.durationMinutes ? el("span", { class: "pc-muted", style: { fontWeight: "500", fontSize: "13px" } }, [" · " + p.durationMinutes + " min"]) : null]),
-            isService
-              ? el("a", { class: "pc-btn", href: "#" + node.getAttribute("data-plexo-id"), onclick: function (e) { e.preventDefault(); var target = document.querySelector('[data-plexo-commerce-booking][data-plexo-service-id="' + p.id + '"]'); if (target) target.scrollIntoView({ behavior: "smooth", block: "center" }); } }, ["Book this service"])
-              : el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
-                  buildQtyRow(),
-                  (addBtn = el(
-                    "button",
-                    {
-                      class: "pc-btn",
-                      disabled: p.stockQuantity === 0 ? "disabled" : null,
-                      onclick: function () {
-                        addBtn.disabled = true;
-                        addBtn.textContent = "Adding…";
-                        addToCart(p.id, qty)
-                          .then(function () {
-                            addBtn.textContent = "Added ✓";
-                            setTimeout(function () {
-                              addBtn.textContent = "Add to Cart";
-                              addBtn.disabled = false;
-                            }, 1400);
-                          })
-                          .catch(function (err) {
-                            addBtn.textContent = "Add to Cart";
-                            addBtn.disabled = false;
-                            alert(err.message);
-                          });
-                      },
-                    },
-                    ["Add to Cart"]
-                  )),
-                ]),
+            el("div", { class: "pc-mono", style: { fontSize: "16px", color: "#16233F" } }, [money(p.priceMinor, p.currency)]),
+            el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
+              buildQtyRow(),
+              (addBtn = el(
+                "button",
+                {
+                  class: "pc-btn",
+                  disabled: p.stockQuantity === 0 ? "disabled" : null,
+                  onclick: function () {
+                    addBtn.disabled = true;
+                    addBtn.textContent = "Adding…";
+                    addToCart(p.id, qty)
+                      .then(function () {
+                        addBtn.textContent = "Added ✓";
+                        setTimeout(function () {
+                          addBtn.textContent = "Add to Cart";
+                          addBtn.disabled = false;
+                        }, 1400);
+                      })
+                      .catch(function (err) {
+                        addBtn.textContent = "Add to Cart";
+                        addBtn.disabled = false;
+                        alert(err.message);
+                      });
+                  },
+                },
+                ["Add to Cart"]
+              )),
+            ]),
           ]),
         ];
         node.appendChild(el("div", { class: "pc-card", style: { height: "100%" } }, body));
@@ -311,7 +361,7 @@
             var d = new Date(daySlots[0].start);
             var dayLabel = d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
             var row = el("div", {}, [
-              el("div", { style: { fontSize: "11.5px", fontWeight: "700", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" } }, [dayLabel]),
+              el("div", { style: { fontSize: "11.5px", fontWeight: "700", color: "#565F72", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" } }, [dayLabel]),
               el(
                 "div",
                 { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(70px, 1fr))", gap: "8px" } },
@@ -355,7 +405,7 @@
         confirmBtn = el(
           "button",
           {
-            class: "pc-btn",
+            class: "pc-btn pc-btn-gold",
             disabled: "disabled",
             style: { width: "100%" },
             onclick: function () {
@@ -395,11 +445,11 @@
         node.appendChild(
           el("div", { class: "pc-card", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "20px" } }, [
             el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" } }, [
-              el("h3", { style: { margin: "0", fontSize: "17px", fontWeight: "700", color: "#111827" } }, ["Choose a time"]),
+              el("h3", { style: { margin: "0", fontSize: "17px", fontWeight: "700", color: "#16233F" } }, ["Choose a time"]),
               el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, [product.durationMinutes ? product.durationMinutes + " min" : ""]),
             ]),
             slotGrid,
-            el("div", { style: { height: "1px", background: "#e5e7eb" } }),
+            el("div", { style: { height: "1px", background: "#E4E1D6" } }),
             nameField.wrap,
             emailField.wrap,
             phoneField.wrap,
@@ -449,13 +499,13 @@
               el("div", { class: "pc-card", style: { display: "flex", flexDirection: "column" } }, [
                 p.imageUrl
                   ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "160px", objectFit: "cover", display: "block" } })
-                  : el("div", { style: { width: "100%", height: "160px", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: "13px" } }, [p.name]),
+                  : el("div", { style: { width: "100%", height: "160px", background: "#F3F1EA", display: "flex", alignItems: "center", justifyContent: "center", color: "#8A93A6", fontSize: "13px" } }, [p.name]),
                 el("div", { style: { padding: "14px", display: "flex", flexDirection: "column", gap: "8px", flex: "1" } }, [
                   el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" } }, [
-                    el("span", { style: { fontSize: "14px", fontWeight: "600", color: "#111827" } }, [p.name]),
+                    el("span", { style: { fontSize: "14px", fontWeight: "600", color: "#16233F" } }, [p.name]),
                     stockBadge(p.stockQuantity),
                   ]),
-                  el("div", { style: { fontSize: "14.5px", fontWeight: "700", color: "#111827", marginTop: "auto" } }, [money(p.priceMinor, p.currency)]),
+                  el("div", { style: { fontSize: "14.5px", fontWeight: "700", color: "#16233F", marginTop: "auto" } }, [money(p.priceMinor, p.currency)]),
                   (addBtn = el(
                     "button",
                     {
@@ -570,13 +620,13 @@
         { style: { display: "flex", flexDirection: "column" } },
         snapshot.items.map(function (item) {
           var qtyLabel;
-          return el("div", { style: { display: "flex", alignItems: "center", gap: "14px", padding: "16px 0", borderBottom: "1px solid #e5e7eb" } }, [
+          return el("div", { style: { display: "flex", alignItems: "center", gap: "14px", padding: "16px 0", borderBottom: "1px solid #E4E1D6" } }, [
             item.imageUrl
               ? el("img", { src: item.imageUrl, alt: item.name, style: { width: "56px", height: "56px", objectFit: "cover", borderRadius: "4px", flexShrink: "0" } })
-              : el("div", { style: { width: "56px", height: "56px", background: "#f3f4f6", borderRadius: "4px", flexShrink: "0" } }),
+              : el("div", { style: { width: "56px", height: "56px", background: "#F3F1EA", borderRadius: "4px", flexShrink: "0" } }),
             el("div", { style: { flex: "1", minWidth: "0" } }, [
-              el("div", { style: { fontSize: "14px", fontWeight: "600", color: "#111827" } }, [item.name]),
-              !item.inStock ? el("div", { style: { fontSize: "12px", color: "#b91c1c" } }, ["No longer in stock"]) : null,
+              el("div", { style: { fontSize: "14px", fontWeight: "600", color: "#16233F" } }, [item.name]),
+              !item.inStock ? el("div", { style: { fontSize: "12px", color: "#8C3A2E" } }, ["No longer in stock"]) : null,
               el("div", { style: { display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" } }, [
                 el(
                   "button",
@@ -604,7 +654,7 @@
                 el(
                   "button",
                   {
-                    style: { background: "none", border: "none", color: "#9ca3af", fontSize: "12px", cursor: "pointer", marginLeft: "8px", textDecoration: "underline" },
+                    style: { background: "none", border: "none", color: "#8A93A6", fontSize: "12px", cursor: "pointer", marginLeft: "8px", textDecoration: "underline" },
                     onclick: function () {
                       updateQty(item.itemId, 0).then(paint);
                     },
@@ -613,13 +663,13 @@
                 ),
               ]),
             ]),
-            el("div", { style: { fontSize: "14px", fontWeight: "600", color: "#111827", whiteSpace: "nowrap" } }, [money(item.lineTotalMinor, snapshot.currency)]),
+            el("div", { style: { fontSize: "14px", fontWeight: "600", color: "#16233F", whiteSpace: "nowrap" } }, [money(item.lineTotalMinor, snapshot.currency)]),
           ]);
         })
       );
       node.appendChild(list);
       node.appendChild(
-        el("div", { style: { display: "flex", justifyContent: "space-between", padding: "18px 0 0", fontSize: "16px", fontWeight: "700", color: "#111827" } }, [el("span", {}, ["Subtotal"]), el("span", {}, [money(snapshot.subtotalMinor, snapshot.currency)])])
+        el("div", { style: { display: "flex", justifyContent: "space-between", padding: "18px 0 0", fontSize: "16px", fontWeight: "700", color: "#16233F" } }, [el("span", {}, ["Subtotal"]), el("span", {}, [money(snapshot.subtotalMinor, snapshot.currency)])])
       );
     }
 
@@ -672,18 +722,18 @@
           var wrap = el(
             "div",
             {
-              style: { border: "1.5px solid " + (value === deliveryMethod ? "#111827" : "#e5e7eb"), borderRadius: "4px", padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" },
+              style: { border: "1.5px solid " + (value === deliveryMethod ? "#16233F" : "#E4E1D6"), borderRadius: "4px", padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" },
               onclick: function () {
                 deliveryMethod = value;
                 Array.prototype.forEach.call(node.querySelectorAll("[data-pc-delivery-option]"), function (o) {
-                  o.style.borderColor = "#e5e7eb";
+                  o.style.borderColor = "#E4E1D6";
                 });
-                wrap.style.borderColor = "#111827";
+                wrap.style.borderColor = "#16233F";
                 refreshTotal();
               },
               "data-pc-delivery-option": "true",
             },
-            [el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#111827" } }, [label]), el("span", { class: "pc-muted", style: { fontSize: "12px" } }, [feeText])]
+            [el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F" } }, [label]), el("span", { class: "pc-muted", style: { fontSize: "12px" } }, [feeText])]
           );
           return wrap;
         }
@@ -700,7 +750,7 @@
         payBtn = el(
           "button",
           {
-            class: "pc-btn",
+            class: "pc-btn pc-btn-gold",
             style: { width: "100%" },
             onclick: function () {
               if (errorBox) {
@@ -748,8 +798,8 @@
             emailField.wrap,
             phoneField.wrap,
             discountField.wrap,
-            el("div", { style: { height: "1px", background: "#e5e7eb" } }),
-            el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "16px", fontWeight: "700", color: "#111827" } }, [el("span", {}, ["Total"]), (totalLabel = el("span", {}, [money(computeTotal(), cart.currency)]))]),
+            el("div", { style: { height: "1px", background: "#E4E1D6" } }),
+            el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "16px", fontWeight: "700", color: "#16233F" } }, [el("span", {}, ["Total"]), (totalLabel = el("span", {}, [money(computeTotal(), cart.currency)]))]),
             payBtn,
             el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, ["Secured by Paystack"]),
           ])
@@ -782,14 +832,14 @@
         node.appendChild(
           el("div", { class: "pc-card", style: { padding: "28px", display: "flex", flexDirection: "column", gap: "18px" } }, [
             el("div", { style: { display: "flex", alignItems: "center", gap: "10px" } }, [
-              el("span", { style: { background: "#111827", color: "#fff", fontSize: "11px", fontWeight: "700", padding: "5px 10px", borderRadius: "3px", letterSpacing: "0.04em" } }, [order.orderNumber]),
+              el("span", { style: { background: "#16233F", color: "#fff", fontSize: "11px", fontWeight: "700", padding: "5px 10px", borderRadius: "3px", letterSpacing: "0.04em" } }, [order.orderNumber]),
               el("span", { class: "pc-badge " + (order.status === "PAID" ? "pc-badge-ok" : order.status === "PENDING" ? "pc-badge-low" : "pc-badge-out") }, [order.status]),
             ]),
             el(
               "div",
               { style: { display: "flex", flexDirection: "column" } },
               order.items.map(function (item) {
-                return el("div", { style: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #e5e7eb", fontSize: "13.5px" } }, [
+                return el("div", { style: { display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #E4E1D6", fontSize: "13.5px" } }, [
                   el("span", {}, [item.nameSnapshot + " × " + item.quantity]),
                   el("span", { style: { fontWeight: "600" } }, [money(item.unitPriceMinor * item.quantity, order.currency)]),
                 ]);
@@ -798,7 +848,7 @@
             order.booking
               ? el("div", { class: "pc-muted", style: { fontSize: "13px" } }, ["Scheduled for " + new Date(order.booking.scheduledStart).toLocaleString()])
               : null,
-            el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "16px", fontWeight: "700", color: "#111827" } }, [el("span", {}, ["Total"]), el("span", {}, [money(order.amountMinor, order.currency)])]),
+            el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "16px", fontWeight: "700", color: "#16233F" } }, [el("span", {}, ["Total"]), el("span", {}, [money(order.amountMinor, order.currency)])]),
             el("a", { class: "pc-btn", href: "/track-order?order=" + encodeURIComponent(order.orderNumber) + "&email=" + encodeURIComponent(email), style: { textAlign: "center", textDecoration: "none" } }, ["Track my order"]),
           ])
         );
@@ -834,7 +884,7 @@
           var order = data.order;
           clear(resultBox);
           if (order.status !== "PAID") {
-            resultBox.appendChild(el("div", { class: "pc-error", style: { background: "#fffbeb", borderColor: "#fde68a", color: "#92400e" } }, ["This order hasn't been paid for yet."]));
+            resultBox.appendChild(el("div", { class: "pc-error", style: { background: "#FBEFD8", borderColor: "#fde68a", color: "#92400e" } }, ["This order hasn't been paid for yet."]));
             return;
           }
           var isCancelled = order.status === "CANCELLED" || order.status === "REFUNDED";
@@ -851,10 +901,10 @@
                       var done = i <= currentIndex;
                       return el("div", { style: { display: "flex", alignItems: "center", flex: i < FULFILLMENT_STEPS.length - 1 ? "1" : "0 0 auto" } }, [
                         el("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", minWidth: "70px" } }, [
-                          el("div", { style: { width: "16px", height: "16px", borderRadius: "50%", background: done ? "#111827" : "#e5e7eb" } }),
-                          el("div", { style: { fontSize: "10.5px", color: done ? "#111827" : "#9ca3af", textAlign: "center", fontWeight: done ? "700" : "500" } }, [FULFILLMENT_LABELS[step]]),
+                          el("div", { style: { width: "16px", height: "16px", borderRadius: "50%", background: done ? "#16233F" : "#E4E1D6" } }),
+                          el("div", { style: { fontSize: "10.5px", color: done ? "#16233F" : "#8A93A6", textAlign: "center", fontWeight: done ? "700" : "500" } }, [FULFILLMENT_LABELS[step]]),
                         ]),
-                        i < FULFILLMENT_STEPS.length - 1 ? el("div", { style: { flex: "1", height: "2px", background: i < currentIndex ? "#111827" : "#e5e7eb", margin: "0 4px 20px" } }) : null,
+                        i < FULFILLMENT_STEPS.length - 1 ? el("div", { style: { flex: "1", height: "2px", background: i < currentIndex ? "#16233F" : "#E4E1D6", margin: "0 4px 20px" } }) : null,
                       ]);
                     })
                   ),
