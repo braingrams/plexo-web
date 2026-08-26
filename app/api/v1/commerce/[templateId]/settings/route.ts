@@ -23,6 +23,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
         : null,
       maildripApiKeyMasked: settings?.maildripApiKeyEncrypted ? maskSecret(decryptMaildripKey(settings.maildripApiKeyEncrypted)) : null,
       maildripPaidGroupId: settings?.maildripPaidGroupId ?? null,
+      maildripNewsletterGroupId: settings?.maildripNewsletterGroupId ?? null,
       notificationEmail: settings?.notificationEmail ?? null,
       webhookUrl: `${request.nextUrl.origin}/api/webhooks/paystack/${templateId}`,
     },
@@ -39,7 +40,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
   if (permissionError) return permissionError;
 
   const body = await request.json().catch(() => ({}));
-  const { enabled, paystackMode, paystackPublicKey, paystackSecretKey, maildripApiKey, maildripPaidGroupId, notificationEmail } = body;
+  const { enabled, paystackMode, paystackPublicKey, paystackSecretKey, maildripApiKey, maildripPaidGroupId, maildripNewsletterGroupId, notificationEmail } = body;
 
   if (paystackMode !== undefined && paystackMode !== "TEST" && paystackMode !== "LIVE") {
     return NextResponse.json({ error: "paystackMode must be TEST or LIVE." }, { status: 400 });
@@ -59,6 +60,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
       paystackSecretKeyEncrypted: typeof paystackSecretKey === "string" && paystackSecretKey ? encryptPaystackKey(paystackSecretKey) : null,
       maildripApiKeyEncrypted: typeof maildripApiKey === "string" && maildripApiKey ? encryptMaildripKey(maildripApiKey) : null,
       maildripPaidGroupId: typeof maildripPaidGroupId === "string" && maildripPaidGroupId ? maildripPaidGroupId : null,
+      maildripNewsletterGroupId: typeof maildripNewsletterGroupId === "string" && maildripNewsletterGroupId ? maildripNewsletterGroupId : null,
       notificationEmail: typeof notificationEmail === "string" && notificationEmail ? notificationEmail : null,
     },
     update: {
@@ -69,6 +71,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
         typeof paystackSecretKey === "string" && paystackSecretKey ? encryptPaystackKey(paystackSecretKey) : undefined,
       maildripApiKeyEncrypted: typeof maildripApiKey === "string" && maildripApiKey ? encryptMaildripKey(maildripApiKey) : undefined,
       maildripPaidGroupId: typeof maildripPaidGroupId === "string" ? maildripPaidGroupId || null : undefined,
+      maildripNewsletterGroupId: typeof maildripNewsletterGroupId === "string" ? maildripNewsletterGroupId || null : undefined,
       notificationEmail: typeof notificationEmail === "string" ? notificationEmail || null : undefined,
     },
   });
@@ -81,6 +84,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
       paystackSecretKeyMasked: settings.paystackSecretKeyEncrypted ? maskSecret(decryptPaystackKey(settings.paystackSecretKeyEncrypted)) : null,
       maildripApiKeyMasked: settings.maildripApiKeyEncrypted ? maskSecret(decryptMaildripKey(settings.maildripApiKeyEncrypted)) : null,
       maildripPaidGroupId: settings.maildripPaidGroupId,
+      maildripNewsletterGroupId: settings.maildripNewsletterGroupId,
       notificationEmail: settings.notificationEmail,
       webhookUrl: `${request.nextUrl.origin}/api/webhooks/paystack/${templateId}`,
     },

@@ -1764,6 +1764,11 @@ model CommerceSettings {
   // group to tag is always org-specific regardless of which account sends the mail.
   maildripApiKeyEncrypted String?
   maildripPaidGroupId     String?
+  // Separate from maildripPaidGroupId — a site visitor can subscribe to updates without
+  // ever buying anything or booking a consultation, so this needs its own group and its
+  // own opt-in surface (a footer signup block, see commerce.js's renderNewsletterSignup)
+  // rather than being folded into the post-purchase tagging flow.
+  maildripNewsletterGroupId String?
 
   notificationEmail String?
   // Master switch — gates whether the published page shell injects commerce.js at all,

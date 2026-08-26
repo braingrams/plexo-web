@@ -44,6 +44,21 @@ async function sendReceiptEmail(apiKey: string, order: CommerceOrder): Promise<v
   }
 }
 
+/** Tags a bare email into a MailDrip group — the newsletter signup's own path, distinct
+ * from tagContactIntoGroup above which always has a real CommerceOrder (name/phone) to
+ * draw from. Throws on failure; the caller (a real-time public endpoint, not a
+ * best-effort webhook side-effect) surfaces that to the visitor instead of swallowing it. */
+export async function tagNewsletterSubscriber(apiKey: string, groupId: string, email: string): Promise<void> {
+  const response = await fetch(`${maildripApiBase()}/contacts?groupId=${encodeURIComponent(groupId)}`, {
+    method: "POST",
+    headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!response.ok) {
+    throw new Error(`MailDrip newsletter signup failed (${response.status}): ${await response.text()}`);
+  }
+}
+
 /**
  * Best-effort, non-blocking post-payment notification: tags the customer into the site's
  * configured MailDrip group and sends a receipt email. Uses the site's OWN MailDrip

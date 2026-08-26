@@ -9,6 +9,7 @@ type InitialSettings = {
   paystackSecretKeyMasked: string | null;
   maildripApiKeyMasked: string | null;
   maildripPaidGroupId: string;
+  maildripNewsletterGroupId: string;
   notificationEmail: string;
 };
 
@@ -45,6 +46,7 @@ export function SettingsClient({ templateId, initial }: { templateId: string; in
   const [paystackSecretKey, setPaystackSecretKey] = useState("");
   const [maildripApiKey, setMaildripApiKey] = useState("");
   const [maildripPaidGroupId, setMaildripPaidGroupId] = useState(initial.maildripPaidGroupId);
+  const [maildripNewsletterGroupId, setMaildripNewsletterGroupId] = useState(initial.maildripNewsletterGroupId);
   const [notificationEmail, setNotificationEmail] = useState(initial.notificationEmail);
   const [paystackSecretMasked, setPaystackSecretMasked] = useState(initial.paystackSecretKeyMasked);
   const [maildripMasked, setMaildripMasked] = useState(initial.maildripApiKeyMasked);
@@ -68,6 +70,7 @@ export function SettingsClient({ templateId, initial }: { templateId: string; in
           paystackSecretKey: paystackSecretKey || undefined,
           maildripApiKey: maildripApiKey || undefined,
           maildripPaidGroupId,
+          maildripNewsletterGroupId,
           notificationEmail,
         }),
       });
@@ -162,6 +165,9 @@ export function SettingsClient({ templateId, initial }: { templateId: string; in
         </FieldLabel>
         <FieldLabel label="Group to tag paid customers into">
           <input type="text" value={maildripPaidGroupId} onChange={(e) => setMaildripPaidGroupId(e.target.value)} placeholder="Group ID" style={inputStyle} />
+        </FieldLabel>
+        <FieldLabel label="Group to tag newsletter subscribers into" hint="Powers the site's newsletter signup block (e.g. in the footer) — separate from paying customers above, since a visitor can subscribe without ever buying anything.">
+          <input type="text" value={maildripNewsletterGroupId} onChange={(e) => setMaildripNewsletterGroupId(e.target.value)} placeholder="Group ID" style={inputStyle} />
         </FieldLabel>
       </Section>
 

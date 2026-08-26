@@ -17,6 +17,7 @@ export default async function CommerceSettingsPage({ params }: { params: Promise
         paystackSecretKeyMasked: settings?.paystackSecretKeyEncrypted ? maskSecret(decryptPaystackKey(settings.paystackSecretKeyEncrypted)) : null,
         maildripApiKeyMasked: settings?.maildripApiKeyEncrypted ? maskSecret(decryptMaildripKey(settings.maildripApiKeyEncrypted)) : null,
         maildripPaidGroupId: settings?.maildripPaidGroupId ?? "",
+        maildripNewsletterGroupId: settings?.maildripNewsletterGroupId ?? "",
         notificationEmail: settings?.notificationEmail ?? "",
       }}
     />

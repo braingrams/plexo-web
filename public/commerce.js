@@ -19,6 +19,15 @@
 
   var STYLE_ID = "plexo-commerce-style";
   var CART_EVENT = "plexo:cart-updated";
+  var CHECKOUT_STATE_EVENT = "plexo:checkout-state-changed";
+  var COURIER_FEE_MINOR = 150000;
+  // Shared between the checkout page's two independent marker blocks — checkout_flow
+  // (delivery method + contact details + discount code) and cart_summary (the order
+  // summary sidebar, which needs the current delivery method to compute the total, and
+  // the contact details to actually submit payment). Module-level rather than passed
+  // through props since the two markers render into separate DOM nodes with no direct
+  // reference to each other — see renderCheckoutFlow/renderCartSummary.
+  var checkoutFormState = { deliveryMethod: "PICKUP", customerName: "", customerEmail: "", customerPhone: "", discountCode: "" };
 
   // ---------------------------------------------------------------------
   // Shared helpers
@@ -49,6 +58,11 @@
       ".pc-badge-low{background:#FBEFD8;color:#8A5A22;}",
       ".pc-badge-out{background:#F3E4E1;color:#8C3A2E;}",
       ".pc-grid{display:grid;gap:24px;}",
+      ".pc-grid-4{display:grid;gap:20px;grid-template-columns:repeat(4, minmax(0, 1fr));}",
+      "@media (max-width:900px){.pc-grid-4{grid-template-columns:repeat(2, minmax(0, 1fr));}}",
+      "@media (max-width:520px){.pc-grid-4{grid-template-columns:1fr;}}",
+      ".pc-select{padding:12px 14px;font-size:13.5px;border:1px solid #E4E1D6;border-radius:0;font-family:'Public Sans',sans-serif;color:#1B2333;background:#FFFFFF;}",
+      ".pc-newsletter-input::placeholder{color:#8FA0C4;}",
       ".pc-spin{width:22px;height:22px;border-radius:50%;border:2.5px solid #E4E1D6;border-top-color:#16233F;animation:pc-spin 0.7s linear infinite;}",
       "@keyframes pc-spin{to{transform:rotate(360deg);}}",
       ".pc-pill{display:inline-flex;align-items:center;padding:9px 18px;border-radius:100px;font-size:13px;font-weight:500;border:1px solid #E4E1D6;background:#fff;color:#3C4356;cursor:pointer;}",
@@ -255,10 +269,7 @@
                     addToCart(p.id, qty)
                       .then(function () {
                         addBtn.textContent = "Added ✓";
-                        setTimeout(function () {
-                          addBtn.textContent = "Add to Cart — " + money(p.priceMinor * qty, p.currency);
-                          addBtn.disabled = false;
-                        }, 1400);
+                        addBtn.disabled = false;
                       })
                       .catch(function (err) {
                         addBtn.textContent = "Add to Cart — " + money(p.priceMinor * qty, p.currency);
@@ -304,10 +315,7 @@
                       addToCart(p.id, 1)
                         .then(function () {
                           addBtn.textContent = "Added ✓";
-                          setTimeout(function () {
-                            addBtn.textContent = "Add to Cart";
-                            addBtn.disabled = p.stockQuantity === 0;
-                          }, 1400);
+                          addBtn.disabled = false;
                         })
                         .catch(function (err) {
                           addBtn.disabled = false;
@@ -342,10 +350,7 @@
                         addToCart(p.id, qty)
                           .then(function () {
                             addBtn.textContent = "Added ✓";
-                            setTimeout(function () {
-                              addBtn.textContent = "Add to Cart";
-                              addBtn.disabled = false;
-                            }, 1400);
+                            addBtn.disabled = false;
                           })
                           .catch(function (err) {
                             addBtn.textContent = "Add to Cart";
@@ -523,15 +528,25 @@
     var addBtn;
     var textColor = dark ? "#FBFAF6" : "#16233F";
     var priceColor = dark ? "#E3B23C" : "#16233F";
+    var href = "/shop/" + encodeURIComponent(p.slug || p.id);
+    var media = p.imageUrl
+      ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "160px", objectFit: "cover", display: "block" } })
+      : el("div", { style: { width: "100%", height: "160px", background: dark ? "linear-gradient(155deg,#1F3B2A,#2E7D52)" : "#F3F1EA", display: "flex", alignItems: "center", justifyContent: "center", color: dark ? "#D7F0DF" : "#8A93A6", fontSize: "13px" } }, [p.name]);
+    // Image + name are the click target through to the product's own detail page;
+    // price and Add to Cart sit OUTSIDE that link (a nested interactive button inside
+    // an <a> is invalid HTML and unreliable to click) so adding to cart from the grid
+    // still works without navigating away.
     return el("div", { style: { display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: dark ? "#1E2F52" : "#fff", border: dark ? "1px solid rgba(227,178,60,0.16)" : "1px solid #E4E1D6" } }, [
-      p.imageUrl
-        ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "160px", objectFit: "cover", display: "block" } })
-        : el("div", { style: { width: "100%", height: "160px", background: dark ? "linear-gradient(155deg,#1F3B2A,#2E7D52)" : "#F3F1EA", display: "flex", alignItems: "center", justifyContent: "center", color: dark ? "#D7F0DF" : "#8A93A6", fontSize: "13px" } }, [p.name]),
-      el("div", { style: { padding: "14px", display: "flex", flexDirection: "column", gap: "8px", flex: "1" } }, [
-        el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" } }, [
-          el("span", { style: { fontSize: "14px", fontWeight: "600", color: textColor } }, [p.name]),
-          dark ? null : stockBadge(p.stockQuantity),
+      el("a", { href: href, style: { display: "block", textDecoration: "none", color: "inherit" } }, [
+        media,
+        el("div", { style: { padding: "14px 14px 0" } }, [
+          el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" } }, [
+            el("span", { style: { fontSize: "14px", fontWeight: "600", color: textColor } }, [p.name]),
+            dark ? null : stockBadge(p.stockQuantity),
+          ]),
         ]),
+      ]),
+      el("div", { style: { padding: "8px 14px 14px", display: "flex", flexDirection: "column", gap: "8px", flex: "1" } }, [
         el("div", { class: "pc-mono", style: { fontSize: "14.5px", fontWeight: dark ? "500" : "700", color: priceColor, marginTop: "auto" } }, [money(p.priceMinor, p.currency)]),
         (addBtn = el(
           "button",
@@ -545,10 +560,7 @@
               addToCart(p.id, 1)
                 .then(function () {
                   addBtn.textContent = "Added ✓";
-                  setTimeout(function () {
-                    addBtn.textContent = "Add to Cart";
-                    addBtn.disabled = p.stockQuantity === 0;
-                  }, 1400);
+                  addBtn.disabled = false;
                 })
                 .catch(function (err) {
                   addBtn.disabled = false;
@@ -584,6 +596,8 @@
     }
   }
 
+  var SHOP_PAGE_SIZE = 12;
+
   function renderShopGridStore(node) {
     showSpinner(node);
     api("/api/public/commerce/products")
@@ -595,6 +609,8 @@
         var categories = data.categories || [];
         var activeCategory = null;
         var searchTerm = "";
+        var stockFilter = "all";
+        var page = 1;
 
         clear(node);
         prepareNode(node);
@@ -609,27 +625,62 @@
           return;
         }
 
-        var grid = el("div", { class: "pc-grid", style: { gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" } });
+        var grid = el("div", { class: "pc-grid pc-grid-4" });
+        var pager = el("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: "16px", marginTop: "28px" } });
+
+        function matchesStock(p) {
+          if (stockFilter === "all") return true;
+          var inStock = p.stockQuantity === null || p.stockQuantity === undefined || p.stockQuantity > 0;
+          return stockFilter === "in" ? inStock : !inStock;
+        }
 
         function renderCards() {
           clear(grid);
+          clear(pager);
           var filtered = allProducts.filter(function (p) {
             var matchesCategory = !activeCategory || (p.category && p.category.slug === activeCategory);
             var matchesSearch = !searchTerm || p.name.toLowerCase().indexOf(searchTerm.toLowerCase()) !== -1;
-            return matchesCategory && matchesSearch;
+            return matchesCategory && matchesSearch && matchesStock(p);
           });
           if (filtered.length === 0) {
             grid.appendChild(el("p", { class: "pc-muted", style: { gridColumn: "1 / -1" } }, ["No products match — try a different filter."]));
             return;
           }
-          filtered.forEach(function (p) {
+          var totalPages = Math.max(1, Math.ceil(filtered.length / SHOP_PAGE_SIZE));
+          if (page > totalPages) page = totalPages;
+          var start = (page - 1) * SHOP_PAGE_SIZE;
+          filtered.slice(start, start + SHOP_PAGE_SIZE).forEach(function (p) {
             grid.appendChild(shopCard(p));
           });
+          if (totalPages > 1) {
+            var prevBtn, nextBtn;
+            pager.appendChild(
+              (prevBtn = el(
+                "button",
+                { class: "pc-btn-outline", style: { padding: "8px 16px", fontSize: "13px" }, disabled: page <= 1 ? "disabled" : null, onclick: function () { page -= 1; renderCards(); window.scrollTo({ top: node.getBoundingClientRect().top + window.scrollY - 80, behavior: "smooth" }); } },
+                ["Previous"]
+              ))
+            );
+            pager.appendChild(el("span", { class: "pc-mono", style: { fontSize: "12.5px", color: "#565F72" } }, ["Page " + page + " of " + totalPages]));
+            pager.appendChild(
+              (nextBtn = el(
+                "button",
+                { class: "pc-btn-outline", style: { padding: "8px 16px", fontSize: "13px" }, disabled: page >= totalPages ? "disabled" : null, onclick: function () { page += 1; renderCards(); window.scrollTo({ top: node.getBoundingClientRect().top + window.scrollY - 80, behavior: "smooth" }); } },
+                ["Next"]
+              ))
+            );
+          }
         }
 
-        var controls = el("div", { style: { display: "flex", flexDirection: "column", gap: "14px", marginBottom: "20px" } });
+        function resetAndRender() {
+          page = 1;
+          renderCards();
+        }
+
+        var controls = el("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "14px", marginBottom: "24px" } });
+
+        var pillRow = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap" } });
         if (categories.length > 0) {
-          var pillRow = el("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap" } });
           var allPill = el(
             "span",
             {
@@ -640,7 +691,7 @@
                   p.classList.remove("active");
                 });
                 allPill.classList.add("active");
-                renderCards();
+                resetAndRender();
               },
             },
             ["All"]
@@ -657,29 +708,48 @@
                     p.classList.remove("active");
                   });
                   pill.classList.add("active");
-                  renderCards();
+                  resetAndRender();
                 },
               },
               [cat.name]
             );
             pillRow.appendChild(pill);
           });
-          controls.appendChild(pillRow);
         }
-        controls.appendChild(
+
+        var rightControls = el("div", { style: { display: "flex", gap: "10px", flexWrap: "wrap", marginLeft: "auto" } }, [
+          el(
+            "select",
+            {
+              class: "pc-select",
+              onchange: function (e) {
+                stockFilter = e.target.value;
+                resetAndRender();
+              },
+            },
+            [
+              el("option", { value: "all" }, ["All items"]),
+              el("option", { value: "in" }, ["In stock"]),
+              el("option", { value: "out" }, ["Out of stock"]),
+            ]
+          ),
           el("input", {
             class: "pc-input",
             placeholder: "Search products…",
-            style: { maxWidth: "320px" },
+            style: { width: "220px" },
             oninput: function (e) {
               searchTerm = e.target.value;
-              renderCards();
+              resetAndRender();
             },
-          })
-        );
+          }),
+        ]);
+
+        controls.appendChild(pillRow);
+        controls.appendChild(rightControls);
 
         node.appendChild(controls);
         node.appendChild(grid);
+        node.appendChild(pager);
         renderCards();
       })
       .catch(function (err) {
@@ -762,85 +832,186 @@
   }
 
   // ---------------------------------------------------------------------
+  // newsletter signup — not a native SDK marker (see data-plexo-commerce-product-count
+  // for the same pattern): a plain data-plexo-newsletter-signup attribute a hand-authored
+  // page (the footer, here) can drop anywhere. Tags the email into the site's configured
+  // MailDrip newsletter group — entirely separate from the paid-customer group a
+  // completed order tags into.
+  // ---------------------------------------------------------------------
+
+  function renderNewsletterSignup(node) {
+    prepareNode(node);
+    clear(node);
+    var input = el("input", {
+      type: "email",
+      placeholder: "Your email address",
+      class: "pc-newsletter-input",
+      style: { flex: "1", minWidth: "0", padding: "12px 14px", fontSize: "13.5px", border: "1px solid rgba(227,178,60,0.3)", background: "transparent", color: "#FBFAF6", fontFamily: "'Public Sans', sans-serif" },
+    });
+    var btn;
+    var msg = el("div", { style: { fontSize: "12px", marginTop: "8px", minHeight: "14px" } });
+    var row = el("div", { style: { display: "flex", gap: "10px" } }, [
+      input,
+      (btn = el(
+        "button",
+        {
+          class: "pc-btn pc-btn-gold",
+          style: { flexShrink: "0", padding: "12px 20px", fontSize: "13px" },
+          onclick: function () {
+            var email = input.value.trim();
+            if (!email || email.indexOf("@") === -1) {
+              msg.textContent = "Please enter a valid email.";
+              msg.style.color = "#E3987F";
+              return;
+            }
+            btn.disabled = true;
+            btn.textContent = "Subscribing…";
+            api("/api/public/commerce/newsletter", { method: "POST", body: JSON.stringify({ email: email }) })
+              .then(function () {
+                btn.textContent = "Subscribed ✓";
+                msg.textContent = "Thanks — you're on the list.";
+                msg.style.color = "#9CA6BA";
+                input.value = "";
+                setTimeout(function () {
+                  btn.disabled = false;
+                  btn.textContent = "Subscribe";
+                }, 2500);
+              })
+              .catch(function (err) {
+                btn.disabled = false;
+                btn.textContent = "Subscribe";
+                msg.textContent = err.message;
+                msg.style.color = "#E3987F";
+              });
+          },
+        },
+        ["Subscribe"]
+      )),
+    ]);
+    node.appendChild(row);
+    node.appendChild(msg);
+  }
+
+  // ---------------------------------------------------------------------
   // cart_summary — line items, quantities, subtotal
   // ---------------------------------------------------------------------
 
+  // Renders as a compact, self-contained "Order summary" card (its own pc-card chrome,
+  // not just a bare list) — designed to sit in the checkout page's right-hand sidebar
+  // column next to renderCheckoutFlow's form. Reads/submits checkoutFormState directly
+  // since the delivery method and contact fields live in the OTHER marker's DOM.
   function renderCartSummary(node) {
+    var latestSnapshot = null;
+
+    function computeTotal(snapshot) {
+      return snapshot.subtotalMinor + (checkoutFormState.deliveryMethod === "COURIER" ? COURIER_FEE_MINOR : 0);
+    }
+
+    function totalsRow(label, value, muted) {
+      return el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "13.5px" } }, [
+        el("span", { class: "pc-muted" }, [label]),
+        el("span", { style: { color: muted ? "#2E7D52" : "#16233F", fontWeight: muted ? "600" : "500" } }, [value]),
+      ]);
+    }
+
     function paint(snapshot) {
+      latestSnapshot = snapshot;
       clear(node);
       prepareNode(node);
+
+      var heading = el("h3", { style: { margin: "0", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Order summary"]);
+
       if (!snapshot.items || snapshot.items.length === 0) {
         node.appendChild(
-          el("div", { style: { padding: "40px 20px", textAlign: "center", display: "flex", flexDirection: "column", gap: "12px", alignItems: "center" } }, [
-            el("p", { class: "pc-muted", style: { margin: "0", fontSize: "14px" } }, ["Your cart is empty."]),
-            el("a", { class: "pc-btn-outline pc-btn", href: "#", onclick: function (e) { e.preventDefault(); history.back(); } }, ["Continue shopping"]),
+          el("div", { class: "pc-card", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "16px" } }, [
+            heading,
+            el("div", { style: { textAlign: "center", padding: "20px 0", display: "flex", flexDirection: "column", gap: "12px", alignItems: "center" } }, [
+              el("p", { class: "pc-muted", style: { margin: "0", fontSize: "14px" } }, ["Your cart is empty."]),
+              el("a", { class: "pc-btn-outline pc-btn", href: "/shop", style: { textDecoration: "none" } }, ["Continue shopping"]),
+            ]),
           ])
         );
         return;
       }
+
       var list = el(
         "div",
-        { style: { display: "flex", flexDirection: "column" } },
+        { style: { display: "flex", flexDirection: "column", gap: "14px" } },
         snapshot.items.map(function (item) {
-          var qtyLabel;
-          return el("div", { style: { display: "flex", alignItems: "center", gap: "14px", padding: "16px 0", borderBottom: "1px solid #E4E1D6" } }, [
+          return el("div", { style: { display: "flex", alignItems: "center", gap: "12px" } }, [
             item.imageUrl
-              ? el("img", { src: item.imageUrl, alt: item.name, style: { width: "56px", height: "56px", objectFit: "cover", borderRadius: "4px", flexShrink: "0" } })
-              : el("div", { style: { width: "56px", height: "56px", background: "#F3F1EA", borderRadius: "4px", flexShrink: "0" } }),
+              ? el("img", { src: item.imageUrl, alt: item.name, style: { width: "48px", height: "48px", objectFit: "cover", flexShrink: "0" } })
+              : el("div", { style: { width: "48px", height: "48px", background: "#F3F1EA", flexShrink: "0" } }),
             el("div", { style: { flex: "1", minWidth: "0" } }, [
-              el("div", { style: { fontSize: "14px", fontWeight: "600", color: "#16233F" } }, [item.name]),
-              !item.inStock ? el("div", { style: { fontSize: "12px", color: "#8C3A2E" } }, ["No longer in stock"]) : null,
-              el("div", { style: { display: "flex", alignItems: "center", gap: "8px", marginTop: "6px" } }, [
-                el(
-                  "button",
-                  {
-                    class: "pc-btn-outline",
-                    style: { width: "26px", height: "26px", padding: "0", fontSize: "13px" },
-                    onclick: function () {
-                      updateQty(item.itemId, item.quantity - 1).then(paint);
-                    },
-                  },
-                  ["–"]
-                ),
-                (qtyLabel = el("span", { style: { fontSize: "13px", minWidth: "18px", textAlign: "center" } }, [String(item.quantity)])),
-                el(
-                  "button",
-                  {
-                    class: "pc-btn-outline",
-                    style: { width: "26px", height: "26px", padding: "0", fontSize: "13px" },
-                    onclick: function () {
-                      updateQty(item.itemId, item.quantity + 1).then(paint);
-                    },
-                  },
-                  ["+"]
-                ),
-                el(
-                  "button",
-                  {
-                    style: { background: "none", border: "none", color: "#8A93A6", fontSize: "12px", cursor: "pointer", marginLeft: "8px", textDecoration: "underline" },
-                    onclick: function () {
-                      updateQty(item.itemId, 0).then(paint);
-                    },
-                  },
-                  ["Remove"]
-                ),
-              ]),
+              el("div", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, [item.name]),
+              el("div", { class: "pc-mono", style: { fontSize: "11px", color: "#8A93A6", marginTop: "2px" } }, ["Qty " + item.quantity]),
             ]),
-            el("div", { style: { fontSize: "14px", fontWeight: "600", color: "#16233F", whiteSpace: "nowrap" } }, [money(item.lineTotalMinor, snapshot.currency)]),
+            el("div", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F", whiteSpace: "nowrap" } }, [money(item.lineTotalMinor, snapshot.currency)]),
           ]);
         })
       );
-      node.appendChild(list);
-      node.appendChild(
-        el("div", { style: { display: "flex", justifyContent: "space-between", padding: "18px 0 0", fontSize: "16px", fontWeight: "700", color: "#16233F" } }, [el("span", {}, ["Subtotal"]), el("span", {}, [money(snapshot.subtotalMinor, snapshot.currency)])])
-      );
-    }
 
-    function updateQty(itemId, quantity) {
-      return api("/api/public/commerce/cart/items/" + encodeURIComponent(itemId), { method: "PATCH", body: JSON.stringify({ quantity: quantity }) }).then(function (snapshot) {
-        broadcastCart(snapshot);
-        return snapshot;
-      });
+      var total = computeTotal(snapshot);
+      var payBtn;
+      var errorBox = null;
+
+      payBtn = el(
+        "button",
+        {
+          class: "pc-btn pc-btn-gold",
+          style: { width: "100%" },
+          onclick: function () {
+            if (errorBox) {
+              errorBox.remove();
+              errorBox = null;
+            }
+            if (!checkoutFormState.customerEmail || checkoutFormState.customerEmail.indexOf("@") === -1) {
+              errorBox = el("div", { class: "pc-error" }, ["Please enter a valid email in Your details."]);
+              payBtn.parentNode.insertBefore(errorBox, payBtn);
+              return;
+            }
+            payBtn.disabled = true;
+            payBtn.textContent = "Starting payment…";
+            api("/api/public/commerce/checkout/cart", {
+              method: "POST",
+              body: JSON.stringify({
+                customerName: checkoutFormState.customerName || undefined,
+                customerEmail: checkoutFormState.customerEmail,
+                customerPhone: checkoutFormState.customerPhone || undefined,
+                deliveryMethod: checkoutFormState.deliveryMethod,
+                discountCode: checkoutFormState.discountCode || undefined,
+              }),
+            })
+              .then(function (result) {
+                window.location.href = result.authorizationUrl;
+              })
+              .catch(function (err) {
+                payBtn.disabled = false;
+                payBtn.textContent = "Continue to Payment →";
+                errorBox = el("div", { class: "pc-error" }, [err.message]);
+                payBtn.parentNode.insertBefore(errorBox, payBtn);
+              });
+          },
+        },
+        ["Continue to Payment →"]
+      );
+
+      node.appendChild(
+        el("div", { class: "pc-card", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "18px" } }, [
+          heading,
+          list,
+          el("div", { style: { display: "flex", flexDirection: "column", gap: "8px", paddingTop: "16px", borderTop: "1px solid #E4E1D6" } }, [
+            totalsRow("Subtotal", money(snapshot.subtotalMinor, snapshot.currency)),
+            totalsRow("Delivery", checkoutFormState.deliveryMethod === "COURIER" ? money(COURIER_FEE_MINOR, snapshot.currency) : "Free", checkoutFormState.deliveryMethod !== "COURIER"),
+          ]),
+          el("div", { style: { display: "flex", justifyContent: "space-between", paddingTop: "14px", borderTop: "1px solid #E4E1D6", fontSize: "16px", fontWeight: "700", color: "#16233F" } }, [
+            el("span", {}, ["Total"]),
+            el("span", {}, [money(total, snapshot.currency)]),
+          ]),
+          payBtn,
+          el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, ["Secured by Paystack"]),
+        ])
+      );
     }
 
     showSpinner(node);
@@ -850,12 +1021,22 @@
     document.addEventListener(CART_EVENT, function (e) {
       paint(e.detail);
     });
+    // Delivery method lives in the OTHER marker (renderCheckoutFlow) — re-render our own
+    // totals when it changes rather than re-fetching the cart, which hasn't changed.
+    document.addEventListener(CHECKOUT_STATE_EVENT, function () {
+      if (latestSnapshot) paint(latestSnapshot);
+    });
   }
 
   // ---------------------------------------------------------------------
   // checkout_flow — delivery, contact, discount, pay
   // ---------------------------------------------------------------------
 
+  // Renders ONLY the delivery-method / contact-details / discount-code form — the
+  // checkout page's LEFT column. Totals and the actual Pay button live in the sidebar
+  // (see renderCartSummary) since that's where the mockup puts them; this writes every
+  // field straight into the shared checkoutFormState and broadcasts CHECKOUT_STATE_EVENT
+  // on delivery-method changes so the sidebar's total stays in sync.
   function renderCheckoutFlow(node) {
     showSpinner(node);
     fetchCart()
@@ -868,106 +1049,104 @@
           return;
         }
 
-        var deliveryMethod = "PICKUP";
-        var COURIER_FEE_MINOR = 150000;
-        var errorBox = null;
-        var payBtn, totalLabel;
-
-        function computeTotal() {
-          return cart.subtotalMinor + (deliveryMethod === "COURIER" ? COURIER_FEE_MINOR : 0);
-        }
-        function refreshTotal() {
-          totalLabel.textContent = money(computeTotal(), cart.currency);
-          payBtn.textContent = "Pay with Paystack — " + money(computeTotal(), cart.currency);
-        }
-
         function deliveryOption(value, label, feeText) {
+          var dot;
           var wrap = el(
             "div",
             {
-              style: { border: "1.5px solid " + (value === deliveryMethod ? "#16233F" : "#E4E1D6"), borderRadius: "4px", padding: "14px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" },
+              style: {
+                border: "1.5px solid " + (value === checkoutFormState.deliveryMethod ? "#16233F" : "#E4E1D6"),
+                padding: "16px 18px",
+                cursor: "pointer",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: "12px",
+                flex: "1",
+                minWidth: "180px",
+              },
               onclick: function () {
-                deliveryMethod = value;
+                checkoutFormState.deliveryMethod = value;
                 Array.prototype.forEach.call(node.querySelectorAll("[data-pc-delivery-option]"), function (o) {
                   o.style.borderColor = "#E4E1D6";
+                  var d = o.querySelector("[data-pc-delivery-dot]");
+                  if (d) d.style.background = "transparent";
                 });
                 wrap.style.borderColor = "#16233F";
-                refreshTotal();
+                dot.style.background = "#16233F";
+                document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
               },
               "data-pc-delivery-option": "true",
             },
-            [el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F" } }, [label]), el("span", { class: "pc-muted", style: { fontSize: "12px" } }, [feeText])]
+            [
+              el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } }, [
+                el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F" } }, [label]),
+                el("span", { class: "pc-muted", style: { fontSize: "12px" } }, [feeText]),
+              ]),
+              (dot = el("span", {
+                "data-pc-delivery-dot": "true",
+                style: { width: "16px", height: "16px", borderRadius: "50%", border: "1.5px solid #16233F", background: value === checkoutFormState.deliveryMethod ? "#16233F" : "transparent", flexShrink: "0" },
+              })),
+            ]
           );
           return wrap;
         }
 
-        function field(label, type) {
-          var input = el("input", { class: "pc-input", type: type || "text" });
-          return { wrap: el("div", {}, [el("label", { class: "pc-label" }, [label]), input]), input: input };
-        }
-        var nameField = field("Full name");
-        var emailField = field("Email", "email");
-        var phoneField = field("Phone");
-        var discountField = field("Discount code (optional)");
-
-        payBtn = el(
-          "button",
-          {
-            class: "pc-btn pc-btn-gold",
-            style: { width: "100%" },
-            onclick: function () {
-              if (errorBox) {
-                errorBox.remove();
-                errorBox = null;
-              }
-              if (!emailField.input.value || emailField.input.value.indexOf("@") === -1) {
-                errorBox = el("div", { class: "pc-error" }, ["Please enter a valid email."]);
-                payBtn.parentNode.insertBefore(errorBox, payBtn);
-                return;
-              }
-              payBtn.disabled = true;
-              payBtn.textContent = "Starting payment…";
-              api("/api/public/commerce/checkout/cart", {
-                method: "POST",
-                body: JSON.stringify({
-                  customerName: nameField.input.value || undefined,
-                  customerEmail: emailField.input.value,
-                  customerPhone: phoneField.input.value || undefined,
-                  deliveryMethod: deliveryMethod,
-                  discountCode: discountField.input.value || undefined,
-                }),
-              })
-                .then(function (result) {
-                  window.location.href = result.authorizationUrl;
-                })
-                .catch(function (err) {
-                  payBtn.disabled = false;
-                  refreshTotal();
-                  errorBox = el("div", { class: "pc-error" }, [err.message]);
-                  payBtn.parentNode.insertBefore(errorBox, payBtn);
-                });
+        function field(label, type, stateKey) {
+          var input = el("input", {
+            class: "pc-input",
+            type: type || "text",
+            value: checkoutFormState[stateKey] || "",
+            oninput: function (e) {
+              checkoutFormState[stateKey] = e.target.value;
             },
-          },
-          ["Pay with Paystack"]
-        );
+          });
+          return el("div", {}, [el("label", { class: "pc-label" }, [label]), input]);
+        }
+
+        var discountInput = el("input", { class: "pc-input", placeholder: "Enter code", value: checkoutFormState.discountCode || "" });
+        var discountMsg = el("span", { class: "pc-muted", style: { fontSize: "12px" } });
 
         node.appendChild(
-          el("div", { style: { display: "flex", flexDirection: "column", gap: "22px" } }, [
+          el("div", { style: { display: "flex", flexDirection: "column", gap: "30px" } }, [
             el("div", {}, [
-              el("div", { class: "pc-label", style: { marginBottom: "10px" } }, ["Delivery"]),
-              el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [deliveryOption("PICKUP", "Pickup", "Free"), deliveryOption("COURIER", "Courier delivery", "from " + money(COURIER_FEE_MINOR, cart.currency))]),
+              el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Delivery method"]),
+              el("div", { style: { display: "flex", gap: "12px", flexWrap: "wrap" } }, [
+                deliveryOption("PICKUP", "Pickup — Ilorin", "Free"),
+                deliveryOption("COURIER", "Courier delivery", "from " + money(COURIER_FEE_MINOR, cart.currency)),
+              ]),
             ]),
-            nameField.wrap,
-            emailField.wrap,
-            phoneField.wrap,
-            discountField.wrap,
-            el("div", { style: { height: "1px", background: "#E4E1D6" } }),
-            el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "16px", fontWeight: "700", color: "#16233F" } }, [el("span", {}, ["Total"]), (totalLabel = el("span", {}, [money(computeTotal(), cart.currency)]))]),
-            payBtn,
-            el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, ["Secured by Paystack"]),
+            el("div", {}, [
+              el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Your details"]),
+              el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, [
+                el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap" } }, [
+                  el("div", { style: { flex: "1", minWidth: "180px" } }, [field("Full name", "text", "customerName")]),
+                  el("div", { style: { flex: "1", minWidth: "180px" } }, [field("Phone number", "tel", "customerPhone")]),
+                ]),
+                field("Email", "email", "customerEmail"),
+              ]),
+            ]),
+            el("div", {}, [
+              el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Discount code"]),
+              el("div", { style: { display: "flex", gap: "10px" } }, [
+                discountInput,
+                el(
+                  "button",
+                  {
+                    class: "pc-btn-outline",
+                    style: { flexShrink: "0", padding: "0 22px" },
+                    onclick: function () {
+                      checkoutFormState.discountCode = discountInput.value.trim();
+                      discountMsg.textContent = checkoutFormState.discountCode ? "Will be applied at payment." : "";
+                    },
+                  },
+                  ["Apply"]
+                ),
+              ]),
+              discountMsg,
+            ]),
           ])
         );
-        refreshTotal();
       })
       .catch(function (err) {
         showError(node, err.message);
@@ -1121,6 +1300,7 @@
     document.querySelectorAll("[data-plexo-commerce-checkoutFlow]").forEach(renderCheckoutFlow);
     document.querySelectorAll("[data-plexo-commerce-orderConfirmation]").forEach(renderOrderConfirmation);
     document.querySelectorAll("[data-plexo-commerce-orderTracking]").forEach(renderOrderTracking);
+    document.querySelectorAll("[data-plexo-newsletter-signup]").forEach(renderNewsletterSignup);
     renderProductCounts();
     fetchCart().then(broadcastCart).catch(function () {});
   }
