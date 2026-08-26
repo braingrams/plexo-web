@@ -514,19 +514,100 @@
   // shop_grid — category-pilled, searchable product grid
   // ---------------------------------------------------------------------
 
+  // A card for the shop_grid's live product listing (both storeMode and curated share
+  // this). Kept separate from renderProduct's own card (which handles the `product` block
+  // singular-item case) since this one is always a grid tile, never bare. `dark` (from the
+  // block's own `mode` attr, curated mode only) swaps in the navy/gold treatment for a
+  // grid sitting on a dark section — see renderShopGridCurated.
+  function shopCard(p, dark) {
+    var addBtn;
+    var textColor = dark ? "#FBFAF6" : "#16233F";
+    var priceColor = dark ? "#E3B23C" : "#16233F";
+    return el("div", { style: { display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: dark ? "#1E2F52" : "#fff", border: dark ? "1px solid rgba(227,178,60,0.16)" : "1px solid #E4E1D6" } }, [
+      p.imageUrl
+        ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "160px", objectFit: "cover", display: "block" } })
+        : el("div", { style: { width: "100%", height: "160px", background: dark ? "linear-gradient(155deg,#1F3B2A,#2E7D52)" : "#F3F1EA", display: "flex", alignItems: "center", justifyContent: "center", color: dark ? "#D7F0DF" : "#8A93A6", fontSize: "13px" } }, [p.name]),
+      el("div", { style: { padding: "14px", display: "flex", flexDirection: "column", gap: "8px", flex: "1" } }, [
+        el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" } }, [
+          el("span", { style: { fontSize: "14px", fontWeight: "600", color: textColor } }, [p.name]),
+          dark ? null : stockBadge(p.stockQuantity),
+        ]),
+        el("div", { class: "pc-mono", style: { fontSize: "14.5px", fontWeight: dark ? "500" : "700", color: priceColor, marginTop: "auto" } }, [money(p.priceMinor, p.currency)]),
+        (addBtn = el(
+          "button",
+          {
+            class: dark ? "pc-btn pc-btn-gold" : "pc-btn",
+            style: { width: "100%", fontSize: "13px", padding: "9px 14px" },
+            disabled: p.stockQuantity === 0 ? "disabled" : null,
+            onclick: function () {
+              addBtn.disabled = true;
+              addBtn.textContent = "Adding…";
+              addToCart(p.id, 1)
+                .then(function () {
+                  addBtn.textContent = "Added ✓";
+                  setTimeout(function () {
+                    addBtn.textContent = "Add to Cart";
+                    addBtn.disabled = p.stockQuantity === 0;
+                  }, 1400);
+                })
+                .catch(function (err) {
+                  addBtn.disabled = false;
+                  addBtn.textContent = "Add to Cart";
+                  alert(err.message);
+                });
+            },
+          },
+          [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart"]
+        )),
+      ]),
+    ]);
+  }
+
+  // A card for a slot the curated grid couldn't fill (a brand-new catalog with nothing
+  // in the requested category/sort yet) — keeps the shelf looking intentional instead of
+  // empty or broken while real products are still being added.
+  function placeholderCard(dark) {
+    return el("div", { style: { display: "flex", flexDirection: "column", opacity: "0.6", background: dark ? "#1E2F52" : "#fff", border: dark ? "1px solid rgba(227,178,60,0.16)" : "1px solid #E4E1D6" } }, [
+      el("div", { style: { width: "100%", height: "160px", background: dark ? "linear-gradient(155deg,#0F1930,#1E2F52)" : "linear-gradient(155deg,#EDEBE3,#F3F1EA)" } }),
+      el("div", { style: { padding: "14px", display: "flex", flexDirection: "column", gap: "8px" } }, [
+        el("span", { style: { fontSize: "13px", fontWeight: "600", color: dark ? "#8FA0C4" : "#565F72" } }, ["Coming soon"]),
+      ]),
+    ]);
+  }
+
   function renderShopGrid(node) {
+    var storeMode = node.getAttribute("data-plexo-commerce-store-mode") !== "false";
+    if (storeMode) {
+      renderShopGridStore(node);
+    } else {
+      renderShopGridCurated(node);
+    }
+  }
+
+  function renderShopGridStore(node) {
     showSpinner(node);
     api("/api/public/commerce/products")
       .then(function (data) {
         var allProducts = (data.products || []).filter(function (p) {
           return p.kind === "PHYSICAL";
         });
+        var catalogEmpty = allProducts.length === 0;
         var categories = data.categories || [];
         var activeCategory = null;
         var searchTerm = "";
 
         clear(node);
         prepareNode(node);
+
+        if (catalogEmpty) {
+          node.appendChild(
+            el("div", { style: { padding: "60px 20px", textAlign: "center", display: "flex", flexDirection: "column", gap: "8px", alignItems: "center" } }, [
+              el("span", { class: "pc-serif", style: { fontSize: "18px", color: "#16233F" } }, ["No products yet"]),
+              el("span", { class: "pc-muted", style: { fontSize: "14px" } }, ["Check back soon — new items are on the way."]),
+            ])
+          );
+          return;
+        }
 
         var grid = el("div", { class: "pc-grid", style: { gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" } });
 
@@ -542,47 +623,7 @@
             return;
           }
           filtered.forEach(function (p) {
-            var addBtn;
-            grid.appendChild(
-              el("div", { class: "pc-card", style: { display: "flex", flexDirection: "column" } }, [
-                p.imageUrl
-                  ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "160px", objectFit: "cover", display: "block" } })
-                  : el("div", { style: { width: "100%", height: "160px", background: "#F3F1EA", display: "flex", alignItems: "center", justifyContent: "center", color: "#8A93A6", fontSize: "13px" } }, [p.name]),
-                el("div", { style: { padding: "14px", display: "flex", flexDirection: "column", gap: "8px", flex: "1" } }, [
-                  el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" } }, [
-                    el("span", { style: { fontSize: "14px", fontWeight: "600", color: "#16233F" } }, [p.name]),
-                    stockBadge(p.stockQuantity),
-                  ]),
-                  el("div", { style: { fontSize: "14.5px", fontWeight: "700", color: "#16233F", marginTop: "auto" } }, [money(p.priceMinor, p.currency)]),
-                  (addBtn = el(
-                    "button",
-                    {
-                      class: "pc-btn",
-                      style: { width: "100%", fontSize: "13px", padding: "9px 14px" },
-                      disabled: p.stockQuantity === 0 ? "disabled" : null,
-                      onclick: function () {
-                        addBtn.disabled = true;
-                        addBtn.textContent = "Adding…";
-                        addToCart(p.id, 1)
-                          .then(function () {
-                            addBtn.textContent = "Added ✓";
-                            setTimeout(function () {
-                              addBtn.textContent = "Add to Cart";
-                              addBtn.disabled = p.stockQuantity === 0;
-                            }, 1400);
-                          })
-                          .catch(function (err) {
-                            addBtn.disabled = false;
-                            addBtn.textContent = "Add to Cart";
-                            alert(err.message);
-                          });
-                      },
-                    },
-                    [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart"]
-                  )),
-                ]),
-              ])
-            );
+            grid.appendChild(shopCard(p));
           });
         }
 
@@ -644,6 +685,80 @@
       .catch(function (err) {
         showError(node, err.message);
       });
+  }
+
+  // Curated mode (storeMode: false) — a fixed category/sort + limit, no search/filter UI,
+  // optionally its own pagination. Reads config straight off the marker's own attributes
+  // (set by whoever placed the block — see plexo-sdk compiler.ts's shop_grid case).
+  function renderShopGridCurated(node) {
+    var category = node.getAttribute("data-plexo-commerce-category") || "";
+    var sort = node.getAttribute("data-plexo-commerce-sort") || "";
+    var limit = parseInt(node.getAttribute("data-plexo-commerce-limit"), 10) || 6;
+    var itemsPerRow = parseInt(node.getAttribute("data-plexo-commerce-items-per-row"), 10) || 3;
+    var paginated = node.getAttribute("data-plexo-commerce-paginated") === "true";
+    var itemsPerPage = parseInt(node.getAttribute("data-plexo-commerce-items-per-page"), 10) || limit;
+    var dark = node.getAttribute("data-plexo-commerce-mode") === "dark";
+    var categoryParam = category || sort || "";
+    var page = 1;
+
+    showSpinner(node);
+    prepareNode(node);
+
+    function load() {
+      var params = "?";
+      if (categoryParam) params += "category=" + encodeURIComponent(categoryParam) + "&";
+      if (paginated) {
+        params += "pageSize=" + itemsPerPage + "&page=" + page;
+      } else {
+        params += "limit=" + limit;
+      }
+      api("/api/public/commerce/products" + params).then(paint).catch(function (err) {
+        showError(node, err.message);
+      });
+    }
+
+    function paint(data) {
+      clear(node);
+      var products = (data.products || []).filter(function (p) {
+        return p.kind === "PHYSICAL";
+      });
+      var total = data.total || 0;
+      var grid = el("div", { class: "pc-grid", style: { gridTemplateColumns: "repeat(" + itemsPerRow + ", minmax(0, 1fr))" } });
+
+      var slots = paginated ? itemsPerPage : limit;
+      for (var i = 0; i < Math.min(products.length, slots); i++) {
+        grid.appendChild(shopCard(products[i], dark));
+      }
+      // A brand-new catalog (or one with nothing in this category yet) still fills the
+      // shelf with placeholders rather than showing a half-empty or blank grid.
+      for (var j = products.length; j < slots; j++) {
+        grid.appendChild(placeholderCard(dark));
+      }
+
+      node.appendChild(grid);
+
+      if (paginated && total > itemsPerPage) {
+        var totalPages = Math.ceil(total / itemsPerPage);
+        var prevBtn, nextBtn, pageLabel;
+        node.appendChild(
+          el("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: "16px", marginTop: "20px" } }, [
+            (prevBtn = el(
+              "button",
+              { class: "pc-btn-outline", style: { padding: "8px 16px", fontSize: "13px" }, disabled: page <= 1 ? "disabled" : null, onclick: function () { page -= 1; showSpinner(node); load(); } },
+              ["Previous"]
+            )),
+            (pageLabel = el("span", { class: "pc-mono", style: { fontSize: "12.5px", color: "#565F72" } }, ["Page " + page + " of " + totalPages])),
+            (nextBtn = el(
+              "button",
+              { class: "pc-btn-outline", style: { padding: "8px 16px", fontSize: "13px" }, disabled: page >= totalPages ? "disabled" : null, onclick: function () { page += 1; showSpinner(node); load(); } },
+              ["Next"]
+            )),
+          ])
+        );
+      }
+    }
+
+    load();
   }
 
   // ---------------------------------------------------------------------

@@ -94,12 +94,14 @@ export function CommerceNav({ templateId }: { templateId: string }) {
   ];
 
   return (
-    <nav aria-label="Commerce navigation" style={{ width: 190, flexShrink: 0 }}>
-      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+    <nav aria-label="Commerce navigation" className="w-full md:w-[190px] md:shrink-0">
+      {/* Horizontal scrolling pill row below md (matches the outer dashboard shell's own
+       * mobile nav pattern — see .dash-pill-nav), vertical list at md and up. */}
+      <ul className="list-none m-0 p-0 flex flex-row md:flex-col gap-1.5 md:gap-0.5 overflow-x-auto md:overflow-visible">
         {subNav.map((item) => {
           const isActive = item.href === base ? pathname === item.href : pathname.startsWith(item.href);
           return (
-            <li key={item.href}>
+            <li key={item.href} className="shrink-0">
               <Link
                 href={item.href}
                 style={{
@@ -113,6 +115,7 @@ export function CommerceNav({ templateId }: { templateId: string }) {
                   color: isActive ? "#fff" : "rgba(240,242,255,0.55)",
                   background: isActive ? "rgba(139,92,246,0.12)" : "transparent",
                   textDecoration: "none",
+                  whiteSpace: "nowrap",
                   transition: "background 0.15s ease, color 0.15s ease",
                 }}
               >

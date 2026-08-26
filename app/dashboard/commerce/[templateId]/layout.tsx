@@ -44,12 +44,15 @@ export default async function CommerceSiteLayout({
 
   return (
     <PageContainer>
-      <div style={{ display: "flex", gap: "2rem", alignItems: "flex-start" }}>
-        <div style={{ width: 190, flexShrink: 0, display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      {/* Below md the fixed-width sub-nav rail would otherwise squeeze page content into a
+       * sliver (see CommerceNav) — stack the rail above the content and let CommerceNav
+       * switch to a horizontally-scrolling pill row itself. */}
+      <div className="flex flex-col md:flex-row md:items-start gap-6 md:gap-8">
+        <div className="flex flex-col gap-4 md:w-[190px] md:shrink-0 md:gap-6">
           <CommerceSiteSwitcher sites={sites} currentTemplateId={templateId} />
           <CommerceNav templateId={templateId} />
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>{children}</div>
+        <div style={{ minWidth: 0 }} className="flex-1">{children}</div>
       </div>
     </PageContainer>
   );

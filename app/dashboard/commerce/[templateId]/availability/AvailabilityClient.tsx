@@ -189,7 +189,7 @@ export function AvailabilityClient({ templateId, services }: { templateId: strin
               </div>
             )}
 
-            <div style={{ display: "flex", gap: "0.5rem" }}>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
               <input type="date" value={newExceptionDate} onChange={(e) => setNewExceptionDate(e.target.value)} style={inputStyle} />
               <button
                 type="button" onClick={() => void addException()}
