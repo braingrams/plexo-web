@@ -205,6 +205,15 @@
   // ---------------------------------------------------------------------
 
   function renderProduct(node) {
+    // "detail" mode: a single, reusable Product Detail page (see CommerceSettings.
+    // productDetailTemplateId) with no productId of its own — the site owner never picks
+    // a product for this marker, because it isn't tied to one. Whichever product's real
+    // slug the visited URL ends in is the one shown; a brand-new product added in the
+    // dashboard gets a working detail page immediately, with no page to hand-create.
+    if (node.getAttribute("data-plexo-commerce-mode") === "detail") {
+      renderProductDetail(node);
+      return;
+    }
     var productId = node.getAttribute("data-plexo-product-id");
     if (!productId) return;
     // "bare" mode: the surrounding hand-authored page (e.g. Product Detail) already shows
@@ -379,6 +388,173 @@
       })
       .catch(function (err) {
         showError(node, err.message);
+      });
+  }
+
+  // ---------------------------------------------------------------------
+  // product (mode="detail") — the one reusable Product Detail page, filled in
+  // entirely from the product whose slug the CURRENT URL ends in.
+  // ---------------------------------------------------------------------
+
+  function renderProductDetail(node) {
+    var segments = window.location.pathname.split("/").filter(Boolean);
+    var slug = decodeURIComponent(segments[segments.length - 1] || "");
+    showSpinner(node);
+    node.style.padding = "0";
+    api("/api/public/commerce/products/" + encodeURIComponent(slug))
+      .then(function (data) {
+        var p = data.product;
+        var related = (data.relatedProducts || []).filter(function (r) {
+          return r.kind === "PHYSICAL";
+        });
+        var qty = 1;
+        var qtyLabel, addBtn;
+
+        clear(node);
+        prepareNode(node);
+        node.style.padding = "0";
+
+        var media = p.imageUrl
+          ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } })
+          : el("div", { style: { width: "100%", height: "100%", background: "linear-gradient(155deg,#1F3B2A,#2E7D52)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px", textAlign: "center" } }, [
+              el("span", { class: "pc-serif", style: { fontSize: "20px", color: "#D7F0DF" } }, [p.name]),
+            ]);
+
+        var breadcrumb = el("div", { class: "pc-mono", style: { fontSize: "11.5px", color: "#8A93A6" } }, [
+          el("a", { href: "/shop", style: { color: "#8A93A6", textDecoration: "none" } }, ["Shop"]),
+          p.category ? " / " + p.category.name + " / " : " / ",
+          el("span", { style: { color: "#16233F" } }, [p.name]),
+        ]);
+
+        function buildQtyRow() {
+          return el("div", { style: { display: "flex", alignItems: "center", gap: "0", width: "fit-content", border: "1px solid #E4E1D6" } }, [
+            el(
+              "button",
+              {
+                class: "pc-btn-outline",
+                style: { border: "none", borderRight: "1px solid #E4E1D6", width: "44px", height: "44px", padding: "0", fontSize: "18px" },
+                onclick: function () {
+                  if (qty > 1) qty -= 1;
+                  qtyLabel.textContent = String(qty);
+                },
+              },
+              ["–"]
+            ),
+            (qtyLabel = el("span", { class: "pc-mono", style: { width: "52px", textAlign: "center", fontSize: "14px" } }, [String(qty)])),
+            el(
+              "button",
+              {
+                class: "pc-btn-outline",
+                style: { border: "none", borderLeft: "1px solid #E4E1D6", width: "44px", height: "44px", padding: "0", fontSize: "18px" },
+                onclick: function () {
+                  qty += 1;
+                  qtyLabel.textContent = String(qty);
+                },
+              },
+              ["+"]
+            ),
+          ]);
+        }
+
+        var buyControl =
+          p.kind === "SERVICE"
+            ? el("a", { class: "pc-btn pc-btn-gold", href: "#", style: { width: "fit-content" }, onclick: function (e) { e.preventDefault(); var target = document.querySelector('[data-plexo-commerce-booking][data-plexo-service-id="' + p.id + '"]'); if (target) target.scrollIntoView({ behavior: "smooth", block: "center" }); } }, ["Book this service"])
+            : el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, [
+                buildQtyRow(),
+                (addBtn = el(
+                  "button",
+                  {
+                    class: "pc-btn",
+                    style: { width: "fit-content", padding: "17px 26px", fontSize: "15px" },
+                    disabled: p.stockQuantity === 0 ? "disabled" : null,
+                    onclick: function () {
+                      addBtn.disabled = true;
+                      addBtn.textContent = "Adding…";
+                      addToCart(p.id, qty)
+                        .then(function () {
+                          addBtn.textContent = "Added ✓";
+                          addBtn.disabled = false;
+                        })
+                        .catch(function (err) {
+                          addBtn.textContent = "Add to Cart — " + money(p.priceMinor * qty, p.currency);
+                          addBtn.disabled = false;
+                          alert(err.message);
+                        });
+                    },
+                  },
+                  [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart — " + money(p.priceMinor, p.currency)]
+                )),
+              ]);
+
+        var deliveryRow = el("div", { style: { display: "flex", gap: "28px", paddingTop: "8px", borderTop: "1px solid #E4E1D6", marginTop: "4px", flexWrap: "wrap" } }, [
+          el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
+            el("span", { html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 21h18M5 21V9l7-6 7 6v12M9 21v-6h6v6"></path></svg>' }),
+            el("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } }, [
+              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, ["Pickup in Ilorin"]),
+              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, ["Ready next business day"]),
+            ]),
+          ]),
+          el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
+            el("span", { html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"></path><circle cx="7" cy="19" r="1.6"></circle><circle cx="17.5" cy="19" r="1.6"></circle></svg>' }),
+            el("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } }, [
+              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, ["Courier delivery"]),
+              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, ["Fee calculated at checkout"]),
+            ]),
+          ]),
+        ]);
+
+        var infoCol = el("div", { style: { flex: "1 1 380px", minWidth: "280px", display: "flex", flexDirection: "column", gap: "24px" } }, [
+          el("div", { style: { display: "flex", flexDirection: "column", gap: "12px" } }, [
+            el("span", { class: "pc-mono", style: { fontSize: "11.5px", letterSpacing: "0.16em", textTransform: "uppercase", color: "#2E7D52" } }, [p.category ? p.category.name : "Shop"]),
+            el("h1", { class: "pc-serif", style: { margin: "0", fontWeight: "500", fontSize: "38px", color: "#16233F" } }, [p.name]),
+            el("div", { style: { display: "flex", alignItems: "center", gap: "14px" } }, [
+              el("span", { class: "pc-mono", style: { fontSize: "22px", color: "#16233F" } }, [money(p.priceMinor, p.currency)]),
+              stockBadge(p.stockQuantity),
+            ]),
+          ]),
+          p.description ? el("p", { style: { margin: "0", fontSize: "15.5px", lineHeight: "1.75", color: "#3C4356" } }, [p.description]) : null,
+          el("div", { style: { background: "#F3F1EA", borderLeft: "3px solid #E3B23C", padding: "16px 20px" } }, [
+            el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13px", lineHeight: "1.6" } }, [
+              "Natural food and wellness item, not a replacement for prescribed medical treatment. Always tell your doctor about any herbal products you're using.",
+            ]),
+          ]),
+          buyControl,
+          deliveryRow,
+        ]);
+
+        var heroWrap = el("div", { style: { maxWidth: "1440px", margin: "0 auto", padding: "32px clamp(20px, 6vw, 56px) 88px", boxSizing: "border-box" } }, [
+          breadcrumb,
+          el("div", { style: { display: "flex", gap: "48px", flexWrap: "wrap", marginTop: "32px" } }, [
+            el("div", { style: { flex: "0 1 480px", minWidth: "280px", height: "520px", background: "#10192C", overflow: "hidden" } }, [media]),
+            infoCol,
+          ]),
+        ]);
+        node.appendChild(heroWrap);
+
+        // Staff-curated only (CommerceProductRelation, set from the product's own admin
+        // edit form) — never a guessed/automatic pick, and the whole section simply
+        // doesn't render when nothing has been curated for this product yet.
+        if (related.length > 0) {
+          node.appendChild(
+            el("div", { style: { background: "#F3F1EA" } }, [
+              el("div", { style: { maxWidth: "1440px", margin: "0 auto", padding: "80px clamp(20px, 6vw, 56px) 80px", boxSizing: "border-box" } }, [
+                el("span", { class: "pc-mono", style: { fontSize: "11.5px", letterSpacing: "0.16em", textTransform: "uppercase", color: "#C23B2E" } }, ["Frequently bought together"]),
+                el("h2", { class: "pc-serif", style: { margin: "12px 0 40px", fontWeight: "500", fontSize: "28px", color: "#16233F" } }, ["Pairs well with"]),
+                el("div", { class: "pc-grid pc-grid-cols-3" }, related.map(function (r) { return shopCard(r, false); })),
+              ]),
+            ])
+          );
+        }
+      })
+      .catch(function () {
+        clear(node);
+        prepareNode(node);
+        node.appendChild(
+          el("div", { style: { padding: "80px 20px", textAlign: "center", display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" } }, [
+            el("span", { class: "pc-serif", style: { fontSize: "18px", color: "#16233F" } }, ["Product not found"]),
+            el("a", { class: "pc-btn-outline pc-btn", href: "/shop", style: { textDecoration: "none" } }, ["Back to shop"]),
+          ])
+        );
       });
   }
 

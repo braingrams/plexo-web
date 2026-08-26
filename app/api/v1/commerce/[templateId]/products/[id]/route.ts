@@ -81,8 +81,11 @@ export async function PATCH(
   });
 
   if (Array.isArray(relatedProductIds)) {
+    // Staff-curated, not a recommendation engine (see the Commerce plan) — capped at 3
+    // here too, not just in the dashboard form, since this is a real API contract another
+    // caller could hit directly.
     const validIds = (
-      await prisma.commerceProduct.findMany({ where: { id: { in: relatedProductIds }, templateId }, select: { id: true } })
+      await prisma.commerceProduct.findMany({ where: { id: { in: relatedProductIds.slice(0, 3) }, templateId }, select: { id: true } })
     ).map((p) => p.id);
     await prisma.$transaction([
       prisma.commerceProductRelation.deleteMany({ where: { productId: id } }),

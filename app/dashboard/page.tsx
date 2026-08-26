@@ -40,7 +40,7 @@ export default async function OverviewPage() {
   }
 
   const templatesCount = await prisma.template.count({
-    where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false },
+    where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false },
   });
 
   // Brand-new workspace: skip every other query below and hand off to the guided
@@ -85,7 +85,7 @@ export default async function OverviewPage() {
     prisma.publishedDomain.count({ where: { organizationId } }),
     prisma.apiKey.count({ where: { organizationId } }),
     prisma.template.count({
-      where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, publishedDomains: { some: {} } },
+      where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false, publishedDomains: { some: {} } },
     }),
     prisma.publishedDomain.findMany({
       where: { organizationId, type: "CUSTOM", dnsVerified: false },
@@ -95,14 +95,14 @@ export default async function OverviewPage() {
     }),
     prisma.publishedDomain.count({ where: { organizationId, type: "CUSTOM", dnsVerified: false } }),
     prisma.template.count({
-      where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, publishedDomains: { none: {} } },
+      where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false, publishedDomains: { none: {} } },
     }),
     prisma.apiKey.count({ where: { organizationId, lastUsedAt: null } }),
     prisma.pageView.count({
       where: { template: { organizationId }, createdAt: { gte: fourteenDaysAgo, lt: sevenDaysAgo } },
     }),
     prisma.template.findMany({
-      where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false },
+      where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       take: 6,
       select: {

@@ -40,7 +40,7 @@ export default async function PagesOverviewPage() {
       organizationId: orgResolution.organizationId,
       parentId: null,
       kind: "LANDING_PAGE",
-      isBlogLayout: false, isSiteLayoutFragment: false,
+      isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false,
       marketplaceStatus: null,
       pages: { some: {} },
       // Same reasoning as /dashboard/templates: a blog-as-homepage site is a blog now,

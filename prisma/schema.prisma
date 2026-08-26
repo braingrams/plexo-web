@@ -552,6 +552,12 @@ model Template {
   // BlogSite.postLayoutTemplateId/listingLayoutTemplateId.
   isSiteLayoutFragment Boolean @default(false)
 
+  // A LANDING_PAGE Template used as a site's single reusable product-detail layout (see
+  // CommerceSettings.productDetailTemplateId) rather than a page in its own right — same
+  // "never itself published/visited directly, excluded from the normal page list/count
+  // and plan-limit counting" shape as isBlogLayout/isSiteLayoutFragment.
+  isCommerceLayout Boolean @default(false)
+
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   parent               Template?             @relation("TemplatePages", fields: [parentId], references: [id], onDelete: Cascade)
@@ -586,6 +592,9 @@ model Template {
   // blogSitePostLayoutFor/blogSiteListingLayoutFor above.
   siteLayoutHeaderFor SiteLayout? @relation("SiteLayoutHeader")
   siteLayoutFooterFor SiteLayout? @relation("SiteLayoutFooter")
+
+  // Reverse side of CommerceSettings.productDetailTemplateId — see CommerceSettings.
+  commerceProductDetailLayoutFor CommerceSettings? @relation("CommerceProductDetailLayout")
 
   // Plexo Commerce — scoped per SITE (this root Template), not per organization, same
   // reasoning as Blog: an org can own multiple sites, each needing its own catalog and
@@ -1774,6 +1783,18 @@ model CommerceSettings {
   // Master switch — gates whether the published page shell injects commerce.js at all,
   // same layered-gate shape as BlogSite.enabled.
   enabled           Boolean @default(false)
+
+  // A single reusable "Product Detail" layout Template (Template.isCommerceLayout: true) —
+  // same "one shared layout, real data spliced in by the runtime at view time" shape as
+  // BlogSite.postLayoutTemplateId, just for products instead of blog posts. Never itself
+  // published/visited directly: app/pub/[domain]/[[...slug]]/route.ts serves ITS
+  // compiledHtml whenever a request's last path segment matches a live product's slug
+  // with no page of its own, and commerce.js's renderProductDetail reads which product to
+  // show off the visited URL (see the marker's mode="detail"), not off anything baked
+  // into this Template's own designJson. Null = product URLs 404 like any unmatched path,
+  // same safe-by-default shape as BlogSite's layout fields being null.
+  productDetailTemplateId String?   @unique @db.Uuid
+  productDetailTemplate   Template? @relation("CommerceProductDetailLayout", fields: [productDetailTemplateId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

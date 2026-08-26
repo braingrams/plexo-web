@@ -17,8 +17,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   }
   const { templateId } = siteResult.published;
 
+  // Postgres type-checks each OR branch against the column's own declared type — `id` is
+  // uuid, so `{ id: "chia-seed" }` throws "invalid input syntax for type uuid" at the SQL
+  // level instead of just not matching, even though it's harmlessly sitting in an OR next
+  // to a valid slug comparison. Only include the id branch when the param is actually
+  // shaped like a UUID.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const idMatchers = UUID_RE.test(id) ? [{ id }, { slug: id }] : [{ slug: id }];
+
   const product = await prisma.commerceProduct.findFirst({
-    where: { templateId, active: true, OR: [{ id }, { slug: id }] },
+    where: { templateId, active: true, OR: idMatchers },
     select: {
       id: true,
       name: true,

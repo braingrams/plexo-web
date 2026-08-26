@@ -89,7 +89,7 @@ export async function POST(
       );
     }
     const emailCount = await prisma.template.count({
-      where: { organizationId: resolved.organizationId, parentId: null, kind: TemplateKind.EMAIL, isBlogLayout: false },
+      where: { organizationId: resolved.organizationId, parentId: null, kind: TemplateKind.EMAIL, isBlogLayout: false, isCommerceLayout: false },
     });
     if (emailCount >= features.maxEmailTemplates) {
       return NextResponse.json(
@@ -99,7 +99,7 @@ export async function POST(
     }
   } else {
     const landingPageCount = await prisma.template.count({
-      where: { organizationId: resolved.organizationId, parentId: null, kind: TemplateKind.LANDING_PAGE, isBlogLayout: false },
+      where: { organizationId: resolved.organizationId, parentId: null, kind: TemplateKind.LANDING_PAGE, isBlogLayout: false, isCommerceLayout: false },
     });
     if (landingPageCount >= features.maxLandingPages) {
       return NextResponse.json(

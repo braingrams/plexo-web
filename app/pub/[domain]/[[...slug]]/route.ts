@@ -331,6 +331,37 @@ export async function GET(
     });
   }
 
+  // Exactly one segment left over after the walk, no page of its own — check whether it's
+  // a real product's slug before giving up. Mirrors the blog post-layout pattern
+  // (BlogSite.postLayoutTemplateId): one reusable Template (CommerceSettings.
+  // productDetailTemplateId) serves EVERY product, with commerce.js's
+  // renderProductDetail reading which one off this same visited URL client-side — so a
+  // product added in the dashboard gets a working page immediately, with nothing to
+  // create or regenerate here.
+  if (remainingSegments.length === 1) {
+    const commerceSettings = await prisma.commerceSettings.findUnique({
+      where: { templateId: published.templateId },
+      select: { enabled: true, productDetailTemplateId: true, productDetailTemplate: { select: { compiledHtml: true } } },
+    });
+    if (commerceSettings?.enabled && commerceSettings.productDetailTemplate) {
+      const candidateSlug = remainingSegments[0];
+      const product = await prisma.commerceProduct.findFirst({
+        where: { templateId: published.templateId, slug: candidateSlug, active: true, kind: "PHYSICAL" },
+        select: { id: true },
+      });
+      if (product) {
+        let html = injectCommerceScript(commerceSettings.productDetailTemplate.compiledHtml);
+        if (!resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+          html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
+        }
+        return new NextResponse(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8", "X-Content-Type-Options": "nosniff" },
+        });
+      }
+    }
+  }
+
   // Nothing in the page tree matched. Before giving up, check whether this is an old
   // WordPress permalink (or a renamed Plexo page) that should 301 to its new home —
   // e.g. a WP site's "/2023/04/my-post/" migrated to "/blog/my-post". This is the ONE

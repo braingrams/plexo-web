@@ -60,7 +60,7 @@ export default async function DomainsPage() {
       // Blog post/listing layouts are internal-only — Template rows referenced by a
       // BlogSite's postLayoutTemplateId/listingLayoutTemplateId, never a page a domain
       // should link to directly (see lib/pub/blogLayoutRender.ts).
-      isBlogLayout: false,
+      isBlogLayout: false, isCommerceLayout: false,
     },
     select: {
       id: true,

@@ -432,25 +432,39 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
               </FieldLabel>
 
               {otherProducts.length > 0 && (
-                <FieldLabel label="Frequently bought together">
+                <FieldLabel label={`Frequently bought together (up to 3 — shown on this product's detail page; left empty, that section just doesn't show)`}>
                   <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", maxHeight: 140, overflowY: "auto" }}>
-                    {otherProducts.map((p) => (
-                      <label key={p.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.82rem", color: "rgba(240,242,255,0.75)" }}>
-                        <input
-                          type="checkbox"
-                          checked={form.relatedProductIds.includes(p.id)}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              relatedProductIds: e.target.checked
-                                ? [...prev.relatedProductIds, p.id]
-                                : prev.relatedProductIds.filter((id) => id !== p.id),
-                            }))
-                          }
-                        />
-                        {p.name}
-                      </label>
-                    ))}
+                    {otherProducts.map((p) => {
+                      const checked = form.relatedProductIds.includes(p.id);
+                      const atLimit = form.relatedProductIds.length >= 3;
+                      return (
+                        <label
+                          key={p.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.5rem",
+                            fontSize: "0.82rem",
+                            color: checked || !atLimit ? "rgba(240,242,255,0.75)" : "rgba(240,242,255,0.3)",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={!checked && atLimit}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                relatedProductIds: e.target.checked
+                                  ? [...prev.relatedProductIds, p.id].slice(0, 3)
+                                  : prev.relatedProductIds.filter((id) => id !== p.id),
+                              }))
+                            }
+                          />
+                          {p.name}
+                        </label>
+                      );
+                    })}
                   </div>
                 </FieldLabel>
               )}
