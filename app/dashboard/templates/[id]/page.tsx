@@ -89,6 +89,22 @@ export default async function TemplateEditorPage(
     notFound();
   }
 
+  // Commerce is scoped per SITE (the root Template — parentId null), not per page, so a
+  // sub-page's editor needs to walk up to the root to know whether to show the Commerce
+  // block palette. Most sites are only one level deep, but the page tree can nest further.
+  let rootTemplateId = template.id;
+  let walkParentId = template.parentId;
+  while (walkParentId) {
+    const parent = await prisma.template.findUnique({ where: { id: walkParentId }, select: { id: true, parentId: true } });
+    if (!parent) break;
+    rootTemplateId = parent.id;
+    walkParentId = parent.parentId;
+  }
+  const commerceSettings = await prisma.commerceSettings.findUnique({
+    where: { templateId: rootTemplateId },
+    select: { enabled: true },
+  });
+
   const activeApiKey = user?.apiKeys[0] ?? null;
   const tierFeatures = getTierFeatures(user?.subscriptionPlan);
 
@@ -132,6 +148,7 @@ export default async function TemplateEditorPage(
       currentUserRole={orgResolution.role}
       organizationId={orgResolution.organizationId}
       isBlogLayout={template.isBlogLayout}
+      commerceEnabled={commerceSettings?.enabled ?? false}
     />
   );
 }

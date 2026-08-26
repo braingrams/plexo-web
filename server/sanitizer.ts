@@ -80,7 +80,12 @@ const ElementTypeSchema = z.enum([
   'input', 'textarea', 'select', 'heading', 'paragraph', 'carousel',
   'video', 'social', 'menu', 'html', 'table', 'timer', 'icon', 'accordion',
   'blog_title', 'blog_content', 'blog_featured_image', 'blog_date',
-  'blog_author', 'blog_categories', 'blog_comments', 'blog_post_list'
+  'blog_author', 'blog_categories', 'blog_comments', 'blog_post_list',
+  // Plexo Commerce marker family (@charisol/plexo-sdk >= 1.4.6) — same "must be listed
+  // here too or the whole template tree gets rejected" requirement as every blog_* entry
+  // above; this schema is hand-maintained separately from the SDK's own.
+  'product', 'booking', 'shop_grid', 'cart_summary', 'checkout_flow',
+  'order_confirmation', 'order_tracking'
 ]);
 
 export const ElementJSONSchema = z.object({

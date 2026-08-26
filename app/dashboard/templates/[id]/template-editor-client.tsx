@@ -44,6 +44,10 @@ type Props = {
 	// True for a Template created via Blog Settings' "Design custom layout" — shows the
 	// Blog block palette group in PlexoBuilder and an instructional banner here.
 	isBlogLayout?: boolean;
+	// True when this page's SITE (its root Template) has Commerce enabled — shows the
+	// Commerce block palette group in PlexoBuilder. Resolved server-side in page.tsx by
+	// walking up to the root, since Commerce is scoped per site, not per page.
+	commerceEnabled?: boolean;
 };
 
 function IconArrowLeft() {
@@ -489,6 +493,7 @@ export function TemplateEditorClient({
 	currentUserRole,
 	organizationId,
 	isBlogLayout,
+	commerceEnabled,
 }: Props) {
 	const router = useRouter();
 	const searchParams = useSearchParams();
@@ -734,6 +739,7 @@ export function TemplateEditorClient({
 					apiKey="workspace-internal"
 					mode={isEmail ? "email" : "landing_page"}
 					isBlogLayout={isBlogLayout}
+					commerceEnabled={commerceEnabled}
 					initialTemplate={initialDesignJson}
 					backgroundColor="#0b1526"
 					themeBgColor="#8b5cf6"
