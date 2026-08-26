@@ -144,6 +144,48 @@ function injectCommerceScript(html: string): string {
   return html + scriptTag;
 }
 
+// The Product Detail layout is ONE physical page shared by every product (see the
+// route's own product-slug branch below) — its baked <title>/meta tags are necessarily
+// generic (CommerceSettings.productDetailTemplateId's own authored SEO fields, whatever
+// they are). Real crawlers and link-unfurlers read the served HTML, not anything
+// commerce.js does client-side after the fact, so getting a genuinely correct per-product
+// title/description/image means rewriting these specific tags server-side, here, with
+// the real product this particular request resolved to. Matches by tag pattern (not by
+// the exact baked string) so it works regardless of what static placeholder was authored
+// — including "no metaDescription/ogImageUrl authored at all", where the tag is simply
+// absent from the baked HTML and nothing gets rewritten.
+function injectProductSeo(html: string, product: { name: string; description: string | null; imageUrl: string | null }): string {
+  const title = escapeHtmlAttr(`${product.name} — Shop Natural Products | Helimax`);
+  const description = escapeHtmlAttr(
+    (product.description && product.description.trim()) ||
+      `${product.name} — a natural wellness product from Helimax, prepared in Ilorin. Pickup or courier delivery available.`
+  );
+  let out = html;
+  out = out.replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`);
+  out = out.replace(/<meta[^>]*\bname="description"[^>]*>/, `<meta name="description" content="${description}">`);
+  out = out.replace(/<meta[^>]*\bproperty="og:title"[^>]*>/, `<meta content="${title}" property="og:title">`);
+  out = out.replace(/<meta[^>]*\bproperty="og:description"[^>]*>/, `<meta content="${description}" property="og:description">`);
+  out = out.replace(/<meta[^>]*\bname="twitter:title"[^>]*>/, `<meta content="${title}" name="twitter:title">`);
+  out = out.replace(/<meta[^>]*\bname="twitter:description"[^>]*>/, `<meta content="${description}" name="twitter:description">`);
+  if (product.imageUrl) {
+    const image = escapeHtmlAttr(product.imageUrl);
+    const ogImageTag = `<meta content="${image}" property="og:image">`;
+    out = out.replace(/<meta[^>]*\bproperty="og:image"[^>]*>/, ogImageTag);
+    if (!out.includes(ogImageTag)) {
+      // No og:image was authored on the layout template at all — insert one right after
+      // og:title so a product with its own real photo still gets a real share image
+      // instead of silently falling back to none.
+      out = out.replace(/(<meta[^>]*\bproperty="og:title"[^>]*>)/, `$1${ogImageTag}`);
+    }
+    out = out.replace(/<meta[^>]*\bname="twitter:image"[^>]*>/, `<meta content="${image}" name="twitter:image">`);
+  }
+  return out;
+}
+
+function escapeHtmlAttr(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ domain: string; slug?: string[] }> }
@@ -347,10 +389,11 @@ export async function GET(
       const candidateSlug = remainingSegments[0];
       const product = await prisma.commerceProduct.findFirst({
         where: { templateId: published.templateId, slug: candidateSlug, active: true, kind: "PHYSICAL" },
-        select: { id: true },
+        select: { id: true, name: true, description: true, imageUrl: true },
       });
       if (product) {
-        let html = injectCommerceScript(commerceSettings.productDetailTemplate.compiledHtml);
+        let html = injectProductSeo(commerceSettings.productDetailTemplate.compiledHtml, product);
+        html = injectCommerceScript(html);
         if (!resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
           const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
           html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
