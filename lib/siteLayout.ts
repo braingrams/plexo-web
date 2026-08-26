@@ -29,6 +29,27 @@ export async function findRootTemplateId(id: string, parentId: string | null): P
   return rootId;
 }
 
+/**
+ * A layout fragment Template (Blog's postLayoutTemplateId/listingLayoutTemplateId, Commerce's
+ * productDetailTemplateId) is created with parentId: null — deliberately detached from the
+ * page tree, since it's reused across many "pages" rather than being one itself. That means
+ * findRootTemplateId's parentId walk can't find its site: given a null parentId it just
+ * returns the fragment's own id, so getEnabledSiteLayoutRows looks up SiteLayout keyed to the
+ * fragment instead of the real site root, finds nothing, and silently compiles it without a
+ * header/footer. Every fragment's owning site is discoverable by reversing the FK that points
+ * at it instead, so resolve that way whenever a template has no parent to walk.
+ */
+async function resolveLayoutFragmentRootId(templateId: string): Promise<string | null> {
+  const [blogSite, commerceSettings] = await Promise.all([
+    prisma.blogSite.findFirst({
+      where: { OR: [{ postLayoutTemplateId: templateId }, { listingLayoutTemplateId: templateId }] },
+      select: { templateId: true },
+    }),
+    prisma.commerceSettings.findFirst({ where: { productDetailTemplateId: templateId }, select: { templateId: true } }),
+  ]);
+  return blogSite?.templateId ?? commerceSettings?.templateId ?? null;
+}
+
 type LayoutRows = { headerRows: any[]; footerRows: any[] };
 
 function extractRows(designJson: unknown): any[] {
@@ -74,7 +95,9 @@ export function spliceLayoutRows(designJson: any, layout: LayoutRows | null): an
  * that page and the header/footer stay editable in exactly one place).
  */
 export async function compileWithSiteLayout(template: { id: string; parentId: string | null }, designJson: any): Promise<any> {
-  const rootId = await findRootTemplateId(template.id, template.parentId);
+  const rootId = template.parentId
+    ? await findRootTemplateId(template.id, template.parentId)
+    : ((await resolveLayoutFragmentRootId(template.id)) ?? template.id);
   const layout = await getEnabledSiteLayoutRows(rootId);
   return spliceLayoutRows(designJson, layout);
 }
@@ -104,6 +127,24 @@ export async function recompileSiteLayoutDependents(rootTemplateId: string): Pro
     });
     pages.push(...children);
     frontier = children.map((c) => c.id);
+  }
+
+  // Layout fragments (Blog's post/listing layout, Commerce's product detail layout) live
+  // outside the page tree above (parentId: null — see resolveLayoutFragmentRootId) but still
+  // need their compiledHtml re-spliced whenever this site's header/footer changes.
+  const [blogSite, commerceSettings] = await Promise.all([
+    prisma.blogSite.findUnique({
+      where: { templateId: rootTemplateId },
+      select: { postLayoutTemplateId: true, listingLayoutTemplateId: true },
+    }),
+    prisma.commerceSettings.findUnique({ where: { templateId: rootTemplateId }, select: { productDetailTemplateId: true } }),
+  ]);
+  const fragmentIds = [blogSite?.postLayoutTemplateId, blogSite?.listingLayoutTemplateId, commerceSettings?.productDetailTemplateId].filter(
+    (id): id is string => Boolean(id),
+  );
+  if (fragmentIds.length > 0) {
+    const fragments = await prisma.template.findMany({ where: { id: { in: fragmentIds } }, select: { id: true, designJson: true } });
+    pages.push(...fragments);
   }
 
   for (const page of pages) {
