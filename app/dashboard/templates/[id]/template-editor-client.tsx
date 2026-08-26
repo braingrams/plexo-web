@@ -349,6 +349,7 @@ function EditorHeaderRight({
 	commentsOpen,
 	onToggleComments,
 	siteLayoutHref,
+	transferHref,
 }: {
 	saveMessage: string | null;
 	saveError: string | null;
@@ -358,6 +359,7 @@ function EditorHeaderRight({
 	commentsOpen: boolean;
 	onToggleComments: () => void;
 	siteLayoutHref?: string;
+	transferHref?: string;
 }) {
 	return (
 		<div
@@ -386,6 +388,27 @@ function EditorHeaderRight({
 					}}
 				>
 					Site Layout
+				</Link>
+			)}
+
+			{transferHref && (
+				<Link
+					href={transferHref}
+					style={{
+						display: "inline-flex",
+						alignItems: "center",
+						gap: "0.4rem",
+						padding: "0.45rem 0.8rem",
+						borderRadius: 9,
+						border: "1px solid rgba(255,255,255,0.1)",
+						color: "rgba(240,242,255,0.6)",
+						fontSize: "0.8rem",
+						fontWeight: 600,
+						whiteSpace: "nowrap",
+						textDecoration: "none",
+					}}
+				>
+					Transfer Site
 				</Link>
 			)}
 
@@ -830,6 +853,7 @@ export function TemplateEditorClient({
 								setPendingPin(null);
 							}}
 							siteLayoutHref={!isEmail ? `/dashboard/templates/${rootTemplateId}/site-layout` : undefined}
+							transferHref={!isEmail ? `/dashboard/templates/${rootTemplateId}/transfer` : undefined}
 						/>
 					}
 					{...({ __internalPlan: subscriptionPlan } as any)}

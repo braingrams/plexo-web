@@ -95,6 +95,8 @@ model Organization {
   comments         Comment[]
   notifications    Notification[]
 
+  outgoingSiteTransfers SiteTransferRequest[] @relation("SiteTransferFromOrganization")
+
   // Plexo Commerce
   commerceCategories             CommerceCategory[]
   commerceProducts               CommerceProduct[]
@@ -297,6 +299,8 @@ model User {
   uploadedImages   UploadedImage[]
   creditLedger     CreditLedgerEntry[]
   adminAuditLogs   AdminAuditLog[]
+
+  outgoingSiteTransfers SiteTransferRequest[] @relation("SiteTransferFromUser")
 
   memberships            Member[]
   sentInvitations        Invitation[]
@@ -595,6 +599,8 @@ model Template {
 
   // Reverse side of CommerceSettings.productDetailTemplateId — see CommerceSettings.
   commerceProductDetailLayoutFor CommerceSettings? @relation("CommerceProductDetailLayout")
+
+  siteTransferRequests SiteTransferRequest[]
 
   // Plexo Commerce — scoped per SITE (this root Template), not per organization, same
   // reasoning as Blog: an org can own multiple sites, each needing its own catalog and
@@ -1028,6 +1034,49 @@ model SiteLayout {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
+}
+
+enum SiteTransferStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+  EXPIRED
+}
+
+// User-initiated site ownership transfer — the Supabase "transfer project" model: the
+// current owner names a recipient by email, the recipient (who may not have a Plexo
+// account yet) reviews the SAME plan-compatibility warnings fresh at accept time and
+// explicitly accepts before anything moves. Distinct from Invitation (better-auth's
+// built-in "join my org as a member" flow) — this moves the SITE ITSELF to a different
+// organization entirely, not membership in this one. See server/siteTransfer.ts for the
+// full reassignment (every organizationId-scoped row belonging to this site's template
+// tree, not just the Template row) and compatibility-check logic.
+model SiteTransferRequest {
+  id                     String              @id @default(uuid()) @db.Uuid
+  templateId             String              @db.Uuid // the root site being transferred
+  fromOrganizationId     String              @db.Uuid
+  fromUserId             String              @db.Uuid
+  toEmail                String // lowercased at write time
+  toUserId               String?             @db.Uuid // resolved once accepted (or once a matching account is found)
+  status                 SiteTransferStatus  @default(PENDING)
+  token                  String              @unique // accept-link token; the recipient may not be signed in yet
+  // Snapshot of the warnings shown to the SENDER at initiation — kept for reference, not
+  // trusted at accept time (the recipient's own accept-time check is authoritative, since
+  // plans/usage can change between initiation and response).
+  compatibilityWarnings  Json?
+  createdAt              DateTime            @default(now())
+  respondedAt            DateTime?
+  expiresAt              DateTime
+
+  template         Template     @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  fromOrganization Organization @relation("SiteTransferFromOrganization", fields: [fromOrganizationId], references: [id], onDelete: Cascade)
+  fromUser         User         @relation("SiteTransferFromUser", fields: [fromUserId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([toEmail])
+  @@index([status])
+  @@index([fromOrganizationId])
 }
 
 // A byline, not an account — may or may not be linked to a real Plexo User. WordPress

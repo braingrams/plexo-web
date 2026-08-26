@@ -95,6 +95,38 @@ export function buildInviteEmail(input: {
   });
 }
 
+export function buildSiteTransferEmail(input: {
+  senderName: string;
+  siteName: string;
+  acceptUrl: string;
+  warningCount: number;
+  expiresInDays: number;
+  brand?: EmailBrand;
+}): string {
+  const productName = input.brand?.name ?? "Plexo";
+  const accent = input.brand?.color ?? "#8b5cf6";
+  return emailShell({
+    title: `${input.senderName} wants to transfer "${input.siteName}" to you on ${productName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">You've been offered a site</h1>
+      <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        <strong>${input.senderName}</strong> wants to transfer full ownership of <strong>${input.siteName}</strong> to your ${productName} account — every page, and any Commerce catalog/orders it has.
+      </p>
+      ${input.warningCount > 0
+        ? `<p style="margin:0 0 28px;text-align:center;">
+             <span style="display:inline-block;background:#fef3c7;color:#92400e;font-size:13px;font-weight:700;padding:6px 14px;border-radius:9999px;letter-spacing:0.2px;">
+               ${input.warningCount} thing${input.warningCount === 1 ? "" : "s"} to review before accepting
+             </span>
+           </p>`
+        : ""}
+      ${CTA_BUTTON(input.acceptUrl, "Review & Respond", accent)}
+      ${FALLBACK_LINK(input.acceptUrl, accent)}
+    `,
+    footerHtml: `This offer expires in ${input.expiresInDays} days. If you weren't expecting this, you can safely ignore this email — nothing transfers unless you explicitly accept it.<br/>`,
+    brand: input.brand,
+  });
+}
+
 export function buildMentionEmail(input: {
   mentionerName: string;
   templateName: string;

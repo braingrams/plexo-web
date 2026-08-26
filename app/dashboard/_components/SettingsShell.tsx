@@ -52,6 +52,15 @@ function IconAiMcp() {
   );
 }
 
+function IconTransfers() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 3l4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14" />
+      <path d="M7 21l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" />
+    </svg>
+  );
+}
+
 function IconInsights() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -68,6 +77,7 @@ const ICONS: Record<string, React.ReactNode> = {
   "/dashboard/sdk": <IconSdk />,
   "/dashboard/integrations": <IconAiMcp />,
   "/dashboard/insights": <IconInsights />,
+  "/dashboard/transfers": <IconTransfers />,
 };
 
 const SECTIONS: SubNavSection[] = [
@@ -75,6 +85,7 @@ const SECTIONS: SubNavSection[] = [
     items: [
       { href: "/dashboard/profile", label: "Profile" },
       { href: "/dashboard/settings", label: "Settings" },
+      { href: "/dashboard/transfers", label: "Transfers" },
     ],
   },
   {
