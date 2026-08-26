@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+
+type LayoutInfo = { templateId: string; ready: boolean } | null;
+type LayoutCandidate = { layoutTemplateId: string; layoutName: string; siteName: string; updatedAt: string };
 
 type InitialSettings = {
   enabled: boolean;
@@ -11,6 +15,7 @@ type InitialSettings = {
   maildripPaidGroupId: string;
   maildripNewsletterGroupId: string;
   notificationEmail: string;
+  productDetailLayout: LayoutInfo;
 };
 
 const inputStyle: React.CSSProperties = {
@@ -36,6 +41,133 @@ function FieldLabel({ label, hint, children }: { label: string; hint?: string; c
       {children}
       {hint && <span style={{ display: "block", fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", marginTop: "0.3rem" }}>{hint}</span>}
     </label>
+  );
+}
+
+function ProductDetailLayoutSection({ templateId, layout }: { templateId: string; layout: LayoutInfo }) {
+  const router = useRouter();
+  const [showPicker, setShowPicker] = useState(false);
+  const [candidates, setCandidates] = useState<LayoutCandidate[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDesignNew() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/commerce/${templateId}/product-detail-layout`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't create a layout. Try again.");
+      router.push(`/dashboard/templates/${data.layoutTemplateId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't create a layout. Try again.");
+      setBusy(false);
+    }
+  }
+
+  async function handleShowPicker() {
+    setShowPicker(true);
+    if (candidates === null) {
+      const res = await fetch(`/api/v1/commerce/${templateId}/product-detail-layout`);
+      const data = await res.json();
+      setCandidates(res.ok ? data.candidates : []);
+    }
+  }
+
+  async function handleUseExisting(sourceLayoutTemplateId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/commerce/${templateId}/product-detail-layout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceLayoutTemplateId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't use that layout. Try again.");
+      router.push(`/dashboard/templates/${data.layoutTemplateId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't use that layout. Try again.");
+      setBusy(false);
+    }
+  }
+
+  async function handleDetach() {
+    if (!confirm("Turn off product pages? Products will 404 until you attach a layout again. Your design stays saved and can be re-attached later.")) return;
+    setBusy(true);
+    try {
+      await fetch(`/api/v1/commerce/${templateId}/product-detail-layout`, { method: "DELETE" });
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Section
+      title="Product page"
+      description="One reusable page design serves every product's own URL (e.g. /shop/your-product) — add a product in the catalog and it gets a working page immediately, nothing to create per product."
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+        <div>
+          <p style={{ fontSize: "0.75rem", color: layout ? (layout.ready ? "#4ade80" : "#f59e0b") : "rgba(240,242,255,0.4)", margin: 0 }}>
+            {!layout ? "No product page yet — products will 404 until one is designed." : layout.ready ? "Product page is live." : "Draft — the required block was removed, re-add it to go live."}
+          </p>
+        </div>
+        {layout ? (
+          <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+            <a
+              href={`/dashboard/templates/${layout.templateId}`}
+              style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff", fontSize: "0.8rem", fontWeight: 600, textDecoration: "none" }}
+            >
+              Edit design
+            </a>
+            <button type="button" onClick={() => void handleDetach()} disabled={busy} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.5)", fontSize: "0.8rem", cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+              Turn off
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+            <button type="button" onClick={() => void handleDesignNew()} disabled={busy} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+              Design product page
+            </button>
+            <button type="button" onClick={() => void handleShowPicker()} disabled={busy} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.8rem", cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+              Use existing
+            </button>
+          </div>
+        )}
+      </div>
+
+      {error && <p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0 }}>{error}</p>}
+
+      {showPicker && !layout && (
+        <div style={{ marginTop: "0.25rem" }}>
+          {candidates === null ? (
+            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>Loading…</p>
+          ) : candidates.length === 0 ? (
+            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>No other product pages yet — design one on another site first, or start new here.</p>
+          ) : (
+            <div style={{ display: "grid", gap: "0.5rem" }}>
+              {candidates.map((c) => (
+                <div key={c.layoutTemplateId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+                  <span style={{ fontSize: "0.8rem", color: "#f0f2ff" }}>
+                    {c.layoutName} <span style={{ color: "rgba(240,242,255,0.4)" }}>— from {c.siteName} · updated {new Date(c.updatedAt).toLocaleDateString()}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void handleUseExisting(c.layoutTemplateId)}
+                    disabled={busy}
+                    style={{ padding: "0.35rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff", fontSize: "0.75rem", cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit", flexShrink: 0 }}
+                  >
+                    Use this
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </Section>
   );
 }
 
@@ -104,6 +236,8 @@ export function SettingsClient({ templateId, initial }: { templateId: string; in
           </span>
         </label>
       </Section>
+
+      <ProductDetailLayoutSection templateId={templateId} layout={initial.productDetailLayout} />
 
       <Section title="Paystack" description="Each site brings its own Paystack account.">
         <div style={{ display: "flex", gap: "0.5rem" }}>
