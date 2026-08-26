@@ -67,8 +67,19 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     hostname === baseDomain || hostname === "localhost" || hostname === "127.0.0.1";
   const isSubdomainOrCustom = !isKnownHost;
 
+  // Platform-level static assets served from this app's own /public directory,
+  // injected into tenant pages by absolute path (e.g. commerce.js's runtime <script
+  // src="/commerce.js">). These are NOT per-tenant content — every tenant domain needs
+  // the same file — so they must bypass the /pub/[domain]/... rewrite below entirely
+  // and fall through to Next's normal static-file serving. Without this, a tenant-site
+  // request for /commerce.js got rewritten to /pub/<domain>/commerce.js, which the
+  // catch-all page route resolves as a nonexistent page slug and 404s — silently
+  // breaking every Commerce block (and anything else depending on that script) on
+  // every published tenant domain.
+  const PLATFORM_STATIC_ASSETS = new Set(["/commerce.js"]);
+
   // 1. If it's a pages subdomain or a custom domain, rewrite internally to /pub/[domain]/[path]
-  if (isSubdomainOrCustom) {
+  if (isSubdomainOrCustom && !PLATFORM_STATIC_ASSETS.has(pathname)) {
     // Normalize development subdomains (xyz.localhost -> xyz.plexopages.io or similar)
     // so we can test them in local environment
     let lookupDomain = hostname;
