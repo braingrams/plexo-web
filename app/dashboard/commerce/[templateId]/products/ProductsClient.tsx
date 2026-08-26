@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export type ProductSummary = {
   id: string;
@@ -63,6 +63,15 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
   const [deleteTarget, setDeleteTarget] = useState<ProductSummary | null>(null);
   const mainFileInputRef = useRef<HTMLInputElement>(null);
   const galleryFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [stockFilter, setStockFilter] = useState<"all" | "in" | "out">("all");
+  const [view, setView] = useState<"grid" | "list">("grid");
+  const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkActing, setBulkActing] = useState(false);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const PAGE_SIZE = 12;
 
   const apiBase = `/api/v1/commerce/${templateId}/products`;
 
@@ -197,7 +206,55 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
     }
   }
 
+  async function handleBulkDeactivate() {
+    if (selectedIds.size === 0) return;
+    setBulkActing(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await Promise.all(
+        ids.map((id) => fetch(`${apiBase}/${id}`, { method: "DELETE" }).catch(() => null))
+      );
+      setProducts((prev) => prev.map((p) => (selectedIds.has(p.id) ? { ...p, active: false } : p)));
+      setSelectedIds(new Set());
+      setBulkConfirmOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to deactivate the selected products.");
+    } finally {
+      setBulkActing(false);
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   const otherProducts = useMemo(() => products.filter((p) => p.id !== form.id), [products, form.id]);
+
+  const filteredProducts = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return products.filter((p) => {
+      const matchesSearch = !term || p.name.toLowerCase().includes(term);
+      const matchesStock =
+        stockFilter === "all" ||
+        (p.kind === "PHYSICAL" && (stockFilter === "out" ? (p.stockQuantity ?? 0) <= 0 : (p.stockQuantity ?? 0) > 0));
+      return matchesSearch && matchesStock;
+    });
+  }, [products, searchTerm, stockFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredProducts.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedProducts = filteredProducts.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, stockFilter]);
+
+  const allOnPageSelected = pagedProducts.length > 0 && pagedProducts.every((p) => selectedIds.has(p.id));
 
   return (
     <div>
@@ -228,60 +285,279 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
           No products yet. Create your first one to start selling.
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "1rem" }}>
-          {products.map((product) => (
-            <div key={product.id} style={{
-              border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14,
-              background: "rgba(255,255,255,0.02)", overflow: "hidden",
-              opacity: product.active ? 1 : 0.55,
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search products…"
+              style={{ ...inputStyle, width: 220 }}
+            />
+            <select
+              value={stockFilter}
+              onChange={(e) => setStockFilter(e.target.value as typeof stockFilter)}
+              style={{ ...inputStyle, width: 160, cursor: "pointer" }}
+            >
+              <option value="all">All items</option>
+              <option value="in">In stock</option>
+              <option value="out">Out of stock</option>
+            </select>
+            <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>
+              {filteredProducts.length} {filteredProducts.length === 1 ? "product" : "products"}
+            </span>
+            <div style={{ marginLeft: "auto", display: "flex", gap: "0.35rem", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 9, padding: 3 }}>
+              <button
+                type="button"
+                onClick={() => setView("grid")}
+                aria-label="Grid view"
+                style={{
+                  width: 32, height: 28, borderRadius: 6, border: "none", cursor: "pointer",
+                  display: "grid", placeItems: "center",
+                  background: view === "grid" ? "rgba(139,92,246,0.18)" : "transparent",
+                  color: view === "grid" ? "var(--brand)" : "rgba(240,242,255,0.4)",
+                }}
+              >
+                <IconGrid />
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("list")}
+                aria-label="List view"
+                style={{
+                  width: 32, height: 28, borderRadius: 6, border: "none", cursor: "pointer",
+                  display: "grid", placeItems: "center",
+                  background: view === "list" ? "rgba(139,92,246,0.18)" : "transparent",
+                  color: view === "list" ? "var(--brand)" : "rgba(240,242,255,0.4)",
+                }}
+              >
+                <IconList />
+              </button>
+            </div>
+          </div>
+
+          {pagedProducts.length > 0 && (
+            <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem", fontSize: "0.78rem", color: "rgba(240,242,255,0.5)", cursor: "pointer", width: "fit-content" }}>
+              <input
+                type="checkbox"
+                checked={allOnPageSelected}
+                onChange={(e) => {
+                  setSelectedIds((prev) => {
+                    const next = new Set(prev);
+                    pagedProducts.forEach((p) => (e.target.checked ? next.add(p.id) : next.delete(p.id)));
+                    return next;
+                  });
+                }}
+              />
+              Select all on this page
+            </label>
+          )}
+
+          {filteredProducts.length === 0 ? (
+            <div style={{
+              padding: "2.5rem 2rem", textAlign: "center", borderRadius: 14,
+              border: "1px dashed rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.02)",
+              color: "rgba(240,242,255,0.4)", fontSize: "0.85rem",
             }}>
-              <div style={{
-                height: 140, background: product.imageUrl ? `url(${product.imageUrl}) center/cover` : "rgba(139,92,246,0.08)",
-                display: "grid", placeItems: "center",
-              }}>
-                {!product.imageUrl && <span style={{ color: "rgba(240,242,255,0.25)", fontSize: "0.75rem" }}>No image</span>}
-              </div>
-              <div style={{ padding: "0.9rem 1rem" }}>
-                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
-                  <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "#f0f2ff" }}>{product.name}</div>
-                  {!product.active && (
-                    <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#f87171", background: "rgba(248,113,113,0.12)", padding: "2px 6px", borderRadius: 6, flexShrink: 0 }}>
-                      INACTIVE
-                    </span>
-                  )}
+              No products match — try a different search or filter.
+            </div>
+          ) : view === "grid" ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "1rem" }}>
+              {pagedProducts.map((product) => (
+                <div key={product.id} style={{
+                  position: "relative",
+                  border: selectedIds.has(product.id) ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 14,
+                  background: "rgba(255,255,255,0.02)", overflow: "hidden",
+                  opacity: product.active ? 1 : 0.55,
+                }}>
+                  <label style={{ position: "absolute", top: 10, left: 10, zIndex: 1, width: 20, height: 20, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.55)", borderRadius: 6 }}>
+                    <input type="checkbox" checked={selectedIds.has(product.id)} onChange={() => toggleSelected(product.id)} />
+                  </label>
+                  <div style={{
+                    height: 140, background: product.imageUrl ? `url(${product.imageUrl}) center/cover` : "rgba(139,92,246,0.08)",
+                    display: "grid", placeItems: "center",
+                  }}>
+                    {!product.imageUrl && <span style={{ color: "rgba(240,242,255,0.25)", fontSize: "0.75rem" }}>No image</span>}
+                  </div>
+                  <div style={{ padding: "0.9rem 1rem" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
+                      <div style={{ fontSize: "0.9rem", fontWeight: 600, color: "#f0f2ff" }}>{product.name}</div>
+                      {!product.active && (
+                        <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#f87171", background: "rgba(248,113,113,0.12)", padding: "2px 6px", borderRadius: 6, flexShrink: 0 }}>
+                          INACTIVE
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)", marginTop: 2 }}>
+                      {product.category?.name ?? "Uncategorized"} · {product.kind === "PHYSICAL" ? "Product" : "Service"}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "0.6rem" }}>
+                      <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--brand)", fontVariantNumeric: "tabular-nums" }}>
+                        {formatNaira(product.priceMinor)}
+                      </span>
+                      <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)" }}>
+                        {product.kind === "PHYSICAL" ? `${product.stockQuantity ?? 0} in stock` : `${product.durationMinutes ?? 0} min`}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.8rem" }}>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(product)}
+                        style={{ flex: 1, padding: "0.4rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#f0f2ff", fontSize: "0.78rem", cursor: "pointer", fontFamily: "inherit" }}
+                      >
+                        Edit
+                      </button>
+                      {product.active && (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(product)}
+                          style={{ padding: "0.4rem 0.7rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: "0.78rem", cursor: "pointer", fontFamily: "inherit" }}
+                        >
+                          Deactivate
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)", marginTop: 2 }}>
-                  {product.category?.name ?? "Uncategorized"} · {product.kind === "PHYSICAL" ? "Product" : "Service"}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "0.6rem" }}>
-                  <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--brand)", fontVariantNumeric: "tabular-nums" }}>
+              ))}
+            </div>
+          ) : (
+            <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, overflow: "hidden" }}>
+              {pagedProducts.map((product, i) => (
+                <div
+                  key={product.id}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "0.9rem", padding: "0.7rem 1rem",
+                    background: selectedIds.has(product.id) ? "rgba(139,92,246,0.06)" : "rgba(255,255,255,0.015)",
+                    borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)",
+                    opacity: product.active ? 1 : 0.55,
+                  }}
+                >
+                  <input type="checkbox" checked={selectedIds.has(product.id)} onChange={() => toggleSelected(product.id)} style={{ flexShrink: 0 }} />
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 8, flexShrink: 0,
+                    background: product.imageUrl ? `url(${product.imageUrl}) center/cover` : "rgba(139,92,246,0.08)",
+                  }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                      <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{product.name}</span>
+                      {!product.active && (
+                        <span style={{ fontSize: "0.62rem", fontWeight: 700, color: "#f87171", background: "rgba(248,113,113,0.12)", padding: "2px 6px", borderRadius: 6, flexShrink: 0 }}>
+                          INACTIVE
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.45)" }}>
+                      {product.category?.name ?? "Uncategorized"} · {product.kind === "PHYSICAL" ? "Product" : "Service"}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--brand)", fontVariantNumeric: "tabular-nums", flexShrink: 0, width: 100, textAlign: "right" }}>
                     {formatNaira(product.priceMinor)}
                   </span>
-                  <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)" }}>
+                  <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", flexShrink: 0, width: 90, textAlign: "right" }}>
                     {product.kind === "PHYSICAL" ? `${product.stockQuantity ?? 0} in stock` : `${product.durationMinutes ?? 0} min`}
                   </span>
-                </div>
-                <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.8rem" }}>
-                  <button
-                    type="button"
-                    onClick={() => openEdit(product)}
-                    style={{ flex: 1, padding: "0.4rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#f0f2ff", fontSize: "0.78rem", cursor: "pointer", fontFamily: "inherit" }}
-                  >
-                    Edit
-                  </button>
-                  {product.active && (
+                  <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
                     <button
                       type="button"
-                      onClick={() => setDeleteTarget(product)}
-                      style={{ padding: "0.4rem 0.7rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: "0.78rem", cursor: "pointer", fontFamily: "inherit" }}
+                      onClick={() => openEdit(product)}
+                      style={{ padding: "0.35rem 0.6rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#f0f2ff", fontSize: "0.75rem", cursor: "pointer", fontFamily: "inherit" }}
                     >
-                      Deactivate
+                      Edit
                     </button>
-                  )}
+                    {product.active && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(product)}
+                        style={{ padding: "0.35rem 0.6rem", borderRadius: 7, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: "0.75rem", cursor: "pointer", fontFamily: "inherit" }}
+                      >
+                        Deactivate
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
-          ))}
+          )}
+
+          {totalPages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "1rem", marginTop: "1.5rem" }}>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontSize: "0.8rem", cursor: currentPage <= 1 ? "not-allowed" : "pointer", opacity: currentPage <= 1 ? 0.4 : 1, fontFamily: "inherit" }}
+              >
+                Previous
+              </button>
+              <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.5)" }}>
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontSize: "0.8rem", cursor: currentPage >= totalPages ? "not-allowed" : "pointer", opacity: currentPage >= totalPages ? 0.4 : 1, fontFamily: "inherit" }}
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── BULK ACTION BAR ────────────────────────── */}
+      {selectedIds.size > 0 && (
+        <div style={{
+          position: "fixed", left: "50%", bottom: "1.5rem", transform: "translateX(-50%)", zIndex: 50,
+          display: "flex", alignItems: "center", gap: "1rem",
+          background: "#141726", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14,
+          padding: "0.7rem 1rem", boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
+        }}>
+          <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "#f0f2ff" }}>
+            {selectedIds.size} selected
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            style={{ padding: "0.4rem 0.7rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.78rem", cursor: "pointer", fontFamily: "inherit" }}
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            onClick={() => setBulkConfirmOpen(true)}
+            style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.1)", color: "#f87171", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+          >
+            Deactivate selected
+          </button>
+        </div>
+      )}
+
+      {/* ── BULK DEACTIVATE CONFIRM ────────────────────────── */}
+      {bulkConfirmOpen && (
+        <div
+          role="dialog" aria-modal="true"
+          style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.75)", padding: "1rem" }}
+          onClick={(e) => { if (e.target === e.currentTarget) setBulkConfirmOpen(false); }}
+        >
+          <div style={{ width: "min(100%,420px)", background: "#0d0f1a", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 18, padding: "1.5rem" }}>
+            <h2 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.5rem" }}>
+              Deactivate {selectedIds.size} {selectedIds.size === 1 ? "product" : "products"}?
+            </h2>
+            <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.55)", marginBottom: "1.25rem" }}>
+              They'll stop appearing in the storefront but their order history is kept.
+            </p>
+            <div style={{ display: "flex", gap: "0.6rem", justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setBulkConfirmOpen(false)} style={{ padding: "0.55rem 1rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff", cursor: "pointer", fontFamily: "inherit", fontSize: "0.82rem" }}>
+                Cancel
+              </button>
+              <button type="button" onClick={() => void handleBulkDeactivate()} disabled={bulkActing} style={{ padding: "0.55rem 1rem", borderRadius: 8, border: "none", background: "#dc2626", color: "#fff", cursor: bulkActing ? "not-allowed" : "pointer", opacity: bulkActing ? 0.7 : 1, fontFamily: "inherit", fontSize: "0.82rem", fontWeight: 700 }}>
+                {bulkActing ? "Deactivating…" : "Deactivate"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -520,6 +796,24 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
         </div>
       )}
     </div>
+  );
+}
+
+function IconGrid() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+function IconList() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+    </svg>
   );
 }
 

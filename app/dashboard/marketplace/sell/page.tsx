@@ -24,7 +24,7 @@ export default async function SellTemplatePage() {
   // are eligible to become a new listing — same exclusion as the main Templates page.
   const [templates, platformSettings] = await Promise.all([
     prisma.template.findMany({
-      where: { organizationId: orgResolution.organizationId, parentId: null, marketplaceStatus: null },
+      where: { organizationId: orgResolution.organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false },
       orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
       select: { id: true, name: true, kind: true, compiledHtml: true },
     }),

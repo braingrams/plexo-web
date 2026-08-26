@@ -40,7 +40,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       targetKind = TemplateKind.EMAIL;
     }
 
-    const dbWhere: any = { parentId: null, organizationId };
+    const dbWhere: any = { parentId: null, organizationId, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false };
     if (targetKind) {
       dbWhere.kind = targetKind;
     }

@@ -6,6 +6,7 @@ import { put } from "@vercel/blob";
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
 import { getTierFeatures } from "@/lib/subscription";
+import { ensureUniqueTemplateName } from "@/server/templateName";
 
 /**
  * POST /api/v1/marketplace/templates/:id/use
@@ -55,7 +56,7 @@ export async function POST(
   const features = getTierFeatures(resolved.subscriptionPlan);
   {
     const limit = listing.kind === "LANDING_PAGE" ? features.maxLandingPages : features.maxEmailTemplates;
-    const count = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: listing.kind } });
+    const count = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: listing.kind, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false } });
     if (count >= limit) {
       const label = listing.kind === "LANDING_PAGE" ? "landing pages" : "email templates";
       return NextResponse.json(
@@ -69,6 +70,7 @@ export async function POST(
   }
 
   const newId = randomUUID();
+  const name = await ensureUniqueTemplateName({ organizationId: resolved.organizationId, parentId: null, kind: listing.kind, base: listing.name });
 
   if (listing.sourceType === "RAW_UPLOAD") {
     const sourceAssets = await prisma.templateAsset.findMany({ where: { templateId: listing.id } });
@@ -97,7 +99,7 @@ export async function POST(
           id: newId,
           userId: resolved.userId,
           organizationId: resolved.organizationId,
-          name: listing.name,
+          name,
           kind: listing.kind,
           sourceType: listing.sourceType,
           designJson: listing.designJson as Prisma.InputJsonValue,
@@ -115,7 +117,7 @@ export async function POST(
       id: newId,
       userId: resolved.userId,
       organizationId: resolved.organizationId,
-      name: listing.name,
+      name,
       kind: listing.kind,
       sourceType: listing.sourceType,
       designJson: listing.designJson as Prisma.InputJsonValue,

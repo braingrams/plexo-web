@@ -7,6 +7,7 @@ import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
 import { requirePermission } from "@/server/requirePermission";
 import { ensureUniqueSlug, isValidUuid } from "@/server/slug";
+import { ensureUniqueTemplateName } from "@/server/templateName";
 import { getTierFeatures } from "@/lib/subscription";
 
 /**
@@ -57,7 +58,7 @@ export async function POST(
     select: { order: true },
   });
 
-  const name = `${existing.name} copy`;
+  const name = await ensureUniqueTemplateName({ organizationId: resolved.organizationId, parentId: existing.parentId, kind: existing.kind, base: `${existing.name} copy` });
   const slug = await ensureUniqueSlug(existing.parentId, `${existing.slug ?? name}-copy`);
 
   // Raw-upload pages own real files in Blob storage — those need independent copies,

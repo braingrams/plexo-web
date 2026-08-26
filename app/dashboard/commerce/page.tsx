@@ -20,7 +20,7 @@ export default async function CommerceRootPage() {
   if (orgResolution.status === "needs-choice") redirect("/choose-org");
 
   const mostRecentSite = await prisma.template.findFirst({
-    where: { organizationId: orgResolution.organizationId, parentId: null },
+    where: { organizationId: orgResolution.organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false },
     select: { id: true },
     orderBy: { updatedAt: "desc" },
   });

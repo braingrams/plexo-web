@@ -34,7 +34,7 @@ export default async function CommerceSiteLayout({
       select: { id: true },
     }),
     prisma.template.findMany({
-      where: { organizationId, parentId: null },
+      where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false },
       select: { id: true, name: true },
       orderBy: { updatedAt: "desc" },
     }),

@@ -131,7 +131,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // with several multipage sub-pages still counts as one against this limit, not several.
   {
     const limit = kind === TemplateKind.EMAIL ? features.maxEmailTemplates : features.maxLandingPages;
-    const templateCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind } });
+    const templateCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false } });
     if (templateCount >= limit) {
       const label = kind === TemplateKind.EMAIL ? "email templates" : "landing pages";
       return NextResponse.json(

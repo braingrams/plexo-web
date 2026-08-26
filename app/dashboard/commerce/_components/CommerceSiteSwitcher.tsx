@@ -39,17 +39,28 @@ export function CommerceSiteSwitcher({ sites, currentTemplateId }: { sites: Site
         onChange={(e) => handleChange(e.target.value)}
         style={{
           width: "100%",
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.1)",
+          background: "rgba(255,255,255,0.06)",
+          border: "1px solid rgba(255,255,255,0.18)",
           borderRadius: 9,
           color: "#f0f2ff",
-          padding: "0.5rem 0.6rem",
+          padding: "0.55rem 2rem 0.55rem 0.7rem",
           fontSize: "0.82rem",
           fontWeight: 600,
           outline: "none",
           fontFamily: "inherit",
           cursor: "pointer",
+          appearance: "none",
+          WebkitAppearance: "none",
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23a5adc9' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")",
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "right 0.7rem center",
+          transition: "border-color 0.15s, background-color 0.15s",
         }}
+        onFocus={(e) => { e.currentTarget.style.borderColor = "rgba(139,92,246,0.6)"; }}
+        onBlur={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)"; }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = e.currentTarget.style.background.replace("0.06", "0.1"); e.currentTarget.style.borderColor = "rgba(255,255,255,0.28)"; }}
+        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)"; }}
       >
         {sites.map((s) => (
           <option key={s.id} value={s.id} style={{ background: "#0d0f1a", color: "#f0f2ff" }}>

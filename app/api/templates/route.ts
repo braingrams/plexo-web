@@ -7,6 +7,7 @@ import { ensureUniqueSlug } from "@/server/slug";
 import { resolveUser } from "@/app/api/v1/domains/route";
 import { requirePermission } from "@/server/requirePermission";
 import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
+import { isTemplateNameTaken } from "@/server/templateName";
 
 type TemplateSummary = {
   id: string;
@@ -140,6 +141,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   // A sub-page always belongs to the same landing-page tree as its parent.
   const kind = parent ? TemplateKind.LANDING_PAGE : (body.kind === "LANDING_PAGE" ? TemplateKind.LANDING_PAGE : TemplateKind.EMAIL);
+
+  if (await isTemplateNameTaken({ organizationId: resolved.organizationId, parentId, kind, name })) {
+    return NextResponse.json(
+      { error: parentId ? `This page already has a sub-page named "${name}".` : `You already have a ${kind === TemplateKind.LANDING_PAGE ? "site" : "email template"} named "${name}".` },
+      { status: 409 },
+    );
+  }
 
   if (!parentId) {
     // The plan's template limit counts root/home pages only, per kind — a page with

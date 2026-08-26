@@ -6,6 +6,7 @@ import { prisma } from "@/server/prisma";
 import { resolveUser, removeVercelDomain } from "@/app/api/v1/domains/route";
 import { requirePermission } from "@/server/requirePermission";
 import { isValidSlugSegment, isReservedTopLevelSlug, isSameOrAncestor, isValidUuid, slugify, getDescendantIds } from "@/server/slug";
+import { isTemplateNameTaken } from "@/server/templateName";
 
 type PatchTemplateBody = {
   name?: string;
@@ -45,6 +46,12 @@ export async function PATCH(
     const name = body.name.trim();
     if (!name) {
       return NextResponse.json({ error: "Name cannot be empty." }, { status: 400 });
+    }
+    if (await isTemplateNameTaken({ organizationId: resolved.organizationId, parentId: existing.parentId, kind: existing.kind, name, excludeId: existing.id })) {
+      return NextResponse.json(
+        { error: existing.parentId ? `This page already has a sub-page named "${name}".` : `You already have a ${existing.kind === "LANDING_PAGE" ? "site" : "email template"} named "${name}".` },
+        { status: 409 },
+      );
     }
     data.name = name;
   }
