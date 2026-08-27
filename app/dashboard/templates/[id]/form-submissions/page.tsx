@@ -1,5 +1,30 @@
+import Link from "next/link";
+
 import { prisma } from "@/server/prisma";
 import { requireSiteLayoutAccess } from "@/lib/siteLayout";
+import { PageContainer } from "../../../_components/PageContainer";
+import { Card } from "../../../_components/Card";
+
+function IconArrowLeft() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 12H5M12 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+function IconInbox() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 12h-6l-2 3h-4l-2-3H2" />
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" />
+    </svg>
+  );
+}
+
+function formatDateTime(date: Date): string {
+  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
 
 export default async function FormSubmissionsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,36 +37,69 @@ export default async function FormSubmissionsPage({ params }: { params: Promise<
   });
 
   return (
-    <div className="mx-auto max-w-5xl p-6 text-slate-100">
-      <h1 className="text-xl font-semibold">Form submissions — {access.templateName}</h1>
-      <p className="mt-1 text-sm text-slate-400">
-        Messages sent through any form on this site, newest first. Showing the last {submissions.length} of up to 200.
-      </p>
+    <PageContainer>
+      <Link href={`/dashboard/templates/${id}/detail`} style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 600, color: "rgba(240,242,255,0.5)", textDecoration: "none", marginBottom: "1.5rem" }}>
+        <IconArrowLeft /> {access.templateName}
+      </Link>
+
+      <div style={{ marginBottom: "2rem" }}>
+        <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.35rem" }}>
+          {access.templateName}
+        </p>
+        <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.8rem", fontWeight: 800, color: "#f0f2ff", letterSpacing: "-0.02em" }}>
+          Form Submissions
+        </h1>
+        <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.45)", marginTop: "0.4rem" }}>
+          Messages sent through any form on this site, newest first — showing the last {submissions.length} of up to 200.
+        </p>
+      </div>
 
       {submissions.length === 0 ? (
-        <div className="mt-8 rounded border border-slate-800 bg-slate-900/50 p-8 text-center text-sm text-slate-400">
-          No submissions yet.
-        </div>
+        <Card style={{ padding: "3.5rem 2rem", textAlign: "center" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 56, height: 56, borderRadius: 14, background: "rgba(255,255,255,0.04)", color: "rgba(240,242,255,0.3)", marginBottom: "1rem" }}>
+            <IconInbox />
+          </div>
+          <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "rgba(240,242,255,0.7)" }}>No submissions yet</p>
+          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", marginTop: "0.3rem" }}>
+            Messages sent through a form on this site will show up here.
+          </p>
+        </Card>
       ) : (
-        <div className="mt-6 flex flex-col gap-3">
-          {submissions.map((s) => (
-            <div key={s.id} className="rounded border border-slate-800 bg-slate-900/50 p-4">
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-xs font-medium uppercase tracking-wide text-indigo-300">{s.formName}</span>
-                <span className="text-xs text-slate-500">{s.createdAt.toLocaleString()}</span>
-              </div>
-              <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-                {Object.entries(s.fields as Record<string, string>).map(([key, value]) => (
-                  <div key={key}>
-                    <dt className="text-xs text-slate-500">{key}</dt>
-                    <dd className="whitespace-pre-wrap break-words text-sm text-slate-200">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          ))}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+          {submissions.map((s) => {
+            const fields = Object.entries(s.fields as Record<string, string>);
+            return (
+              <Card key={s.id}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", marginBottom: "1.1rem", paddingBottom: "1rem", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <span
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: "0.3rem",
+                      padding: "0.25rem 0.65rem", borderRadius: 999,
+                      fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
+                      background: "rgba(129,140,248,0.1)", color: "#818cf8",
+                    }}
+                  >
+                    {s.formName}
+                  </span>
+                  <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>{formatDateTime(s.createdAt)}</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem 1.5rem" }}>
+                  {fields.map(([key, value]) => (
+                    <div key={key}>
+                      <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.35)", marginBottom: "0.3rem" }}>
+                        {key}
+                      </div>
+                      <div style={{ fontSize: "0.85rem", color: "#f0f2ff", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }
