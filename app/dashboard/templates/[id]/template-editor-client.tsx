@@ -349,6 +349,7 @@ function EditorHeaderRight({
 	commentsOpen,
 	onToggleComments,
 	siteLayoutHref,
+	formSubmissionsHref,
 	transferHref,
 }: {
 	saveMessage: string | null;
@@ -359,6 +360,7 @@ function EditorHeaderRight({
 	commentsOpen: boolean;
 	onToggleComments: () => void;
 	siteLayoutHref?: string;
+	formSubmissionsHref?: string;
 	transferHref?: string;
 }) {
 	return (
@@ -388,6 +390,27 @@ function EditorHeaderRight({
 					}}
 				>
 					Site Layout
+				</Link>
+			)}
+
+			{formSubmissionsHref && (
+				<Link
+					href={formSubmissionsHref}
+					style={{
+						display: "inline-flex",
+						alignItems: "center",
+						gap: "0.4rem",
+						padding: "0.45rem 0.8rem",
+						borderRadius: 9,
+						border: "1px solid rgba(255,255,255,0.1)",
+						color: "rgba(240,242,255,0.6)",
+						fontSize: "0.8rem",
+						fontWeight: 600,
+						whiteSpace: "nowrap",
+						textDecoration: "none",
+					}}
+				>
+					Form Submissions
 				</Link>
 			)}
 
@@ -853,6 +876,7 @@ export function TemplateEditorClient({
 								setPendingPin(null);
 							}}
 							siteLayoutHref={!isEmail ? `/dashboard/templates/${rootTemplateId}/site-layout` : undefined}
+							formSubmissionsHref={!isEmail ? `/dashboard/templates/${rootTemplateId}/form-submissions` : undefined}
 							transferHref={!isEmail ? `/dashboard/templates/${rootTemplateId}/transfer` : undefined}
 						/>
 					}

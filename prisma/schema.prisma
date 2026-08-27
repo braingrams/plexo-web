@@ -111,6 +111,7 @@ model Organization {
   commerceSettings               CommerceSettings[]
   paystackWebhookEvents          PaystackWebhookEvent[]
   commerceProductReviews         CommerceProductReview[]
+  formSubmissions                FormSubmission[]
 
   // One row per site (SiteLayout.templateId is the unique key), same shape as commerceSettings.
   siteLayouts SiteLayout[]
@@ -617,6 +618,7 @@ model Template {
   commerceBookings               CommerceBooking[]
   paystackWebhookEvents          PaystackWebhookEvent[]
   commerceProductReviews         CommerceProductReview[]
+  formSubmissions                FormSubmission[]
 
   @@unique([parentId, slug])
   @@index([userId])
@@ -1875,6 +1877,28 @@ model PaystackWebhookEvent {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([templateId])
+  @@index([organizationId])
+}
+
+// A submission from a real form_container (see sanitizeCompiledHtml's FIX-004 — form/input/
+// textarea/select now survive publish, so a form_container's action can point straight at
+// /api/public/forms/[templateId]/submit and actually receive a plain, no-JS browser POST).
+// fields is a Json bag rather than fixed name/email/message columns since a form_container's
+// own field list is fully author-defined (any mix of text/email/number/date/textarea/select/
+// radio/checkbox, any names) — there is no fixed shape to normalize into.
+model FormSubmission {
+  id             String   @id @default(uuid()) @db.Uuid
+  templateId     String   @db.Uuid
+  organizationId String   @db.Uuid
+  formName       String   @default("Website Form")
+  fields         Json
+  submitterIp    String?
+  createdAt      DateTime @default(now())
+
+  template     Template     @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, createdAt])
   @@index([organizationId])
 }
 
