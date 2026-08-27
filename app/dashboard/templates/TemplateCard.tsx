@@ -195,7 +195,7 @@ export function TemplateCard({ template, onDelete }: Props) {
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <button
             type="button"
-            onClick={() => router.push(`/dashboard/templates/${template.id}`)}
+            onClick={() => router.push(`/dashboard/templates/${template.id}/detail`)}
             style={{
               flex: 1,
               display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
@@ -210,7 +210,7 @@ export function TemplateCard({ template, onDelete }: Props) {
             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139, 92, 246, 0.25)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139, 92, 246, 0.15)"; }}
           >
-            Open Editor
+            View Details
             <IconArrow />
           </button>
           {!isEmail && (

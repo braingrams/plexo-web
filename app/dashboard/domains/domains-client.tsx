@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { CustomSelect } from "../../_components/CustomSelect";
 
 // Vercel's generic, stable CNAME target — works for both subdomains and apex/root
@@ -156,6 +157,7 @@ function initialDnsStatus(records: DomainRecord[]): Record<string, { checking: b
 }
 
 export function DomainsClient({ initialDomains, landingPages, plan, customLimit }: Props) {
+  const searchParams = useSearchParams();
   const [domains, setDomains] = useState<DomainRecord[]>(initialDomains);
   // NEXT_PUBLIC_ vars are inlined into the client bundle at build time, so this is
   // correct on first paint with no hardcoded domain guess and no flash of a stale
@@ -209,6 +211,20 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   const [subdomainPrefix, setSubdomainPrefix] = useState<string>("");
   const [customDomainInput, setCustomDomainInput] = useState<string>("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(landingPages[0]?.id ?? "");
+
+  // Deep-linked from a site's own Detail page ("Connect Domain" / "Manage Domain") — pick
+  // that site in the connect form, and if it has no domain yet, open the drawer straight to
+  // it instead of leaving the visitor to find the right one in the dropdown themselves.
+  useEffect(() => {
+    const templateId = searchParams.get("templateId");
+    if (!templateId || !landingPages.some((lp) => lp.id === templateId)) return;
+    setSelectedTemplateId(templateId);
+    const alreadyConnected = initialDomains.some((d) => d.templateId === templateId);
+    if (!alreadyConnected) setIsDrawerOpen(true);
+    // Intentionally run once on mount — this is a one-time deep-link handoff, not a live
+    // sync with the URL (the drawer/dropdown are then free to be user-driven as normal).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);

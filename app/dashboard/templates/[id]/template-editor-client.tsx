@@ -9,7 +9,6 @@
  */
 
 import { useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
 	PlexoBuilder,
@@ -227,12 +226,10 @@ function EditorHeaderLeft({
 	isEmail,
 	templateName,
 	onBack,
-	onConvert,
 }: {
 	isEmail: boolean;
 	templateName: string;
 	onBack: () => void;
-	onConvert?: () => void;
 }) {
 	return (
 		<div
@@ -264,7 +261,7 @@ function EditorHeaderLeft({
 				}}
 			>
 				<IconArrowLeft />
-				Templates
+				Details
 			</button>
 
 			<div
@@ -306,27 +303,6 @@ function EditorHeaderLeft({
 					{isEmail ? <IconMail /> : <IconLayout />}
 					{isEmail ? "Email" : "Page"}
 				</span>
-				{onConvert && (
-					<button
-						type="button"
-						onClick={onConvert}
-						style={{
-							padding: "0.2rem 0.5rem",
-							borderRadius: 6,
-							border: "1px solid rgba(255,255,255,0.1)",
-							background: "transparent",
-							color: "rgba(240,242,255,0.5)",
-							cursor: "pointer",
-							fontFamily: "inherit",
-							fontSize: "0.68rem",
-							fontWeight: 600,
-							whiteSpace: "nowrap",
-							flexShrink: 0,
-						}}
-					>
-						Switch to {isEmail ? "Landing Page" : "Email"}
-					</button>
-				)}
 				<h1
 					style={{
 						fontFamily: "var(--font-heading), sans-serif",
@@ -353,9 +329,6 @@ function EditorHeaderRight({
 	onSave,
 	commentsOpen,
 	onToggleComments,
-	siteLayoutHref,
-	formSubmissionsHref,
-	transferHref,
 }: {
 	saveMessage: string | null;
 	saveError: string | null;
@@ -364,9 +337,6 @@ function EditorHeaderRight({
 	onSave: () => void;
 	commentsOpen: boolean;
 	onToggleComments: () => void;
-	siteLayoutHref?: string;
-	formSubmissionsHref?: string;
-	transferHref?: string;
 }) {
 	return (
 		<div
@@ -377,69 +347,6 @@ function EditorHeaderRight({
 				flexShrink: 0,
 			}}
 		>
-			{siteLayoutHref && (
-				<Link
-					href={siteLayoutHref}
-					style={{
-						display: "inline-flex",
-						alignItems: "center",
-						gap: "0.4rem",
-						padding: "0.45rem 0.8rem",
-						borderRadius: 9,
-						border: "1px solid rgba(255,255,255,0.1)",
-						color: "rgba(240,242,255,0.6)",
-						fontSize: "0.8rem",
-						fontWeight: 600,
-						whiteSpace: "nowrap",
-						textDecoration: "none",
-					}}
-				>
-					Site Layout
-				</Link>
-			)}
-
-			{formSubmissionsHref && (
-				<Link
-					href={formSubmissionsHref}
-					style={{
-						display: "inline-flex",
-						alignItems: "center",
-						gap: "0.4rem",
-						padding: "0.45rem 0.8rem",
-						borderRadius: 9,
-						border: "1px solid rgba(255,255,255,0.1)",
-						color: "rgba(240,242,255,0.6)",
-						fontSize: "0.8rem",
-						fontWeight: 600,
-						whiteSpace: "nowrap",
-						textDecoration: "none",
-					}}
-				>
-					Form Submissions
-				</Link>
-			)}
-
-			{transferHref && (
-				<Link
-					href={transferHref}
-					style={{
-						display: "inline-flex",
-						alignItems: "center",
-						gap: "0.4rem",
-						padding: "0.45rem 0.8rem",
-						borderRadius: 9,
-						border: "1px solid rgba(255,255,255,0.1)",
-						color: "rgba(240,242,255,0.6)",
-						fontSize: "0.8rem",
-						fontWeight: 600,
-						whiteSpace: "nowrap",
-						textDecoration: "none",
-					}}
-				>
-					Transfer Site
-				</Link>
-			)}
-
 			<button
 				type="button"
 				onClick={onToggleComments}
@@ -582,9 +489,6 @@ export function TemplateEditorClient({
 	const [isSaving, setIsSaving] = useState(false);
 	const [saveMessage, setSaveMessage] = useState<string | null>(null);
 	const [saveError, setSaveError] = useState<string | null>(null);
-	const [showConvertModal, setShowConvertModal] = useState(false);
-	const [isConverting, setIsConverting] = useState(false);
-	const [convertError, setConvertError] = useState<string | null>(null);
 	const [showPublishModal, setShowPublishModal] = useState(false);
 	const [modalDomainType, setModalDomainType] = useState<
 		"SUBDOMAIN" | "CUSTOM"
@@ -755,29 +659,6 @@ export function TemplateEditorClient({
 		}
 	}
 
-	async function handleConvertType(): Promise<void> {
-		setConvertError(null);
-		setIsConverting(true);
-		try {
-			const targetKind = isEmail ? "LANDING_PAGE" : "EMAIL";
-			const response = await fetch(`/api/templates/${templateId}/convert-type`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ targetKind }),
-			});
-			const data = (await response.json().catch(() => ({}))) as { error?: string };
-			if (!response.ok) {
-				throw new Error(data.error ?? "Unable to convert template.");
-			}
-			setShowConvertModal(false);
-			router.refresh();
-		} catch (err) {
-			setConvertError(err instanceof Error ? err.message : "Unable to convert template.");
-		} finally {
-			setIsConverting(false);
-		}
-	}
-
 	async function handleModalPublish(e: React.FormEvent) {
 		e.preventDefault();
 		setModalError(null);
@@ -908,20 +789,11 @@ export function TemplateEditorClient({
 							isEmail={isEmail}
 							templateName={templateName}
 							onBack={() => {
-								// The Templates list is prefetch-cached behind the always-visible nav
-								// link — force a refetch so a just-created/edited template isn't hidden
-								// behind a stale pre-change payload.
-								router.refresh();
-								router.push("/dashboard/templates");
+								// The Detail page is server-rendered fresh on every navigation, so a
+								// just-saved edit is never stale there the way the old flat Templates
+								// list needed a forced refresh to avoid.
+								router.push(`/dashboard/templates/${rootTemplateId}/detail`);
 							}}
-							onConvert={
-								templateParentId || isBlogLayout
-									? undefined
-									: () => {
-											setConvertError(null);
-											setShowConvertModal(true);
-										}
-							}
 						/>
 					}
 					headerRightContent={
@@ -936,9 +808,6 @@ export function TemplateEditorClient({
 								setCommentsOpen((v) => !v);
 								setPendingPin(null);
 							}}
-							siteLayoutHref={!isEmail ? `/dashboard/templates/${rootTemplateId}/site-layout` : undefined}
-							formSubmissionsHref={!isEmail ? `/dashboard/templates/${rootTemplateId}/form-submissions` : undefined}
-							transferHref={!isEmail ? `/dashboard/templates/${rootTemplateId}/transfer` : undefined}
 						/>
 					}
 					{...({ __internalPlan: subscriptionPlan } as any)}
@@ -1242,118 +1111,6 @@ export function TemplateEditorClient({
 				</div>
 			)}
 
-			{/* ── Convert Type Modal ──────────────────── */}
-			{showConvertModal && (
-				<div
-					style={{
-						position: "fixed",
-						top: 0,
-						left: 0,
-						right: 0,
-						bottom: 0,
-						background: "rgba(3, 7, 18, 0.85)",
-						zIndex: 100,
-						display: "grid",
-						placeItems: "center",
-						backdropFilter: "blur(8px)",
-						animation: "fadeIn 0.2s ease-out",
-					}}
-				>
-					<div
-						style={{
-							background: "#0d1324",
-							border: "1px solid rgba(255,255,255,0.08)",
-							borderRadius: 16,
-							width: "90%",
-							maxWidth: 460,
-							padding: "1.75rem",
-							boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
-						}}
-					>
-						<div
-							style={{
-								display: "flex",
-								justifyContent: "space-between",
-								alignItems: "center",
-								marginBottom: "1.25rem",
-							}}
-						>
-							<h2
-								style={{
-									fontSize: "1.2rem",
-									fontWeight: 800,
-									color: "#f0f2ff",
-									fontFamily: "var(--font-heading)",
-								}}
-							>
-								Switch to {isEmail ? "Landing Page" : "Email"}
-							</h2>
-							<button
-								onClick={() => setShowConvertModal(false)}
-								style={{
-									background: "none",
-									border: "none",
-									color: "rgba(240,242,255,0.4)",
-									cursor: "pointer",
-									display: "flex",
-									alignItems: "center",
-								}}
-							>
-								<IconClose />
-							</button>
-						</div>
-
-						<p
-							style={{
-								fontSize: "0.82rem",
-								color: "rgba(240,242,255,0.6)",
-								lineHeight: 1.5,
-								marginBottom: "1.25rem",
-							}}
-						>
-							{isEmail
-								? "This keeps all your content and design — it'll just be recompiled as a landing page instead of an email."
-								: "This keeps all your content and design, but interactive blocks like carousels, videos, timers, menus, and accordions won't animate or respond in email clients — they'll show as static images/snapshots instead."}
-						</p>
-
-						{convertError && (
-							<p style={{ fontSize: "0.78rem", color: "#f87171", margin: "0 0 1rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-								<IconWarning /> {convertError}
-							</p>
-						)}
-
-						<div style={{ display: "flex", gap: "0.6rem" }}>
-							<button
-								type="button"
-								onClick={() => setShowConvertModal(false)}
-								className="btn-secondary"
-								style={{ flex: 1, padding: "0.6rem" }}
-							>
-								Cancel
-							</button>
-							<button
-								type="button"
-								disabled={isConverting}
-								onClick={() => void handleConvertType()}
-								className="btn-primary"
-								style={{
-									flex: 1,
-									padding: "0.6rem",
-									display: "inline-flex",
-									alignItems: "center",
-									justifyContent: "center",
-									gap: "0.4rem",
-								}}
-							>
-								{isConverting && (
-									<span className="spinner" style={{ width: 11, height: 11 }} />
-								)}
-								{isConverting ? "Converting…" : "Continue"}
-							</button>
-						</div>
-					</div>
-				</div>
-			)}
 		</div>
 	);
 }

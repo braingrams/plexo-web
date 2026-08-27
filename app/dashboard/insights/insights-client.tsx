@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { CustomSelect } from "../../_components/CustomSelect";
 import { Card } from "../_components/Card";
 import { PageHeader } from "../_components/PageHeader";
@@ -21,9 +22,13 @@ type TemplateItem = {
 };
 
 export function InsightsClient() {
-  // Analytics Filter States
+  const searchParams = useSearchParams();
+
+  // Analytics Filter States. Deep-linked from a site's own Detail page ("View full
+  // analytics") — a ?templateId= param pre-selects that site instead of leaving the
+  // visitor to find it themselves in the dropdown.
   const [filterType, setFilterType] = useState<"all" | "published">("all");
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("all");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(() => searchParams.get("templateId") || "all");
   const [loading, setLoading] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
