@@ -53,7 +53,6 @@ export default async function TemplateDetailPage(
       createdAt: true,
       updatedAt: true,
       compiledAt: true,
-      sdkVersion: true,
       designJson: true,
       compiledHtml: true,
       _count: { select: { pages: true, formSubmissions: true } },
@@ -104,7 +103,6 @@ export default async function TemplateDetailPage(
       createdAt={template.createdAt.toISOString()}
       updatedAt={template.updatedAt.toISOString()}
       compiledAt={template.compiledAt ? template.compiledAt.toISOString() : null}
-      sdkVersion={template.sdkVersion}
       designJson={template.designJson}
       compiledHtml={template.compiledHtml}
       pageCount={template._count.pages}
