@@ -43,6 +43,7 @@ type Props = {
   compiledAt: string | null;
   designJson: unknown;
   compiledHtml: string;
+  previewHtml: string;
   pageCount: number;
   formSubmissionCount: number;
   siteData: SiteData | null;
@@ -50,7 +51,7 @@ type Props = {
 
 const CARD_TITLE: React.CSSProperties = { fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", margin: 0 };
 const CARD_HEADER: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "1.1rem", flexWrap: "wrap" };
-const ROW: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", padding: "0.7rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)" };
+const ROW: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem 1rem", padding: "0.7rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)" };
 const LABEL: React.CSSProperties = { fontSize: "0.82rem", color: "rgba(240,242,255,0.5)" };
 const VALUE: React.CSSProperties = { fontSize: "0.82rem", color: "#f0f2ff", fontWeight: 600 };
 const LINK_BTN: React.CSSProperties = { padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.85)", fontSize: "0.78rem", fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap" };
@@ -130,22 +131,6 @@ function stripTags(html: string): string {
     .trim();
 }
 
-/** The preview iframe's own srcDoc — scripts stripped before ever reaching the frame, same
- * defensive reasoning plexo-sdk's own CompiledCanvasFrame uses: this is a passive display
- * surface, not a place a real MailDrip embed, checkout redirect, or form submission should
- * actually fire from just because someone opened this site's Detail page. Stripping
- * <script> makes a real browser treat the page exactly like JS is disabled — which means it
- * also renders any <noscript> fallback content, e.g. a raw-uploaded site's own
- * `<noscript><style>.mobile-nav{display:flex!important}</style></noscript>` (a legitimate
- * "nav still works without JS" affordance that a real visitor with JS enabled never sees).
- * Stripped here too so the preview shows the normal JS-enabled experience, not that
- * fallback. */
-function stripScriptTags(html: string): string {
-  return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, "");
-}
-
 /** Nested RAW_UPLOAD pages already need this on the real serving path (see
  * injectBaseHref in app/pub/[domain]/[[...slug]]/route.ts) because a relative asset
  * reference ("style.css") resolves against the page's OWN directory. The preview iframe
@@ -175,6 +160,7 @@ export function DetailClient({
   compiledAt,
   designJson,
   compiledHtml,
+  previewHtml: initialPreviewHtml,
   pageCount,
   formSubmissionCount,
   siteData,
@@ -200,11 +186,16 @@ export function DetailClient({
   const [copied, setCopied] = useState(false);
   const [showSource, setShowSource] = useState(false);
 
-  // Preview: the page this Detail route already has compiledHtml for is seeded straight
-  // into the cache — switching to any other page in the site fetches it on demand.
+  // Preview: the page this Detail route already has HTML for is seeded straight into the
+  // cache — switching to any other page in the site fetches it on demand. Two fields per
+  // page: `compiledHtml` (the true, unmodified source — View Source reads this) and
+  // `previewHtml` (server-processed for a script-free iframe — <script>/<noscript>
+  // stripped, scroll-reveal sections forced visible; see lib/buildLivePreviewHtml.ts).
   const [previewPages, setPreviewPages] = useState<PreviewPage[]>([{ id: templateId, name, parentId: null, slug: null, sourceType }]);
   const [selectedPreviewId, setSelectedPreviewId] = useState(templateId);
-  const [previewCache, setPreviewCache] = useState<Record<string, string>>({ [templateId]: compiledHtml });
+  const [pageHtmlCache, setPageHtmlCache] = useState<Record<string, { compiledHtml: string; previewHtml: string }>>({
+    [templateId]: { compiledHtml, previewHtml: initialPreviewHtml },
+  });
   const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
@@ -221,13 +212,13 @@ export function DetailClient({
 
   async function selectPreview(id: string) {
     setSelectedPreviewId(id);
-    if (previewCache[id] !== undefined) return;
+    if (pageHtmlCache[id] !== undefined) return;
     setPreviewLoading(true);
     try {
       const res = await fetch(`/api/templates/${id}`);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.page) {
-        setPreviewCache((prev) => ({ ...prev, [id]: data.page.compiledHtml }));
+        setPageHtmlCache((prev) => ({ ...prev, [id]: { compiledHtml: data.page.compiledHtml, previewHtml: data.page.previewHtml } }));
       }
     } finally {
       setPreviewLoading(false);
@@ -316,21 +307,19 @@ export function DetailClient({
         : "Not live"
     : "Not connected";
 
-  const currentCompiledHtml = sourceTab === "html" || sourceTab === "text" ? previewCache[selectedPreviewId] ?? compiledHtml : compiledHtml;
+  const currentCompiledHtml = pageHtmlCache[selectedPreviewId]?.compiledHtml ?? compiledHtml;
   const sourceText = sourceTab === "json" ? JSON.stringify(designJson, null, 2) : sourceTab === "html" ? currentCompiledHtml : stripTags(currentCompiledHtml);
 
-  const previewHtml = previewCache[selectedPreviewId];
+  const selectedPreviewHtml = pageHtmlCache[selectedPreviewId]?.previewHtml;
   const previewOptions = previewPages.map((p) => ({ label: p.parentId === null ? `${p.name} (Home)` : p.name, value: p.id }));
   const previewSourceType = previewPages.find((p) => p.id === selectedPreviewId)?.sourceType ?? sourceType;
   const previewPagePath = buildPagePath(previewPages, selectedPreviewId);
   const previewSrcDoc =
-    previewHtml === undefined
+    selectedPreviewHtml === undefined
       ? undefined
-      : stripScriptTags(
-          previewSourceType === "RAW_UPLOAD" && siteData?.domain
-            ? injectBaseHref(previewHtml, `https://${siteData.domain.domain}/${previewPagePath}${previewPagePath ? "/" : ""}`)
-            : previewHtml,
-        );
+      : previewSourceType === "RAW_UPLOAD" && siteData?.domain
+        ? injectBaseHref(selectedPreviewHtml, `https://${siteData.domain.domain}/${previewPagePath}${previewPagePath ? "/" : ""}`)
+        : selectedPreviewHtml;
 
   return (
     <PageContainer>
@@ -366,6 +355,7 @@ export function DetailClient({
             </span>
           </div>
           <input
+            className="detail-name-input"
             value={nameDraft}
             onChange={(e) => setNameDraft(e.target.value)}
             onBlur={handleRenameCommit}
@@ -411,9 +401,16 @@ export function DetailClient({
       </div>
 
       <div className="detail-grid">
-        {/* Main column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", minWidth: 0 }}>
-          {/* Preview */}
+        {/* Preview, Sidebar, and the "bottom group" (View Source + Danger Zone) are three
+            explicit named grid areas (see the <style jsx> block) rather than relying on
+            plain auto-placement — auto-placement put Sidebar entirely in the same row as
+            Preview, so row 1's height became whichever of the two was taller, leaving a
+            gap before Bottom (row 2) started whenever Sidebar was the taller one. Named
+            areas with Sidebar spanning both rows size Preview/Bottom's own column purely
+            from their own content, independent of Sidebar's height — any leftover
+            difference becomes ordinary trailing space at the bottom of whichever column is
+            shorter, not a gap in the middle of one. */}
+        <div className="detail-grid-preview" style={{ minWidth: 0 }}>
           <Card>
             <div style={CARD_HEADER}>
               <div>
@@ -441,7 +438,7 @@ export function DetailClient({
                   <span key={c} style={{ width: 9, height: 9, borderRadius: "50%", background: c, opacity: 0.7 }} />
                 ))}
               </div>
-              <div style={{ position: "relative", height: 620 }}>
+              <div className="detail-preview-frame" style={{ position: "relative", height: 620 }}>
                 {previewLoading && (
                   <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(255,255,255,0.6)" }}>
                     <div className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
@@ -459,98 +456,10 @@ export function DetailClient({
               </div>
             </div>
           </Card>
-
-          {/* View Source — collapsed by default; a debugging/inspection aid, not something
-              most visits to this page need open. */}
-          <Card padded={false}>
-            <button
-              type="button"
-              onClick={() => setShowSource((v) => !v)}
-              style={{
-                width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-                gap: "1rem", padding: "1.4rem", background: "none", border: "none", cursor: "pointer",
-                fontFamily: "inherit", textAlign: "left",
-              }}
-            >
-              <div>
-                <h2 style={CARD_TITLE}>View Source</h2>
-                <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
-                  The compiled HTML, design JSON, or plain text behind this {isEmail ? "email" : "page"}.
-                </p>
-              </div>
-              <span style={{ color: "rgba(240,242,255,0.5)", flexShrink: 0 }}>
-                <IconChevronDown open={showSource} />
-              </span>
-            </button>
-            {showSource && (
-              <div style={{ padding: "0 1.4rem 1.4rem" }}>
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.3rem", marginBottom: "0.75rem" }}>
-                  {(["html", "json", "text"] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => setSourceTab(tab)}
-                      style={{
-                        padding: "0.3rem 0.7rem", borderRadius: 7, border: "none", cursor: "pointer",
-                        fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.02em",
-                        background: sourceTab === tab ? "var(--brand-subtle)" : "transparent",
-                        color: sourceTab === tab ? "var(--brand)" : "rgba(240,242,255,0.5)",
-                      }}
-                    >
-                      {tab === "text" ? "Plain text" : tab}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(sourceText)}
-                    style={{ padding: "0.3rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.72rem", fontWeight: 600, cursor: "pointer" }}
-                  >
-                    {copied ? "Copied!" : "Copy"}
-                  </button>
-                </div>
-                <pre
-                  style={{
-                    maxHeight: 340,
-                    overflow: "auto",
-                    fontSize: "0.72rem",
-                    lineHeight: 1.5,
-                    color: "rgba(240,242,255,0.75)",
-                    background: "rgba(0,0,0,0.25)",
-                    border: "1px solid rgba(255,255,255,0.06)",
-                    borderRadius: 8,
-                    padding: "0.9rem",
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {sourceText}
-                </pre>
-              </div>
-            )}
-          </Card>
-
-          {/* Danger zone — bottom of the main column, past preview/source rather than
-              competing for space in the status sidebar. */}
-          <Card style={{ border: "1px solid rgba(239,68,68,0.2)" }}>
-            <h2 style={{ ...CARD_TITLE, color: "#f87171", marginBottom: "0.9rem" }}>Danger Zone</h2>
-            <div style={{ ...ROW, borderBottom: "none" }}>
-              <div>
-                <div style={VALUE}>Delete {isEmail ? "this template" : "this site"}</div>
-                <div style={LABEL}>Can&apos;t be undone.</div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowDeleteConfirm(true)}
-                style={{ padding: "0.5rem 1rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer" }}
-              >
-                Delete
-              </button>
-            </div>
-          </Card>
         </div>
 
         {/* Sidebar column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", minWidth: 0 }}>
+        <div className="detail-grid-sidebar" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", minWidth: 0 }}>
           <Card>
             <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>Properties</h2>
             <div style={ROW}>
@@ -578,12 +487,12 @@ export function DetailClient({
           {siteData && (
             <>
               <Card>
-                <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>Domain &amp; Traffic</h2>
+                <div style={CARD_HEADER}>
+                  <h2 style={CARD_TITLE}>Domain &amp; Traffic</h2>
+                  <Chip on={domainStatus === "Live"} onLabel="Live" offLabel={domainStatus} />
+                </div>
                 <div style={ROW}>
-                  <div>
-                    <div style={{ ...VALUE, marginBottom: "0.3rem" }}>{siteData.domain?.domain ?? "No domain connected"}</div>
-                    <Chip on={domainStatus === "Live"} onLabel="Live" offLabel={domainStatus} />
-                  </div>
+                  <div style={VALUE}>{siteData.domain?.domain ?? "No domain connected"}</div>
                   <Link href={`/dashboard/domains?templateId=${templateId}`} style={LINK_BTN}>
                     {siteData.domain ? "Manage" : "Connect"}
                   </Link>
@@ -652,6 +561,97 @@ export function DetailClient({
               </Card>
             </>
           )}
+        </div>
+
+        {/* Bottom group — named grid area "bottom" (see the <style jsx> block): sits under
+            Preview in the same column on desktop, and last on mobile's single column. */}
+        <div className="detail-grid-bottom" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", minWidth: 0 }}>
+          {/* View Source — collapsed by default; a debugging/inspection aid, not something
+              most visits to this page need open. */}
+          <Card padded={false}>
+            <button
+              type="button"
+              onClick={() => setShowSource((v) => !v)}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+                gap: "1rem", padding: "1.4rem", background: "none", border: "none", cursor: "pointer",
+                fontFamily: "inherit", textAlign: "left",
+              }}
+            >
+              <div>
+                <h2 style={CARD_TITLE}>View Source</h2>
+                <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
+                  The compiled HTML, design JSON, or plain text behind this {isEmail ? "email" : "page"}.
+                </p>
+              </div>
+              <span style={{ color: "rgba(240,242,255,0.5)", flexShrink: 0 }}>
+                <IconChevronDown open={showSource} />
+              </span>
+            </button>
+            {showSource && (
+              <div style={{ padding: "0 1.4rem 1.4rem" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "0.3rem", marginBottom: "0.75rem" }}>
+                  {(["html", "json", "text"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setSourceTab(tab)}
+                      style={{
+                        padding: "0.3rem 0.7rem", borderRadius: 7, border: "none", cursor: "pointer",
+                        fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.02em",
+                        background: sourceTab === tab ? "var(--brand-subtle)" : "transparent",
+                        color: sourceTab === tab ? "var(--brand)" : "rgba(240,242,255,0.5)",
+                      }}
+                    >
+                      {tab === "text" ? "Plain text" : tab}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(sourceText)}
+                    style={{ padding: "0.3rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.72rem", fontWeight: 600, cursor: "pointer" }}
+                  >
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+                <pre
+                  style={{
+                    maxHeight: 340,
+                    overflow: "auto",
+                    fontSize: "0.72rem",
+                    lineHeight: 1.5,
+                    color: "rgba(240,242,255,0.75)",
+                    background: "rgba(0,0,0,0.25)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    borderRadius: 8,
+                    padding: "0.9rem",
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {sourceText}
+                </pre>
+              </div>
+            )}
+          </Card>
+
+          {/* Danger zone — last item on the page, both breakpoints. */}
+          <Card style={{ border: "1px solid rgba(239,68,68,0.2)" }}>
+            <h2 style={{ ...CARD_TITLE, color: "#f87171", marginBottom: "0.9rem" }}>Danger Zone</h2>
+            <div style={{ ...ROW, borderBottom: "none" }}>
+              <div>
+                <div style={VALUE}>Delete {isEmail ? "this template" : "this site"}</div>
+                <div style={LABEL}>Can&apos;t be undone.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                style={{ padding: "0.5rem 1rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer" }}
+              >
+                Delete
+              </button>
+            </div>
+          </Card>
         </div>
       </div>
 
@@ -732,9 +732,15 @@ export function DetailClient({
         .detail-grid {
           display: grid;
           grid-template-columns: 1fr 380px;
+          grid-template-areas:
+            "preview sidebar"
+            "bottom  sidebar";
           gap: 1.5rem;
           align-items: start;
         }
+        .detail-grid-preview { grid-area: preview; }
+        .detail-grid-sidebar { grid-area: sidebar; }
+        .detail-grid-bottom { grid-area: bottom; }
         .spinner {
           border: 2px solid rgba(0,0,0,0.1);
           border-top-color: var(--brand);
@@ -747,6 +753,18 @@ export function DetailClient({
         @media (max-width: 1000px) {
           .detail-grid {
             grid-template-columns: 1fr;
+            grid-template-areas:
+              "preview"
+              "sidebar"
+              "bottom";
+          }
+        }
+        @media (max-width: 640px) {
+          .detail-name-input {
+            font-size: 1.5rem !important;
+          }
+          .detail-preview-frame {
+            height: 420px !important;
           }
         }
       `}</style>

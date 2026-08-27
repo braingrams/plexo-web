@@ -5,6 +5,7 @@ import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
 import { findRootTemplateId } from "@/lib/siteLayout";
+import { buildLivePreviewHtml } from "@/lib/buildLivePreviewHtml";
 
 import { DetailClient } from "./detail-client";
 
@@ -55,12 +56,15 @@ export default async function TemplateDetailPage(
       compiledAt: true,
       designJson: true,
       compiledHtml: true,
+      assets: { select: { path: true, blobUrl: true } },
       _count: { select: { pages: true, formSubmissions: true } },
     },
   });
   if (!template) {
     notFound();
   }
+
+  const previewHtml = await buildLivePreviewHtml(template.compiledHtml, template.assets);
 
   let siteData: {
     domain: { domain: string; type: string; dnsVerified: boolean; active: boolean } | null;
@@ -105,6 +109,7 @@ export default async function TemplateDetailPage(
       compiledAt={template.compiledAt ? template.compiledAt.toISOString() : null}
       designJson={template.designJson}
       compiledHtml={template.compiledHtml}
+      previewHtml={previewHtml}
       pageCount={template._count.pages}
       formSubmissionCount={template._count.formSubmissions}
       siteData={siteData}

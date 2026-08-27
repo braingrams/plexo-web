@@ -18,34 +18,12 @@ import {
   annotateColorNodesForPreview,
   applyColorEdits,
   type ColorEdit,
-  type ExternalStylesheet,
 } from "@/lib/htmlColorExtraction";
 import { rewriteAssetReferencesForPreview } from "@/lib/htmlAssetRewrite";
 import { forceRevealAnimationsForPreview } from "@/lib/htmlRevealPreview";
 import { stripNoscriptForPreview } from "@/lib/htmlNoscriptStrip";
+import { fetchCssStylesheetContents } from "@/lib/fetchCssAssets";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
-
-/**
- * A multi-file RAW_UPLOAD template's CSS is often entirely in linked stylesheets
- * (TemplateAsset, stored in Vercel Blob) rather than inline <style> blocks — color
- * extraction needs their actual text to find anything defined there (including, commonly,
- * every CSS variable a hand-built template's brand colors are defined as). Fetched fresh
- * every request, same as app/api/v1/templates/[id]/files/route.ts's GET already does for
- * the file-listing endpoint — there's no content column to read from instead.
- */
-async function fetchCssStylesheetContents(
-  assets: { path: string; blobUrl: string }[],
-): Promise<ExternalStylesheet[]> {
-  const cssAssets = assets.filter((a) => a.path.toLowerCase().endsWith(".css"));
-  const fetched = await Promise.all(
-    cssAssets.map(async (a) => {
-      const res = await fetch(a.blobUrl).catch(() => null);
-      const content = res && res.ok ? await res.text() : "";
-      return { path: a.path, content };
-    }),
-  );
-  return fetched.filter((s) => s.content.length > 0);
-}
 
 /**
  * GET /api/v1/templates/:id/text-content

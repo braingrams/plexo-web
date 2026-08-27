@@ -7,6 +7,7 @@ import { resolveUser, removeVercelDomain } from "@/app/api/v1/domains/route";
 import { requirePermission } from "@/server/requirePermission";
 import { isValidSlugSegment, isReservedTopLevelSlug, isSameOrAncestor, isValidUuid, slugify, getDescendantIds } from "@/server/slug";
 import { isTemplateNameTaken } from "@/server/templateName";
+import { buildLivePreviewHtml } from "@/lib/buildLivePreviewHtml";
 
 type PatchTemplateBody = {
   name?: string;
@@ -37,13 +38,14 @@ export async function GET(
   }
   const template = await prisma.template.findFirst({
     where: { id, organizationId: resolved.organizationId },
-    select: { id: true, name: true, kind: true, compiledHtml: true },
+    select: { id: true, name: true, kind: true, compiledHtml: true, assets: { select: { path: true, blobUrl: true } } },
   });
   if (!template) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
 
-  return NextResponse.json({ page: template });
+  const previewHtml = await buildLivePreviewHtml(template.compiledHtml, template.assets);
+  return NextResponse.json({ page: { id: template.id, name: template.name, kind: template.kind, compiledHtml: template.compiledHtml, previewHtml } });
 }
 
 export async function PATCH(
