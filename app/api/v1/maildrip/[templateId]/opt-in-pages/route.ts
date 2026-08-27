@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!settings?.maildripApiKeyEncrypted) {
     return NextResponse.json(
       {
-        error: "Connect your MailDrip account first — add your API key in Commerce Settings.",
+        error: "Connect your MailDrip account first using the Connect panel above.",
         needsMaildripKey: true,
         apiKeysUrl: MAILDRIP_API_KEYS_SETTINGS_URL,
         signupUrl: MAILDRIP_SIGNUP_URL,

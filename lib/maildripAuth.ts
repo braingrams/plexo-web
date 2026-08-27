@@ -60,6 +60,9 @@ export async function maildripFetchApiKey(token: string): Promise<{ apiKey: stri
   if (!response.ok) {
     return { error: typeof payload.message === "string" ? payload.message : "Could not fetch MailDrip credentials.", status: response.status };
   }
+  if (typeof payload.apiKey !== "string" || !payload.apiKey) {
+    return { error: "MailDrip did not return an API key.", status: 502 };
+  }
   return { apiKey: payload.apiKey };
 }
 
