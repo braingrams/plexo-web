@@ -14,9 +14,10 @@ import { maildripRegister, maildripLogin, maildripVerify, maildripResendVerifica
  *
  *   register -> verify_required (MailDrip emails a code)
  *   login    -> connected (already verified) | verify_required (never finished verifying)
- *   verify   -> re-submits the password alongside the code so this same call can log in and
- *               fetch the API key immediately after verifying — the client never needs to
- *               hold the password past this one step.
+ *   verify   -> MailDrip's own verify endpoint already returns a usable session token on
+ *               success (confirmed against the real API — it exists specifically so a
+ *               just-verified visitor can proceed without a second login), so this never
+ *               needs the password resubmitted here.
  *   resend   -> re-sends the verification email
  *
  * "connected" always means: a real MailDrip API key was fetched and saved (encrypted) to this
@@ -55,9 +56,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (action === "register") {
     const password = typeof body.password === "string" ? body.password : "";
     const name = typeof body.name === "string" ? body.name.trim() : "";
-    if (!password || !name) return NextResponse.json({ error: "name and password are required." }, { status: 400 });
+    const companyName = typeof body.companyName === "string" ? body.companyName.trim() : "";
+    const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+    if (!password || !name || !companyName || !phone) {
+      return NextResponse.json({ error: "name, companyName, phone, and password are required." }, { status: 400 });
+    }
 
-    const result = await maildripRegister({ email, password, name });
+    const result = await maildripRegister({ email, password, name, companyName, phone });
     if (isApiError(result)) return NextResponse.json({ error: result.error }, { status: result.status === 400 ? 400 : 502 });
     return NextResponse.json({ status: "verify_required", email });
   }
@@ -74,15 +79,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   if (action === "verify") {
     const code = typeof body.code === "string" ? body.code.trim() : "";
-    const password = typeof body.password === "string" ? body.password : "";
-    if (!code || !password) return NextResponse.json({ error: "code and password are required." }, { status: 400 });
+    if (!code) return NextResponse.json({ error: "code is required." }, { status: 400 });
 
     const verifyResult = await maildripVerify({ email, verificationCode: code });
     if (isApiError(verifyResult)) return NextResponse.json({ error: verifyResult.error }, { status: verifyResult.status === 400 ? 400 : 502 });
-
-    const loginResult = await maildripLogin({ email, password });
-    if (isApiError(loginResult)) return NextResponse.json({ error: loginResult.error }, { status: loginResult.status === 400 ? 400 : 502 });
-    return connectWithToken(loginResult.token);
+    return connectWithToken(verifyResult.token);
   }
 
   if (action === "resend") {

@@ -5,12 +5,29 @@
 // MailDrip's API over HTTPS — it is never logged, never stored, and never sent anywhere else.
 // This is defensible specifically because MailDrip and Plexo are both Charisol's own
 // products; this is not a pattern to generalize to a genuine third-party service.
+//
+// MailDrip's own response envelope is NOT consistent across these endpoints — confirmed by
+// real calls against the live API, not assumed from its (incomplete) public docs:
+//   - register / verify / resend-verification-link / credentials all go through its sendData()
+//     helper, nesting the real payload under `.data`.
+//   - login responds flat (`{success, token, verified}`, no `.data`) — a genuinely different
+//     shape from every other endpoint here.
+//   - Error responses are ALSO inconsistent: most go through sendError(), which puts the
+//     message on `.error` (not `.message`, despite what's passed into it) — but login's own
+//     "wrong email or password" case bypasses that and uses `.message` directly. Checking both
+//     is the only way to surface the real message across every path.
 
 const MAILDRIP_API_BASE = "https://api.maildrip.io/api/v1";
 
 export type MaildripApiError = { error: string; status: number };
 
-async function maildripPost<T>(path: string, body: Record<string, unknown>, token?: string): Promise<T | MaildripApiError> {
+function extractErrorMessage(payload: Record<string, unknown>): string {
+  if (typeof payload.message === "string") return payload.message;
+  if (typeof payload.error === "string") return payload.error;
+  return "MailDrip request failed.";
+}
+
+async function maildripPost(path: string, body: Record<string, unknown>, token?: string): Promise<Record<string, unknown> | MaildripApiError> {
   const response = await fetch(`${MAILDRIP_API_BASE}${path}`, {
     method: "POST",
     headers: {
@@ -21,33 +38,48 @@ async function maildripPost<T>(path: string, body: Record<string, unknown>, toke
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    return { error: typeof payload.message === "string" ? payload.message : "MailDrip request failed.", status: response.status };
+    return { error: extractErrorMessage(payload), status: response.status };
   }
-  return payload as T;
+  return payload;
 }
 
-function isApiError<T>(result: T | MaildripApiError): result is MaildripApiError {
+function isApiError(result: unknown): result is MaildripApiError {
   return typeof result === "object" && result !== null && "error" in result && "status" in result;
 }
 
-export async function maildripRegister(input: { email: string; password: string; name: string }): Promise<{ userId: string } | MaildripApiError> {
-  const result = await maildripPost<{ userId: string }>("/users/register", input);
-  return result;
+// companyName and phone are genuinely required by MailDrip's own register validator
+// (body("companyName").notEmpty(), body("phone").notEmpty()) despite the public API docs'
+// schema not marking them that way — confirmed by a real 422 against the live API before
+// wiring this up, not assumed from the docs alone.
+export async function maildripRegister(input: { email: string; password: string; name: string; companyName: string; phone: string }): Promise<{ userId: string } | MaildripApiError> {
+  const result = await maildripPost("/users/register", input);
+  if (isApiError(result)) return result;
+  const data = result.data as { userId?: string } | undefined;
+  if (!data?.userId) return { error: "MailDrip did not return a user id.", status: 502 };
+  return { userId: data.userId };
 }
 
 export async function maildripLogin(input: { email: string; password: string }): Promise<{ token: string; verified: boolean } | MaildripApiError> {
-  const result = await maildripPost<{ token: string; verified: boolean }>("/users/login", input);
-  return result;
+  const result = await maildripPost("/users/login", input);
+  if (isApiError(result)) return result;
+  if (typeof result.token !== "string") return { error: "MailDrip did not return a session token.", status: 502 };
+  return { token: result.token, verified: Boolean(result.verified) };
 }
 
-export async function maildripVerify(input: { email: string; verificationCode: string }): Promise<{ ok: true } | MaildripApiError> {
-  const result = await maildripPost<Record<string, unknown>>("/users/verify", input);
+// Confirmed via a real call: MailDrip's own verify endpoint already mints and returns a
+// usable JWT on success (it exists specifically so a just-verified visitor can proceed
+// without a second login step) — so this flow never needs to re-submit the password after
+// verifying, unlike an earlier version of this file that called login() again afterward.
+export async function maildripVerify(input: { email: string; verificationCode: string }): Promise<{ token: string } | MaildripApiError> {
+  const result = await maildripPost("/users/verify", input);
   if (isApiError(result)) return result;
-  return { ok: true };
+  const data = result.data as { token?: string } | undefined;
+  if (!data?.token) return { error: "MailDrip did not return a session token.", status: 502 };
+  return { token: data.token };
 }
 
 export async function maildripResendVerification(email: string): Promise<{ ok: true } | MaildripApiError> {
-  const result = await maildripPost<Record<string, unknown>>("/users/resend-verification-link", { email });
+  const result = await maildripPost("/users/resend-verification-link", { email });
   if (isApiError(result)) return result;
   return { ok: true };
 }
@@ -58,12 +90,13 @@ export async function maildripFetchApiKey(token: string): Promise<{ apiKey: stri
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    return { error: typeof payload.message === "string" ? payload.message : "Could not fetch MailDrip credentials.", status: response.status };
+    return { error: extractErrorMessage(payload), status: response.status };
   }
-  if (typeof payload.apiKey !== "string" || !payload.apiKey) {
+  const data = payload.data as { apiKey?: string } | undefined;
+  if (typeof data?.apiKey !== "string" || !data.apiKey) {
     return { error: "MailDrip did not return an API key.", status: 502 };
   }
-  return { apiKey: payload.apiKey };
+  return { apiKey: data.apiKey };
 }
 
 export { isApiError };
