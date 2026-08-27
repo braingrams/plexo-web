@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PageContainer } from "../../../_components/PageContainer";
+import { Card } from "../../../_components/Card";
+import { CustomSelect } from "../../../../_components/CustomSelect";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
@@ -14,6 +16,8 @@ type SiteData = {
   siteLayoutEnabled: boolean;
   commerceEnabled: boolean;
 };
+
+type PreviewPage = { id: string; name: string; parentId: string | null };
 
 type Props = {
   templateId: string;
@@ -32,14 +36,8 @@ type Props = {
   siteData: SiteData | null;
 };
 
-const CARD: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 14,
-  padding: "1.4rem",
-  marginBottom: "1.1rem",
-  background: "rgba(255,255,255,0.02)",
-};
-const CARD_TITLE: React.CSSProperties = { fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.9rem" };
+const CARD_TITLE: React.CSSProperties = { fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", margin: 0 };
+const CARD_HEADER: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "1.1rem", flexWrap: "wrap" };
 const ROW: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", padding: "0.7rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)" };
 const LABEL: React.CSSProperties = { fontSize: "0.82rem", color: "rgba(240,242,255,0.5)" };
 const VALUE: React.CSSProperties = { fontSize: "0.82rem", color: "#f0f2ff", fontWeight: 600 };
@@ -102,14 +100,20 @@ function formatDateTime(iso: string): string {
 }
 
 /** Strips tags for a rough plain-text view — good enough for "what does this page say",
- * not a faithful text-extraction (script/style contents aren't specially excluded, but
- * compileToHTML never emits inline <script> content and <style> blocks are CSS, not copy,
- * so in practice this reads cleanly for real compiled pages). */
+ * not a faithful text-extraction. */
 function stripTags(html: string): string {
   return html
     .replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** The preview iframe's own srcDoc — scripts stripped before ever reaching the frame, same
+ * defensive reasoning plexo-sdk's own CompiledCanvasFrame uses: this is a passive display
+ * surface, not a place a real MailDrip embed, checkout redirect, or form submission should
+ * actually fire from just because someone opened this site's Detail page. */
+function stripScriptTags(html: string): string {
+  return html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
 }
 
 export function DetailClient({
@@ -130,6 +134,7 @@ export function DetailClient({
 }: Props) {
   const router = useRouter();
   const isEmail = templateKind === "EMAIL";
+  const isRawUpload = sourceType === "RAW_UPLOAD";
 
   const [name, setName] = useState(templateName);
   const [nameDraft, setNameDraft] = useState(templateName);
@@ -146,6 +151,40 @@ export function DetailClient({
 
   const [sourceTab, setSourceTab] = useState<"json" | "html" | "text">("html");
   const [copied, setCopied] = useState(false);
+
+  // Preview: the page this Detail route already has compiledHtml for is seeded straight
+  // into the cache — switching to any other page in the site fetches it on demand.
+  const [previewPages, setPreviewPages] = useState<PreviewPage[]>([{ id: templateId, name, parentId: null }]);
+  const [selectedPreviewId, setSelectedPreviewId] = useState(templateId);
+  const [previewCache, setPreviewCache] = useState<Record<string, string>>({ [templateId]: compiledHtml });
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  useEffect(() => {
+    if (isEmail) return;
+    fetch(`/api/templates/${templateId}/pages`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.pages) setPreviewPages(data.pages);
+      })
+      .catch(() => {});
+    // Run once — the switcher itself is what drives further interaction from here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function selectPreview(id: string) {
+    setSelectedPreviewId(id);
+    if (previewCache[id] !== undefined) return;
+    setPreviewLoading(true);
+    try {
+      const res = await fetch(`/api/templates/${id}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.page) {
+        setPreviewCache((prev) => ({ ...prev, [id]: data.page.compiledHtml }));
+      }
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
 
   async function handleRenameCommit() {
     const trimmed = nameDraft.trim();
@@ -229,34 +268,45 @@ export function DetailClient({
         : "Not live"
     : "Not connected";
 
-  const sourceText =
-    sourceTab === "json"
-      ? JSON.stringify(designJson, null, 2)
-      : sourceTab === "html"
-        ? compiledHtml
-        : stripTags(compiledHtml);
+  const currentCompiledHtml = sourceTab === "html" || sourceTab === "text" ? previewCache[selectedPreviewId] ?? compiledHtml : compiledHtml;
+  const sourceText = sourceTab === "json" ? JSON.stringify(designJson, null, 2) : sourceTab === "html" ? currentCompiledHtml : stripTags(currentCompiledHtml);
+
+  const previewHtml = previewCache[selectedPreviewId];
+  const previewOptions = previewPages.map((p) => ({ label: p.parentId === null ? `${p.name} (Home)` : p.name, value: p.id }));
 
   return (
-    <PageContainer style={{ maxWidth: 900 }}>
-      <Link href="/dashboard/templates" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 600, color: "rgba(240,242,255,0.5)", textDecoration: "none", marginBottom: "1.25rem" }}>
+    <PageContainer>
+      <Link href="/dashboard/templates" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 600, color: "rgba(240,242,255,0.5)", textDecoration: "none", marginBottom: "1.5rem" }}>
         <IconArrowLeft /> Templates
       </Link>
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
-        <div style={{ flex: 1, minWidth: 240 }}>
-          <span
-            style={{
-              display: "inline-flex", alignItems: "center", gap: "0.3rem",
-              padding: "0.2rem 0.6rem", borderRadius: 999,
-              fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-              background: isEmail ? "var(--brand-subtle)" : "rgba(129,140,248,0.1)",
-              color: isEmail ? "var(--brand)" : "#818cf8",
-              marginBottom: "0.6rem",
-            }}
-          >
-            {isEmail ? "Email" : "Page"}
-          </span>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1.5rem", marginBottom: "2rem", flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.6rem" }}>
+            <span
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "0.3rem",
+                padding: "0.2rem 0.6rem", borderRadius: 999,
+                fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
+                background: isEmail ? "var(--brand-subtle)" : "rgba(129,140,248,0.1)",
+                color: isEmail ? "var(--brand)" : "#818cf8",
+              }}
+            >
+              {isEmail ? "Email" : "Page"}
+            </span>
+            <span
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "0.3rem",
+                padding: "0.2rem 0.6rem", borderRadius: 999,
+                fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
+                background: "rgba(255,255,255,0.06)",
+                color: "rgba(240,242,255,0.55)",
+              }}
+            >
+              {isRawUpload ? "Raw Upload" : "Drag & Drop"}
+            </span>
+          </div>
           <input
             value={nameDraft}
             onChange={(e) => setNameDraft(e.target.value)}
@@ -269,7 +319,7 @@ export function DetailClient({
             style={{
               display: "block",
               fontFamily: "var(--font-heading), sans-serif",
-              fontSize: "1.6rem",
+              fontSize: "1.9rem",
               fontWeight: 800,
               color: "#f0f2ff",
               background: "transparent",
@@ -278,19 +328,22 @@ export function DetailClient({
               padding: "0.15rem 0.4rem",
               marginLeft: "-0.4rem",
               width: "100%",
-              maxWidth: 480,
+              maxWidth: 560,
             }}
             onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)")}
           />
           {nameError && <p style={{ fontSize: "0.75rem", color: "#f87171", marginTop: "0.3rem" }}>{nameError}</p>}
+          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", marginTop: "0.35rem" }}>
+            Updated {formatDateTime(updatedAt)}
+          </p>
         </div>
         <button
           type="button"
           onClick={() => router.push(`/dashboard/templates/${templateId}`)}
           style={{
             display: "inline-flex", alignItems: "center", gap: "0.5rem",
-            padding: "0.7rem 1.3rem", borderRadius: 10, border: "none", cursor: "pointer",
-            fontSize: "0.9rem", fontWeight: 700,
+            padding: "0.75rem 1.4rem", borderRadius: 10, border: "none", cursor: "pointer",
+            fontSize: "0.92rem", fontWeight: 700,
             background: "var(--brand)", color: "#fff",
             fontFamily: "inherit", whiteSpace: "nowrap",
           }}
@@ -299,188 +352,229 @@ export function DetailClient({
         </button>
       </div>
 
-      {/* Properties */}
-      <div style={CARD}>
-        <p style={CARD_TITLE}>Properties</p>
-        <div style={ROW}>
-          <span style={LABEL}>Created</span>
-          <span style={VALUE}>{formatDateTime(createdAt)}</span>
-        </div>
-        <div style={ROW}>
-          <span style={LABEL}>Last updated</span>
-          <span style={VALUE}>{formatDateTime(updatedAt)}</span>
-        </div>
-        <div style={ROW}>
-          <span style={LABEL}>Last compiled</span>
-          <span style={VALUE}>{compiledAt ? formatDateTime(compiledAt) : "Never"}{sdkVersion ? ` · SDK ${sdkVersion}` : ""}</span>
-        </div>
-        <div style={ROW}>
-          <span style={LABEL}>Source</span>
-          <span style={VALUE}>{sourceType === "RAW_UPLOAD" ? "Uploaded HTML" : "Built in Plexo"}</span>
-        </div>
-        {!isBlogLayout && (
-          <div style={{ ...ROW, borderBottom: "none" }}>
-            <span style={LABEL}>Kind</span>
-            <button
-              type="button"
-              onClick={() => setShowConvertModal(true)}
-              style={{ padding: "0.3rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "rgba(240,242,255,0.75)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer" }}
+      <div className="detail-grid">
+        {/* Main column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", minWidth: 0 }}>
+          {/* Preview */}
+          <Card>
+            <div style={CARD_HEADER}>
+              <div>
+                <h2 style={CARD_TITLE}>Preview</h2>
+                <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
+                  {isEmail ? "How this email renders." : "What this page actually looks like, live."}
+                </p>
+              </div>
+              {previewOptions.length > 1 && (
+                <div style={{ width: "min(260px, 100%)" }}>
+                  <CustomSelect value={selectedPreviewId} options={previewOptions} onChange={(val) => void selectPreview(val)} />
+                </div>
+              )}
+            </div>
+            <div
+              style={{
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 10,
+                overflow: "hidden",
+                background: "#fff",
+              }}
             >
-              Switch to {isEmail ? "Landing Page" : "Email"}
-            </button>
-          </div>
-        )}
-      </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", padding: "0.55rem 0.75rem", background: "#12172a", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                {["#f87171", "#fbbf24", "#4ade80"].map((c) => (
+                  <span key={c} style={{ width: 9, height: 9, borderRadius: "50%", background: c, opacity: 0.7 }} />
+                ))}
+              </div>
+              <div style={{ position: "relative", height: 620 }}>
+                {previewLoading && (
+                  <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(255,255,255,0.6)" }}>
+                    <div className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
+                  </div>
+                )}
+                {previewHtml !== undefined && (
+                  <iframe
+                    key={selectedPreviewId}
+                    srcDoc={stripScriptTags(previewHtml)}
+                    title="Page preview"
+                    sandbox=""
+                    style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+                  />
+                )}
+              </div>
+            </div>
+          </Card>
 
-      {siteData && (
-        <>
-          {/* Domain & Deploy */}
-          <div style={CARD}>
-            <p style={CARD_TITLE}>Domain &amp; Deploy</p>
-            <div style={{ ...ROW, borderBottom: "none" }}>
-              <div>
-                <div style={{ ...VALUE, marginBottom: "0.3rem" }}>{siteData.domain?.domain ?? "No domain connected"}</div>
-                <Chip on={domainStatus === "Live"} onLabel="Live" offLabel={domainStatus} />
-              </div>
-              <Link href={`/dashboard/domains?templateId=${templateId}`} style={LINK_BTN}>
-                {siteData.domain ? "Manage Domain" : "Connect Domain"}
-              </Link>
-            </div>
-          </div>
-
-          {/* Traffic */}
-          <div style={CARD}>
-            <p style={CARD_TITLE}>Traffic</p>
-            <div style={{ ...ROW, borderBottom: "none" }}>
-              <div>
-                <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "#f0f2ff" }}>{siteData.pageViews30d.toLocaleString()}</div>
-                <div style={LABEL}>page views, last 30 days</div>
-              </div>
-              <Link href={`/dashboard/insights?templateId=${templateId}`} style={LINK_BTN}>
-                View full analytics →
-              </Link>
-            </div>
-          </div>
-
-          {/* Site modules */}
-          <div style={CARD}>
-            <p style={CARD_TITLE}>Site Modules</p>
-            <div style={ROW}>
-              <span style={LABEL}>Site Layout</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <Chip on={siteData.siteLayoutEnabled} onLabel="On" offLabel="Off" />
-                <Link href={`/dashboard/templates/${templateId}/site-layout`} style={LINK_BTN}>Configure</Link>
-              </div>
-            </div>
-            <div style={ROW}>
-              <span style={LABEL}>Blog</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <Chip on={siteData.blogEnabled} onLabel="On" offLabel="Off" />
-                <Link href={`/dashboard/templates/${templateId}/blog`} style={LINK_BTN}>Manage</Link>
-              </div>
-            </div>
-            <div style={{ ...ROW, borderBottom: "none" }}>
-              <span style={LABEL}>Commerce</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <Chip on={siteData.commerceEnabled} onLabel="On" offLabel="Off" />
-                <Link href={`/dashboard/commerce/${templateId}/settings`} style={LINK_BTN}>Configure</Link>
-              </div>
-            </div>
-          </div>
-
-          {/* Pages / Form Submissions / Transfer */}
-          <div style={CARD}>
-            <div style={ROW}>
-              <span style={LABEL}>Pages</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <span style={VALUE}>{pageCount + 1}</span>
+          {/* View Source */}
+          <Card>
+            <div style={CARD_HEADER}>
+              <h2 style={CARD_TITLE}>View Source</h2>
+              <div style={{ display: "flex", gap: "0.3rem" }}>
+                {(["html", "json", "text"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setSourceTab(tab)}
+                    style={{
+                      padding: "0.3rem 0.7rem", borderRadius: 7, border: "none", cursor: "pointer",
+                      fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.02em",
+                      background: sourceTab === tab ? "var(--brand-subtle)" : "transparent",
+                      color: sourceTab === tab ? "var(--brand)" : "rgba(240,242,255,0.5)",
+                    }}
+                  >
+                    {tab === "text" ? "Plain text" : tab}
+                  </button>
+                ))}
                 <button
                   type="button"
-                  onClick={() => router.push(`/dashboard/templates/${templateId}`)}
-                  style={{ ...LINK_BTN, background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
+                  onClick={() => handleCopy(sourceText)}
+                  style={{ padding: "0.3rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.72rem", fontWeight: 600, cursor: "pointer" }}
                 >
-                  Manage Pages
+                  {copied ? "Copied!" : "Copy"}
                 </button>
               </div>
             </div>
-            <div style={ROW}>
-              <span style={LABEL}>Form Submissions</span>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <span style={VALUE}>{formSubmissionCount}</span>
-                <Link href={`/dashboard/templates/${templateId}/form-submissions`} style={LINK_BTN}>View</Link>
-              </div>
-            </div>
-            <div style={{ ...ROW, borderBottom: "none" }}>
-              <span style={LABEL}>Transfer Site</span>
-              <Link href={`/dashboard/templates/${templateId}/transfer`} style={LINK_BTN}>Transfer</Link>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* View Source */}
-      <div style={CARD}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.9rem" }}>
-          <p style={{ ...CARD_TITLE, marginBottom: 0 }}>View Source</p>
-          <div style={{ display: "flex", gap: "0.3rem" }}>
-            {(["html", "json", "text"] as const).map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setSourceTab(tab)}
-                style={{
-                  padding: "0.3rem 0.7rem", borderRadius: 7, border: "none", cursor: "pointer",
-                  fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.02em",
-                  background: sourceTab === tab ? "var(--brand-subtle)" : "transparent",
-                  color: sourceTab === tab ? "var(--brand)" : "rgba(240,242,255,0.5)",
-                }}
-              >
-                {tab === "text" ? "Plain text" : tab}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => handleCopy(sourceText)}
-              style={{ padding: "0.3rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.72rem", fontWeight: 600, cursor: "pointer" }}
+            <pre
+              style={{
+                maxHeight: 340,
+                overflow: "auto",
+                fontSize: "0.72rem",
+                lineHeight: 1.5,
+                color: "rgba(240,242,255,0.75)",
+                background: "rgba(0,0,0,0.25)",
+                border: "1px solid rgba(255,255,255,0.06)",
+                borderRadius: 8,
+                padding: "0.9rem",
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-word",
+              }}
             >
-              {copied ? "Copied!" : "Copy"}
-            </button>
-          </div>
+              {sourceText}
+            </pre>
+          </Card>
         </div>
-        <pre
-          style={{
-            maxHeight: 320,
-            overflow: "auto",
-            fontSize: "0.72rem",
-            lineHeight: 1.5,
-            color: "rgba(240,242,255,0.75)",
-            background: "rgba(0,0,0,0.25)",
-            border: "1px solid rgba(255,255,255,0.06)",
-            borderRadius: 8,
-            padding: "0.9rem",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
-          {sourceText}
-        </pre>
-      </div>
 
-      {/* Danger zone */}
-      <div style={{ ...CARD, border: "1px solid rgba(239,68,68,0.2)", marginBottom: 0 }}>
-        <p style={{ ...CARD_TITLE, color: "#f87171" }}>Danger Zone</p>
-        <div style={{ ...ROW, borderBottom: "none" }}>
-          <div>
-            <div style={VALUE}>Delete {isEmail ? "this email template" : "this site"}</div>
-            <div style={LABEL}>This can&apos;t be undone.</div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowDeleteConfirm(true)}
-            style={{ padding: "0.5rem 1rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer" }}
-          >
-            Delete
-          </button>
+        {/* Sidebar column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", minWidth: 0 }}>
+          <Card>
+            <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>Properties</h2>
+            <div style={ROW}>
+              <span style={LABEL}>Created</span>
+              <span style={VALUE}>{formatDateTime(createdAt)}</span>
+            </div>
+            <div style={ROW}>
+              <span style={LABEL}>Last compiled</span>
+              <span style={VALUE}>{compiledAt ? formatDateTime(compiledAt) : "Never"}{sdkVersion ? ` · SDK ${sdkVersion}` : ""}</span>
+            </div>
+            {!isBlogLayout && (
+              <div style={{ ...ROW, borderBottom: "none" }}>
+                <span style={LABEL}>Kind</span>
+                <button
+                  type="button"
+                  onClick={() => setShowConvertModal(true)}
+                  style={{ padding: "0.3rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "rgba(240,242,255,0.75)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer" }}
+                >
+                  Switch to {isEmail ? "Landing Page" : "Email"}
+                </button>
+              </div>
+            )}
+          </Card>
+
+          {siteData && (
+            <>
+              <Card>
+                <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>Domain &amp; Deploy</h2>
+                <div style={{ ...ROW, borderBottom: "none" }}>
+                  <div>
+                    <div style={{ ...VALUE, marginBottom: "0.3rem" }}>{siteData.domain?.domain ?? "No domain connected"}</div>
+                    <Chip on={domainStatus === "Live"} onLabel="Live" offLabel={domainStatus} />
+                  </div>
+                  <Link href={`/dashboard/domains?templateId=${templateId}`} style={LINK_BTN}>
+                    {siteData.domain ? "Manage" : "Connect"}
+                  </Link>
+                </div>
+              </Card>
+
+              <Card>
+                <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>Traffic</h2>
+                <div style={{ ...ROW, borderBottom: "none" }}>
+                  <div>
+                    <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff" }}>{siteData.pageViews30d.toLocaleString()}</div>
+                    <div style={LABEL}>page views, last 30 days</div>
+                  </div>
+                  <Link href={`/dashboard/insights?templateId=${templateId}`} style={LINK_BTN}>
+                    View analytics
+                  </Link>
+                </div>
+              </Card>
+
+              <Card>
+                <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>Site Modules</h2>
+                <div style={ROW}>
+                  <span style={LABEL}>Site Layout</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                    <Chip on={siteData.siteLayoutEnabled} onLabel="On" offLabel="Off" />
+                    <Link href={`/dashboard/templates/${templateId}/site-layout`} style={LINK_BTN}>Configure</Link>
+                  </div>
+                </div>
+                <div style={ROW}>
+                  <span style={LABEL}>Blog</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                    <Chip on={siteData.blogEnabled} onLabel="On" offLabel="Off" />
+                    <Link href={`/dashboard/templates/${templateId}/blog`} style={LINK_BTN}>Manage</Link>
+                  </div>
+                </div>
+                <div style={{ ...ROW, borderBottom: "none" }}>
+                  <span style={LABEL}>Commerce</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                    <Chip on={siteData.commerceEnabled} onLabel="On" offLabel="Off" />
+                    <Link href={`/dashboard/commerce/${templateId}/settings`} style={LINK_BTN}>Configure</Link>
+                  </div>
+                </div>
+              </Card>
+
+              <Card>
+                <div style={ROW}>
+                  <span style={LABEL}>Pages</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                    <span style={VALUE}>{pageCount + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => router.push(`/dashboard/templates/${templateId}`)}
+                      style={{ ...LINK_BTN, background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
+                    >
+                      Manage
+                    </button>
+                  </div>
+                </div>
+                <div style={ROW}>
+                  <span style={LABEL}>Form Submissions</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                    <span style={VALUE}>{formSubmissionCount}</span>
+                    <Link href={`/dashboard/templates/${templateId}/form-submissions`} style={LINK_BTN}>View</Link>
+                  </div>
+                </div>
+                <div style={{ ...ROW, borderBottom: "none" }}>
+                  <span style={LABEL}>Transfer Site</span>
+                  <Link href={`/dashboard/templates/${templateId}/transfer`} style={LINK_BTN}>Transfer</Link>
+                </div>
+              </Card>
+            </>
+          )}
+
+          <Card style={{ border: "1px solid rgba(239,68,68,0.2)" }}>
+            <h2 style={{ ...CARD_TITLE, color: "#f87171", marginBottom: "0.9rem" }}>Danger Zone</h2>
+            <div style={{ ...ROW, borderBottom: "none" }}>
+              <div>
+                <div style={VALUE}>Delete {isEmail ? "this template" : "this site"}</div>
+                <div style={LABEL}>Can&apos;t be undone.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                style={{ padding: "0.5rem 1rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer" }}
+              >
+                Delete
+              </button>
+            </div>
+          </Card>
         </div>
       </div>
 
@@ -556,6 +650,29 @@ export function DetailClient({
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        .detail-grid {
+          display: grid;
+          grid-template-columns: 1fr 380px;
+          gap: 1.5rem;
+          align-items: start;
+        }
+        .spinner {
+          border: 2px solid rgba(0,0,0,0.1);
+          border-top-color: var(--brand);
+          border-radius: 50%;
+          animation: spin 0.65s linear infinite;
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+        @media (max-width: 1000px) {
+          .detail-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </PageContainer>
   );
 }

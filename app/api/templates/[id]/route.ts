@@ -15,6 +15,37 @@ type PatchTemplateBody = {
   order?: number;
 };
 
+/**
+ * GET /api/templates/:id
+ *
+ * Just enough to render a lightweight preview of one page — the Detail
+ * page's page-switcher fetches this for whichever sub-page isn't the one
+ * it already has compiledHtml for server-side.
+ */
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+): Promise<NextResponse> {
+  const resolved = await resolveUser(request);
+  if (!resolved) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await context.params;
+  if (!isValidUuid(id)) {
+    return NextResponse.json({ error: "Page not found." }, { status: 404 });
+  }
+  const template = await prisma.template.findFirst({
+    where: { id, organizationId: resolved.organizationId },
+    select: { id: true, name: true, kind: true, compiledHtml: true },
+  });
+  if (!template) {
+    return NextResponse.json({ error: "Page not found." }, { status: 404 });
+  }
+
+  return NextResponse.json({ page: template });
+}
+
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },

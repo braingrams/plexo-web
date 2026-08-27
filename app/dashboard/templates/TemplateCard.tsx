@@ -60,6 +60,16 @@ function IconTrash() {
   );
 }
 
+function IconInfo() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  );
+}
+
 function IconBlog() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -195,7 +205,7 @@ export function TemplateCard({ template, onDelete }: Props) {
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <button
             type="button"
-            onClick={() => router.push(`/dashboard/templates/${template.id}/detail`)}
+            onClick={() => router.push(`/dashboard/templates/${template.id}`)}
             style={{
               flex: 1,
               display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
@@ -210,8 +220,25 @@ export function TemplateCard({ template, onDelete }: Props) {
             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139, 92, 246, 0.25)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139, 92, 246, 0.15)"; }}
           >
-            View Details
+            Open Editor
             <IconArrow />
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push(`/dashboard/templates/${template.id}/detail`)}
+            title="View Details"
+            style={{
+              width: "38px", height: "38px",
+              display: "grid", placeItems: "center",
+              borderRadius: 10, border: "1px solid rgba(129, 140, 248, 0.2)", cursor: "pointer",
+              background: "rgba(129, 140, 248, 0.1)",
+              color: "#818cf8",
+              transition: "all 0.2s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(129, 140, 248, 0.2)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(129, 140, 248, 0.1)"; }}
+          >
+            <IconInfo />
           </button>
           {!isEmail && (
             <button
