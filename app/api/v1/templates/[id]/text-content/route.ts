@@ -22,6 +22,7 @@ import {
 } from "@/lib/htmlColorExtraction";
 import { rewriteAssetReferencesForPreview } from "@/lib/htmlAssetRewrite";
 import { forceRevealAnimationsForPreview } from "@/lib/htmlRevealPreview";
+import { stripNoscriptForPreview } from "@/lib/htmlNoscriptStrip";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 
 /**
@@ -100,15 +101,17 @@ export async function GET(
   // latter because this preview deliberately never runs page JS — see
   // htmlRevealPreview.ts's doc comment — so any scroll-triggered "reveal" section would
   // otherwise stay invisible forever.
-  const previewHtml = forceRevealAnimationsForPreview(
-    rewriteAssetReferencesForPreview(
-      annotateImageNodesForPreview(
-        annotateTextNodesForPreview(annotateColorNodesForPreview(template.compiledHtml, externalStylesheets)),
+  const previewHtml = stripNoscriptForPreview(
+    forceRevealAnimationsForPreview(
+      rewriteAssetReferencesForPreview(
+        annotateImageNodesForPreview(
+          annotateTextNodesForPreview(annotateColorNodesForPreview(template.compiledHtml, externalStylesheets)),
+        ),
+        template.assets,
+        externalStylesheets,
       ),
-      template.assets,
       externalStylesheets,
     ),
-    externalStylesheets,
   );
   return NextResponse.json({ nodes, imageNodes, colorNodes, previewHtml });
 }

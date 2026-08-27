@@ -150,7 +150,7 @@ function PublishedPageCard({ page }: { page: PublishedPageSummary }) {
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <button
             type="button"
-            onClick={() => router.push(`/dashboard/templates/${page.id}`)}
+            onClick={() => router.push(`/dashboard/templates/${page.id}/detail`)}
             style={{
               flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
               padding: "0.6rem 1rem", borderRadius: 10, border: "none", cursor: "pointer",
@@ -160,7 +160,7 @@ function PublishedPageCard({ page }: { page: PublishedPageSummary }) {
             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.25)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.15)"; }}
           >
-            Open Editor
+            View
             <IconArrow />
           </button>
         </div>

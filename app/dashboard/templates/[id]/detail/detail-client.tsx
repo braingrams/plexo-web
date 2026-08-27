@@ -17,7 +17,20 @@ type SiteData = {
   commerceEnabled: boolean;
 };
 
-type PreviewPage = { id: string; name: string; parentId: string | null };
+type PreviewPage = { id: string; name: string; parentId: string | null; slug: string | null; sourceType: string };
+
+/** Walks a page's parentId chain within the already-fetched tree to assemble its full
+ * slug path (e.g. "shop/product-1") — mirrors how a real nested page's URL is built. */
+function buildPagePath(pages: PreviewPage[], id: string): string {
+  const byId = new Map(pages.map((p) => [p.id, p]));
+  const segments: string[] = [];
+  let current = byId.get(id);
+  while (current && current.parentId !== null) {
+    if (current.slug) segments.unshift(current.slug);
+    current = byId.get(current.parentId);
+  }
+  return segments.join("/");
+}
 
 type Props = {
   templateId: string;
@@ -120,9 +133,35 @@ function stripTags(html: string): string {
 /** The preview iframe's own srcDoc — scripts stripped before ever reaching the frame, same
  * defensive reasoning plexo-sdk's own CompiledCanvasFrame uses: this is a passive display
  * surface, not a place a real MailDrip embed, checkout redirect, or form submission should
- * actually fire from just because someone opened this site's Detail page. */
+ * actually fire from just because someone opened this site's Detail page. Stripping
+ * <script> makes a real browser treat the page exactly like JS is disabled — which means it
+ * also renders any <noscript> fallback content, e.g. a raw-uploaded site's own
+ * `<noscript><style>.mobile-nav{display:flex!important}</style></noscript>` (a legitimate
+ * "nav still works without JS" affordance that a real visitor with JS enabled never sees).
+ * Stripped here too so the preview shows the normal JS-enabled experience, not that
+ * fallback. */
 function stripScriptTags(html: string): string {
-  return html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "");
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>/gi, "");
+}
+
+/** Nested RAW_UPLOAD pages already need this on the real serving path (see
+ * injectBaseHref in app/pub/[domain]/[[...slug]]/route.ts) because a relative asset
+ * reference ("style.css") resolves against the page's OWN directory. The preview iframe
+ * needs it for every RAW_UPLOAD page, not just nested ones — `srcDoc` gives the frame an
+ * `about:srcdoc` base with no real URL at all, so even a ROOT page's relative CSS/asset
+ * paths (which resolve fine on the real domain, no base tag needed there) can't resolve
+ * here without one. No-op when the site has no live domain yet — there's nothing to
+ * resolve a relative path against until it's actually published somewhere. */
+function injectBaseHref(html: string, basePath: string): string {
+  const baseTag = `<base href="${basePath}">`;
+  const headMatch = html.match(/<head[^>]*>/i);
+  if (headMatch && headMatch.index !== undefined) {
+    const idx = headMatch.index + headMatch[0].length;
+    return html.slice(0, idx) + baseTag + html.slice(idx);
+  }
+  return baseTag + html;
 }
 
 export function DetailClient({
@@ -163,7 +202,7 @@ export function DetailClient({
 
   // Preview: the page this Detail route already has compiledHtml for is seeded straight
   // into the cache — switching to any other page in the site fetches it on demand.
-  const [previewPages, setPreviewPages] = useState<PreviewPage[]>([{ id: templateId, name, parentId: null }]);
+  const [previewPages, setPreviewPages] = useState<PreviewPage[]>([{ id: templateId, name, parentId: null, slug: null, sourceType }]);
   const [selectedPreviewId, setSelectedPreviewId] = useState(templateId);
   const [previewCache, setPreviewCache] = useState<Record<string, string>>({ [templateId]: compiledHtml });
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -282,6 +321,16 @@ export function DetailClient({
 
   const previewHtml = previewCache[selectedPreviewId];
   const previewOptions = previewPages.map((p) => ({ label: p.parentId === null ? `${p.name} (Home)` : p.name, value: p.id }));
+  const previewSourceType = previewPages.find((p) => p.id === selectedPreviewId)?.sourceType ?? sourceType;
+  const previewPagePath = buildPagePath(previewPages, selectedPreviewId);
+  const previewSrcDoc =
+    previewHtml === undefined
+      ? undefined
+      : stripScriptTags(
+          previewSourceType === "RAW_UPLOAD" && siteData?.domain
+            ? injectBaseHref(previewHtml, `https://${siteData.domain.domain}/${previewPagePath}${previewPagePath ? "/" : ""}`)
+            : previewHtml,
+        );
 
   return (
     <PageContainer>
@@ -398,10 +447,10 @@ export function DetailClient({
                     <div className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
                   </div>
                 )}
-                {previewHtml !== undefined && (
+                {previewSrcDoc !== undefined && (
                   <iframe
                     key={selectedPreviewId}
-                    srcDoc={stripScriptTags(previewHtml)}
+                    srcDoc={previewSrcDoc}
                     title="Page preview"
                     sandbox=""
                     style={{ width: "100%", height: "100%", border: "none", display: "block" }}
