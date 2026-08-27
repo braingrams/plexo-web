@@ -49,6 +49,11 @@ type Props = {
 	// Commerce block palette group in PlexoBuilder. Resolved server-side in page.tsx by
 	// walking up to the root, since Commerce is scoped per site, not per page.
 	commerceEnabled?: boolean;
+	// True when this site already has a MailDrip API key saved (CommerceSettings) — lets
+	// form_container's 'maildrip' provider panel skip straight to "Create Opt-in Page"
+	// instead of showing the Connect flow. Resolved server-side the same way as
+	// commerceEnabled, for the same reason (MailDrip is a per-site concern, not per-page).
+	maildripConnected?: boolean;
 	// This page's site's root Template id — same walk as commerceEnabled, reused here to
 	// link to /dashboard/templates/{root}/site-layout regardless of how deep the current
 	// page sits in the site's page tree.
@@ -568,6 +573,7 @@ export function TemplateEditorClient({
 	organizationId,
 	isBlogLayout,
 	commerceEnabled,
+	maildripConnected,
 	rootTemplateId,
 }: Props) {
 	const router = useRouter();
@@ -641,6 +647,58 @@ export function TemplateEditorClient({
 				console.warn("Autosave failed:", err);
 				setSaveError(err instanceof Error ? err.message : "Autosave failed.");
 			});
+	}
+
+	/** Backs form_container's 'maildrip' provider "Connect MailDrip" flow (see
+	 * plexo-sdk's FormContainerPropertiesAccordion / MaildripConnectPanel) — a real
+	 * login-or-create-account modal inside the builder itself, never a redirect to
+	 * app.maildrip.io. Every action is relayed to our own backend, which is the only place
+	 * a password can be forwarded to MailDrip's API and the resulting API key decrypted/
+	 * encrypted for storage; see app/api/v1/maildrip/[templateId]/connect's own comment for
+	 * the full register/login/verify/resend state machine. */
+	async function handleMaildripAuth(
+		input:
+			| { action: "register"; email: string; password: string; name: string }
+			| { action: "login"; email: string; password: string }
+			| { action: "verify"; email: string; code: string; password: string }
+			| { action: "resend"; email: string },
+	): Promise<{ status: "connected" } | { status: "verify_required"; email: string } | { status: "sent" } | { error: string }> {
+		try {
+			const response = await fetch(`/api/v1/maildrip/${rootTemplateId}/connect`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(input),
+			});
+			const payload = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				return { error: typeof payload.error === "string" ? payload.error : "MailDrip request failed." };
+			}
+			return payload;
+		} catch {
+			return { error: "Could not reach the server. Please try again." };
+		}
+	}
+
+	/** Backs form_container's 'maildrip' provider "Create MailDrip Opt-in Page" action (see
+	 * plexo-sdk's FormContainerPropertiesAccordion) — brokers the call to the site's own
+	 * MailDrip account through our own backend, which is the only place the site's
+	 * encrypted MailDrip API key can be decrypted. */
+	async function handleCreateMaildripOptInPage(title: string): Promise<{ pageId: string; editUrl: string } | { error: string }> {
+		try {
+			const response = await fetch(`/api/v1/maildrip/${rootTemplateId}/opt-in-pages`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ title }),
+			});
+			const payload = await response.json().catch(() => ({}));
+			if (!response.ok) {
+				const message = typeof payload.error === "string" ? payload.error : "Could not create the MailDrip opt-in page.";
+				return { error: payload.needsMaildripKey ? `${message} (Commerce → Settings → MailDrip)` : message };
+			}
+			return { pageId: payload.pageId, editUrl: payload.editUrl };
+		} catch {
+			return { error: "Could not reach the server. Please try again." };
+		}
 	}
 
 	async function handleNavigateToPage(pageId: string): Promise<void> {
@@ -815,6 +873,8 @@ export function TemplateEditorClient({
 					mode={isEmail ? "email" : "landing_page"}
 					isBlogLayout={isBlogLayout}
 					commerceEnabled={commerceEnabled}
+					maildripConnected={maildripConnected}
+					onMaildripAuth={isEmail ? undefined : handleMaildripAuth}
 					initialTemplate={initialDesignJson}
 					backgroundColor="#0b1526"
 					themeBgColor="#8b5cf6"
@@ -824,6 +884,7 @@ export function TemplateEditorClient({
 					autoSave
 					autoSaveDuration={6000}
 					onSave={handleAutoSave}
+					onCreateMaildripOptInPage={isEmail ? undefined : handleCreateMaildripOptInPage}
 					useAi={useAi}
 					aiProvider={aiProvider}
 					aiTier={aiTier}

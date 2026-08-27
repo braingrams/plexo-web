@@ -97,7 +97,7 @@ export default async function TemplateEditorPage(
   const rootTemplateId = await findRootTemplateId(template.id, template.parentId);
   const commerceSettings = await prisma.commerceSettings.findUnique({
     where: { templateId: rootTemplateId },
-    select: { enabled: true },
+    select: { enabled: true, maildripApiKeyEncrypted: true },
   });
 
   const activeApiKey = user?.apiKeys[0] ?? null;
@@ -144,6 +144,7 @@ export default async function TemplateEditorPage(
       organizationId={orgResolution.organizationId}
       isBlogLayout={template.isBlogLayout}
       commerceEnabled={commerceSettings?.enabled ?? false}
+      maildripConnected={Boolean(commerceSettings?.maildripApiKeyEncrypted)}
       rootTemplateId={rootTemplateId}
     />
   );

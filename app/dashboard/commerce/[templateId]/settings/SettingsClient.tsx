@@ -349,7 +349,7 @@ export function SettingsClient({ templateId, initial }: { templateId: string; in
         />
       </Section>
 
-      <Section title="MailDrip" description="Optional — tags paying customers into a group and sends receipts through your own MailDrip account.">
+      <Section title="MailDrip" description="Optional — tags paying customers into a group, sends receipts, and (once connected) lets any page's form use a MailDrip opt-in form instead of the native one. You can also connect an account directly from a form block's Provider panel in the page editor.">
         <FieldLabel label="API key" hint={maildripMasked ? `Currently set: ${maildripMasked}` : "Falls back to Plexo's shared account until set."}>
           <input
             type="password"
