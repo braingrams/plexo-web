@@ -551,7 +551,7 @@ export function DetailClient({
               </Card>
 
               <Card>
-                <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>Site</h2>
+                <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>Site Modules</h2>
                 <div style={ROW}>
                   <span style={LABEL}>Site Layout</span>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
@@ -566,13 +566,16 @@ export function DetailClient({
                     <Link href={`/dashboard/templates/${templateId}/blog`} style={LINK_BTN}>Manage</Link>
                   </div>
                 </div>
-                <div style={ROW}>
+                <div style={{ ...ROW, borderBottom: "none" }}>
                   <span style={LABEL}>Commerce</span>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
                     <Chip on={siteData.commerceEnabled} onLabel="On" offLabel="Off" />
                     <Link href={`/dashboard/commerce/${templateId}/settings`} style={LINK_BTN}>Configure</Link>
                   </div>
                 </div>
+              </Card>
+
+              <Card>
                 <div style={ROW}>
                   <span style={LABEL}>Pages</span>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
