@@ -17,8 +17,10 @@ export default async function CommerceSettingsPage({ params }: { params: Promise
       initial={{
         enabled: settings?.enabled ?? false,
         paystackMode: settings?.paystackMode ?? "TEST",
-        paystackPublicKey: settings?.paystackPublicKey ?? "",
-        paystackSecretKeyMasked: settings?.paystackSecretKeyEncrypted ? maskSecret(decryptPaystackKey(settings.paystackSecretKeyEncrypted)) : null,
+        paystackTestPublicKey: settings?.paystackTestPublicKey ?? "",
+        paystackLivePublicKey: settings?.paystackLivePublicKey ?? "",
+        paystackTestSecretKeyMasked: settings?.paystackTestSecretKeyEncrypted ? maskSecret(decryptPaystackKey(settings.paystackTestSecretKeyEncrypted)) : null,
+        paystackLiveSecretKeyMasked: settings?.paystackLiveSecretKeyEncrypted ? maskSecret(decryptPaystackKey(settings.paystackLiveSecretKeyEncrypted)) : null,
         maildripApiKeyMasked: settings?.maildripApiKeyEncrypted ? maskSecret(decryptMaildripKey(settings.maildripApiKeyEncrypted)) : null,
         maildripPaidGroupId: settings?.maildripPaidGroupId ?? "",
         maildripNewsletterGroupId: settings?.maildripNewsletterGroupId ?? "",

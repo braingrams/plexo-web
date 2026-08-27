@@ -6,6 +6,7 @@ import { prisma } from "@/server/prisma";
 import { resolveSite } from "@/lib/pub/resolveSite";
 import { decryptPaystackKey } from "@/lib/crypto";
 import { initializePaystackTransaction } from "@/lib/paystack";
+import { resolveActivePaystackKeys } from "@/lib/commerce/paystack";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimit";
 import { readCartToken, findOpenCart, clearCartCookie } from "@/lib/commerce/cart";
 
@@ -64,7 +65,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const deliveryFeeMinor = deliveryMethodValue === "COURIER" ? COURIER_FEE_MINOR : 0;
 
   const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
-  if (!settings || !settings.enabled || !settings.paystackSecretKeyEncrypted || !settings.paystackPublicKey) {
+  if (!settings || !settings.enabled) {
+    return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
+  }
+  const { publicKey: activePaystackPublicKey, secretKeyEncrypted: activePaystackSecretKeyEncrypted } = resolveActivePaystackKeys(settings);
+  if (!activePaystackSecretKeyEncrypted || !activePaystackPublicKey) {
     return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
   }
 
@@ -210,7 +215,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     throw lastError instanceof Error ? lastError : new Error("Failed to create Commerce order after retries.");
   }
 
-  const secretKey = decryptPaystackKey(settings.paystackSecretKeyEncrypted);
+  const secretKey = decryptPaystackKey(activePaystackSecretKeyEncrypted);
 
   try {
     const result = await initializePaystackTransaction({

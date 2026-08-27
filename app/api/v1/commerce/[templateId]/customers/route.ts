@@ -3,6 +3,7 @@ import { prisma } from "@/server/prisma";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
 import { decryptPaystackKey } from "@/lib/crypto";
 import { listPaystackCustomers } from "@/lib/paystack";
+import { resolveActivePaystackKeys } from "@/lib/commerce/paystack";
 
 /**
  * Lists this site's customers straight from Paystack (the merchant account that actually
@@ -16,14 +17,15 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   if (resolved.error) return resolved.error;
 
   const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
-  if (!settings?.paystackSecretKeyEncrypted) {
+  const activeSecretKeyEncrypted = settings ? resolveActivePaystackKeys(settings).secretKeyEncrypted : null;
+  if (!activeSecretKeyEncrypted) {
     return NextResponse.json({ error: "Paystack isn't configured for this site yet." }, { status: 400 });
   }
 
   const page = Number(request.nextUrl.searchParams.get("page") ?? "1") || 1;
 
   try {
-    const result = await listPaystackCustomers({ secretKey: decryptPaystackKey(settings.paystackSecretKeyEncrypted), page });
+    const result = await listPaystackCustomers({ secretKey: decryptPaystackKey(activeSecretKeyEncrypted), page });
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Failed to load customers from Paystack." }, { status: 502 });

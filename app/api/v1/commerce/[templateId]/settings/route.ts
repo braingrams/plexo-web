@@ -15,11 +15,15 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
     settings: {
       enabled: settings?.enabled ?? false,
       paystackMode: settings?.paystackMode ?? "TEST",
-      paystackPublicKey: settings?.paystackPublicKey ?? null,
+      paystackTestPublicKey: settings?.paystackTestPublicKey ?? null,
+      paystackLivePublicKey: settings?.paystackLivePublicKey ?? null,
       // Secrets are never returned in plaintext — only a masked hint that something is
       // configured, same idea as ApiKey.maskedKey.
-      paystackSecretKeyMasked: settings?.paystackSecretKeyEncrypted
-        ? maskSecret(decryptPaystackKey(settings.paystackSecretKeyEncrypted))
+      paystackTestSecretKeyMasked: settings?.paystackTestSecretKeyEncrypted
+        ? maskSecret(decryptPaystackKey(settings.paystackTestSecretKeyEncrypted))
+        : null,
+      paystackLiveSecretKeyMasked: settings?.paystackLiveSecretKeyEncrypted
+        ? maskSecret(decryptPaystackKey(settings.paystackLiveSecretKeyEncrypted))
         : null,
       maildripApiKeyMasked: settings?.maildripApiKeyEncrypted ? maskSecret(decryptMaildripKey(settings.maildripApiKeyEncrypted)) : null,
       maildripPaidGroupId: settings?.maildripPaidGroupId ?? null,
@@ -40,7 +44,18 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
   if (permissionError) return permissionError;
 
   const body = await request.json().catch(() => ({}));
-  const { enabled, paystackMode, paystackPublicKey, paystackSecretKey, maildripApiKey, maildripPaidGroupId, maildripNewsletterGroupId, notificationEmail } = body;
+  const {
+    enabled,
+    paystackMode,
+    paystackTestPublicKey,
+    paystackTestSecretKey,
+    paystackLivePublicKey,
+    paystackLiveSecretKey,
+    maildripApiKey,
+    maildripPaidGroupId,
+    maildripNewsletterGroupId,
+    notificationEmail,
+  } = body;
 
   if (paystackMode !== undefined && paystackMode !== "TEST" && paystackMode !== "LIVE") {
     return NextResponse.json({ error: "paystackMode must be TEST or LIVE." }, { status: 400 });
@@ -53,11 +68,15 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
       organizationId,
       enabled: typeof enabled === "boolean" ? enabled : false,
       paystackMode: paystackMode ?? "TEST",
-      paystackPublicKey: typeof paystackPublicKey === "string" && paystackPublicKey ? paystackPublicKey : null,
+      paystackTestPublicKey: typeof paystackTestPublicKey === "string" && paystackTestPublicKey ? paystackTestPublicKey : null,
+      paystackLivePublicKey: typeof paystackLivePublicKey === "string" && paystackLivePublicKey ? paystackLivePublicKey : null,
       // A non-empty string replaces the key; an empty string / omitted leaves it unset on
       // create, or unchanged on update (see the update branch below) — never overwritten
       // with a blank value just because the form round-tripped a masked placeholder.
-      paystackSecretKeyEncrypted: typeof paystackSecretKey === "string" && paystackSecretKey ? encryptPaystackKey(paystackSecretKey) : null,
+      paystackTestSecretKeyEncrypted:
+        typeof paystackTestSecretKey === "string" && paystackTestSecretKey ? encryptPaystackKey(paystackTestSecretKey) : null,
+      paystackLiveSecretKeyEncrypted:
+        typeof paystackLiveSecretKey === "string" && paystackLiveSecretKey ? encryptPaystackKey(paystackLiveSecretKey) : null,
       maildripApiKeyEncrypted: typeof maildripApiKey === "string" && maildripApiKey ? encryptMaildripKey(maildripApiKey) : null,
       maildripPaidGroupId: typeof maildripPaidGroupId === "string" && maildripPaidGroupId ? maildripPaidGroupId : null,
       maildripNewsletterGroupId: typeof maildripNewsletterGroupId === "string" && maildripNewsletterGroupId ? maildripNewsletterGroupId : null,
@@ -66,9 +85,12 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     update: {
       enabled: typeof enabled === "boolean" ? enabled : undefined,
       paystackMode: paystackMode ?? undefined,
-      paystackPublicKey: typeof paystackPublicKey === "string" ? paystackPublicKey || null : undefined,
-      paystackSecretKeyEncrypted:
-        typeof paystackSecretKey === "string" && paystackSecretKey ? encryptPaystackKey(paystackSecretKey) : undefined,
+      paystackTestPublicKey: typeof paystackTestPublicKey === "string" ? paystackTestPublicKey || null : undefined,
+      paystackLivePublicKey: typeof paystackLivePublicKey === "string" ? paystackLivePublicKey || null : undefined,
+      paystackTestSecretKeyEncrypted:
+        typeof paystackTestSecretKey === "string" && paystackTestSecretKey ? encryptPaystackKey(paystackTestSecretKey) : undefined,
+      paystackLiveSecretKeyEncrypted:
+        typeof paystackLiveSecretKey === "string" && paystackLiveSecretKey ? encryptPaystackKey(paystackLiveSecretKey) : undefined,
       maildripApiKeyEncrypted: typeof maildripApiKey === "string" && maildripApiKey ? encryptMaildripKey(maildripApiKey) : undefined,
       maildripPaidGroupId: typeof maildripPaidGroupId === "string" ? maildripPaidGroupId || null : undefined,
       maildripNewsletterGroupId: typeof maildripNewsletterGroupId === "string" ? maildripNewsletterGroupId || null : undefined,
@@ -80,8 +102,10 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     settings: {
       enabled: settings.enabled,
       paystackMode: settings.paystackMode,
-      paystackPublicKey: settings.paystackPublicKey,
-      paystackSecretKeyMasked: settings.paystackSecretKeyEncrypted ? maskSecret(decryptPaystackKey(settings.paystackSecretKeyEncrypted)) : null,
+      paystackTestPublicKey: settings.paystackTestPublicKey,
+      paystackLivePublicKey: settings.paystackLivePublicKey,
+      paystackTestSecretKeyMasked: settings.paystackTestSecretKeyEncrypted ? maskSecret(decryptPaystackKey(settings.paystackTestSecretKeyEncrypted)) : null,
+      paystackLiveSecretKeyMasked: settings.paystackLiveSecretKeyEncrypted ? maskSecret(decryptPaystackKey(settings.paystackLiveSecretKeyEncrypted)) : null,
       maildripApiKeyMasked: settings.maildripApiKeyEncrypted ? maskSecret(decryptMaildripKey(settings.maildripApiKeyEncrypted)) : null,
       maildripPaidGroupId: settings.maildripPaidGroupId,
       maildripNewsletterGroupId: settings.maildripNewsletterGroupId,

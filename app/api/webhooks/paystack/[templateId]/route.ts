@@ -4,6 +4,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/server/prisma";
 import { decryptPaystackKey } from "@/lib/crypto";
 import { notifyMaildripOfPaidOrder } from "@/lib/commerce/maildripNotify";
+import { listConfiguredPaystackSecretKeys } from "@/lib/commerce/paystack";
 
 // Idempotency guard for Paystack's at-least-once webhook delivery, same defensive shape
 // as claimStripeEvent (app/api/webhooks/stripe/route.ts) — claim the event id via a
@@ -32,7 +33,8 @@ export async function POST(
   const { templateId } = await context.params;
 
   const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
-  if (!settings || !settings.paystackSecretKeyEncrypted) {
+  const configuredKeys = settings ? listConfiguredPaystackSecretKeys(settings) : [];
+  if (!settings || configuredKeys.length === 0) {
     // No Commerce site should ever have this URL registered unless it configured Paystack
     // itself — a 404 here can't cause a legitimate webhook to retry-storm.
     return NextResponse.json({ error: "Not configured." }, { status: 404 });
@@ -46,14 +48,19 @@ export async function POST(
   // Raw body, never .json() — needed for the signature check, same reason
   // app/api/webhooks/stripe/route.ts reads it as text first.
   const rawBody = await request.text();
-  const secretKey = decryptPaystackKey(settings.paystackSecretKeyEncrypted);
-  const expectedSignature = createHmac("sha512", secretKey).update(rawBody).digest("hex");
-
-  const expectedBuf = Buffer.from(expectedSignature, "utf8");
   const providedBuf = Buffer.from(signatureHeader, "utf8");
-  // Constant-time comparison — a naive === here is a well-known timing side-channel for
-  // exactly this kind of check.
-  const signatureValid = expectedBuf.length === providedBuf.length && timingSafeEqual(expectedBuf, providedBuf);
+
+  // Tried against BOTH configured keys (test and live), not just whichever mode is
+  // currently toggled active — a transaction started before a mode switch, or a merchant
+  // with both dashboards pointed at this same URL, still needs its signature to verify.
+  // Constant-time comparison per candidate — a naive === here is a well-known timing
+  // side-channel for exactly this kind of check.
+  const signatureValid = configuredKeys.some(({ secretKeyEncrypted }) => {
+    const secretKey = decryptPaystackKey(secretKeyEncrypted);
+    const expectedSignature = createHmac("sha512", secretKey).update(rawBody).digest("hex");
+    const expectedBuf = Buffer.from(expectedSignature, "utf8");
+    return expectedBuf.length === providedBuf.length && timingSafeEqual(expectedBuf, providedBuf);
+  });
   if (!signatureValid) {
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }

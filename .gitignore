@@ -20,3 +20,5 @@ node_modules
 # misc
 .DS_Store
 *.pem
+.vercel
+.env*

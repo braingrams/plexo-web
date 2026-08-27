@@ -1813,9 +1813,15 @@ model CommerceSettings {
   templateId     String @unique @db.Uuid
   organizationId String @db.Uuid
 
-  paystackPublicKey          String?
-  paystackSecretKeyEncrypted String?
-  paystackMode               CommercePaystackMode @default(TEST)
+  // Test and live are two genuinely separate credential pairs, stored side by side — not
+  // one pair with a mode label slapped on it. paystackMode picks which pair checkout/webhook
+  // actually use; switching it is the ONLY thing that should ever move real charges from
+  // test to live, never a half-updated single key field.
+  paystackTestPublicKey          String?
+  paystackTestSecretKeyEncrypted String?
+  paystackLivePublicKey          String?
+  paystackLiveSecretKeyEncrypted String?
+  paystackMode                   CommercePaystackMode @default(TEST)
 
   // Nullable — Commerce can send receipts through the org's own MailDrip account (this
   // field set) or, until that exists, through Plexo's shared platform MailDrip key; the

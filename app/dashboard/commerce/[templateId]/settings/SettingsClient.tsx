@@ -9,8 +9,10 @@ type LayoutCandidate = { layoutTemplateId: string; layoutName: string; siteName:
 type InitialSettings = {
   enabled: boolean;
   paystackMode: "TEST" | "LIVE";
-  paystackPublicKey: string;
-  paystackSecretKeyMasked: string | null;
+  paystackTestPublicKey: string;
+  paystackLivePublicKey: string;
+  paystackTestSecretKeyMasked: string | null;
+  paystackLiveSecretKeyMasked: string | null;
   maildripApiKeyMasked: string | null;
   maildripPaidGroupId: string;
   maildripNewsletterGroupId: string;
@@ -171,16 +173,58 @@ function ProductDetailLayoutSection({ templateId, layout }: { templateId: string
   );
 }
 
+function PaystackKeyPairFields({
+  label, active, publicKey, onPublicKeyChange, secretKey, onSecretKeyChange, secretMasked, publicPlaceholder, secretPlaceholder,
+}: {
+  label: string;
+  active: boolean;
+  publicKey: string;
+  onPublicKeyChange: (v: string) => void;
+  secretKey: string;
+  onSecretKeyChange: (v: string) => void;
+  secretMasked: string | null;
+  publicPlaceholder: string;
+  secretPlaceholder: string;
+}) {
+  return (
+    <div style={{ border: active ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "0.9rem", display: "grid", gap: "0.7rem" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <span style={{ fontSize: "0.8rem", fontWeight: 700, color: active ? "var(--brand)" : "#c5cbe8" }}>{label}</span>
+        {active && (
+          <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--brand)", background: "var(--brand-subtle)", borderRadius: 999, padding: "0.1rem 0.55rem" }}>
+            ACTIVE
+          </span>
+        )}
+      </div>
+      <FieldLabel label="Public key">
+        <input type="text" value={publicKey} onChange={(e) => onPublicKeyChange(e.target.value)} placeholder={publicPlaceholder} style={inputStyle} />
+      </FieldLabel>
+      <FieldLabel label="Secret key" hint={secretMasked ? `Currently set: ${secretMasked}` : "Not set yet."}>
+        <input
+          type="password"
+          value={secretKey}
+          onChange={(e) => onSecretKeyChange(e.target.value)}
+          placeholder={secretMasked ? "Leave blank to keep the current key" : secretPlaceholder}
+          style={inputStyle}
+        />
+      </FieldLabel>
+    </div>
+  );
+}
+
 export function SettingsClient({ templateId, initial }: { templateId: string; initial: InitialSettings }) {
   const [enabled, setEnabled] = useState(initial.enabled);
   const [paystackMode, setPaystackMode] = useState(initial.paystackMode);
-  const [paystackPublicKey, setPaystackPublicKey] = useState(initial.paystackPublicKey);
-  const [paystackSecretKey, setPaystackSecretKey] = useState("");
+  const [paystackTestPublicKey, setPaystackTestPublicKey] = useState(initial.paystackTestPublicKey);
+  const [paystackLivePublicKey, setPaystackLivePublicKey] = useState(initial.paystackLivePublicKey);
+  const [paystackTestSecretKey, setPaystackTestSecretKey] = useState("");
+  const [paystackLiveSecretKey, setPaystackLiveSecretKey] = useState("");
   const [maildripApiKey, setMaildripApiKey] = useState("");
   const [maildripPaidGroupId, setMaildripPaidGroupId] = useState(initial.maildripPaidGroupId);
   const [maildripNewsletterGroupId, setMaildripNewsletterGroupId] = useState(initial.maildripNewsletterGroupId);
   const [notificationEmail, setNotificationEmail] = useState(initial.notificationEmail);
-  const [paystackSecretMasked, setPaystackSecretMasked] = useState(initial.paystackSecretKeyMasked);
+  const [paystackTestSecretMasked, setPaystackTestSecretMasked] = useState(initial.paystackTestSecretKeyMasked);
+  const [paystackLiveSecretMasked, setPaystackLiveSecretMasked] = useState(initial.paystackLiveSecretKeyMasked);
   const [maildripMasked, setMaildripMasked] = useState(initial.maildripApiKeyMasked);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
@@ -198,8 +242,10 @@ export function SettingsClient({ templateId, initial }: { templateId: string; in
         body: JSON.stringify({
           enabled,
           paystackMode,
-          paystackPublicKey,
-          paystackSecretKey: paystackSecretKey || undefined,
+          paystackTestPublicKey,
+          paystackLivePublicKey,
+          paystackTestSecretKey: paystackTestSecretKey || undefined,
+          paystackLiveSecretKey: paystackLiveSecretKey || undefined,
           maildripApiKey: maildripApiKey || undefined,
           maildripPaidGroupId,
           maildripNewsletterGroupId,
@@ -209,9 +255,11 @@ export function SettingsClient({ templateId, initial }: { templateId: string; in
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save settings.");
 
-      setPaystackSecretMasked(data.settings.paystackSecretKeyMasked);
+      setPaystackTestSecretMasked(data.settings.paystackTestSecretKeyMasked);
+      setPaystackLiveSecretMasked(data.settings.paystackLiveSecretKeyMasked);
       setMaildripMasked(data.settings.maildripApiKeyMasked);
-      setPaystackSecretKey("");
+      setPaystackTestSecretKey("");
+      setPaystackLiveSecretKey("");
       setMaildripApiKey("");
       setMessage({ kind: "success", text: "Settings saved." });
     } catch (err) {
@@ -239,41 +287,32 @@ export function SettingsClient({ templateId, initial }: { templateId: string; in
 
       <ProductDetailLayoutSection templateId={templateId} layout={initial.productDetailLayout} />
 
-      <Section title="Paystack" description="Each site brings its own Paystack account.">
-        <div style={{ display: "flex", gap: "0.5rem" }}>
-          {(["TEST", "LIVE"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setPaystackMode(mode)}
-              style={{
-                flex: 1, padding: "0.55rem", borderRadius: 9, cursor: "pointer", fontFamily: "inherit",
-                border: paystackMode === mode ? "1.5px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
-                background: paystackMode === mode ? "var(--brand-subtle)" : "rgba(255,255,255,0.03)",
-                color: paystackMode === mode ? "var(--brand)" : "rgba(240,242,255,0.6)",
-                fontWeight: 600, fontSize: "0.82rem",
-              }}
-            >
-              {mode === "TEST" ? "Test mode" : "Live mode"}
-            </button>
-          ))}
-        </div>
-
-        <FieldLabel label="Public key">
-          <input type="text" value={paystackPublicKey} onChange={(e) => setPaystackPublicKey(e.target.value)} placeholder="pk_test_..." style={inputStyle} />
+      <Section
+        title="Paystack"
+        description="Each site brings its own Paystack account. Test and live keys are stored separately — the toggle below picks which pair actually gets charged at checkout, so switching it is a real, deliberate action, not just a label."
+      >
+        <FieldLabel label="Active mode" hint={paystackMode === "LIVE" ? "Checkout charges real cards using the Live keys below." : "Checkout runs against the Test keys below — no real money moves."}>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            {(["TEST", "LIVE"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setPaystackMode(mode)}
+                style={{
+                  flex: 1, padding: "0.55rem", borderRadius: 9, cursor: "pointer", fontFamily: "inherit",
+                  border: paystackMode === mode ? "1.5px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
+                  background: paystackMode === mode ? "var(--brand-subtle)" : "rgba(255,255,255,0.03)",
+                  color: paystackMode === mode ? "var(--brand)" : "rgba(240,242,255,0.6)",
+                  fontWeight: 600, fontSize: "0.82rem",
+                }}
+              >
+                {mode === "TEST" ? "Test mode" : "Live mode"}
+              </button>
+            ))}
+          </div>
         </FieldLabel>
 
-        <FieldLabel label="Secret key" hint={paystackSecretMasked ? `Currently set: ${paystackSecretMasked}` : "Not set yet."}>
-          <input
-            type="password"
-            value={paystackSecretKey}
-            onChange={(e) => setPaystackSecretKey(e.target.value)}
-            placeholder={paystackSecretMasked ? "Leave blank to keep the current key" : "sk_test_..."}
-            style={inputStyle}
-          />
-        </FieldLabel>
-
-        <FieldLabel label="Webhook URL" hint="Paste this into your Paystack dashboard's webhook settings.">
+        <FieldLabel label="Webhook URL" hint="Paste this into both your Test and Live Paystack dashboards' webhook settings — one URL covers both.">
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <input type="text" readOnly value={webhookUrl} style={{ ...inputStyle, color: "rgba(240,242,255,0.6)" }} />
             <button
@@ -285,6 +324,29 @@ export function SettingsClient({ templateId, initial }: { templateId: string; in
             </button>
           </div>
         </FieldLabel>
+
+        <PaystackKeyPairFields
+          label="Test keys"
+          active={paystackMode === "TEST"}
+          publicKey={paystackTestPublicKey}
+          onPublicKeyChange={setPaystackTestPublicKey}
+          secretKey={paystackTestSecretKey}
+          onSecretKeyChange={setPaystackTestSecretKey}
+          secretMasked={paystackTestSecretMasked}
+          publicPlaceholder="pk_test_..."
+          secretPlaceholder="sk_test_..."
+        />
+        <PaystackKeyPairFields
+          label="Live keys"
+          active={paystackMode === "LIVE"}
+          publicKey={paystackLivePublicKey}
+          onPublicKeyChange={setPaystackLivePublicKey}
+          secretKey={paystackLiveSecretKey}
+          onSecretKeyChange={setPaystackLiveSecretKey}
+          secretMasked={paystackLiveSecretMasked}
+          publicPlaceholder="pk_live_..."
+          secretPlaceholder="sk_live_..."
+        />
       </Section>
 
       <Section title="MailDrip" description="Optional — tags paying customers into a group and sends receipts through your own MailDrip account.">

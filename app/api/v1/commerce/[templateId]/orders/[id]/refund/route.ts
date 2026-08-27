@@ -4,6 +4,7 @@ import { requirePermission } from "@/server/requirePermission";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
 import { decryptPaystackKey } from "@/lib/crypto";
 import { refundPaystackTransaction } from "@/lib/paystack";
+import { resolvePaystackKeysForMode } from "@/lib/commerce/paystack";
 
 /**
  * Refunds a paid order via Paystack. Deliberately does NOT auto-restock or free a booking
@@ -30,13 +31,17 @@ export async function POST(
   }
 
   const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
-  if (!settings?.paystackSecretKeyEncrypted) {
-    return NextResponse.json({ error: "Paystack isn't configured for this site." }, { status: 400 });
+  // Refund through the same account the order was actually PAID through — order.paystackMode
+  // was stamped at creation time and never changes, regardless of what the site's active
+  // mode has since been switched to.
+  const orderModeKeys = settings ? resolvePaystackKeysForMode(settings, order.paystackMode) : null;
+  if (!orderModeKeys?.secretKeyEncrypted) {
+    return NextResponse.json({ error: `This site has no ${order.paystackMode.toLowerCase()}-mode Paystack key configured to refund through.` }, { status: 400 });
   }
 
   try {
     await refundPaystackTransaction({
-      secretKey: decryptPaystackKey(settings.paystackSecretKeyEncrypted),
+      secretKey: decryptPaystackKey(orderModeKeys.secretKeyEncrypted),
       reference: order.paystackReference,
     });
   } catch (err) {
