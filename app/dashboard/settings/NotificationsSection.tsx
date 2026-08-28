@@ -82,12 +82,9 @@ export function NotificationsSection({ initial }: Props) {
 
   return (
     <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "1.5rem" }}>
-      <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.35rem" }}>
-        Notifications
-      </h2>
       <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.35)", maxWidth: 560, marginBottom: "1.25rem" }}>
-        Which activity across your sites emails you, and where. Account-security emails (verification, password reset) and things you're actively
-        waiting on (org invites, site transfer requests) always send regardless of these.
+        Account-security emails (verification, password reset) and things you&apos;re actively waiting on (org invites, site transfer requests)
+        always send regardless of these.
       </p>
 
       <div style={{ display: "flex", flexDirection: "column" }}>

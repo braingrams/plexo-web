@@ -1,58 +1,12 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { ensureCreditPeriod } from "@/lib/credits/ledger";
 import { auth } from "@/server/auth";
 import { prisma } from "@/server/prisma";
 import { ensureActiveOrganization } from "@/server/org";
 
 import { SettingsClient } from "./settings-client";
 import { SettingsShell } from "../_components/SettingsShell";
-
-type SettingsApiKey = {
-  id: string;
-  name: string;
-  maskedKey: string;
-  createdAt: string;
-  isActive: boolean;
-  useAi: boolean;
-  aiProvider: string;
-  aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
-  hasAiApiKey: boolean;
-  aiAccessMode: "SYSTEM" | "BYOK" | "HOST_MANAGED";
-  hostAuthWebhookUrl: string | null;
-  hasHostWebhookSecret: boolean;
-};
-
-function serializeApiKey(record: {
-  id: string;
-  name: string;
-  maskedKey: string;
-  createdAt: Date;
-  isActive: boolean;
-  useAi: boolean;
-  aiProvider: string;
-  aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
-  aiApiKey: string | null;
-  aiAccessMode: "SYSTEM" | "BYOK" | "HOST_MANAGED";
-  hostAuthWebhookUrl: string | null;
-  hostWebhookSecret: string | null;
-}): SettingsApiKey {
-  return {
-    id: record.id,
-    name: record.name,
-    maskedKey: record.maskedKey,
-    createdAt: record.createdAt.toISOString(),
-    isActive: record.isActive,
-    useAi: record.useAi,
-    aiProvider: record.aiProvider,
-    aiTier: record.aiTier,
-    hasAiApiKey: !!record.aiApiKey,
-    aiAccessMode: record.aiAccessMode,
-    hostAuthWebhookUrl: record.hostAuthWebhookUrl,
-    hasHostWebhookSecret: !!record.hostWebhookSecret,
-  };
-}
 
 export default async function DashboardSettingsPage() {
   const requestHeaders = await headers();
@@ -67,57 +21,16 @@ export default async function DashboardSettingsPage() {
     redirect("/choose-org");
   }
 
-  const apiKeys = await prisma.apiKey.findMany({
-    where: {
-      organizationId: orgResolution.organizationId,
-      isActive: true,
-    },
-    orderBy: { createdAt: "desc" },
+  const user = await prisma.user.findUniqueOrThrow({
+    where: { id: session.user.id },
+    select: { subscriptionPlan: true, manageLandingPagePublishing: true },
   });
-
-  // Lazily grants the next monthly allowance if the current period has elapsed,
-  // so the balance shown below is always current even without a cron job.
-  const balance = await ensureCreditPeriod(session.user.id);
-
-  const [user, recentActivity, notificationPreferences] = await Promise.all([
-    prisma.user.findUniqueOrThrow({
-      where: { id: session.user.id },
-      select: { subscriptionPlan: true, manageLandingPagePublishing: true, hideBranding: true },
-    }),
-    prisma.creditLedgerEntry.findMany({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    }),
-    prisma.notificationPreferences.findUnique({ where: { organizationId: orgResolution.organizationId } }),
-  ]);
 
   return (
     <SettingsShell>
       <SettingsClient
-        initialApiKeys={apiKeys.map(serializeApiKey)}
         initialManageLandingPagePublishing={user.manageLandingPagePublishing}
-        initialHideBranding={user.hideBranding}
-        billing={{
-          plan: user.subscriptionPlan,
-          allowanceBalance: balance.allowanceBalance,
-          topupBalance: balance.topupBalance,
-          allowanceResetAt: balance.allowanceResetAt.toISOString(),
-          recentActivity: recentActivity.map((entry) => ({
-            id: entry.id,
-            type: entry.type,
-            amount: entry.amount,
-            description: entry.description,
-            createdAt: entry.createdAt.toISOString(),
-          })),
-        }}
-        notificationPreferences={{
-          formSubmissions: notificationPreferences?.formSubmissions ?? false,
-          blogComments: notificationPreferences?.blogComments ?? true,
-          payments: notificationPreferences?.payments ?? true,
-          commentMentions: notificationPreferences?.commentMentions ?? true,
-          notificationEmail: notificationPreferences?.notificationEmail ?? null,
-        }}
+        isUltra={user.subscriptionPlan === "ULTRA"}
       />
     </SettingsShell>
   );

@@ -18,6 +18,7 @@ type Props = {
   email: string;
   subscriptionPlan: string;
   memberSince: string;
+  initialHideBranding: boolean;
 };
 
 const PLAN_COLORS: Record<string, { bg: string; color: string; border: string }> = {
@@ -62,7 +63,7 @@ function IconCheck() {
   );
 }
 
-export function ProfileClient({ userId: _userId, initialName, email, subscriptionPlan, memberSince }: Props) {
+export function ProfileClient({ userId: _userId, initialName, email, subscriptionPlan, memberSince, initialHideBranding }: Props) {
   const [name, setName] = useState(initialName);
   const [draft, setDraft] = useState(initialName);
   const [saving, setSaving] = useState(false);
@@ -307,9 +308,130 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
         </form>
       </Card>
 
+      {/* Plexo branding */}
+      <BrandingSection subscriptionPlan={subscriptionPlan} initialHideBranding={initialHideBranding} />
+
       {/* Dashboard layout preference */}
       <LayoutModeSection />
     </>
+  );
+}
+
+function BrandingSection({ subscriptionPlan, initialHideBranding }: { subscriptionPlan: string; initialHideBranding: boolean }) {
+  const isProOrAbove = subscriptionPlan === "PRO" || subscriptionPlan === "ULTRA";
+  const [hideBranding, setHideBranding] = useState(initialHideBranding);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [upgradeRedirecting, setUpgradeRedirecting] = useState(false);
+
+  // FREE users clicking this get a seamless upgrade path instead of an inert control —
+  // same /api/billing/checkout pattern as billing-section.tsx.
+  async function onToggleClick(): Promise<void> {
+    if (!isProOrAbove) {
+      setUpgradeRedirecting(true);
+      setError(null);
+      try {
+        const res = await fetch("/api/billing/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind: "subscription", plan: "PRO" }),
+        });
+        const data = (await res.json()) as { url?: string; error?: string };
+        if (!res.ok || !data.url) throw new Error(data.error ?? "Could not start checkout.");
+        window.location.href = data.url;
+      } catch (err) {
+        setUpgradeRedirecting(false);
+        setError(err instanceof Error ? err.message : "Could not start checkout.");
+      }
+      return;
+    }
+
+    const next = !hideBranding;
+    setHideBranding(next);
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hideBranding: next }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error ?? "Unable to update this setting.");
+      }
+    } catch (err) {
+      setHideBranding(!next);
+      setError(err instanceof Error ? err.message : "Unable to update this setting.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card style={{ marginTop: "1.5rem" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+        <div>
+          <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.35rem" }}>
+            Plexo Branding
+          </h2>
+          <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.35)", maxWidth: 520 }}>
+            Pages published on your plexopages.io subdomain show a &quot;Hosted with Plexo&quot; bar. Hide it on Pro or Ultra.
+          </p>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
+          {!isProOrAbove && (
+            <span
+              style={{
+                fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.05em",
+                textTransform: "uppercase", color: "var(--brand)",
+                background: "var(--brand-subtle)", padding: "0.2rem 0.5rem", borderRadius: 5,
+              }}
+            >
+              Requires Pro
+            </span>
+          )}
+          <button
+            type="button"
+            role="switch"
+            aria-checked={hideBranding}
+            aria-disabled={!isProOrAbove}
+            id="toggle-hide-branding"
+            onClick={() => void onToggleClick()}
+            style={{
+              position: "relative",
+              width: 44, height: 24,
+              borderRadius: 999,
+              background: hideBranding ? "var(--brand)" : "rgba(255,255,255,0.1)",
+              border: hideBranding ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.12)",
+              cursor: saving || upgradeRedirecting ? "default" : "pointer",
+              opacity: isProOrAbove ? 1 : 0.5,
+              transition: "background 0.2s, border-color 0.2s",
+              flexShrink: 0,
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                top: 3, left: hideBranding ? 22 : 3,
+                width: 16, height: 16, borderRadius: "50%",
+                background: "#fff",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+                transition: "left 0.2s cubic-bezier(0.4,0,0.2,1)",
+              }}
+            />
+          </button>
+        </div>
+      </div>
+
+      {!isProOrAbove && (
+        <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginTop: "1rem" }}>
+          {upgradeRedirecting ? "Redirecting to checkout…" : "Click the toggle to upgrade to Pro and hide the Plexo badge on your published pages."}
+        </p>
+      )}
+      {error && <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.75rem" }}>{error}</p>}
+    </Card>
   );
 }
 

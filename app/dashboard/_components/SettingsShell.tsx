@@ -70,9 +70,48 @@ function IconInsights() {
   );
 }
 
+function IconBell() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    </svg>
+  );
+}
+
+function IconCard() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <line x1="2" y1="10" x2="22" y2="10" />
+    </svg>
+  );
+}
+
+function IconKeySmall() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7.5" cy="15.5" r="5.5" />
+      <path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3" />
+    </svg>
+  );
+}
+
+function IconSparkle() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />
+    </svg>
+  );
+}
+
 const ICONS: Record<string, React.ReactNode> = {
   "/dashboard/profile": <IconProfile />,
   "/dashboard/settings": <IconSettings />,
+  "/dashboard/settings/notifications": <IconBell />,
+  "/dashboard/settings/subscription": <IconCard />,
+  "/dashboard/settings/api-keys": <IconKeySmall />,
+  "/dashboard/settings/ai": <IconSparkle />,
   "/dashboard/compile": <IconCompile />,
   "/dashboard/sdk": <IconSdk />,
   "/dashboard/integrations": <IconAiMcp />,
@@ -84,6 +123,8 @@ const SECTIONS: SubNavSection[] = [
   {
     items: [
       { href: "/dashboard/profile", label: "Profile" },
+      { href: "/dashboard/settings/notifications", label: "Notifications" },
+      { href: "/dashboard/settings/subscription", label: "Subscription" },
       { href: "/dashboard/settings", label: "Settings" },
       { href: "/dashboard/transfers", label: "Transfers" },
     ],
@@ -91,6 +132,8 @@ const SECTIONS: SubNavSection[] = [
   {
     label: "Developer",
     items: [
+      { href: "/dashboard/settings/api-keys", label: "API Keys" },
+      { href: "/dashboard/settings/ai", label: "AI" },
       { href: "/dashboard/compile", label: "Compile" },
       { href: "/dashboard/sdk", label: "SDK Client" },
       { href: "/dashboard/integrations", label: "AI & MCP Skills" },
@@ -118,7 +161,12 @@ function SettingsNav() {
           )}
           <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
             {section.items.map((item) => {
-              const isActive = pathname.startsWith(item.href);
+              // Exact match for "/dashboard/settings" specifically — it's now a URL prefix
+              // of its own sibling sub-pages (notifications, subscription, api-keys, ai), so
+              // startsWith would light up "Settings" AND whichever sub-page is actually
+              // active at the same time. Every other item's href isn't a prefix of anything
+              // else here, so startsWith stays correct (and future-proof) for those.
+              const isActive = item.href === "/dashboard/settings" ? pathname === item.href : pathname.startsWith(item.href);
               return (
                 <li key={item.href}>
                   <Link

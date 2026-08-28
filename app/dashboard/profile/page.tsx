@@ -22,6 +22,7 @@ export default async function ProfilePage() {
       email: true,
       subscriptionPlan: true,
       createdAt: true,
+      hideBranding: true,
     },
   });
 
@@ -37,6 +38,7 @@ export default async function ProfilePage() {
         email={user.email ?? ""}
         subscriptionPlan={user.subscriptionPlan ?? "FREE"}
         memberSince={user.createdAt.toISOString()}
+        initialHideBranding={user.hideBranding}
       />
     </SettingsShell>
   );
