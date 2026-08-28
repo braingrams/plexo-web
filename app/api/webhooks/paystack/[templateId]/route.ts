@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import type { CommerceOrder } from "@prisma/client";
 
 import { prisma } from "@/server/prisma";
 import { decryptPaystackKey } from "@/lib/crypto";
 import { notifyMaildripOfPaidOrder } from "@/lib/commerce/maildripNotify";
 import { listConfiguredPaystackSecretKeys } from "@/lib/commerce/paystack";
+import { resolveNotificationRecipient } from "@/lib/notificationPreferences";
+import { sendMaildripEmail } from "@/lib/mail/maildrip";
+import { buildPaymentReceivedEmail } from "@/lib/mail/templates";
 
 // Idempotency guard for Paystack's at-least-once webhook delivery, same defensive shape
 // as claimStripeEvent (app/api/webhooks/stripe/route.ts) — claim the event id via a
@@ -114,9 +118,33 @@ export async function POST(
           // webhook; the payment itself is already real and recorded above.
           console.error("Commerce: MailDrip notify failed", err);
         }
+        void notifyPaymentReceived(templateId, settings.organizationId, order).catch((err) =>
+          console.error("[mail] payment received notification failed:", err),
+        );
       }
     }
   }
 
   return NextResponse.json({ received: true });
+}
+
+/** Gated by NotificationPreferences.payments — CommerceSettings.notificationEmail has
+ * existed as a stored field since Commerce shipped but this webhook never actually sent
+ * anything to it; this is the real send it was always meant to gate. */
+async function notifyPaymentReceived(templateId: string, organizationId: string, order: CommerceOrder): Promise<void> {
+  const template = await prisma.template.findUnique({ where: { id: templateId }, select: { name: true, user: { select: { email: true } } } });
+  if (!template) return;
+
+  const to = await resolveNotificationRecipient(organizationId, "payments", template.user?.email);
+  if (!to) return;
+
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const html = buildPaymentReceivedEmail({
+    siteName: template.name,
+    amountFormatted: `₦${(order.amountMinor / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`,
+    customerEmail: order.customerEmail,
+    orderNumber: order.orderNumber,
+    orderUrl: `${base}/dashboard/commerce/${templateId}/orders`,
+  });
+  await sendMaildripEmail({ to, subject: `Payment received on ${template.name} — ${order.orderNumber}`, html });
 }

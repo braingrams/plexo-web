@@ -6,6 +6,7 @@ import { sanitizeCommentBody, countLinksInCommentBody } from "@/lib/blog/sanitiz
 import { hashRequestIp } from "@/server/ipHash";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildNewBlogCommentEmail } from "@/lib/mail/templates";
+import { resolveNotificationRecipient } from "@/lib/notificationPreferences";
 import { isValidUuid } from "@/server/slug";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -126,8 +127,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 }
 
 async function notifySiteOwner(templateId: string, postTitle: string, commenterName: string, rawBody: string): Promise<void> {
-  const template = await prisma.template.findUnique({ where: { id: templateId }, select: { user: { select: { email: true } } } });
-  const to = template?.user?.email;
+  const template = await prisma.template.findUnique({
+    where: { id: templateId },
+    select: { organizationId: true, user: { select: { email: true } } },
+  });
+  if (!template) return;
+
+  const to = await resolveNotificationRecipient(template.organizationId, "blogComments", template.user?.email);
   if (!to) return;
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

@@ -22,8 +22,45 @@ function IconInbox() {
   );
 }
 
+function IconMail() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="3" />
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+    </svg>
+  );
+}
+
 function formatDateTime(date: Date): string {
   return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Forms have no fixed schema — every field a site owner adds becomes its own key in
+ * `fields`. Finding "the" email/name to act on means scanning for a key that looks like
+ * one (case-insensitive "email"/"name") whose value is actually shaped like that, rather
+ * than assuming a fixed field name every form happens to use. */
+function findFieldByKeyword(fields: [string, string][], keyword: string): string | null {
+  const match = fields.find(([key]) => key.toLowerCase().includes(keyword));
+  return match ? match[1] : null;
+}
+
+function findSubmissionEmail(fields: [string, string][]): string | null {
+  const byKey = findFieldByKeyword(fields, "email");
+  if (byKey && EMAIL_PATTERN.test(byKey.trim())) return byKey.trim();
+  // Fall back to scanning every value — some forms label the field something else
+  // entirely ("Your contact", "Reach me at").
+  const byShape = fields.find(([, value]) => EMAIL_PATTERN.test(value.trim()));
+  return byShape ? byShape[1].trim() : null;
+}
+
+function buildMailtoHref(email: string, formName: string, senderName: string | null): string {
+  const subject = `Re: your ${formName} submission`;
+  const body = senderName ? `Hi ${senderName},\n\n` : "";
+  // The address itself is left unencoded (standard mailto: practice — encoding "@" as
+  // %40 trips up some mail clients' address parsing); only the query params are encoded.
+  return `mailto:${email}?subject=${encodeURIComponent(subject)}${body ? `&body=${encodeURIComponent(body)}` : ""}`;
 }
 
 export default async function FormSubmissionsPage({ params }: { params: Promise<{ id: string }> }) {
@@ -68,20 +105,37 @@ export default async function FormSubmissionsPage({ params }: { params: Promise<
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {submissions.map((s) => {
             const fields = Object.entries(s.fields as Record<string, string>);
+            const email = findSubmissionEmail(fields);
+            const senderName = findFieldByKeyword(fields, "name");
             return (
               <Card key={s.id}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", marginBottom: "1.1rem", paddingBottom: "1rem", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                  <span
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: "0.3rem",
-                      padding: "0.25rem 0.65rem", borderRadius: 999,
-                      fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-                      background: "rgba(129,140,248,0.1)", color: "#818cf8",
-                    }}
-                  >
-                    {s.formName}
-                  </span>
-                  <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>{formatDateTime(s.createdAt)}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                    <span
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: "0.3rem",
+                        padding: "0.25rem 0.65rem", borderRadius: 999,
+                        fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
+                        background: "rgba(129,140,248,0.1)", color: "#818cf8",
+                      }}
+                    >
+                      {s.formName}
+                    </span>
+                    <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>{formatDateTime(s.createdAt)}</span>
+                  </div>
+                  {email && (
+                    <a
+                      href={buildMailtoHref(email, s.formName, senderName)}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: "0.4rem",
+                        padding: "0.4rem 0.8rem", borderRadius: 8,
+                        border: "1px solid rgba(139,92,246,0.25)", background: "rgba(139,92,246,0.1)",
+                        color: "var(--brand)", fontSize: "0.78rem", fontWeight: 700, textDecoration: "none",
+                      }}
+                    >
+                      <IconMail /> Reply by email
+                    </a>
+                  )}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "1rem 1.5rem" }}>
                   {fields.map(([key, value]) => (

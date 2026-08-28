@@ -7,6 +7,7 @@ import { parseMentionedUserIds, commentSnippet } from "@/lib/comments/mentions";
 import { triggerEvent, commentChannelName, userChannelName, isRealtimeConfigured } from "@/lib/realtime/pusher";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildMentionEmail, buildCommentReplyEmail } from "@/lib/mail/templates";
+import { isNotificationEnabled } from "@/lib/notificationPreferences";
 import { getOrgBrand } from "@/lib/subscription";
 
 function serializeComment(c: {
@@ -191,7 +192,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const snippet = commentSnippet(trimmedBody);
     const brand = await getOrgBrand(resolved.organizationId);
 
+    const mentionsEnabled = await isNotificationEnabled(resolved.organizationId, "commentMentions");
+
     for (const target of notificationTargets) {
+      if (target.type === "MENTION" && !mentionsEnabled) continue;
       const to = emailByUserId.get(target.userId);
       if (!to) continue;
       const html =

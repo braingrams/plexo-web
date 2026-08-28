@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/server/prisma";
 import { resolveSite } from "@/lib/pub/resolveSite";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimit";
+import { resolveNotificationRecipient } from "@/lib/notificationPreferences";
+import { sendMaildripEmail } from "@/lib/mail/maildrip";
+import { buildFormSubmissionEmail } from "@/lib/mail/templates";
 
 /**
  * Receives a real, no-JS browser form submission from a form_container's own <form
@@ -67,5 +70,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     },
   });
 
+  void notifyFormSubmission(templateId, organization.id, formName, fields).catch((err) =>
+    console.error("[mail] form submission notification failed:", err),
+  );
+
   return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
+}
+
+async function notifyFormSubmission(
+  templateId: string,
+  organizationId: string,
+  formName: string,
+  fields: Record<string, string>,
+): Promise<void> {
+  const template = await prisma.template.findUnique({ where: { id: templateId }, select: { name: true, user: { select: { email: true } } } });
+  if (!template) return;
+
+  const to = await resolveNotificationRecipient(organizationId, "formSubmissions", template.user?.email);
+  if (!to) return;
+
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const html = buildFormSubmissionEmail({
+    siteName: template.name,
+    formName,
+    fieldsPreview: Object.entries(fields).slice(0, 8) as [string, string][],
+    submissionsUrl: `${base}/dashboard/templates/${templateId}/form-submissions`,
+  });
+  await sendMaildripEmail({ to, subject: `New ${formName} submission on ${template.name}`, html });
 }

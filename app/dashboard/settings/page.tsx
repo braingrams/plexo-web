@@ -79,7 +79,7 @@ export default async function DashboardSettingsPage() {
   // so the balance shown below is always current even without a cron job.
   const balance = await ensureCreditPeriod(session.user.id);
 
-  const [user, recentActivity] = await Promise.all([
+  const [user, recentActivity, notificationPreferences] = await Promise.all([
     prisma.user.findUniqueOrThrow({
       where: { id: session.user.id },
       select: { subscriptionPlan: true, manageLandingPagePublishing: true, hideBranding: true },
@@ -89,6 +89,7 @@ export default async function DashboardSettingsPage() {
       orderBy: { createdAt: "desc" },
       take: 10,
     }),
+    prisma.notificationPreferences.findUnique({ where: { organizationId: orgResolution.organizationId } }),
   ]);
 
   return (
@@ -109,6 +110,13 @@ export default async function DashboardSettingsPage() {
             description: entry.description,
             createdAt: entry.createdAt.toISOString(),
           })),
+        }}
+        notificationPreferences={{
+          formSubmissions: notificationPreferences?.formSubmissions ?? false,
+          blogComments: notificationPreferences?.blogComments ?? true,
+          payments: notificationPreferences?.payments ?? true,
+          commentMentions: notificationPreferences?.commentMentions ?? true,
+          notificationEmail: notificationPreferences?.notificationEmail ?? null,
         }}
       />
     </SettingsShell>

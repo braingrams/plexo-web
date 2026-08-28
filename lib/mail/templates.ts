@@ -205,3 +205,68 @@ export function buildCommentReplyEmail(input: {
     brand: input.brand,
   });
 }
+
+/** Gated by NotificationPreferences.formSubmissions (see lib/notificationPreferences.ts) —
+ * only sent when the org has that toggle on. `fieldsPreview` is the submission's own field
+ * list, already trimmed to a handful of entries by the caller. */
+export function buildFormSubmissionEmail(input: {
+  siteName: string;
+  formName: string;
+  fieldsPreview: [string, string][];
+  submissionsUrl: string;
+  brand?: EmailBrand;
+}): string {
+  const productName = input.brand?.name ?? "Plexo";
+  const accent = input.brand?.color ?? "#8b5cf6";
+  const fieldsHtml = input.fieldsPreview
+    .map(
+      ([key, value]) => `
+        <tr>
+          <td style="padding:6px 0;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;vertical-align:top;white-space:nowrap;padding-right:16px;">${key}</td>
+          <td style="padding:6px 0;font-size:14px;color:#334155;line-height:1.5;">${value}</td>
+        </tr>`,
+    )
+    .join("");
+  return emailShell({
+    title: `New ${input.formName} submission on ${input.siteName} — ${productName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">New form submission</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Someone submitted <strong>${input.formName}</strong> on <strong>${input.siteName}</strong>:
+      </p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 28px;background:#f1f5f9;border-radius:10px;padding:16px 20px;text-align:left;">
+        ${fieldsHtml}
+      </table>
+      ${CTA_BUTTON(input.submissionsUrl, "View All Submissions", accent)}
+      ${FALLBACK_LINK(input.submissionsUrl, accent)}
+    `,
+    brand: input.brand,
+  });
+}
+
+/** Gated by NotificationPreferences.payments. amountFormatted is already currency-formatted
+ * by the caller (e.g. "₦12,000.00") — this template has no currency-conversion opinion. */
+export function buildPaymentReceivedEmail(input: {
+  siteName: string;
+  amountFormatted: string;
+  customerEmail: string;
+  orderNumber: string;
+  orderUrl: string;
+  brand?: EmailBrand;
+}): string {
+  const productName = input.brand?.name ?? "Plexo";
+  const accent = input.brand?.color ?? "#8b5cf6";
+  return emailShell({
+    title: `Payment received on ${input.siteName} — ${productName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">You've been paid</h1>
+      <p style="margin:0 0 8px;font-size:32px;font-weight:800;color:#16a34a;letter-spacing:-0.5px;text-align:center;">${input.amountFormatted}</p>
+      <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Order <strong>${input.orderNumber}</strong> on <strong>${input.siteName}</strong>, paid by <strong>${input.customerEmail}</strong>.
+      </p>
+      ${CTA_BUTTON(input.orderUrl, "View Order", accent)}
+      ${FALLBACK_LINK(input.orderUrl, accent)}
+    `,
+    brand: input.brand,
+  });
+}

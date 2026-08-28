@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../_components/PageHeader";
 import { CustomSelect } from "../../_components/CustomSelect";
 import { BillingSection } from "./billing-section";
+import { NotificationsSection } from "./NotificationsSection";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 type Provider = "openai" | "anthropic_claude" | "google_gemini";
@@ -43,11 +44,20 @@ type BillingProps = {
   }>;
 };
 
+type NotificationPreferencesProps = {
+  formSubmissions: boolean;
+  blogComments: boolean;
+  payments: boolean;
+  commentMentions: boolean;
+  notificationEmail: string | null;
+};
+
 type Props = {
   initialApiKeys: SettingsApiKey[];
   initialManageLandingPagePublishing: boolean;
   initialHideBranding: boolean;
   billing: BillingProps;
+  notificationPreferences: NotificationPreferencesProps;
 };
 
 const PROVIDER_OPTIONS: Array<{ label: string; value: Provider }> = [
@@ -112,7 +122,7 @@ function IconArrowRight() {
   );
 }
 
-export function SettingsClient({ initialApiKeys, initialManageLandingPagePublishing, initialHideBranding, billing }: Props) {
+export function SettingsClient({ initialApiKeys, initialManageLandingPagePublishing, initialHideBranding, billing, notificationPreferences }: Props) {
   const [apiKeys, setApiKeys] = useState<SettingsApiKey[]>(initialApiKeys);
   const isUltra = billing.plan === "ULTRA";
   const isProOrAbove = billing.plan === "PRO" || billing.plan === "ULTRA";
@@ -658,6 +668,8 @@ export function SettingsClient({ initialApiKeys, initialManageLandingPagePublish
             <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.75rem" }}>{brandingError}</p>
           )}
         </div>
+
+        <NotificationsSection initial={notificationPreferences} />
 
         {/* ── AI CONFIGURATION ───────────────────── */}
         <div style={{
