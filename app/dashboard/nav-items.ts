@@ -14,5 +14,5 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/blog", label: "Blog" },
   { href: "/dashboard/commerce", label: "Commerce", badge: "New" },
   { href: "/dashboard/domains", label: "Domains" },
-  { href: "/dashboard/settings", label: "Settings" },
+  { href: "/dashboard/profile", label: "Settings" },
 ];

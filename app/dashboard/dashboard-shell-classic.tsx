@@ -205,7 +205,6 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   "/dashboard/sdk": <IconSdk />,
   "/dashboard/domains": <IconDomains />,
   "/dashboard/integrations": <IconAiMcp />,
-  "/dashboard/settings": <IconSettings />,
   "/dashboard/profile": <IconProfile />,
 };
 
@@ -234,7 +233,11 @@ function NavLink({ item, pathname, collapsed }: { item: { href: string; label: s
           position: "relative",
         }}
       >
-        <span style={{ flexShrink: 0 }}>{NAV_ICONS[item.href]}</span>
+        {/* NAV_ICONS is keyed by href, but the main nav's "Settings" item now points at
+            /dashboard/profile (there's no longer a standalone settings landing page) while
+            still needing to read as "Settings" via its icon — label is the one thing that
+            still disambiguates it from a genuine Profile link sharing the same href. */}
+        <span style={{ flexShrink: 0 }}>{item.label === "Settings" ? <IconSettings /> : NAV_ICONS[item.href]}</span>
         {!collapsed && <span>{item.label}</span>}
         {!collapsed && item.badge && (
           <span style={{

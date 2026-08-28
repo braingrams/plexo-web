@@ -21,22 +21,32 @@ export default async function DashboardSdkPage() {
   }
 
   // Fetch the org's active API keys to display in the code integration tab
-  const apiKeys = await prisma.apiKey.findMany({
-    where: {
-      organizationId: orgResolution.organizationId,
-      isActive: true,
-    },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      maskedKey: true,
-    },
-  });
+  const [apiKeys, user] = await Promise.all([
+    prisma.apiKey.findMany({
+      where: {
+        organizationId: orgResolution.organizationId,
+        isActive: true,
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        maskedKey: true,
+      },
+    }),
+    prisma.user.findUniqueOrThrow({
+      where: { id: session.user.id },
+      select: { subscriptionPlan: true, manageLandingPagePublishing: true },
+    }),
+  ]);
 
   return (
     <SettingsShell>
-      <SdkClient initialKeys={apiKeys} />
+      <SdkClient
+        initialKeys={apiKeys}
+        initialManageLandingPagePublishing={user.manageLandingPagePublishing}
+        isUltra={user.subscriptionPlan === "ULTRA"}
+      />
     </SettingsShell>
   );
 }

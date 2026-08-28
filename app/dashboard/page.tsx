@@ -174,7 +174,7 @@ export default async function OverviewPage() {
       title: `${unusedApiKeysCount} API key${unusedApiKeysCount === 1 ? "" : "s"} never used`,
       subtitle: "Remove unused keys or start integrating",
       actionLabel: "Manage",
-      href: "/dashboard/settings",
+      href: "/dashboard/settings/api-keys",
       tone: "warning",
     });
   }

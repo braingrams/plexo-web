@@ -466,7 +466,7 @@ POST {yourWebhookUrl}/ai-charge
                 <li>Implement two endpoints on your own backend: <code className="text-[#22d3ee]">POST {"{yourWebhookUrl}"}/ai-authorize</code> and <code className="text-[#22d3ee]">POST {"{yourWebhookUrl}"}/ai-charge</code>.</li>
                 <li>Verify the <code className="text-[#22d3ee]">x-plexo-signature</code> header on every request before trusting it (snippet on the right).</li>
                 <li>
-                  In <a href="/dashboard/settings" className="text-[#22d3ee] underline">Settings</a>, pick the API key, set <strong className="text-white">AI Access Mode</strong> to <strong className="text-white">Host-Managed</strong>, then paste your webhook URL and the secret from step 1.
+                  On the <a href="/dashboard/settings/ai" className="text-[#22d3ee] underline">AI</a> page, pick the API key, set <strong className="text-white">AI Access Mode</strong> to <strong className="text-white">Host-Managed</strong>, then paste your webhook URL and the secret from step 1.
                 </li>
                 <li>Set that identical secret in your own backend&apos;s environment — nothing is copied <em>from</em> Plexo, the value just needs to match in both places.</li>
               </ol>
@@ -544,10 +544,10 @@ POST {yourWebhookUrl}/ai-charge
               </div>
 
               <a
-                href="/dashboard/settings"
+                href="/dashboard/settings/ai"
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#22d3ee]/10 border border-[#22d3ee]/25 text-[#22d3ee] hover:bg-[#22d3ee]/20 text-xs font-semibold transition"
               >
-                Go to Settings to configure it
+                Go to AI settings to configure it
                 <ChevronRight className="w-3.5 h-3.5" />
               </a>
             </div>

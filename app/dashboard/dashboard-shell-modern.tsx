@@ -311,15 +311,6 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
               </Link>
 
               <Link
-                href="/dashboard/settings"
-                onClick={() => setMenuOpen(false)}
-                style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.55rem 0.6rem", borderRadius: 10, fontSize: "0.82rem", fontWeight: 500, color: "rgba(240,242,255,0.7)", textDecoration: "none" }}
-              >
-                <IconSettings />
-                Settings
-              </Link>
-
-              <Link
                 href="/dashboard/settings/team"
                 onClick={() => setMenuOpen(false)}
                 style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.55rem 0.6rem", borderRadius: 10, fontSize: "0.82rem", fontWeight: 500, color: "rgba(240,242,255,0.7)", textDecoration: "none" }}

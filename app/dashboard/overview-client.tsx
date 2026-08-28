@@ -365,7 +365,7 @@ export function OverviewClient(props: Props) {
             {apiKeysCount}
           </div>
           <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
-            <Link href="/dashboard/settings" style={{ color: "var(--brand)", fontWeight: 600 }}>
+            <Link href="/dashboard/settings/api-keys" style={{ color: "var(--brand)", fontWeight: 600 }}>
               View keys
             </Link>
           </div>
