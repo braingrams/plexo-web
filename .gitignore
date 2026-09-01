@@ -22,3 +22,6 @@ node_modules
 *.pem
 .vercel
 .env*
+
+# cdk
+cdk/cdk.out/

@@ -1,0 +1,47 @@
+name: PR | Tear Down Stale Previews
+
+# Runs daily. Any open PR with no activity for 5+ days gets its compute-stack preview
+# destroyed (via pr-destroy-aws.yml) so it stops costing anything — the PR itself is
+# left open; only the AWS resources are torn down. Re-pushing to the PR redeploys a
+# fresh preview via pr-deploy-aws.yml's normal `synchronize` trigger.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: write
+
+jobs:
+  sweep-stale-previews:
+    if: github.repository == 'Challaris/plexo-web'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find PRs idle 5+ days and trigger teardown
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const staleThresholdMs = 5 * 24 * 60 * 60 * 1000;
+            const now = new Date();
+
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+            });
+
+            const stale = prs.filter((pr) => now - new Date(pr.updated_at) > staleThresholdMs);
+            console.log(`${stale.length} of ${prs.length} open PRs are stale (5+ days idle)`);
+
+            for (const pr of stale) {
+              console.log(`Tearing down preview for PR #${pr.number} ("${pr.title}")`);
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: "pr-destroy-aws.yml",
+                ref: context.payload.repository.default_branch,
+                inputs: { pr_number: `${pr.number}` },
+              });
+            }

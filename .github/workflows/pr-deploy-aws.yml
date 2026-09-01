@@ -1,0 +1,53 @@
+name: PR | Deploy Compute Stack Preview
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
+  contents: read
+
+jobs:
+  deploy:
+    if: github.repository == 'Challaris/plexo-web'
+    runs-on: ubuntu-latest
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      STACK_ID: pr-${{ github.event.number }}-plexo
+      STACK_KIND: compute
+      PLEXO_ENV: staging
+      AWS_ACCOUNT_ID: "919927637684"
+      AWS_REGION: us-east-1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Guard — refuse to run against anything but a pr-<number>-plexo stack
+        run: |
+          if [[ ! "$STACK_ID" =~ ^pr-[0-9]+-plexo$ ]]; then
+            echo "::error::STACK_ID '$STACK_ID' doesn't match the required pr-<number>-plexo pattern — refusing to deploy."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::919927637684:role/github-actions-plexo-deploy
+          aws-region: us-east-1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Install & build CDK project
+        working-directory: ./cdk
+        run: |
+          npm install
+          npm run build
+
+      - name: Deploy the PR's compute stack only — never --all, never the data stack
+        working-directory: ./cdk
+        run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively
