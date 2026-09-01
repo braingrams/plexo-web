@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/server/prisma";
-import { requireBlogSiteAccess } from "@/lib/blog/pageAuth";
-import { DETAIL_SELECT } from "@/lib/blog/queries";
+import { BlogPost, BlogSite, Template } from "@/lib/db/contentEntities";
+import { requireBlogSiteAccess } from "@/lib/blog/pageAuthDynamo";
+import { hydratePostDetail } from "@/lib/blog/queriesDynamo";
 import { BlogStyles, SiteHeader, PostMeta, CategoryChips } from "@/lib/pub/blogTheme";
 import { hasBlogMarker, substituteBlogMarkers, extractMarkerPrefix } from "@/lib/pub/blogLayoutRender";
 import { buildPostFragments } from "@/lib/pub/blogLayoutFragments";
@@ -19,21 +19,23 @@ export default async function BlogPostPreviewPage({ params }: { params: Promise<
   const { id, postId } = await params;
   const access = await requireBlogSiteAccess(id, `/dashboard/templates/${id}/blog/${postId}/preview`);
 
-  const [post, blogSite] = await Promise.all([
-    prisma.blogPost.findFirst({
-      where: { id: postId, templateId: access.templateId },
-      select: { ...DETAIL_SELECT, status: true },
-    }),
-    prisma.blogSite.findUnique({ where: { templateId: access.templateId } }),
+  // BlogPost's primary key is (templateId, slug), not (templateId, id) — postId here is
+  // an id, so this has to search the template's posts rather than .get() directly.
+  const [{ data: allPosts }, { data: blogSite }] = await Promise.all([
+    BlogPost.query.byStatus({ templateId: access.templateId }).go(),
+    BlogSite.get({ templateId: access.templateId }).go(),
   ]);
-  if (!post) notFound();
+  const found = allPosts.find((p) => p.id === postId);
+  if (!found) notFound();
+
+  const post = await hydratePostDetail(access.templateId, found);
 
   // Mirrors app/pub/[domain]/blog/[...slug]/page.tsx's own branching — a preview that
   // always showed the default theme regardless of a configured custom layout wasn't
   // actually previewing what visitors would see, which is the whole point of this page.
-  const layoutTemplate = blogSite?.postLayoutTemplateId
-    ? await prisma.template.findUnique({ where: { id: blogSite.postLayoutTemplateId }, select: { compiledHtml: true } })
-    : null;
+  const { data: layoutTemplate } = blogSite?.postLayoutTemplateId
+    ? await Template.get({ id: blogSite.postLayoutTemplateId }).go()
+    : { data: null };
 
   if (layoutTemplate && hasBlogMarker(layoutTemplate.compiledHtml, "content")) {
     const fragments = buildPostFragments(post, "/blog", "", {

@@ -1,5 +1,5 @@
-import { prisma } from "@/server/prisma";
-import { requireBlogSiteAccess } from "@/lib/blog/pageAuth";
+import { BlogSite, BlogCategory, BlogTag, BlogAuthor, Template } from "@/lib/db/contentEntities";
+import { requireBlogSiteAccess } from "@/lib/blog/pageAuthDynamo";
 import { hasBlogMarker } from "@/lib/pub/blogLayoutRender";
 import { BlogSettingsClient } from "./BlogSettingsClient";
 
@@ -7,17 +7,19 @@ export default async function BlogSettingsPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const access = await requireBlogSiteAccess(id, `/dashboard/templates/${id}/blog/settings`);
 
-  const [site, categories, tags, authors] = await Promise.all([
-    prisma.blogSite.findUnique({
-      where: { templateId: access.templateId },
-      include: {
-        postLayoutTemplate: { select: { id: true, compiledHtml: true } },
-        listingLayoutTemplate: { select: { id: true, compiledHtml: true } },
-      },
-    }),
-    prisma.blogCategory.findMany({ where: { templateId: access.templateId }, orderBy: { name: "asc" } }),
-    prisma.blogTag.findMany({ where: { templateId: access.templateId }, orderBy: { name: "asc" } }),
-    prisma.blogAuthor.findMany({ where: { templateId: access.templateId }, orderBy: { name: "asc" } }),
+  const [{ data: site }, { data: categories }, { data: tags }, { data: authors }] = await Promise.all([
+    BlogSite.get({ templateId: access.templateId }).go(),
+    BlogCategory.query.primary({ templateId: access.templateId }).go(),
+    BlogTag.query.primary({ templateId: access.templateId }).go(),
+    BlogAuthor.query.primary({ templateId: access.templateId }).go(),
+  ]);
+  categories.sort((a, b) => a.name.localeCompare(b.name));
+  tags.sort((a, b) => a.name.localeCompare(b.name));
+  authors.sort((a, b) => a.name.localeCompare(b.name));
+
+  const [postLayoutTemplate, listingLayoutTemplate] = await Promise.all([
+    site?.postLayoutTemplateId ? Template.get({ id: site.postLayoutTemplateId }).go() : null,
+    site?.listingLayoutTemplateId ? Template.get({ id: site.listingLayoutTemplateId }).go() : null,
   ]);
 
   return (
@@ -36,13 +38,13 @@ export default async function BlogSettingsPage({ params }: { params: Promise<{ i
         commentsEnabled: site?.commentsEnabled ?? true,
       }}
       postLayout={
-        site?.postLayoutTemplate
-          ? { templateId: site.postLayoutTemplate.id, ready: hasBlogMarker(site.postLayoutTemplate.compiledHtml, "content") }
+        postLayoutTemplate?.data
+          ? { templateId: postLayoutTemplate.data.id, ready: hasBlogMarker(postLayoutTemplate.data.compiledHtml, "content") }
           : null
       }
       listingLayout={
-        site?.listingLayoutTemplate
-          ? { templateId: site.listingLayoutTemplate.id, ready: hasBlogMarker(site.listingLayoutTemplate.compiledHtml, "postList") }
+        listingLayoutTemplate?.data
+          ? { templateId: listingLayoutTemplate.data.id, ready: hasBlogMarker(listingLayoutTemplate.data.compiledHtml, "postList") }
           : null
       }
       categories={categories}

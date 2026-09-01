@@ -1,19 +1,22 @@
-import { prisma } from "@/server/prisma";
-import { requireBlogSiteAccess } from "@/lib/blog/pageAuth";
-import { findOrCreateAuthorForUser } from "@/lib/blog/authors";
+import { BlogCategory, BlogTag, BlogAuthor, PublishedDomain } from "@/lib/db/contentEntities";
+import { requireBlogSiteAccess } from "@/lib/blog/pageAuthDynamo";
+import { findOrCreateAuthorForUser } from "@/lib/blog/authorsDynamo";
 import { BlogPostEditor } from "../BlogPostEditor";
 
 export default async function NewBlogPostPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const access = await requireBlogSiteAccess(id, `/dashboard/templates/${id}/blog/new`);
 
-  const [currentUserAuthor, categories, tags, authors, domain] = await Promise.all([
+  const [currentUserAuthor, { data: categories }, { data: tags }, { data: authors }, { data: domains }] = await Promise.all([
     findOrCreateAuthorForUser(access.templateId, access.userId, access.userName || access.userEmail),
-    prisma.blogCategory.findMany({ where: { templateId: access.templateId }, orderBy: { name: "asc" } }),
-    prisma.blogTag.findMany({ where: { templateId: access.templateId }, orderBy: { name: "asc" } }),
-    prisma.blogAuthor.findMany({ where: { templateId: access.templateId }, orderBy: { name: "asc" } }),
-    prisma.publishedDomain.findFirst({ where: { templateId: access.templateId }, select: { domain: true } }),
+    BlogCategory.query.primary({ templateId: access.templateId }).go(),
+    BlogTag.query.primary({ templateId: access.templateId }).go(),
+    BlogAuthor.query.primary({ templateId: access.templateId }).go(),
+    PublishedDomain.query.primary({ templateId: access.templateId }).go(),
   ]);
+  categories.sort((a, b) => a.name.localeCompare(b.name));
+  tags.sort((a, b) => a.name.localeCompare(b.name));
+  authors.sort((a, b) => a.name.localeCompare(b.name));
 
   // findOrCreateAuthorForUser may have just created the row this same request — make sure
   // it's reflected in the dropdown's option list even though `authors` was fetched in parallel.
@@ -29,7 +32,7 @@ export default async function NewBlogPostPage({ params }: { params: Promise<{ id
       tags={tags}
       authors={allAuthors}
       currentUserAuthorId={currentUserAuthor.id}
-      siteDomain={domain?.domain ?? null}
+      siteDomain={domains[0]?.domain ?? null}
     />
   );
 }
