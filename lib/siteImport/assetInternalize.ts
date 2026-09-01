@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { put } from "@vercel/blob";
+import { uploadObject } from "@/lib/storage";
 import { prisma } from "@/server/prisma";
 import { isAllowedExtension, extensionOf } from "@/server/rawUpload";
 import { safeFetch } from "./fetchSafe";
@@ -62,13 +62,9 @@ export async function internalizeAsset(jobId: string, relativePath: string, sour
   try {
     const ext = extensionOf(relativePath) || "bin";
     const key = `site-import/${jobId}/${sha256}.${ext}`;
-    const localDevToken = process.env.BLOB_READ_WRITE_TOKEN; // OIDC covers real deployments — see upload-raw/route.ts
-    const blob = await put(key, buffer, {
-      access: "public",
-      contentType,
-      allowOverwrite: true, // key is content-hashed — a "collision" is always identical bytes
-      ...(localDevToken ? { token: localDevToken } : {}),
-    });
+    // key is content-hashed — a "collision" is always identical bytes, so an unconditional
+    // overwrite (uploadObject's only mode) is exactly the right behavior here.
+    const blob = await uploadObject(key, buffer, { access: "public", contentType });
 
     await prisma.siteImportAssetBlob.upsert({
       where: { jobId_sha256: { jobId, sha256 } },

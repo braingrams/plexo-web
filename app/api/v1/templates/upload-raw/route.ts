@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { put, BlobError } from "@vercel/blob";
+import { uploadObject, StorageError } from "@/lib/storage";
 import { TemplateKind } from "@prisma/client";
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
@@ -182,23 +182,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     throw err;
   }
 
-  // On an actual Vercel deployment, the store's OIDC token (auto-injected, short-lived,
-  // no env var needed) authenticates this automatically — the SDK picks it up on its own.
-  // BLOB_READ_WRITE_TOKEN is only read here as a fallback for environments without OIDC
-  // (i.e. local `next dev`); don't set it in Vercel's own project env vars once you've
-  // confirmed OIDC works, per Vercel's own guidance to revoke unused static tokens.
-  const localDevToken = process.env.BLOB_READ_WRITE_TOKEN;
-
   type UploadedAssetRow = { templateId: string; path: string; blobUrl: string; contentType: string; size: number };
 
   async function uploadAssetsFor(ownerId: string, assets: ExtractedAsset[]): Promise<UploadedAssetRow[]> {
     if (assets.length === 0) return [];
     return Promise.all(
       assets.map(async (asset) => {
-        const blob = await put(`raw-sites/${ownerId}/${asset.path}`, asset.buffer, {
+        const blob = await uploadObject(`raw-sites/${ownerId}/${asset.path}`, asset.buffer, {
           access: "public",
           contentType: asset.contentType,
-          ...(localDevToken ? { token: localDevToken } : {}),
         });
         return {
           templateId: ownerId,
@@ -236,7 +228,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     uploadedAssets = await uploadAssetsFor(templateId, sharedAssets);
   } catch (err) {
-    if (err instanceof BlobError) {
+    if (err instanceof StorageError) {
       console.error("Blob storage upload failed:", err.message);
       return NextResponse.json({
         error: "Storage isn't available for multi-file uploads right now. Upload a single self-contained .html file, or contact support.",

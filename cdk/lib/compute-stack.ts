@@ -132,6 +132,17 @@ export class ComputeStack extends cdk.Stack {
         resources: [`arn:aws:kms:${this.region}:${this.account}:alias/aws/ssm`],
       }),
     );
+    // lib/storage.ts (Vercel Blob replacement) — the bucket itself lives in the data
+    // stack (cdk/lib/data-stack.ts), a separate `cdk deploy` invocation, so this can't
+    // reference it as a real CDK cross-stack object; scoped by the "plexo-user-content*"
+    // naming convention data-stack.ts's nameFor() always produces instead, same idea as
+    // this stack's own SSM parameter path scoping just above.
+    serverFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+        resources: [`arn:aws:s3:::plexo-user-content*/*`],
+      }),
+    );
     const serverFnUrl = serverFn.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.AWS_IAM });
 
     const imageFn = new lambda.Function(this, "ImageOptimizationFn", {

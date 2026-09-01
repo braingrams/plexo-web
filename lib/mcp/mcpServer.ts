@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { put, del } from "@vercel/blob";
+import { uploadObject, deleteObjects } from "@/lib/storage";
 import { prisma } from "@/server/prisma";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
@@ -1474,8 +1474,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             select: { blobUrl: true },
           });
           if (assets.length > 0) {
-            const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
-            await del(assets.map((a) => a.blobUrl), blobToken ? { token: blobToken } : undefined).catch((err) =>
+            await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
               console.error("Failed to delete blobs during MCP page delete (non-fatal):", err)
             );
           }
@@ -1541,15 +1540,13 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           if (existing.sourceType === "RAW_UPLOAD") {
             const sourceAssets = await prisma.templateAsset.findMany({ where: { templateId: existing.id } });
             if (sourceAssets.length > 0) {
-              const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
               copiedAssets = await Promise.all(
                 sourceAssets.map(async (asset) => {
                   const sourceRes = await fetch(asset.blobUrl);
                   const buffer = Buffer.from(await sourceRes.arrayBuffer());
-                  const blob = await put(`raw-sites/${newId}/${asset.path}`, buffer, {
+                  const blob = await uploadObject(`raw-sites/${newId}/${asset.path}`, buffer, {
                     access: "public",
                     contentType: asset.contentType,
-                    ...(blobToken ? { token: blobToken } : {}),
                   });
                   return {
                     templateId: newId,

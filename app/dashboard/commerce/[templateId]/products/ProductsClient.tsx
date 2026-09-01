@@ -179,18 +179,28 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
     }
   }
 
-  // A digital product's file can be tens-to-hundreds of MB, so this goes straight to Blob
-  // from the browser (client-direct upload, see the digital-upload route's own comment)
-  // rather than through the small-image-only /api/v1/media/upload buffered flow above.
+  // A digital product's file can be tens-to-hundreds of MB, so this goes straight to S3
+  // from the browser (client-direct upload via a presigned POST, see the digital-upload
+  // route's own comment) rather than through the small-image-only /api/v1/media/upload
+  // buffered flow above.
   async function handleDigitalFileUpload(file: File) {
     setUploading(true);
     try {
-      const { upload } = await import("@vercel/blob/client");
-      const blob = await upload(`commerce-digital/${templateId}/${crypto.randomUUID()}-${file.name}`, file, {
-        access: "private",
-        handleUploadUrl: `/api/v1/commerce/${templateId}/digital-upload`,
+      const presignRes = await fetch(`/api/v1/commerce/${templateId}/digital-upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: file.name, contentType: file.type || "application/octet-stream" }),
       });
-      setForm((prev) => ({ ...prev, digitalFileUrl: blob.url, digitalFileName: file.name }));
+      if (!presignRes.ok) throw new Error("Upload failed.");
+      const { url, fields, publicUrl } = await presignRes.json();
+
+      const uploadBody = new FormData();
+      for (const [key, value] of Object.entries(fields as Record<string, string>)) uploadBody.append(key, value);
+      uploadBody.append("file", file);
+      const uploadRes = await fetch(url, { method: "POST", body: uploadBody });
+      if (!uploadRes.ok) throw new Error("Upload failed.");
+
+      setForm((prev) => ({ ...prev, digitalFileUrl: publicUrl, digitalFileName: file.name }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {

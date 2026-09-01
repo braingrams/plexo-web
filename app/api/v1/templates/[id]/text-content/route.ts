@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put, BlobError } from "@vercel/blob";
+import { uploadObject, StorageError } from "@/lib/storage";
 
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
@@ -170,7 +170,6 @@ export async function PATCH(
     // any other file edit.
     const stylesheetPaths = Object.keys(colorResult.updatedStylesheets);
     if (stylesheetPaths.length > 0) {
-      const localDevToken = process.env.BLOB_READ_WRITE_TOKEN; // see upload-raw/route.ts — OIDC covers real deployments
       await Promise.all(
         stylesheetPaths.map(async (path) => {
           const asset = template.assets.find((a) => a.path === path);
@@ -178,18 +177,16 @@ export async function PATCH(
           const newContent = colorResult.updatedStylesheets[path];
           const contentType = contentTypeFor(path);
           try {
-            const blob = await put(`raw-sites/${template.id}/${path}`, Buffer.from(newContent, "utf8"), {
+            const blob = await uploadObject(`raw-sites/${template.id}/${path}`, Buffer.from(newContent, "utf8"), {
               access: "public",
               contentType,
-              allowOverwrite: true,
-              ...(localDevToken ? { token: localDevToken } : {}),
             });
             await prisma.templateAsset.update({
               where: { id: asset.id },
               data: { blobUrl: blob.url, contentType, size: Buffer.byteLength(newContent, "utf8") },
             });
           } catch (err) {
-            if (err instanceof BlobError) {
+            if (err instanceof StorageError) {
               console.error(`Failed to save color edit to ${path}:`, err.message);
               return;
             }

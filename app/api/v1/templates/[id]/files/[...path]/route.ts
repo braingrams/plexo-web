@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put, BlobError } from "@vercel/blob";
+import { uploadObject, StorageError } from "@/lib/storage";
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
 import { requirePermission } from "@/server/requirePermission";
@@ -77,21 +77,18 @@ export async function PUT(
       }, { status: 404 });
     }
 
-    const localDevToken = process.env.BLOB_READ_WRITE_TOKEN; // see app/api/v1/templates/upload-raw/route.ts — OIDC covers real deployments
     const contentType = contentTypeFor(filePath);
     try {
-      const blob = await put(`raw-sites/${template.id}/${filePath}`, contentBuffer, {
+      const blob = await uploadObject(`raw-sites/${template.id}/${filePath}`, contentBuffer, {
         access: "public",
         contentType,
-        allowOverwrite: true,
-        ...(localDevToken ? { token: localDevToken } : {}),
       });
       await prisma.templateAsset.update({
         where: { id: asset.id },
         data: { blobUrl: blob.url, contentType, size: contentBuffer.byteLength },
       });
     } catch (err) {
-      if (err instanceof BlobError || err instanceof RawUploadValidationError) {
+      if (err instanceof StorageError || err instanceof RawUploadValidationError) {
         return NextResponse.json({ error: err.message }, { status: 500 });
       }
       throw err;

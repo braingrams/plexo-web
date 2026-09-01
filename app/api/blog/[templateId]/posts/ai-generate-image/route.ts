@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put, BlobError } from "@vercel/blob";
+import { uploadObject, StorageError } from "@/lib/storage";
 
 import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
 import { requirePermission } from "@/server/requirePermission";
@@ -64,20 +64,18 @@ export async function POST(
   }
 
   const extension = image.mimeType.split("/")[1]?.replace("jpeg", "jpg") || "png";
-  const localDevToken = process.env.BLOB_READ_WRITE_TOKEN;
 
   try {
-    const blob = await put(`blog-images/${resolved.context.templateId}/${randomKey()}.${extension}`, image.bytes, {
+    const blob = await uploadObject(`blog-images/${resolved.context.templateId}/${randomKey()}.${extension}`, image.bytes, {
       access: "public",
       contentType: image.mimeType,
-      ...(localDevToken ? { token: localDevToken } : {}),
     });
 
     await chargeFlatCredits(resolved.context.userId, cost, "generate_blog_post image (google_gemini/imagen)");
 
     return NextResponse.json({ url: blob.url }, { status: 201 });
   } catch (err) {
-    if (err instanceof BlobError) {
+    if (err instanceof StorageError) {
       return NextResponse.json({ error: err.message }, { status: 500 });
     }
     throw err;

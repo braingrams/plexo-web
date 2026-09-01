@@ -1,4 +1,4 @@
-import { put } from "@vercel/blob";
+import { uploadObject } from "@/lib/storage";
 import pLimit from "p-limit";
 import { prisma } from "@/server/prisma";
 import { safeFetch } from "@/lib/siteImport/fetchSafe";
@@ -25,9 +25,9 @@ export function rewriteImageUrls(html: string, urlMap: Map<string, string>): str
 }
 
 /**
- * Downloads every URL in `urls` from the source WordPress site and re-uploads it to
- * @vercel/blob (same put() pattern as every other upload path in this app), returning a
- * sourceUrl -> new blobUrl map for rewriting <img src> references. Backed by
+ * Downloads every URL in `urls` from the source WordPress site and re-uploads it via
+ * lib/storage.ts's uploadObject() (same pattern as every other upload path in this app),
+ * returning a sourceUrl -> new blobUrl map for rewriting <img src> references. Backed by
  * ImportMediaMap so a retried/resumed batch never re-downloads a file it already moved —
  * safe to call repeatedly with overlapping URL lists across batches.
  */
@@ -38,7 +38,6 @@ export async function rehostMediaUrls(templateId: string, urls: string[], errors
   const existing = await prisma.importMediaMap.findMany({ where: { templateId, sourceUrl: { in: unique } } });
   const resolved = new Map(existing.map((e) => [e.sourceUrl, e.blobUrl]));
   const toFetch = unique.filter((u) => !resolved.has(u));
-  const localDevToken = process.env.BLOB_READ_WRITE_TOKEN; // OIDC covers real deployments — see upload-raw/route.ts
 
   await Promise.all(
     toFetch.map((sourceUrl) =>
@@ -57,12 +56,9 @@ export async function rehostMediaUrls(templateId: string, urls: string[], errors
           }
           const extension = sourceUrl.split(".").pop()?.split(/[?#]/)[0]?.slice(0, 5).replace(/[^a-z0-9]/gi, "") || "bin";
           const key = `blog-import/${templateId}/${Buffer.from(sourceUrl).toString("base64url").slice(0, 48)}.${extension}`;
-          const blob = await put(key, buffer, {
-            access: "public",
-            contentType,
-            allowOverwrite: true, // key is a hash of sourceUrl — a "collision" is always identical content, so overwriting is always safe
-            ...(localDevToken ? { token: localDevToken } : {}),
-          });
+          // key is a hash of sourceUrl — a "collision" is always identical content, so
+          // uploadObject's unconditional overwrite is always safe here.
+          const blob = await uploadObject(key, buffer, { access: "public", contentType });
 
           await prisma.importMediaMap.upsert({
             where: { templateId_sourceUrl: { templateId, sourceUrl } },

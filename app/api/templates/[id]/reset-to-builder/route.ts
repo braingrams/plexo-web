@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { del } from "@vercel/blob";
+import { deleteObjects } from "@/lib/storage";
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
 import { requirePermission } from "@/server/requirePermission";
@@ -56,8 +56,7 @@ export async function POST(
   await prisma.templateAsset.deleteMany({ where: { templateId: existing.id } });
 
   if (assets.length > 0) {
-    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
-    await del(assets.map((a) => a.blobUrl), blobToken ? { token: blobToken } : undefined).catch((err) =>
+    await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
       console.error("Failed to delete blobs during reset-to-builder (non-fatal):", err)
     );
   }

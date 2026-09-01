@@ -2,6 +2,9 @@ import * as cdk from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as kms from "aws-cdk-lib/aws-kms";
+import * as s3 from "aws-cdk-lib/aws-s3";
+import * as iam from "aws-cdk-lib/aws-iam";
+import * as ssm from "aws-cdk-lib/aws-ssm";
 
 const isProd = (process.env.PLEXO_ENV || "development") === "production";
 // Non-prod stacks (PR previews, dev) are torn down freely; production tables survive
@@ -110,5 +113,50 @@ export class DataStack extends cdk.Stack {
         exportName: `${id}-${spec.id}-TableName`,
       });
     }
+
+    // Replaces Vercel Blob (lib/storage.ts) — user-uploaded template/blog/commerce assets.
+    // Lives in the data stack, not a compute stack: uploaded files need to survive a
+    // compute-stack teardown (PR preview cleanup, a staging redeploy) exactly like the
+    // DynamoDB tables do, for the same reason. Two prefixes, one bucket: "public/" is
+    // openly readable (site assets, blog images — meant to be served to any visitor of a
+    // published site) via a scoped bucket policy; "private/" (digital-product downloads)
+    // is never publicly readable, only reachable through a short-lived presigned GET URL
+    // (lib/storage.ts's getSignedDownloadUrl) — same access model Vercel Blob's
+    // access:"public"/"private" + issueSignedToken split provided.
+    const userContentBucket = new s3.Bucket(this, "UserContentBucket", {
+      bucketName: nameFor("plexo-user-content"),
+      blockPublicAccess: new s3.BlockPublicAccess({
+        blockPublicAcls: true,
+        ignorePublicAcls: true,
+        blockPublicPolicy: false,
+        restrictPublicBuckets: false,
+      }),
+      cors: [
+        {
+          allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT, s3.HttpMethods.POST],
+          allowedOrigins: ["*"],
+          allowedHeaders: ["*"],
+        },
+      ],
+      removalPolicy,
+    });
+    userContentBucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        sid: "PublicReadForPublicPrefix",
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.AnyPrincipal()],
+        actions: ["s3:GetObject"],
+        resources: [userContentBucket.arnForObjects("public/*")],
+      }),
+    );
+
+    // Matches compute-stack.ts's ssmEnv convention ("staging"/"production") — read by
+    // lib/storage.ts at Lambda cold start alongside the other SSM-sourced config.
+    new ssm.StringParameter(this, "UserContentBucketNameParam", {
+      parameterName: `/plexo/${isProd ? "production" : "staging"}/USER_CONTENT_BUCKET_NAME`,
+      stringValue: userContentBucket.bucketName,
+    });
+
+    new cdk.CfnOutput(this, "UserContentBucketName", { value: userContentBucket.bucketName });
   }
 }

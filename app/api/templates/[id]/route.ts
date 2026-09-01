@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { del } from "@vercel/blob";
+import { deleteObjects } from "@/lib/storage";
 
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { resolveUser } from "@/lib/auth/resolveUser";
@@ -179,8 +179,7 @@ export async function DELETE(
   const assetBatches = await Promise.all(allIds.map((tid) => TemplateAsset.query.primary({ templateId: tid }).go()));
   const assets = assetBatches.flatMap((b) => b.data);
   if (assets.length > 0) {
-    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
-    await del(assets.map((a) => a.blobUrl), blobToken ? { token: blobToken } : undefined).catch((err) =>
+    await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
       console.error("Failed to delete blobs during page delete (non-fatal):", err),
     );
   }

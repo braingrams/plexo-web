@@ -1,17 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { issueSignedToken, presignUrl } from "@vercel/blob";
+import { getSignedDownloadUrl } from "@/lib/storage";
 
 import { prisma } from "@/server/prisma";
 import { decryptDigitalAccessSecret } from "@/lib/crypto";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimit";
-
-// Blob pathname is everything after the store host in fileUrl, e.g.
-// "https://<store>.public.blob.vercel-storage.com/commerce-digital/org/product/abc.pdf"
-// -> "commerce-digital/org/product/abc.pdf". presignUrl needs the bare pathname, not the
-// full URL.
-function pathnameFromBlobUrl(blobUrl: string): string {
-  return new URL(blobUrl).pathname.replace(/^\//, "");
-}
 
 /**
  * The only credential this route trusts is the token itself — a random 32-byte value,
@@ -47,11 +39,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tok
 
     await prisma.commerceDigitalDelivery.update({ where: { id: delivery.id }, data: { downloadCount: { increment: 1 } } });
 
-    // Never expose the permanent private blob URL directly — mint a short-lived (5 min)
-    // signed read URL scoped to exactly this one pathname and redirect to that instead.
-    const pathname = pathnameFromBlobUrl(delivery.fileUrl);
-    const signed = await issueSignedToken({ pathname, operations: ["get"], validUntil: Date.now() + 5 * 60 * 1000 });
-    const { presignedUrl } = await presignUrl(signed, { operation: "get", pathname, access: "private" });
+    // Never expose the permanent private storage URL directly — mint a short-lived
+    // (5 min) signed read URL and redirect to that instead.
+    const presignedUrl = await getSignedDownloadUrl(delivery.fileUrl, 5 * 60);
     return NextResponse.redirect(presignedUrl, { status: 302 });
   }
 

@@ -191,15 +191,14 @@ export async function DELETE(
     return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });
   }
 
-  // 1. Delete linked Vercel Blob storage assets
+  // 1. Delete linked storage assets
   const assets = await prisma.templateAsset.findMany({
     where: { templateId: existing.id },
     select: { blobUrl: true },
   });
   if (assets.length > 0) {
-    const { del } = await import("@vercel/blob");
-    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
-    await del(assets.map((a) => a.blobUrl), blobToken ? { token: blobToken } : undefined).catch((err) =>
+    const { deleteObjects } = await import("@/lib/storage");
+    await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
       console.error("Failed to delete blobs during template delete (non-fatal):", err)
     );
   }

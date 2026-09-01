@@ -41,8 +41,10 @@ const APP_SECRET_KEYS = [
   "PUSHER_SECRET",
   "PUSHER_CLUSTER",
   "BROWSERBASE_API_KEY",
-  "BLOB_READ_WRITE_TOKEN",
-  "BLOB_WEBHOOK_PUBLIC_KEY",
+  // Not a secret (a bucket name), but published to the same /plexo/<env>/* SSM path by
+  // cdk/lib/data-stack.ts and read through this same loader rather than inventing a
+  // second config-loading mechanism for one value.
+  "USER_CONTENT_BUCKET_NAME",
 ] as const;
 
 // GetParameters caps at 10 names per call.

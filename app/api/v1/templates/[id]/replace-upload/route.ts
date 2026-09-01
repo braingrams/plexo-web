@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put, del } from "@vercel/blob";
+import { uploadObject, deleteObjects } from "@/lib/storage";
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
 import { requirePermission } from "@/server/requirePermission";
@@ -87,7 +87,6 @@ export async function POST(
     throw err;
   }
 
-  const blobToken = process.env.BLOB_READ_WRITE_TOKEN; // see upload-raw/route.ts — OIDC covers real deployments
   const oldAssets = await prisma.templateAsset.findMany({ where: { templateId: template.id } });
 
   // Upload the new assets FIRST, before touching anything old — if this fails partway,
@@ -96,11 +95,9 @@ export async function POST(
   if (site.assets.length > 0) {
     try {
       for (const asset of site.assets) {
-        const blob = await put(`raw-sites/${template.id}/${asset.path}`, asset.buffer, {
+        const blob = await uploadObject(`raw-sites/${template.id}/${asset.path}`, asset.buffer, {
           access: "public",
           contentType: asset.contentType,
-          allowOverwrite: true,
-          ...(blobToken ? { token: blobToken } : {}),
         });
         uploaded.push({
           templateId: template.id,
@@ -120,13 +117,13 @@ export async function POST(
 
   // Now safe to tear down the old files: DB row deletion + blob deletion for whatever
   // isn't present in the new upload (a path reused by both old and new was just
-  // overwritten in place above via allowOverwrite).
+  // overwritten in place above).
   await prisma.templateAsset.deleteMany({ where: { templateId: template.id } });
   const staleBlobUrls = oldAssets
     .filter((a) => !uploaded.some((u) => u.path === a.path))
     .map((a) => a.blobUrl);
   if (staleBlobUrls.length > 0) {
-    await del(staleBlobUrls, blobToken ? { token: blobToken } : undefined).catch((err) =>
+    await deleteObjects(staleBlobUrls).catch((err) =>
       console.error("Failed to delete stale blobs during replace (non-fatal):", err)
     );
   }

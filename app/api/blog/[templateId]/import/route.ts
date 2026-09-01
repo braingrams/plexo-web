@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put, BlobError } from "@vercel/blob";
+import { uploadObject, StorageError } from "@/lib/storage";
 import { ImportJobStatus, ImportMediaHandling, ImportSourceType } from "@prisma/client";
 import { prisma } from "@/server/prisma";
 import { requirePermission } from "@/server/requirePermission";
@@ -71,17 +71,15 @@ async function createWxrJob(request: NextRequest, templateId: string, userId: st
     return rehostCapError(totalPosts);
   }
 
-  const localDevToken = process.env.BLOB_READ_WRITE_TOKEN; // OIDC covers real deployments — see upload-raw/route.ts
   let wxrBlobUrl: string;
   try {
-    const blob = await put(`blog-import-wxr/${templateId}/${Date.now()}.xml`, buffer, {
+    const blob = await uploadObject(`blog-import-wxr/${templateId}/${Date.now()}.xml`, buffer, {
       access: "public",
       contentType: "application/xml",
-      ...(localDevToken ? { token: localDevToken } : {}),
     });
     wxrBlobUrl = blob.url;
   } catch (err) {
-    if (err instanceof BlobError) return NextResponse.json({ error: err.message }, { status: 500 });
+    if (err instanceof StorageError) return NextResponse.json({ error: err.message }, { status: 500 });
     throw err;
   }
 

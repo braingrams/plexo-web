@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
-import { put } from "@vercel/blob";
+import { uploadObject } from "@/lib/storage";
 
 import { prisma } from "@/server/prisma";
 import { resolveUser } from "@/app/api/v1/domains/route";
@@ -75,15 +75,13 @@ export async function POST(
   if (listing.sourceType === "RAW_UPLOAD") {
     const sourceAssets = await prisma.templateAsset.findMany({ where: { templateId: listing.id } });
     if (sourceAssets.length > 0) {
-      const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
       const copiedAssets = await Promise.all(
         sourceAssets.map(async (asset) => {
           const sourceRes = await fetch(asset.blobUrl);
           const buffer = Buffer.from(await sourceRes.arrayBuffer());
-          const blob = await put(`raw-sites/${newId}/${asset.path}`, buffer, {
+          const blob = await uploadObject(`raw-sites/${newId}/${asset.path}`, buffer, {
             access: "public",
             contentType: asset.contentType,
-            ...(blobToken ? { token: blobToken } : {}),
           });
           return {
             templateId: newId,
