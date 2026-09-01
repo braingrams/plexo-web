@@ -95,7 +95,8 @@
 		"@types/react-dom": "^19.2.3",
 		"prisma": "^7.8.0",
 		"tsx": "^4.23.1",
-		"@types/aws-lambda": "^8.10.145"
+		"@types/aws-lambda": "^8.10.145",
+		"@opennextjs/aws": "^4.1.4"
 	},
 	"overrides": {
 		"openai": {
@@ -103,6 +104,9 @@
 		},
 		"next-auth": {
 			"nodemailer": "$nodemailer"
+		},
+		"@opennextjs/aws": {
+			"next": "$next"
 		}
 	},
 	"prisma": {

@@ -10,18 +10,26 @@ import {
   CommerceSettings,
 } from "./commerceEntities";
 import { NotificationPreferences } from "./coreEntities";
+import { Template, PublishedDomain } from "./contentEntities";
+import { notifyMaildripOfPaidOrder, resolveMaildripApiKey, sendCommerceEmail } from "@/lib/commerce/maildripNotify";
+import { sendMaildripEmail } from "@/lib/mail/maildrip";
+import { decryptDigitalAccessSecret } from "@/lib/crypto";
+import {
+  buildPaymentReceivedEmail,
+  buildDigitalFileDeliveryEmail,
+  buildDigitalExternalLinkEmail,
+  buildDigitalAccessGrantedEmail,
+} from "@/lib/mail/templates";
 
-// Ported from app/api/webhooks/paystack/[templateId]/route.ts and
-// lib/commerce/orderFulfillment.ts / digitalDelivery.ts. Signature verification
-// (HMAC-SHA512 against the site's own Paystack keys) is unchanged by this migration — it
-// doesn't touch the database — so it isn't reproduced here; only the DB-touching logic
-// is ported. Not wired into a live route yet, same reason as server/authDynamo.ts: the
-// real webhook route still runs against Postgres today.
+// Ported from app/api/webhooks/paystack/[templateId]/route.ts,
+// lib/commerce/orderFulfillment.ts, and lib/commerce/digitalDelivery.ts. Signature
+// verification (HMAC-SHA512 against the site's own Paystack keys) is unchanged by this
+// migration — it doesn't touch the database — so it isn't reproduced here; only the
+// DB-touching logic is ported. Not wired into a live route yet, same reason as
+// server/authDynamo.ts: the real webhook route still runs against Postgres today.
 //
-// Two real dependencies this pulls in that weren't in ANY phase's original scope yet —
-// PublishedDomain (for resolveSitePublicUrl's email links) and Template (for the site
-// name shown in emails) — are Phase 4 (plexo-content) entities that don't exist as
-// DynamoDB code yet. Marked as explicit TODOs below rather than stubbed with fake data.
+// Every TODO(Phase 4) from the first draft of this file is now resolved — Template and
+// PublishedDomain (this file's remaining two dependencies) exist as of Phase 4.
 
 type OrderItem = EntityItem<typeof CommerceOrder>;
 type BookingItem = EntityItem<typeof CommerceBooking>;
@@ -77,11 +85,25 @@ export async function confirmPaystackPayment(
   return { order: order as OrderItem, booking: booking && "orderId" in booking ? (booking as BookingItem) : null };
 }
 
+/** Ported from lib/commerce/siteUrl.ts's resolveSitePublicUrl — prefers an active CUSTOM
+ * domain, falls back to the shared plexopages SUBDOMAIN, then to Plexo's own app URL. */
+async function resolveSitePublicUrl(templateId: string): Promise<string> {
+  const { data: domains } = await PublishedDomain.query
+    .primary({ templateId })
+    .where((attr, op) => op.eq(attr.active, true))
+    .go();
+  const custom = domains.find((d) => d.type === "CUSTOM");
+  const subdomain = domains.find((d) => d.type === "SUBDOMAIN");
+  const chosen = custom ?? subdomain;
+  if (chosen) return `https://${chosen.domain}`;
+  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+}
+
 /**
  * Everything that happens once an order flips PAID — booking confirmation is a real,
- * guaranteed DynamoDB write; notification and digital delivery are best-effort side
- * effects, same as the original (a failure in either must never fail the webhook that
- * already recorded a real payment).
+ * guaranteed DynamoDB write; MailDrip notify, the payment-received email, and digital
+ * delivery are all best-effort side effects, same as the original (a failure in any one
+ * of them must never fail the webhook that already recorded a real payment).
  */
 export async function handleOrderPaid(order: OrderItem, booking: BookingItem | null, settings: SettingsItem): Promise<void> {
   if (booking) {
@@ -91,25 +113,47 @@ export async function handleOrderPaid(order: OrderItem, booking: BookingItem | n
       .go();
   }
 
-  // TODO(Phase 4): the actual payment-received email needs the site's name (Template
-  // entity) and, for its order-management link, the site's public URL (PublishedDomain
-  // entity) — neither exists as DynamoDB code yet. resolveNotificationRecipient below is
-  // fully ported (NotificationPreferences already exists in plexo-core); only the send
-  // itself is deferred, gated correctly on whether it would even fire.
   try {
-    const recipient = await resolveNotificationRecipient(order.organizationId, order.customerEmail);
-    if (recipient) {
-      console.log(`TODO(Phase 4): send payment-received email to ${recipient} for order ${order.orderNumber}`);
-    }
+    // Fully ported as-is — this helper and its dependencies (sendReceiptEmail,
+    // tagContactIntoGroup) never touched Prisma to begin with, just `order`/`settings`
+    // objects and outbound MailDrip HTTP calls. The cast bridges two independently
+    // generated type systems (Prisma's CommerceSettings/CommerceOrder vs. our ElectroDB
+    // item shapes) describing the same real fields — the function only ever reads
+    // maildripApiKeyEncrypted/maildripPaidGroupId and customerEmail/Name/Phone/
+    // orderNumber/amountMinor, all genuinely present and correctly typed on our side.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await notifyMaildripOfPaidOrder(settings as any, order as any);
   } catch (err) {
-    console.error("Commerce: payment-received notification failed", err);
+    console.error("Commerce: MailDrip notify failed", err);
   }
+
+  notifyPaymentReceived(order).catch((err) => console.error("[mail] payment received notification failed:", err));
 
   try {
     await deliverDigitalProducts(order, settings);
   } catch (err) {
     console.error("Commerce: digital product delivery failed", err);
   }
+}
+
+/** Ported from lib/commerce/orderFulfillment.ts's notifyPaymentReceived — gated by
+ * NotificationPreferences.payments, same as the original. */
+async function notifyPaymentReceived(order: OrderItem): Promise<void> {
+  const { data: template } = await Template.get({ id: order.templateId }).go();
+  if (!template || !("id" in template)) return;
+
+  const recipient = await resolveNotificationRecipient(order.organizationId, order.customerEmail);
+  if (!recipient) return;
+
+  const base = await resolveSitePublicUrl(order.templateId);
+  const html = buildPaymentReceivedEmail({
+    siteName: template.name,
+    amountFormatted: `₦${(order.amountMinor / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`,
+    customerEmail: order.customerEmail,
+    orderNumber: order.orderNumber,
+    orderUrl: `${base}/dashboard/commerce/${order.templateId}/orders`,
+  });
+  await sendMaildripEmail({ to: recipient, subject: `Payment received on ${template.name} — ${order.orderNumber}`, html });
 }
 
 /** Ported from lib/notificationPreferences.ts's resolveNotificationRecipient, "payments"
@@ -125,21 +169,26 @@ async function resolveNotificationRecipient(organizationId: string, fallbackEmai
 }
 
 /**
- * Ported from lib/commerce/digitalDelivery.ts. Idempotency now lives in
- * CommerceDigitalDelivery's own primary key (orderId + productId) rather than a Prisma
- * @@unique constraint — create() throwing ConditionalCheckFailedException on a re-run is
- * the direct equivalent, caught and skipped exactly like the original's constraint-catch.
- * The actual delivery record creation is real; the delivery EMAIL send is the one piece
- * deferred (same Phase 4 dependency as the payment-received email above).
+ * Ported from lib/commerce/digitalDelivery.ts in full, including the email send.
+ * Idempotency lives in CommerceDigitalDelivery's own primary key (orderId + productId)
+ * rather than a Prisma @@unique constraint — create() throwing
+ * ConditionalCheckFailedException on a re-run is the direct equivalent.
  */
 async function deliverDigitalProducts(order: OrderItem, settings: SettingsItem): Promise<void> {
   const { data: orderItems } = await CommerceOrderItem.query.primary({ templateId: order.templateId, orderId: order.id }).go();
   if (orderItems.length === 0) return;
 
+  const { data: templateData } = await Template.get({ id: order.templateId }).go();
+  const siteName = templateData && "id" in templateData ? templateData.name : "your order";
+  const siteUrl = await resolveSitePublicUrl(order.templateId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const apiKey = resolveMaildripApiKey(settings as any); // same cross-type-system cast as above
+
   for (const item of orderItems) {
     const { data: product } = await CommerceProduct.get({ templateId: order.templateId, id: item.productId }).go();
     if (!product || !("id" in product) || product.kind !== "DIGITAL" || !product.digitalDeliveryMethod) continue;
 
+    const token = randomBytes(32).toString("hex");
     try {
       await CommerceDigitalDelivery.create({
         id: crypto.randomUUID(),
@@ -148,7 +197,7 @@ async function deliverDigitalProducts(order: OrderItem, settings: SettingsItem):
         orderId: order.id,
         productId: product.id,
         method: product.digitalDeliveryMethod,
-        token: randomBytes(32).toString("hex"),
+        token,
         fileUrl: product.digitalFileUrl,
         fileName: product.digitalFileName,
         externalUrl: product.digitalExternalUrl,
@@ -164,8 +213,50 @@ async function deliverDigitalProducts(order: OrderItem, settings: SettingsItem):
       throw err;
     }
 
-    console.log(`TODO(Phase 4): email digital delivery for order ${order.id} product ${product.id}`);
-  }
+    const accessUrl = `${siteUrl}/api/public/commerce/digital/${token}`;
+    let subject: string;
+    let html: string;
+    if (product.digitalDeliveryMethod === "FILE_DOWNLOAD") {
+      subject = `Your download: ${product.name}`;
+      html = buildDigitalFileDeliveryEmail({
+        siteName,
+        productName: product.name,
+        downloadUrl: accessUrl,
+        expiresAt: product.digitalLinkExpiryDays
+          ? new Date(Date.now() + product.digitalLinkExpiryDays * 24 * 60 * 60 * 1000).toLocaleDateString("en-NG", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })
+          : null,
+      });
+    } else if (product.digitalDeliveryMethod === "EXTERNAL_LINK") {
+      subject = `Your access link: ${product.name}`;
+      html = buildDigitalExternalLinkEmail({ siteName, productName: product.name, accessUrl });
+    } else {
+      subject = `Your access: ${product.name}`;
+      html = buildDigitalAccessGrantedEmail({
+        siteName,
+        productName: product.name,
+        accessInstructions: product.digitalAccessInstructions ?? "",
+        password: product.digitalAccessPasswordEncrypted ? decryptDigitalAccessSecret(product.digitalAccessPasswordEncrypted) : null,
+        accessUrl,
+      });
+    }
 
-  void settings; // resolveMaildripApiKey(settings) needed once the real email send is wired
+    if (apiKey) {
+      try {
+        await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html });
+        await CommerceDigitalDelivery.patch({ orderId: order.id, productId: product.id })
+          .set({ deliveredAt: new Date().toISOString() })
+          .go();
+      } catch (err) {
+        console.error("Commerce: digital delivery email failed", err);
+      }
+    }
+
+    // TODO: ACCESS_LIST additionally needs a distinct seller-facing "go add this buyer
+    // somewhere" notice (notifySellerAccessListAction in the original) — not ported here,
+    // a genuinely separate notification path from everything else in this file.
+  }
 }

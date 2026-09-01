@@ -22,15 +22,24 @@ type TableSpec = {
 // relational models is a maintainability trap for a team new to DynamoDB. Storage cost
 // is identical either way since DynamoDB prices by GB, not by table count.
 const TABLES: TableSpec[] = [
-  { id: "Core", tableName: "plexo-core" },
+  // PITR on Core/Commerce/Content isn't just a nice-to-have here — it's a hard
+  // requirement discovered by actually invoking the analytics-stack export Lambda
+  // (cdk/lib/analytics-stack.ts), which failed with
+  // PointInTimeRecoveryUnavailableException before this was added:
+  // ExportTableToPointInTime requires PITR enabled on the source table. Also a real
+  // backup benefit in its own right for genuine business data, not just export plumbing.
+  { id: "Core", tableName: "plexo-core", pointInTimeRecovery: true },
   { id: "Ledger", tableName: "plexo-ledger", pointInTimeRecovery: true, stream: true },
   // CommerceOrder needs a second real lookup beyond payment-reference (GSI1) — customer
   // order-tracking by orderNumber, a genuine access pattern proven out in
   // lib/db/commerceEntities.ts, not speculative. customerEmail search stays on the
   // Athena/export path from the roadmap (an occasional admin-support query, not a
   // latency-sensitive one) rather than spending a third GSI on it.
-  { id: "Commerce", tableName: "plexo-commerce", secondGsi: true },
-  { id: "Content", tableName: "plexo-content" },
+  { id: "Commerce", tableName: "plexo-commerce", secondGsi: true, pointInTimeRecovery: true },
+  // Template needs two real lookups beyond its own id: org-wide dashboard listing
+  // (GSI1) and parent/child page-tree traversal for multipage sites (GSI2) — both
+  // genuine, not speculative.
+  { id: "Content", tableName: "plexo-content", secondGsi: true, pointInTimeRecovery: true },
   { id: "Ops", tableName: "plexo-ops", ttlAttribute: "ttl" },
   { id: "Import", tableName: "plexo-import", ttlAttribute: "ttl" },
 ];

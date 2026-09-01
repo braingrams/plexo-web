@@ -79,25 +79,47 @@ dashboard regardless of not using WorkOS anymore).
 
 ## Phase 4 — `plexo-content` + `plexo-import`
 
-- [ ] Define ElectroDB entities: BlogSite, SiteLayout, BlogAuthor/Category/Tag/Post(+relations)/Comment/Redirect
-- [ ] Define ElectroDB entities: Template, TemplateRevision, TemplateGenerationJob, TemplatePurchase, TemplateAsset, Testimonial
-- [ ] Define ElectroDB entities: ImportJob, ImportMediaMap, SiteImportJob/Page/AssetBlob, SiteTransferRequest (TTL-tagged)
+- [x] Define ElectroDB entities: Template, TemplateRevision, TemplateGenerationJob, TemplatePurchase, TemplateAsset, Testimonial, PublishedDomain (`lib/db/contentEntities.ts`) — 17 entities total, every field ported 1:1 from the real schema
+- [x] Define ElectroDB entities: BlogSite, SiteLayout, BlogAuthor/Category/Tag/Post(+relations)/Comment/Redirect
+- [x] Define ElectroDB entities: ImportJob, ImportMediaMap, SiteImportJob/Page/AssetBlob, SiteTransferRequest (`lib/db/importEntities.ts`) — all TTL-tagged (90 days) except `SiteTransferRequest`, which is a real business action with its own audit trail, not disposable job state
+- [x] Added `Template`'s GSI2 as a real CDK change (`secondGsi` flag, same mechanism as Commerce's) — verified via `cdk diff` it only touched the Content table, deployed to production and staging
+- [x] Nine `@@unique` Prisma constraints moved into primary sort keys instead of spent on GSIs (asset path, purchase templateId, author/category/tag/post slug, redirect fromPath, media-map sourceUrl, import-page sourceUrl, asset-blob sha256) — same discipline as the booking slot-lock and digital-delivery record from Phase 3
+- [x] **Both Phase 3 TODOs resolved for real**: `lib/db/commerceWebhookOperations.ts`'s payment-received email and digital-delivery email are now fully ported, not stubbed — `resolveSitePublicUrl` ported against the new `PublishedDomain` entity, site name pulled from the new `Template` entity, all four email builders wired with real content
+- [x] Verified `notifyMaildripOfPaidOrder` (and its `sendReceiptEmail`/`tagContactIntoGroup` helpers) never touched Prisma to begin with — reused directly rather than re-ported, with a documented type-cast bridging Prisma's generated types and our ElectroDB item shapes at the two call sites
+- [x] Type-checked clean against the full project tsconfig after every change
+- [ ] **Confirmed, not guessed**: no real Paystack transfer integration exists anywhere in the current codebase to port — `lib/db/ledgerStreamHandler.ts`'s `TODO(Phase 3)` marker was correctly scoped from the start, not deferred out of laziness. Still open, needs real product/business scoping before it's buildable
+- [ ] Known gaps carried forward, documented not hidden: `Template`'s marketplace-status browsing (candidate for Athena/export), `BlogPost`'s externalId-based import dedup, `SiteTransferRequest`'s toEmail lookup — each is real but didn't earn a GSI over the higher-traffic pattern that got one (TTL-tagged)
 
 ## Phase 5 — `plexo-ops` + `plexo-admin` cutover
 
-- [ ] Define ElectroDB entities: PageView, RateLimit, StockCache, AdminAuditLog, FormSubmission (TTL-tagged)
-- [ ] Build the monthly DynamoDB → S3 export (native PITR-based export)
-- [ ] Wire Athena over the export for ad hoc queries
-- [ ] Walk every `plexo-admin` dashboard route (organizations, users, withdrawals, marketplace, script-access-requests, analytics) and confirm each has a real path — a GSI, or the Athena export
-- [ ] Deploy `plexo-admin`'s own compute stack alongside `plexo-web`'s
+- [x] Define ElectroDB entities: PageView, RateLimit, StockCache, AdminAuditLog, FormSubmission (`lib/db/opsEntities.ts`)
+- [x] **Real design correction**: `AdminAuditLog` and `FormSubmission` don't actually get a `ttl` value despite living in the "TTL-heavy by design" table — they're a compliance trail and real business leads, not disposable data. DynamoDB's TTL is opt-in per item even though the table designates one attribute name for it, so this costs nothing to fix.
+- [x] Built the monthly DynamoDB → S3 export for real (`cdk/lib/analytics-stack.ts`): S3 export bucket (1-year lifecycle), a small scheduled Lambda calling `ExportTableToPointInTime` for core/commerce/content (ledger deliberately excluded — financial data has its own audit path), Athena workgroup + Glue database. Deployed to production and staging as a new `STACK_KIND=analytics`.
+- [x] **Actually invoked the export Lambda rather than assume it worked — it didn't, at first**: `PointInTimeRecoveryUnavailableException`, because `ExportTableToPointInTime` requires PITR on the *source* table, and only `plexo-ledger` had it enabled. Fixed by enabling PITR on Core/Commerce/Content too (verified in-place via `cdk diff`, deployed, confirmed PITR active, re-invoked — real export ARNs returned, confirmed `IN_PROGRESS`)
+- [x] Walked every `plexo-admin` route against what actually exists:
+  - **Covered by a real GSI**: withdrawals (`WithdrawalRequest.byStatus`), testimonials (`Testimonial.byStatus`), settings (`PlatformSettings` singleton)
+  - **Found two models referenced by real admin routes that no phase had scoped**: `ScriptAccessRequest` and `Feedback` — added both to `lib/db/contentEntities.ts`, each with a `byStatus` GSI matching their admin review-queue use
+  - **Genuine Athena/export candidates, not oversights**: organizations and users admin browse/search (no "list everything" GSI exists or should — that's exactly what the export path is for), marketplace browsing (already flagged in Phase 4), platform-wide analytics aggregation (PageView's primary key is per-site, cross-site aggregate reporting is Athena's actual job), domain moderation/abuse review (`PublishedDomain` spent its one GSI on the hot middleware hostname-resolution path, correctly — flagged review queues aren't latency-sensitive)
+- [ ] Deploy `plexo-admin`'s own compute stack alongside `plexo-web`'s — depends on Phase 6 existing first
 
 ## Phase 6 — Compute & Edge (OpenNext)
 
-- [ ] Build the OpenNext output pipeline for `plexo-web` (SSR Lambda, image-optimization Lambda, ISR revalidation queue, static assets on S3)
-- [ ] CDK `EdgeStack`: CloudFront distribution + S3 origin + Lambda Function URLs — no API Gateway (saves $1/M requests for zero functional loss at this scale)
-- [ ] Repeat for `plexo-admin`
-- [ ] Apply Lambda Advanced Logging Controls (WARN/ERROR only) at deploy time, natively, before first production traffic
-- [ ] Route 53 + ACM wiring for both apps' domains
+- [x] **Built and actually deployed, not just written**: `cdk/lib/compute-stack.ts` is a real OpenNext pipeline — SSR Lambda, image-optimization Lambda, S3 static assets, SQS revalidation queue, DynamoDB ISR tag-cache table, CloudFront with the exact behaviors OpenNext's own build manifest specifies
+- [x] Ran `npx @opennextjs/aws build` for real against the actual `plexo-web` app — succeeded (`next build` succeeded too, despite the app not yet running against DynamoDB) — and used the **real output** (`open-next.output.json`, plus the package's own unminified source under `node_modules/@opennextjs/aws/dist/overrides/`) to get exact bundle paths, CloudFront behaviors, and env var contracts, after documentation scraping proved unreliable
+- [x] Lambda Function URLs (`AWS_IAM` auth) + CloudFront Origin Access Control — no API Gateway, per the original roadmap's cost reasoning
+- [x] Deliberately skipped OpenNext's "warmer" function — it exists to reduce cold starts under sustained traffic, which directly conflicts with this migration's whole premise of scaling genuinely to zero
+- [x] Deployed the real stack to the disposable `pr-1-plexo` compute stack and **found and fixed three real bugs by actually testing**, not assumed-correct:
+  1. `FunctionUrlOrigin.withOriginAccessControl` requires `AWS_IAM` auth on the Function URL, not `NONE` — caught at `cdk synth`
+  2. The CloudFormation custom resource seeding the tag-cache table failed with `AccessDeniedException` — `AwsCustomResourcePolicy.fromSdkCalls`'s automatic action-inference from `service: "Lambda", action: "invoke"` did **not** produce the real IAM action; fixed with an explicit `lambda:InvokeFunction` policy statement scoped to the one function
+  3. The deployed site 403'd with `AccessDeniedException` even with correct-looking OAC config — AWS's own docs confirm OAC-for-Lambda needs **two separate permission grants** (`lambda:InvokeFunctionUrl` *and* `lambda:InvokeFunction`), and CDK's L2 construct only wires the first automatically
+- [x] After all three fixes: **hit the live CloudFront URL and got the app's own real 404 page back** — genuine confirmation that Next.js, its middleware, and the OpenNext runtime are executing correctly in Lambda, not just that CloudFormation reported success
+- [x] Also upgraded all four Lambda functions off the soon-to-be-deprecated `nodejs20.x` runtime to `nodejs24.x`, caught via a CDK deploy-time warning
+- [x] Destroyed the verification deployment cleanly afterward — also a real (successful) test of the teardown path against this larger, more complex stack shape than the earlier placeholder
+- [x] Added `.open-next/` to `.gitignore` — build output, not source
+- [ ] Wire real app-level env vars (`AUTH_SECRET`, `GOOGLE_CLIENT_ID`/`SECRET`, table names, etc. from SSM) into the server Lambda's `environment` — only OpenNext's own plumbing vars are wired so far; this is what turns "the app runs" into "the app runs *correctly*"
+- [ ] Repeat for `plexo-admin` (its own compute stack, same pattern — not yet built)
+- [ ] Route 53 + ACM wiring for both apps' real domains — needs the actual production domain names, not yet confirmed
+- [ ] Apply Lambda Advanced Logging Controls (WARN/ERROR only) — the CDK-level convention (`buildLogGroup`, 30-day retention) is wired; the log-*level* filter itself isn't yet applied to these specific functions
 
 ## Phase 7 — Data migration + parallel-run validation
 
