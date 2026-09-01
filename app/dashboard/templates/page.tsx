@@ -1,10 +1,8 @@
-import { TemplateKind } from "@prisma/client";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { Template, BlogSite } from "@/lib/db/contentEntities";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
 
 import { TemplatesClient } from "./templates-client";
 import { PagesShell } from "../_components/PagesShell";
@@ -14,6 +12,8 @@ import { PagesShell } from "../_components/PagesShell";
 // template (e.g. the editor's "← Templates" button) can serve a stale pre-change RSC payload
 // from that prefetch instead of the current list.
 export const dynamic = "force-dynamic";
+
+type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
 type TemplateSummary = {
   id: string;
@@ -25,35 +25,14 @@ type TemplateSummary = {
   pageCount: number;
 };
 
-function serializeTemplate(record: {
-  id: string;
-  name: string;
-  kind: TemplateKind;
-  compiledHtml: string;
-  createdAt: Date;
-  updatedAt: Date;
-  _count: { pages: number };
-}): TemplateSummary {
-  return {
-    id: record.id,
-    name: record.name,
-    kind: record.kind,
-    compiledHtml: record.compiledHtml,
-    createdAt: record.createdAt.toISOString(),
-    updatedAt: record.updatedAt.toISOString(),
-    pageCount: record._count.pages,
-  };
-}
-
 export default async function TemplatesDashboardPage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
 
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/templates");
   }
 
-  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
@@ -62,37 +41,43 @@ export default async function TemplatesDashboardPage() {
   // entries here. Marketplace listing clones (marketplaceStatus set) live in
   // /dashboard/marketplace/listings instead — see app/api/templates/route.ts's identical
   // filter for why.
-  const templates = await prisma.template.findMany({
-    where: {
-      organizationId: orgResolution.organizationId,
-      parentId: null,
-      marketplaceStatus: null,
-      isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false,
-      // A site whose blog is set as its homepage is conceptually a blog now, not a
-      // landing-page template — it still shows in /dashboard/blog, just not here.
-      NOT: { blogSite: { is: { enabled: true, showOnHomepage: true } } },
-    },
-    // Secondary key matters: the org-backfill migration bulk-updated every template's
-    // organizationId in one updateMany, and Prisma's @updatedAt auto-bumps on ANY update
-    // through the query engine — so a lot of rows now share the exact same updatedAt
-    // from that migration moment. Without a tie-breaker, Postgres returns those ties in
-    // arbitrary (often near-creation-order) order, which read as "ascending" instead of
-    // newest-edited-first.
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      name: true,
-      kind: true,
-      compiledHtml: true,
-      createdAt: true,
-      updatedAt: true,
-      _count: { select: { pages: true } },
-    },
+  const { data: all } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go();
+  const candidates = all.filter(
+    (t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
+  );
+
+  // A site whose blog is set as its homepage is conceptually a blog now, not a
+  // landing-page template — it still shows in /dashboard/blog, just not here.
+  const blogSites = await Promise.all(candidates.map((t) => BlogSite.get({ templateId: t.id }).go()));
+  const roots = candidates.filter((t, i) => {
+    const site = blogSites[i].data;
+    return !(site?.enabled && site?.showOnHomepage);
   });
+
+  roots.sort((a, b) => {
+    const byUpdated = (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
+    if (byUpdated !== 0) return byUpdated;
+    return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
+  });
+
+  const templates: TemplateSummary[] = await Promise.all(
+    roots.map(async (t) => {
+      const { data: children } = await Template.query.byParent({ parentId: t.id }).go();
+      return {
+        id: t.id,
+        name: t.name,
+        kind: t.kind as TemplateKind,
+        compiledHtml: t.compiledHtml,
+        createdAt: t.createdAt ?? new Date().toISOString(),
+        updatedAt: t.updatedAt ?? new Date().toISOString(),
+        pageCount: children.length,
+      };
+    }),
+  );
 
   return (
     <PagesShell>
-      <TemplatesClient initialTemplates={templates.map(serializeTemplate)} />
+      <TemplatesClient initialTemplates={templates} />
     </PagesShell>
   );
 }

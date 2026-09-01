@@ -1,31 +1,29 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { headers } from "next/headers";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { User } from "@/lib/db/coreEntities";
+import { ApiKey } from "@/lib/db/coreEntities";
+import { Template, PublishedDomain, BlogPost } from "@/lib/db/contentEntities";
+import { PageView } from "@/lib/db/opsEntities";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { listMarketplaceTemplates } from "@/lib/marketplace";
 import { OverviewClient, type NeedsAttentionItem, type ActivityItem, type OverviewTemplateRow } from "./overview-client";
 import { OverviewSetup, type StarterTemplate } from "./_components/OverviewSetup";
 import { PageContainer } from "./_components/PageContainer";
 
 export default async function OverviewPage() {
-  const reqHeaders = await headers();
-  const session = await auth.api.getSession({ headers: reqHeaders });
+  const session = await auth();
 
   if (!session?.user) {
     redirect("/auth/login");
   }
 
-  const orgResolution = await ensureActiveOrganization(reqHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
   const organizationId = orgResolution.organizationId;
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { name: true, subscriptionPlan: true, pendingPlan: true },
-  });
+  const { data: user } = await User.get({ id: session.user.id }).go();
 
   if (!user) {
     redirect("/auth/login");
@@ -39,12 +37,16 @@ export default async function OverviewPage() {
     redirect("/auth/complete-subscription");
   }
 
-  const templatesCount = await prisma.template.count({
-    where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false },
-  });
+  const { data: allTemplates } = await Template.query.byOrg({ organizationId }).go();
+  const rootTemplates = allTemplates.filter(
+    (t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
+  );
+  const templatesCount = rootTemplates.length;
 
   // Brand-new workspace: skip every other query below and hand off to the guided
   // "pick a template, then publish" setup flow instead of a dashboard full of zeroes.
+  // listMarketplaceTemplates is still Prisma-backed (marketplace browsing hasn't cut
+  // over yet) — a separate, lower-traffic concern from this page's own org-scoped data.
   if (templatesCount === 0) {
     const { templates } = await listMarketplaceTemplates({ sort: "popular", page: 1 });
     const starterTemplates: StarterTemplate[] = templates.slice(0, 4).map((t) => ({
@@ -57,7 +59,7 @@ export default async function OverviewPage() {
 
     return (
       <PageContainer>
-        <OverviewSetup userName={user.name} starterTemplates={starterTemplates} />
+        <OverviewSetup userName={user.name ?? "there"} starterTemplates={starterTemplates} />
       </PageContainer>
     );
   }
@@ -67,81 +69,77 @@ export default async function OverviewPage() {
   sevenDaysAgo.setHours(0, 0, 0, 0);
   const fourteenDaysAgo = new Date(sevenDaysAgo);
   fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 7);
+  const sevenDaysAgoIso = sevenDaysAgo.toISOString();
+  const fourteenDaysAgoIso = fourteenDaysAgo.toISOString();
 
-  const [
-    domainsCount,
-    apiKeysCount,
-    liveTemplatesCount,
-    unverifiedDomains,
-    unverifiedDomainsCount,
-    unpublishedTemplatesCount,
-    unusedApiKeysCount,
-    previousViews7d,
-    recentTemplateRecords,
-    recentDomainActivity,
-    recentBlogActivity,
-    recentApiKeyActivity,
-  ] = await Promise.all([
-    prisma.publishedDomain.count({ where: { organizationId } }),
-    prisma.apiKey.count({ where: { organizationId } }),
-    prisma.template.count({
-      where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false, publishedDomains: { some: {} } },
-    }),
-    prisma.publishedDomain.findMany({
-      where: { organizationId, type: "CUSTOM", dnsVerified: false },
-      orderBy: { createdAt: "desc" },
-      take: 2,
-      select: { domain: true },
-    }),
-    prisma.publishedDomain.count({ where: { organizationId, type: "CUSTOM", dnsVerified: false } }),
-    prisma.template.count({
-      where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false, publishedDomains: { none: {} } },
-    }),
-    prisma.apiKey.count({ where: { organizationId, lastUsedAt: null } }),
-    prisma.pageView.count({
-      where: { template: { organizationId }, createdAt: { gte: fourteenDaysAgo, lt: sevenDaysAgo } },
-    }),
-    prisma.template.findMany({
-      where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false },
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-      take: 6,
-      select: {
-        id: true,
-        name: true,
-        kind: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: { select: { pages: true, publishedDomains: true } },
-      },
-    }),
-    prisma.publishedDomain.findMany({
-      where: { organizationId },
-      orderBy: { createdAt: "desc" },
-      take: 2,
-      select: { domain: true, createdAt: true },
-    }),
-    prisma.blogPost.findMany({
-      where: { template: { organizationId } },
-      orderBy: { updatedAt: "desc" },
-      take: 2,
-      select: { id: true, title: true, status: true, updatedAt: true },
-    }),
-    prisma.apiKey.findMany({
-      where: { organizationId },
-      orderBy: { createdAt: "desc" },
-      take: 2,
-      select: { name: true, createdAt: true },
-    }),
+  // PublishedDomain/BlogPost/PageView have no org-wide index — each is scoped by
+  // templateId (see their own entity comments), so this fans out per root template and
+  // aggregates in memory. Bounded by how many sites one org actually has (small in
+  // practice, same assumption used throughout this migration), not by total row count.
+  const [domainsByTemplate, blogPostsByTemplate, viewCountsByTemplate, apiKeysResult] = await Promise.all([
+    Promise.all(rootTemplates.map((t) => PublishedDomain.query.primary({ templateId: t.id }).go())),
+    Promise.all(rootTemplates.map((t) => BlogPost.query.primary({ templateId: t.id }).go())),
+    Promise.all(
+      rootTemplates.map((t) =>
+        PageView.query
+          .primary({ templateId: t.id })
+          .between({ createdAt: fourteenDaysAgoIso }, { createdAt: sevenDaysAgoIso })
+          .go({ pages: "all" }),
+      ),
+    ),
+    ApiKey.query.primary({ organizationId }).go(),
   ]);
+  const apiKeys = apiKeysResult.data;
 
-  const recentTemplates: OverviewTemplateRow[] = recentTemplateRecords.map((record) => ({
-    id: record.id,
-    name: record.name,
-    kind: record.kind,
-    updatedAt: record.updatedAt.toISOString(),
-    pageCount: record._count.pages,
-    isLive: record._count.publishedDomains > 0,
-  }));
+  const allDomains = domainsByTemplate.flatMap((d) => d.data);
+  const domainsCount = allDomains.length;
+  const apiKeysCount = apiKeys.length;
+  const liveTemplatesCount = rootTemplates.filter((_, i) => domainsByTemplate[i].data.length > 0).length;
+  const unpublishedTemplatesCount = rootTemplates.filter((_, i) => domainsByTemplate[i].data.length === 0).length;
+  const unusedApiKeysCount = apiKeys.filter((k) => !k.lastUsedAt).length;
+  const previousViews7d = viewCountsByTemplate.reduce((sum, r) => sum + r.data.length, 0);
+
+  const unverifiedDomains = allDomains
+    .filter((d) => d.type === "CUSTOM" && !d.dnsVerified)
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+    .slice(0, 2);
+  const unverifiedDomainsCount = allDomains.filter((d) => d.type === "CUSTOM" && !d.dnsVerified).length;
+
+  const recentTemplateRecords = [...rootTemplates]
+    .sort((a, b) => {
+      const byUpdated = (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
+      if (byUpdated !== 0) return byUpdated;
+      return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
+    })
+    .slice(0, 6);
+  const recentTemplatePageCounts = await Promise.all(
+    recentTemplateRecords.map((t) => Template.query.byParent({ parentId: t.id }).go()),
+  );
+
+  const recentDomainActivity = [...allDomains]
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+    .slice(0, 2);
+
+  const recentBlogActivity = blogPostsByTemplate
+    .flatMap((b) => b.data)
+    .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
+    .slice(0, 2);
+
+  const recentApiKeyActivity = [...apiKeys]
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+    .slice(0, 2);
+
+  const recentTemplates: OverviewTemplateRow[] = recentTemplateRecords.map((record, i) => {
+    const idx = rootTemplates.findIndex((t) => t.id === record.id);
+    return {
+      id: record.id,
+      name: record.name,
+      kind: record.kind,
+      updatedAt: record.updatedAt ?? new Date().toISOString(),
+      pageCount: recentTemplatePageCounts[i].data.length,
+      isLive: domainsByTemplate[idx]?.data.length > 0,
+    };
+  });
 
   // "Needs attention": only real, derivable signals — an unverified custom domain, a
   // template nobody has connected a domain to yet, an API key that's never been used.
@@ -183,30 +181,32 @@ export default async function OverviewPage() {
   // audit-log table exists, so this reads as "what changed recently" rather than a full trail.
   const activityCandidates: ActivityItem[] = [];
   for (const t of recentTemplateRecords) {
-    const justCreated = t.updatedAt.getTime() - t.createdAt.getTime() < 10_000;
+    const createdAt = t.createdAt ?? new Date().toISOString();
+    const updatedAt = t.updatedAt ?? createdAt;
+    const justCreated = new Date(updatedAt).getTime() - new Date(createdAt).getTime() < 10_000;
     activityCandidates.push({
       id: `template-${t.id}`,
       text: justCreated ? `Template "${t.name}" created` : `Template "${t.name}" updated`,
-      when: t.updatedAt.toISOString(),
+      when: updatedAt,
     });
   }
   for (const d of recentDomainActivity) {
     activityCandidates.push({
       id: `domain-activity-${d.domain}`,
       text: `Domain "${d.domain}" connected`,
-      when: d.createdAt.toISOString(),
+      when: d.createdAt ?? new Date().toISOString(),
     });
   }
   for (const b of recentBlogActivity) {
     const text =
       b.status === "PUBLISHED" ? `Blog post "${b.title}" published` : b.status === "DRAFT" ? `Blog post "${b.title}" saved as draft` : `Blog post "${b.title}" updated`;
-    activityCandidates.push({ id: `blog-${b.id}`, text, when: b.updatedAt.toISOString() });
+    activityCandidates.push({ id: `blog-${b.id}`, text, when: b.updatedAt ?? new Date().toISOString() });
   }
   for (const k of recentApiKeyActivity) {
     activityCandidates.push({
-      id: `apikey-${k.name}-${k.createdAt.toISOString()}`,
+      id: `apikey-${k.name}-${k.createdAt}`,
       text: `API key "${k.name}" created`,
-      when: k.createdAt.toISOString(),
+      when: k.createdAt ?? new Date().toISOString(),
     });
   }
   const recentActivity = activityCandidates.sort((a, b) => new Date(b.when).getTime() - new Date(a.when).getTime()).slice(0, 5);
@@ -215,7 +215,7 @@ export default async function OverviewPage() {
     <PageContainer>
       <OverviewClient
         organizationName={orgResolution.organizationName}
-        plan={user.subscriptionPlan}
+        plan={user.subscriptionPlan ?? "FREE"}
         templatesCount={templatesCount}
         liveTemplatesCount={liveTemplatesCount}
         domainsCount={domainsCount}
