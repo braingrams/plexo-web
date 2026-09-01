@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
+import { BlogSite } from "@/lib/db/contentEntities";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
 import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogTheme";
 
 const HEX_COLOR_REGEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -41,7 +41,7 @@ export async function GET(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const site = await prisma.blogSite.findUnique({ where: { templateId: resolved.context.templateId } });
+  const { data: site } = await BlogSite.get({ templateId: resolved.context.templateId }).go();
   return NextResponse.json({ site: site ?? { templateId: resolved.context.templateId, ...DEFAULT_SITE } });
 }
 
@@ -53,18 +53,25 @@ export async function PATCH(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { blog: ["update"] });
+  const permissionError = requirePermission(resolved.context.role, { blog: ["update"] });
   if (permissionError) return permissionError;
 
   const body = (await request.json().catch(() => ({}))) as PatchBody;
   const data: Record<string, unknown> = {};
+  type RemovableField = "description" | "accentColor" | "logoUrl" | "headerImageUrl";
+  const toRemove: RemovableField[] = [];
+
   if (body.enabled !== undefined) data.enabled = Boolean(body.enabled);
   if (body.title !== undefined) {
     const title = body.title.trim();
     if (!title) return NextResponse.json({ error: "Blog title can't be empty." }, { status: 400 });
     data.title = title;
   }
-  if (body.description !== undefined) data.description = body.description?.trim() || null;
+  if (body.description !== undefined) {
+    const description = body.description?.trim();
+    if (description) data.description = description;
+    else toRemove.push("description");
+  }
   if (body.postsPerPage !== undefined) {
     if (!Number.isInteger(body.postsPerPage) || body.postsPerPage < 1 || body.postsPerPage > 50) {
       return NextResponse.json({ error: "Posts per page must be between 1 and 50." }, { status: 400 });
@@ -76,7 +83,8 @@ export async function PATCH(
     if (body.accentColor && !HEX_COLOR_REGEX.test(body.accentColor)) {
       return NextResponse.json({ error: "Accent color must be a hex value like #6d28d9." }, { status: 400 });
     }
-    data.accentColor = body.accentColor || null;
+    if (body.accentColor) data.accentColor = body.accentColor;
+    else toRemove.push("accentColor");
   }
   if (body.fontPreset !== undefined) {
     if (!VALID_FONT_PRESETS.has(body.fontPreset)) {
@@ -84,15 +92,26 @@ export async function PATCH(
     }
     data.fontPreset = body.fontPreset;
   }
-  if (body.logoUrl !== undefined) data.logoUrl = body.logoUrl || null;
-  if (body.headerImageUrl !== undefined) data.headerImageUrl = body.headerImageUrl || null;
+  if (body.logoUrl !== undefined) {
+    if (body.logoUrl) data.logoUrl = body.logoUrl;
+    else toRemove.push("logoUrl");
+  }
+  if (body.headerImageUrl !== undefined) {
+    if (body.headerImageUrl) data.headerImageUrl = body.headerImageUrl;
+    else toRemove.push("headerImageUrl");
+  }
   if (body.commentsEnabled !== undefined) data.commentsEnabled = Boolean(body.commentsEnabled);
 
-  const site = await prisma.blogSite.upsert({
-    where: { templateId: resolved.context.templateId },
-    create: { templateId: resolved.context.templateId, ...data },
-    update: data,
-  });
+  const { data: existing } = await BlogSite.get({ templateId: resolved.context.templateId }).go();
+  if (existing) {
+    let patch = BlogSite.patch({ templateId: resolved.context.templateId }).set(data);
+    if (toRemove.length) patch = patch.remove(toRemove);
+    await patch.go();
+  } else {
+    const id = crypto.randomUUID();
+    await BlogSite.create({ id, templateId: resolved.context.templateId, ...data }).go();
+  }
 
+  const { data: site } = await BlogSite.get({ templateId: resolved.context.templateId }).go();
   return NextResponse.json({ site });
 }

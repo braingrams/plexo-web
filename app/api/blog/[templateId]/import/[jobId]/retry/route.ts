@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
-import { isValidUuid } from "@/server/slug";
-import { processImportBatch } from "@/lib/blogImport/runBatch";
+import { ImportJob } from "@/lib/db/importEntities";
+import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
+import { isValidUuid } from "@/server/slugDynamo";
+import { processImportBatch } from "@/lib/blogImport/runBatchDynamo";
 
 /**
  * Processes exactly one batch and returns. This is the workhorse the dashboard tab calls
@@ -24,9 +24,9 @@ export async function POST(
   if ("error" in resolved) return resolved.error;
   if (!isValidUuid(jobId)) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
-  const job = await prisma.importJob.findFirst({ where: { id: jobId, templateId: resolved.context.templateId } });
+  const { data: job } = await ImportJob.get({ templateId: resolved.context.templateId, id: jobId }).go();
   if (!job) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
-  const result = await processImportBatch(jobId);
+  const result = await processImportBatch(resolved.context.templateId, jobId);
   return NextResponse.json({ done: result.done, status: result.status });
 }
