@@ -101,6 +101,14 @@ export const auth = betterAuth({
       });
     },
   },
+  // Google is verified via OAuth itself, so better-auth marks these accounts
+  // emailVerified on first sign-in — no separate confirmation email needed.
+  socialProviders: {
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID as string,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
+    },
+  },
   plugins: [
     organization({
       ac,

@@ -7,6 +7,7 @@ import { ArrowLeft, Sparkles, ShieldCheck, CheckCircle2, Eye, EyeOff, Zap } from
 import { authClient } from "@/lib/auth-client";
 import { Mulish } from "next/font/google";
 import { PlexoLogo } from "@/app/plexo-logo";
+import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
 
 const mulish = Mulish({
   subsets: ["latin"],
@@ -98,6 +99,18 @@ function RegisterForm() {
         <p className="text-sm font-medium text-slate-400">
           Start building web pages &amp; email templates in seconds.
         </p>
+      </div>
+
+      {/* Google — note: a paid plan picked above isn't carried through this path today.
+          better-auth's social sign-in has no request body to attach pendingPlan to the way
+          signUp.email's additionalFields does, so a Google signup always lands on the free
+          plan; the user can upgrade from the dashboard afterward. */}
+      <GoogleAuthButton callbackURL="/dashboard" />
+
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-slate-800" />
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">or</span>
+        <div className="h-px flex-1 bg-slate-800" />
       </div>
 
       {/* Form */}

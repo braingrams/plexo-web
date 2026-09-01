@@ -257,11 +257,60 @@ export const NotificationPreferences = new Entity(
   { table, client: docClient },
 );
 
+// better-auth's organization plugin managed this internally (its own Invitation model,
+// createInvitation/getInvitation/acceptInvitation/rejectInvitation endpoints) — Auth.js
+// has no organization concept at all, so this entity plus the invite/accept/reject flow
+// in server/orgDynamo.ts is genuinely new code, not a mechanical port. Field shapes match
+// prisma/schema.prisma's Invitation model exactly.
+export const Invitation = new Entity(
+  {
+    model: { entity: "invitation", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      email: { type: "string", required: true },
+      role: { type: ["owner", "admin", "editor", "blogger", "commenter", "viewer"] as const, required: true },
+      status: { type: ["pending", "accepted", "rejected", "canceled"] as const, default: "pending" },
+      inviterId: { type: "string", required: true },
+      expiresAt: { type: "string", required: true },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+    },
+    indexes: {
+      // Direct lookup by id — the only thing an accept-invite/[id] URL carries
+      // (prisma: @id).
+      primary: {
+        pk: { field: "pk", composite: ["id"], template: "INVITATION#${id}" },
+        sk: { field: "sk", composite: [], template: "INVITATION#METADATA" },
+      },
+      // An org's pending-invitations list (prisma: @@index([organizationId])) — the only
+      // other real access pattern in the app (app/dashboard/settings/team). No byEmail
+      // index: prisma's @@index([email]) turns out to be unused by any actual query —
+      // grepped before modeling this, not assumed.
+      byOrg: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["organizationId"], template: "ORG#${organizationId}" },
+        sk: { field: "GSI1SK", composite: ["createdAt", "id"], template: "INVITE#${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 // Bundles the org-scoped entities into one queryable collection: fetching everything
 // under PK=ORG#<id> in a single request returns the org itself, its members, API keys,
 // uploaded images, and notification preferences — the DynamoDB equivalent of the
 // Prisma `include` this app used to reach for.
 export const plexoCoreService = new Service(
-  { User, Organization, Member, ApiKey, UploadedImage, PlatformSettings, Notification, NotificationPreferences },
+  {
+    User,
+    Organization,
+    Member,
+    ApiKey,
+    UploadedImage,
+    PlatformSettings,
+    Notification,
+    NotificationPreferences,
+    Invitation,
+  },
   { table, client: docClient },
 );
