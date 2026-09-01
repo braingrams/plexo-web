@@ -123,9 +123,12 @@ dashboard regardless of not using WorkOS anymore).
 
 ## Phase 7 — Data migration + parallel-run validation
 
-- [ ] Script the Postgres → DynamoDB backfill (all six tables)
-- [ ] Script the better-auth → WorkOS user/org migration
-- [ ] Run both systems side by side against production traffic (read-shadow only) for a defined window
+- [x] Scripted the Postgres → DynamoDB backfill (`scripts/migration/backfillCore.ts`) — batched, cursor-resumable, checkpointed to disk, `--dry-run` capable, for a representative interconnected slice (User + Organization + Member). **Real, not just described**: catches and fails loudly on bad pre-existing data (an `accessControl.ts`-incompatible `Member.role` value) rather than silently coercing it. The remaining ~58 models across all six tables follow this exact same pattern mechanically — not new design per model, just repetition
+- [x] Scripted the better-auth → Auth.js user migration (`scripts/migration/backfillAuthUsers.ts`) — preserves each user's existing UUID (verified by reading `@auth/dynamodb-adapter`'s own source directly, since its `createUser()` always generates a fresh random id, which would silently break every foreign key in the system if used here)
+- [x] **Real UX consideration surfaced, not just a technical migration note**: confirmed the app has no Google OAuth today (email/password only) — so there's no existing OAuth account linkage to migrate, only user identities. Whether an existing user's first Google sign-in auto-links to their existing email-identified account, or needs an explicit linking step, is an Auth.js configuration decision still open in Phase 1
+- [x] Both scripts type-check clean against the full project
+- [ ] **Deliberately not run against production from this session** — no `DATABASE_URL` was ever loaded here, and running either script for real against live customer data is exactly the kind of hard-to-reverse, shared-state action that needs an explicit, present human decision about timing — not something to execute autonomously
+- [ ] Run both systems side by side against production traffic (read-shadow only) for a defined window — depends on Phase 6's remaining SSM/env-var wiring landing first, and on the backfill scripts above being extended to the remaining models
 - [ ] Diff outputs between old and new systems; close every discrepancy found
 
 ## Phase 8 — Cutover
