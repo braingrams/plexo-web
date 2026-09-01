@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { uploadObject, StorageError } from "@/lib/storage";
-import { TemplateKind } from "@prisma/client";
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { requirePermission } from "@/server/requirePermission";
+import { Template, TemplateAsset } from "@/lib/db/contentEntities";
+import { User } from "@/lib/db/coreEntities";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { requirePermission } from "@/server/requirePermissionDynamo";
 import { getTierFeatures } from "@/lib/subscription";
-import { ensureUniqueSlug, isValidUuid } from "@/server/slug";
+import { ensureUniqueSlug, isValidUuid } from "@/server/slugDynamo";
 import {
   extractZipUpload,
   validateSingleHtmlUpload,
@@ -48,15 +48,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized. Valid session or API key required." }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["create"] });
+  const permissionError = requirePermission(resolved.role, { template: ["create"] });
   if (permissionError) return permissionError;
 
   const features = getTierFeatures(resolved.subscriptionPlan);
 
-  const user = await prisma.user.findUnique({
-    where: { id: resolved.userId },
-    select: { aupAcceptedAt: true },
-  });
+  const { data: user } = await User.get({ id: resolved.userId }).go();
 
   const isMultipart = (request.headers.get("content-type") ?? "").includes("multipart/form-data");
 
@@ -101,10 +98,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         aupUrl: "/legal/acceptable-use",
       }, { status: 403 });
     }
-    await prisma.user.update({
-      where: { id: resolved.userId },
-      data: { aupAcceptedAt: new Date() },
-    });
+    await User.patch({ id: resolved.userId }).set({ aupAcceptedAt: new Date().toISOString() }).go();
   }
 
   const name = rawName || file?.name.replace(/\.(html?|zip)$/i, "") || "Uploaded Site";
@@ -122,27 +116,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!isValidUuid(parentIdInput)) {
       return NextResponse.json({ error: "Parent page not found." }, { status: 404 });
     }
-    const parent = await prisma.template.findFirst({
-      where: { id: parentIdInput, organizationId: resolved.organizationId },
-      select: { id: true, kind: true },
-    });
-    if (!parent) {
+    const { data: parent } = await Template.get({ id: parentIdInput }).go();
+    if (!parent || parent.organizationId !== resolved.organizationId) {
       return NextResponse.json({ error: "Parent page not found." }, { status: 404 });
     }
-    if (parent.kind !== TemplateKind.LANDING_PAGE) {
+    if (parent.kind !== "LANDING_PAGE") {
       return NextResponse.json({ error: "Only landing pages can have sub-pages." }, { status: 400 });
     }
     slug = await ensureUniqueSlug(parentIdInput, name);
-    const lastSibling = await prisma.template.findFirst({
-      where: { parentId: parentIdInput },
-      orderBy: { order: "desc" },
-      select: { order: true },
-    });
-    order = (lastSibling?.order ?? -1) + 1;
+    const { data: siblings } = await Template.query.byParent({ parentId: parentIdInput }).go();
+    order = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
   } else {
     // The plan's landing-page limit counts root/home pages only, matching /api/templates.
     // Raw uploads always create a LANDING_PAGE, so this checks maxLandingPages.
-    const templateCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: TemplateKind.LANDING_PAGE, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false } });
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const templateCount = orgTemplates.filter(
+      (t) => !t.parentId && t.kind === "LANDING_PAGE" && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
+    ).length;
     if (templateCount >= features.maxLandingPages) {
       return NextResponse.json(
         { error: `Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.` },
@@ -154,10 +144,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Per-account rate limit on raw uploads specifically — this is the abuse-prone path
   // (unsanitized, arbitrary JS), so it gets its own tighter ceiling independent of the
   // general template limit above.
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const recentUploadCount = await prisma.template.count({
-    where: { userId: resolved.userId, sourceType: "RAW_UPLOAD", createdAt: { gte: since } },
-  });
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: orgTemplatesForRateLimit } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+  const recentUploadCount = orgTemplatesForRateLimit.filter(
+    (t) => t.userId === resolved.userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
+  ).length;
   if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
     return NextResponse.json({
       error: `You've reached the raw-upload limit of ${RAW_UPLOAD_DAILY_LIMIT} per 24 hours. Try again later.`,
@@ -221,7 +212,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     : site.assets;
 
   // Generate the id up front so blob paths can be namespaced by it, and upload assets
-  // BEFORE writing anything to Postgres — if storage isn't reachable, nothing is left
+  // BEFORE writing anything to DynamoDB — if storage isn't reachable, nothing is left
   // half-created in the database.
   const templateId = randomUUID();
   let uploadedAssets: UploadedAssetRow[];
@@ -237,24 +228,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     throw err;
   }
 
-  const template = await prisma.template.create({
-    data: {
-      id: templateId,
-      userId: resolved.userId,
-      organizationId: resolved.organizationId,
-      name,
-      kind: "LANDING_PAGE",
-      sourceType: "RAW_UPLOAD",
-      designJson: {}, // no builder representation for raw uploads
-      compiledHtml: site.indexHtml,
-      parentId: parentIdInput,
-      slug,
-      order,
-    },
-  });
+  await Template.create({
+    id: templateId,
+    userId: resolved.userId,
+    organizationId: resolved.organizationId,
+    name,
+    kind: "LANDING_PAGE",
+    sourceType: "RAW_UPLOAD",
+    designJson: {}, // no builder representation for raw uploads
+    compiledHtml: site.indexHtml,
+    parentId: parentIdInput ?? undefined,
+    slug: slug ?? undefined,
+    order,
+  }).go();
+  const { data: template } = await Template.get({ id: templateId }).go();
+  if (!template) throw new Error(`Template ${templateId} vanished immediately after being created`);
 
   if (uploadedAssets.length > 0) {
-    await prisma.templateAsset.createMany({ data: uploadedAssets });
+    await Promise.all(uploadedAssets.map((a) => TemplateAsset.create({ id: randomUUID(), ...a }).go()));
   }
 
   // Each extra root-level page gets its OWN copy of the shared css/js/image/font assets —
@@ -271,23 +262,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const pageSlug = await ensureUniqueSlug(templateId, pageName);
       const childId = randomUUID();
       const childAssets = await uploadAssetsFor(childId, sharedAssets);
-      await prisma.template.create({
-        data: {
-          id: childId,
-          userId: resolved.userId,
-          organizationId: resolved.organizationId,
-          name: pageName,
-          kind: "LANDING_PAGE",
-          sourceType: "RAW_UPLOAD",
-          designJson: {},
-          compiledHtml: pageAsset.buffer.toString("utf8"),
-          parentId: templateId,
-          slug: pageSlug,
-          order: index,
-        },
-      });
+      await Template.create({
+        id: childId,
+        userId: resolved.userId,
+        organizationId: resolved.organizationId,
+        name: pageName,
+        kind: "LANDING_PAGE",
+        sourceType: "RAW_UPLOAD",
+        designJson: {},
+        compiledHtml: pageAsset.buffer.toString("utf8"),
+        parentId: templateId,
+        slug: pageSlug,
+        order: index,
+      }).go();
       if (childAssets.length > 0) {
-        await prisma.templateAsset.createMany({ data: childAssets });
+        await Promise.all(childAssets.map((a) => TemplateAsset.create({ id: randomUUID(), ...a }).go()));
       }
       subPagesCreated++;
     } catch (err) {

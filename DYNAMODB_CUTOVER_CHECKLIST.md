@@ -11,6 +11,36 @@ Sequenced by bounded context, foundation first — nothing else can be safely cu
 until session + org + permission resolution works on DynamoDB, since almost every route
 depends on it.
 
+## ⚠️ Split-brain risk — read this before cutting over any entity's remaining call sites
+
+Cutting over an entity's READ paths (list/get pages) before ALL of its WRITE paths are
+cut over creates a real bug: anything created through a still-Prisma write path becomes
+invisible to the now-DynamoDB read paths. Caught this for real once already — ImportJob's
+create route was ported in one commit, its batch PROCESSOR (a separate file,
+runBatch.ts) wasn't, so any job created after that commit would have silently never been
+processed (fixed same session, see the "Port the WordPress import batch engine" commit).
+
+Found it again, not yet fixed, for **Template**: `app/api/templates/route.ts` and
+`app/api/templates/[id]/route.ts` (list/get/update/delete) are cut over, and 10 other
+files still call `prisma.template.create` — anything created through them right now
+would be invisible to the dashboard template list / overview pages already ported:
+- `app/api/templates/[id]/duplicate/route.ts` — fixed this session
+- `app/api/v1/templates/upload-raw/route.ts` — fixed this session
+- `app/api/v1/marketplace/templates/[id]/use/route.ts` — NOT fixed
+- `app/api/v1/publish/route.ts` — NOT fixed
+- `app/api/v1/commerce/[templateId]/product-detail-layout/route.ts` — NOT fixed
+- `app/api/site-layout/[templateId]/[kind]/route.ts` — NOT fixed
+- `lib/marketplaceListing.ts` — NOT fixed
+- `lib/siteImport/runJob.ts` — NOT fixed
+- `lib/mcp/blogTools.ts` — NOT fixed
+- `lib/mcp/mcpServer.ts` — NOT fixed
+
+None of this affects production (this whole branch is pre-deployment, per the agreed
+staging-first plan), but it means the branch is internally inconsistent right now.
+**Before staging verification, re-grep every entity this checklist marks cut over for
+other create/update/delete call sites still on Prisma, the same way this section was
+found** — don't assume the "obvious" route file is the only writer.
+
 ## Core / Org / Auth foundation
 
 - [x] `Invitation` DynamoDB entity (`lib/db/coreEntities.ts`) — didn't exist; better-auth's
