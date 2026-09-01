@@ -3,7 +3,7 @@ import { deleteObjects } from "@/lib/storage";
 
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { resolveUser } from "@/lib/auth/resolveUser";
-import { removeVercelDomain } from "@/app/api/v1/domains/route";
+import { removeVercelDomain } from "@/lib/vercelDomains";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { isValidSlugSegment, isReservedTopLevelSlug, isSameOrAncestor, isValidUuid, slugify, getDescendantIds } from "@/server/slugDynamo";
 import { isTemplateNameTaken } from "@/server/templateNameDynamo";

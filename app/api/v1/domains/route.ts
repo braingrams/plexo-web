@@ -6,6 +6,10 @@ import { resolveManageLandingPagePublishing, getTierFeatures } from "@/lib/subsc
 import { getPagesDomain } from "@/server/pagesDomain";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { requirePermission } from "@/server/requirePermission";
+// Re-exported for existing callers that still import these from this route file —
+// the real implementation moved to lib/vercelDomains.ts (see that file's own comment).
+import { addVercelDomain, removeVercelDomain } from "@/lib/vercelDomains";
+export { addVercelDomain, removeVercelDomain };
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -16,56 +20,6 @@ const RESERVED_SUBDOMAINS = new Set([
   "static", "assets", "sdk", "pub", "published", "templates", "compile", "settings",
   "profile", "domains", "account", "login", "register", "signup", "logout", "signin"
 ]);
-
-export async function addVercelDomain(domain: string) {
-  const token = process.env.VERCEL_AUTH_TOKEN;
-  const projectId = process.env.VERCEL_PROJECT_ID;
-  const teamId = process.env.VERCEL_TEAM_ID;
-
-  if (!token || !projectId) {
-    console.warn("Vercel configurations missing. Skipping Vercel Domain registration in local development.");
-    return;
-  }
-
-  const url = `https://api.vercel.com/v10/projects/${projectId}/domains${teamId ? `?teamId=${teamId}` : ""}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ name: domain }),
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    console.error("Failed to add domain to Vercel project:", data.error);
-    throw new Error(data.error?.message ?? "Failed to configure custom domain routing on the server.");
-  }
-}
-
-export async function removeVercelDomain(domain: string) {
-  const token = process.env.VERCEL_AUTH_TOKEN;
-  const projectId = process.env.VERCEL_PROJECT_ID;
-  const teamId = process.env.VERCEL_TEAM_ID;
-
-  if (!token || !projectId) {
-    return;
-  }
-
-  const url = `https://api.vercel.com/v9/projects/${projectId}/domains/${domain}${teamId ? `?teamId=${teamId}` : ""}`;
-  const res = await fetch(url, {
-    method: "DELETE",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-    },
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    console.error("Failed to remove domain from Vercel project:", data.error);
-  }
-}
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -190,8 +144,15 @@ export function getDomainLimit(plan: string, customLimit: number | null): number
   }
 }
 
+// GET/POST/DELETE below are cut over to DynamoDB — resolveUser above (still Prisma-backed)
+// stays for the 30+ other callers not yet ported; these three use the DynamoDB one instead.
+import { resolveUser as resolveUserDynamo } from "@/lib/auth/resolveUser";
+import { requirePermission as requirePermissionDynamo } from "@/server/requirePermissionDynamo";
+import { Template, PublishedDomain } from "@/lib/db/contentEntities";
+import type { EntityItem } from "electrodb";
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const resolved = await resolveUser(request);
+  const resolved = await resolveUserDynamo(request);
   if (!resolved) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -199,29 +160,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const baseDomain = getPagesDomain();
 
   const { searchParams } = new URL(request.url);
-  const templateId = searchParams.get("templateId");
+  const templateIdFilter = searchParams.get("templateId");
 
-  const domains = await prisma.publishedDomain.findMany({
-    where: {
-      organizationId: resolved.organizationId,
-      templateId: templateId || undefined,
-    },
-    include: {
-      template: {
-        select: {
-          name: true,
-          kind: true,
-        },
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+  // PublishedDomain has no org-wide index (only templateId-primary and byDomain-GSI1) —
+  // fans out per org template, same bound as the dashboard domains page's identical query.
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+  const templateById = new Map(orgTemplates.map((t) => [t.id, t]));
+  const templateIds = templateIdFilter ? [templateIdFilter] : orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
+  const domainBatches = await Promise.all(templateIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
+  const domains = domainBatches
+    .flatMap((b) => b.data)
+    .filter((d) => templateById.has(d.templateId))
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+    .map((d) => ({ ...d, template: { name: templateById.get(d.templateId)?.name ?? "", kind: templateById.get(d.templateId)?.kind ?? "LANDING_PAGE" } }));
 
-  const count = await prisma.publishedDomain.count({
-    where: { userId: resolved.userId },
-  });
+  const count = domains.filter((d) => d.userId === resolved.userId).length;
 
   // -1 = unlimited (self-managed publishing, Ultra-gated — see resolveManageLandingPagePublishing)
   const limit = resolved.manageLandingPagePublishing
@@ -239,12 +192,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const resolved = await resolveUser(request);
+  const resolved = await resolveUserDynamo(request);
   if (!resolved) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { domain: ["manage"] });
+  const permissionError = requirePermissionDynamo(resolved.role, { domain: ["manage"] });
   if (permissionError) return permissionError;
 
   const body = await request.json().catch(() => ({}));
@@ -262,11 +215,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const baseDomain = getPagesDomain();
 
   // Validate template exists and belongs to the organization
-  const template = await prisma.template.findFirst({
-    where: { id: templateId, organizationId: resolved.organizationId },
-  });
+  const { data: template } = await Template.get({ id: templateId }).go();
 
-  if (!template) {
+  if (!template || template.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });
   }
 
@@ -292,10 +243,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Check if domain is already registered
-  const existingDomain = await prisma.publishedDomain.findUnique({
-    where: { domain: finalDomain },
-  });
+  // Check if domain is already registered — THE hot-path lookup (byDomain GSI1).
+  const { data: existingMatches } = await PublishedDomain.query.byDomain({ domain: finalDomain }).go();
+  const existingDomain = existingMatches[0] ?? null;
 
   if (existingDomain) {
     // 1. If it's already linked to the exact same template and org, it is an idempotent success
@@ -305,10 +255,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     // 2. If it is an explicit re-link update request on the org's own domain
     if (body.relink && existingDomain.organizationId === resolved.organizationId) {
-      const updated = await prisma.publishedDomain.update({
-        where: { id: existingDomain.id },
-        data: { templateId },
-      });
+      // templateId is part of this entity's own primary key (see contentEntities.ts) —
+      // a real re-link (pointing at a different template) moves the item to a new key
+      // via create-at-new-key + remove-old-key, same pattern used for a BlogPost slug
+      // rename; ElectroDB can't .set() a key-composite attribute in place.
+      let updated = existingDomain;
+      if (existingDomain.templateId !== templateId) {
+        await PublishedDomain.create({ ...existingDomain, templateId }).go();
+        await PublishedDomain.remove({ templateId: existingDomain.templateId, id: existingDomain.id }).go();
+        const { data: moved } = await PublishedDomain.get({ templateId, id: existingDomain.id }).go();
+        if (moved) updated = moved;
+      }
       // Content changed under this domain — re-scan rather than trust the last result.
       void scanPublishedDomain(updated.id).catch((err) => console.error("Safe Browsing scan failed:", err));
       return NextResponse.json({ success: true, domain: updated });
@@ -327,9 +284,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // Check org limits before creating new domain mapping
-  const currentCount = await prisma.publishedDomain.count({
-    where: { organizationId: resolved.organizationId },
-  });
+  const { data: orgTemplatesForCount } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+  const rootIds = orgTemplatesForCount.filter((t) => !t.parentId).map((t) => t.id);
+  const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
+  const currentCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);
 
   const limit = resolved.manageLandingPagePublishing
     ? -1
@@ -356,15 +314,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  const created = await prisma.publishedDomain.create({
-    data: {
-      userId: resolved.userId,
-      organizationId: resolved.organizationId,
-      templateId,
-      domain: finalDomain,
-      type,
-    },
-  });
+  const newId = crypto.randomUUID();
+  await PublishedDomain.create({
+    id: newId,
+    userId: resolved.userId,
+    organizationId: resolved.organizationId,
+    templateId,
+    domain: finalDomain,
+    type,
+  }).go();
+  const { data: created } = await PublishedDomain.get({ templateId, id: newId }).go();
+  if (!created) throw new Error(`PublishedDomain ${newId} vanished immediately after being created`);
 
   // Fire-and-forget abuse scan — never blocks the publish response on an external API call.
   void scanPublishedDomain(created.id).catch((err) => console.error("Safe Browsing scan failed:", err));
@@ -373,29 +333,34 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 }
 
 export async function DELETE(request: NextRequest): Promise<NextResponse> {
-  const resolved = await resolveUser(request);
+  const resolved = await resolveUserDynamo(request);
   if (!resolved) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { domain: ["manage"] });
+  const permissionError = requirePermissionDynamo(resolved.role, { domain: ["manage"] });
   if (permissionError) return permissionError;
 
   const { searchParams } = new URL(request.url);
   const domainId = searchParams.get("id")?.trim();
   const domainName = searchParams.get("domain")?.trim().toLowerCase();
 
-  const record = await prisma.publishedDomain.findFirst({
-    where: {
-      OR: [
-        { id: domainId || undefined },
-        { domain: domainName || undefined },
-      ],
-      organizationId: resolved.organizationId,
-    },
-  });
+  let record: EntityItem<typeof PublishedDomain> | null = null;
+  if (domainName) {
+    const { data: matches } = await PublishedDomain.query.byDomain({ domain: domainName }).go();
+    record = matches[0] ?? null;
+  } else if (domainId) {
+    // No id-only index — fan out across the org's templates to find it, same pattern
+    // used throughout this migration for entities whose real key isn't the id field
+    // callers pass around.
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const batches = await Promise.all(
+      orgTemplates.filter((t) => !t.parentId).map((t) => PublishedDomain.query.primary({ templateId: t.id }).go()),
+    );
+    record = batches.flatMap((b) => b.data).find((d) => d.id === domainId) ?? null;
+  }
 
-  if (!record) {
+  if (!record || record.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Published domain not found or unauthorized." }, { status: 404 });
   }
 
@@ -403,9 +368,7 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
     await removeVercelDomain(record.domain);
   }
 
-  await prisma.publishedDomain.delete({
-    where: { id: record.id },
-  });
+  await PublishedDomain.remove({ templateId: record.templateId, id: record.id }).go();
 
   return NextResponse.json({ success: true });
 }

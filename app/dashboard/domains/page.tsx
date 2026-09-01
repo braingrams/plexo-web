@@ -1,86 +1,66 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { User } from "@/lib/db/coreEntities";
+import { Template, PublishedDomain } from "@/lib/db/contentEntities";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { DomainsClient } from "./domains-client";
-import { headers } from "next/headers";
 import { PageContainer } from "../_components/PageContainer";
 
 export default async function DomainsPage() {
-  const reqHeaders = await headers();
-  const session = await auth.api.getSession({ headers: reqHeaders });
+  const session = await auth();
 
   if (!session?.user) {
     redirect("/auth/login");
   }
 
-  const orgResolution = await ensureActiveOrganization(reqHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      name: true,
-      email: true,
-      subscriptionPlan: true,
-      customDomainLimit: true,
-    },
-  });
+  const { data: user } = await User.get({ id: session.user.id }).go();
 
   if (!user) {
     redirect("/auth/login");
   }
 
-  // Fetch the org's published domains
-  const publishedDomains = await prisma.publishedDomain.findMany({
-    where: { organizationId: orgResolution.organizationId },
-    include: {
-      template: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go();
 
   // Fetch the org's landing pages to link/re-link — root/home pages only. A domain always
   // links to a page tree's root; its sub-pages ride along under that same domain via the
   // page-tree walk in app/pub/[domain]/[[...slug]], they never get an independent
   // PublishedDomain of their own, so listing them here would let someone "link a domain"
   // to a page that can't actually be a site root.
-  const landingPages = await prisma.template.findMany({
-    where: {
-      organizationId: orgResolution.organizationId,
-      kind: "LANDING_PAGE",
-      parentId: null,
-      // Blog post/listing layouts are internal-only — Template rows referenced by a
-      // BlogSite's postLayoutTemplateId/listingLayoutTemplateId, never a page a domain
-      // should link to directly (see lib/pub/blogLayoutRender.ts).
-      isBlogLayout: false, isCommerceLayout: false,
-    },
-    select: {
-      id: true,
-      name: true,
-    },
-    // Tie-break on createdAt — the org-backfill migration's updateMany bumped every
-    // template's updatedAt to the same instant via Prisma's @updatedAt.
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-  });
+  const landingPages = orgTemplates
+    .filter((t) => t.kind === "LANDING_PAGE" && !t.parentId && !t.isBlogLayout && !t.isCommerceLayout)
+    // Tie-break on createdAt — the org-backfill migration bumped every template's
+    // updatedAt to the same instant.
+    .sort((a, b) => {
+      const byUpdated = (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
+      if (byUpdated !== 0) return byUpdated;
+      return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
+    })
+    .map((t) => ({ id: t.id, name: t.name }));
 
-  // Format domains for client
-  const domains = publishedDomains.map((d: any) => ({
+  // PublishedDomain has no org-wide index (only templateId-primary and byDomain-GSI1,
+  // see contentEntities.ts) — fans out per root template, same bound as the dashboard
+  // overview page's identical query.
+  const templateNameById = new Map(orgTemplates.map((t) => [t.id, t.name]));
+  const rootTemplateIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
+  const domainBatches = await Promise.all(rootTemplateIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
+  const publishedDomains = domainBatches
+    .flatMap((b) => b.data)
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+
+  const domains = publishedDomains.map((d) => ({
     id: d.id,
     domain: d.domain,
-    type: d.type as "SUBDOMAIN" | "CUSTOM",
+    type: d.type,
     templateId: d.templateId,
-    templateName: d.template.name,
-    createdAt: d.createdAt.toISOString(),
-    dnsVerified: d.dnsVerified,
-    dnsVerifiedAt: d.dnsVerifiedAt ? d.dnsVerifiedAt.toISOString() : null,
+    templateName: templateNameById.get(d.templateId) ?? "",
+    createdAt: d.createdAt ?? new Date().toISOString(),
+    dnsVerified: d.dnsVerified ?? false,
+    dnsVerifiedAt: d.dnsVerifiedAt ?? null,
   }));
 
   return (
@@ -88,8 +68,8 @@ export default async function DomainsPage() {
       <DomainsClient
         initialDomains={domains}
         landingPages={landingPages}
-        plan={user.subscriptionPlan}
-        customLimit={user.customDomainLimit}
+        plan={user.subscriptionPlan ?? "FREE"}
+        customLimit={user.customDomainLimit ?? null}
       />
     </PageContainer>
   );
