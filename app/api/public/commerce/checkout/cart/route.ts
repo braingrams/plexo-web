@@ -6,9 +6,10 @@ import { prisma } from "@/server/prisma";
 import { resolveSite } from "@/lib/pub/resolveSite";
 import { decryptPaystackKey } from "@/lib/crypto";
 import { initializePaystackTransaction } from "@/lib/paystack";
-import { resolveActivePaystackKeys } from "@/lib/commerce/paystack";
+import { resolveCheckoutPaystackSecret } from "@/lib/commerce/paystack";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimit";
 import { readCartToken, findOpenCart, clearCartCookie } from "@/lib/commerce/cart";
+import { createCommerceStripeCheckoutSession } from "@/lib/commerce/stripeClient";
 
 // Placeholder flat courier fee until a site owner can configure their own delivery pricing
 // (not modeled anywhere yet — CommerceSettings has no delivery-fee field). Matches the "from
@@ -68,8 +69,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!settings || !settings.enabled) {
     return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
   }
-  const { publicKey: activePaystackPublicKey, secretKeyEncrypted: activePaystackSecretKeyEncrypted } = resolveActivePaystackKeys(settings);
-  if (!activePaystackSecretKeyEncrypted || !activePaystackPublicKey) {
+  const isStripeFlow = settings.paymentProvider === "PLATFORM_STRIPE";
+  const paystackKeys = isStripeFlow ? null : resolveCheckoutPaystackSecret(settings);
+  if (!isStripeFlow && (!paystackKeys?.secretKeyEncrypted || !paystackKeys.publicKey)) {
     return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
   }
 
@@ -169,8 +171,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
               discountAmountMinor,
               amountMinor,
               currency,
-              paystackMode: settings.paystackMode,
-              paystackReference: reference,
+              paymentProvider: settings.paymentProvider,
+              paystackMode: isStripeFlow || paystackKeys?.isPlatform ? null : settings.paystackMode,
+              paystackReference: isStripeFlow ? null : reference,
               items: {
                 create: activeItems.map((item) => ({
                   productId: item.product.id,
@@ -215,27 +218,44 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     throw lastError instanceof Error ? lastError : new Error("Failed to create Commerce order after retries.");
   }
 
-  const secretKey = decryptPaystackKey(activePaystackSecretKeyEncrypted);
+  const callbackUrl = `${request.nextUrl.origin}/order-confirmation?order=${order.orderNumber}&email=${encodeURIComponent(customerEmail)}`;
 
   try {
-    const result = await initializePaystackTransaction({
-      secretKey,
-      email: customerEmail,
-      amountMinor,
-      reference: order.paystackReference,
-      // email travels alongside order — the order-confirmation page has no session/account
-      // to identify the visitor with, and the strict order-lookup endpoint deliberately
-      // requires orderNumber+email together (never orderNumber alone) to prevent a stranger
-      // from browsing someone else's order by guessing a short code. The visitor just typed
-      // this email into the checkout form seconds ago, so this is a same-session redirect,
-      // not a new disclosure.
-      callbackUrl: `${request.nextUrl.origin}/order-confirmation?order=${order.orderNumber}&email=${encodeURIComponent(customerEmail)}`,
-      metadata: { orderId: order.id, orderNumber: order.orderNumber, templateId },
-    });
+    let authorizationUrl: string;
 
-    await prisma.commerceOrder.update({ where: { id: order.id }, data: { paystackAuthorizationUrl: result.authorizationUrl } });
+    if (isStripeFlow) {
+      const session = await createCommerceStripeCheckoutSession({
+        orderId: order.id,
+        amountMinor,
+        currency,
+        customerEmail,
+        productName: activeItems.length === 1 ? activeItems[0].product.name : `${activeItems.length} items`,
+        successUrl: callbackUrl,
+        cancelUrl: `${request.nextUrl.origin}/checkout`,
+      });
+      await prisma.commerceOrder.update({ where: { id: order.id }, data: { stripeCheckoutSessionId: session.id } });
+      authorizationUrl = session.url;
+    } else {
+      const secretKey = paystackKeys!.isPlatform ? paystackKeys!.secretKeyEncrypted! : decryptPaystackKey(paystackKeys!.secretKeyEncrypted!);
+      const result = await initializePaystackTransaction({
+        secretKey,
+        email: customerEmail,
+        amountMinor,
+        reference: order.paystackReference!,
+        // email travels alongside order — the order-confirmation page has no session/account
+        // to identify the visitor with, and the strict order-lookup endpoint deliberately
+        // requires orderNumber+email together (never orderNumber alone) to prevent a stranger
+        // from browsing someone else's order by guessing a short code. The visitor just typed
+        // this email into the checkout form seconds ago, so this is a same-session redirect,
+        // not a new disclosure.
+        callbackUrl,
+        metadata: { orderId: order.id, orderNumber: order.orderNumber, templateId },
+      });
+      await prisma.commerceOrder.update({ where: { id: order.id }, data: { paystackAuthorizationUrl: result.authorizationUrl } });
+      authorizationUrl = result.authorizationUrl;
+    }
 
-    const response = NextResponse.json({ orderNumber: order.orderNumber, reference: order.paystackReference, authorizationUrl: result.authorizationUrl });
+    const response = NextResponse.json({ orderNumber: order.orderNumber, reference: order.paystackReference, authorizationUrl });
     clearCartCookie(response);
     return response;
   } catch {

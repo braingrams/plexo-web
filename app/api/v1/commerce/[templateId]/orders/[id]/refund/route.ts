@@ -30,6 +30,13 @@ export async function POST(
     return NextResponse.json({ error: `Only a PAID order can be refunded (this one is ${order.status}).` }, { status: 400 });
   }
 
+  // paystackMode/paystackReference are only set on a Paystack-paid order (BYO or platform);
+  // a PLATFORM_STRIPE order has neither — refunding one needs a Stripe-specific path that
+  // doesn't exist yet.
+  if (!order.paystackMode || !order.paystackReference) {
+    return NextResponse.json({ error: "This order wasn't paid via Paystack — refunding it isn't supported yet." }, { status: 400 });
+  }
+
   const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
   // Refund through the same account the order was actually PAID through — order.paystackMode
   // was stamped at creation time and never changes, regardless of what the site's active

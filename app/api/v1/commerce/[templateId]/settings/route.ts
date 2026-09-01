@@ -14,6 +14,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   return NextResponse.json({
     settings: {
       enabled: settings?.enabled ?? false,
+      paymentProvider: settings?.paymentProvider ?? "BYO_PAYSTACK",
       paystackMode: settings?.paystackMode ?? "TEST",
       paystackTestPublicKey: settings?.paystackTestPublicKey ?? null,
       paystackLivePublicKey: settings?.paystackLivePublicKey ?? null,
@@ -46,6 +47,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
   const body = await request.json().catch(() => ({}));
   const {
     enabled,
+    paymentProvider,
     paystackMode,
     paystackTestPublicKey,
     paystackTestSecretKey,
@@ -61,12 +63,38 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     return NextResponse.json({ error: "paystackMode must be TEST or LIVE." }, { status: 400 });
   }
 
+  if (
+    paymentProvider !== undefined &&
+    paymentProvider !== "BYO_PAYSTACK" &&
+    paymentProvider !== "PLATFORM_PAYSTACK" &&
+    paymentProvider !== "PLATFORM_STRIPE"
+  ) {
+    return NextResponse.json({ error: "paymentProvider must be BYO_PAYSTACK, PLATFORM_PAYSTACK, or PLATFORM_STRIPE." }, { status: 400 });
+  }
+
+  // Platform Stripe is admin-gated — see CommerceStripeAccessRequest and the
+  // request/approval flow in app/api/v1/commerce/stripe-access/route.ts + plexo-admin.
+  // Platform Paystack needs no such gate (opt-in, uses Plexo's own Paystack account
+  // automatically).
+  if (paymentProvider === "PLATFORM_STRIPE") {
+    const approved = await prisma.commerceStripeAccessRequest.findFirst({
+      where: { organizationId, status: "APPROVED" },
+    });
+    if (!approved) {
+      return NextResponse.json(
+        { error: "Platform Stripe isn't approved for this organization yet. Request access first." },
+        { status: 400 },
+      );
+    }
+  }
+
   const settings = await prisma.commerceSettings.upsert({
     where: { templateId },
     create: {
       templateId,
       organizationId,
       enabled: typeof enabled === "boolean" ? enabled : false,
+      paymentProvider: paymentProvider ?? "BYO_PAYSTACK",
       paystackMode: paystackMode ?? "TEST",
       paystackTestPublicKey: typeof paystackTestPublicKey === "string" && paystackTestPublicKey ? paystackTestPublicKey : null,
       paystackLivePublicKey: typeof paystackLivePublicKey === "string" && paystackLivePublicKey ? paystackLivePublicKey : null,
@@ -84,6 +112,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     },
     update: {
       enabled: typeof enabled === "boolean" ? enabled : undefined,
+      paymentProvider: paymentProvider ?? undefined,
       paystackMode: paystackMode ?? undefined,
       paystackTestPublicKey: typeof paystackTestPublicKey === "string" ? paystackTestPublicKey || null : undefined,
       paystackLivePublicKey: typeof paystackLivePublicKey === "string" ? paystackLivePublicKey || null : undefined,
@@ -101,6 +130,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
   return NextResponse.json({
     settings: {
       enabled: settings.enabled,
+      paymentProvider: settings.paymentProvider,
       paystackMode: settings.paystackMode,
       paystackTestPublicKey: settings.paystackTestPublicKey,
       paystackLivePublicKey: settings.paystackLivePublicKey,

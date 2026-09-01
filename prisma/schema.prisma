@@ -83,6 +83,11 @@ model Organization {
   // itself. Defaults false for every org, including ones that already had a logo/brandColor
   // set under the old automatic-on-Pro/Ultra behavior.
   whiteLabelEnabled Boolean  @default(false)
+  // Off by default — every site under this org gets its own independent CommerceWallet
+  // (templateId set), matching every other Commerce setting's per-site scoping. When true,
+  // all of the org's sites instead credit one shared, org-wide CommerceWallet (templateId
+  // null) — see that model's own comments and lib/commerce/wallet.ts::resolveCommerceWallet.
+  commerceWalletPooled Boolean  @default(false)
   metadata          String?
   createdAt         DateTime @default(now())
 
@@ -111,6 +116,10 @@ model Organization {
   commerceSettings               CommerceSettings[]
   paystackWebhookEvents          PaystackWebhookEvent[]
   commerceProductReviews         CommerceProductReview[]
+  commerceWallets                CommerceWallet[]
+  commerceWithdrawalRequests     CommerceWithdrawalRequest[]
+  commerceStripeAccessRequests   CommerceStripeAccessRequest[]
+  commerceDigitalDeliveries      CommerceDigitalDelivery[]
   formSubmissions                FormSubmission[]
   notificationPreferences        NotificationPreferences?
 
@@ -317,6 +326,9 @@ model User {
   scriptAccessRequests   ScriptAccessRequest[]
   feedback               Feedback[]
   blogAuthorProfiles     BlogAuthor[]
+
+  commerceWithdrawalRequests   CommerceWithdrawalRequest[]
+  commerceStripeAccessRequests CommerceStripeAccessRequest[]
 }
 
 model CreditLedgerEntry {
@@ -355,6 +367,12 @@ model PlatformSettings {
   // floating-point rounding when computing fee/net cents on every sale. Read by the
   // Stripe webhook's creditMarketplaceSeller (lib/marketplaceListing.ts).
   marketplaceFeeBps              Int      @default(2000)
+  // Basis points taken from a platform-hosted (PLATFORM_PAYSTACK/PLATFORM_STRIPE) Commerce
+  // sale before crediting the seller's CommerceWallet — see creditCommerceWallet
+  // (lib/commerce/wallet.ts). Defaults to 0 (pure pass-through): an actual take-rate is a
+  // business decision, not an engineering one, and this field makes it tunable from
+  // plexo-admin later with no further migration.
+  commercePlatformFeeBps         Int      @default(0)
   updatedAt                      DateTime @updatedAt
 }
 
@@ -620,6 +638,10 @@ model Template {
   paystackWebhookEvents          PaystackWebhookEvent[]
   commerceProductReviews         CommerceProductReview[]
   formSubmissions                FormSubmission[]
+  commerceDigitalDeliveries      CommerceDigitalDelivery[]
+  // The site's own wallet (CommerceWallet.templateId) — null on a site whose org has
+  // commerceWalletPooled enabled, since its sales credit the org's pooled wallet instead.
+  commerceWallet                 CommerceWallet?
 
   @@unique([parentId, slug])
   @@index([userId])
@@ -1489,6 +1511,13 @@ model CommerceCategory {
 enum CommerceProductKind {
   PHYSICAL
   SERVICE
+  DIGITAL
+}
+
+enum CommerceDigitalDeliveryMethod {
+  FILE_DOWNLOAD
+  EXTERNAL_LINK
+  ACCESS_LIST
 }
 
 model CommerceProduct {
@@ -1516,6 +1545,27 @@ model CommerceProduct {
   // Services only.
   durationMinutes  Int?
 
+  // Digital products only (kind === DIGITAL) — null on PHYSICAL/SERVICE rows, same
+  // "only the relevant kind's fields are populated" convention as stockQuantity/
+  // durationMinutes above. Exactly one of digitalFileUrl / digitalExternalUrl /
+  // digitalAccessInstructions is populated, matching digitalDeliveryMethod.
+  digitalDeliveryMethod         CommerceDigitalDeliveryMethod?
+  // Private Vercel Blob URL (FILE_DOWNLOAD) — never served directly, only ever resolved
+  // to a short-lived signed URL by the token-gated download route.
+  digitalFileUrl                String?
+  digitalFileName               String?
+  digitalFileSizeBytes          Int?
+  // EXTERNAL_LINK — a seller-provided Drive/Dropbox/etc. link, routed through our own
+  // token rather than emailed raw so a compromised link can be revoked without re-sending.
+  digitalExternalUrl            String?
+  // ACCESS_LIST — what the buyer is told (a private course URL, an invite process, etc.);
+  // the seller manages the actual access grant themselves outside Plexo.
+  digitalAccessInstructions     String?
+  digitalAccessPasswordEncrypted String?
+  // FILE_DOWNLOAD only; null = unlimited / never expires.
+  digitalMaxDownloads           Int?
+  digitalLinkExpiryDays         Int?
+
   // Product pages are high commercial-intent — they get their own SEO fields from day
   // one rather than inheriting only a bare <title>, the same gap flagged for ordinary
   // builder pages.
@@ -1542,6 +1592,7 @@ model CommerceProduct {
   // this same model (the "from" product and the "related" product it's paired with).
   relatedFrom            CommerceProductRelation[]       @relation("CommerceProductRelationsFrom")
   relatedTo              CommerceProductRelation[]       @relation("CommerceProductRelationsTo")
+  digitalDeliveries      CommerceDigitalDelivery[]
 
   @@unique([templateId, slug])
   @@index([templateId])
@@ -1712,6 +1763,18 @@ enum CommercePaystackMode {
   LIVE
 }
 
+// BYO_PAYSTACK (default): the site's own keys, unchanged existing behavior — charges land
+// directly in the site owner's own Paystack account, Plexo never touches the money.
+// PLATFORM_PAYSTACK / PLATFORM_STRIPE: routed through Plexo's own account instead,
+// crediting the site's CommerceWallet (see below) as a withdrawable balance.
+// PLATFORM_STRIPE additionally requires an APPROVED CommerceStripeAccessRequest for the
+// org before checkout will honor it — enforced at the settings-write layer, not here.
+enum CommercePaymentProvider {
+  BYO_PAYSTACK
+  PLATFORM_PAYSTACK
+  PLATFORM_STRIPE
+}
+
 model CommerceOrder {
   id             String  @id @default(uuid()) @db.Uuid
   // Primary scope: the site the visitor bought from. organizationId stays denormalized
@@ -1737,21 +1800,34 @@ model CommerceOrder {
   status            CommerceOrderStatus            @default(PENDING)
   fulfillmentStatus CommerceOrderFulfillmentStatus @default(UNFULFILLED)
 
+  // Stamped at creation from CommerceSettings.paymentProvider — same "never let a later
+  // settings change retroactively reinterpret an already-placed order" rationale as
+  // paystackMode below. Determines which webhook/credentials confirm this specific order.
+  paymentProvider CommercePaymentProvider @default(BYO_PAYSTACK)
+
   // Stamped at creation from the org's CommerceSettings.paystackMode at that moment, so
   // flipping an org from test to live mid-flight can't cross-contaminate confirmation.
-  paystackMode             CommercePaystackMode
-  paystackReference        String               @unique
+  // Paystack-only — null for a PLATFORM_STRIPE order (paystackReference/paystackMode both
+  // unused in that case; see stripeCheckoutSessionId/stripePaymentIntentId instead).
+  paystackMode             CommercePaystackMode?
+  paystackReference        String?              @unique
   paystackAuthorizationUrl String?
+
+  // Platform Stripe only — null for a Paystack order (BYO or platform).
+  stripeCheckoutSessionId String? @unique
+  stripePaymentIntentId   String?
 
   metadata  Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  template     Template            @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  cart         CommerceCart?       @relation(fields: [cartId], references: [id], onDelete: SetNull)
+  template     Template                  @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cart         CommerceCart?             @relation(fields: [cartId], references: [id], onDelete: SetNull)
   items        CommerceOrderItem[]
   booking      CommerceBooking?
+  digitalDeliveries    CommerceDigitalDelivery[]
+  walletLedgerEntries  CommerceWalletLedgerEntry[]
 
   @@index([templateId])
   @@index([organizationId])
@@ -1771,6 +1847,54 @@ model CommerceOrderItem {
   product CommerceProduct @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
+  @@index([productId])
+}
+
+// One row per (order, product) digital line item — created once, when the order flips to
+// PAID (see lib/commerce/digitalDelivery.ts::deliverDigitalProducts). Snapshots the
+// deliverable at delivery time (file URL, external link, or access instructions/password)
+// so a seller editing or deleting the product afterward never changes what an already-paid
+// buyer can reach — same "stamp it, don't re-derive it live" rationale as
+// CommerceOrder.paystackMode. token is the download/access URL's only credential; it's
+// never regenerated by a resend, so an already-shared link keeps working.
+model CommerceDigitalDelivery {
+  id             String                        @id @default(uuid()) @db.Uuid
+  templateId     String                        @db.Uuid
+  organizationId String                        @db.Uuid
+  orderId        String                        @db.Uuid
+  productId      String                        @db.Uuid
+  method         CommerceDigitalDeliveryMethod
+  token          String                        @unique
+
+  // Snapshot of the product's digital fields at the moment of delivery.
+  fileUrl                String?
+  fileName                String?
+  externalUrl             String?
+  accessInstructions      String?
+  accessPasswordEncrypted String?
+
+  // FILE_DOWNLOAD only.
+  maxDownloads Int?
+  downloadCount Int @default(0)
+  expiresAt     DateTime?
+
+  // Set once the buyer email actually sends; resend bumps resendCount/lastResentAt but
+  // never touches token.
+  deliveredAt   DateTime?
+  resendCount   Int       @default(0)
+  lastResentAt  DateTime?
+  createdAt     DateTime  @default(now())
+
+  template     Template        @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  order        CommerceOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      CommerceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Idempotent delivery — a webhook retry that races deliverDigitalProducts a second time
+  // hits this constraint and no-ops instead of re-crediting/re-emailing.
+  @@unique([orderId, productId])
+  @@index([templateId])
+  @@index([organizationId])
   @@index([productId])
 }
 
@@ -1826,6 +1950,12 @@ model CommerceSettings {
   paystackLiveSecretKeyEncrypted String?
   paystackMode                   CommercePaystackMode @default(TEST)
 
+  // Which account actually processes this site's Commerce payments — see
+  // CommercePaymentProvider. Independent of paystackMode/the key fields above: those stay
+  // populated and usable even when paymentProvider has been switched away from
+  // BYO_PAYSTACK, so switching back later doesn't require re-entering keys.
+  paymentProvider CommercePaymentProvider @default(BYO_PAYSTACK)
+
   // Nullable — Commerce can send receipts through the org's own MailDrip account (this
   // field set) or, until that exists, through Plexo's shared platform MailDrip key; the
   // group to tag is always org-specific regardless of which account sends the mail.
@@ -1879,6 +2009,152 @@ model PaystackWebhookEvent {
 
   @@index([templateId])
   @@index([organizationId])
+}
+
+// Idempotency guard for the platform-hosted Commerce Stripe webhook (app/api/webhooks/
+// stripe/commerce/route.ts). Deliberately separate from StripeEvent, which claims events
+// from Plexo's own SaaS-billing Stripe account/webhook — these are two different Stripe
+// accounts and event streams, and must never share one claim table.
+model StripeCommerceEvent {
+  id         String   @id
+  receivedAt DateTime @default(now())
+}
+
+// Idempotency guard for the platform-hosted Commerce Paystack webhook (app/api/webhooks/
+// paystack/platform/route.ts) — a single webhook URL for every site's PLATFORM_PAYSTACK
+// orders (money all lands in one Plexo-owned account), unlike the per-site
+// PaystackWebhookEvent used for BYO_PAYSTACK. Claims by Paystack's own event id alone,
+// with no templateId/organizationId to scope by.
+model PlatformPaystackWebhookEvent {
+  id         String   @id
+  receivedAt DateTime @default(now())
+}
+
+// Commerce wallet — holds the running balance for orders processed through Plexo's own
+// Paystack/Stripe account (CommercePaymentProvider PLATFORM_PAYSTACK/PLATFORM_STRIPE).
+// Balance tracking only for v1: no automated bank-transfer API, a withdrawal is a logged
+// CommerceWithdrawalRequest an admin processes manually (same shape/limitation as the
+// template-marketplace's own WithdrawalRequest).
+//
+// Site-scoped by default (templateId set) — one wallet per storefront, matching every
+// other Commerce setting (Paystack keys, MailDrip account are all per-site, never pooled
+// implicitly). templateId is null ONLY for an org's single POOLED wallet, which exists
+// when Organization.commerceWalletPooled is true — in that mode every site under the org
+// credits this one row instead of its own. resolveCommerceWallet() (lib/commerce/wallet.ts)
+// is the only place that decides which row a given site's sale credits into; never resolve
+// a wallet by templateId alone without going through it. The DB does not enforce "at most
+// one pooled wallet per org" (Postgres treats each NULL templateId as distinct) —
+// resolveCommerceWallet() enforces that at the app layer with a find-before-create check.
+model CommerceWallet {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @db.Uuid
+  templateId     String?  @unique @db.Uuid
+  balanceCents   Int      @default(0)
+  currency       String   @default("NGN")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  template     Template?    @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  ledger       CommerceWalletLedgerEntry[]
+  withdrawals  CommerceWithdrawalRequest[]
+
+  @@index([organizationId])
+}
+
+enum CommerceWalletLedgerType {
+  SALE_CREDIT
+  WITHDRAWAL_DEBIT
+  WITHDRAWAL_REVERSAL
+}
+
+// Mirrors SellerLedgerEntry's shape exactly (see that model's own comments), scoped to a
+// CommerceWallet instead of a User.
+model CommerceWalletLedgerEntry {
+  id                  String                    @id @default(uuid()) @db.Uuid
+  walletId            String                    @db.Uuid
+  type                CommerceWalletLedgerType
+  grossAmountCents    Int?
+  feeCents            Int?
+  netAmountCents      Int
+  balanceAfterCents   Int
+  orderId             String?                   @db.Uuid
+  withdrawalRequestId String?                   @db.Uuid
+  description         String?
+  createdAt           DateTime                  @default(now())
+
+  wallet CommerceWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  order  CommerceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([walletId])
+  @@index([orderId])
+}
+
+enum CommerceWithdrawalStatus {
+  PENDING
+  PROCESSED
+  REJECTED
+}
+
+// Manual bank-transfer payout request — identical shape/semantics to WithdrawalRequest
+// (see that model's own comments); an admin processes it outside the system, no automated
+// transfer API in v1.
+model CommerceWithdrawalRequest {
+  id                         String                    @id @default(uuid()) @db.Uuid
+  walletId                   String                    @db.Uuid
+  organizationId             String                    @db.Uuid
+  requestedByUserId          String                    @db.Uuid
+  amountCents                Int
+  encryptedAccountNumber     String
+  encryptedAccountHolderName String
+  bankName                   String
+  status                     CommerceWithdrawalStatus @default(PENDING)
+  // Required at the app layer when status is set to REJECTED — not a DB constraint.
+  rejectionReason            String?
+  requestedAt                DateTime                  @default(now())
+  processedAt                DateTime?
+  processedByAdminId         String?                   @db.Uuid
+
+  wallet       CommerceWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requestedBy  User           @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([walletId])
+  @@index([organizationId])
+  @@index([status])
+}
+
+enum CommerceStripeAccessStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Gates CommercePaymentProvider.PLATFORM_STRIPE — an org must have an APPROVED row here
+// before any site it owns can select platform Stripe (enforced in the settings PUT route,
+// not here). Org-scoped, not per-site: Stripe-account approval is a business-level
+// decision, matching CommerceWallet's own default org-vs-site reasoning. Same request/
+// approve split as ScriptAccessRequest — the approve/reject mutation lives in plexo-admin,
+// this repo only ever writes PENDING and reads the resulting status.
+model CommerceStripeAccessRequest {
+  id                 String                      @id @default(uuid()) @db.Uuid
+  organizationId     String                      @db.Uuid
+  requestedByUserId  String                      @db.Uuid
+  // Short free-text reason/expected-volume the requester gave — shown to the reviewing admin.
+  reason             String?
+  expectedVolume     String?
+  status             CommerceStripeAccessStatus @default(PENDING)
+  requestedAt        DateTime                    @default(now())
+  processedAt        DateTime?
+  processedByAdminId String?                     @db.Uuid
+  // Required at the app layer when status is set to REJECTED — not a DB constraint.
+  rejectionReason    String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  requestedBy  User         @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([status])
 }
 
 // A submission from a real form_container (see sanitizeCompiledHtml's FIX-004 — form/input/

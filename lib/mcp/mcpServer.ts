@@ -21,6 +21,7 @@ import {
 import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { BLOG_MCP_TOOLS, BLOG_TOOL_NAMES, handleBlogTool } from "./blogTools";
+import { COMMERCE_MCP_TOOLS, COMMERCE_TOOL_NAMES, handleCommerceTool } from "./commerceTools";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -768,6 +769,7 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
     },
   },
   ...BLOG_MCP_TOOLS,
+  ...COMMERCE_MCP_TOOLS,
 ];
 
 export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise<NextResponse> {
@@ -1654,6 +1656,10 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
         default: {
           if (BLOG_TOOL_NAMES.has(toolName)) {
             toolResult = await handleBlogTool(toolName, args, resolved);
+            break;
+          }
+          if (COMMERCE_TOOL_NAMES.has(toolName)) {
+            toolResult = await handleCommerceTool(toolName, args, resolved);
             break;
           }
           throw new Error(`Unknown tool: ${toolName}`);

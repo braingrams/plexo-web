@@ -270,3 +270,95 @@ export function buildPaymentReceivedEmail(input: {
     brand: input.brand,
   });
 }
+
+// ── Digital product delivery — the first real customer-facing post-payment emails in
+// Commerce (every other Commerce email today only ever notifies the site owner). One
+// builder per CommerceDigitalDeliveryMethod, all sharing the same CTA_BUTTON/FALLBACK_LINK
+// shell as buildPaymentReceivedEmail above.
+
+export function buildDigitalFileDeliveryEmail(input: {
+  siteName: string;
+  productName: string;
+  downloadUrl: string;
+  expiresAt?: string | null; // pre-formatted, e.g. "March 12, 2026"
+  brand?: EmailBrand;
+}): string {
+  const accent = input.brand?.color ?? "#8b5cf6";
+  return emailShell({
+    title: `Your download: ${input.productName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">Your download is ready</h1>
+      <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Thanks for your purchase of <strong>${input.productName}</strong> on <strong>${input.siteName}</strong>.
+      </p>
+      ${CTA_BUTTON(input.downloadUrl, "Download now", accent)}
+      ${FALLBACK_LINK(input.downloadUrl, accent)}
+      ${
+        input.expiresAt
+          ? `<p style="margin:20px 0 0;font-size:12px;color:#94a3b8;line-height:1.5;text-align:center;">This link expires on ${input.expiresAt}.</p>`
+          : ""
+      }
+    `,
+    brand: input.brand,
+  });
+}
+
+export function buildDigitalExternalLinkEmail(input: {
+  siteName: string;
+  productName: string;
+  accessUrl: string; // our own token route, not the raw external URL — see digitalDelivery.ts
+  brand?: EmailBrand;
+}): string {
+  const accent = input.brand?.color ?? "#8b5cf6";
+  return emailShell({
+    title: `Your access link: ${input.productName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">Here's your access link</h1>
+      <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Thanks for your purchase of <strong>${input.productName}</strong> on <strong>${input.siteName}</strong>.
+      </p>
+      ${CTA_BUTTON(input.accessUrl, "Open link", accent)}
+      ${FALLBACK_LINK(input.accessUrl, accent)}
+    `,
+    brand: input.brand,
+  });
+}
+
+export function buildDigitalAccessGrantedEmail(input: {
+  siteName: string;
+  productName: string;
+  accessInstructions: string;
+  password?: string | null;
+  accessUrl: string; // "see it again" page — same content as this email
+  brand?: EmailBrand;
+}): string {
+  const accent = input.brand?.color ?? "#8b5cf6";
+  return emailShell({
+    title: `Your access: ${input.productName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">You're in</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Thanks for your purchase of <strong>${input.productName}</strong> on <strong>${input.siteName}</strong>. Here's how to access it:
+      </p>
+      <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 24px auto;width:100%;max-width:420px;">
+        <tr>
+          <td style="padding:18px 20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;font-size:14px;color:#334155;line-height:1.6;white-space:pre-wrap;">${input.accessInstructions}</td>
+        </tr>
+      </table>
+      ${
+        input.password
+          ? `<p style="margin:0 0 28px;font-size:14px;color:#334155;text-align:center;">Password: <strong style="font-family:monospace;background:#f1f5f9;padding:2px 8px;border-radius:6px;">${input.password}</strong></p>`
+          : ""
+      }
+      ${FALLBACK_LINK(input.accessUrl, accent)}
+    `,
+    brand: input.brand,
+  });
+}
+
+// Commerce's own admin-notification emails (Stripe access requests, wallet withdrawals)
+// live in lib/email.ts instead, alongside sendScriptAccessRequestNotificationEmail /
+// sendWithdrawalRequestNotificationEmail — those go through nodemailer/SMTP to ADMIN_EMAIL,
+// a different delivery mechanism from every other builder in this file (which render into
+// sendMaildripEmail, for real customers). Keeping the two admin-only senders together with
+// their siblings there, rather than splitting the pattern across two files.

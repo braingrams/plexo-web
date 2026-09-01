@@ -1,13 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 type LayoutInfo = { templateId: string; ready: boolean } | null;
 type LayoutCandidate = { layoutTemplateId: string; layoutName: string; siteName: string; updatedAt: string };
 
+type CommercePaymentProvider = "BYO_PAYSTACK" | "PLATFORM_PAYSTACK" | "PLATFORM_STRIPE";
+type StripeAccessStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED";
+
 type InitialSettings = {
   enabled: boolean;
+  paymentProvider: CommercePaymentProvider;
   paystackMode: "TEST" | "LIVE";
   paystackTestPublicKey: string;
   paystackLivePublicKey: string;
@@ -212,8 +216,100 @@ function PaystackKeyPairFields({
   );
 }
 
+/** Request/approval status + request form for platform Stripe — same status-display idea as
+ * ProductDetailLayoutSection above, mirroring ScriptAccessControl's pattern for the
+ * request/admin-approve split (approval itself happens in plexo-admin). Org-scoped, not
+ * site-scoped — fetched once regardless of which provider is currently selected, since
+ * selecting PLATFORM_STRIPE needs to immediately show whatever standing already exists. */
+function StripeAccessControl({ selected }: { selected: boolean }) {
+  const [status, setStatus] = useState<StripeAccessStatus | "LOADING">("LOADING");
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const [expectedVolume, setExpectedVolume] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/v1/commerce/stripe-access")
+      .then((res) => res.json())
+      .then((data) => {
+        setStatus(data.status ?? "NONE");
+        setRejectionReason(data.rejectionReason ?? null);
+      })
+      .catch(() => setStatus("NONE"));
+  }, []);
+
+  async function handleRequest() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/v1/commerce/stripe-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason || undefined, expectedVolume: expectedVolume || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't submit the request.");
+      setStatus("PENDING");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't submit the request.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!selected) return null;
+
+  return (
+    <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "0.9rem", marginTop: "0.7rem", display: "grid", gap: "0.7rem" }}>
+      {status === "LOADING" && <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", margin: 0 }}>Checking access…</p>}
+
+      {status === "APPROVED" && (
+        <p style={{ fontSize: "0.78rem", color: "#4ade80", margin: 0 }}>
+          Platform Stripe is approved for your organization — save to switch this site over.
+        </p>
+      )}
+
+      {status === "PENDING" && (
+        <p style={{ fontSize: "0.78rem", color: "#f59e0b", margin: 0 }}>
+          Your request is pending review. You'll be able to switch this site to Platform Stripe once it's approved.
+        </p>
+      )}
+
+      {(status === "NONE" || status === "REJECTED") && (
+        <>
+          {status === "REJECTED" && (
+            <p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0 }}>
+              Your previous request was rejected{rejectionReason ? `: ${rejectionReason}` : "."}
+            </p>
+          )}
+          <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.5)", margin: 0 }}>
+            Platform Stripe routes checkout through Plexo's own Stripe account for international payments — request access and our team will review it.
+          </p>
+          <FieldLabel label="Why do you need Stripe? (optional)">
+            <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. selling to customers outside Nigeria" style={inputStyle} />
+          </FieldLabel>
+          <FieldLabel label="Expected monthly volume (optional)">
+            <input type="text" value={expectedVolume} onChange={(e) => setExpectedVolume(e.target.value)} placeholder="e.g. $500-2000/mo" style={inputStyle} />
+          </FieldLabel>
+          {error && <p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0 }}>{error}</p>}
+          <button
+            type="button"
+            onClick={() => void handleRequest()}
+            disabled={busy}
+            style={{ padding: "0.55rem 0.9rem", borderRadius: 8, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit", justifySelf: "start" }}
+          >
+            {busy ? "Requesting…" : "Request Stripe access"}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function SettingsClient({ templateId, initial }: { templateId: string; initial: InitialSettings }) {
   const [enabled, setEnabled] = useState(initial.enabled);
+  const [paymentProvider, setPaymentProvider] = useState<CommercePaymentProvider>(initial.paymentProvider);
   const [paystackMode, setPaystackMode] = useState(initial.paystackMode);
   const [paystackTestPublicKey, setPaystackTestPublicKey] = useState(initial.paystackTestPublicKey);
   const [paystackLivePublicKey, setPaystackLivePublicKey] = useState(initial.paystackLivePublicKey);
@@ -241,6 +337,7 @@ export function SettingsClient({ templateId, initial }: { templateId: string; in
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           enabled,
+          paymentProvider,
           paystackMode,
           paystackTestPublicKey,
           paystackLivePublicKey,
@@ -286,6 +383,36 @@ export function SettingsClient({ templateId, initial }: { templateId: string; in
       </Section>
 
       <ProductDetailLayoutSection templateId={templateId} layout={initial.productDetailLayout} />
+
+      <Section
+        title="Payment provider"
+        description="How this site gets paid. BYO Paystack uses your own account below (money lands directly with you). Platform Paystack routes through Plexo's own Paystack account into a withdrawable wallet — no keys to manage. Platform Stripe is for international payments and needs approval first."
+      >
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          {([
+            { value: "BYO_PAYSTACK" as const, label: "Your own Paystack", hint: "Uses the keys configured below. Money goes straight to your account." },
+            { value: "PLATFORM_PAYSTACK" as const, label: "Plexo's Paystack", hint: "No keys needed — proceeds credit your Commerce wallet, withdrawable any time." },
+            { value: "PLATFORM_STRIPE" as const, label: "Plexo's Stripe (international)", hint: "Requires approval. Proceeds credit the same Commerce wallet." },
+          ]).map((opt) => (
+            <label
+              key={opt.value}
+              style={{
+                display: "flex", alignItems: "flex-start", gap: "0.65rem", cursor: "pointer",
+                border: paymentProvider === opt.value ? "1.5px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
+                background: paymentProvider === opt.value ? "var(--brand-subtle)" : "rgba(255,255,255,0.03)",
+                borderRadius: 10, padding: "0.7rem 0.85rem",
+              }}
+            >
+              <input type="radio" name="paymentProvider" checked={paymentProvider === opt.value} onChange={() => setPaymentProvider(opt.value)} style={{ marginTop: 3 }} />
+              <span>
+                <span style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff" }}>{opt.label}</span>
+                <span style={{ display: "block", fontSize: "0.75rem", color: "rgba(240,242,255,0.45)", marginTop: 2 }}>{opt.hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+        <StripeAccessControl selected={paymentProvider === "PLATFORM_STRIPE"} />
+      </Section>
 
       <Section
         title="Paystack"

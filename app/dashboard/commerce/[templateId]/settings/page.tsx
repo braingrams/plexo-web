@@ -16,6 +16,7 @@ export default async function CommerceSettingsPage({ params }: { params: Promise
       templateId={templateId}
       initial={{
         enabled: settings?.enabled ?? false,
+        paymentProvider: settings?.paymentProvider ?? "BYO_PAYSTACK",
         paystackMode: settings?.paystackMode ?? "TEST",
         paystackTestPublicKey: settings?.paystackTestPublicKey ?? "",
         paystackLivePublicKey: settings?.paystackLivePublicKey ?? "",

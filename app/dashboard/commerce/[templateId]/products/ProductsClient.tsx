@@ -7,7 +7,7 @@ export type ProductSummary = {
   name: string;
   slug: string;
   description: string | null;
-  kind: "PHYSICAL" | "SERVICE";
+  kind: "PHYSICAL" | "SERVICE" | "DIGITAL";
   priceMinor: number;
   currency: string;
   stockQuantity: number | null;
@@ -17,17 +17,39 @@ export type ProductSummary = {
   active: boolean;
   category: { id: string; name: string } | null;
   createdAt: string;
+  digitalDeliveryMethod: "FILE_DOWNLOAD" | "EXTERNAL_LINK" | "ACCESS_LIST" | null;
+  digitalFileUrl: string | null;
+  digitalFileName: string | null;
+  digitalExternalUrl: string | null;
+  digitalAccessInstructions: string | null;
+  hasDigitalAccessPassword: boolean;
+  digitalMaxDownloads: number | null;
+  digitalLinkExpiryDays: number | null;
 };
 
 function formatNaira(minor: number): string {
   return `₦${(minor / 100).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function kindLabel(kind: ProductSummary["kind"]): string {
+  return kind === "PHYSICAL" ? "Product" : kind === "SERVICE" ? "Service" : "Digital";
+}
+
+function kindMetaText(product: ProductSummary): string {
+  if (product.kind === "PHYSICAL") return `${product.stockQuantity ?? 0} in stock`;
+  if (product.kind === "SERVICE") return `${product.durationMinutes ?? 0} min`;
+  return product.digitalDeliveryMethod === "FILE_DOWNLOAD"
+    ? "File download"
+    : product.digitalDeliveryMethod === "EXTERNAL_LINK"
+      ? "External link"
+      : "Access list";
+}
+
 type FormState = {
   id: string | null;
   name: string;
   description: string;
-  kind: "PHYSICAL" | "SERVICE";
+  kind: "PHYSICAL" | "SERVICE" | "DIGITAL";
   priceNaira: string;
   stockQuantity: string;
   durationMinutes: string;
@@ -36,6 +58,17 @@ type FormState = {
   category: string;
   active: boolean;
   relatedProductIds: string[];
+  digitalDeliveryMethod: "FILE_DOWNLOAD" | "EXTERNAL_LINK" | "ACCESS_LIST";
+  digitalFileUrl: string;
+  digitalFileName: string;
+  digitalExternalUrl: string;
+  digitalAccessInstructions: string;
+  // Write-only — never pre-filled from the server (see openEdit), so the encrypted
+  // password is never sent to the client. Left blank on an edit means "keep the existing
+  // password unchanged"; the backend only updates it when this is non-empty.
+  digitalAccessPassword: string;
+  digitalMaxDownloads: string;
+  digitalLinkExpiryDays: string;
 };
 
 const EMPTY_FORM: FormState = {
@@ -51,6 +84,14 @@ const EMPTY_FORM: FormState = {
   category: "",
   active: true,
   relatedProductIds: [],
+  digitalDeliveryMethod: "FILE_DOWNLOAD",
+  digitalFileUrl: "",
+  digitalFileName: "",
+  digitalExternalUrl: "",
+  digitalAccessInstructions: "",
+  digitalAccessPassword: "",
+  digitalMaxDownloads: "",
+  digitalLinkExpiryDays: "",
 };
 
 export function ProductsClient({ templateId, initialProducts }: { templateId: string; initialProducts: ProductSummary[] }) {
@@ -97,6 +138,14 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
       category: product.category?.name ?? "",
       active: product.active,
       relatedProductIds: [],
+      digitalDeliveryMethod: product.digitalDeliveryMethod ?? "FILE_DOWNLOAD",
+      digitalFileUrl: product.digitalFileUrl ?? "",
+      digitalFileName: product.digitalFileName ?? "",
+      digitalExternalUrl: product.digitalExternalUrl ?? "",
+      digitalAccessInstructions: product.digitalAccessInstructions ?? "",
+      digitalAccessPassword: "",
+      digitalMaxDownloads: product.digitalMaxDownloads !== null ? String(product.digitalMaxDownloads) : "",
+      digitalLinkExpiryDays: product.digitalLinkExpiryDays !== null ? String(product.digitalLinkExpiryDays) : "",
     });
     // relatedProductIds isn't on the list payload — fetch the full record for the modal.
     try {
@@ -130,6 +179,25 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
     }
   }
 
+  // A digital product's file can be tens-to-hundreds of MB, so this goes straight to Blob
+  // from the browser (client-direct upload, see the digital-upload route's own comment)
+  // rather than through the small-image-only /api/v1/media/upload buffered flow above.
+  async function handleDigitalFileUpload(file: File) {
+    setUploading(true);
+    try {
+      const { upload } = await import("@vercel/blob/client");
+      const blob = await upload(`commerce-digital/${templateId}/${crypto.randomUUID()}-${file.name}`, file, {
+        access: "private",
+        handleUploadUrl: `/api/v1/commerce/${templateId}/digital-upload`,
+      });
+      setForm((prev) => ({ ...prev, digitalFileUrl: blob.url, digitalFileName: file.name }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function handleSave() {
     if (!form.name.trim()) {
       setError("Name is required.");
@@ -156,6 +224,22 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
       category: form.category || null,
       active: form.active,
       relatedProductIds: form.relatedProductIds,
+      ...(form.kind === "DIGITAL"
+        ? {
+            digitalDeliveryMethod: form.digitalDeliveryMethod,
+            digitalFileUrl: form.digitalDeliveryMethod === "FILE_DOWNLOAD" ? form.digitalFileUrl || null : null,
+            digitalFileName: form.digitalDeliveryMethod === "FILE_DOWNLOAD" ? form.digitalFileName || null : null,
+            digitalExternalUrl: form.digitalDeliveryMethod === "EXTERNAL_LINK" ? form.digitalExternalUrl || null : null,
+            digitalAccessInstructions: form.digitalDeliveryMethod === "ACCESS_LIST" ? form.digitalAccessInstructions || null : null,
+            // Blank means "leave the existing password unchanged" — omitted entirely
+            // rather than sent as null, so the API route can tell the two apart.
+            ...(form.digitalDeliveryMethod === "ACCESS_LIST" && form.digitalAccessPassword
+              ? { digitalAccessPassword: form.digitalAccessPassword }
+              : {}),
+            digitalMaxDownloads: form.digitalMaxDownloads ? Number(form.digitalMaxDownloads) : null,
+            digitalLinkExpiryDays: form.digitalLinkExpiryDays ? Number(form.digitalLinkExpiryDays) : null,
+          }
+        : {}),
     };
 
     try {
@@ -183,6 +267,14 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
         active: saved.active,
         category: saved.category ?? (form.category ? { id: "", name: form.category } : null),
         createdAt: saved.createdAt ?? new Date().toISOString(),
+        digitalDeliveryMethod: saved.digitalDeliveryMethod ?? null,
+        digitalFileUrl: saved.digitalFileUrl ?? null,
+        digitalFileName: saved.digitalFileName ?? null,
+        digitalExternalUrl: saved.digitalExternalUrl ?? null,
+        digitalAccessInstructions: saved.digitalAccessInstructions ?? null,
+        hasDigitalAccessPassword: Boolean(saved.hasDigitalAccessPassword),
+        digitalMaxDownloads: saved.digitalMaxDownloads ?? null,
+        digitalLinkExpiryDays: saved.digitalLinkExpiryDays ?? null,
       };
 
       setProducts((prev) => (form.id ? prev.map((p) => (p.id === form.id ? summary : p)) : [summary, ...prev]));
@@ -390,14 +482,14 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
                       )}
                     </div>
                     <div style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)", marginTop: 2 }}>
-                      {product.category?.name ?? "Uncategorized"} · {product.kind === "PHYSICAL" ? "Product" : "Service"}
+                      {product.category?.name ?? "Uncategorized"} · {kindLabel(product.kind)}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "0.6rem" }}>
                       <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--brand)", fontVariantNumeric: "tabular-nums" }}>
                         {formatNaira(product.priceMinor)}
                       </span>
                       <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)" }}>
-                        {product.kind === "PHYSICAL" ? `${product.stockQuantity ?? 0} in stock` : `${product.durationMinutes ?? 0} min`}
+                        {kindMetaText(product)}
                       </span>
                     </div>
                     <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.8rem" }}>
@@ -449,14 +541,14 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
                       )}
                     </div>
                     <div style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.45)" }}>
-                      {product.category?.name ?? "Uncategorized"} · {product.kind === "PHYSICAL" ? "Product" : "Service"}
+                      {product.category?.name ?? "Uncategorized"} · {kindLabel(product.kind)}
                     </div>
                   </div>
                   <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--brand)", fontVariantNumeric: "tabular-nums", flexShrink: 0, width: 100, textAlign: "right" }}>
                     {formatNaira(product.priceMinor)}
                   </span>
                   <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", flexShrink: 0, width: 90, textAlign: "right" }}>
-                    {product.kind === "PHYSICAL" ? `${product.stockQuantity ?? 0} in stock` : `${product.durationMinutes ?? 0} min`}
+                    {kindMetaText(product)}
                   </span>
                   <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}>
                     <button
@@ -578,7 +670,7 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
 
             <div style={{ display: "grid", gap: "1rem" }}>
               <label style={{ display: "flex", gap: "0.5rem" }}>
-                {(["PHYSICAL", "SERVICE"] as const).map((k) => (
+                {(["PHYSICAL", "SERVICE", "DIGITAL"] as const).map((k) => (
                   <button
                     key={k}
                     type="button"
@@ -591,7 +683,7 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
                       fontWeight: 600, fontSize: "0.85rem",
                     }}
                   >
-                    {k === "PHYSICAL" ? "Product" : "Service / Booking"}
+                    {k === "PHYSICAL" ? "Product" : k === "SERVICE" ? "Service / Booking" : "Digital"}
                   </button>
                 ))}
               </label>
@@ -622,13 +714,15 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
                 <FieldLabel label="Stock quantity">
                   <TextInput value={form.stockQuantity} onChange={(v) => setForm((p) => ({ ...p, stockQuantity: v }))} placeholder="10" type="number" />
                 </FieldLabel>
-              ) : (
+              ) : form.kind === "SERVICE" ? (
                 <FieldLabel label="Duration (minutes)">
                   <TextInput value={form.durationMinutes} onChange={(v) => setForm((p) => ({ ...p, durationMinutes: v }))} placeholder="60" type="number" />
                 </FieldLabel>
+              ) : (
+                <DigitalDeliveryFields form={form} setForm={setForm} uploading={uploading} onFileSelected={(f) => void handleDigitalFileUpload(f)} />
               )}
 
-              <FieldLabel label="Main image">
+              <FieldLabel label={form.kind === "DIGITAL" ? "Cover image (optional)" : "Main image"}>
                 <input ref={mainFileInputRef} type="file" accept="image/*" disabled={uploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleUpload(f, "main"); e.target.value = ""; }} style={{ display: "none" }} />
                 {form.imageUrl ? (
                   <div
@@ -859,5 +953,107 @@ function TextInput({ value, onChange, placeholder, type = "text" }: { value: str
       placeholder={placeholder}
       style={inputStyle}
     />
+  );
+}
+
+const DELIVERY_METHODS = [
+  { value: "FILE_DOWNLOAD", label: "File download" },
+  { value: "EXTERNAL_LINK", label: "External link" },
+  { value: "ACCESS_LIST", label: "Access list" },
+] as const;
+
+function DigitalDeliveryFields({
+  form,
+  setForm,
+  uploading,
+  onFileSelected,
+}: {
+  form: FormState;
+  setForm: React.Dispatch<React.SetStateAction<FormState>>;
+  uploading: boolean;
+  onFileSelected: (file: File) => void;
+}) {
+  const digitalFileInputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div style={{ display: "grid", gap: "1rem" }}>
+      <FieldLabel label="Delivery method">
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          {DELIVERY_METHODS.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              onClick={() => setForm((prev) => ({ ...prev, digitalDeliveryMethod: m.value }))}
+              style={{
+                flex: 1, padding: "0.5rem", borderRadius: 8, cursor: "pointer", fontFamily: "inherit",
+                border: form.digitalDeliveryMethod === m.value ? "1.5px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
+                background: form.digitalDeliveryMethod === m.value ? "var(--brand-subtle)" : "rgba(255,255,255,0.03)",
+                color: form.digitalDeliveryMethod === m.value ? "var(--brand)" : "rgba(240,242,255,0.6)",
+                fontWeight: 600, fontSize: "0.78rem",
+              }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </FieldLabel>
+
+      {form.digitalDeliveryMethod === "FILE_DOWNLOAD" && (
+        <>
+          <FieldLabel label="File">
+            <input
+              ref={digitalFileInputRef}
+              type="file"
+              disabled={uploading}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) onFileSelected(f); e.target.value = ""; }}
+              style={{ display: "none" }}
+            />
+            <button
+              type="button"
+              onClick={() => digitalFileInputRef.current?.click()}
+              disabled={uploading}
+              style={{
+                width: "100%", padding: "0.6rem 0.8rem", borderRadius: 9, cursor: uploading ? "wait" : "pointer",
+                border: "1.5px dashed rgba(139,92,246,0.35)", background: "rgba(139,92,246,0.05)",
+                color: "var(--brand)", fontFamily: "inherit", fontSize: "0.82rem", fontWeight: 600,
+                textAlign: "left",
+              }}
+            >
+              {uploading ? "Uploading…" : form.digitalFileName ? `Change file (currently: ${form.digitalFileName})` : "Click to upload a file"}
+            </button>
+          </FieldLabel>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+            <FieldLabel label="Max downloads (blank = unlimited)">
+              <TextInput value={form.digitalMaxDownloads} onChange={(v) => setForm((p) => ({ ...p, digitalMaxDownloads: v }))} placeholder="e.g. 3" type="number" />
+            </FieldLabel>
+            <FieldLabel label="Link expires after (days, blank = never)">
+              <TextInput value={form.digitalLinkExpiryDays} onChange={(v) => setForm((p) => ({ ...p, digitalLinkExpiryDays: v }))} placeholder="e.g. 30" type="number" />
+            </FieldLabel>
+          </div>
+        </>
+      )}
+
+      {form.digitalDeliveryMethod === "EXTERNAL_LINK" && (
+        <FieldLabel label="Link (Google Drive, Dropbox, etc.)">
+          <TextInput value={form.digitalExternalUrl} onChange={(v) => setForm((p) => ({ ...p, digitalExternalUrl: v }))} placeholder="https://drive.google.com/…" />
+        </FieldLabel>
+      )}
+
+      {form.digitalDeliveryMethod === "ACCESS_LIST" && (
+        <>
+          <FieldLabel label="Instructions shown to the buyer (e.g. a private course URL, how to join a group)">
+            <textarea
+              value={form.digitalAccessInstructions}
+              onChange={(e) => setForm((p) => ({ ...p, digitalAccessInstructions: e.target.value }))}
+              rows={3}
+              style={inputStyle}
+            />
+          </FieldLabel>
+          <FieldLabel label="Password to email (optional)">
+            <TextInput value={form.digitalAccessPassword} onChange={(v) => setForm((p) => ({ ...p, digitalAccessPassword: v }))} placeholder={form.id ? "Leave blank to keep the current password" : "Optional"} />
+          </FieldLabel>
+        </>
+      )}
+    </div>
   );
 }

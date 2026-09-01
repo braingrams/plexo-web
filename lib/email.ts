@@ -278,3 +278,96 @@ export async function sendScriptAccessRequestNotificationEmail(req: SendScriptAc
     ],
   });
 }
+
+export type SendCommerceStripeAccessRequestEmailParams = {
+  id: string;
+  organizationName: string;
+  userEmail: string;
+  userName: string;
+  reason?: string | null;
+  expectedVolume?: string | null;
+};
+
+/** Notifies ADMIN_EMAIL that an org wants platform-hosted Stripe unlocked for Commerce —
+ * same "no 1-click link, goes through plexo-admin's own review UI" shape as
+ * sendScriptAccessRequestNotificationEmail/sendWithdrawalRequestNotificationEmail above. */
+export async function sendCommerceStripeAccessRequestNotificationEmail(req: SendCommerceStripeAccessRequestEmailParams) {
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM || "admin@plexopages.com";
+  const adminAppUrl = process.env.ADMIN_APP_URL || "http://localhost:3001";
+  const reviewUrl = `${adminAppUrl}/commerce-stripe-access-requests`;
+
+  const html = emailShell({
+    title: "Platform Stripe Requested",
+    bodyHtml: `
+      ${badge("Platform Stripe Requested", "#ede9fe", "#7c3aed")}
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">An org wants platform-hosted Stripe for Commerce</h1>
+      ${detailsBlock([
+        detailRow("Organization", escapeHtml(req.organizationName)),
+        detailRow("Requested by", `${escapeHtml(req.userName)} (${escapeHtml(req.userEmail)})`),
+        req.reason ? detailRow("Reason", escapeHtml(req.reason)) : "",
+        req.expectedVolume ? detailRow("Expected volume", escapeHtml(req.expectedVolume)) : "",
+      ].filter(Boolean).join(""))}
+      ${CTA_BUTTON(reviewUrl, "Review in Admin")}
+    `,
+  });
+
+  await deliver({
+    to: adminEmail,
+    subject: `[Plexo Commerce] Platform Stripe requested — ${req.organizationName}`,
+    html,
+    logLabel: "COMMERCE STRIPE ACCESS REQUEST EMAIL NOTIFICATION LOG",
+    logLines: [
+      `Organization: ${req.organizationName}`,
+      `Requested by: ${req.userName} (${req.userEmail})`,
+      ...(req.reason ? [`Reason: ${req.reason}`] : []),
+      `Review: ${reviewUrl}`,
+    ],
+  });
+}
+
+export type SendCommerceWithdrawalRequestEmailParams = {
+  id: string;
+  organizationName: string;
+  userEmail: string;
+  userName: string;
+  amountCents: number;
+  bankName: string;
+};
+
+/** Notifies ADMIN_EMAIL that a Commerce wallet withdrawal needs review — same shape as
+ * sendWithdrawalRequestNotificationEmail above (the marketplace's own equivalent), just
+ * against CommerceWithdrawalRequest instead of WithdrawalRequest. */
+export async function sendCommerceWithdrawalRequestNotificationEmail(req: SendCommerceWithdrawalRequestEmailParams) {
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM || "admin@plexopages.com";
+  const adminAppUrl = process.env.ADMIN_APP_URL || "http://localhost:3001";
+  const reviewUrl = `${adminAppUrl}/commerce-withdrawals`;
+  const amount = (req.amountCents / 100).toFixed(2);
+
+  const html = emailShell({
+    title: "New Commerce Withdrawal Request",
+    bodyHtml: `
+      ${badge("New Commerce Withdrawal Request", "#ede9fe", "#7c3aed")}
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A Commerce wallet payout has been requested</h1>
+      ${detailsBlock([
+        detailRow("Organization", escapeHtml(req.organizationName)),
+        detailRow("Requested by", `${escapeHtml(req.userName)} (${escapeHtml(req.userEmail)})`),
+        detailRow("Amount", `₦${amount}`),
+        detailRow("Bank", escapeHtml(req.bankName)),
+      ].join(""))}
+      ${CTA_BUTTON(reviewUrl, "Review in Admin")}
+    `,
+  });
+
+  await deliver({
+    to: adminEmail,
+    subject: `[Plexo Commerce] Withdrawal requested by ${req.organizationName}`,
+    html,
+    logLabel: "COMMERCE WITHDRAWAL REQUEST EMAIL NOTIFICATION LOG",
+    logLines: [
+      `Organization: ${req.organizationName}`,
+      `Requested by: ${req.userName} (${req.userEmail})`,
+      `Amount: ₦${amount}`,
+      `Review: ${reviewUrl}`,
+    ],
+  });
+}

@@ -30,7 +30,7 @@ type McpLandingClientProps = {
 };
 
 export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
-  const [activeTab, setActiveTab] = useState<"prompt" | "analytics" | "templates" | "profile">("prompt");
+  const [activeTab, setActiveTab] = useState<"prompt" | "analytics" | "templates" | "profile" | "commerce">("prompt");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopy = (text: string, id: string) => {
@@ -87,6 +87,16 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
         domainsUsed: "2 / 10 published domains",
         templatesUsed: "5 / 20 templates",
         totalCredits: "18,400 remaining AI credits",
+      },
+    },
+    commerce: {
+      userPrompt: "Add a digital product called 'Startup Pitch Deck Template' for $19, delivered as a file download, and switch this site to Plexo's own Paystack so I don't need my own keys",
+      aiResult: {
+        status: "success",
+        action: "Plexo MCP Server -> create_commerce_product + update_commerce_settings",
+        product: "Startup Pitch Deck Template — DIGITAL — $19.00",
+        delivery: "FILE_DOWNLOAD — buyers get an emailed download link the moment they pay",
+        paymentProvider: "PLATFORM_PAYSTACK — proceeds credit your Commerce wallet, withdrawable any time",
       },
     },
   };
@@ -149,6 +159,7 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
                 { id: "analytics", label: "Page Analytics", icon: BarChart3 },
                 { id: "templates", label: "List Templates", icon: Layers },
                 { id: "profile", label: "Account Limits", icon: Cpu },
+                { id: "commerce", label: "Sell Digital Products", icon: ShieldCheck },
               ].map((tab) => {
                 const Icon = tab.icon;
                 const active = activeTab === tab.id;

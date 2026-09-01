@@ -36,7 +36,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: { items: { select: { nameSnapshot: true, quantity: true, unitPriceMinor: true } }, booking: { select: { scheduledStart: true, status: true } } },
+      include: {
+        items: { select: { nameSnapshot: true, quantity: true, unitPriceMinor: true } },
+        booking: { select: { scheduledStart: true, status: true } },
+        digitalDeliveries: {
+          select: { id: true, method: true, deliveredAt: true, downloadCount: true, maxDownloads: true, resendCount: true, product: { select: { name: true } } },
+        },
+      },
     }),
     prisma.commerceOrder.count({ where }),
   ]);

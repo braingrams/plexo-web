@@ -25,6 +25,14 @@ export default async function CommerceProductsPage({ params }: { params: Promise
     active: p.active,
     category: p.category,
     createdAt: p.createdAt.toISOString(),
+    digitalDeliveryMethod: p.digitalDeliveryMethod,
+    digitalFileUrl: p.digitalFileUrl,
+    digitalFileName: p.digitalFileName,
+    digitalExternalUrl: p.digitalExternalUrl,
+    digitalAccessInstructions: p.digitalAccessInstructions,
+    hasDigitalAccessPassword: Boolean(p.digitalAccessPasswordEncrypted),
+    digitalMaxDownloads: p.digitalMaxDownloads,
+    digitalLinkExpiryDays: p.digitalLinkExpiryDays,
   }));
 
   return <ProductsClient templateId={templateId} initialProducts={initialProducts} />;

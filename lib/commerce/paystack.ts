@@ -1,4 +1,4 @@
-import type { CommercePaystackMode } from "@prisma/client";
+import type { CommercePaymentProvider, CommercePaystackMode } from "@prisma/client";
 
 type PaystackKeyFields = {
   paystackMode: CommercePaystackMode;
@@ -44,6 +44,32 @@ export function resolvePaystackKeysForMode(
  * dashboard pointed at the same webhook URL — either way, the signature has to be checked
  * against whichever key actually signed it, not just whatever's currently toggled on.
  */
+/**
+ * Which Paystack credential a CHECKOUT should actually use — branches on
+ * CommerceSettings.paymentProvider. BYO_PAYSTACK (default) delegates to
+ * resolveActivePaystackKeys, unchanged. PLATFORM_PAYSTACK uses Plexo's own single
+ * ops-controlled key pair (no per-site test/live split — see PLATFORM_PAYSTACK_SECRET_KEY
+ * in .env.example) instead of anything stored on CommerceSettings; the resulting order's
+ * proceeds get credited to the site's CommerceWallet by the platform webhook rather than
+ * landing in the site owner's own Paystack account. Returns null for PLATFORM_STRIPE — that
+ * provider doesn't use Paystack at all, see lib/commerce/stripeClient.ts.
+ */
+export function resolveCheckoutPaystackSecret(
+  settings: PaystackKeyFields & { paymentProvider: CommercePaymentProvider },
+): { publicKey: string | null; secretKeyEncrypted: string | null; isPlatform: boolean } | null {
+  if (settings.paymentProvider === "PLATFORM_STRIPE") return null;
+  if (settings.paymentProvider === "PLATFORM_PAYSTACK") {
+    const publicKey = process.env.PLATFORM_PAYSTACK_PUBLIC_KEY ?? null;
+    const secretKey = process.env.PLATFORM_PAYSTACK_SECRET_KEY ?? null;
+    // Platform keys are plain env vars, not per-site encrypted storage — there's nothing to
+    // decrypt, so this deliberately returns the raw secret under the same field name a
+    // caller would otherwise pass through decryptPaystackKey, tagged via isPlatform so
+    // callers know not to attempt that.
+    return { publicKey, secretKeyEncrypted: secretKey, isPlatform: true };
+  }
+  return { ...resolveActivePaystackKeys(settings), isPlatform: false };
+}
+
 export function listConfiguredPaystackSecretKeys(
   settings: PaystackKeyFields,
 ): Array<{ mode: CommercePaystackMode; secretKeyEncrypted: string }> {

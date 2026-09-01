@@ -95,3 +95,16 @@ export function encryptMaildripKey(plainText: string): string {
 export function decryptMaildripKey(encoded: string): string {
   return decryptWithKey(encoded, deriveKey(requireEnv("MAILDRIP_KEY_ENCRYPTION_SECRET")));
 }
+
+/**
+ * Encrypts/decrypts a digital product's optional ACCESS_LIST password
+ * (CommerceProduct.digitalAccessPasswordEncrypted) — another DELIBERATELY separate secret
+ * (COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET), same isolation rationale as the other four.
+ */
+export function encryptDigitalAccessSecret(plainText: string): string {
+  return encryptWithKey(plainText, deriveKey(requireEnv("COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET")));
+}
+
+export function decryptDigitalAccessSecret(encoded: string): string {
+  return decryptWithKey(encoded, deriveKey(requireEnv("COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET")));
+}

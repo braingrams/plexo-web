@@ -11,6 +11,9 @@ export default async function CommerceOrdersPage({ params }: { params: Promise<{
     include: {
       items: { select: { nameSnapshot: true, quantity: true, unitPriceMinor: true } },
       booking: { select: { scheduledStart: true, status: true } },
+      digitalDeliveries: {
+        select: { id: true, method: true, deliveredAt: true, downloadCount: true, maxDownloads: true, resendCount: true, product: { select: { name: true } } },
+      },
     },
   });
 
@@ -25,6 +28,15 @@ export default async function CommerceOrdersPage({ params }: { params: Promise<{
     createdAt: o.createdAt.toISOString(),
     items: o.items,
     booking: o.booking ? { scheduledStart: o.booking.scheduledStart.toISOString(), status: o.booking.status } : null,
+    digitalDeliveries: o.digitalDeliveries.map((d) => ({
+      id: d.id,
+      method: d.method,
+      productName: d.product.name,
+      deliveredAt: d.deliveredAt ? d.deliveredAt.toISOString() : null,
+      downloadCount: d.downloadCount,
+      maxDownloads: d.maxDownloads,
+      resendCount: d.resendCount,
+    })),
   }));
 
   return <OrdersClient templateId={templateId} initialOrders={initialOrders} initialTotal={initialOrders.length} />;
