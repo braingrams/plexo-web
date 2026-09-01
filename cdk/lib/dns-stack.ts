@@ -14,7 +14,7 @@ import * as ssm from "aws-cdk-lib/aws-ssm";
 // rather than touching a zone shared by every other Charisol product.
 //
 // One-time bootstrap only this stack can't do itself: after first deploy, this zone's 4
-// NS records need to be added as an NS record set for "aws.plexo" under the existing
+// NS records need to be added as an NS record set named "plexo" under the existing
 // aws.charisol.io zone in the MAIN Charisol account (692239535551) — a different account
 // than this stack deploys into. That's the one write that ever touches shared company
 // DNS; everything after it (every record below) is entirely within this account.
@@ -25,8 +25,17 @@ export class DnsStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
+    // NOTE: this zone is a child of aws.charisol.io — one label ("plexo") delegated under
+    // it, same shape as maildrip's own aws.maildrip.io precedent (one label delegated
+    // under maildrip.io). An earlier version of this file named the zone
+    // "aws.plexo.charisol.io" instead, which is NOT a subdomain of aws.charisol.io at
+    // all (wrong suffix entirely) — no NS delegation from aws.charisol.io could ever
+    // have made that resolve. Caught by an ACM certificate stuck in PENDING_VALIDATION
+    // for hours with the validation CNAME confirmed present in the zone but the zone
+    // itself unreachable from public DNS (dig against 8.8.8.8 returned nothing) — the
+    // stuck stack was deleted and recreated with this corrected name.
     this.zone = new route53.PublicHostedZone(this, "Zone", {
-      zoneName: "aws.plexo.charisol.io",
+      zoneName: "plexo.aws.charisol.io",
     });
 
     // One wildcard cert covers every subdomain this migration needs (production,
@@ -34,8 +43,8 @@ export class DnsStack extends cdk.Stack {
     // environment. CloudFront requires ACM certs to exist in us-east-1 specifically —
     // this stack must be deployed there regardless of where compute/data stacks run.
     this.certificate = new acm.Certificate(this, "WildcardCert", {
-      domainName: "aws.plexo.charisol.io",
-      subjectAlternativeNames: ["*.aws.plexo.charisol.io"],
+      domainName: "plexo.aws.charisol.io",
+      subjectAlternativeNames: ["*.plexo.aws.charisol.io"],
       validation: acm.CertificateValidation.fromDns(this.zone),
     });
 
@@ -57,7 +66,7 @@ export class DnsStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, "NameServers", {
       value: cdk.Fn.join(", ", this.zone.hostedZoneNameServers ?? []),
-      description: "Add these as an NS record set for 'aws.plexo' under aws.charisol.io in the main Charisol account (692239535551) — one-time, done once ever.",
+      description: "Add these as an NS record set named 'plexo' under aws.charisol.io in the main Charisol account (692239535551) — one-time, done once ever.",
     });
   }
 }

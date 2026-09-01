@@ -14,7 +14,7 @@ const stackID = process.env.STACK_ID || "pr-1-plexo";
 // "compute" deploys the app-hosting layer (production, staging, and per-PR previews).
 // "analytics" deploys the export/Athena admin-query path (production, staging only —
 // no PR preview needs its own export pipeline).
-// "dns" deploys the aws.plexo.charisol.io hosted zone + wildcard cert — ONCE ever, same
+// "dns" deploys the plexo.aws.charisol.io hosted zone + wildcard cert — ONCE ever, same
 // as "data"/"analytics" (never per-PR; every environment shares this one zone/cert).
 const stackKind = process.env.STACK_KIND || "data";
 
