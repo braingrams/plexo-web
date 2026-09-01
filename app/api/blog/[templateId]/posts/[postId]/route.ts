@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
-import { updateBlogPost, deleteBlogPost, type SavePostInput } from "@/lib/blog/savePost";
-import { isValidUuid } from "@/server/slug";
+import { BlogPost, BlogCategory, BlogTag, BlogAuthor, BlogPostCategory, BlogPostTag } from "@/lib/db/contentEntities";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
+import { updateBlogPost, deleteBlogPost, type SavePostInput } from "@/lib/blog/savePostDynamo";
+import { isValidUuid } from "@/server/slugDynamo";
 import { convertWordPressHtmlToTiptapJson } from "@/lib/blogImport/htmlToTiptap";
 
 export async function GET(
@@ -15,17 +15,31 @@ export async function GET(
   if ("error" in resolved) return resolved.error;
   if (!isValidUuid(postId)) return NextResponse.json({ error: "Post not found." }, { status: 404 });
 
-  const post = await prisma.blogPost.findFirst({
-    where: { id: postId, templateId: resolved.context.templateId },
-    include: {
-      categories: { select: { category: { select: { id: true, name: true, slug: true } } } },
-      tags: { select: { tag: { select: { id: true, name: true, slug: true } } } },
-      author: { select: { id: true, name: true, slug: true } },
-    },
-  });
+  // BlogPost's primary key is (templateId, slug), not (templateId, id) — search the
+  // template's posts rather than .get() directly, same as savePostDynamo.ts's findPostById.
+  const { data: allPosts } = await BlogPost.query.byStatus({ templateId: resolved.context.templateId }).go();
+  const post = allPosts.find((p) => p.id === postId);
   if (!post) return NextResponse.json({ error: "Post not found." }, { status: 404 });
 
-  return NextResponse.json({ post });
+  const [{ data: categories }, { data: tags }, { data: authors }, { data: postCategories }, { data: postTags }] = await Promise.all([
+    BlogCategory.query.primary({ templateId: resolved.context.templateId }).go(),
+    BlogTag.query.primary({ templateId: resolved.context.templateId }).go(),
+    BlogAuthor.query.primary({ templateId: resolved.context.templateId }).go(),
+    BlogPostCategory.query.primary({ templateId: resolved.context.templateId, postId }).go(),
+    BlogPostTag.query.primary({ templateId: resolved.context.templateId, postId }).go(),
+  ]);
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const tagById = new Map(tags.map((t) => [t.id, t]));
+  const author = post.authorId ? authors.find((a) => a.id === post.authorId) : undefined;
+
+  return NextResponse.json({
+    post: {
+      ...post,
+      categories: postCategories.map((pc) => categoryById.get(pc.categoryId)).filter((c): c is NonNullable<typeof c> => !!c),
+      tags: postTags.map((pt) => tagById.get(pt.tagId)).filter((t): t is NonNullable<typeof t> => !!t),
+      author: author ? { id: author.id, name: author.name, slug: author.slug } : null,
+    },
+  });
 }
 
 export async function PATCH(
@@ -37,7 +51,7 @@ export async function PATCH(
   if ("error" in resolved) return resolved.error;
   if (!isValidUuid(postId)) return NextResponse.json({ error: "Post not found." }, { status: 404 });
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { blog: ["update"] });
+  const permissionError = requirePermission(resolved.context.role, { blog: ["update"] });
   if (permissionError) return permissionError;
 
   const body = (await request.json().catch(() => ({}))) as Partial<SavePostInput>;
@@ -66,7 +80,7 @@ export async function DELETE(
   if ("error" in resolved) return resolved.error;
   if (!isValidUuid(postId)) return NextResponse.json({ error: "Post not found." }, { status: 404 });
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { blog: ["delete"] });
+  const permissionError = requirePermission(resolved.context.role, { blog: ["delete"] });
   if (permissionError) return permissionError;
 
   const deleted = await deleteBlogPost(resolved.context.templateId, postId);
