@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadObject, StorageError } from "@/lib/storage";
 
-import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
-import { requirePermission } from "@/server/requirePermission";
+import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
+import { requirePermission } from "@/server/requirePermissionDynamo";
 import { generateImage, ImageGenerationError } from "@/lib/ai/providers/geminiImage";
-import { ensureCreditPeriod, chargeFlatCredits } from "@/lib/credits/ledger";
+import { ensureCreditPeriod, chargeFlatCredits } from "@/lib/db/ledgerOperations";
 import { imageGenerationCredits } from "@/lib/credits/pricing";
 
 function randomKey(): string {
@@ -26,7 +26,7 @@ export async function POST(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { blog: ["update"] });
+  const permissionError = requirePermission(resolved.context.role, { blog: ["update"] });
   if (permissionError) return permissionError;
 
   const body = (await request.json().catch(() => ({}))) as { prompt?: string };
