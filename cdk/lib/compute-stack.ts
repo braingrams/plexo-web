@@ -11,8 +11,6 @@ import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 import * as cr from "aws-cdk-lib/custom-resources";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as path from "node:path";
-import * as ssm from "aws-cdk-lib/aws-ssm";
-import { execFileSync } from "node:child_process";
 import { buildLogGroup } from "./conventions";
 
 // Real OpenNext deployment (SSR Lambda + image-optimization Lambda + CloudFront + S3 +
@@ -30,46 +28,21 @@ const isProd = (process.env.PLEXO_ENV || "development") === "production";
 const removalPolicy = isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY;
 const ssmEnv = isProd ? "production" : "staging";
 
-// Every real secret the app needs at runtime, resolved from SSM at DEPLOY time via a
-// CloudFormation SecureString dynamic reference ({{resolve:ssm-secure:name:version}}) —
-// the value never appears in the synthesized template source or this process's own
-// environment, only in the deployed Lambda's configuration. Pushed to /plexo/<env>/<KEY>
-// by sync-secrets-to-ssm.yml, never typed here.
+// App secrets are deliberately NOT injected into the Lambda's Environment.Variables block
+// via a CloudFormation SSM dynamic reference — tried exactly that first, and a real `cdk
+// deploy` rejected it outright: "SSM Secure reference is not supported in:
+// AWS::Lambda::Function/.../Environment/Variables". That's a hard CloudFormation
+// restriction on which resource properties accept an ssm-secure dynamic reference, not a
+// permissions gap — confirmed by actually deploying, not by trusting `cdk synth` (which
+// synthesizes a template that looks valid and only fails at the changeset-creation step).
 //
-// CDK's valueForSecureStringParameter (verified against aws-cdk-lib's own parameter.d.ts,
-// not assumed) requires an explicit numeric version — SecureString dynamic references
-// can't reference "latest" the way plain-String ones can, so a stale hardcoded version
-// would silently keep deploying an old secret after a rotation. This shells out to the
-// same AWS credentials `cdk deploy` is already running under to read each parameter's
-// CURRENT version at synth time, so every deploy picks up whatever is in SSM right now.
-// Deliberately baking each into the Lambda's environment block (not maildrip-server's
-// lazy-SSM-load-at-cold-start pattern — see maildrip-server/CLAUDE.md's "Lambda
-// environment variables" section) — fine at this list's current size, comfortably under
-// the 4KB-per-function cap that pattern exists to avoid. If this list keeps growing,
-// that's the next move: a lazy loader read only inside request handlers, matching
-// maildrip-server/utils/dotenv.js, not more entries piled into this object.
-function currentSsmVersion(name: string): number {
-  const region = process.env.AWS_REGION || "us-east-1";
-  try {
-    const out = execFileSync(
-      "aws",
-      ["ssm", "get-parameter", "--name", name, "--region", region, "--query", "Parameter.Version", "--output", "text"],
-      { encoding: "utf-8" },
-    );
-    return parseInt(out.trim(), 10);
-  } catch {
-    throw new Error(
-      `SSM parameter "${name}" doesn't exist yet (or the current AWS credentials can't read it). ` +
-        `Run the "Sync Secrets to SSM" GitHub Actions workflow for the "${ssmEnv}" environment first — ` +
-        `it creates every parameter this stack depends on from GitHub Secrets.`,
-    );
-  }
-}
-
-function ssmSecret(scope: Construct, key: string): string {
-  const name = `/plexo/${ssmEnv}/${key}`;
-  return ssm.StringParameter.valueForSecureStringParameter(scope, name, currentSsmVersion(name));
-}
+// Instead, secrets are loaded at Lambda cold start by the app itself (lib/ssmEnv.ts,
+// invoked from instrumentation.ts's register() — Next.js guarantees that runs once per
+// server instance and completes before any request is served, so every existing eager
+// `process.env.X` read elsewhere in the app stays safe without auditing each call site,
+// unlike maildrip-server/utils/dotenv.js's per-key lazy-read discipline, which exists
+// because maildrip has no equivalent single choke point). All this stack needs to grant is
+// read access to the real secrets' SSM path plus KMS decrypt for the SecureString type.
 
 // Resolved relative to this file (cdk/lib/compute-stack.ts) up to the repo root's
 // .open-next/ output — `npm run build && npx @opennextjs/aws build` must have been run
@@ -127,56 +100,38 @@ export class ComputeStack extends cdk.Stack {
       CACHE_DYNAMO_TABLE: tagCacheTable.tableName,
     };
 
-    // Real app secrets — still the app's live config today (Prisma/Neon Postgres, Stripe,
-    // Maildrip, Pusher, Browserbase, per-field encryption keys, Auth.js's Google
-    // credentials) even though the data layer hasn't cut over to DynamoDB yet. Every key
-    // here must already exist at /plexo/${ssmEnv}/<KEY> — run "Sync Secrets to SSM" first
-    // if `cdk deploy` fails asking for one that's missing.
-    const APP_SECRET_KEYS = [
-      "DATABASE_URL",
-      "DIRECT_URL",
-      "BETTER_AUTH_SECRET",
-      "AUTH_SECRET",
-      "GOOGLE_CLIENT_ID",
-      "GOOGLE_CLIENT_SECRET",
-      "AI_KEY_ENCRYPTION_SECRET",
-      "PAYSTACK_KEY_ENCRYPTION_SECRET",
-      "COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET",
-      "MAILDRIP_KEY_ENCRYPTION_SECRET",
-      "MAILDRIP_API_URL",
-      "MAILDRIP_API_KEY",
-      "STRIPE_SECRET_KEY",
-      "STRIPE_WEBHOOK_SECRET",
-      "STRIPE_PRICE_PRO",
-      "STRIPE_PRICE_ULTRA",
-      "STRIPE_PRICE_TOPUP_SMALL",
-      "STRIPE_PRICE_TOPUP_MEDIUM",
-      "STRIPE_PRICE_TOPUP_LARGE",
-      "SYSTEM_AI_KEY_ANTHROPIC_CLAUDE",
-      "SYSTEM_AI_KEY_OPENAI",
-      "SYSTEM_AI_KEY_GOOGLE_GEMINI",
-      "PUSHER_APP_ID",
-      "PUSHER_KEY",
-      "PUSHER_SECRET",
-      "PUSHER_CLUSTER",
-      "BROWSERBASE_API_KEY",
-      "BLOB_READ_WRITE_TOKEN",
-      "BLOB_WEBHOOK_PUBLIC_KEY",
-    ];
-    const appSecretsEnv = Object.fromEntries(APP_SECRET_KEYS.map((key) => [key, ssmSecret(this, key)]));
-
     const serverFn = new lambda.Function(this, "ServerFn", {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: "index.handler",
       code: lambda.Code.fromAsset(path.join(OPEN_NEXT_DIR, "server-functions", "default")),
       memorySize: 1024,
       timeout: cdk.Duration.seconds(30),
-      environment: { ...commonEnv, ...appSecretsEnv },
+      // PLEXO_ENV is the only app-secret-adjacent thing set here — it's what
+      // lib/ssmEnv.ts reads to build the /plexo/<env>/<KEY> path it fetches from at cold
+      // start (via instrumentation.ts). Not sensitive itself, just "staging" or
+      // "production".
+      environment: { ...commonEnv, PLEXO_ENV: ssmEnv },
       logGroup: buildLogGroup(this, "ServerFn"),
     });
     assetsBucket.grantReadWrite(serverFn);
     tagCacheTable.grantReadWriteData(serverFn);
     revalidationQueue.grantSendMessages(serverFn);
+    // Runtime read access for lib/ssmEnv.ts's cold-start fetch — GetParameters (plural,
+    // what SSMClient's GetParametersCommand actually calls) plus KMS decrypt for the
+    // SecureString type, matching the free "alias/aws/ssm" AWS-managed key
+    // sync-secrets-to-ssm.yml already writes with.
+    serverFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameters"],
+        resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/plexo/${ssmEnv}/*`],
+      }),
+    );
+    serverFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["kms:Decrypt"],
+        resources: [`arn:aws:kms:${this.region}:${this.account}:alias/aws/ssm`],
+      }),
+    );
     const serverFnUrl = serverFn.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.AWS_IAM });
 
     const imageFn = new lambda.Function(this, "ImageOptimizationFn", {
