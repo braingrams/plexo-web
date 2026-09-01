@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
-import { isValidUuid } from "@/server/slug";
+import { BlogTag, BlogPostTag } from "@/lib/db/contentEntities";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
+import { isValidUuid } from "@/server/slugDynamo";
 
 export async function DELETE(
   request: NextRequest,
@@ -13,12 +13,18 @@ export async function DELETE(
   if ("error" in resolved) return resolved.error;
   if (!isValidUuid(tagId)) return NextResponse.json({ error: "Tag not found." }, { status: 404 });
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { blog: ["delete"] });
+  const permissionError = requirePermission(resolved.context.role, { blog: ["delete"] });
   if (permissionError) return permissionError;
 
-  const tag = await prisma.blogTag.findFirst({ where: { id: tagId, templateId: resolved.context.templateId }, select: { id: true } });
+  const { data: tags } = await BlogTag.query.primary({ templateId: resolved.context.templateId }).go();
+  const tag = tags.find((t) => t.id === tagId);
   if (!tag) return NextResponse.json({ error: "Tag not found." }, { status: 404 });
 
-  await prisma.blogTag.delete({ where: { id: tagId } });
+  // Postgres's onDelete: Cascade on BlogPostTag -> BlogTag has no DynamoDB equivalent —
+  // clean up the join rows explicitly via byTag (GSI1) before removing the tag itself.
+  const { data: links } = await BlogPostTag.query.byTag({ tagId }).go();
+  await Promise.all(links.map((l) => BlogPostTag.remove({ templateId: l.templateId, postId: l.postId, tagId: l.tagId }).go()));
+
+  await BlogTag.remove({ templateId: resolved.context.templateId, slug: tag.slug }).go();
   return NextResponse.json({ ok: true });
 }
