@@ -5,6 +5,7 @@ import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { ApiKey, User } from "@/lib/db/coreEntities";
 import { resolveManageLandingPagePublishing } from "@/lib/subscription";
+import type { OrgRole } from "@/server/accessControl";
 
 // DynamoDB-native replacement for app/api/v1/domains/route.ts's resolveUser — moved to a
 // proper shared home since it's imported by 29 files across the public API surface, not
@@ -38,7 +39,7 @@ export async function resolveUser(
 ): Promise<{
   userId: string;
   organizationId: string;
-  role: string | null;
+  role: OrgRole | null;
   subscriptionPlan: string;
   customDomainLimit: number | null;
   manageLandingPagePublishing: boolean;

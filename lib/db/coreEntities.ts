@@ -56,6 +56,9 @@ export const User = new Entity(
       // Per-user override of the plan-default published-domain cap — null defers to
       // getDomainLimit()'s plan-based default (app/api/v1/domains/route.ts).
       customDomainLimit: { type: "number" },
+      // Acceptable Use Policy acceptance gate for publishing unsanitized raw HTML
+      // (app/api/templates/route.ts, app/api/v1/templates/upload-raw/route.ts).
+      aupAcceptedAt: { type: "string" },
     },
     indexes: {
       primary: {
