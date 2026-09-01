@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getStripe } from "@/lib/stripe";
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
+import { auth } from "@/server/authDynamo";
+import { User } from "@/lib/db/coreEntities";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const user = await prisma.user.findUniqueOrThrow({
-    where: { id: session.user.id },
-    select: { stripeCustomerId: true },
-  });
+  const { data: user } = await User.get({ id: session.user.id }).go();
+  if (!user) throw new Error(`Session user ${session.user.id} has no matching User record`);
 
   if (!user.stripeCustomerId) {
     return NextResponse.json(

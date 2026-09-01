@@ -6,7 +6,29 @@ import { Organization, Member, Invitation, User } from "@/lib/db/coreEntities";
 import type { OrgRole } from "@/server/accessControl";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildInviteEmail } from "@/lib/mail/templates";
-import { getOrgBrand } from "@/lib/subscription";
+import { canWhiteLabel } from "@/lib/subscription";
+
+// DynamoDB-native replacement for lib/subscription.ts's getOrgBrand/getOrganizationOwnerPlan
+// (both Prisma-backed) — can't reuse those directly here: an organization created through
+// this file's createOrganization() only exists in DynamoDB, so a Prisma query for it would
+// silently find nothing and always fall back to "no branding" even for an org that has it
+// configured. canWhiteLabel() itself is pure (a plan-tier lookup table, no I/O) so it's
+// still shared.
+export async function getOrganizationOwnerPlanDynamo(organizationId: string): Promise<string> {
+  const { data: owner } = await Member.query.primary({ organizationId }).where((attr, op) => op.eq(attr.role, "owner")).go();
+  const ownerUserId = owner[0]?.userId;
+  if (!ownerUserId) return "FREE";
+  const { data: ownerUser } = await User.get({ id: ownerUserId }).go();
+  return ownerUser?.subscriptionPlan ?? "FREE";
+}
+
+export async function getOrgBrandDynamo(organizationId: string): Promise<{ name: string; logoUrl?: string; color?: string } | undefined> {
+  const { data: org } = await Organization.get({ id: organizationId }).go();
+  if (!org) return undefined;
+  const plan = await getOrganizationOwnerPlanDynamo(organizationId);
+  if (!canWhiteLabel(plan) || !org.whiteLabelEnabled) return undefined;
+  return { name: org.name, logoUrl: org.logo, color: org.brandColor };
+}
 
 // DynamoDB-stack replacement for server/org.ts + everything better-auth's `organization`
 // plugin used to do server-side (createOrganization, invite/accept/reject/cancel, member
@@ -169,7 +191,7 @@ export async function createInvitation(
   const expiresAt = new Date(Date.now() + INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
   await Invitation.create({ id, organizationId, email, role, inviterId, expiresAt }).go();
 
-  const brand = await getOrgBrand(organizationId);
+  const brand = await getOrgBrandDynamo(organizationId);
   const baseUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
   await sendMaildripEmail({
     to: email,

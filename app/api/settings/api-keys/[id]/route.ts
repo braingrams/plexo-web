@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { encryptSecret } from "@/lib/crypto";
 import { canUseHostManagedAi } from "@/lib/subscription";
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
+import { resolveOrgContext } from "@/app/api/org/_context";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { ApiKey, User } from "@/lib/db/coreEntities";
+import type { EntityItem } from "electrodb";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 type AiAccessMode = "SYSTEM" | "BYOK" | "HOST_MANAGED";
@@ -13,25 +14,12 @@ const PROVIDER_VALUES = new Set(["openai", "anthropic_claude", "google_gemini"])
 const TIER_VALUES = new Set<AiTier>(["AUTO", "BASIC", "MEDIUM", "HIGH"]);
 const ACCESS_MODE_VALUES = new Set<AiAccessMode>(["SYSTEM", "BYOK", "HOST_MANAGED"]);
 
-function serializeApiKey(record: {
-  id: string;
-  name: string;
-  maskedKey: string;
-  createdAt: Date;
-  isActive: boolean;
-  useAi: boolean;
-  aiProvider: string;
-  aiTier: AiTier;
-  aiApiKey: string | null;
-  aiAccessMode: AiAccessMode;
-  hostAuthWebhookUrl: string | null;
-  hostWebhookSecret: string | null;
-}) {
+function serializeApiKey(record: EntityItem<typeof ApiKey>) {
   return {
     id: record.id,
     name: record.name,
     maskedKey: record.maskedKey,
-    createdAt: record.createdAt.toISOString(),
+    createdAt: record.createdAt,
     isActive: record.isActive,
     useAi: record.useAi,
     aiProvider: record.aiProvider,
@@ -43,34 +31,14 @@ function serializeApiKey(record: {
   };
 }
 
-// API keys belong to the organization — any teammate with apiKey.manage permission
-// (Owner/Admin) may manage the whole org's keys, matching the list route's scoping.
-async function getSessionOrgContext(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session?.user) return null;
-
-  const activeOrgId = (session.session as { activeOrganizationId?: string }).activeOrganizationId;
-  const membership =
-    (activeOrgId &&
-      (await prisma.member.findUnique({
-        where: { organizationId_userId: { organizationId: activeOrgId, userId: session.user.id } },
-      }))) ||
-    (await prisma.member.findFirst({ where: { userId: session.user.id }, orderBy: { createdAt: "asc" } }));
-  if (!membership) return null;
-
-  return { userId: session.user.id, organizationId: membership.organizationId, role: membership.role };
-}
-
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
-  const ctx = await getSessionOrgContext(request);
-  if (!ctx) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const ctx = await resolveOrgContext();
+  if (ctx.error) return ctx.error;
 
-  const permissionError = await requirePermission(request.headers, ctx.role, { apiKey: ["manage"] });
+  const permissionError = requirePermission(ctx.role, { apiKey: ["manage"] });
   if (permissionError) return permissionError;
 
   const params = await context.params;
@@ -85,22 +53,14 @@ export async function PATCH(
     hostWebhookSecret?: string;
   };
 
-  const existingKey = await prisma.apiKey.findFirst({
-    where: {
-      id: params.id,
-      organizationId: ctx.organizationId,
-    },
-  });
+  const { data: existingKey } = await ApiKey.get({ organizationId: ctx.organizationId, id: params.id }).go();
 
   if (!existingKey) {
     return NextResponse.json({ error: "API key not found" }, { status: 404 });
   }
 
   if ("action" in body && body.action === "revoke") {
-    await prisma.apiKey.delete({
-      where: { id: existingKey.id },
-    });
-
+    await ApiKey.remove({ organizationId: ctx.organizationId, id: existingKey.id }).go();
     return NextResponse.json({ success: true, deletedId: existingKey.id });
   }
 
@@ -113,15 +73,27 @@ export async function PATCH(
   // omitting the field leaves it untouched. Never round-tripped back to the client
   // — see serializeApiKey.
   let aiApiKey = existingKey.aiApiKey;
+  let clearAiApiKey = false;
   if (typeof body.aiApiKey === "string") {
     const trimmed = body.aiApiKey.trim();
-    aiApiKey = trimmed ? encryptSecret(trimmed) : null;
+    if (trimmed) {
+      aiApiKey = encryptSecret(trimmed);
+    } else {
+      aiApiKey = undefined;
+      clearAiApiKey = true;
+    }
   }
 
   let hostWebhookSecret = existingKey.hostWebhookSecret;
+  let clearHostWebhookSecret = false;
   if (typeof body.hostWebhookSecret === "string") {
     const trimmed = body.hostWebhookSecret.trim();
-    hostWebhookSecret = trimmed ? encryptSecret(trimmed) : null;
+    if (trimmed) {
+      hostWebhookSecret = encryptSecret(trimmed);
+    } else {
+      hostWebhookSecret = undefined;
+      clearHostWebhookSecret = true;
+    }
   }
 
   const aiAccessMode =
@@ -129,14 +101,23 @@ export async function PATCH(
       ? body.aiAccessMode
       : existingKey.aiAccessMode;
 
-  const hostAuthWebhookUrl =
-    typeof body.hostAuthWebhookUrl === "string" ? body.hostAuthWebhookUrl.trim() || null : existingKey.hostAuthWebhookUrl;
+  let hostAuthWebhookUrl = existingKey.hostAuthWebhookUrl;
+  let clearHostAuthWebhookUrl = false;
+  if (typeof body.hostAuthWebhookUrl === "string") {
+    const trimmed = body.hostAuthWebhookUrl.trim();
+    if (trimmed) {
+      hostAuthWebhookUrl = trimmed;
+    } else {
+      hostAuthWebhookUrl = undefined;
+      clearHostAuthWebhookUrl = true;
+    }
+  }
 
-  if (!PROVIDER_VALUES.has(aiProvider)) {
+  if (!PROVIDER_VALUES.has(aiProvider ?? "")) {
     return NextResponse.json({ error: "Invalid AI provider" }, { status: 400 });
   }
 
-  if (!TIER_VALUES.has(aiTier)) {
+  if (!TIER_VALUES.has((aiTier ?? "AUTO") as AiTier)) {
     return NextResponse.json({ error: "Invalid AI tier" }, { status: 400 });
   }
 
@@ -154,10 +135,8 @@ export async function PATCH(
       );
     }
 
-    const owner = await prisma.user.findUniqueOrThrow({
-      where: { id: existingKey.userId },
-      select: { subscriptionPlan: true },
-    });
+    const { data: owner } = await User.get({ id: existingKey.userId }).go();
+    if (!owner) throw new Error(`ApiKey ${existingKey.id}'s owner user ${existingKey.userId} no longer exists`);
     if (!canUseHostManagedAi(owner.subscriptionPlan)) {
       return NextResponse.json(
         { error: "Host-Managed AI access requires the Ultra plan." },
@@ -166,18 +145,24 @@ export async function PATCH(
     }
   }
 
-  const updated = await prisma.apiKey.update({
-    where: { id: existingKey.id },
-    data: {
-      useAi,
-      aiProvider,
-      aiTier,
-      aiApiKey,
-      aiAccessMode,
-      hostAuthWebhookUrl,
-      hostWebhookSecret,
-    },
+  let patch = ApiKey.patch({ organizationId: ctx.organizationId, id: existingKey.id }).set({
+    useAi,
+    aiProvider,
+    aiTier,
+    ...(aiApiKey !== undefined ? { aiApiKey } : {}),
+    aiAccessMode,
+    ...(hostAuthWebhookUrl !== undefined ? { hostAuthWebhookUrl } : {}),
+    ...(hostWebhookSecret !== undefined ? { hostWebhookSecret } : {}),
   });
+  const toRemove: ("aiApiKey" | "hostAuthWebhookUrl" | "hostWebhookSecret")[] = [];
+  if (clearAiApiKey) toRemove.push("aiApiKey");
+  if (clearHostAuthWebhookUrl) toRemove.push("hostAuthWebhookUrl");
+  if (clearHostWebhookSecret) toRemove.push("hostWebhookSecret");
+  if (toRemove.length) patch = patch.remove(toRemove);
+  await patch.go();
+
+  const { data: updated } = await ApiKey.get({ organizationId: ctx.organizationId, id: existingKey.id }).go();
+  if (!updated) throw new Error(`ApiKey ${existingKey.id} vanished immediately after being updated`);
 
   return NextResponse.json({ apiKey: serializeApiKey(updated) });
 }

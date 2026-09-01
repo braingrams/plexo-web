@@ -1,7 +1,7 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
+import { auth } from "@/server/authDynamo";
+import { getInvitation } from "@/server/orgDynamo";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { AcceptInviteClient } from "./accept-invite-client";
 
@@ -31,24 +31,13 @@ function ErrorCard({ title, message }: { title: string; message: string }) {
 
 export default async function AcceptInvitePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
 
   if (!session?.user) {
     redirect(`/auth/login?redirectTo=${encodeURIComponent(`/accept-invite/${id}`)}`);
   }
 
-  let invitation;
-  try {
-    invitation = await auth.api.getInvitation({ query: { id }, headers: requestHeaders });
-  } catch {
-    return (
-      <ErrorCard
-        title="Invitation not found"
-        message="This invite link is invalid, expired, or has already been used. Ask whoever invited you to send a new one."
-      />
-    );
-  }
+  const invitation = await getInvitation(id);
 
   if (!invitation || invitation.status !== "pending") {
     return (
@@ -59,7 +48,7 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ i
     );
   }
 
-  if (invitation.email.toLowerCase() !== session.user.email.toLowerCase()) {
+  if (invitation.email.toLowerCase() !== (session.user.email ?? "").toLowerCase()) {
     return (
       <ErrorCard
         title="Wrong account"

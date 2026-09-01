@@ -3,6 +3,7 @@ import { EntityItem } from "electrodb";
 import { docClient } from "./client";
 import { User } from "./coreEntities";
 import { CreditLedgerEntry, StripeEvent } from "./ledgerEntities";
+import { PLAN_MONTHLY_CREDITS } from "@/lib/subscription";
 
 type UserItem = EntityItem<typeof User>;
 
@@ -149,12 +150,73 @@ export async function chargeFlatCredits(
   return debitCredits(userId, credits, "AI_USAGE", description);
 }
 
-// chargeUsage (real token-usage pricing) and ensureCreditPeriod (monthly allowance
-// grant) port the same way — read User, compute, conditional TransactWriteCommand
-// against User (plexo-core) + CreditLedgerEntry (plexo-ledger). Omitted here to keep
-// this file to the two patterns that actually differ (idempotent external-event credit,
-// and optimistic-lock debit); wiring lib/ai/generate.ts and the monthly-grant call site
-// to these is app-integration work for whenever this table goes live, not new design.
+export interface CreditBalance {
+  allowanceBalance: number;
+  topupBalance: number;
+  total: number;
+  allowanceResetAt: string;
+}
+
+const ALLOWANCE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Ported from lib/credits/ledger.ts. Unlike grantTopup/debitCredits above, losing the
+ * race here isn't an error to retry past — Postgres's `updateMany` version treats
+ * `count === 0` as "someone else already granted this period" and just reads back what
+ * they wrote, so this does the same: one conditional TransactWriteCommand attempt, and a
+ * plain re-read (not a throw) if the condition fails.
+ */
+export async function ensureCreditPeriod(userId: string): Promise<CreditBalance> {
+  const { data } = await User.get({ id: userId }).go();
+  if (!data) throw new Error(`ensureCreditPeriod: user ${userId} not found`);
+  const user = data as UserItem;
+  const allowanceBalance = user.allowanceBalance ?? 0;
+  const topupBalance = user.topupBalance ?? 0;
+  const allowanceResetAt = user.allowanceResetAt ?? new Date(0).toISOString();
+  const subscriptionPlan = user.subscriptionPlan ?? "FREE";
+
+  const now = new Date();
+  if (now <= new Date(allowanceResetAt)) {
+    return { allowanceBalance, topupBalance, total: allowanceBalance + topupBalance, allowanceResetAt };
+  }
+
+  const grant = PLAN_MONTHLY_CREDITS[subscriptionPlan];
+  const nextResetAt = new Date(now.getTime() + ALLOWANCE_PERIOD_MS).toISOString();
+
+  const updateUser = User.patch({ id: userId })
+    .set({ allowanceBalance: grant, allowanceResetAt: nextResetAt })
+    .where((attr, op) => op.eq(attr.allowanceResetAt, allowanceResetAt)) // optimistic lock
+    .params();
+
+  const createEntry = CreditLedgerEntry.create({
+    id: crypto.randomUUID(),
+    userId,
+    type: "MONTHLY_GRANT",
+    amount: grant,
+    balanceAfter: grant + topupBalance,
+    description: `Monthly ${subscriptionPlan} allowance`,
+  }).params();
+
+  try {
+    await docClient.send(buildTransactWrite(updateUser, createEntry));
+    return { allowanceBalance: grant, topupBalance, total: grant + topupBalance, allowanceResetAt: nextResetAt };
+  } catch (err) {
+    if (!isConditionalCheckFailure(err)) throw err;
+    // Lost the race to another concurrent request — read back what it wrote.
+    const { data: fresh } = await User.get({ id: userId }).go();
+    if (!fresh) throw new Error(`ensureCreditPeriod: user ${userId} vanished mid-race`);
+    const freshUser = fresh as UserItem;
+    const freshAllowance = freshUser.allowanceBalance ?? 0;
+    const freshTopup = freshUser.topupBalance ?? 0;
+    const freshResetAt = freshUser.allowanceResetAt ?? nextResetAt;
+    return { allowanceBalance: freshAllowance, topupBalance: freshTopup, total: freshAllowance + freshTopup, allowanceResetAt: freshResetAt };
+  }
+}
+
+// chargeUsage (real token-usage pricing) ports the same way as chargeFlatCredits above —
+// read User, compute, conditional TransactWriteCommand. Omitted here since nothing has
+// been cut over to it yet (lib/ai/generate.ts is still Prisma-backed) — add when that
+// call site's own cutover happens, not speculatively ahead of it.
 
 // ElectroDB's .params() returns the exact runtime shape TransactWriteItems' Update/Put
 // members need (TableName, Key/Item, UpdateExpression, ExpressionAttributeNames/Values,

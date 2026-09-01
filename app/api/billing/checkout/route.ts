@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { PLAN_PRICE_ENV, TOPUP_PACKS, resolvePriceId } from "@/lib/credits/catalog";
 import { getStripe } from "@/lib/stripe";
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
+import { auth } from "@/server/authDynamo";
+import { User } from "@/lib/db/coreEntities";
 
 type CheckoutRequest =
   | { kind: "subscription"; plan: "PRO" | "ULTRA" }
@@ -18,7 +18,7 @@ function isValidBody(value: unknown): value is CheckoutRequest {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -29,10 +29,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const stripe = getStripe();
-  const user = await prisma.user.findUniqueOrThrow({
-    where: { id: session.user.id },
-    select: { email: true, stripeCustomerId: true },
-  });
+  const { data: user } = await User.get({ id: session.user.id }).go();
+  if (!user) throw new Error(`Session user ${session.user.id} has no matching User record`);
 
   let customerId = user.stripeCustomerId;
   if (!customerId) {
@@ -41,7 +39,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       metadata: { plexoUserId: session.user.id },
     });
     customerId = customer.id;
-    await prisma.user.update({ where: { id: session.user.id }, data: { stripeCustomerId: customerId } });
+    await User.patch({ id: session.user.id }).set({ stripeCustomerId: customerId }).go();
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

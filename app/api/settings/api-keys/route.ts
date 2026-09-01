@@ -1,10 +1,11 @@
-import { createHash, randomInt } from "node:crypto";
+import { createHash, randomInt, randomUUID } from "node:crypto";
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
+import { resolveOrgContext } from "@/app/api/org/_context";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { ApiKey } from "@/lib/db/coreEntities";
+import type { EntityItem } from "electrodb";
 
 const TOKEN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -24,25 +25,12 @@ function maskApiKey(rawKey: string): string {
   return `${rawKey.slice(0, 11)}...${rawKey.slice(-4)}`;
 }
 
-function serializeApiKey(record: {
-  id: string;
-  name: string;
-  maskedKey: string;
-  createdAt: Date;
-  isActive: boolean;
-  useAi: boolean;
-  aiProvider: string;
-  aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
-  aiApiKey: string | null;
-  aiAccessMode: "SYSTEM" | "BYOK" | "HOST_MANAGED";
-  hostAuthWebhookUrl: string | null;
-  hostWebhookSecret: string | null;
-}) {
+function serializeApiKey(record: EntityItem<typeof ApiKey>) {
   return {
     id: record.id,
     name: record.name,
     maskedKey: record.maskedKey,
-    createdAt: record.createdAt.toISOString(),
+    createdAt: record.createdAt,
     isActive: record.isActive,
     useAi: record.useAi,
     aiProvider: record.aiProvider,
@@ -54,70 +42,48 @@ function serializeApiKey(record: {
   };
 }
 
-// API keys belong to the organization, not the individual member who happened to create
-// one — any teammate with apiKey.manage permission (Owner/Admin) sees and can rotate the
-// whole org's keys, matching how ApiKey.organizationId (not userId alone) is now scoped.
-async function getSessionOrgContext(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session?.user) return null;
+export async function GET(): Promise<NextResponse> {
+  const ctx = await resolveOrgContext();
+  if (ctx.error) return ctx.error;
 
-  const activeOrgId = (session.session as { activeOrganizationId?: string }).activeOrganizationId;
-  const membership =
-    (activeOrgId &&
-      (await prisma.member.findUnique({
-        where: { organizationId_userId: { organizationId: activeOrgId, userId: session.user.id } },
-      }))) ||
-    (await prisma.member.findFirst({ where: { userId: session.user.id }, orderBy: { createdAt: "asc" } }));
-  if (!membership) return null;
-
-  return { userId: session.user.id, organizationId: membership.organizationId, role: membership.role };
-}
-
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  const ctx = await getSessionOrgContext(request);
-  if (!ctx) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const apiKeys = await prisma.apiKey.findMany({
-    where: { organizationId: ctx.organizationId },
-    orderBy: { createdAt: "desc" },
-  });
+  const { data: apiKeys } = await ApiKey.query.primary({ organizationId: ctx.organizationId }).go();
+  apiKeys.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   return NextResponse.json({ apiKeys: apiKeys.map(serializeApiKey) });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const ctx = await getSessionOrgContext(request);
-  if (!ctx) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const ctx = await resolveOrgContext();
+  if (ctx.error) return ctx.error;
 
-  const permissionError = await requirePermission(request.headers, ctx.role, { apiKey: ["manage"] });
+  const permissionError = requirePermission(ctx.role, { apiKey: ["manage"] });
   if (permissionError) return permissionError;
 
   const body = (await request.json().catch(() => ({}))) as { name?: string };
 
-  const keyCount = await prisma.apiKey.count({ where: { organizationId: ctx.organizationId } });
-  const keyName = body.name?.trim() || `API Key ${keyCount + 1}`;
+  const { data: existing } = await ApiKey.query.primary({ organizationId: ctx.organizationId }).go();
+  const keyName = body.name?.trim() || `API Key ${existing.length + 1}`;
 
   const rawKey = `pk_live_${randomToken(32)}`;
   const hashedKey = sha256(rawKey);
   const maskedKey = maskApiKey(rawKey);
 
-  const apiKey = await prisma.apiKey.create({
-    data: {
-      userId: ctx.userId,
-      organizationId: ctx.organizationId,
-      name: keyName,
-      hashedKey,
-      maskedKey,
-      useAi: false,
-      aiProvider: "openai",
-      aiTier: "AUTO",
-      isActive: true,
-    },
-  });
+  const id = randomUUID();
+  await ApiKey.create({
+    id,
+    userId: ctx.userId,
+    organizationId: ctx.organizationId,
+    name: keyName,
+    hashedKey,
+    maskedKey,
+    useAi: false,
+    aiProvider: "openai",
+    aiTier: "AUTO",
+    isActive: true,
+  }).go();
+
+  const { data: apiKey } = await ApiKey.get({ organizationId: ctx.organizationId, id }).go();
+  if (!apiKey) throw new Error(`ApiKey ${id} vanished immediately after being created`);
 
   return NextResponse.json({
     apiKey: serializeApiKey(apiKey),

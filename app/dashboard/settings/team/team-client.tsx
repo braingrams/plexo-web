@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-import { authClient } from "@/lib/auth-client";
 import { Card } from "@/app/dashboard/_components/Card";
 import { Avatar } from "@/app/dashboard/_components/Avatar";
 import { CustomSelect } from "@/app/_components/CustomSelect";
@@ -60,18 +59,16 @@ export function TeamClient({
     if (!trimmed) return;
     setInviting(true);
     try {
-      // better-auth client methods resolve with { data, error } rather than throwing on
-      // an API-level failure (bad permission, duplicate invite, etc.) — a bare try/catch
-      // alone never sees those, so `res.error` must be checked explicitly. Missing this
-      // check previously let a failed invite fall through as if it had an `invitation`
-      // (actually the whole { data: null, error } wrapper), adding a row with a
-      // `undefined` id to the list — which is what the React "missing key" warning below
-      // was actually pointing at.
-      const res: any = await authClient.organization.inviteMember({ email: trimmed, role: role as any });
-      if (res?.error) {
-        throw new Error(res.error.message ?? "Couldn't send that invite.");
+      const res = await fetch("/api/org/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed, role }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.error ?? "Couldn't send that invite.");
       }
-      const invitation = res?.data;
+      const invitation = body.invitation;
       if (!invitation?.id) {
         throw new Error("Unexpected response from the server.");
       }
@@ -90,8 +87,11 @@ export function TeamClient({
   async function handleCancelInvite(id: string) {
     setInvitations((prev) => prev.filter((i) => i.id !== id));
     try {
-      const res: any = await authClient.organization.cancelInvitation({ invitationId: id });
-      if (res?.error) throw new Error(res.error.message ?? "Couldn't cancel that invite.");
+      const res = await fetch(`/api/org/invite/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Couldn't cancel that invite.");
+      }
     } catch {
       // Best-effort UI removal even if the server call fails — a stale row is harmless.
     }
@@ -100,8 +100,15 @@ export function TeamClient({
   async function handleRoleChange(memberId: string, userId: string, nextRole: string) {
     setMembers((prev) => prev.map((m) => (m.id === memberId ? { ...m, role: nextRole } : m)));
     try {
-      const res: any = await authClient.organization.updateMemberRole({ memberId, role: nextRole });
-      if (res?.error) throw new Error(res.error.message ?? "Couldn't update that member's role.");
+      const res = await fetch(`/api/org/members/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: nextRole }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Couldn't update that member's role.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't update that member's role.");
     }
@@ -111,8 +118,11 @@ export function TeamClient({
     if (!confirm("Remove this member from the organization?")) return;
     setMembers((prev) => prev.filter((m) => m.id !== memberId));
     try {
-      const res: any = await authClient.organization.removeMember({ memberIdOrEmail: memberId });
-      if (res?.error) throw new Error(res.error.message ?? "Couldn't remove that member.");
+      const res = await fetch(`/api/org/members/${memberId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Couldn't remove that member.");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't remove that member.");
     }

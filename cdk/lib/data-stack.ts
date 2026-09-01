@@ -28,7 +28,12 @@ const TABLES: TableSpec[] = [
   // PointInTimeRecoveryUnavailableException before this was added:
   // ExportTableToPointInTime requires PITR enabled on the source table. Also a real
   // backup benefit in its own right for genuine business data, not just export plumbing.
-  { id: "Core", tableName: "plexo-core", pointInTimeRecovery: true },
+  // secondGsi: ApiKey's byHashedKey lookup — the app-code cutover's resolveUser (every
+  // API-key-authenticated request across the public API surface) needs this indexed;
+  // without it, that lookup would be a Scan across the whole table, exactly what
+  // maildrip-server/CLAUDE.md's "Scan is a code smell — never use it" rule exists to
+  // prevent, on a security-critical, called-on-every-request path.
+  { id: "Core", tableName: "plexo-core", secondGsi: true, pointInTimeRecovery: true },
   { id: "Ledger", tableName: "plexo-ledger", pointInTimeRecovery: true, stream: true },
   // CommerceOrder needs a second real lookup beyond payment-reference (GSI1) — customer
   // order-tracking by orderNumber, a genuine access pattern proven out in

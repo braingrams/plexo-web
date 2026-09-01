@@ -3,8 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { authClient } from "@/lib/auth-client";
-
 export function AcceptInviteClient({ invitationId }: { invitationId: string }) {
   const router = useRouter();
   const [pending, setPending] = useState<"accept" | "decline" | null>(null);
@@ -14,16 +12,13 @@ export function AcceptInviteClient({ invitationId }: { invitationId: string }) {
     setPending("accept");
     setError(null);
     try {
-      // better-auth client methods resolve with { data, error } rather than throwing on
-      // an API-level failure — must check res.error explicitly or a failed accept would
-      // silently navigate to /dashboard as if it had succeeded.
-      const res: any = await authClient.organization.acceptInvitation({ invitationId });
-      if (res?.error) {
-        throw new Error(res.error.message ?? "Couldn't accept this invitation.");
-      }
-      const organizationId = res?.data?.invitation?.organizationId ?? res?.data?.member?.organizationId;
-      if (organizationId) {
-        await authClient.organization.setActive({ organizationId });
+      // /api/org/invite/[id]/accept already sets the active-org cookie on success
+      // (see server/orgDynamo.ts's setActiveOrganizationCookie) — no separate "set
+      // active" call needed here, unlike better-auth's two-step client flow.
+      const res = await fetch(`/api/org/invite/${invitationId}/accept`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.error ?? "Couldn't accept this invitation.");
       }
       router.push("/dashboard");
     } catch (err) {
@@ -36,9 +31,10 @@ export function AcceptInviteClient({ invitationId }: { invitationId: string }) {
     setPending("decline");
     setError(null);
     try {
-      const res: any = await authClient.organization.rejectInvitation({ invitationId });
-      if (res?.error) {
-        throw new Error(res.error.message ?? "Couldn't decline this invitation.");
+      const res = await fetch(`/api/org/invite/${invitationId}/reject`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body.error ?? "Couldn't decline this invitation.");
       }
       router.push("/dashboard");
     } catch (err) {

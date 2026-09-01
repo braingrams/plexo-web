@@ -3,6 +3,7 @@ import * as cdk from "aws-cdk-lib";
 import { DataStack } from "../lib/data-stack";
 import { ComputeStack } from "../lib/compute-stack";
 import { AnalyticsStack } from "../lib/analytics-stack";
+import { DnsStack } from "../lib/dns-stack";
 
 const app = new cdk.App();
 cdk.Tags.of(app).add("appName", "plexo-web");
@@ -13,6 +14,8 @@ const stackID = process.env.STACK_ID || "pr-1-plexo";
 // "compute" deploys the app-hosting layer (production, staging, and per-PR previews).
 // "analytics" deploys the export/Athena admin-query path (production, staging only —
 // no PR preview needs its own export pipeline).
+// "dns" deploys the aws.plexo.charisol.io hosted zone + wildcard cert — ONCE ever, same
+// as "data"/"analytics" (never per-PR; every environment shares this one zone/cert).
 const stackKind = process.env.STACK_KIND || "data";
 
 const env = {
@@ -40,6 +43,8 @@ if (stackKind === "data") {
     },
     { env },
   );
+} else if (stackKind === "dns") {
+  new DnsStack(app, `${stackID}-dns-stack`, { env });
 } else {
-  throw new Error(`Unknown STACK_KIND "${stackKind}" — expected "data", "compute", or "analytics"`);
+  throw new Error(`Unknown STACK_KIND "${stackKind}" — expected "data", "compute", "analytics", or "dns"`);
 }

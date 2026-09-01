@@ -1,30 +1,18 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
+import { auth } from "@/server/authDynamo";
+import { User } from "@/lib/db/coreEntities";
 import { ProfileClient } from "./profile-client";
 import { SettingsShell } from "../_components/SettingsShell";
 
 export default async function ProfilePage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
 
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/profile");
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      subscriptionPlan: true,
-      createdAt: true,
-      hideBranding: true,
-    },
-  });
+  const { data: user } = await User.get({ id: session.user.id }).go();
 
   if (!user) {
     redirect("/auth/login");
@@ -37,8 +25,8 @@ export default async function ProfilePage() {
         initialName={user.name ?? ""}
         email={user.email ?? ""}
         subscriptionPlan={user.subscriptionPlan ?? "FREE"}
-        memberSince={user.createdAt.toISOString()}
-        initialHideBranding={user.hideBranding}
+        memberSince={user.createdAt ?? new Date().toISOString()}
+        initialHideBranding={user.hideBranding ?? false}
       />
     </SettingsShell>
   );

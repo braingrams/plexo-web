@@ -1,13 +1,11 @@
-import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
+import { auth } from "@/server/authDynamo";
+import { User } from "@/lib/db/coreEntities";
 import { getTierFeatures } from "@/lib/subscription";
 
 export async function PATCH(request: Request): Promise<NextResponse> {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
 
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,8 +29,8 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     layoutMode?: "CLASSIC" | "MODERN";
     manageLandingPagePublishing?: boolean;
     hideBranding?: boolean;
-    pendingPlan?: null;
   } = {};
+  let clearPendingPlan = false;
 
   if (body.name !== undefined) {
     const name = body.name.trim();
@@ -59,10 +57,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     // Server-side Ultra gate — reject with a clear error rather than silently storing a
     // value that resolveManageLandingPagePublishing() would collapse to false everywhere else.
     if (body.manageLandingPagePublishing === true) {
-      const currentUser = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { subscriptionPlan: true },
-      });
+      const { data: currentUser } = await User.get({ id: session.user.id }).go();
       if (currentUser?.subscriptionPlan !== "ULTRA") {
         return NextResponse.json({ error: "This feature requires the Ultra plan." }, { status: 403 });
       }
@@ -78,10 +73,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     // resolveHideBranding() would collapse a FREE account's true back to false everywhere else
     // anyway, but rejecting here gives a clearer error instead of a silently-ignored save.
     if (body.hideBranding === true) {
-      const currentUser = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { subscriptionPlan: true },
-      });
+      const { data: currentUser } = await User.get({ id: session.user.id }).go();
       if (!getTierFeatures(currentUser?.subscriptionPlan).brandingRemovalEnabled) {
         return NextResponse.json({ error: "This feature requires the Pro or Ultra plan." }, { status: 403 });
       }
@@ -96,19 +88,18 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     if (body.pendingPlan !== null) {
       return NextResponse.json({ error: "Invalid value for pendingPlan." }, { status: 400 });
     }
-    data.pendingPlan = null;
+    clearPendingPlan = true;
   }
 
-  if (Object.keys(data).length === 0) {
+  if (Object.keys(data).length === 0 && !clearPendingPlan) {
     return NextResponse.json({ error: "No changes to update." }, { status: 400 });
   }
 
   try {
-    const updatedUser = await prisma.user.update({
-      where: { id: session.user.id },
-      data,
-      select: { id: true, name: true, email: true, layoutMode: true, manageLandingPagePublishing: true, hideBranding: true },
-    });
+    let patch = User.patch({ id: session.user.id }).set(data);
+    if (clearPendingPlan) patch = patch.remove(["pendingPlan"]);
+    await patch.go();
+    const { data: updatedUser } = await User.get({ id: session.user.id }).go();
 
     return NextResponse.json({ user: updatedUser });
   } catch {

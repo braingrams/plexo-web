@@ -28,4 +28,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   session: { strategy: "database" },
+  callbacks: {
+    // Auth.js doesn't put `id` on session.user by default even with the database
+    // strategy (verified — it's a documented, deliberate omission, not a bug) — every
+    // call site across the app (server/orgDynamo.ts, /api/org/*, etc.) reads
+    // session.user.id, so this is required, not an enhancement.
+    session({ session, user }) {
+      session.user.id = user.id;
+      return session;
+    },
+  },
 });

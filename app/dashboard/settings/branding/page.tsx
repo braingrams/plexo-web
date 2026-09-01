@@ -1,33 +1,29 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
-import { canWhiteLabel, getOrganizationOwnerPlan } from "@/lib/subscription";
+import { auth } from "@/server/authDynamo";
+import { Organization } from "@/lib/db/coreEntities";
+import { ensureActiveOrganization, getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
+import { canWhiteLabel } from "@/lib/subscription";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
 import { PageContainer } from "@/app/dashboard/_components/PageContainer";
 import { BrandingForm } from "./branding-form";
 
 export default async function BrandingSettingsPage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/settings/branding");
   }
 
-  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
 
-  const [org, plan] = await Promise.all([
-    prisma.organization.findUniqueOrThrow({
-      where: { id: orgResolution.organizationId },
-      select: { name: true, logo: true, brandColor: true, whiteLabelEnabled: true },
-    }),
-    getOrganizationOwnerPlan(orgResolution.organizationId),
+  const [{ data: org }, plan] = await Promise.all([
+    Organization.get({ id: orgResolution.organizationId }).go(),
+    getOrganizationOwnerPlanDynamo(orgResolution.organizationId),
   ]);
+  if (!org) throw new Error(`Organization ${orgResolution.organizationId} not found`);
 
   return (
     <PageContainer>
@@ -40,10 +36,10 @@ export default async function BrandingSettingsPage() {
         organizationId={orgResolution.organizationId}
         canManage={orgResolution.role === "owner"}
         planAllowsWhiteLabel={canWhiteLabel(plan)}
-        initialWhiteLabelEnabled={org.whiteLabelEnabled}
+        initialWhiteLabelEnabled={org.whiteLabelEnabled ?? false}
         initialName={org.name}
-        initialLogo={org.logo}
-        initialBrandColor={org.brandColor}
+        initialLogo={org.logo ?? null}
+        initialBrandColor={org.brandColor ?? null}
       />
     </PageContainer>
   );

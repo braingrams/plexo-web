@@ -43,6 +43,19 @@ export const User = new Entity(
       // Platform admin — null = ordinary customer, set = Charisol staff (plexo-admin).
       adminRole: { type: ["SUPERADMIN", "SUPPORT", "MODERATOR", "FINANCE"] as const },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      // Dashboard shell UI preference — server/orgDynamo.ts's cutover of app/dashboard/layout.tsx.
+      layoutMode: { type: ["CLASSIC", "MODERN"] as const, default: "MODERN" },
+      // Plan-gated preferences (resolveHideBranding/resolveManageLandingPagePublishing in
+      // lib/subscription.ts do the actual entitlement collapse — these store the raw
+      // stated preference, same as Prisma did).
+      hideBranding: { type: "boolean", default: false },
+      manageLandingPagePublishing: { type: "boolean", default: false },
+      // Plan picked at signup before email verification completes — see server/auth.ts's
+      // databaseHooks and app/auth/complete-subscription. Null once resolved.
+      pendingPlan: { type: ["PRO", "ULTRA"] as const },
+      // Per-user override of the plan-default published-domain cap — null defers to
+      // getDomainLimit()'s plan-based default (app/api/v1/domains/route.ts).
+      customDomainLimit: { type: "number" },
     },
     indexes: {
       primary: {
@@ -149,6 +162,20 @@ export const ApiKey = new Entity(
         index: "GSI1",
         pk: { field: "GSI1PK", composite: ["userId"], template: "USER#${userId}" },
         sk: { field: "GSI1SK", composite: ["id"], template: "APIKEY#${id}" },
+      },
+      // The API-key-authentication lookup (every x-api-key/Bearer-authenticated request
+      // across the public API surface, see lib/auth/resolveUser.ts) — prisma's own
+      // findFirst({OR: [{hashedKey}, {maskedKey}]}) had no index either (grepped
+      // prisma/schema.prisma to confirm, not assumed), but a full scan on DynamoDB is the
+      // thing worth avoiding on a security-critical, called-on-every-request path, so
+      // this gets an explicit GSI here where an unindexed lookup would otherwise silently
+      // become a Scan. maskedKey is checked in application code as a fallback (see
+      // resolveUser) rather than a second index — it's the "the raw key equals what a
+      // human already sees as the masked value" edge case, not a hot path.
+      byHashedKey: {
+        index: "GSI2",
+        pk: { field: "GSI2PK", composite: ["hashedKey"], template: "APIKEYHASH#${hashedKey}" },
+        sk: { field: "GSI2SK", composite: ["id"], template: "APIKEY#${id}" },
       },
     },
   },

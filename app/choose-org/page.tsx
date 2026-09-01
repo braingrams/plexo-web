@@ -1,25 +1,25 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
+import { auth } from "@/server/authDynamo";
+import { Member, Organization } from "@/lib/db/coreEntities";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { ChooseOrgClient } from "./choose-org-client";
 
 export default async function ChooseOrgPage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
   if (!session?.user) {
     redirect("/auth/login");
   }
 
-  const memberships = await prisma.member.findMany({
-    where: { userId: session.user.id },
-    include: { organization: { select: { id: true, name: true } } },
-    orderBy: { createdAt: "asc" },
-  });
+  const { data: rawMemberships } = await Member.query.byUser({ userId: session.user.id }).go();
+  const memberships = await Promise.all(
+    rawMemberships.map(async (m) => {
+      const { data: org } = await Organization.get({ id: m.organizationId }).go();
+      return { organizationId: m.organizationId, role: m.role, organization: { id: m.organizationId, name: org?.name ?? "Unknown" } };
+    }),
+  );
 
-  // Nothing to choose between — send them straight through (server/org.ts's
+  // Nothing to choose between — send them straight through (server/orgDynamo.ts's
   // ensureActiveOrganization handles the 0-or-1 cases when the dashboard layout runs next).
   if (memberships.length < 2) {
     redirect("/dashboard");

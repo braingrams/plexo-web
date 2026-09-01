@@ -24,13 +24,34 @@ depends on it.
       replacement
 - [x] `/api/org/*` route handlers (invite, invite/[id], invite/[id]/accept, invite/[id]/reject,
       members/[userId], active) — REST replacements for `authClient.organization.*`
-- [ ] Swap `app/dashboard/settings/team/team-client.tsx` and
+- [x] Swap `app/dashboard/settings/team/team-client.tsx` and
       `app/accept-invite/[id]/accept-invite-client.tsx` to call `/api/org/*` instead of
       `authClient.organization.*`
-- [ ] Swap the 47 files calling `auth.api.getSession` / importing `@/server/auth` to
-      `auth()` from `@/server/authDynamo` instead (session shape differs slightly —
-      `session.user.id`/`.email` still there, but no `session.session.activeOrganizationId`,
-      use `ensureActiveOrganization` from `orgDynamo.ts` instead)
+- [x] `types/next-auth.d.ts` — session.user.id augmentation (Auth.js doesn't include it by
+      default even with the database strategy; `server/authDynamo.ts` needed a
+      `callbacks.session` to actually populate it)
+- [x] `lib/auth/resolveUser.ts` — the shared session-or-API-key resolver used by 29 v1 API
+      routes, moved out of `app/api/v1/domains/route.ts` to a proper home. Required adding
+      `ApiKey`'s `byHashedKey` GSI2 (`lib/db/coreEntities.ts`) + `secondGsi: true` on the
+      Core table (`cdk/lib/data-stack.ts`) — the hashedKey lookup needed a real index, not
+      a Scan, on a security-critical every-request path (maildrip-server/CLAUDE.md's "Scan
+      is a code smell" rule). **Data stack needs redeploying** (`STACK_KIND=data`) before
+      this GSI exists for real — additive change, safe on a live table, no other GSI/table
+      touched.
+- [x] 21 Core-only files swapped and type-clean: dashboard layout/profile, choose-org,
+      complete-subscription, mcp/login, billing checkout/portal, organizations/[id]/branding,
+      settings (api-keys, notifications, branding, ai, subscription — the last needed
+      `ensureCreditPeriod` actually ported to `lib/db/ledgerOperations.ts`, previously just
+      a stub comment), insights, integrations, sdk, marketplace/payouts +
+      `/api/v1/marketplace/withdrawals` (3-item TransactWriteItems: balance debit +
+      WithdrawalRequest + SellerLedgerEntry, same optimistic-lock pattern as grantTopup)
+- [ ] Swap the remaining ~24 files calling `auth.api.getSession` / importing
+      `@/server/auth` to `auth()` from `@/server/authDynamo` instead — the rest are blocked
+      on Content (Template/BlogPost/PublishedDomain) or Commerce cutover landing first,
+      since they read those models in the same request (dashboard/page.tsx,
+      lib/blog/pageAuth.ts, lib/siteLayout.ts, templates/*, domains/page.tsx, commerce/*,
+      marketplace/listings+sell, site-transfers + transfers/* — the last also needs
+      `template.name` for display, a Content dependency, not just Import)
 - [ ] `server/adminAuth.ts` (plexo-web's own admin allowlist check, separate from
       plexo-admin's `adminGuard.ts`) — verify it doesn't depend on better-auth internals
 - [ ] Password-based signup/login/reset flows — Auth.js's `Credentials` provider isn't
@@ -43,6 +64,26 @@ depends on it.
 - [ ] Not started. Entities already exist (`lib/db/contentEntities.ts`, Phase 4) — this is
       purely swapping call sites in `app/dashboard/**`, `app/api/v1/**`, `app/[domain]/**`
       (published-site rendering — the highest-traffic read path in the whole app)
+- [ ] **Customer domain publishing has no AWS equivalent built yet** — `app/api/v1/domains/route.ts`'s
+      `addVercelDomain`/`removeVercelDomain` call Vercel's Domains API, which auto-issues a
+      cert for any customer domain pointed at it with zero extra DNS step from the
+      customer. Plain CloudFront has no equivalent (one cert per distribution, no
+      automatic per-domain issuance). Confirmed via real AWS docs (not guessed): **CloudFront
+      SaaS Manager** (GA April 2025) is the purpose-built replacement — `AWS::CloudFront::
+      DistributionTenant` + `ManagedCertificateRequest` gives each customer domain its own
+      auto-validated (HTTP, no manual customer DNS step), auto-renewed ACM cert, up to 2,000
+      domains per multi-tenant distribution. Pricing: first 10 tenants free, then $20/mo
+      flat up to 200, $0.10/tenant past that — factor into the $500/year budget once past
+      10 total published domains. User confirmed (2026-09-01): build on CloudFront SaaS
+      Manager, not deferred. Blocked on the Content cutover above landing first — a
+      multi-tenant distribution needs a real published-site rendering path (reading
+      `PublishedDomain`/`Template` from DynamoDB) to point tenants at; building the tenant
+      plumbing before that exists would have nothing real to serve. Sequence: (1) Content
+      cutover's `app/[domain]/**` rendering path first, (2) then a new `cdk/lib/
+      published-sites-stack.ts` — multi-tenant `AWS::CloudFront::Distribution` + connection
+      group, wired to that rendering Lambda, (3) then swap `addVercelDomain`/
+      `removeVercelDomain` in `app/api/v1/domains/route.ts` for `CreateDistributionTenant`/
+      `DeleteDistributionTenant` calls.
 
 ## Commerce (CommerceProduct 33, CommerceSettings 31, CommerceOrder 27, CommerceCartItem 10,
 ## CommerceDiscountCode 13, CommerceWallet 14, CommerceAvailabilityRule/Exception 14, etc.)

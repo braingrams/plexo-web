@@ -1,35 +1,25 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { ensureActiveOrganization, listMembers, listPendingInvitations } from "@/server/orgDynamo";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
 import { PageContainer } from "@/app/dashboard/_components/PageContainer";
 import { TeamClient } from "./team-client";
 
 export default async function TeamSettingsPage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/settings/team");
   }
 
-  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
 
   const [members, invitations] = await Promise.all([
-    prisma.member.findMany({
-      where: { organizationId: orgResolution.organizationId },
-      include: { user: { select: { id: true, name: true, email: true, image: true } } },
-      orderBy: { createdAt: "asc" },
-    }),
-    prisma.invitation.findMany({
-      where: { organizationId: orgResolution.organizationId, status: "pending" },
-      orderBy: { createdAt: "desc" },
-    }),
+    listMembers(orgResolution.organizationId),
+    listPendingInvitations(orgResolution.organizationId),
   ]);
 
   return (
@@ -44,17 +34,17 @@ export default async function TeamSettingsPage() {
         currentRole={orgResolution.role}
         organizationName={orgResolution.organizationName}
         initialMembers={members.map((m) => ({
-          id: m.id,
+          id: m.userId,
           userId: m.userId,
           role: m.role,
-          name: m.user.name,
-          email: m.user.email,
+          name: m.name,
+          email: m.email,
         }))}
         initialInvitations={invitations.map((i) => ({
           id: i.id,
           email: i.email,
           role: i.role,
-          createdAt: i.createdAt.toISOString(),
+          createdAt: i.createdAt,
         }))}
       />
     </PageContainer>
