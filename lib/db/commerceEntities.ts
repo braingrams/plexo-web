@@ -505,6 +505,211 @@ export const CommerceDigitalDelivery = new Entity(
   { table, client: docClient },
 );
 
+// Holds the running balance for orders processed through Plexo's own platform-hosted
+// Paystack/Stripe account. Scoped by either a single template OR pooled org-wide
+// (Organization.commerceWalletPooled) — Prisma's own @unique on a nullable templateId
+// couldn't actually enforce "one pooled wallet per org" (Postgres treats every NULL as
+// distinct), so the original needed an app-layer find-before-create check instead. This
+// keys by a single resolved scopeId (templateId when per-site, organizationId when
+// pooled) so ElectroDB's own .create() attribute_not_exists condition enforces uniqueness
+// atomically — a real correctness improvement over the app-layer race the Prisma version
+// had, not just a port.
+export const CommerceWallet = new Entity(
+  {
+    model: { entity: "commerceWallet", version: "1", service: "plexoCommerce" },
+    attributes: {
+      id: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      templateId: { type: "string" },
+      scopeId: { type: "string", required: true }, // templateId if set, else organizationId
+      balanceCents: { type: "number", default: 0 },
+      currency: { type: "string", default: "NGN" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["scopeId"], template: "WALLETSCOPE#${scopeId}" },
+        sk: { field: "sk", composite: [], template: "WALLET" },
+      },
+      // Org-wide wallet listing (prisma: @@index([organizationId])) — admin/support use,
+      // and the lookup-by-id path once a ledger entry only carries walletId.
+      byOrg: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["organizationId"], template: "ORG#${organizationId}" },
+        sk: { field: "GSI1SK", composite: ["id"], template: "WALLET#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Mirrors SellerLedgerEntry's shape (lib/db/ledgerEntities.ts), scoped to a CommerceWallet
+// instead of a User — see that entity's comments for the general pattern.
+export const CommerceWalletLedgerEntry = new Entity(
+  {
+    model: { entity: "commerceWalletLedgerEntry", version: "1", service: "plexoCommerce" },
+    attributes: {
+      id: { type: "string", required: true },
+      walletId: { type: "string", required: true },
+      type: { type: ["SALE_CREDIT", "WITHDRAWAL_DEBIT", "WITHDRAWAL_REVERSAL"] as const, required: true },
+      grossAmountCents: { type: "number" },
+      feeCents: { type: "number" },
+      netAmountCents: { type: "number", required: true },
+      balanceAfterCents: { type: "number", required: true },
+      orderId: { type: "string" },
+      withdrawalRequestId: { type: "string" },
+      description: { type: "string" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+    },
+    indexes: {
+      // A wallet's transaction history, newest first (prisma: @@index([walletId])). No
+      // orderId index: grepped every real call site, nothing looks up this entry by
+      // orderId — the Athena/export escape hatch covers that rare admin query if it's
+      // ever needed, same discipline as this migration's other documented gaps.
+      primary: {
+        pk: { field: "pk", composite: ["walletId"], template: "WALLET#${walletId}" },
+        sk: { field: "sk", composite: ["createdAt", "id"], template: "WALLETLEDGER#${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Same shape/limitation as WithdrawalRequest (lib/db/ledgerEntities.ts) — a logged request
+// an admin processes manually, no automated bank-transfer API.
+export const CommerceWithdrawalRequest = new Entity(
+  {
+    model: { entity: "commerceWithdrawalRequest", version: "1", service: "plexoCommerce" },
+    attributes: {
+      id: { type: "string", required: true },
+      walletId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      requestedByUserId: { type: "string", required: true },
+      amountCents: { type: "number", required: true },
+      encryptedAccountNumber: { type: "string", required: true },
+      encryptedAccountHolderName: { type: "string", required: true },
+      bankName: { type: "string", required: true },
+      status: { type: ["PENDING", "APPROVED", "REJECTED"] as const, default: "PENDING" },
+      rejectionReason: { type: "string" },
+      requestedAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      processedAt: { type: "string" },
+      processedByAdminId: { type: "string" },
+    },
+    indexes: {
+      // A wallet's withdrawal history (prisma: @@index([walletId])).
+      primary: {
+        pk: { field: "pk", composite: ["walletId"], template: "WALLET#${walletId}" },
+        sk: { field: "sk", composite: ["requestedAt", "id"], template: "COMMERCEWITHDRAWAL#${requestedAt}#${id}" },
+      },
+      // The admin review queue — every PENDING request across every wallet (prisma:
+      // @@index([status])), same shape as WithdrawalRequest.byStatus — plexo-admin's
+      // commerce-withdrawals dashboard route.
+      byStatus: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["status"], template: "COMMERCEWITHDRAWALSTATUS#${status}" },
+        sk: { field: "GSI1SK", composite: ["requestedAt", "id"], template: "COMMERCEWITHDRAWAL#${requestedAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+export const CommerceProductRelation = new Entity(
+  {
+    model: { entity: "commerceProductRelation", version: "1", service: "plexoCommerce" },
+    attributes: {
+      id: { type: "string", required: true },
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      productId: { type: "string", required: true },
+      relatedProductId: { type: "string", required: true },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+    },
+    indexes: {
+      // "every relation for this product" (prisma: @@unique([productId, relatedProductId]),
+      // @@index([templateId])) — real call sites (grepped, not assumed) always query and
+      // delete by productId, never by templateId alone.
+      primary: {
+        pk: { field: "pk", composite: ["productId"], template: "PRODUCT#${productId}" },
+        sk: { field: "sk", composite: ["relatedProductId"], template: "RELATED#${relatedProductId}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+export const CommerceStripeAccessRequest = new Entity(
+  {
+    model: { entity: "commerceStripeAccessRequest", version: "1", service: "plexoCommerce" },
+    attributes: {
+      id: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      requestedByUserId: { type: "string", required: true },
+      reason: { type: "string" },
+      expectedVolume: { type: "string" },
+      status: { type: ["PENDING", "APPROVED", "REJECTED"] as const, default: "PENDING" },
+      requestedAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      processedAt: { type: "string" },
+      processedByAdminId: { type: "string" },
+      rejectionReason: { type: "string" },
+    },
+    indexes: {
+      // An org's own request history, newest first (prisma: @@index([organizationId]) —
+      // every real call site queries/orders by this, not by status directly).
+      primary: {
+        pk: { field: "pk", composite: ["organizationId"], template: "ORG#${organizationId}" },
+        sk: { field: "sk", composite: ["requestedAt", "id"], template: "STRIPEACCESS#${requestedAt}#${id}" },
+      },
+      // The admin review queue (prisma: @@index([status])) — plexo-admin's
+      // commerce-stripe-access-requests dashboard route.
+      byStatus: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["status"], template: "STRIPEACCESSSTATUS#${status}" },
+        sk: { field: "GSI1SK", composite: ["requestedAt", "id"], template: "STRIPEACCESS#${requestedAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Pure idempotency claims (prisma: id-only models, no other fields but a receivedAt
+// timestamp) — same shape as StripeEvent (lib/db/ledgerEntities.ts), one per platform-hosted
+// webhook that needs its own dedicated dedup namespace.
+export const StripeCommerceEvent = new Entity(
+  {
+    model: { entity: "stripeCommerceEvent", version: "1", service: "plexoCommerce" },
+    attributes: {
+      id: { type: "string", required: true },
+      receivedAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["id"], template: "STRIPECOMMERCEEVENT#${id}" },
+        sk: { field: "sk", composite: [], template: "STRIPECOMMERCEEVENT#METADATA" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+export const PlatformPaystackWebhookEvent = new Entity(
+  {
+    model: { entity: "platformPaystackWebhookEvent", version: "1", service: "plexoCommerce" },
+    attributes: {
+      id: { type: "string", required: true },
+      receivedAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["id"], template: "PLATFORMPAYSTACKEVENT#${id}" },
+        sk: { field: "sk", composite: [], template: "PLATFORMPAYSTACKEVENT#METADATA" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoCommerceService = new Service(
   {
     CommerceCategory,
@@ -521,6 +726,13 @@ export const plexoCommerceService = new Service(
     CommerceProductReview,
     CommerceSettings,
     CommerceDigitalDelivery,
+    CommerceWallet,
+    CommerceWalletLedgerEntry,
+    CommerceWithdrawalRequest,
+    CommerceProductRelation,
+    CommerceStripeAccessRequest,
+    StripeCommerceEvent,
+    PlatformPaystackWebhookEvent,
   },
   { table, client: docClient },
 );

@@ -595,6 +595,64 @@ export const Feedback = new Entity(
   { table, client: docClient },
 );
 
+// The Figma-style anchored canvas comments on a template (PlexoBuilder editor) — distinct
+// from BlogComment (public blog post comments) above. Scoped by templateId, not postId:
+// "list this template's whole comment thread" is the real access pattern (grepped every
+// real call site, not assumed) — no status-prefixed SK the way BlogComment has, since
+// canvas comments don't go through a moderation queue, just resolved/unresolved in place.
+export const Comment = new Entity(
+  {
+    model: { entity: "comment", version: "1", service: "plexoContent" },
+    attributes: {
+      id: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      templateId: { type: "string", required: true },
+      authorId: { type: "string", required: true },
+      parentId: { type: "string" },
+      body: { type: "string", required: true },
+      anchorNodeId: { type: "string" },
+      anchorNodeType: { type: ["row", "column", "element"] as const },
+      anchorX: { type: "number" },
+      anchorY: { type: "number" },
+      deviceView: { type: ["desktop", "tablet", "mobile"] as const },
+      resolvedAt: { type: "string" },
+      resolvedById: { type: "string" },
+      editedAt: { type: "string" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["createdAt", "id"], template: "COMMENT#${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Write-only in the real app (grepped — no read call site exists anywhere; it's a pure
+// @mention dedup/audit record) — prisma: @@unique([commentId, userId]) becomes the
+// primary key itself, so a repeat mention on an edited comment hits .create()'s
+// attribute_not_exists condition exactly the way skipDuplicates: true did.
+export const CommentMention = new Entity(
+  {
+    model: { entity: "commentMention", version: "1", service: "plexoContent" },
+    attributes: {
+      id: { type: "string", required: true },
+      commentId: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["commentId"], template: "COMMENT#${commentId}" },
+        sk: { field: "sk", composite: ["userId"], template: "MENTION#${userId}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoContentService = new Service(
   {
     Template,
@@ -616,6 +674,8 @@ export const plexoContentService = new Service(
     TemplateGenerationJob,
     ScriptAccessRequest,
     Feedback,
+    Comment,
+    CommentMention,
   },
   { table, client: docClient },
 );
