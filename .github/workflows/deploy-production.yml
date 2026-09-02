@@ -10,10 +10,17 @@ name: Deploy | Production
 # `environment: production` is kept for its own sake (scopes any environment-specific
 # secrets/variables, shows up in the repo's Deployments tab) even without that rule.
 
+# workflow_dispatch covers redeploys with no code change — e.g. after rotating a secret
+# in SSM, which needs a fresh deploy to actually take effect (see ORIGIN_VERIFY_SECRET/
+# CRON_SECRET's own comments in cdk/lib/compute-stack.ts: they're baked in as literal
+# Lambda env vars at deploy time, not loaded at runtime). Deliberately NOT gated the same
+# way push-to-main is (branch protection) — this dispatches whatever's already on `main`,
+# it can't introduce unreviewed code, only redeploy code that already passed that gate.
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   id-token: write # required for OIDC — no static AWS keys anywhere in this workflow

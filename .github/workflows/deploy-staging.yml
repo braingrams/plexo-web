@@ -4,12 +4,16 @@ name: Deploy | Staging
 # (dashboard + tenant Lambdas) and the published-sites stack (the CloudFront SaaS Manager
 # distribution + the certificate-attachment EventBridge schedule) to the real, persistent
 # staging environment. No manual gate: staging exists specifically so this is safe to do
-# on every push.
+# on every push. workflow_dispatch covers redeploys with no code change — e.g. after
+# rotating a secret in SSM, which needs a fresh deploy to actually take effect (see
+# ORIGIN_VERIFY_SECRET/CRON_SECRET's own comments in cdk/lib/compute-stack.ts: they're
+# baked in as literal Lambda env vars at deploy time, not loaded at runtime).
 
 on:
   push:
     branches:
       - staging
+  workflow_dispatch:
 
 permissions:
   id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
