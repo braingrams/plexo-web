@@ -1,21 +1,22 @@
-import { prisma } from "@/server/prisma";
+import { CommerceDiscountCode } from "@/lib/db/commerceEntities";
 import { DiscountsClient, type DiscountSummary } from "./DiscountsClient";
 
 export default async function CommerceDiscountsPage({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = await params;
 
-  const discounts = await prisma.commerceDiscountCode.findMany({ where: { templateId }, orderBy: { createdAt: "desc" } });
+  const { data: discounts } = await CommerceDiscountCode.query.primary({ templateId }).go();
+  discounts.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   const initialDiscounts: DiscountSummary[] = discounts.map((d) => ({
     id: d.id,
     code: d.code,
     type: d.type,
     value: d.value,
-    active: d.active,
-    expiresAt: d.expiresAt ? d.expiresAt.toISOString() : null,
-    usageLimit: d.usageLimit,
-    usedCount: d.usedCount,
-    createdAt: d.createdAt.toISOString(),
+    active: d.active ?? true,
+    expiresAt: d.expiresAt ?? null,
+    usageLimit: d.usageLimit ?? null,
+    usedCount: d.usedCount ?? 0,
+    createdAt: d.createdAt ?? new Date().toISOString(),
   }));
 
   return <DiscountsClient templateId={templateId} initialDiscounts={initialDiscounts} />;

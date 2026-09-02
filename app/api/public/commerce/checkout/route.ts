@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
-import { Prisma, type CommerceOrder } from "@prisma/client";
+import { EntityItem } from "electrodb";
 
-import { prisma } from "@/server/prisma";
-import { resolveSite } from "@/lib/pub/resolveSite";
+import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { decryptPaystackKey } from "@/lib/crypto";
 import { initializePaystackTransaction } from "@/lib/paystack";
-import { resolveActivePaystackKeys } from "@/lib/commerce/paystack";
+import { resolveCheckoutPaystackSecret } from "@/lib/commerce/paystack";
 import { isSlotAvailable } from "@/lib/commerce/availability";
-import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimit";
+import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
+import { createCommerceStripeCheckoutSession } from "@/lib/commerce/stripeClient";
+import { createCommerceOrder, failCommerceOrder, OutOfStockError, SlotTakenError, InvalidDiscountError } from "@/lib/commerce/checkoutDynamo";
+import { CommerceOrder, CommerceSettings, CommerceProduct, CommerceDiscountCode, CommerceAvailabilityRule, CommerceAvailabilityException, CommerceBooking } from "@/lib/db/commerceEntities";
 
 function generateOrderNumber(): string {
   return `ORD-${randomBytes(4).toString("hex").toUpperCase()}`;
@@ -29,7 +31,7 @@ function isValidEmail(email: string): boolean {
  * "production hardening" notes.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const hostname = (request.headers.get("host") ?? "").split(":")[0];
+  const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
   const siteResult = await resolveSite(hostname);
   if (siteResult.status !== "ok") {
     return NextResponse.json({ error: "Site not found." }, { status: 404 });
@@ -58,21 +60,29 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "A valid customerEmail is required." }, { status: 400 });
   }
 
-  const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
   if (!settings || !settings.enabled) {
     return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
   }
-  const { publicKey: activePaystackPublicKey, secretKeyEncrypted: activePaystackSecretKeyEncrypted } = resolveActivePaystackKeys(settings);
-  if (!activePaystackSecretKeyEncrypted || !activePaystackPublicKey) {
+  const isStripeFlow = settings.paymentProvider === "PLATFORM_STRIPE";
+  const paystackKeys = isStripeFlow
+    ? null
+    : resolveCheckoutPaystackSecret({
+        paymentProvider: settings.paymentProvider ?? "BYO_PAYSTACK",
+        paystackMode: settings.paystackMode ?? "TEST",
+        paystackTestPublicKey: settings.paystackTestPublicKey ?? null,
+        paystackTestSecretKeyEncrypted: settings.paystackTestSecretKeyEncrypted ?? null,
+        paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
+        paystackLiveSecretKeyEncrypted: settings.paystackLiveSecretKeyEncrypted ?? null,
+      });
+  if (!isStripeFlow && (!paystackKeys?.secretKeyEncrypted || !paystackKeys.publicKey)) {
     return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
   }
 
   // Never trust a client-supplied price — the only thing read from the request body that
   // ends up in amountMinor is which product and how many, resolved against this row.
-  const product = await prisma.commerceProduct.findFirst({
-    where: { id: productId, templateId, active: true },
-  });
-  if (!product) {
+  const { data: product } = await CommerceProduct.get({ templateId, id: productId }).go();
+  if (!product || !(product.active ?? true)) {
     return NextResponse.json({ error: "Product not found." }, { status: 404 });
   }
 
@@ -96,46 +106,46 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // defense in depth alongside the DB unique-constraint race guard below: it rejects a
     // slot that was never open in the first place (outside business hours, a closed date),
     // even when nobody else is racing for it.
-    const [rules, exceptions, existingBookings] = await Promise.all([
-      prisma.commerceAvailabilityRule.findMany({
-        where: { productId: product.id },
-        select: { dayOfWeek: true, startMinute: true, endMinute: true, timezone: true },
-      }),
-      prisma.commerceAvailabilityException.findMany({
-        where: { productId: product.id, closed: true },
-        select: { date: true, closed: true },
-      }),
-      prisma.commerceBooking.findMany({
-        where: {
-          productId: product.id,
-          OR: [{ status: "CONFIRMED" }, { status: "PENDING_PAYMENT", holdExpiresAt: { gt: new Date() } }],
-        },
-        select: { scheduledStart: true, scheduledEnd: true },
-      }),
+    const now = new Date();
+    const [{ data: ruleRows }, { data: exceptionRows }, { data: orgBookings }] = await Promise.all([
+      CommerceAvailabilityRule.query.byProduct({ productId: product.id }).go(),
+      CommerceAvailabilityException.query.byProduct({ productId: product.id }).go(),
+      CommerceBooking.query.byOrg({ organizationId }).go(),
     ]);
+    const rules = ruleRows.map((r) => ({ dayOfWeek: r.dayOfWeek, startMinute: r.startMinute, endMinute: r.endMinute, timezone: r.timezone ?? "Africa/Lagos" }));
+    const exceptions = exceptionRows.filter((e) => e.closed ?? true).map((e) => ({ date: new Date(e.date), closed: true as const }));
+    const existingBookings = orgBookings
+      .filter(
+        (b) =>
+          b.templateId === templateId &&
+          b.productId === product.id &&
+          (b.status === "CONFIRMED" || (b.status === "PENDING_PAYMENT" && b.holdExpiresAt && new Date(b.holdExpiresAt).getTime() > now.getTime())),
+      )
+      .map((b) => ({ scheduledStart: new Date(b.scheduledStart), scheduledEnd: new Date(b.scheduledEnd) }));
 
     if (!isSlotAvailable({ scheduledStart, scheduledEnd, rules, exceptions, existingBookings })) {
       return NextResponse.json({ error: "That time isn't available for booking." }, { status: 400 });
     }
   }
 
-  const deliveryMethodValue =
+  const deliveryMethodValue: "PICKUP" | "COURIER" | null =
     product.kind === "PHYSICAL" && (deliveryMethod === "PICKUP" || deliveryMethod === "COURIER") ? deliveryMethod : null;
 
   const subtotalMinor = product.priceMinor * quantity;
 
   // Fast, non-authoritative pre-check — a clean error for an obviously-bad code before
-  // ever opening a transaction. The atomic claim inside the transaction below is what
+  // ever attempting the transaction. The atomic claim inside createCommerceOrder is what
   // actually enforces usageLimit under concurrency; this is just early rejection.
-  let discount: Awaited<ReturnType<typeof prisma.commerceDiscountCode.findUnique>> = null;
+  let discount: EntityItem<typeof CommerceDiscountCode> | null = null;
   const normalizedDiscountCode = typeof rawDiscountCode === "string" ? rawDiscountCode.trim().toUpperCase() : "";
   if (normalizedDiscountCode) {
-    discount = await prisma.commerceDiscountCode.findUnique({ where: { templateId_code: { templateId, code: normalizedDiscountCode } } });
+    const { data: matches } = await CommerceDiscountCode.query.byCode({ templateId, code: normalizedDiscountCode }).go();
+    discount = matches[0] ?? null;
     const invalid =
       !discount ||
-      !discount.active ||
-      (discount.expiresAt && discount.expiresAt.getTime() <= Date.now()) ||
-      (discount.usageLimit !== null && discount.usedCount >= discount.usageLimit);
+      !(discount.active ?? true) ||
+      (discount.expiresAt && new Date(discount.expiresAt).getTime() <= Date.now()) ||
+      (discount.usageLimit != null && (discount.usedCount ?? 0) >= discount.usageLimit);
     if (invalid) {
       return NextResponse.json({ error: "That discount code isn't valid." }, { status: 400 });
     }
@@ -152,197 +162,93 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "This discount would reduce the order to zero — pick a smaller code or a larger order." }, { status: 400 });
   }
 
-  let order: CommerceOrder | null = null;
-  let lastError: unknown = null;
+  const orderNumber = generateOrderNumber();
+  // Platform Paystack has no per-site test/live split (a single ops-controlled key, see
+  // resolveCheckoutPaystackSecret) — paystackMode only means anything for BYO_PAYSTACK.
+  // Stripe orders use neither field (see stripeCheckoutSessionId instead, set after this
+  // transaction commits).
+  const paystackMode = isStripeFlow || paystackKeys?.isPlatform ? null : settings.paystackMode ?? "TEST";
+  const paystackReference = isStripeFlow ? null : generatePaystackReference();
 
-  // Sentinels for the three distinct failure modes below, thrown at the exact call site
-  // that hit them — NOT classified afterward by inspecting the caught error's `meta`.
-  // The Neon driver adapter's P2002 errors carry `meta: { modelName, driverAdapterError }`
-  // with no `target` field at all (unlike the classic Prisma error shape), so matching on
-  // meta.target silently misclassifies every collision here and lets it escape as an
-  // uncaught 500 — catching each Prisma call individually sidesteps that entirely.
-  class OutOfStockError extends Error {}
-  class OrderCodeCollisionError extends Error {}
-  class SlotTakenError extends Error {}
-  class InvalidDiscountError extends Error {}
-
-  for (let attempt = 0; attempt < 5 && !order; attempt++) {
-    const orderNumber = generateOrderNumber();
-    const reference = generatePaystackReference();
-    try {
-      order = await prisma.$transaction(async (tx) => {
-        if (product.kind === "PHYSICAL" && product.stockQuantity !== null) {
-          // Guarded update, not read-then-write: zero rows affected means someone else
-          // already took the remaining stock, not "usually did" — see the Commerce plan.
-          const stockUpdate = await tx.commerceProduct.updateMany({
-            where: { id: product.id, stockQuantity: { gte: quantity } },
-            data: { stockQuantity: { decrement: quantity } },
-          });
-          if (stockUpdate.count === 0) {
-            throw new OutOfStockError();
-          }
-        }
-
-        if (discount) {
-          // Atomic guarded claim, not read-then-write — a raw UPDATE because Prisma's
-          // query API can't express "usedCount < usageLimit" (comparing two columns of the
-          // same row) any other way. Zero rows affected means someone else just spent the
-          // last use (or it went inactive/expired) between the pre-check above and now.
-          const claimed = await tx.$executeRaw`
-            UPDATE "CommerceDiscountCode"
-            SET "usedCount" = "usedCount" + 1
-            WHERE id = ${discount.id}
-              AND active = true
-              AND ("expiresAt" IS NULL OR "expiresAt" > now())
-              AND ("usageLimit" IS NULL OR "usedCount" < "usageLimit")
-          `;
-          if (claimed === 0) {
-            throw new InvalidDiscountError();
-          }
-        }
-
-        const createdOrder = await tx.commerceOrder
-          .create({
-            data: {
-              templateId,
-              organizationId,
-              orderNumber,
-              customerEmail,
-              customerName: typeof customerName === "string" ? customerName : null,
-              customerPhone: typeof customerPhone === "string" ? customerPhone : null,
-              deliveryMethod: deliveryMethodValue,
-              deliveryFeeMinor: 0,
-              discountCode: discount?.code ?? null,
-              discountAmountMinor,
-              amountMinor,
-              currency: product.currency,
-              paystackMode: settings.paystackMode,
-              paystackReference: reference,
-              items: {
-                create: [
-                  {
-                    productId: product.id,
-                    nameSnapshot: product.name,
-                    unitPriceMinor: product.priceMinor,
-                    quantity,
-                  },
-                ],
-              },
-            },
-          })
-          .catch((err) => {
-            if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-              throw new OrderCodeCollisionError();
-            }
-            throw err;
-          });
-
-        if (product.kind === "SERVICE" && scheduledStart && scheduledEnd) {
-          // A previous visitor's abandoned hold on this EXACT slot doesn't get cleaned up
-          // until the expire-stale-holds cron next runs (daily — see vercel.json), but a
-          // slot listing already treats it as free the moment holdExpiresAt passes (see
-          // lib/commerce/availability.ts's query filter). Clearing it inline here, right
-          // before claiming the slot, means correctness never depends on cron cadence —
-          // the cron becomes pure housekeeping (stock restoration, general cleanup), not
-          // something a real booking attempt can be silently blocked behind for a day.
-          await tx.commerceBooking.deleteMany({
-            where: { productId: product.id, scheduledStart, status: "PENDING_PAYMENT", holdExpiresAt: { lt: new Date() } },
-          });
-
-          // @@unique([productId, scheduledStart]) is the actual race guard — a second
-          // concurrent request for the same slot fails here at the database, not
-          // "usually" in application logic.
-          await tx.commerceBooking
-            .create({
-              data: {
-                templateId,
-                organizationId,
-                orderId: createdOrder.id,
-                productId: product.id,
-                scheduledStart,
-                scheduledEnd,
-                holdExpiresAt: new Date(Date.now() + 15 * 60_000),
-              },
-            })
-            .catch((err) => {
-              if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-                throw new SlotTakenError();
-              }
-              throw err;
-            });
-        }
-
-        return createdOrder;
-      });
-    } catch (err) {
-      lastError = err;
-      if (err instanceof OrderCodeCollisionError) {
-        continue; // collision on a random code — retry with a fresh one
-      }
-      if (err instanceof SlotTakenError) {
-        return NextResponse.json({ error: "That time slot was just booked by someone else. Please pick another." }, { status: 409 });
-      }
-      if (err instanceof OutOfStockError) {
-        return NextResponse.json({ error: `Only ${product.stockQuantity ?? 0} left in stock.` }, { status: 409 });
-      }
-      if (err instanceof InvalidDiscountError) {
-        return NextResponse.json({ error: "That discount code isn't valid." }, { status: 400 });
-      }
-      throw err;
+  let order;
+  try {
+    order = await createCommerceOrder({
+      templateId,
+      organizationId,
+      product,
+      quantity,
+      orderNumber,
+      paystackReference,
+      customerEmail,
+      customerName: typeof customerName === "string" ? customerName : null,
+      customerPhone: typeof customerPhone === "string" ? customerPhone : null,
+      deliveryMethod: deliveryMethodValue,
+      discount,
+      discountAmountMinor,
+      amountMinor,
+      paymentProvider: settings.paymentProvider ?? "BYO_PAYSTACK",
+      paystackMode,
+      scheduledStart,
+      scheduledEnd,
+    });
+  } catch (err) {
+    if (err instanceof SlotTakenError) {
+      return NextResponse.json({ error: "That time slot was just booked by someone else. Please pick another." }, { status: 409 });
     }
+    if (err instanceof OutOfStockError) {
+      return NextResponse.json({ error: `Only ${product.stockQuantity ?? 0} left in stock.` }, { status: 409 });
+    }
+    if (err instanceof InvalidDiscountError) {
+      return NextResponse.json({ error: "That discount code isn't valid." }, { status: 400 });
+    }
+    throw err;
   }
 
-  if (!order) {
-    throw lastError instanceof Error ? lastError : new Error("Failed to create Commerce order after retries.");
-  }
-
-  const secretKey = decryptPaystackKey(activePaystackSecretKeyEncrypted);
+  const callbackUrl = `${request.nextUrl.origin}/order-confirmation?order=${order.orderNumber}&email=${encodeURIComponent(customerEmail)}`;
 
   try {
-    const result = await initializePaystackTransaction({
-      secretKey,
-      email: customerEmail,
-      amountMinor,
-      reference: order.paystackReference,
-      // Same reasoning as the cart checkout route: email travels alongside order because
-      // the strict order-lookup endpoint requires both together, and /order-confirmation
-      // (not "/") is the default landing spot for a site with a dedicated confirmation
-      // page — see the Commerce plan's runtime section.
-      callbackUrl: `${request.nextUrl.origin}/order-confirmation?order=${order.orderNumber}&email=${encodeURIComponent(customerEmail)}`,
-      metadata: { orderId: order.id, orderNumber: order.orderNumber, templateId },
-    });
+    let authorizationUrl: string;
 
-    await prisma.commerceOrder.update({
-      where: { id: order.id },
-      data: { paystackAuthorizationUrl: result.authorizationUrl },
-    });
+    if (isStripeFlow) {
+      const session = await createCommerceStripeCheckoutSession({
+        orderId: order.id,
+        amountMinor,
+        currency: product.currency ?? "NGN",
+        customerEmail,
+        productName: product.name,
+        successUrl: callbackUrl,
+        cancelUrl: `${request.nextUrl.origin}/checkout`,
+      });
+      await CommerceOrder.patch({ templateId: order.templateId, id: order.id }).set({ stripeCheckoutSessionId: session.id }).go();
+      authorizationUrl = session.url;
+    } else {
+      // paystackKeys is confirmed non-null above (isStripeFlow is false in this branch).
+      const secretKey = paystackKeys!.isPlatform ? paystackKeys!.secretKeyEncrypted! : decryptPaystackKey(paystackKeys!.secretKeyEncrypted!);
+      const result = await initializePaystackTransaction({
+        secretKey,
+        email: customerEmail,
+        amountMinor,
+        // Same reasoning as the cart checkout route: email travels alongside order because
+        // the strict order-lookup endpoint requires both together, and /order-confirmation
+        // (not "/") is the default landing spot for a site with a dedicated confirmation
+        // page — see the Commerce plan's runtime section.
+        reference: order.paystackReference!,
+        callbackUrl,
+        metadata: { orderId: order.id, orderNumber: order.orderNumber, templateId },
+      });
+      await CommerceOrder.patch({ templateId: order.templateId, id: order.id }).set({ paystackAuthorizationUrl: result.authorizationUrl }).go();
+      authorizationUrl = result.authorizationUrl;
+    }
 
     return NextResponse.json({
       orderNumber: order.orderNumber,
       reference: order.paystackReference,
-      authorizationUrl: result.authorizationUrl,
+      authorizationUrl,
     });
   } catch {
-    // Paystack itself rejected the initialize call — mark the order FAILED rather than
-    // leaving a PENDING order with no way to ever get paid, and release anything it held.
-    await prisma.$transaction(async (tx) => {
-      await tx.commerceOrder.update({ where: { id: order.id }, data: { status: "FAILED" } });
-      if (product.kind === "PHYSICAL" && product.stockQuantity !== null) {
-        await tx.commerceProduct.update({ where: { id: product.id }, data: { stockQuantity: { increment: quantity } } });
-      }
-      if (product.kind === "SERVICE") {
-        // Deleted, not status-flipped to CANCELLED: @@unique([productId, scheduledStart])
-        // has no notion of status, so a row left behind here — even cancelled — would
-        // permanently squat that slot and make it unbookable by anyone, forever. The order
-        // itself keeps the full history (status FAILED); only the slot-holding row goes.
-        await tx.commerceBooking.deleteMany({ where: { orderId: order.id } });
-      }
-      if (discount) {
-        // Release the claimed use — a failed-to-even-start payment shouldn't burn a
-        // customer's discount code.
-        await tx.commerceDiscountCode.update({ where: { id: discount.id }, data: { usedCount: { decrement: 1 } } });
-      }
-    });
+    // Paystack/Stripe itself rejected the initialize call — mark the order FAILED rather
+    // than leaving a PENDING order with no way to ever get paid, and release anything it held.
+    await failCommerceOrder(order, product, quantity, discount);
     return NextResponse.json({ error: "Unable to start payment. Please try again." }, { status: 502 });
   }
 }

@@ -1,4 +1,4 @@
-import { createAccessControl } from "better-auth/plugins";
+import { createAccessControl } from "@/lib/localAccessControl";
 
 // `organization`, `member`, and `invitation` resources/actions are NOT ours to name —
 // better-auth's own built-in endpoints hardcode these exact checks internally

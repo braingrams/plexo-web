@@ -1,47 +1,50 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { listIncomingTransfers, listOutgoingTransfers } from "@/lib/siteTransferDynamo";
+import { Template } from "@/lib/db/contentEntities";
+import { Organization, User } from "@/lib/db/coreEntities";
 import { SettingsShell } from "../_components/SettingsShell";
 import { TransfersListClient } from "./TransfersListClient";
 
 export default async function TransfersPage() {
-  const reqHeaders = await headers();
-  const session = await auth.api.getSession({ headers: reqHeaders });
-  if (!session?.user) redirect("/auth/login?redirectTo=/dashboard/transfers");
+  const session = await auth();
+  if (!session?.user?.id || !session.user.email) redirect("/auth/login?redirectTo=/dashboard/transfers");
 
-  const orgResolution = await ensureActiveOrganization(reqHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") redirect("/choose-org");
   const activeOrgId = orgResolution.organizationId;
 
   const [incoming, outgoing] = await Promise.all([
-    prisma.siteTransferRequest.findMany({
-      where: { toEmail: session.user.email.toLowerCase(), status: "PENDING" },
-      include: { template: { select: { id: true, name: true } }, fromOrganization: { select: { name: true } }, fromUser: { select: { name: true } } },
-      orderBy: { createdAt: "desc" },
-    }),
-    activeOrgId
-      ? prisma.siteTransferRequest.findMany({
-          where: { fromOrganizationId: activeOrgId, status: "PENDING" },
-          include: { template: { select: { id: true, name: true } } },
-          orderBy: { createdAt: "desc" },
-        })
-      : Promise.resolve([]),
+    listIncomingTransfers(session.user.email.toLowerCase()),
+    listOutgoingTransfers(activeOrgId),
+  ]);
+
+  const [incomingTemplates, incomingOrgs, incomingUsers, outgoingTemplates] = await Promise.all([
+    Promise.all(incoming.map((t) => Template.get({ id: t.templateId }).go())),
+    Promise.all(incoming.map((t) => Organization.get({ id: t.fromOrganizationId }).go())),
+    Promise.all(incoming.map((t) => User.get({ id: t.fromUserId }).go())),
+    Promise.all(outgoing.map((t) => Template.get({ id: t.templateId }).go())),
   ]);
 
   return (
     <SettingsShell>
       <TransfersListClient
-        incoming={incoming.map((t) => ({
+        incoming={incoming.map((t, i) => ({
           id: t.id,
-          siteName: t.template.name,
-          fromName: t.fromUser.name,
-          fromOrgName: t.fromOrganization.name,
-          createdAt: t.createdAt.toISOString(),
-          expiresAt: t.expiresAt.toISOString(),
+          siteName: incomingTemplates[i].data?.name ?? "Untitled site",
+          fromName: incomingUsers[i].data?.name ?? "Unknown",
+          fromOrgName: incomingOrgs[i].data?.name ?? "Unknown organization",
+          createdAt: t.createdAt ?? "",
+          expiresAt: t.expiresAt,
         }))}
-        outgoing={outgoing.map((t) => ({ id: t.id, templateId: t.template.id, siteName: t.template.name, toEmail: t.toEmail, createdAt: t.createdAt.toISOString() }))}
+        outgoing={outgoing.map((t, i) => ({
+          id: t.id,
+          templateId: t.templateId,
+          siteName: outgoingTemplates[i].data?.name ?? "Untitled site",
+          toEmail: t.toEmail,
+          createdAt: t.createdAt ?? "",
+        }))}
       />
     </SettingsShell>
   );

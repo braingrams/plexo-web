@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { TemplateKind } from "@prisma/client";
 
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { requirePermission } from "@/server/requirePermission";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { requirePermission } from "@/server/requirePermissionDynamo";
 import { getTierFeatures } from "@/lib/subscription";
 import { compileDesignJsonForKind } from "@/lib/compileForKind";
-import { isValidUuid } from "@/server/slug";
+import { isValidUuid } from "@/server/slugDynamo";
+import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 
 type ConvertTypeBody = {
   targetKind?: "EMAIL" | "LANDING_PAGE";
@@ -19,6 +18,9 @@ type ConvertTypeBody = {
  * compiledHtml for the new target — designJson itself is untouched, same block tree, just
  * relabeled. No `confirm` flag: same shape as reset-to-builder/route.ts, where confirming a
  * one-way action with the user is entirely the client's job before calling this.
+ *
+ * `kind` isn't part of Template's primary key composite (contentEntities.ts: pk is just
+ * `id`), so this is a plain in-place `.patch().set()` — no create-at-new-key dance needed.
  */
 export async function POST(
   request: NextRequest,
@@ -29,7 +31,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  const permissionError = requirePermission(resolved.role, { template: ["update"] });
   if (permissionError) return permissionError;
 
   const { id } = await context.params;
@@ -43,19 +45,8 @@ export async function POST(
     return NextResponse.json({ error: "targetKind must be 'EMAIL' or 'LANDING_PAGE'." }, { status: 400 });
   }
 
-  const existing = await prisma.template.findFirst({
-    where: { id, organizationId: resolved.organizationId },
-    select: {
-      id: true,
-      kind: true,
-      sourceType: true,
-      parentId: true,
-      isBlogLayout: true,
-      designJson: true,
-      _count: { select: { pages: true } },
-    },
-  });
-  if (!existing) {
+  const { data: existing } = await Template.get({ id }).go();
+  if (!existing || existing.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
 
@@ -65,7 +56,7 @@ export async function POST(
   if (existing.sourceType !== "BUILDER") {
     return NextResponse.json({ error: "Raw HTML pages can't be converted directly. Switch to Builder first." }, { status: 400 });
   }
-  if (existing.parentId !== null) {
+  if (existing.parentId) {
     return NextResponse.json({ error: "Sub-pages always match their parent page's type and can't be converted independently." }, { status: 400 });
   }
   if (existing.isBlogLayout) {
@@ -74,23 +65,24 @@ export async function POST(
 
   const features = getTierFeatures(resolved.subscriptionPlan);
 
-  if (targetKind === TemplateKind.EMAIL) {
-    if (existing._count.pages > 0) {
+  const { data: pageCount } = await Template.query.byParent({ parentId: existing.id }).go();
+
+  if (targetKind === "EMAIL") {
+    if (pageCount.length > 0) {
       return NextResponse.json(
-        { error: `This page has ${existing._count.pages} sub-page(s). Remove them before converting it to an email template.` },
+        { error: `This page has ${pageCount.length} sub-page(s). Remove them before converting it to an email template.` },
         { status: 400 },
       );
     }
-    const activeDomain = await prisma.publishedDomain.findFirst({ where: { templateId: existing.id } });
-    if (activeDomain) {
+    const { data: domains } = await PublishedDomain.query.primary({ templateId: existing.id }).go();
+    if (domains[0]) {
       return NextResponse.json(
         { error: "Unlink this page's published domain before converting it to an email template." },
         { status: 400 },
       );
     }
-    const emailCount = await prisma.template.count({
-      where: { organizationId: resolved.organizationId, parentId: null, kind: TemplateKind.EMAIL, isBlogLayout: false, isCommerceLayout: false },
-    });
+    const { data: orgRoots } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const emailCount = orgRoots.filter((t) => !t.parentId && t.kind === "EMAIL" && !t.isBlogLayout && !t.isCommerceLayout).length;
     if (emailCount >= features.maxEmailTemplates) {
       return NextResponse.json(
         { error: `Your plan allows a maximum of ${features.maxEmailTemplates} email templates. Upgrade to convert more.`, plan: resolved.subscriptionPlan },
@@ -98,9 +90,8 @@ export async function POST(
       );
     }
   } else {
-    const landingPageCount = await prisma.template.count({
-      where: { organizationId: resolved.organizationId, parentId: null, kind: TemplateKind.LANDING_PAGE, isBlogLayout: false, isCommerceLayout: false },
-    });
+    const { data: orgRoots } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const landingPageCount = orgRoots.filter((t) => !t.parentId && t.kind === "LANDING_PAGE" && !t.isBlogLayout && !t.isCommerceLayout).length;
     if (landingPageCount >= features.maxLandingPages) {
       return NextResponse.json(
         { error: `Your plan allows a maximum of ${features.maxLandingPages} landing pages. Upgrade to convert more.`, plan: resolved.subscriptionPlan },
@@ -111,11 +102,9 @@ export async function POST(
 
   const compiledHtml = await compileDesignJsonForKind(existing.designJson, targetKind);
 
-  const updated = await prisma.template.update({
-    where: { id: existing.id },
-    data: { kind: targetKind, compiledHtml },
-    select: { id: true, name: true, kind: true, updatedAt: true },
-  });
+  await Template.patch({ id: existing.id }).set({ kind: targetKind, compiledHtml }).go();
+  const { data: updated } = await Template.get({ id: existing.id }).go();
+  if (!updated) throw new Error(`Template ${existing.id} vanished immediately after being updated`);
 
-  return NextResponse.json({ template: updated });
+  return NextResponse.json({ template: { id: updated.id, name: updated.name, kind: updated.kind, updatedAt: updated.updatedAt } });
 }

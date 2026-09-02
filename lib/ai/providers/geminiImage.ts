@@ -16,7 +16,7 @@ export class ImageGenerationError extends Error {
 /** Generates a single image from a text prompt via Gemini's native image generation — the
  * only text-to-image call site in the app (everything else is stock-photo search or manual
  * upload). Returns the raw image bytes + the mime type actually produced, ready to hand
- * straight to @vercel/blob's put() the same way upload-image/route.ts does. */
+ * straight to lib/storage.ts's uploadObject() the same way upload-image/route.ts does. */
 export async function generateImage({ apiKey, prompt }: { apiKey: string; prompt: string }): Promise<{ bytes: Buffer; mimeType: string }> {
   const client = new GoogleGenAI({ apiKey });
 

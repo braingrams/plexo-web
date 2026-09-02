@@ -1,5 +1,5 @@
 import { ImageResponse } from 'next/og';
-import { prisma } from "@/server/prisma";
+import { Template } from "@/lib/db/contentEntities";
 
 export async function GET(
   request: Request,
@@ -7,11 +7,8 @@ export async function GET(
 ) {
   try {
     const { id } = await context.params;
-    
-    const template = await prisma.template.findUnique({
-      where: { id: id },
-      select: { name: true, kind: true }
-    });
+
+    const { data: template } = await Template.get({ id }).go();
 
     if (!template) {
       return new Response('Not found', { status: 404 });

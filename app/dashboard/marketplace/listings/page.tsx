@@ -1,10 +1,9 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { Template, TemplatePurchase } from "@/lib/db/contentEntities";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
 import { Card } from "@/app/dashboard/_components/Card";
 import { PageContainer } from "@/app/dashboard/_components/PageContainer";
@@ -17,30 +16,38 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
 };
 
 export default async function MyListingsPage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/marketplace/listings");
   }
 
-  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
 
-  const listings = await prisma.template.findMany({
-    where: { organizationId: orgResolution.organizationId, marketplaceStatus: { not: null } },
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      name: true,
-      kind: true,
-      marketplaceStatus: true,
-      marketplaceRejectionReason: true,
-      priceCents: true,
-      _count: { select: { purchases: true } },
-    },
-  });
+  // Template has no index for "this org's marketplace listings" specifically — byOrg
+  // (GSI1) already covers "this org's templates," so filtering to the ones that carry a
+  // marketplaceStatus happens in memory over that same query rather than adding a GSI
+  // for what's a small per-org list in practice.
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go();
+  const listingTemplates = orgTemplates
+    .filter((t) => !!t.marketplaceStatus)
+    .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+
+  const purchaseCounts = await Promise.all(
+    listingTemplates.map((t) => TemplatePurchase.query.byTemplate({ templateId: t.id }).go().then((r) => r.data.length)),
+  );
+
+  const listings = listingTemplates.map((t, i) => ({
+    id: t.id,
+    name: t.name,
+    kind: t.kind,
+    marketplaceStatus: t.marketplaceStatus ?? "DRAFT",
+    marketplaceRejectionReason: t.marketplaceRejectionReason ?? null,
+    priceCents: t.priceCents ?? 0,
+    purchaseCount: purchaseCounts[i] ?? 0,
+  }));
 
   return (
     <PageContainer>
@@ -80,7 +87,7 @@ export default async function MyListingsPage() {
                   <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)", margin: "0.25rem 0 0" }}>
                     {listing.kind === "EMAIL" ? "Email" : "Landing Page"} ·{" "}
                     {listing.priceCents ? `$${(listing.priceCents / 100).toFixed(2)}` : "Free"} ·{" "}
-                    {listing._count.purchases} sale{listing._count.purchases === 1 ? "" : "s"}
+                    {listing.purchaseCount} sale{listing.purchaseCount === 1 ? "" : "s"}
                   </p>
                   {listing.marketplaceStatus === "REJECTED" && listing.marketplaceRejectionReason && (
                     <p style={{ fontSize: "0.78rem", color: "#f87171", margin: "0.5rem 0 0" }}>

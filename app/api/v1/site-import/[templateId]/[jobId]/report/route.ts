@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SiteImportPageOutcome } from "@prisma/client";
-import { prisma } from "@/server/prisma";
-import { resolveSiteImportSite } from "@/lib/siteImport/adminAuth";
-import { isValidUuid } from "@/server/slug";
+import { resolveSiteImportSite } from "@/lib/siteImport/adminAuthDynamo";
+import { isValidUuid } from "@/lib/slugUtils";
 import { describeInteractiveFeatureFlag } from "@/lib/siteImport/interactiveFeatureDetect";
+import { SiteImportJob, SiteImportPage, SiteImportAssetBlob } from "@/lib/db/importEntities";
 
 /**
  * GET /api/v1/site-import/[templateId]/[jobId]/report
@@ -21,15 +20,17 @@ export async function GET(
   if ("error" in resolved) return resolved.error;
   if (!isValidUuid(jobId)) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
-  const job = await prisma.siteImportJob.findFirst({
-    where: { id: jobId, templateId: resolved.context.templateId },
-    include: { pages: true, assetBlobs: { select: { id: true } } },
-  });
+  const { data: job } = await SiteImportJob.get({ templateId: resolved.context.templateId, id: jobId }).go();
   if (!job) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
+
+  const [{ data: jobPages }, { data: assetBlobs }] = await Promise.all([
+    SiteImportPage.query.primary({ jobId }).go(),
+    SiteImportAssetBlob.query.primary({ jobId }).go(),
+  ]);
 
   const urlMap = (job.urlMap && typeof job.urlMap === "object" ? (job.urlMap as Record<string, string>) : {});
 
-  const pages = job.pages.map((p) => ({
+  const pages = jobPages.map((p) => ({
     sourceUrl: p.sourceUrl,
     outcome: p.outcome,
     plexoPath: urlMap[p.sourceUrl] ?? null,
@@ -44,10 +45,10 @@ export async function GET(
 
   return NextResponse.json({
     phase: job.phase,
-    pagesCreated: job.pages.filter((p) => p.outcome === SiteImportPageOutcome.PAGE_CREATED).length,
-    postsCreated: job.pages.filter((p) => p.outcome === SiteImportPageOutcome.POST_CREATED).length,
-    pagesFailed: job.pages.filter((p) => p.outcome === SiteImportPageOutcome.FAILED).length,
-    assetsInternalized: job.assetBlobs.length,
+    pagesCreated: jobPages.filter((p) => p.outcome === "PAGE_CREATED").length,
+    postsCreated: jobPages.filter((p) => p.outcome === "POST_CREATED").length,
+    pagesFailed: jobPages.filter((p) => p.outcome === "FAILED").length,
+    assetsInternalized: assetBlobs.length,
     warnings: Array.isArray(job.warnings) ? job.warnings : [],
     errors: Array.isArray(job.errors) ? job.errors : [],
     pages,

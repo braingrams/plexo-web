@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
+import { CommerceOrder, CommerceOrderItem, CommerceBooking } from "@/lib/db/commerceEntities";
 
 const FULFILLMENT_STATUSES = new Set(["UNFULFILLED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "COMPLETED"]);
 
@@ -13,13 +13,15 @@ export async function GET(
   const resolved = await resolveCommerceAdmin(request, templateId);
   if (resolved.error) return resolved.error;
 
-  const order = await prisma.commerceOrder.findFirst({
-    where: { id, templateId },
-    include: { items: true, booking: true },
-  });
+  const { data: order } = await CommerceOrder.get({ templateId, id }).go();
   if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
 
-  return NextResponse.json({ order });
+  const [{ data: items }, { data: booking }] = await Promise.all([
+    CommerceOrderItem.query.primary({ templateId, orderId: id }).go(),
+    CommerceBooking.get({ templateId, orderId: id }).go(),
+  ]);
+
+  return NextResponse.json({ order: { ...order, items, booking: booking ?? null } });
 }
 
 // Fulfillment status only — payment status (CommerceOrder.status) is only ever changed by
@@ -33,10 +35,10 @@ export async function PATCH(
   if (resolved.error) return resolved.error;
   const { role } = resolved.context;
 
-  const permissionError = await requirePermission(request.headers, role, { commerce: ["update"] });
+  const permissionError = requirePermission(role, { commerce: ["update"] });
   if (permissionError) return permissionError;
 
-  const existing = await prisma.commerceOrder.findFirst({ where: { id, templateId } });
+  const { data: existing } = await CommerceOrder.get({ templateId, id }).go();
   if (!existing) return NextResponse.json({ error: "Order not found." }, { status: 404 });
 
   const body = await request.json().catch(() => ({}));
@@ -45,6 +47,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid fulfillmentStatus." }, { status: 400 });
   }
 
-  const order = await prisma.commerceOrder.update({ where: { id }, data: { fulfillmentStatus: fulfillmentStatus as never } });
+  await CommerceOrder.patch({ templateId, id }).set({ fulfillmentStatus: fulfillmentStatus as any }).go();
+  const { data: order } = await CommerceOrder.get({ templateId, id }).go();
   return NextResponse.json({ order });
 }

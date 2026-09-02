@@ -1,50 +1,39 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { ApiKey, User } from "@/lib/db/coreEntities";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { SdkClient } from "./sdk-client";
 import { SettingsShell } from "../_components/SettingsShell";
 
 export default async function DashboardSdkPage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
 
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/sdk");
   }
 
-  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
 
   // Fetch the org's active API keys to display in the code integration tab
-  const [apiKeys, user] = await Promise.all([
-    prisma.apiKey.findMany({
-      where: {
-        organizationId: orgResolution.organizationId,
-        isActive: true,
-      },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        maskedKey: true,
-      },
-    }),
-    prisma.user.findUniqueOrThrow({
-      where: { id: session.user.id },
-      select: { subscriptionPlan: true, manageLandingPagePublishing: true },
-    }),
+  const [{ data: allKeys }, { data: user }] = await Promise.all([
+    ApiKey.query.primary({ organizationId: orgResolution.organizationId }).go(),
+    User.get({ id: session.user.id }).go(),
   ]);
+  if (!user) throw new Error(`Session user ${session.user.id} has no matching User record`);
+  const apiKeys = allKeys
+    .filter((k) => k.isActive)
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+    .map((k) => ({ id: k.id, name: k.name, maskedKey: k.maskedKey }));
 
   return (
     <SettingsShell>
       <SdkClient
         initialKeys={apiKeys}
-        initialManageLandingPagePublishing={user.manageLandingPagePublishing}
+        initialManageLandingPagePublishing={user.manageLandingPagePublishing ?? false}
         isUltra={user.subscriptionPlan === "ULTRA"}
       />
     </SettingsShell>

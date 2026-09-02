@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveSite } from "@/lib/pub/resolveSite";
-import { readCartToken, findOpenCart, readCartSnapshot } from "@/lib/commerce/cart";
+import { EntityItem } from "electrodb";
+import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
+import { readCartToken, findOpenCart, readCartSnapshot } from "@/lib/commerce/cartDynamo";
+import { CommerceCartItem } from "@/lib/db/commerceEntities";
 
 const MAX_QUANTITY = 50;
 
 type OwnedItemResolution =
   | { error: NextResponse }
-  | { templateId: string; cart: Awaited<ReturnType<typeof findOpenCart>> & object; item: Awaited<ReturnType<typeof prisma.commerceCartItem.findFirst>> & object };
+  | { templateId: string; cart: NonNullable<Awaited<ReturnType<typeof findOpenCart>>>; item: EntityItem<typeof CommerceCartItem> };
 
 async function resolveOwnedItem(request: NextRequest, itemId: string): Promise<OwnedItemResolution> {
-  const hostname = (request.headers.get("host") ?? "").split(":")[0];
+  const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
   const siteResult = await resolveSite(hostname);
   if (siteResult.status !== "ok") return { error: NextResponse.json({ error: "Site not found." }, { status: 404 }) };
 
@@ -20,7 +21,8 @@ async function resolveOwnedItem(request: NextRequest, itemId: string): Promise<O
   // guessed/enumerated id could edit a stranger's cart.
   if (!cart) return { error: NextResponse.json({ error: "No cart found." }, { status: 404 }) };
 
-  const item = await prisma.commerceCartItem.findFirst({ where: { id: itemId, cartId: cart.id } });
+  const { data: items } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
+  const item = items.find((i) => i.id === itemId);
   if (!item) return { error: NextResponse.json({ error: "Item not found in your cart." }, { status: 404 }) };
 
   return { templateId, cart, item };
@@ -38,9 +40,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
   }
 
   if (quantity <= 0) {
-    await prisma.commerceCartItem.delete({ where: { id: itemId } });
+    await CommerceCartItem.remove({ templateId: resolved.templateId, cartId: resolved.cart.id, id: itemId }).go();
   } else {
-    await prisma.commerceCartItem.update({ where: { id: itemId }, data: { quantity: Math.min(quantity, MAX_QUANTITY) } });
+    await CommerceCartItem.patch({ templateId: resolved.templateId, cartId: resolved.cart.id, id: itemId })
+      .set({ quantity: Math.min(quantity, MAX_QUANTITY) })
+      .go();
   }
 
   return NextResponse.json(await readCartSnapshot(resolved.templateId, resolved.cart.cartToken));
@@ -51,6 +55,6 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   const resolved = await resolveOwnedItem(request, itemId);
   if ("error" in resolved) return resolved.error;
 
-  await prisma.commerceCartItem.delete({ where: { id: itemId } });
+  await CommerceCartItem.remove({ templateId: resolved.templateId, cartId: resolved.cart.id, id: itemId }).go();
   return NextResponse.json(await readCartSnapshot(resolved.templateId, resolved.cart.cartToken));
 }

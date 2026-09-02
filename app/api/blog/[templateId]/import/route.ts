@@ -1,21 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put, BlobError } from "@vercel/blob";
-import { ImportJobStatus, ImportMediaHandling, ImportSourceType } from "@prisma/client";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
+import { uploadObject, StorageError } from "@/lib/storage";
+import { ImportJob } from "@/lib/db/importEntities";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
 import { checkWordPressReachable, normalizeSiteUrl } from "@/lib/blogImport/wpClient";
 import { parseWxr } from "@/lib/blogImport/wxrParser";
 
+type ImportMediaHandling = "RETAIN" | "REHOST";
+type ImportSourceType = "WP_REST" | "WXR_UPLOAD";
+type ImportJobStatus = "PENDING" | "DISCOVERING" | "RUNNING" | "PAUSED_ERROR" | "COMPLETED" | "FAILED" | "CANCELLED";
+
 const MAX_WXR_BYTES = 50 * 1024 * 1024;
 
-// Rehosting downloads + re-uploads every image to Vercel Blob — bounded to small imports
-// so a full-site migration can't rack up unbounded storage/time. Larger imports must use
+// Rehosting downloads + re-uploads every image to S3 — bounded to small imports so a
+// full-site migration can't rack up unbounded storage/time. Larger imports must use
 // Retain (keep hotlinking the source site's media) instead.
 const MAX_REHOST_POSTS = 10;
 
 function parseMediaHandling(value: FormDataEntryValue | string | null): ImportMediaHandling {
-  return value === "REHOST" ? ImportMediaHandling.REHOST : ImportMediaHandling.RETAIN;
+  return value === "REHOST" ? "REHOST" : "RETAIN";
 }
 
 function rehostCapError(totalPosts: number): NextResponse {
@@ -35,11 +38,15 @@ export async function GET(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const jobs = await prisma.importJob.findMany({
-    where: { templateId: resolved.context.templateId },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
+  // Primary's SK is id (a UUID), not createdAt — a plain query order wouldn't be
+  // chronological, so this sorts in memory instead. A site's import-job history is small
+  // in practice (imports are rare, deliberate actions), so fetching the whole partition
+  // and sorting is fine — same "small in practice" assumption used elsewhere in this
+  // migration (e.g. server/slugDynamo.ts's ensureUniqueSlug).
+  const { data: allJobs } = await ImportJob.query.primary({ templateId: resolved.context.templateId }).go();
+  const jobs = allJobs
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+    .slice(0, 20);
   return NextResponse.json({ jobs });
 }
 
@@ -67,36 +74,35 @@ async function createWxrJob(request: NextRequest, templateId: string, userId: st
   if (totalPosts === 0) {
     return NextResponse.json({ error: "No published posts found in that export file." }, { status: 400 });
   }
-  if (mediaHandling === ImportMediaHandling.REHOST && totalPosts > MAX_REHOST_POSTS) {
+  if (mediaHandling === "REHOST" && totalPosts > MAX_REHOST_POSTS) {
     return rehostCapError(totalPosts);
   }
 
-  const localDevToken = process.env.BLOB_READ_WRITE_TOKEN; // OIDC covers real deployments — see upload-raw/route.ts
   let wxrBlobUrl: string;
   try {
-    const blob = await put(`blog-import-wxr/${templateId}/${Date.now()}.xml`, buffer, {
+    const blob = await uploadObject(`blog-import-wxr/${templateId}/${Date.now()}.xml`, buffer, {
       access: "public",
       contentType: "application/xml",
-      ...(localDevToken ? { token: localDevToken } : {}),
     });
     wxrBlobUrl = blob.url;
   } catch (err) {
-    if (err instanceof BlobError) return NextResponse.json({ error: err.message }, { status: 500 });
+    if (err instanceof StorageError) return NextResponse.json({ error: err.message }, { status: 500 });
     throw err;
   }
 
-  const job = await prisma.importJob.create({
-    data: {
-      templateId,
-      sourceType: ImportSourceType.WXR_UPLOAD,
-      wxrBlobUrl,
-      status: ImportJobStatus.PENDING,
-      mediaHandling,
-      totalPosts,
-      createdBy: userId,
-      cursor: { offset: 0, batchSize: 5 },
-    },
-  });
+  const id = crypto.randomUUID();
+  await ImportJob.create({
+    id,
+    templateId,
+    sourceType: "WXR_UPLOAD",
+    wxrBlobUrl,
+    status: "PENDING",
+    mediaHandling,
+    totalPosts,
+    createdBy: userId,
+    cursor: { offset: 0, batchSize: 5 },
+  }).go();
+  const { data: job } = await ImportJob.get({ templateId, id }).go();
 
   return NextResponse.json({ job }, { status: 201 });
 }
@@ -119,22 +125,23 @@ async function createRestJob(request: NextRequest, templateId: string, userId: s
       { status: 400 },
     );
   }
-  if (mediaHandling === ImportMediaHandling.REHOST && (check.totalPosts === undefined || check.totalPosts > MAX_REHOST_POSTS)) {
+  if (mediaHandling === "REHOST" && (check.totalPosts === undefined || check.totalPosts > MAX_REHOST_POSTS)) {
     return rehostCapError(check.totalPosts ?? MAX_REHOST_POSTS + 1);
   }
 
-  const job = await prisma.importJob.create({
-    data: {
-      templateId,
-      sourceType: ImportSourceType.WP_REST,
-      sourceUrl,
-      status: ImportJobStatus.PENDING,
-      mediaHandling,
-      totalPosts: check.totalPosts ?? null,
-      createdBy: userId,
-      cursor: { page: 1, perPage: 5 },
-    },
-  });
+  const id = crypto.randomUUID();
+  await ImportJob.create({
+    id,
+    templateId,
+    sourceType: "WP_REST",
+    sourceUrl,
+    status: "PENDING",
+    mediaHandling,
+    totalPosts: check.totalPosts,
+    createdBy: userId,
+    cursor: { page: 1, perPage: 5 },
+  }).go();
+  const { data: job } = await ImportJob.get({ templateId, id }).go();
 
   return NextResponse.json({ job }, { status: 201 });
 }
@@ -147,15 +154,14 @@ export async function POST(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { blog: ["create"] });
+  const permissionError = requirePermission(resolved.context.role, { blog: ["create"] });
   if (permissionError) return permissionError;
 
   // One job per site can safely run at a time — starting another while one is already
   // in flight would just double-process (harmlessly, thanks to upsert-by-externalId,
   // but wastefully) rather than run any faster.
-  const existingActive = await prisma.importJob.findFirst({
-    where: { templateId: resolved.context.templateId, status: { in: [ImportJobStatus.PENDING, ImportJobStatus.RUNNING] } },
-  });
+  const { data: templateJobs } = await ImportJob.query.primary({ templateId: resolved.context.templateId }).go();
+  const existingActive = templateJobs.find((j) => j.status === "PENDING" || j.status === "RUNNING");
   if (existingActive) {
     return NextResponse.json({ job: existingActive, alreadyRunning: true });
   }

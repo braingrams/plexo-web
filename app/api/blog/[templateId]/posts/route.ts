@@ -1,25 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { BlogPostStatus, Prisma } from "@prisma/client";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
-import { createBlogPost, type SavePostInput } from "@/lib/blog/savePost";
-import { effectiveStatus } from "@/lib/blog/queries";
+import { BlogPost, BlogCategory, BlogAuthor, BlogPostCategory } from "@/lib/db/contentEntities";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
+import { createBlogPost, type SavePostInput } from "@/lib/blog/savePostDynamo";
+import { effectiveStatus } from "@/lib/blog/queriesDynamo";
 import { convertWordPressHtmlToTiptapJson } from "@/lib/blogImport/htmlToTiptap";
-
-const LIST_SELECT = {
-  id: true,
-  title: true,
-  slug: true,
-  status: true,
-  publishedAt: true,
-  scheduledAt: true,
-  updatedAt: true,
-  viewCount: true,
-  featuredImageUrl: true,
-  author: { select: { id: true, name: true } },
-  categories: { select: { category: { select: { id: true, name: true, slug: true } } } },
-} satisfies Prisma.BlogPostSelect;
 
 export async function GET(
   request: NextRequest,
@@ -31,29 +16,54 @@ export async function GET(
 
   const { searchParams } = new URL(request.url);
   const statusFilter = searchParams.get("status");
-  const search = searchParams.get("search")?.trim();
+  const search = searchParams.get("search")?.trim().toLowerCase();
   const categoryId = searchParams.get("categoryId");
 
-  const where: Prisma.BlogPostWhereInput = { templateId: resolved.context.templateId };
-  if (statusFilter && statusFilter in BlogPostStatus) {
-    where.status = statusFilter as BlogPostStatus;
+  const [{ data: allPosts }, { data: categories }, { data: authors }] = await Promise.all([
+    BlogPost.query.byStatus({ templateId: resolved.context.templateId }).go(),
+    BlogCategory.query.primary({ templateId: resolved.context.templateId }).go(),
+    BlogAuthor.query.primary({ templateId: resolved.context.templateId }).go(),
+  ]);
+
+  let filtered = allPosts;
+  if (statusFilter) {
+    filtered = filtered.filter((p) => p.status === statusFilter);
   }
   if (search) {
-    where.title = { contains: search, mode: "insensitive" };
+    filtered = filtered.filter((p) => p.title.toLowerCase().includes(search));
   }
   if (categoryId) {
-    where.categories = { some: { categoryId } };
+    const { data: linked } = await BlogPostCategory.query.byCategory({ categoryId }).go();
+    const postIdsInCategory = new Set(linked.filter((l) => l.templateId === resolved.context.templateId).map((l) => l.postId));
+    filtered = filtered.filter((p) => postIdsInCategory.has(p.id));
   }
 
-  const posts = await prisma.blogPost.findMany({
-    where,
-    select: LIST_SELECT,
-    orderBy: { updatedAt: "desc" },
-    take: 200,
-  });
+  filtered = [...filtered].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")).slice(0, 200);
+
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const authorById = new Map(authors.map((a) => [a.id, a]));
+  const postCategoryBatches = await Promise.all(
+    filtered.map((p) => BlogPostCategory.query.primary({ templateId: resolved.context.templateId, postId: p.id }).go()),
+  );
 
   return NextResponse.json({
-    posts: posts.map((p) => ({ ...p, effectiveStatus: effectiveStatus(p.status, p.publishedAt) })),
+    posts: filtered.map((p, i) => ({
+      id: p.id,
+      title: p.title,
+      slug: p.slug,
+      status: p.status ?? "DRAFT",
+      publishedAt: p.publishedAt ?? null,
+      scheduledAt: p.scheduledAt ?? null,
+      updatedAt: p.updatedAt ?? new Date().toISOString(),
+      viewCount: p.viewCount ?? 0,
+      featuredImageUrl: p.featuredImageUrl ?? null,
+      author: p.authorId && authorById.has(p.authorId) ? { id: p.authorId, name: authorById.get(p.authorId)!.name } : null,
+      categories: postCategoryBatches[i].data
+        .map((pc) => categoryById.get(pc.categoryId))
+        .filter((c): c is NonNullable<typeof c> => !!c)
+        .map((c) => ({ category: { id: c.id, name: c.name, slug: c.slug } })),
+      effectiveStatus: effectiveStatus(p.status ?? "DRAFT", p.publishedAt ?? null),
+    })),
   });
 }
 
@@ -65,7 +75,7 @@ export async function POST(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { blog: ["create"] });
+  const permissionError = requirePermission(resolved.context.role, { blog: ["create"] });
   if (permissionError) return permissionError;
 
   const body = (await request.json().catch(() => ({}))) as Partial<SavePostInput>;
@@ -87,7 +97,7 @@ export async function POST(
     contentHtml,
     featuredImageUrl: body.featuredImageUrl ?? null,
     featuredImageAlt: body.featuredImageAlt ?? null,
-    status: body.status ?? BlogPostStatus.DRAFT,
+    status: body.status ?? "DRAFT",
     scheduledAt: body.scheduledAt ?? null,
     metaTitle: body.metaTitle ?? null,
     metaDescription: body.metaDescription ?? null,

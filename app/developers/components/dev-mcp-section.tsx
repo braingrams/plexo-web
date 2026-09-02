@@ -131,10 +131,10 @@ export function DevMcpSection({ isDark }: { isDark: boolean }) {
               <div className={`p-5 rounded-2xl border shadow-md space-y-2 transition-colors ${
                 isDark ? "bg-[#121724] border-slate-800 text-white" : "bg-slate-50 border-slate-200 text-slate-950"
               }`}>
-                <span className="text-[11px] font-mono font-bold text-orange-400 block">tool: delete_landing_page</span>
-                <h4 className="text-sm font-extrabold">Cascading Clean Cleanup</h4>
+                <span className="text-[11px] font-mono font-bold text-orange-400 block">tool: create_commerce_product</span>
+                <h4 className="text-sm font-extrabold">Digital Products &amp; Payments</h4>
                 <p className={`text-xs ${isDark ? "text-slate-400" : "text-slate-600"}`}>
-                  Cleans up Vercel domains and Blob assets explicitly when pages are deleted.
+                  Lists a digital download or service, manages orders, and switches a site between its own Paystack keys or Plexo's Paystack/Stripe.
                 </p>
               </div>
             </Reveal>

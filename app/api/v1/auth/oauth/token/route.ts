@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
+import { ApiKey } from "@/lib/db/coreEntities";
 
 /**
  * POST /api/v1/auth/oauth/token
@@ -30,13 +30,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
   }
 
-  // Fetch default active system/test key if available
-  const apiKeyRecord = await prisma.apiKey.findFirst({
-    where: { isActive: true },
-    orderBy: { createdAt: "desc" },
-  });
+  // Fetch default active system/test key if available. ApiKey has no index over `isActive`
+  // alone (primary is organizationId-scoped, GSI1 is byUser, GSI2 is byHashedKey — see
+  // coreEntities.ts) — this "any active key, most recently created" fallback has no real
+  // org/user context to scope by, so a bounded Scan (filtered + sorted in application
+  // code) is the honest v1 answer here, same discipline as scan-domains/expire-stale-holds,
+  // for what is itself just a best-effort fallback token, not a security-critical lookup.
+  let mostRecent: { maskedKey: string; createdAt?: string } | undefined;
+  let cursor: string | null = null;
+  for (;;) {
+    const page: { data: { maskedKey: string; createdAt?: string }[]; cursor: string | null } =
+      await ApiKey.scan.where(({ isActive }, { eq }) => eq(isActive, true)).go({ cursor });
+    for (const row of page.data) {
+      if (!mostRecent || (row.createdAt ?? "") > (mostRecent.createdAt ?? "")) mostRecent = row;
+    }
+    cursor = page.cursor;
+    if (!cursor) break;
+  }
 
-  const token = apiKeyRecord?.maskedKey || "plexo_mcp_session_token";
+  const token = mostRecent?.maskedKey || "plexo_mcp_session_token";
 
   return NextResponse.json({
     access_token: token,

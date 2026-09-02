@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put, BlobError } from "@vercel/blob";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
+import { uploadObject, StorageError } from "@/lib/storage";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
 
 // Featured images and in-post photos routinely run 2-5MB straight out of a phone/camera
 // or an unoptimized WordPress media library export — the raw-upload flow's 1MB
@@ -22,7 +22,7 @@ export async function POST(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { blog: ["update"] });
+  const permissionError = requirePermission(resolved.context.role, { blog: ["update"] });
   if (permissionError) return permissionError;
 
   const form = await request.formData().catch(() => null);
@@ -39,17 +39,14 @@ export async function POST(
 
   const buffer = Buffer.from(await uploaded.arrayBuffer());
   const extension = uploaded.type.split("/")[1]?.replace("svg+xml", "svg") || "bin";
-  const localDevToken = process.env.BLOB_READ_WRITE_TOKEN; // OIDC covers real deployments — see upload-raw/route.ts
-
   try {
-    const blob = await put(`blog-images/${resolved.context.templateId}/${randomKey()}.${extension}`, buffer, {
+    const blob = await uploadObject(`blog-images/${resolved.context.templateId}/${randomKey()}.${extension}`, buffer, {
       access: "public",
       contentType: uploaded.type,
-      ...(localDevToken ? { token: localDevToken } : {}),
     });
     return NextResponse.json({ url: blob.url }, { status: 201 });
   } catch (err) {
-    if (err instanceof BlobError) {
+    if (err instanceof StorageError) {
       return NextResponse.json({ error: err.message }, { status: 500 });
     }
     throw err;

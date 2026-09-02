@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
 import { isAuthorizedAdmin } from "@/server/adminAuth";
+import { isCronRequest } from "@/lib/cronAuth";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
+import { PublishedDomain } from "@/lib/db/contentEntities";
 
 const BATCH_SIZE = 50;
 
@@ -16,26 +17,37 @@ const BATCH_SIZE = 50;
  * daily, the max frequency Vercel Hobby cron plans allow; bump to hourly/6-hourly if
  * the project moves to Pro).
  *
- * Accepts either Vercel Cron's bearer auth (CRON_SECRET) or the internal admin token,
- * so it can also be triggered manually for testing.
+ * PublishedDomain has no index over `active`/`lastScannedAt` (both indexes are keyed off
+ * templateId/domain, see contentEntities.ts) — this cross-partition "least recently
+ * scanned across every org" access pattern only exists for this once-daily internal job,
+ * so a full table Scan (filtered + sorted in application code) is the honest v1 answer
+ * here rather than spending a third GSI on the hottest entity in the table for a
+ * low-frequency batch job. Revisit via the Athena/export path if this ever needs to run
+ * more often than daily.
+ *
+ * Accepts either the x-cron-secret header (see lib/cronAuth.ts) or the internal admin
+ * token, so it can also be triggered manually for testing.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-  const isCronRequest = !!cronSecret && authHeader === `Bearer ${cronSecret}`;
-
-  if (!isCronRequest && !isAuthorizedAdmin(request)) {
+  if (!isCronRequest(request) && !isAuthorizedAdmin(request)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const domains = await prisma.publishedDomain.findMany({
-    where: { active: true },
-    orderBy: { lastScannedAt: { sort: "asc", nulls: "first" } },
-    take: BATCH_SIZE,
-    select: { id: true },
-  });
+  const allActive: { id: string; templateId: string; lastScannedAt?: string }[] = [];
+  let cursor: string | null = null;
+  for (;;) {
+    const page: { data: { id: string; templateId: string; lastScannedAt?: string }[]; cursor: string | null } =
+      await PublishedDomain.scan.where(({ active }, { eq }) => eq(active, true)).go({ cursor });
+    allActive.push(...page.data.map((d) => ({ id: d.id, templateId: d.templateId, lastScannedAt: d.lastScannedAt })));
+    cursor = page.cursor;
+    if (!cursor) break;
+  }
 
-  const results = await Promise.allSettled(domains.map((d) => scanPublishedDomain(d.id)));
+  const domains = allActive
+    .sort((a, b) => (a.lastScannedAt ?? "").localeCompare(b.lastScannedAt ?? ""))
+    .slice(0, BATCH_SIZE);
+
+  const results = await Promise.allSettled(domains.map((d) => scanPublishedDomain(d.templateId, d.id)));
   const failures = results.filter((r) => r.status === "rejected").length;
 
   return NextResponse.json({ scanned: domains.length, failures });

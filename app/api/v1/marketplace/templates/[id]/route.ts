@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getMarketplaceTemplateDetail } from "@/lib/marketplace";
-import { resolveUser } from "@/app/api/v1/domains/route";
+import { resolveUser } from "@/lib/auth/resolveUser";
 
 /**
  * GET /api/v1/marketplace/templates/:id

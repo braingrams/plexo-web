@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveUser } from "../../../domains/route";
+import { resolveUser } from "@/lib/auth/resolveUser";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {

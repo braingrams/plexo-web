@@ -1,4 +1,4 @@
-import { SiteImportPlatform } from "@prisma/client";
+import { SiteImportPlatform } from "@/lib/siteImport/platform";
 import type { PlatformAdapter } from "../types";
 
 // Fallback for a site that isn't recognized as one of the four named platforms — plain

@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { canWhiteLabel, getOrganizationOwnerPlan } from "@/lib/subscription";
+import { auth } from "@/server/authDynamo";
+import { Member, Organization } from "@/lib/db/coreEntities";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { canWhiteLabel } from "@/lib/subscription";
+import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
 import { isValidHexColor } from "@/lib/color";
+import type { OrgRole } from "@/server/accessControl";
 
-async function getMembership(request: NextRequest, organizationId: string) {
-  const session = await auth.api.getSession({ headers: request.headers });
+async function getMembership(organizationId: string): Promise<{ userId: string; role: OrgRole } | null> {
+  const session = await auth();
   if (!session?.user) return null;
-  const membership = await prisma.member.findUnique({
-    where: { organizationId_userId: { organizationId, userId: session.user.id } },
-  });
+  const { data: membership } = await Member.get({ organizationId, userId: session.user.id }).go();
   if (!membership) return null;
-  return { userId: session.user.id, role: membership.role };
+  return { userId: session.user.id, role: membership.role as OrgRole };
 }
 
 /**
@@ -27,29 +27,26 @@ async function getMembership(request: NextRequest, organizationId: string) {
  *  - app/pub/[domain]/[[...slug]]/route.ts (published-page favicon)
  *  - app/api/v1/validate-key (embedded SDK splash)
  *
- * Gated to Pro/Ultra via canWhiteLabel(getOrganizationOwnerPlan(id)) — see
+ * Gated to Pro/Ultra via canWhiteLabel(getOrganizationOwnerPlanDynamo(id)) — see
  * lib/subscription.ts for why plan is resolved via the owning Member rather than a column
  * on Organization itself (billing still lives entirely on User).
  */
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   const { id } = await context.params;
-  const membership = await getMembership(request, id);
+  const membership = await getMembership(id);
   if (!membership) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const org = await prisma.organization.findUnique({
-    where: { id },
-    select: { name: true, logo: true, brandColor: true, whiteLabelEnabled: true },
-  });
+  const { data: org } = await Organization.get({ id }).go();
   if (!org) {
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   }
 
-  const plan = await getOrganizationOwnerPlan(id);
+  const plan = await getOrganizationOwnerPlanDynamo(id);
   return NextResponse.json({
     name: org.name,
     logo: org.logo,
@@ -64,17 +61,15 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   const { id } = await context.params;
-  const membership = await getMembership(request, id);
+  const membership = await getMembership(id);
   if (!membership) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, membership.role, {
-    organization: ["update"],
-  });
+  const permissionError = requirePermission(membership.role, { organization: ["update"] });
   if (permissionError) return permissionError;
 
-  const plan = await getOrganizationOwnerPlan(id);
+  const plan = await getOrganizationOwnerPlanDynamo(id);
   if (!canWhiteLabel(plan)) {
     return NextResponse.json(
       { error: "White-labeling requires the organization owner to be on a Pro or Ultra plan." },
@@ -89,7 +84,8 @@ export async function PATCH(
     whiteLabelEnabled?: boolean;
   };
 
-  const data: { name?: string; logo?: string | null; brandColor?: string | null; whiteLabelEnabled?: boolean } = {};
+  const data: { name?: string; logo?: string; brandColor?: string; whiteLabelEnabled?: boolean } = {};
+  const toRemove: ("logo" | "brandColor")[] = [];
 
   if (typeof body.name === "string") {
     const trimmed = body.name.trim();
@@ -100,31 +96,36 @@ export async function PATCH(
   }
 
   if (body.logo === null || typeof body.logo === "string") {
-    data.logo = typeof body.logo === "string" ? body.logo.trim() || null : null;
+    const trimmed = typeof body.logo === "string" ? body.logo.trim() : "";
+    if (trimmed) data.logo = trimmed;
+    else toRemove.push("logo");
   }
 
   if (body.brandColor === null || typeof body.brandColor === "string") {
-    const trimmed = typeof body.brandColor === "string" ? body.brandColor.trim() : null;
+    const trimmed = typeof body.brandColor === "string" ? body.brandColor.trim() : "";
     if (trimmed && !isValidHexColor(trimmed)) {
       return NextResponse.json({ error: "brandColor must be a 6-digit hex color, e.g. #4f46e5." }, { status: 400 });
     }
-    data.brandColor = trimmed || null;
+    if (trimmed) data.brandColor = trimmed;
+    else toRemove.push("brandColor");
   }
 
   if (typeof body.whiteLabelEnabled === "boolean") {
     data.whiteLabelEnabled = body.whiteLabelEnabled;
   }
 
-  // Writes straight to Prisma rather than auth.api.updateOrganization: better-auth's
-  // additionalFields typing only accepts `string | undefined` for brandColor (no
-  // `null`), so it can't express "clear the color" — and permission (organization:update)
-  // plus the plan gate above are already fully enforced by this point, so there's nothing
-  // better-auth's own endpoint would additionally check.
-  const updated = await prisma.organization.update({
-    where: { id },
-    data,
-    select: { name: true, logo: true, brandColor: true, whiteLabelEnabled: true },
-  });
+  let patch = Organization.patch({ id }).set(data);
+  if (toRemove.length) patch = patch.remove(toRemove);
+  await patch.go();
 
-  return NextResponse.json({ ...updated, planAllowsWhiteLabel: true });
+  const { data: updated } = await Organization.get({ id }).go();
+  if (!updated) throw new Error(`Organization ${id} vanished immediately after being updated`);
+
+  return NextResponse.json({
+    name: updated.name,
+    logo: updated.logo,
+    brandColor: updated.brandColor,
+    whiteLabelEnabled: updated.whiteLabelEnabled,
+    planAllowsWhiteLabel: true,
+  });
 }

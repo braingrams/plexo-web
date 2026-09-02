@@ -1,9 +1,8 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { ApiKey, User } from "@/lib/db/coreEntities";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
 
 import { AiSettingsClient } from "./AiSettingsClient";
 import { SettingsShell } from "../../_components/SettingsShell";
@@ -24,29 +23,25 @@ export type AiSettingsApiKey = {
 };
 
 export default async function AiSettingsPage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
 
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/settings/ai");
   }
 
-  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
 
-  const [apiKeys, user] = await Promise.all([
-    prisma.apiKey.findMany({
-      where: { organizationId: orgResolution.organizationId, isActive: true },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true, name: true, isActive: true, useAi: true, aiProvider: true, aiTier: true,
-        aiApiKey: true, aiAccessMode: true, hostAuthWebhookUrl: true, hostWebhookSecret: true,
-      },
-    }),
-    prisma.user.findUniqueOrThrow({ where: { id: session.user.id }, select: { subscriptionPlan: true } }),
+  const [{ data: allKeys }, { data: user }] = await Promise.all([
+    ApiKey.query.primary({ organizationId: orgResolution.organizationId }).go(),
+    User.get({ id: session.user.id }).go(),
   ]);
+  if (!user) throw new Error(`Session user ${session.user.id} has no matching User record`);
+  const apiKeys = allKeys
+    .filter((k) => k.isActive)
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   return (
     <SettingsShell>
@@ -54,13 +49,13 @@ export default async function AiSettingsPage() {
         initialApiKeys={apiKeys.map((k) => ({
           id: k.id,
           name: k.name,
-          isActive: k.isActive,
-          useAi: k.useAi,
-          aiProvider: k.aiProvider,
-          aiTier: k.aiTier,
+          isActive: k.isActive ?? true,
+          useAi: k.useAi ?? false,
+          aiProvider: k.aiProvider ?? "openai",
+          aiTier: (k.aiTier ?? "AUTO") as AiTier,
           hasAiApiKey: !!k.aiApiKey,
-          aiAccessMode: k.aiAccessMode,
-          hostAuthWebhookUrl: k.hostAuthWebhookUrl,
+          aiAccessMode: (k.aiAccessMode ?? "SYSTEM") as AiAccessMode,
+          hostAuthWebhookUrl: k.hostAuthWebhookUrl ?? null,
           hasHostWebhookSecret: !!k.hostWebhookSecret,
         }))}
         isUltra={user.subscriptionPlan === "ULTRA"}

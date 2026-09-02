@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ImportJobStatus } from "@prisma/client";
 import { isAuthorizedAdmin } from "@/server/adminAuth";
-import { processImportBatch } from "@/lib/blogImport/runBatch";
+import { processImportBatch } from "@/lib/blogImport/runBatchDynamo";
 
 // Import jobs normally progress via the dashboard tab driving batches one at a time
 // (app/dashboard/templates/[id]/blog/import/ImportClient.tsx) — this route is now only
@@ -25,15 +24,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { jobId?: string };
-  if (!body.jobId) {
-    return NextResponse.json({ error: "jobId is required." }, { status: 400 });
+  // templateId is required now — ImportJob's primary key is (templateId, id), see
+  // runBatchDynamo.ts's own comment. The only caller (resume-stalled/route.ts) already
+  // has it from its own ImportJob.byStatus query result.
+  const body = (await request.json().catch(() => ({}))) as { jobId?: string; templateId?: string };
+  if (!body.jobId || !body.templateId) {
+    return NextResponse.json({ error: "jobId and templateId are required." }, { status: 400 });
   }
 
   const deadline = Date.now() + BATCH_LOOP_BUDGET_MS;
-  let result = await processImportBatch(body.jobId);
-  while (!result.done && result.status === ImportJobStatus.RUNNING && Date.now() < deadline) {
-    result = await processImportBatch(body.jobId);
+  let result = await processImportBatch(body.templateId, body.jobId);
+  while (!result.done && result.status === "RUNNING" && Date.now() < deadline) {
+    result = await processImportBatch(body.templateId, body.jobId);
   }
 
   return NextResponse.json({ done: result.done, status: result.status });

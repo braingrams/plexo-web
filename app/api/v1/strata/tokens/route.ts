@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveUser } from "../../domains/route";
-import { resolveStrataProjectId, fetchStrataTokens } from "@/server/strata";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { resolveStrataProjectId, fetchStrataTokens } from "@/server/strataDynamo";
 
 /**
  * GET /api/v1/strata/tokens?projectId=optional

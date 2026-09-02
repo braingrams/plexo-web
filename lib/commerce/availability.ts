@@ -1,5 +1,3 @@
-import type { CommerceAvailabilityRule, CommerceAvailabilityException, CommerceBooking } from "@prisma/client";
-
 const WEEKDAY_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 
 /** How many minutes to ADD to a UTC instant to get local wall-clock time in `timeZone`, at
@@ -71,9 +69,13 @@ export interface AvailabilitySlot {
   end: Date;
 }
 
-type RuleInput = Pick<CommerceAvailabilityRule, "dayOfWeek" | "startMinute" | "endMinute" | "timezone">;
-type ExceptionInput = Pick<CommerceAvailabilityException, "date" | "closed">;
-type BookingInput = Pick<CommerceBooking, "scheduledStart" | "scheduledEnd">;
+// timezone is non-optional here too — every caller already defaults it (e.g. "Africa/Lagos")
+// before calling in, unlike the entity's own optional field.
+type RuleInput = { dayOfWeek: number; startMinute: number; endMinute: number; timezone: string };
+// Real Date objects, not the entity's own stored ISO-string shape — every caller already
+// parses the raw string fields into Date before calling into this module.
+type ExceptionInput = { date: Date; closed: boolean };
+type BookingInput = { scheduledStart: Date; scheduledEnd: Date };
 
 /**
  * Computes open booking slots for a service between `from` and `to` (UTC instants), from

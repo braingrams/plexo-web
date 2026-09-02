@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
 import { decryptPaystackKey } from "@/lib/crypto";
 import { refundPaystackTransaction } from "@/lib/paystack";
 import { resolvePaystackKeysForMode } from "@/lib/commerce/paystack";
+import { CommerceOrder, CommerceSettings } from "@/lib/db/commerceEntities";
 
 /**
  * Refunds a paid order via Paystack. Deliberately does NOT auto-restock or free a booking
@@ -21,20 +21,37 @@ export async function POST(
   if (resolved.error) return resolved.error;
   const { role } = resolved.context;
 
-  const permissionError = await requirePermission(request.headers, role, { commerce: ["update"] });
+  const permissionError = requirePermission(role, { commerce: ["update"] });
   if (permissionError) return permissionError;
 
-  const order = await prisma.commerceOrder.findFirst({ where: { id, templateId } });
+  const { data: order } = await CommerceOrder.get({ templateId, id }).go();
   if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
   if (order.status !== "PAID") {
     return NextResponse.json({ error: `Only a PAID order can be refunded (this one is ${order.status}).` }, { status: 400 });
   }
 
-  const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
+  // paystackMode/paystackReference are only set on a Paystack-paid order (BYO or platform);
+  // a PLATFORM_STRIPE order has neither — refunding one needs a Stripe-specific path that
+  // doesn't exist yet.
+  if (!order.paystackMode || !order.paystackReference) {
+    return NextResponse.json({ error: "This order wasn't paid via Paystack — refunding it isn't supported yet." }, { status: 400 });
+  }
+
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
   // Refund through the same account the order was actually PAID through — order.paystackMode
   // was stamped at creation time and never changes, regardless of what the site's active
   // mode has since been switched to.
-  const orderModeKeys = settings ? resolvePaystackKeysForMode(settings, order.paystackMode) : null;
+  const orderModeKeys = settings
+    ? resolvePaystackKeysForMode(
+        {
+          paystackTestPublicKey: settings.paystackTestPublicKey ?? null,
+          paystackTestSecretKeyEncrypted: settings.paystackTestSecretKeyEncrypted ?? null,
+          paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
+          paystackLiveSecretKeyEncrypted: settings.paystackLiveSecretKeyEncrypted ?? null,
+        },
+        order.paystackMode,
+      )
+    : null;
   if (!orderModeKeys?.secretKeyEncrypted) {
     return NextResponse.json({ error: `This site has no ${order.paystackMode.toLowerCase()}-mode Paystack key configured to refund through.` }, { status: 400 });
   }
@@ -48,6 +65,7 @@ export async function POST(
     return NextResponse.json({ error: err instanceof Error ? err.message : "Refund failed." }, { status: 502 });
   }
 
-  const updated = await prisma.commerceOrder.update({ where: { id }, data: { status: "REFUNDED" } });
+  await CommerceOrder.patch({ templateId, id }).set({ status: "REFUNDED" }).go();
+  const { data: updated } = await CommerceOrder.get({ templateId, id }).go();
   return NextResponse.json({ order: updated });
 }

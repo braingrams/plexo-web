@@ -1,11 +1,17 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import type { Template } from "@prisma/client";
-import { prisma } from "@/server/prisma";
+import type { EntityItem } from "electrodb";
 import { parseUserAgent, extractGeoFromHeaders } from "@/server/analytics";
-import { resolveHideBranding, canWhiteLabel, getOrganizationOwnerPlan } from "@/lib/subscription";
-import { resolveSite } from "@/lib/pub/resolveSite";
-import { resolveBlogRedirect } from "@/lib/blog/redirects";
+import { resolveHideBranding, canWhiteLabel } from "@/lib/subscription";
+import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
+import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
+import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
+import { Template, TemplateAsset, BlogSite } from "@/lib/db/contentEntities";
+import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
+import { PageView } from "@/lib/db/opsEntities";
+import { recordPageViewRollup } from "@/lib/analyticsRollup";
+
+type TemplateItem = EntityItem<typeof Template>;
 
 function notFoundResponse(): NextResponse {
   return new NextResponse(
@@ -186,6 +192,15 @@ function escapeHtmlAttr(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+/** Prisma's `prisma.template.findFirst({ where: { parentId, slug } })` — Template has no
+ * (parentId, slug) direct index, only byParent (GSI2, sorted by order), so this fetches the
+ * parent's children (small in practice — a site's own page tree) and matches in memory,
+ * same discipline as server/slugDynamo.ts's ensureUniqueSlug. */
+async function findChildBySlug(parentId: string, slug: string): Promise<TemplateItem | null> {
+  const { data: children } = await Template.query.byParent({ parentId }).go();
+  return children.find((c) => c.slug === slug) ?? null;
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ domain: string; slug?: string[] }> }
@@ -215,10 +230,7 @@ export async function GET(
   // request to /pub/{domain}/blog the same way it rewrote this one, and we relay its
   // response back verbatim as our own. The client's original request/URL never changes.
   if (slugSegments.length === 0) {
-    const blogSite = await prisma.blogSite.findUnique({
-      where: { templateId: published.templateId },
-      select: { enabled: true, showOnHomepage: true },
-    });
+    const { data: blogSite } = await BlogSite.get({ templateId: published.templateId }).go();
     if (blogSite?.enabled && blogSite.showOnHomepage) {
       const blogResponse = await fetch(new URL("/blog", request.url));
       // Relaying a fetch() response's headers verbatim is a known footgun: fetch already
@@ -251,17 +263,17 @@ export async function GET(
   // left over after the walk stops are resolved as an asset path scoped to the last page
   // reached, which is what lets a RAW_UPLOAD page (root or nested) have its own css/js/
   // image files without colliding with another page's same-named files.
-  let cursor: Template = published.template;
+  let cursor: TemplateItem = published.template;
   let matchedSegments = 0;
   for (const segment of slugSegments) {
-    let child = await prisma.template.findFirst({ where: { parentId: cursor.id, slug: segment } });
+    let child = await findChildBySlug(cursor.id, segment);
     // A zip's own nav links a sibling page as "about.html" (that's the literal href baked
     // into the uploaded HTML — see upload-raw/route.ts's auto-split, which turns an extra
     // root-level .html file into a page whose slug is the bare name, "about"), so a segment
     // ending in .html/.htm that doesn't match any child verbatim gets a second look with
     // that suffix stripped before this walk gives up on it.
     if (!child && /\.html?$/i.test(segment)) {
-      child = await prisma.template.findFirst({ where: { parentId: cursor.id, slug: segment.replace(/\.html?$/i, "") } });
+      child = await findChildBySlug(cursor.id, segment.replace(/\.html?$/i, ""));
     }
     if (!child) break;
     cursor = child;
@@ -318,7 +330,7 @@ export async function GET(
     // branding bar above, this is a single <link> tag in <head>, not a </body> splice, so
     // RAW_UPLOAD's "arbitrary uploaded HTML" safety concern doesn't apply).
     if (published.organization.logo && published.organization.whiteLabelEnabled) {
-      const ownerPlan = await getOrganizationOwnerPlan(published.organization.id);
+      const ownerPlan = await getOrganizationOwnerPlanDynamo(published.organization.id);
       if (canWhiteLabel(ownerPlan)) {
         html = injectFavicon(html, published.organization.logo);
       }
@@ -328,10 +340,7 @@ export async function GET(
     // a site with Commerce off (the default) never gets this script, so it costs nothing.
     // Scoped to the SITE's root Template (published.templateId), not the current page —
     // Commerce is a per-site setting, same as CommerceSettings itself.
-    const commerceSettings = await prisma.commerceSettings.findUnique({
-      where: { templateId: published.templateId },
-      select: { enabled: true },
-    });
+    const { data: commerceSettings } = await CommerceSettings.get({ templateId: published.templateId }).go();
     if (commerceSettings?.enabled) {
       html = injectCommerceScript(html);
     }
@@ -344,20 +353,23 @@ export async function GET(
       const { deviceType, browser, os } = parseUserAgent(userAgent);
       const { country, region, city } = extractGeoFromHeaders(request.headers);
 
-      void prisma.pageView.create({
-        data: {
-          templateId: cursor.id,
-          domain: rawDomain,
-          ipHash,
-          userAgent,
-          deviceType,
-          browser,
-          os,
-          country,
-          region,
-          city,
-        },
-      }).catch(err => console.error("Failed to log PageView:", err));
+      const viewCreatedAt = new Date();
+      void PageView.create({
+        id: randomUUID(),
+        templateId: cursor.id,
+        domain: rawDomain,
+        ipHash,
+        userAgent: userAgent ?? undefined,
+        deviceType: deviceType ?? undefined,
+        browser: browser ?? undefined,
+        os: os ?? undefined,
+        country: country ?? undefined,
+        region: region ?? undefined,
+        city: city ?? undefined,
+      }).go().catch((err) => console.error("Failed to log PageView:", err));
+      void recordPageViewRollup({ createdAt: viewCreatedAt, templateId: cursor.id, deviceType, browser, os }).catch((err) =>
+        console.error("Failed to record PageView rollup:", err),
+      );
     } catch (err) {
       console.error("Error logging PageView:", err);
     }
@@ -381,26 +393,31 @@ export async function GET(
   // product added in the dashboard gets a working page immediately, with nothing to
   // create or regenerate here.
   if (remainingSegments.length === 1) {
-    const commerceSettings = await prisma.commerceSettings.findUnique({
-      where: { templateId: published.templateId },
-      select: { enabled: true, productDetailTemplateId: true, productDetailTemplate: { select: { compiledHtml: true } } },
-    });
-    if (commerceSettings?.enabled && commerceSettings.productDetailTemplate) {
-      const candidateSlug = remainingSegments[0];
-      const product = await prisma.commerceProduct.findFirst({
-        where: { templateId: published.templateId, slug: candidateSlug, active: true, kind: "PHYSICAL" },
-        select: { id: true, name: true, description: true, imageUrl: true },
-      });
-      if (product) {
-        let html = injectProductSeo(commerceSettings.productDetailTemplate.compiledHtml, product);
-        html = injectCommerceScript(html);
-        if (!resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-          html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
+    const { data: commerceSettings } = await CommerceSettings.get({ templateId: published.templateId }).go();
+    if (commerceSettings?.enabled && commerceSettings.productDetailTemplateId) {
+      const { data: productDetailTemplate } = await Template.get({ id: commerceSettings.productDetailTemplateId }).go();
+      if (productDetailTemplate) {
+        const candidateSlug = remainingSegments[0];
+        // CommerceProduct is id-keyed, not slug-keyed (see commerceEntities.ts's own
+        // comment) — fans out over the site's own product list in memory, same bound as
+        // every other slug/name lookup this migration uses for that entity.
+        const { data: products } = await CommerceProduct.query.primary({ templateId: published.templateId }).go();
+        const product = products.find((p) => p.slug === candidateSlug && p.active && p.kind === "PHYSICAL");
+        if (product) {
+          let html = injectProductSeo(productDetailTemplate.compiledHtml, {
+            name: product.name,
+            description: product.description ?? null,
+            imageUrl: product.imageUrl ?? null,
+          });
+          html = injectCommerceScript(html);
+          if (!resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+            html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
+          }
+          return new NextResponse(html, {
+            headers: { "Content-Type": "text/html; charset=utf-8", "X-Content-Type-Options": "nosniff" },
+          });
         }
-        return new NextResponse(html, {
-          headers: { "Content-Type": "text/html; charset=utf-8", "X-Content-Type-Options": "nosniff" },
-        });
       }
     }
   }
@@ -433,13 +450,18 @@ export async function GET(
     `${requestedPath}.htm`,
     `${requestedPath}/index.html`,
   ];
-  // findMany + manual pick (not findFirst) so priority order is guaranteed — Prisma's
-  // `in` filter doesn't promise result order matches the array, and if a zip somehow
-  // contains both "about" and "about.html" the exact match must win.
-  const matches = await prisma.templateAsset.findMany({
-    where: { templateId: cursor.id, path: { in: candidatePaths } },
-  });
-  const asset = candidatePaths.map((p) => matches.find((m) => m.path === p)).find(Boolean);
+  // Direct key .get() per candidate (TemplateAsset's primary key is templateId+path — see
+  // contentEntities.ts), tried in priority order and stopping at the first hit — the
+  // DynamoDB equivalent of Prisma's findMany+manual-pick, which existed there only to
+  // guarantee priority order Prisma's own `in` filter didn't promise.
+  let asset: EntityItem<typeof TemplateAsset> | null = null;
+  for (const path of candidatePaths) {
+    const { data } = await TemplateAsset.get({ templateId: cursor.id, path }).go();
+    if (data) {
+      asset = data;
+      break;
+    }
+  }
   if (!asset) {
     return notFoundResponse();
   }

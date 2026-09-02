@@ -1,13 +1,15 @@
-import { TemplateKind } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 
-import { prisma } from "@/server/prisma";
+import { Template } from "@/lib/db/contentEntities";
+import { User } from "@/lib/db/coreEntities";
 import { getTierFeatures } from "@/lib/subscription";
-import { ensureUniqueSlug } from "@/server/slug";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { requirePermission } from "@/server/requirePermission";
+import { ensureUniqueSlug } from "@/server/slugDynamo";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { requirePermission } from "@/server/requirePermissionDynamo";
 import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
-import { isTemplateNameTaken } from "@/server/templateName";
+import { isTemplateNameTaken } from "@/server/templateNameDynamo";
+
+type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
 type TemplateSummary = {
   id: string;
@@ -20,16 +22,9 @@ type TemplateSummary = {
 
 type CreateTemplateBody = {
   name?: string;
-  kind?: "EMAIL" | "LANDING_PAGE";
-  // Present when creating a sub-page from the editor's Pages panel — the
-  // new template is nested under this existing LANDING_PAGE template
-  // instead of appearing as its own top-level dashboard entry.
+  kind?: TemplateKind;
   parentId?: string;
   slug?: string;
-  // When given, creates a RAW_UPLOAD sub-page (served as-is) instead of a blank
-  // BUILDER one — see plexo-mcp's create_landing_page_subpage tool. Mutually
-  // exclusive with the default blank-BUILDER behavior; requires acceptAup on an
-  // account's first raw page, same as /api/v1/templates/upload-raw.
   htmlContent?: string;
   acceptAup?: boolean;
 };
@@ -48,17 +43,16 @@ function serializeTemplate(record: {
   id: string;
   name: string;
   kind: TemplateKind;
-  createdAt: Date;
-  updatedAt: Date;
-  _count?: { pages: number };
-}): TemplateSummary {
+  createdAt?: string;
+  updatedAt?: string;
+}, pageCount: number): TemplateSummary {
   return {
     id: record.id,
     name: record.name,
     kind: record.kind,
-    createdAt: record.createdAt.toISOString(),
-    updatedAt: record.updatedAt.toISOString(),
-    pageCount: record._count?.pages ?? 0,
+    createdAt: record.createdAt ?? new Date().toISOString(),
+    updatedAt: record.updatedAt ?? new Date().toISOString(),
+    pageCount,
   };
 }
 
@@ -73,25 +67,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // (marketplaceStatus set) are a separate concept from the seller's own working
   // templates — they live in /dashboard/marketplace/listings instead of cluttering this
   // list with a second, non-editable-in-the-same-way copy of the same content.
-  const templates = await prisma.template.findMany({
-    where: { organizationId: resolved.organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false },
-    // Tie-break on createdAt — see app/dashboard/templates/page.tsx's identical comment:
-    // the org-backfill migration's updateMany bumped every template's updatedAt to the
-    // same instant via Prisma's @updatedAt, so ties need a secondary sort to avoid
-    // arbitrary ordering.
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      name: true,
-      kind: true,
-      createdAt: true,
-      updatedAt: true,
-      _count: { select: { pages: true } },
-    },
+  const { data: all } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+  const roots = all.filter(
+    (t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
+  );
+  // Tie-break on createdAt — see app/dashboard/templates/page.tsx's identical comment:
+  // the org-backfill migration bumped every template's updatedAt to the same instant, so
+  // ties need a secondary sort to avoid arbitrary ordering.
+  roots.sort((a, b) => {
+    const byUpdated = (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
+    if (byUpdated !== 0) return byUpdated;
+    return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
   });
 
+  const templates = await Promise.all(
+    roots.map(async (t) => {
+      const { data: children } = await Template.query.byParent({ parentId: t.id }).go();
+      return serializeTemplate(t as { id: string; name: string; kind: TemplateKind; createdAt?: string; updatedAt?: string }, children.length);
+    }),
+  );
+
   return NextResponse.json({
-    templates: templates.map(serializeTemplate),
+    templates,
     plan: resolved.subscriptionPlan,
     tier: getTierFeatures(resolved.subscriptionPlan),
   });
@@ -103,7 +100,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["create"] });
+  const permissionError = requirePermission(resolved.role, { template: ["create"] });
   if (permissionError) return permissionError;
 
   const features = getTierFeatures(resolved.subscriptionPlan);
@@ -127,24 +124,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 403 },
       );
     }
-    parent = await prisma.template.findFirst({
-      where: { id: parentId, organizationId: resolved.organizationId },
-      select: { id: true, kind: true },
-    });
-    if (!parent) {
+    const { data: parentRecord } = await Template.get({ id: parentId }).go();
+    if (!parentRecord || parentRecord.organizationId !== resolved.organizationId) {
       return NextResponse.json({ error: "Parent page not found." }, { status: 404 });
     }
-    if (parent.kind !== TemplateKind.LANDING_PAGE) {
+    if (parentRecord.kind !== "LANDING_PAGE") {
       return NextResponse.json({ error: "Only landing pages can have sub-pages." }, { status: 400 });
     }
+    parent = { id: parentRecord.id, kind: parentRecord.kind as TemplateKind };
   }
 
   // A sub-page always belongs to the same landing-page tree as its parent.
-  const kind = parent ? TemplateKind.LANDING_PAGE : (body.kind === "LANDING_PAGE" ? TemplateKind.LANDING_PAGE : TemplateKind.EMAIL);
+  const kind: TemplateKind = parent ? "LANDING_PAGE" : body.kind === "LANDING_PAGE" ? "LANDING_PAGE" : "EMAIL";
 
   if (await isTemplateNameTaken({ organizationId: resolved.organizationId, parentId, kind, name })) {
     return NextResponse.json(
-      { error: parentId ? `This page already has a sub-page named "${name}".` : `You already have a ${kind === TemplateKind.LANDING_PAGE ? "site" : "email template"} named "${name}".` },
+      { error: parentId ? `This page already has a sub-page named "${name}".` : `You already have a ${kind === "LANDING_PAGE" ? "site" : "email template"} named "${name}".` },
       { status: 409 },
     );
   }
@@ -152,10 +147,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!parentId) {
     // The plan's template limit counts root/home pages only, per kind — a page with
     // five sub-pages still counts as one landing page against this limit, not six.
-    const limit = kind === TemplateKind.LANDING_PAGE ? features.maxLandingPages : features.maxEmailTemplates;
-    const count = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false } });
+    const limit = kind === "LANDING_PAGE" ? features.maxLandingPages : features.maxEmailTemplates;
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const count = orgTemplates.filter(
+      (t) => !t.parentId && t.kind === kind && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
+    ).length;
     if (count >= limit) {
-      const label = kind === TemplateKind.LANDING_PAGE ? "landing pages" : "email templates";
+      const label = kind === "LANDING_PAGE" ? "landing pages" : "email templates";
       return NextResponse.json(
         {
           error: `Your plan allows a maximum of ${limit} ${label}. Upgrade to create more.`,
@@ -170,17 +168,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let order = 0;
   if (parentId) {
     slug = await ensureUniqueSlug(parentId, body.slug?.trim() || name);
-    const lastSibling = await prisma.template.findFirst({
-      where: { parentId },
-      orderBy: { order: "desc" },
-      select: { order: true },
-    });
-    order = (lastSibling?.order ?? -1) + 1;
+    const { data: siblings } = await Template.query.byParent({ parentId }).go();
+    const lastOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1);
+    order = lastOrder + 1;
   }
 
   const rawHtmlContent = typeof body.htmlContent === "string" ? body.htmlContent : null;
   if (rawHtmlContent !== null) {
-    if (kind !== TemplateKind.LANDING_PAGE) {
+    if (kind !== "LANDING_PAGE") {
       return NextResponse.json({ error: "htmlContent is only supported for landing pages, not email templates." }, { status: 400 });
     }
     try {
@@ -192,7 +187,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       throw err;
     }
 
-    const user = await prisma.user.findUnique({ where: { id: resolved.userId }, select: { aupAcceptedAt: true } });
+    const { data: user } = await User.get({ id: resolved.userId }).go();
     if (!user?.aupAcceptedAt) {
       if (body.acceptAup !== true) {
         return NextResponse.json({
@@ -201,13 +196,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           aupUrl: "/legal/acceptable-use",
         }, { status: 403 });
       }
-      await prisma.user.update({ where: { id: resolved.userId }, data: { aupAcceptedAt: new Date() } });
+      await User.patch({ id: resolved.userId }).set({ aupAcceptedAt: new Date().toISOString() }).go();
     }
 
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const recentUploadCount = await prisma.template.count({
-      where: { userId: resolved.userId, sourceType: "RAW_UPLOAD", createdAt: { gte: since } },
-    });
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const recentUploadCount = orgTemplates.filter(
+      (t) => t.userId === resolved.userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
+    ).length;
     if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
       return NextResponse.json({
         error: `You've reached the raw-upload limit of ${RAW_UPLOAD_DAILY_LIMIT} per 24 hours. Try again later.`,
@@ -215,27 +211,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  const template = await prisma.template.create({
-    data: {
-      userId: resolved.userId,
-      organizationId: resolved.organizationId,
-      name,
-      kind,
-      parentId,
-      slug,
-      order,
-      ...(rawHtmlContent !== null
-        ? { sourceType: "RAW_UPLOAD" as const, designJson: {}, compiledHtml: rawHtmlContent }
-        : { designJson: BLANK_TEMPLATE_SHELL, compiledHtml: "" }),
-    },
-    select: {
-      id: true,
-      name: true,
-      kind: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
+  const id = crypto.randomUUID();
+  await Template.create({
+    id,
+    userId: resolved.userId,
+    organizationId: resolved.organizationId,
+    name,
+    kind,
+    parentId: parentId ?? undefined,
+    slug: slug ?? undefined,
+    order,
+    ...(rawHtmlContent !== null
+      ? { sourceType: "RAW_UPLOAD" as const, designJson: {}, compiledHtml: rawHtmlContent }
+      : { designJson: BLANK_TEMPLATE_SHELL, compiledHtml: "" }),
+  }).go();
 
-  return NextResponse.json({ template: serializeTemplate(template) }, { status: 201 });
+  const { data: template } = await Template.get({ id }).go();
+  if (!template) throw new Error(`Template ${id} vanished immediately after being created`);
+
+  return NextResponse.json({ template: serializeTemplate(template as { id: string; name: string; kind: TemplateKind; createdAt?: string; updatedAt?: string }, 0) }, { status: 201 });
 }

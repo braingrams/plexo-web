@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { prisma } from "@/server/prisma";
-import { resolveSite } from "@/lib/pub/resolveSite";
+import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { computeAvailableSlots } from "@/lib/commerce/availability";
-import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimit";
+import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
+import { CommerceProduct, CommerceAvailabilityRule, CommerceAvailabilityException, CommerceBooking } from "@/lib/db/commerceEntities";
 
 const DEFAULT_RANGE_DAYS = 14;
 const MAX_RANGE_DAYS = 60;
@@ -15,7 +15,7 @@ const MAX_RANGE_DAYS = 60;
  * bookings each call, never pre-materialized — see the Commerce plan.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const hostname = (request.headers.get("host") ?? "").split(":")[0];
+  const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
   const siteResult = await resolveSite(hostname);
   if (siteResult.status !== "ok") {
     return NextResponse.json({ error: "Site not found." }, { status: 404 });
@@ -32,10 +32,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "productId is required." }, { status: 400 });
   }
 
-  const product = await prisma.commerceProduct.findFirst({
-    where: { id: productId, templateId, active: true, kind: "SERVICE" },
-  });
-  if (!product) {
+  const { data: product } = await CommerceProduct.get({ templateId, id: productId }).go();
+  if (!product || product.kind !== "SERVICE" || !(product.active ?? true)) {
     return NextResponse.json({ error: "Service not found." }, { status: 404 });
   }
 
@@ -54,25 +52,36 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const effectiveFrom = from.getTime() < now.getTime() ? now : from;
 
-  const [rules, exceptions, existingBookings] = await Promise.all([
-    prisma.commerceAvailabilityRule.findMany({
-      where: { productId },
-      select: { dayOfWeek: true, startMinute: true, endMinute: true, timezone: true },
-    }),
-    prisma.commerceAvailabilityException.findMany({
-      where: { productId, closed: true, date: { gte: effectiveFrom, lte: cappedTo } },
-      select: { date: true, closed: true },
-    }),
-    prisma.commerceBooking.findMany({
-      where: {
-        productId,
-        scheduledEnd: { gte: effectiveFrom },
-        scheduledStart: { lte: cappedTo },
-        OR: [{ status: "CONFIRMED" }, { status: "PENDING_PAYMENT", holdExpiresAt: { gt: now } }],
-      },
-      select: { scheduledStart: true, scheduledEnd: true },
-    }),
+  // CommerceBooking has no productId-indexed access pattern (primary key is
+  // templateId+orderId, byOrg GSI1 is organizationId+scheduledStart+id — see
+  // commerceEntities.ts) — the closest available index is byOrg, range-bounded by the
+  // same from/to window, then filtered by productId/templateId in memory. Bounded by one
+  // org's booking volume in a <=60-day window, not the whole table.
+  const [{ data: ruleRows }, { data: exceptionRows }, { data: orgBookingsInRange }] = await Promise.all([
+    CommerceAvailabilityRule.query.byProduct({ productId }).go(),
+    CommerceAvailabilityException.query
+      .byProduct({ productId })
+      .between({ date: effectiveFrom.toISOString() }, { date: cappedTo.toISOString() })
+      .go(),
+    CommerceBooking.query
+      .byOrg({ organizationId: siteResult.published.organizationId })
+      .between({ scheduledStart: effectiveFrom.toISOString() }, { scheduledStart: cappedTo.toISOString() })
+      .go(),
   ]);
+
+  const rules = ruleRows.map((r) => ({ dayOfWeek: r.dayOfWeek, startMinute: r.startMinute, endMinute: r.endMinute, timezone: r.timezone ?? "Africa/Lagos" }));
+  const exceptions = exceptionRows.filter((e) => e.closed ?? true).map((e) => ({ date: new Date(e.date), closed: e.closed ?? true }));
+
+  const nowMs = now.getTime();
+  const existingBookings = orgBookingsInRange
+    .filter(
+      (b) =>
+        b.templateId === templateId &&
+        b.productId === productId &&
+        new Date(b.scheduledEnd).getTime() >= effectiveFrom.getTime() &&
+        (b.status === "CONFIRMED" || (b.status === "PENDING_PAYMENT" && b.holdExpiresAt && new Date(b.holdExpiresAt).getTime() > nowMs)),
+    )
+    .map((b) => ({ scheduledStart: new Date(b.scheduledStart), scheduledEnd: new Date(b.scheduledEnd) }));
 
   const slots = computeAvailableSlots({
     from: effectiveFrom,

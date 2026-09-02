@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { prisma } from "@/server/prisma";
-import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
 import { decryptMaildripKey } from "@/lib/crypto";
 import { createAndPublishMaildripOptInPage, MAILDRIP_API_KEYS_SETTINGS_URL, MAILDRIP_SIGNUP_URL } from "@/lib/maildripOptIn";
+import { CommerceSettings } from "@/lib/db/commerceEntities";
 
 /**
  * Backs form_container's 'maildrip' provider "Create MailDrip Opt-in Page" action (see
@@ -28,10 +28,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "title is required." }, { status: 400 });
   }
 
-  const settings = await prisma.commerceSettings.findUnique({
-    where: { templateId },
-    select: { maildripApiKeyEncrypted: true },
-  });
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
   if (!settings?.maildripApiKeyEncrypted) {
     return NextResponse.json(
       {

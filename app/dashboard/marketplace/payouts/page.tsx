@@ -1,8 +1,8 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
+import { auth } from "@/server/authDynamo";
+import { User, PlatformSettings } from "@/lib/db/coreEntities";
+import { SellerLedgerEntry, WithdrawalRequest } from "@/lib/db/ledgerEntities";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
 import { Card } from "@/app/dashboard/_components/Card";
 import { PageContainer } from "@/app/dashboard/_components/PageContainer";
@@ -15,31 +15,21 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 export default async function PayoutsPage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/marketplace/payouts");
   }
 
-  const [user, sales, withdrawals, platformSettings] = await Promise.all([
-    prisma.user.findUniqueOrThrow({
-      where: { id: session.user.id },
-      select: { sellerBalanceCents: true },
-    }),
-    prisma.sellerLedgerEntry.findMany({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
-      take: 25,
-    }),
-    prisma.withdrawalRequest.findMany({
-      where: { userId: session.user.id },
-      orderBy: { requestedAt: "desc" },
-      select: { id: true, amountCents: true, bankName: true, status: true, rejectionReason: true, requestedAt: true, processedAt: true },
-    }),
-    prisma.platformSettings.findUnique({ where: { id: "global" }, select: { marketplaceFeeBps: true } }),
+  const [{ data: user }, { data: sales }, { data: withdrawals }, { data: platformSettings }] = await Promise.all([
+    User.get({ id: session.user.id }).go(),
+    SellerLedgerEntry.query.primary({ userId: session.user.id }).go({ order: "desc", limit: 25 }),
+    WithdrawalRequest.query.primary({ userId: session.user.id }).go({ order: "desc" }),
+    PlatformSettings.get({}).go(),
   ]);
+  if (!user) throw new Error(`Session user ${session.user.id} has no matching User record`);
 
-  const balance = (user.sellerBalanceCents / 100).toFixed(2);
+  const sellerBalanceCents = user.sellerBalanceCents ?? 0;
+  const balance = (sellerBalanceCents / 100).toFixed(2);
   const feeBps = platformSettings?.marketplaceFeeBps ?? 2000;
   const feePercent = (feeBps / 100).toFixed(feeBps % 100 === 0 ? 0 : 2);
   const keepPercent = ((10_000 - feeBps) / 100).toFixed(feeBps % 100 === 0 ? 0 : 2);
@@ -59,7 +49,7 @@ export default async function PayoutsPage() {
           </p>
         </Card>
 
-        <WithdrawalForm availableCents={user.sellerBalanceCents} />
+        <WithdrawalForm availableCents={sellerBalanceCents} />
       </div>
 
       <h2 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.75rem" }}>Withdrawal history</h2>
@@ -86,9 +76,9 @@ export default async function PayoutsPage() {
               <span style={{
                 flexShrink: 0, fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em",
                 textTransform: "uppercase", padding: "0.3rem 0.65rem", borderRadius: 999,
-                background: "rgba(255,255,255,0.05)", color: STATUS_COLOR[w.status],
+                background: "rgba(255,255,255,0.05)", color: STATUS_COLOR[w.status ?? "PENDING"],
               }}>
-                {w.status}
+                {w.status ?? "PENDING"}
               </span>
             </Card>
           ))}

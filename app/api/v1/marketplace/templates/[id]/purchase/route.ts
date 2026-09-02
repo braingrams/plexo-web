@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getStripe } from "@/lib/stripe";
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { Template, TemplatePurchase } from "@/lib/db/contentEntities";
+import { User } from "@/lib/db/coreEntities";
 
 /**
  * POST /api/v1/marketplace/templates/:id/purchase
@@ -23,40 +25,38 @@ export async function POST(
   }
 
   const { id } = await params;
-  const template = await prisma.template.findUnique({
-    where: { id },
-    select: { id: true, name: true, marketplaceStatus: true, priceCents: true, userId: true },
-  });
+  const { data: template } = await Template.get({ id }).go();
   if (!template || template.marketplaceStatus !== "PUBLISHED") {
     return NextResponse.json({ error: "Template not found." }, { status: 404 });
   }
 
-  const existing = await prisma.templatePurchase.findUnique({
-    where: { userId_templateId: { userId: resolved.userId, templateId: id } },
-  });
+  const { data: existing } = await TemplatePurchase.get({ userId: resolved.userId, templateId: id }).go();
   if (existing) {
     return NextResponse.json({ success: true, alreadyOwned: true });
   }
 
   const priceCents = template.priceCents ?? 0;
   if (priceCents <= 0) {
-    await prisma.templatePurchase.create({
-      data: { userId: resolved.userId, templateId: id, priceCentsPaid: 0 },
-    });
+    await TemplatePurchase.create({
+      id: randomUUID(),
+      userId: resolved.userId,
+      templateId: id,
+      priceCentsPaid: 0,
+    }).go();
     return NextResponse.json({ success: true, free: true });
   }
 
-  const user = await prisma.user.findUniqueOrThrow({
-    where: { id: resolved.userId },
-    select: { email: true, stripeCustomerId: true },
-  });
+  const { data: user } = await User.get({ id: resolved.userId }).go();
+  if (!user) {
+    throw new Error(`User ${resolved.userId} not found while starting a marketplace purchase checkout`);
+  }
 
   const stripe = getStripe();
   let customerId = user.stripeCustomerId;
   if (!customerId) {
     const customer = await stripe.customers.create({ email: user.email, metadata: { plexoUserId: resolved.userId } });
     customerId = customer.id;
-    await prisma.user.update({ where: { id: resolved.userId }, data: { stripeCustomerId: customerId } });
+    await User.patch({ id: resolved.userId }).set({ stripeCustomerId: customerId }).go();
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

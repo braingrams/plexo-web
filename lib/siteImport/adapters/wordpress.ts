@@ -1,4 +1,4 @@
-import { SiteImportPlatform } from "@prisma/client";
+import { SiteImportPlatform } from "@/lib/siteImport/platform";
 import type { AdapterPostContent, AdapterPostSummary, PlatformAdapter } from "../types";
 import { detectInteractiveFeatures } from "../interactiveFeatureDetect";
 import { checkWordPressReachable, fetchWordPressPostBySlug, fetchWordPressPostsPage } from "@/lib/blogImport/wpClient";

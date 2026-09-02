@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SiteImportPhase } from "@prisma/client";
 import { isAuthorizedAdmin } from "@/server/adminAuth";
-import { processSiteImportStep } from "@/lib/siteImport/runJob";
+import { processSiteImportStep } from "@/lib/siteImport/runJobDynamo";
 
 // Same in-process, time-boxed loop as app/api/internal/blog-import/process/route.ts — a
 // self-triggering HTTP chain trips Vercel's own loop protection (508) after a handful of
@@ -21,15 +20,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { jobId?: string };
-  if (!body.jobId) {
-    return NextResponse.json({ error: "jobId is required." }, { status: 400 });
+  const body = (await request.json().catch(() => ({}))) as { jobId?: string; templateId?: string };
+  if (!body.jobId || !body.templateId) {
+    return NextResponse.json({ error: "jobId and templateId are required." }, { status: 400 });
   }
 
   const deadline = Date.now() + STEP_LOOP_BUDGET_MS;
-  let result = await processSiteImportStep(body.jobId);
-  while (!result.done && result.phase !== SiteImportPhase.PAUSED_ERROR && Date.now() < deadline) {
-    result = await processSiteImportStep(body.jobId);
+  let result = await processSiteImportStep(body.templateId, body.jobId);
+  while (!result.done && result.phase !== "PAUSED_ERROR" && Date.now() < deadline) {
+    result = await processSiteImportStep(body.templateId, body.jobId);
   }
 
   return NextResponse.json({ done: result.done, phase: result.phase });

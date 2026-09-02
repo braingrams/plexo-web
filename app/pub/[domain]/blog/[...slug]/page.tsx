@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { prisma } from "@/server/prisma";
-import { resolveBlogSite } from "@/lib/pub/resolveSite";
-import { resolveBlogRedirect } from "@/lib/blog/redirects";
-import { getPublishedPostBySlug, getRelatedPosts, listApprovedComments } from "@/lib/blog/queries";
+import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
+import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
+import { getPublishedPostBySlug, getRelatedPosts, listApprovedComments } from "@/lib/blog/queriesDynamo";
+import { Template } from "@/lib/db/contentEntities";
 import { postMetadata, postJsonLd } from "@/lib/blog/seo";
 import { BlogStyles, SiteHeader, SiteFooter, PostMeta, CategoryChips, PostCard, JsonLd, Breadcrumbs } from "@/lib/pub/blogTheme";
 import { hasBlogMarker, substituteBlogMarkers, extractMarkerPrefix } from "@/lib/pub/blogLayoutRender";
@@ -44,7 +44,7 @@ export default async function BlogPostPage({ params }: { params: Promise<Params>
     notFound();
   }
 
-  const commentsAllowed = site.blogSite.commentsEnabled && post.commentsEnabled;
+  const commentsAllowed = (site.blogSite.commentsEnabled ?? true) && post.commentsEnabled;
   const comments = commentsAllowed ? await listApprovedComments(post.id) : [];
   const commentsHtml = renderCommentsSection({
     domain: site.published.domain,
@@ -57,7 +57,7 @@ export default async function BlogPostPage({ params }: { params: Promise<Params>
   // the article (see prisma/schema.prisma's Template.isBlogLayout comment) — falls back
   // to the built-in theme below otherwise, so there's never a broken/blank state.
   const layoutTemplate = site.blogSite.postLayoutTemplateId
-    ? await prisma.template.findUnique({ where: { id: site.blogSite.postLayoutTemplateId }, select: { compiledHtml: true } })
+    ? (await Template.get({ id: site.blogSite.postLayoutTemplateId }).go()).data
     : null;
 
   if (layoutTemplate && hasBlogMarker(layoutTemplate.compiledHtml, "content")) {
@@ -87,7 +87,7 @@ export default async function BlogPostPage({ params }: { params: Promise<Params>
     <div className="plexo-blog">
       <BlogStyles appearance={site.blogSite} />
       <SiteHeader
-        title={site.blogSite.title}
+        title={site.blogSite.title ?? "Blog"}
         basePath="/blog"
         logoUrl={site.blogSite.logoUrl}
         headerImageUrl={site.blogSite.headerImageUrl}

@@ -65,6 +65,17 @@ function IconDiscounts() {
   );
 }
 
+function IconWallet() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v3" />
+      <path d="M3 7v11a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-4" />
+      <rect x="15" y="11" width="7" height="6" rx="1.2" />
+      <circle cx="17.7" cy="14" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function IconSettings() {
   return (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -90,6 +101,7 @@ export function CommerceNav({ templateId }: { templateId: string }) {
     { href: `${base}/availability`, label: "Availability", icon: <IconAvailability /> },
     { href: `${base}/customers`, label: "Customers", icon: <IconCustomers /> },
     { href: `${base}/discounts`, label: "Discounts", icon: <IconDiscounts /> },
+    { href: `${base}/wallet`, label: "Wallet", icon: <IconWallet /> },
     { href: `${base}/settings`, label: "Settings", icon: <IconSettings /> },
   ];
 

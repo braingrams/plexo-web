@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
+import { Testimonial } from "@/lib/db/contentEntities";
 import { verifyModerationToken } from "@/lib/email";
 
 export async function GET(req: Request) {
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const testimonial = await prisma.testimonial.findUnique({ where: { id } });
+    const { data: testimonial } = await Testimonial.get({ id }).go();
 
     if (!testimonial) {
       return new NextResponse(
@@ -35,10 +35,7 @@ export async function GET(req: Request) {
     }
 
     const newStatus = action === "approve" ? "APPROVED" : "REJECTED";
-    await prisma.testimonial.update({
-      where: { id },
-      data: { status: newStatus },
-    });
+    await Testimonial.patch({ id }).set({ status: newStatus }).go();
 
     const isApprove = action === "approve";
     const title = isApprove ? "Testimonial Approved & Live! 🎉" : "Testimonial Rejected ✖";

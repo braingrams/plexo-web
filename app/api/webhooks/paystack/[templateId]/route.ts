@@ -1,27 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { CommerceOrder } from "@prisma/client";
 
-import { prisma } from "@/server/prisma";
 import { decryptPaystackKey } from "@/lib/crypto";
-import { notifyMaildripOfPaidOrder } from "@/lib/commerce/maildripNotify";
 import { listConfiguredPaystackSecretKeys } from "@/lib/commerce/paystack";
-import { resolveNotificationRecipient } from "@/lib/notificationPreferences";
-import { sendMaildripEmail } from "@/lib/mail/maildrip";
-import { buildPaymentReceivedEmail } from "@/lib/mail/templates";
-
-// Idempotency guard for Paystack's at-least-once webhook delivery, same defensive shape
-// as claimStripeEvent (app/api/webhooks/stripe/route.ts) — claim the event id via a
-// standalone insert BEFORE doing any mutation; a unique-constraint failure means it's
-// already been processed.
-async function claimPaystackEvent(eventId: string, templateId: string, organizationId: string): Promise<boolean> {
-  try {
-    await prisma.paystackWebhookEvent.create({ data: { id: eventId, templateId, organizationId } });
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { claimPaystackEvent, confirmPaystackPayment, handleOrderPaid } from "@/lib/db/commerceWebhookOperations";
+import { CommerceSettings } from "@/lib/db/commerceEntities";
 
 /**
  * Paystack signs with the MERCHANT'S OWN secret key (HMAC-SHA512 of the raw body), unlike
@@ -36,8 +19,16 @@ export async function POST(
 ): Promise<NextResponse> {
   const { templateId } = await context.params;
 
-  const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
-  const configuredKeys = settings ? listConfiguredPaystackSecretKeys(settings) : [];
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  const configuredKeys = settings
+    ? listConfiguredPaystackSecretKeys({
+        paystackMode: settings.paystackMode ?? "TEST",
+        paystackTestPublicKey: settings.paystackTestPublicKey ?? null,
+        paystackTestSecretKeyEncrypted: settings.paystackTestSecretKeyEncrypted ?? null,
+        paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
+        paystackLiveSecretKeyEncrypted: settings.paystackLiveSecretKeyEncrypted ?? null,
+      })
+    : [];
   if (!settings || configuredKeys.length === 0) {
     // No Commerce site should ever have this URL registered unless it configured Paystack
     // itself — a 404 here can't cause a legitimate webhook to retry-storm.
@@ -87,64 +78,11 @@ export async function POST(
   }
 
   if (event.event === "charge.success" && event.data?.reference) {
-    const reference = event.data.reference;
-
-    // Atomic guard: only flips PENDING -> PAID, so a duplicate delivery of an event we
-    // somehow claimed twice (or a stale retry after a later refund) can never re-process
-    // an order that already moved on.
-    const updated = await prisma.commerceOrder.updateMany({
-      where: { paystackReference: reference, templateId, status: "PENDING" },
-      data: { status: "PAID" },
-    });
-
-    if (updated.count > 0) {
-      const order = await prisma.commerceOrder.findUnique({
-        where: { paystackReference: reference },
-        include: { booking: true },
-      });
-
-      if (order?.booking) {
-        await prisma.commerceBooking.update({
-          where: { id: order.booking.id },
-          data: { status: "CONFIRMED", holdExpiresAt: null },
-        });
-      }
-
-      if (order) {
-        try {
-          await notifyMaildripOfPaidOrder(settings, order);
-        } catch (err) {
-          // Best-effort only — a MailDrip outage must never fail or retry-storm this
-          // webhook; the payment itself is already real and recorded above.
-          console.error("Commerce: MailDrip notify failed", err);
-        }
-        void notifyPaymentReceived(templateId, settings.organizationId, order).catch((err) =>
-          console.error("[mail] payment received notification failed:", err),
-        );
-      }
+    const confirmed = await confirmPaystackPayment(event.data.reference, templateId);
+    if (confirmed) {
+      await handleOrderPaid(confirmed.order, confirmed.booking, settings);
     }
   }
 
   return NextResponse.json({ received: true });
-}
-
-/** Gated by NotificationPreferences.payments — CommerceSettings.notificationEmail has
- * existed as a stored field since Commerce shipped but this webhook never actually sent
- * anything to it; this is the real send it was always meant to gate. */
-async function notifyPaymentReceived(templateId: string, organizationId: string, order: CommerceOrder): Promise<void> {
-  const template = await prisma.template.findUnique({ where: { id: templateId }, select: { name: true, user: { select: { email: true } } } });
-  if (!template) return;
-
-  const to = await resolveNotificationRecipient(organizationId, "payments", template.user?.email);
-  if (!to) return;
-
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const html = buildPaymentReceivedEmail({
-    siteName: template.name,
-    amountFormatted: `₦${(order.amountMinor / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`,
-    customerEmail: order.customerEmail,
-    orderNumber: order.orderNumber,
-    orderUrl: `${base}/dashboard/commerce/${templateId}/orders`,
-  });
-  await sendMaildripEmail({ to, subject: `Payment received on ${template.name} — ${order.orderNumber}`, html });
 }

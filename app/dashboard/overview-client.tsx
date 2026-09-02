@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
-import type { TemplateKind } from "@prisma/client";
+import type { TemplateKind } from "@/lib/db/contentEntities";
 
 export type OverviewTemplateRow = {
   id: string;

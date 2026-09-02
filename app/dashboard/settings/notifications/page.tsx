@@ -1,30 +1,28 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { NotificationPreferences } from "@/lib/db/coreEntities";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
 
 import { SettingsShell } from "../../_components/SettingsShell";
 import { PageHeader } from "../../_components/PageHeader";
 import { NotificationsSection } from "../NotificationsSection";
 
 export default async function NotificationsPage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
 
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/settings/notifications");
   }
 
-  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
 
-  const notificationPreferences = await prisma.notificationPreferences.findUnique({
-    where: { organizationId: orgResolution.organizationId },
-  });
+  const { data: notificationPreferences } = await NotificationPreferences.get({
+    organizationId: orgResolution.organizationId,
+  }).go();
 
   return (
     <SettingsShell>

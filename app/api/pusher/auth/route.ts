@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { Template } from "@/lib/db/contentEntities";
 import { authorizeChannel } from "@/lib/realtime/pusher";
 
 /**
@@ -38,11 +38,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (organizationId !== resolved.organizationId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    const template = await prisma.template.findFirst({
-      where: { id: templateId, organizationId },
-      select: { id: true },
-    });
-    if (!template) {
+    const { data: template } = await Template.get({ id: templateId }).go();
+    if (!template || template.organizationId !== organizationId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     return NextResponse.json(authorizeChannel(socketId, channel));

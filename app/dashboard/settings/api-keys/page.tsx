@@ -1,9 +1,8 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { ApiKey } from "@/lib/db/coreEntities";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
 
 import { ApiKeysClient } from "./ApiKeysClient";
 import { SettingsShell } from "../../_components/SettingsShell";
@@ -17,28 +16,32 @@ export type SettingsApiKey = {
 };
 
 export default async function ApiKeysPage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
 
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/settings/api-keys");
   }
 
-  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
 
-  const apiKeys = await prisma.apiKey.findMany({
-    where: { organizationId: orgResolution.organizationId, isActive: true },
-    orderBy: { createdAt: "desc" },
-    select: { id: true, name: true, maskedKey: true, createdAt: true, isActive: true },
-  });
+  const { data: allKeys } = await ApiKey.query.primary({ organizationId: orgResolution.organizationId }).go();
+  const apiKeys = allKeys
+    .filter((k) => k.isActive)
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   return (
     <SettingsShell>
       <ApiKeysClient
-        initialApiKeys={apiKeys.map((k) => ({ ...k, createdAt: k.createdAt.toISOString() }))}
+        initialApiKeys={apiKeys.map((k) => ({
+          id: k.id,
+          name: k.name,
+          maskedKey: k.maskedKey,
+          createdAt: k.createdAt ?? new Date().toISOString(),
+          isActive: k.isActive ?? true,
+        }))}
       />
     </SettingsShell>
   );

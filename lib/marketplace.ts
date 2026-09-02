@@ -1,10 +1,10 @@
-import { TemplateKind, Prisma } from "@prisma/client";
+import type { EntityItem } from "electrodb";
 
-import { prisma } from "@/server/prisma";
+import { Template, TemplatePurchase } from "@/lib/db/contentEntities";
 
 export interface MarketplaceFilters {
   category?: string;
-  kind?: TemplateKind;
+  kind?: "EMAIL" | "LANDING_PAGE";
   free?: boolean;
   q?: string;
   sort?: "latest" | "popular";
@@ -14,11 +14,11 @@ export interface MarketplaceFilters {
 export interface MarketplaceListItem {
   id: string;
   name: string;
-  kind: TemplateKind;
+  kind: "EMAIL" | "LANDING_PAGE";
   category: string | null;
   description: string | null;
   priceCents: number;
-  publishedAt: Date | null;
+  publishedAt: string | null;
   purchaseCount: number;
   compiledHtml?: string | null;
 }
@@ -29,45 +29,59 @@ export interface MarketplaceDetail extends MarketplaceListItem {
   owned: boolean;
 }
 
+async function purchaseCountFor(templateId: string): Promise<number> {
+  const { data } = await TemplatePurchase.query.byTemplate({ templateId }).go();
+  return data.length;
+}
+
 /** Used by app/marketplace/[id]'s Server Component — direct DB access, no self-fetch. */
 export async function getMarketplaceTemplateDetail(id: string, userId: string | null): Promise<MarketplaceDetail | null> {
-  const template = await prisma.template.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      name: true,
-      kind: true,
-      marketplaceStatus: true,
-      marketplaceCategory: true,
-      marketplaceDescription: true,
-      priceCents: true,
-      marketplacePublishedAt: true,
-      compiledHtml: true,
-      _count: { select: { purchases: true } },
-    },
-  });
+  const { data: template } = await Template.get({ id }).go();
   if (!template || template.marketplaceStatus !== "PUBLISHED") return null;
 
   let owned = !template.priceCents || template.priceCents === 0;
   if (!owned && userId) {
-    const purchase = await prisma.templatePurchase.findUnique({
-      where: { userId_templateId: { userId, templateId: id } },
-    });
+    const { data: purchase } = await TemplatePurchase.get({ userId, templateId: id }).go();
     owned = !!purchase;
   }
+
+  const purchaseCount = await purchaseCountFor(id);
 
   return {
     id: template.id,
     name: template.name,
     kind: template.kind,
-    category: template.marketplaceCategory,
-    description: template.marketplaceDescription,
+    category: template.marketplaceCategory ?? null,
+    description: template.marketplaceDescription ?? null,
     priceCents: template.priceCents ?? 0,
-    publishedAt: template.marketplacePublishedAt,
-    purchaseCount: template._count.purchases,
+    publishedAt: template.marketplacePublishedAt ?? null,
+    purchaseCount,
     compiledHtml: template.compiledHtml,
     owned,
   };
+}
+
+/**
+ * Bounded scan over every PUBLISHED template — Template spent both of its GSI slots on
+ * the two hot authenticated-dashboard access patterns (org list, page tree); marketplace-
+ * wide browsing by marketplaceStatus has no dedicated index (documented gap, see
+ * contentEntities.ts's own comment on the Template entity). Same discipline as
+ * app/api/internal/scan-domains/route.ts: a cursor-driven `.scan`, filtered/sorted/
+ * paginated in application code, not a speculative new GSI. Revisit if real marketplace
+ * traffic/catalog size ever makes this worth a GSI3.
+ */
+async function scanPublishedTemplates(): Promise<EntityItem<typeof Template>[]> {
+  const all: EntityItem<typeof Template>[] = [];
+  let cursor: string | null = null;
+  for (;;) {
+    const page: { data: EntityItem<typeof Template>[]; cursor: string | null } = await Template.scan
+      .where(({ marketplaceStatus }, { eq }) => eq(marketplaceStatus, "PUBLISHED"))
+      .go({ cursor });
+    all.push(...page.data);
+    cursor = page.cursor;
+    if (!cursor) break;
+  }
+  return all;
 }
 
 /**
@@ -80,72 +94,52 @@ export async function listMarketplaceTemplates(
 ): Promise<{ templates: MarketplaceListItem[]; total: number; categories: string[]; page: number; pageSize: number }> {
   const page = Math.max(1, filters.page ?? 1);
 
-  // `free` and `q` each need their own OR clause — spreading both directly onto `where`
-  // would collide on the "OR" key (the second spread silently overwrites the first), so
-  // combining "free only" with a search term used to drop the free-only filter entirely.
-  // AND keeps each OR clause distinct.
-  const andClauses: Prisma.TemplateWhereInput[] = [];
-  if (filters.free === true) andClauses.push({ OR: [{ priceCents: null }, { priceCents: 0 }] });
+  const published = await scanPublishedTemplates();
+
+  const categories = Array.from(
+    new Set(published.map((t) => t.marketplaceCategory).filter((c): c is string => !!c)),
+  );
+
+  let filtered = published;
+  if (filters.category) filtered = filtered.filter((t) => t.marketplaceCategory === filters.category);
+  if (filters.kind) filtered = filtered.filter((t) => t.kind === filters.kind);
+  if (filters.free === true) filtered = filtered.filter((t) => !t.priceCents || t.priceCents === 0);
+  if (filters.free === false) filtered = filtered.filter((t) => (t.priceCents ?? 0) > 0);
   if (filters.q) {
-    andClauses.push({
-      OR: [
-        { name: { contains: filters.q, mode: "insensitive" } },
-        { marketplaceDescription: { contains: filters.q, mode: "insensitive" } },
-      ],
-    });
+    const q = filters.q.toLowerCase();
+    filtered = filtered.filter(
+      (t) => t.name.toLowerCase().includes(q) || (t.marketplaceDescription ?? "").toLowerCase().includes(q),
+    );
   }
 
-  const where: Prisma.TemplateWhereInput = {
-    marketplaceStatus: "PUBLISHED",
-    ...(filters.category ? { marketplaceCategory: filters.category } : {}),
-    ...(filters.kind ? { kind: filters.kind } : {}),
-    ...(filters.free === false ? { priceCents: { gt: 0 } } : {}),
-    ...(andClauses.length ? { AND: andClauses } : {}),
-  };
+  const counts = new Map<string, number>();
+  await Promise.all(filtered.map(async (t) => { counts.set(t.id, await purchaseCountFor(t.id)); }));
 
-  const orderBy: Prisma.TemplateOrderByWithRelationInput =
-    filters.sort === "popular" ? { purchases: { _count: "desc" } } : { marketplacePublishedAt: "desc" };
+  const sorted = [...filtered].sort((a, b) => {
+    if (filters.sort === "popular") {
+      const diff = (counts.get(b.id) ?? 0) - (counts.get(a.id) ?? 0);
+      if (diff !== 0) return diff;
+    }
+    return (b.marketplacePublishedAt ?? "").localeCompare(a.marketplacePublishedAt ?? "");
+  });
 
-  const [templates, total, categoryRows] = await Promise.all([
-    prisma.template.findMany({
-      where,
-      orderBy,
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
-      select: {
-        id: true,
-        name: true,
-        kind: true,
-        marketplaceCategory: true,
-        marketplaceDescription: true,
-        priceCents: true,
-        marketplacePublishedAt: true,
-        compiledHtml: true,
-        _count: { select: { purchases: true } },
-      },
-    }),
-    prisma.template.count({ where }),
-    prisma.template.findMany({
-      where: { marketplaceStatus: "PUBLISHED", marketplaceCategory: { not: null } },
-      distinct: ["marketplaceCategory"],
-      select: { marketplaceCategory: true },
-    }),
-  ]);
+  const total = sorted.length;
+  const pageItems = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return {
-    templates: templates.map((t) => ({
+    templates: pageItems.map((t) => ({
       id: t.id,
       name: t.name,
       kind: t.kind,
-      category: t.marketplaceCategory,
-      description: t.marketplaceDescription,
+      category: t.marketplaceCategory ?? null,
+      description: t.marketplaceDescription ?? null,
       priceCents: t.priceCents ?? 0,
-      publishedAt: t.marketplacePublishedAt,
-      purchaseCount: t._count.purchases,
+      publishedAt: t.marketplacePublishedAt ?? null,
+      purchaseCount: counts.get(t.id) ?? 0,
       compiledHtml: t.compiledHtml,
     })),
     total,
-    categories: categoryRows.map((c) => c.marketplaceCategory).filter((c): c is string => !!c),
+    categories,
     page,
     pageSize: PAGE_SIZE,
   };

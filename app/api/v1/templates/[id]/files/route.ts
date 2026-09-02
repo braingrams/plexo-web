@@ -1,8 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { put, BlobError } from "@vercel/blob";
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { requirePermission } from "@/server/requirePermission";
+import { uploadObject, StorageError } from "@/lib/storage";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { requirePermission } from "@/server/requirePermissionDynamo";
 import {
   contentTypeFor,
   isAllowedExtension,
@@ -12,6 +12,7 @@ import {
   MAX_SINGLE_FILE_BYTES,
   RawUploadValidationError,
 } from "@/server/rawUpload";
+import { Template, TemplateAsset } from "@/lib/db/contentEntities";
 
 export type FileEntry = {
   path: string;
@@ -44,17 +45,16 @@ export async function GET(
   }
 
   const { id } = await context.params;
-  const template = await prisma.template.findFirst({
-    where: { id, organizationId: resolved.organizationId },
-    include: { assets: true },
-  });
+  const { data: template } = await Template.get({ id }).go();
 
-  if (!template) {
+  if (!template || template.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });
   }
   if (template.sourceType !== "RAW_UPLOAD") {
     return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
   }
+
+  const { data: assets } = await TemplateAsset.query.primary({ templateId: template.id }).go();
 
   const files: FileEntry[] = [
     {
@@ -67,7 +67,7 @@ export async function GET(
   ];
 
   await Promise.all(
-    template.assets.map(async (asset) => {
+    assets.map(async (asset) => {
       if (isEditableExtension(asset.path)) {
         const res = await fetch(asset.blobUrl);
         const content = res.ok ? await res.text() : "";
@@ -128,20 +128,19 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  const permissionError = requirePermission(resolved.role, { template: ["update"] });
   if (permissionError) return permissionError;
 
   const { id } = await context.params;
-  const template = await prisma.template.findFirst({
-    where: { id, organizationId: resolved.organizationId },
-    include: { assets: true },
-  });
-  if (!template) {
+  const { data: template } = await Template.get({ id }).go();
+  if (!template || template.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });
   }
   if (template.sourceType !== "RAW_UPLOAD") {
     return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
   }
+
+  const { data: assets } = await TemplateAsset.query.primary({ templateId: template.id }).go();
 
   let rawPath: string;
   let buffer: Buffer;
@@ -172,10 +171,10 @@ export async function POST(
       error: `File type ".${path.split(".").pop()}" isn't allowed. Use .css, .js, or another supported static asset type.`,
     }, { status: 400 });
   }
-  if (path.toLowerCase() === "index.html" || template.assets.some((a) => a.path.toLowerCase() === path.toLowerCase())) {
+  if (path.toLowerCase() === "index.html" || assets.some((a) => a.path.toLowerCase() === path.toLowerCase())) {
     return NextResponse.json({ error: `"${path}" already exists on this template.` }, { status: 409 });
   }
-  if (template.assets.length + 1 >= MAX_FILE_COUNT) {
+  if (assets.length + 1 >= MAX_FILE_COUNT) {
     return NextResponse.json({ error: `This template already has the maximum of ${MAX_FILE_COUNT} files.` }, { status: 400 });
   }
 
@@ -189,34 +188,34 @@ export async function POST(
   }
 
   const contentType = contentTypeFor(path);
-  const localDevToken = process.env.BLOB_READ_WRITE_TOKEN; // see upload-raw/route.ts — OIDC covers real deployments
 
   let blobUrl: string;
   try {
-    const blob = await put(`raw-sites/${template.id}/${path}`, buffer, {
-      access: "public",
-      contentType,
-      ...(localDevToken ? { token: localDevToken } : {}),
-    });
-    blobUrl = blob.url;
+    const uploaded = await uploadObject(`raw-sites/${template.id}/${path}`, buffer, { access: "public", contentType });
+    blobUrl = uploaded.url;
   } catch (err) {
-    if (err instanceof BlobError || err instanceof RawUploadValidationError) {
+    if (err instanceof StorageError || err instanceof RawUploadValidationError) {
       return NextResponse.json({ error: err.message }, { status: 500 });
     }
     throw err;
   }
 
-  const asset = await prisma.templateAsset.create({
-    data: { templateId: template.id, path, blobUrl, contentType, size: buffer.byteLength },
-  });
+  await TemplateAsset.create({
+    id: randomUUID(),
+    templateId: template.id,
+    path,
+    blobUrl,
+    contentType,
+    size: buffer.byteLength,
+  }).go();
 
-  const editable = isEditableExtension(asset.path);
+  const editable = isEditableExtension(path);
   const file: FileEntry = {
-    path: asset.path,
-    contentType: asset.contentType,
-    size: asset.size,
+    path,
+    contentType,
+    size: buffer.byteLength,
     editable,
-    url: asset.blobUrl,
+    url: blobUrl,
     ...(editable ? { content: buffer.toString("utf8") } : {}),
   };
 

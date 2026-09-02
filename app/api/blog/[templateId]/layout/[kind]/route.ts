@@ -1,8 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { TemplateKind } from "@prisma/client";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
+import { Template, BlogSite } from "@/lib/db/contentEntities";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
 
 const BLANK_TEMPLATE_SHELL = {
   body: {
@@ -34,26 +34,33 @@ export async function GET(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const sites = await prisma.blogSite.findMany({
-    where: {
-      template: { organizationId: resolved.context.organizationId },
-      templateId: { not: resolved.context.templateId },
-      ...(kind === "post" ? { postLayoutTemplateId: { not: null } } : { listingLayoutTemplateId: { not: null } }),
-    },
-    select: {
-      template: { select: { name: true } },
-      postLayoutTemplate: kind === "post" ? { select: { id: true, name: true, updatedAt: true } } : false,
-      listingLayoutTemplate: kind === "listing" ? { select: { id: true, name: true, updatedAt: true } } : false,
-    },
-  });
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go();
+  const otherRoots = orgTemplates.filter((t) => !t.parentId && t.id !== resolved.context.templateId);
 
-  const candidates = sites
-    .map((s) => {
-      const layout = kind === "post" ? s.postLayoutTemplate : s.listingLayoutTemplate;
-      if (!layout) return null;
-      return { layoutTemplateId: layout.id, layoutName: layout.name, siteName: s.template.name, updatedAt: layout.updatedAt };
-    })
-    .filter((c): c is NonNullable<typeof c> => c !== null);
+  const blogSites = await Promise.all(otherRoots.map((t) => BlogSite.get({ templateId: t.id }).go()));
+  const layoutTemplateIds = blogSites
+    .map((s) => (kind === "post" ? s.data?.postLayoutTemplateId : s.data?.listingLayoutTemplateId))
+    .filter((id): id is string => !!id);
+
+  if (layoutTemplateIds.length === 0) return NextResponse.json({ candidates: [] });
+
+  const layoutTemplates = await Promise.all(layoutTemplateIds.map((id) => Template.get({ id }).go()));
+  const nameById = new Map(otherRoots.map((t) => [t.id, t.name]));
+  const siteIdByLayoutId = new Map(
+    blogSites
+      .map((s, i) => [kind === "post" ? s.data?.postLayoutTemplateId : s.data?.listingLayoutTemplateId, otherRoots[i].id] as const)
+      .filter((entry): entry is [string, string] => !!entry[0]),
+  );
+
+  const candidates = layoutTemplates
+    .map((r) => r.data)
+    .filter((layout): layout is NonNullable<typeof layout> => !!layout)
+    .map((layout) => ({
+      layoutTemplateId: layout.id,
+      layoutName: layout.name,
+      siteName: nameById.get(siteIdByLayoutId.get(layout.id) ?? "") ?? "",
+      updatedAt: layout.updatedAt,
+    }));
 
   return NextResponse.json({ candidates });
 }
@@ -81,10 +88,10 @@ export async function POST(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { blog: ["update"] });
+  const permissionError = requirePermission(resolved.context.role, { blog: ["update"] });
   if (permissionError) return permissionError;
 
-  const site = await prisma.blogSite.findUnique({ where: { templateId: resolved.context.templateId } });
+  const { data: site } = await BlogSite.get({ templateId: resolved.context.templateId }).go();
   const existingId = kind === "post" ? site?.postLayoutTemplateId : site?.listingLayoutTemplateId;
   if (existingId) {
     return NextResponse.json({ layoutTemplateId: existingId });
@@ -102,17 +109,13 @@ export async function POST(
     // surfaced it: it must be reachable as THIS EXACT KIND's attached layout on some
     // BlogSite belonging to the same organization. Prevents cross-org access and
     // kind-mismatches (e.g. cloning a listing layout into a post slot).
-    const sourceSite = await prisma.blogSite.findFirst({
-      where: {
-        template: { organizationId: resolved.context.organizationId },
-        ...(kind === "post" ? { postLayoutTemplateId: sourceLayoutTemplateId } : { listingLayoutTemplateId: sourceLayoutTemplateId }),
-      },
-      select: {
-        postLayoutTemplate: kind === "post" ? { select: { name: true, designJson: true, compiledHtml: true } } : false,
-        listingLayoutTemplate: kind === "listing" ? { select: { name: true, designJson: true, compiledHtml: true } } : false,
-      },
-    });
-    const source = kind === "post" ? sourceSite?.postLayoutTemplate : sourceSite?.listingLayoutTemplate;
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go();
+    const roots = orgTemplates.filter((t) => !t.parentId);
+    const blogSites = await Promise.all(roots.map((t) => BlogSite.get({ templateId: t.id }).go()));
+    const isAttached = blogSites.some((s) =>
+      kind === "post" ? s.data?.postLayoutTemplateId === sourceLayoutTemplateId : s.data?.listingLayoutTemplateId === sourceLayoutTemplateId,
+    );
+    const { data: source } = isAttached ? await Template.get({ id: sourceLayoutTemplateId }).go() : { data: null };
     if (!source) {
       return NextResponse.json({ error: "That layout is no longer available to reuse — it may have been detached from its site." }, { status: 400 });
     }
@@ -121,29 +124,26 @@ export async function POST(
     compiledHtml = source.compiledHtml;
   }
 
-  const layoutTemplate = await prisma.template.create({
-    data: {
-      userId: resolved.context.userId,
-      organizationId: resolved.context.organizationId,
-      name,
-      kind: TemplateKind.LANDING_PAGE,
-      isBlogLayout: true,
-      designJson,
-      compiledHtml,
-    },
-    select: { id: true },
-  });
+  const layoutId = randomUUID();
+  await Template.create({
+    id: layoutId,
+    userId: resolved.context.userId,
+    organizationId: resolved.context.organizationId,
+    name,
+    kind: "LANDING_PAGE",
+    isBlogLayout: true,
+    designJson,
+    compiledHtml,
+  }).go();
 
-  await prisma.blogSite.upsert({
-    where: { templateId: resolved.context.templateId },
-    create: {
-      templateId: resolved.context.templateId,
-      ...(kind === "post" ? { postLayoutTemplateId: layoutTemplate.id } : { listingLayoutTemplateId: layoutTemplate.id }),
-    },
-    update: kind === "post" ? { postLayoutTemplateId: layoutTemplate.id } : { listingLayoutTemplateId: layoutTemplate.id },
-  });
+  const layoutField = kind === "post" ? { postLayoutTemplateId: layoutId } : { listingLayoutTemplateId: layoutId };
+  if (site) {
+    await BlogSite.patch({ templateId: resolved.context.templateId }).set(layoutField).go();
+  } else {
+    await BlogSite.create({ id: randomUUID(), templateId: resolved.context.templateId, ...layoutField }).go();
+  }
 
-  return NextResponse.json({ layoutTemplateId: layoutTemplate.id }, { status: 201 });
+  return NextResponse.json({ layoutTemplateId: layoutId }, { status: 201 });
 }
 
 /** Detaches the layout (reverts to the default theme) without deleting the Template row — it stays around, editable, reattachable later via POST. */
@@ -157,13 +157,15 @@ export async function DELETE(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { blog: ["update"] });
+  const permissionError = requirePermission(resolved.context.role, { blog: ["update"] });
   if (permissionError) return permissionError;
 
-  await prisma.blogSite.updateMany({
-    where: { templateId: resolved.context.templateId },
-    data: kind === "post" ? { postLayoutTemplateId: null } : { listingLayoutTemplateId: null },
-  });
+  const { data: site } = await BlogSite.get({ templateId: resolved.context.templateId }).go();
+  if (site) {
+    await BlogSite.patch({ templateId: resolved.context.templateId })
+      .remove(kind === "post" ? ["postLayoutTemplateId"] : ["listingLayoutTemplateId"])
+      .go();
+  }
 
   return NextResponse.json({ ok: true });
 }

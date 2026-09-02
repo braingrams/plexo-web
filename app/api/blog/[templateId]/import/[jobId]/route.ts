@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ImportJobStatus } from "@prisma/client";
-import { prisma } from "@/server/prisma";
-import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
-import { isValidUuid } from "@/server/slug";
+import { ImportJob } from "@/lib/db/importEntities";
+import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
+import { isValidUuid } from "@/server/slugDynamo";
 
 export async function GET(
   request: NextRequest,
@@ -13,7 +12,7 @@ export async function GET(
   if ("error" in resolved) return resolved.error;
   if (!isValidUuid(jobId)) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
-  const job = await prisma.importJob.findFirst({ where: { id: jobId, templateId: resolved.context.templateId } });
+  const { data: job } = await ImportJob.get({ templateId: resolved.context.templateId, id: jobId }).go();
   if (!job) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
   return NextResponse.json({ job });
@@ -28,11 +27,13 @@ export async function DELETE(
   if ("error" in resolved) return resolved.error;
   if (!isValidUuid(jobId)) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
-  const job = await prisma.importJob.findFirst({ where: { id: jobId, templateId: resolved.context.templateId } });
+  const { data: job } = await ImportJob.get({ templateId: resolved.context.templateId, id: jobId }).go();
   if (!job) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
   // Posts already imported stay — cancelling only stops future batches (the
   // self-continuation chain checks status and no-ops once it's no longer RUNNING).
-  await prisma.importJob.update({ where: { id: jobId }, data: { status: ImportJobStatus.CANCELLED, finishedAt: new Date() } });
+  await ImportJob.patch({ templateId: resolved.context.templateId, id: jobId })
+    .set({ status: "CANCELLED", finishedAt: new Date().toISOString() })
+    .go();
   return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { resolveBlogSite, type ResolveBlogSiteResult } from "@/lib/pub/resolveSite";
-import { listAllPublishedSlugs, listAllCategories, listAllTags } from "@/lib/blog/queries";
+import { resolveBlogSite, type ResolveBlogSiteResult } from "@/lib/pub/resolveSiteDynamo";
+import { listAllPublishedSlugs, listAllCategories, listAllTags } from "@/lib/blog/queriesDynamo";
 import { siteOrigin } from "@/lib/blog/seo";
 
 export const revalidate = 60;

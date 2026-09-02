@@ -1,0 +1,102 @@
+name: PR | Destroy Compute Stack Preview
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull Request number to destroy"
+        required: true
+
+permissions:
+  id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
+  contents: read
+
+jobs:
+  destroy:
+    if: github.repository == 'Challaris/plexo-web'
+    runs-on: ubuntu-latest
+    env:
+      PR_NUMBER: ${{ inputs.pr_number || github.event.number }}
+      STACK_KIND: compute
+      PLEXO_ENV: staging
+      AWS_ACCOUNT_ID: "919927637684"
+      AWS_REGION: us-east-1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve and guard STACK_ID
+        run: |
+          STACK_ID="pr-${PR_NUMBER}-plexo"
+          if [[ ! "$STACK_ID" =~ ^pr-[0-9]+-plexo$ ]]; then
+            echo "::error::Resolved STACK_ID '$STACK_ID' doesn't match the required pr-<number>-plexo pattern — refusing to destroy anything."
+            exit 1
+          fi
+          echo "STACK_ID=$STACK_ID" >> "$GITHUB_ENV"
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::919927637684:role/github-actions-plexo-deploy
+          aws-region: us-east-1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Install & build CDK project
+        working-directory: ./cdk
+        run: |
+          npm install
+          npm run build
+
+      - name: Destroy the PR's compute stack only — never --all, never the data stack
+        working-directory: ./cdk
+        run: npx aws-cdk destroy "${STACK_ID}-compute-stack" --force --exclusively
+
+      - name: Verify the stack is actually gone
+        run: |
+          FULL_STACK="${STACK_ID}-compute-stack"
+          STATUS=$(aws cloudformation describe-stacks --stack-name "$FULL_STACK" \
+            --query 'Stacks[0].StackStatus' --output text 2>&1 || echo "DOES_NOT_EXIST")
+
+          if [[ "$STATUS" == "DOES_NOT_EXIST" || "$STATUS" == *"does not exist"* ]]; then
+            echo "✓ Stack $FULL_STACK: deleted"
+          elif [ "$STATUS" = "DELETE_IN_PROGRESS" ]; then
+            echo "Stack $FULL_STACK still deleting — waiting up to 20min..."
+            aws cloudformation wait stack-delete-complete --stack-name "$FULL_STACK" --cli-read-timeout 1200
+            echo "✓ Stack $FULL_STACK: deleted after waiting"
+          else
+            echo "::error::Stack $FULL_STACK is still in status '$STATUS' after destroy — not clean."
+            aws cloudformation describe-stack-events --stack-name "$FULL_STACK" \
+              --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].[LogicalResourceId,ResourceStatusReason]' \
+              --output table 2>/dev/null || true
+            exit 1
+          fi
+
+      - name: Clean orphaned IAM roles left over from this PR (if any)
+        run: |
+          PR_PATTERN="pr-${PR_NUMBER}-plexo"
+          ORPHANED=$(aws iam list-roles \
+            --query "Roles[?starts_with(RoleName, \`${PR_PATTERN}\`)].RoleName" \
+            --output text 2>/dev/null || echo "")
+
+          if [ -z "$ORPHANED" ]; then
+            echo "✓ No orphaned IAM roles found for this PR"
+            exit 0
+          fi
+
+          for ROLE in $ORPHANED; do
+            echo "Cleaning up orphaned role: $ROLE"
+            for POLICY in $(aws iam list-attached-role-policies --role-name "$ROLE" --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null); do
+              aws iam detach-role-policy --role-name "$ROLE" --policy-arn "$POLICY" || true
+            done
+            for POLICY in $(aws iam list-role-policies --role-name "$ROLE" --query 'PolicyNames' --output text 2>/dev/null); do
+              aws iam delete-role-policy --role-name "$ROLE" --policy-name "$POLICY" || true
+            done
+            aws iam delete-role --role-name "$ROLE" && echo "  ✓ Deleted $ROLE" || echo "::warning::Could not delete $ROLE"
+          done

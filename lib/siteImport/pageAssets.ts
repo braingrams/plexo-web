@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import * as cheerio from "cheerio";
 import { extensionOf } from "@/server/rawUpload";
-import { internalizeAsset, type InternalizedAsset } from "./assetInternalize";
+import { internalizeAsset, type InternalizedAsset } from "./assetInternalizeDynamo";
 
 export interface PageAssetResult {
   /** The page's HTML with every successfully-internalized same-origin asset URL rewritten to its new relative path. */

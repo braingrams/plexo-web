@@ -1,5 +1,5 @@
-import { prisma } from "@/server/prisma";
 import { extractOutboundUrls } from "@/server/rawUpload";
+import { PublishedDomain, Template } from "@/lib/db/contentEntities";
 
 // Google Safe Browsing v4 lookup — free tier, no billing required for this quota.
 // https://developers.google.com/safe-browsing/v4/lookup-api
@@ -54,31 +54,33 @@ export async function checkUrlsForThreats(urls: string[]): Promise<ThreatMatch[]
  * tenant's page unattended is worse than a short review delay. Call
  * app/api/internal/domains/[id]/suspend to act on a flagged domain.
  *
- * Fire-and-forget by design: callers should `void scanPublishedDomain(id).catch(...)`
+ * Fire-and-forget by design: callers should `void scanPublishedDomain(templateId, id).catch(...)`
  * rather than await this in the request path that publishes/links a domain.
+ *
+ * Takes (templateId, id) rather than a bare id — PublishedDomain's real DynamoDB key is
+ * (templateId, id) (templateId is part of the entity's own primary key composite, see
+ * contentEntities.ts), so a lookup by id alone has no index to serve it.
  */
-export async function scanPublishedDomain(publishedDomainId: string): Promise<void> {
-  const record = await prisma.publishedDomain.findUnique({
-    where: { id: publishedDomainId },
-    include: { template: { select: { compiledHtml: true } } },
-  });
+export async function scanPublishedDomain(templateId: string, id: string): Promise<void> {
+  const { data: record } = await PublishedDomain.get({ templateId, id }).go();
   if (!record) return;
+  const { data: template } = await Template.get({ id: record.templateId }).go();
+  if (!template) return;
 
-  const outbound = extractOutboundUrls(record.template.compiledHtml);
+  const outbound = extractOutboundUrls(template.compiledHtml);
   const urlsToCheck = [`https://${record.domain}/`, ...outbound];
 
   try {
     const matches = await checkUrlsForThreats(urlsToCheck);
-    await prisma.publishedDomain.update({
-      where: { id: record.id },
-      data: {
-        lastScannedAt: new Date(),
-        flagged: matches.length > 0,
-        flagReason: matches.length > 0
-          ? matches.map((m) => `${m.threatType}: ${m.url}`).join("; ").slice(0, 500)
-          : null,
-      },
-    });
+    const flagged = matches.length > 0;
+    // .set() with `undefined` is treated as "not provided" (no-op), not "clear" — an
+    // unflag (matches.length back to 0) needs an explicit .remove() to actually drop the
+    // stale flagReason, not just leave the previous scan's reason sitting there.
+    let query = PublishedDomain.patch({ templateId, id }).set({ lastScannedAt: new Date().toISOString(), flagged });
+    query = flagged
+      ? query.set({ flagReason: matches.map((m) => `${m.threatType}: ${m.url}`).join("; ").slice(0, 500) })
+      : query.remove(["flagReason"]);
+    await query.go();
   } catch (err) {
     console.error(`Safe Browsing scan failed for domain ${record.domain}:`, err);
   }

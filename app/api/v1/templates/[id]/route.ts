@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
-import { resolveUser } from "../../domains/route";
-import { requirePermission } from "@/server/requirePermission";
-import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayout";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
+import { getDescendantIds } from "@/server/slugDynamo";
+import { deleteObjects } from "@/lib/storage";
+import { removeCloudFrontDomain } from "@/lib/cloudfrontDomains";
+import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 
 /**
  * GET /api/v1/templates/:id
@@ -22,20 +25,17 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   }
 
   const { id } = await context.params;
-  const template = await prisma.template.findFirst({
-    where: { id, organizationId: resolved.organizationId },
-    select: { id: true, name: true, kind: true, isBlogLayout: true, parentId: true, slug: true, designJson: true, compiledHtml: true },
-  });
-  if (!template) {
+  const { data: template } = await Template.get({ id }).go();
+  if (!template || template.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });
   }
 
   let publishedUrl: string | null = null;
   if (template.kind === "LANDING_PAGE") {
-    const domain = await prisma.publishedDomain.findFirst({ where: { templateId: template.id }, select: { domain: true } });
-    if (domain) {
+    const { data: domains } = await PublishedDomain.query.primary({ templateId: template.id }).go();
+    if (domains[0]) {
       const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
-      publishedUrl = `${protocol}://${domain.domain}`;
+      publishedUrl = `${protocol}://${domains[0].domain}`;
     }
   }
 
@@ -44,9 +44,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     templateId: template.id,
     name: template.name,
     kind: template.kind,
-    isBlogLayout: template.isBlogLayout,
-    parentTemplateId: template.parentId,
-    slug: template.slug,
+    isBlogLayout: template.isBlogLayout ?? false,
+    parentTemplateId: template.parentId ?? null,
+    slug: template.slug ?? null,
     designJson: template.designJson,
     editableUrl: `${baseAppUrl}/dashboard/templates/${template.id}`,
     publishedUrl,
@@ -79,16 +79,13 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     return NextResponse.json({ error: "Unauthorized. Valid API Key or Session required." }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  const permissionError = requirePermission(resolved.role, { template: ["update"] });
   if (permissionError) return permissionError;
 
   const { id } = await context.params;
 
-  const existing = await prisma.template.findFirst({
-    where: { id, organizationId: resolved.organizationId },
-    select: { id: true, kind: true, name: true, sourceType: true, parentId: true },
-  });
-  if (!existing) {
+  const { data: existing } = await Template.get({ id }).go();
+  if (!existing || existing.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });
   }
   if (existing.sourceType === "RAW_UPLOAD") {
@@ -124,7 +121,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
   let compiledHtml: string;
   try {
-    const forCompile = existing.kind === "LANDING_PAGE" ? await compileWithSiteLayout(existing, designJson) : designJson;
+    const forCompile = existing.kind === "LANDING_PAGE" ? await compileWithSiteLayout({ id: existing.id, parentId: existing.parentId ?? null }, designJson) : designJson;
     compiledHtml = sanitizeHtml(compileToHTML(forCompile));
   } catch (err) {
     return NextResponse.json(
@@ -133,10 +130,9 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     );
   }
 
-  const updated = await prisma.template.update({
-    where: { id: existing.id },
-    data: { name, designJson, compiledHtml },
-  });
+  await Template.patch({ id: existing.id }).set({ name, designJson, compiledHtml }).go();
+  const { data: updated } = await Template.get({ id: existing.id }).go();
+  if (!updated) throw new Error(`Template ${existing.id} vanished immediately after being updated`);
   await onTemplateSaved(existing.id);
 
   const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
@@ -144,13 +140,10 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
   let publishedUrl: string | null = null;
   if (existing.kind === "LANDING_PAGE") {
-    const domain = await prisma.publishedDomain.findFirst({
-      where: { templateId: updated.id },
-      select: { domain: true },
-    });
-    if (domain) {
+    const { data: domains } = await PublishedDomain.query.primary({ templateId: updated.id }).go();
+    if (domains[0]) {
       const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
-      publishedUrl = `${protocol}://${domain.domain}`;
+      publishedUrl = `${protocol}://${domains[0].domain}`;
     }
   }
 
@@ -167,8 +160,11 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 /**
  * DELETE /api/v1/templates/:id
  *
- * Permanently deletes a template, cleaning up any Vercel Blob assets, custom domain
- * registrations in Vercel, and cascading database records (pages, publishedDomains, pageViews, assets).
+ * Permanently deletes a template and every page nested under it, cleaning up storage
+ * assets and custom domain registrations. Prisma's onDelete: Cascade used to handle
+ * descendant pages/assets/domains automatically at the DB level — DynamoDB has no
+ * equivalent, so this walks the same cleanup the dashboard's own DELETE route
+ * (app/api/templates/[id]/route.ts) already does explicitly.
  */
 export async function DELETE(
   request: NextRequest,
@@ -179,47 +175,43 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized. Valid API Key or Session required." }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["delete"] });
+  const permissionError = requirePermission(resolved.role, { template: ["delete"] });
   if (permissionError) return permissionError;
 
   const { id } = await context.params;
-  const existing = await prisma.template.findFirst({
-    where: { id, organizationId: resolved.organizationId },
-    select: { id: true, name: true },
-  });
-  if (!existing) {
+  const { data: existing } = await Template.get({ id }).go();
+  if (!existing || existing.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });
   }
 
-  // 1. Delete linked Vercel Blob storage assets
-  const assets = await prisma.templateAsset.findMany({
-    where: { templateId: existing.id },
-    select: { blobUrl: true },
-  });
+  const descendantIds = await getDescendantIds(resolved.organizationId, existing.id);
+  const allIds = [existing.id, ...descendantIds];
+
+  // 1. Delete linked storage assets
+  const assetBatches = await Promise.all(allIds.map((tid) => TemplateAsset.query.primary({ templateId: tid }).go()));
+  const assets = assetBatches.flatMap((b) => b.data);
   if (assets.length > 0) {
-    const { del } = await import("@vercel/blob");
-    const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
-    await del(assets.map((a) => a.blobUrl), blobToken ? { token: blobToken } : undefined).catch((err) =>
+    await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
       console.error("Failed to delete blobs during template delete (non-fatal):", err)
     );
   }
+  await Promise.all(assets.map((a) => TemplateAsset.remove({ templateId: a.templateId, path: a.path }).go()));
 
   // 2. Remove Custom Domains from Vercel registry
-  const domainsToRemove = await prisma.publishedDomain.findMany({
-    where: { templateId: existing.id, type: "CUSTOM" },
-    select: { domain: true },
-  });
-  if (domainsToRemove.length > 0) {
-    const { removeVercelDomain } = await import("../../domains/route");
-    for (const d of domainsToRemove) {
-      await removeVercelDomain(d.domain).catch((err) =>
-        console.error(`Failed to remove Vercel domain ${d.domain} during template delete (non-fatal):`, err)
+  const domainBatches = await Promise.all(allIds.map((tid) => PublishedDomain.query.primary({ templateId: tid }).go()));
+  const domains = domainBatches.flatMap((b) => b.data);
+  for (const d of domains) {
+    if (d.type === "CUSTOM") {
+      await removeCloudFrontDomain(d.domain, { tenantId: d.tenantId, certificateArn: d.certificateArn }).catch((err) =>
+        console.error(`Failed to remove CloudFront distribution tenant for ${d.domain} during template delete (non-fatal):`, err)
       );
     }
   }
+  await Promise.all(domains.map((d) => PublishedDomain.remove({ templateId: d.templateId, id: d.id }).go()));
 
-  // 3. Delete from database (cascades pages, publishedDomains, pageViews, assets)
-  await prisma.template.delete({ where: { id: existing.id } });
+  // 3. Delete the template and every descendant page
+  await Promise.all(descendantIds.map((did) => Template.remove({ id: did }).go()));
+  await Template.remove({ id: existing.id }).go();
 
   return NextResponse.json({
     success: true,

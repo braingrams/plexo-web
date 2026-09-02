@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveManageLandingPagePublishing, canWhiteLabel, getOrganizationOwnerPlan } from "@/lib/subscription";
+import { auth } from "@/server/authDynamo";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { ApiKey, Member, Organization, User } from "@/lib/db/coreEntities";
+import { resolveManageLandingPagePublishing, canWhiteLabel } from "@/lib/subscription";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -12,16 +14,24 @@ function sha256(value: string): string {
  * branding — otherwise omitted from the response entirely, so a Free-tier embed (or one
  * from an org that hasn't configured anything) keeps plexo-sdk's default Plexo splash.
  * See plexo-sdk's useApiKeyValidation.ts, which consumes this field.
+ *
+ * DynamoDB-native replacement for lib/subscription.ts's getOrganizationOwnerPlan/getOrgBrand
+ * (both still Prisma-backed and out of this file's scope) — reimplemented directly against
+ * Member/User/Organization since it's a small, local, self-contained lookup, using the same
+ * "find the owner member, read their plan" join server/orgDynamo.ts already does elsewhere.
  */
 async function resolveSdkBranding(
   organizationId: string,
 ): Promise<{ name: string; logoUrl?: string; brandColor?: string } | undefined> {
-  const plan = await getOrganizationOwnerPlan(organizationId);
+  const { data: owners } = await Member.query.primary({ organizationId }).where((attr, op) => op.eq(attr.role, "owner")).go();
+  const owner = owners[0];
+  if (!owner) return undefined;
+
+  const { data: ownerUser } = await User.get({ id: owner.userId }).go();
+  const plan = ownerUser?.subscriptionPlan ?? "FREE";
   if (!canWhiteLabel(plan)) return undefined;
-  const org = await prisma.organization.findUnique({
-    where: { id: organizationId },
-    select: { name: true, logo: true, brandColor: true },
-  });
+
+  const { data: org } = await Organization.get({ id: organizationId }).go();
   if (!org || (!org.logo && !org.brandColor)) return undefined;
   return { name: org.name, logoUrl: org.logo ?? undefined, brandColor: org.brandColor ?? undefined };
 }
@@ -70,8 +80,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     let branding: Awaited<ReturnType<typeof resolveSdkBranding>>;
 
     if (rawKey === "workspace-internal") {
-      const { auth } = await import("@/server/auth");
-      const session = await auth.api.getSession({ headers: request.headers });
+      const session = await auth();
 
       if (!session?.user) {
         return NextResponse.json(
@@ -80,20 +89,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      const user = await (prisma.user.findUnique as any)({
-        where: { id: session.user.id },
-        select: {
-          email: true,
-          subscriptionPlan: true,
-          manageLandingPagePublishing: true,
-          apiKeys: {
-            where: { isActive: true },
-            orderBy: { createdAt: "desc" },
-            take: 1,
-            select: { useAi: true, aiProvider: true, aiTier: true, aiAccessMode: true },
-          },
-        },
-      });
+      const { data: user } = await User.get({ id: session.user.id }).go();
 
       if (!user) {
         return NextResponse.json(
@@ -103,42 +99,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
 
       subscriptionPlan = user.subscriptionPlan ?? "FREE";
-      manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user.manageLandingPagePublishing);
-      if (user.apiKeys?.[0]) {
-        useAi = user.apiKeys[0].useAi;
-        aiProvider = user.apiKeys[0].aiProvider;
-        aiTier = user.apiKeys[0].aiTier;
-        aiAccessMode = user.apiKeys[0].aiAccessMode;
+      manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user.manageLandingPagePublishing ?? false);
+
+      // ApiKey has no createdAt-sorted index for "this user's keys" (byUser's SK is `id`,
+      // not createdAt) — sort the (small) result set in memory, same pattern as
+      // app/api/v1/ai/generate/route.ts's own workspace-internal resolution.
+      const { data: keys } = await ApiKey.query.byUser({ userId: session.user.id }).go();
+      const activeKey = keys
+        .filter((k) => k.isActive)
+        .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0];
+      if (activeKey) {
+        useAi = activeKey.useAi ?? false;
+        aiProvider = activeKey.aiProvider ?? "openai";
+        aiTier = activeKey.aiTier ?? "AUTO";
+        aiAccessMode = activeKey.aiAccessMode ?? "SYSTEM";
       }
 
-      const activeOrgId = (session.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId;
-      const membership =
-        (activeOrgId &&
-          (await prisma.member.findUnique({
-            where: { organizationId_userId: { organizationId: activeOrgId, userId: session.user.id } },
-          }))) ||
-        (await prisma.member.findFirst({ where: { userId: session.user.id }, orderBy: { createdAt: "asc" } }));
-      if (membership) {
-        branding = await resolveSdkBranding(membership.organizationId);
+      const orgResolution = await ensureActiveOrganization(session.user.id);
+      if (orgResolution.status === "resolved") {
+        branding = await resolveSdkBranding(orgResolution.organizationId);
       }
     } else {
       const hashedKey = sha256(rawKey);
 
-      const apiKey = await prisma.apiKey.findFirst({
-        where: {
-          hashedKey,
-          isActive: true,
-        },
-        select: {
-          id: true,
-          userId: true,
-          organizationId: true,
-          useAi: true,
-          aiProvider: true,
-          aiTier: true,
-          aiAccessMode: true,
-        },
-      });
+      const { data: matches } = await ApiKey.query.byHashedKey({ hashedKey }).go();
+      const apiKey = matches.find((k) => k.isActive);
 
       if (!apiKey) {
         return NextResponse.json(
@@ -147,25 +132,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      // Fetch the owner's subscription plan separately to avoid nested-select type issues
-      const user = await (prisma.user.findUnique as any)({
-        where: { id: apiKey.userId },
-        select: { email: true, subscriptionPlan: true, manageLandingPagePublishing: true },
-      });
+      const { data: user } = await User.get({ id: apiKey.userId }).go();
 
       subscriptionPlan = user?.subscriptionPlan ?? "FREE";
-      manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user?.manageLandingPagePublishing);
-      useAi = apiKey.useAi;
-      aiProvider = apiKey.aiProvider;
-      aiTier = apiKey.aiTier;
-      aiAccessMode = apiKey.aiAccessMode;
+      manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user?.manageLandingPagePublishing ?? false);
+      useAi = apiKey.useAi ?? false;
+      aiProvider = apiKey.aiProvider ?? "openai";
+      aiTier = apiKey.aiTier ?? "AUTO";
+      aiAccessMode = apiKey.aiAccessMode ?? "SYSTEM";
       branding = await resolveSdkBranding(apiKey.organizationId);
 
       // Touch lastUsedAt so we can track active SDK sessions
-      await prisma.apiKey.update({
-        where: { id: apiKey.id },
-        data: { lastUsedAt: new Date() },
-      });
+      await ApiKey.patch({ organizationId: apiKey.organizationId, id: apiKey.id })
+        .set({ lastUsedAt: new Date().toISOString() })
+        .go();
     }
 
     return NextResponse.json({

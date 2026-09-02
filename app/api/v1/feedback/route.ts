@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
+import { User } from "@/lib/db/coreEntities";
+import { Feedback } from "@/lib/db/contentEntities";
+import { resolveUser } from "@/lib/auth/resolveUser";
 import { sendFeedbackNotificationEmail } from "@/lib/email";
 
 /**
@@ -22,23 +23,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Feedback message is required." }, { status: 400 });
   }
 
-  const user = await prisma.user.findUniqueOrThrow({
-    where: { id: resolved.userId },
-    select: { name: true, email: true },
-  });
+  const { data: user } = await User.get({ id: resolved.userId }).go();
+  if (!user) {
+    return NextResponse.json({ error: "User not found." }, { status: 404 });
+  }
 
-  await prisma.feedback.create({
-    data: {
-      userId: resolved.userId,
-      userEmail: user.email,
-      userName: user.name,
-      message,
-      pageUrl: body.pageUrl?.trim() || null,
-    },
-  });
+  await Feedback.create({
+    id: crypto.randomUUID(),
+    userId: resolved.userId,
+    userEmail: user.email,
+    userName: user.name ?? "Plexo User",
+    message,
+    pageUrl: body.pageUrl?.trim() || undefined,
+  }).go();
 
   await sendFeedbackNotificationEmail({
-    userName: user.name,
+    userName: user.name ?? "Plexo User",
     userEmail: user.email,
     message,
     pageUrl: body.pageUrl?.trim() || null,

@@ -19,8 +19,9 @@ function ResetPasswordForm() {
     setError(null);
 
     const token = params.get("token");
-    if (!token) {
-      setError("Missing reset token in URL.");
+    const email = params.get("email");
+    if (!token || !email) {
+      setError("Missing reset link information.");
       return;
     }
 
@@ -32,8 +33,9 @@ function ResetPasswordForm() {
     setLoading(true);
 
     try {
-      const result = await (authClient as any).resetPassword({
+      const result = await authClient.resetPassword({
         token,
+        email,
         newPassword: password,
       });
 

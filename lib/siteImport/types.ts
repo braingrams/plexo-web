@@ -1,4 +1,4 @@
-import type { SiteImportPlatform } from "@prisma/client";
+import type { SiteImportPlatform } from "@/lib/siteImport/platform";
 
 export type { SiteImportPlatform };
 

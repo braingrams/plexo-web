@@ -7,6 +7,7 @@ import { ArrowLeft, Sparkles, ShieldCheck, CheckCircle2, Lock, Eye, EyeOff } fro
 import { authClient } from "@/lib/auth-client";
 import { Mulish } from "next/font/google";
 import { PlexoLogo } from "@/app/plexo-logo";
+import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
 
 const mulish = Mulish({
   subsets: ["latin"],
@@ -26,12 +27,18 @@ function LoginForm() {
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setError(null);
+
+    if (!email.trim() || !password) {
+      setError("Enter your email and password.");
+      return;
+    }
+
     setLoading(true);
 
     const redirectTo = params.get("redirectTo") ?? "/dashboard";
 
     try {
-      const result = await (authClient as any).signIn.email({
+      const result = await authClient.signIn.email({
         email,
         password,
         callbackURL: redirectTo,
@@ -76,6 +83,15 @@ function LoginForm() {
         <p className="text-sm font-medium text-slate-400">
           Sign in to your Plexo workspace to manage your sites &amp; pages.
         </p>
+      </div>
+
+      {/* Google */}
+      <GoogleAuthButton callbackURL={params.get("redirectTo") ?? "/dashboard"} />
+
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-slate-800" />
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">or</span>
+        <div className="h-px flex-1 bg-slate-800" />
       </div>
 
       {/* Form */}

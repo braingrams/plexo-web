@@ -1,13 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
-import { put } from "@vercel/blob";
+import { uploadObject } from "@/lib/storage";
 
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { requirePermission } from "@/server/requirePermission";
-import { ensureUniqueSlug, isValidUuid } from "@/server/slug";
-import { ensureUniqueTemplateName } from "@/server/templateName";
+import { Template, TemplateAsset } from "@/lib/db/contentEntities";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { ensureUniqueSlug, isValidUuid } from "@/server/slugDynamo";
+import { ensureUniqueTemplateName } from "@/server/templateNameDynamo";
 import { getTierFeatures } from "@/lib/subscription";
 
 /**
@@ -34,50 +33,42 @@ export async function POST(
     );
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["create"] });
+  const permissionError = requirePermission(resolved.role, { template: ["create"] });
   if (permissionError) return permissionError;
 
   const { id } = await context.params;
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
-  const existing = await prisma.template.findFirst({
-    where: { id, organizationId: resolved.organizationId },
-    select: { id: true, name: true, kind: true, parentId: true, slug: true, designJson: true, compiledHtml: true, sourceType: true },
-  });
-  if (!existing) {
+  const { data: existing } = await Template.get({ id }).go();
+  if (!existing || existing.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
   if (!existing.parentId) {
     return NextResponse.json({ error: "The home page can't be duplicated from here." }, { status: 400 });
   }
 
-  const lastSibling = await prisma.template.findFirst({
-    where: { parentId: existing.parentId },
-    orderBy: { order: "desc" },
-    select: { order: true },
-  });
+  const { data: siblings } = await Template.query.byParent({ parentId: existing.parentId }).go();
+  const lastOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1);
 
   const name = await ensureUniqueTemplateName({ organizationId: resolved.organizationId, parentId: existing.parentId, kind: existing.kind, base: `${existing.name} copy` });
   const slug = await ensureUniqueSlug(existing.parentId, `${existing.slug ?? name}-copy`);
 
-  // Raw-upload pages own real files in Blob storage — those need independent copies,
-  // not a shared reference, so editing/deleting one page's files can never silently
-  // break its duplicate (or vice versa).
+  // Raw-upload pages own real files in S3 — those need independent copies, not a shared
+  // reference, so editing/deleting one page's files can never silently break its
+  // duplicate (or vice versa).
   const newId = randomUUID();
   let copiedAssets: { templateId: string; path: string; blobUrl: string; contentType: string; size: number }[] = [];
   if (existing.sourceType === "RAW_UPLOAD") {
-    const sourceAssets = await prisma.templateAsset.findMany({ where: { templateId: existing.id } });
+    const { data: sourceAssets } = await TemplateAsset.query.primary({ templateId: existing.id }).go();
     if (sourceAssets.length > 0) {
-      const blobToken = process.env.BLOB_READ_WRITE_TOKEN;
       copiedAssets = await Promise.all(
         sourceAssets.map(async (asset) => {
           const sourceRes = await fetch(asset.blobUrl);
           const buffer = Buffer.from(await sourceRes.arrayBuffer());
-          const blob = await put(`raw-sites/${newId}/${asset.path}`, buffer, {
+          const blob = await uploadObject(`raw-sites/${newId}/${asset.path}`, buffer, {
             access: "public",
             contentType: asset.contentType,
-            ...(blobToken ? { token: blobToken } : {}),
           });
           return {
             templateId: newId,
@@ -91,26 +82,27 @@ export async function POST(
     }
   }
 
-  const duplicate = await prisma.template.create({
-    data: {
-      id: newId,
-      userId: resolved.userId,
-      organizationId: resolved.organizationId,
-      name,
-      kind: existing.kind,
-      sourceType: existing.sourceType,
-      parentId: existing.parentId,
-      slug,
-      order: (lastSibling?.order ?? -1) + 1,
-      designJson: existing.designJson as Prisma.InputJsonValue,
-      compiledHtml: existing.compiledHtml,
-    },
-    select: { id: true, name: true, slug: true, parentId: true, order: true },
-  });
+  await Template.create({
+    id: newId,
+    userId: resolved.userId,
+    organizationId: resolved.organizationId,
+    name,
+    kind: existing.kind,
+    sourceType: existing.sourceType,
+    parentId: existing.parentId,
+    slug,
+    order: lastOrder + 1,
+    designJson: existing.designJson,
+    compiledHtml: existing.compiledHtml,
+  }).go();
+  const { data: duplicate } = await Template.get({ id: newId }).go();
+  if (!duplicate) throw new Error(`Template ${newId} vanished immediately after being created`);
 
   if (copiedAssets.length > 0) {
-    await prisma.templateAsset.createMany({ data: copiedAssets });
+    await Promise.all(copiedAssets.map((a) => TemplateAsset.create({ id: randomUUID(), ...a }).go()));
   }
 
-  return NextResponse.json({ page: duplicate }, { status: 201 });
+  return NextResponse.json({
+    page: { id: duplicate.id, name: duplicate.name, slug: duplicate.slug ?? null, parentId: duplicate.parentId ?? null, order: duplicate.order ?? 0 },
+  }, { status: 201 });
 }

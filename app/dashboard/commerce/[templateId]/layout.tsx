@@ -1,8 +1,7 @@
 import { notFound, redirect } from "next/navigation";
-import { headers } from "next/headers";
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { Template } from "@/lib/db/contentEntities";
 import { PageContainer } from "../../_components/PageContainer";
 import { CommerceNav } from "../_components/CommerceNav";
 import { CommerceSiteSwitcher } from "../_components/CommerceSiteSwitcher";
@@ -20,27 +19,24 @@ export default async function CommerceSiteLayout({
   params: Promise<{ templateId: string }>;
 }) {
   const { templateId } = await params;
-  const reqHeaders = await headers();
-  const session = await auth.api.getSession({ headers: reqHeaders });
+  const session = await auth();
   if (!session?.user) redirect("/auth/login");
 
-  const orgResolution = await ensureActiveOrganization(reqHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") redirect("/choose-org");
   const organizationId = orgResolution.organizationId;
 
-  const [site, sites] = await Promise.all([
-    prisma.template.findFirst({
-      where: { id: templateId, organizationId, parentId: null },
-      select: { id: true },
-    }),
-    prisma.template.findMany({
-      where: { organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false },
-      select: { id: true, name: true },
-      orderBy: { updatedAt: "desc" },
-    }),
+  const [{ data: site }, { data: orgTemplates }] = await Promise.all([
+    Template.get({ id: templateId }).go(),
+    Template.query.byOrg({ organizationId }).go(),
   ]);
 
-  if (!site) notFound();
+  if (!site || site.organizationId !== organizationId || site.parentId) notFound();
+
+  const sites = orgTemplates
+    .filter((t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout)
+    .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
+    .map((t) => ({ id: t.id, name: t.name }));
 
   return (
     <PageContainer>

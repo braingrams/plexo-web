@@ -1,11 +1,9 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { ThemeProvider } from "next-themes";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
-import { getOrgBrand } from "@/lib/subscription";
+import { auth } from "@/server/authDynamo";
+import { User } from "@/lib/db/coreEntities";
+import { ensureActiveOrganization, getOrgBrandDynamo } from "@/server/orgDynamo";
 import { DashboardShell } from "./dashboard-shell";
 
 export default async function DashboardLayout({
@@ -13,8 +11,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
 
   if (!session?.user) {
     redirect("/auth/login");
@@ -23,21 +20,18 @@ export default async function DashboardLayout({
   const userName = session.user.name ?? session.user.email?.split("@")[0] ?? "User";
   const userEmail = session.user.email ?? "";
 
-  const dbUser = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { layoutMode: true },
-  });
+  const { data: dbUser } = await User.get({ id: session.user.id }).go();
   const initialLayoutMode = dbUser?.layoutMode ?? "MODERN";
 
   // Org-scoped login: makes sure this session always has an active organization before
   // rendering the dashboard shell (auto-picks a single membership, restores/creates one
   // for a brand-new user, or routes to a chooser for someone in several orgs).
-  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
 
-  const orgBranding = await getOrgBrand(orgResolution.organizationId);
+  const orgBranding = await getOrgBrandDynamo(orgResolution.organizationId);
 
   return (
     // The marketing site's new light/dark toggle (see app/landing-nav.tsx) is a single

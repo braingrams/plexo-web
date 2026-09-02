@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveSiteImportSite } from "@/lib/siteImport/adminAuth";
-import { isValidUuid } from "@/server/slug";
-import { processSiteImportStep } from "@/lib/siteImport/runJob";
+import { resolveSiteImportSite } from "@/lib/siteImport/adminAuthDynamo";
+import { isValidUuid } from "@/lib/slugUtils";
+import { processSiteImportStep } from "@/lib/siteImport/runJobDynamo";
+import { SiteImportJob } from "@/lib/db/importEntities";
 
 /**
  * Processes exactly one bounded step and returns. Same role as blog-import's
@@ -23,9 +23,9 @@ export async function POST(
   if ("error" in resolved) return resolved.error;
   if (!isValidUuid(jobId)) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
-  const job = await prisma.siteImportJob.findFirst({ where: { id: jobId, templateId: resolved.context.templateId } });
+  const { data: job } = await SiteImportJob.get({ templateId: resolved.context.templateId, id: jobId }).go();
   if (!job) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
-  const result = await processSiteImportStep(jobId);
+  const result = await processSiteImportStep(resolved.context.templateId, jobId);
   return NextResponse.json({ done: result.done, phase: result.phase });
 }

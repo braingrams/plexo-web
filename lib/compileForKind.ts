@@ -1,4 +1,4 @@
-import type { TemplateKind } from "@prisma/client";
+import type { TemplateKind } from "@/lib/db/contentEntities";
 
 import { compileToHTML } from "@/lib/compiler";
 import { parseJsonToTargetFormat } from "@/lib/compilerClient";

@@ -1,5 +1,9 @@
+import type { EntityItem } from "electrodb";
 import { decryptMaildripKey } from "@/lib/crypto";
-import type { CommerceOrder, CommerceSettings } from "@prisma/client";
+import type { CommerceOrder as CommerceOrderEntity, CommerceSettings as CommerceSettingsEntity } from "@/lib/db/commerceEntities";
+
+type CommerceOrder = EntityItem<typeof CommerceOrderEntity>;
+type CommerceSettings = EntityItem<typeof CommerceSettingsEntity>;
 
 const PLATFORM_MAILDRIP_API_URL =
   process.env.MAILDRIP_API_URL ?? "https://api.maildrip.io/api/v1/emails/transaction";
@@ -67,10 +71,30 @@ export async function tagNewsletterSubscriber(apiKey: string, groupId: string, e
  * the caller — a MailDrip outage must never fail or retry-storm the Paystack webhook, since
  * the payment itself is already real and recorded by the time this runs.
  */
+/** Site's own MailDrip key when configured, falling back to Plexo's shared platform key —
+ * factored out of notifyMaildripOfPaidOrder so other Commerce senders (digital delivery)
+ * can resolve the same key without duplicating the fallback logic. */
+export function resolveMaildripApiKey(settings: CommerceSettings): string | null {
+  return settings.maildripApiKeyEncrypted ? decryptMaildripKey(settings.maildripApiKeyEncrypted) : (PLATFORM_MAILDRIP_API_KEY ?? null);
+}
+
+/** Sends a transactional email through a SPECIFIC MailDrip key (e.g. resolveMaildripApiKey's
+ * result) — unlike lib/mail/maildrip.ts's sendMaildripEmail, which always uses Plexo's
+ * shared platform key, this lets a Commerce email go out under the site's own connected
+ * MailDrip account when it has one. */
+export async function sendCommerceEmail(apiKey: string, input: { to: string; subject: string; html: string }): Promise<void> {
+  const response = await fetch(PLATFORM_MAILDRIP_API_URL, {
+    method: "POST",
+    headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    throw new Error(`MailDrip send failed (${response.status}): ${await response.text()}`);
+  }
+}
+
 export async function notifyMaildripOfPaidOrder(settings: CommerceSettings, order: CommerceOrder): Promise<void> {
-  const apiKey = settings.maildripApiKeyEncrypted
-    ? decryptMaildripKey(settings.maildripApiKeyEncrypted)
-    : PLATFORM_MAILDRIP_API_KEY;
+  const apiKey = resolveMaildripApiKey(settings);
 
   if (!apiKey) return; // no key configured anywhere — nothing to do
 

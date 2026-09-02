@@ -27,7 +27,7 @@ type IntegrationClientProps = {
     id: string;
     name: string;
     maskedKey: string;
-    createdAt: Date;
+    createdAt: string;
   }>;
   baseUrl: string;
 };

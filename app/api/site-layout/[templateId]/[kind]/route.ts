@@ -1,8 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { TemplateKind } from "@prisma/client";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveSiteLayoutAdmin, recompileSiteLayoutDependents } from "@/lib/siteLayout";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveSiteLayoutAdmin, recompileSiteLayoutDependents } from "@/lib/siteLayoutDynamo";
+import { Template, SiteLayout } from "@/lib/db/contentEntities";
 
 const BLANK_TEMPLATE_SHELL = {
   body: {
@@ -32,24 +32,23 @@ export async function GET(
   const resolved = await resolveSiteLayoutAdmin(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const sites = await prisma.siteLayout.findMany({
-    where: {
-      template: { organizationId: resolved.context.organizationId },
-      templateId: { not: resolved.context.templateId },
-      ...(kind === "header" ? { headerTemplateId: { not: null } } : { footerTemplateId: { not: null } }),
-    },
-    select: {
-      template: { select: { name: true } },
-      headerTemplate: kind === "header" ? { select: { id: true, name: true, updatedAt: true } } : false,
-      footerTemplate: kind === "footer" ? { select: { id: true, name: true, updatedAt: true } } : false,
-    },
-  });
+  // SiteLayout has no org-wide index (keyed by templateId, see contentEntities.ts) — fan
+  // out per org root template, same bound as every other "list across my org's sites"
+  // query on Template-keyed entities.
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go();
+  const templateNameById = new Map(orgTemplates.map((t) => [t.id, t.name]));
+  const rootIds = orgTemplates.filter((t) => !t.parentId && t.id !== resolved.context.templateId).map((t) => t.id);
+  const siteLayouts = (await Promise.all(rootIds.map((id) => SiteLayout.get({ templateId: id }).go()))).map((b) => b.data);
 
-  const candidates = sites
-    .map((s) => {
-      const fragment = kind === "header" ? s.headerTemplate : s.footerTemplate;
+  const fragmentField = kind === "header" ? "headerTemplateId" : "footerTemplateId";
+  const attached = siteLayouts.filter((s): s is NonNullable<typeof s> => s !== null && Boolean(s[fragmentField]));
+  const fragments = await Promise.all(attached.map((s) => Template.get({ id: s[fragmentField]! }).go()));
+
+  const candidates = attached
+    .map((s, i) => {
+      const fragment = fragments[i].data;
       if (!fragment) return null;
-      return { fragmentTemplateId: fragment.id, fragmentName: fragment.name, siteName: s.template.name, updatedAt: fragment.updatedAt };
+      return { fragmentTemplateId: fragment.id, fragmentName: fragment.name, siteName: templateNameById.get(s.templateId) ?? "", updatedAt: fragment.updatedAt };
     })
     .filter((c): c is NonNullable<typeof c> => c !== null);
 
@@ -76,10 +75,10 @@ export async function POST(
   const resolved = await resolveSiteLayoutAdmin(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { template: ["update"] });
+  const permissionError = requirePermission(resolved.context.role, { template: ["update"] });
   if (permissionError) return permissionError;
 
-  const site = await prisma.siteLayout.findUnique({ where: { templateId: resolved.context.templateId } });
+  const { data: site } = await SiteLayout.get({ templateId: resolved.context.templateId }).go();
   const existingId = kind === "header" ? site?.headerTemplateId : site?.footerTemplateId;
   if (existingId) {
     return NextResponse.json({ fragmentTemplateId: existingId });
@@ -96,17 +95,12 @@ export async function POST(
     // Never trust a bare template id from the client — re-verify it the same way GET
     // surfaced it: reachable as THIS EXACT KIND's attached fragment on some SiteLayout in
     // the same organization. Prevents cross-org access and kind-mismatches.
-    const sourceSite = await prisma.siteLayout.findFirst({
-      where: {
-        template: { organizationId: resolved.context.organizationId },
-        ...(kind === "header" ? { headerTemplateId: sourceFragmentTemplateId } : { footerTemplateId: sourceFragmentTemplateId }),
-      },
-      select: {
-        headerTemplate: kind === "header" ? { select: { name: true, designJson: true, compiledHtml: true } } : false,
-        footerTemplate: kind === "footer" ? { select: { name: true, designJson: true, compiledHtml: true } } : false,
-      },
-    });
-    const source = kind === "header" ? sourceSite?.headerTemplate : sourceSite?.footerTemplate;
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go();
+    const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
+    const siteLayouts = (await Promise.all(rootIds.map((id) => SiteLayout.get({ templateId: id }).go()))).map((b) => b.data);
+    const fragmentField = kind === "header" ? "headerTemplateId" : "footerTemplateId";
+    const sourceSite = siteLayouts.find((s) => s?.[fragmentField] === sourceFragmentTemplateId);
+    const source = sourceSite ? (await Template.get({ id: sourceFragmentTemplateId }).go()).data : null;
     if (!source) {
       return NextResponse.json({ error: "That header/footer is no longer available to reuse — it may have been detached from its site." }, { status: 400 });
     }
@@ -115,32 +109,34 @@ export async function POST(
     compiledHtml = source.compiledHtml;
   }
 
-  const fragmentTemplate = await prisma.template.create({
-    data: {
-      userId: resolved.context.userId,
-      organizationId: resolved.context.organizationId,
-      name,
-      kind: TemplateKind.LANDING_PAGE,
-      isSiteLayoutFragment: true,
-      designJson,
-      compiledHtml,
-    },
-    select: { id: true },
-  });
+  const fragmentTemplateId = randomUUID();
+  await Template.create({
+    id: fragmentTemplateId,
+    userId: resolved.context.userId,
+    organizationId: resolved.context.organizationId,
+    name,
+    kind: "LANDING_PAGE",
+    isSiteLayoutFragment: true,
+    designJson,
+    compiledHtml,
+  }).go();
 
-  await prisma.siteLayout.upsert({
-    where: { templateId: resolved.context.templateId },
-    create: {
+  if (site) {
+    await SiteLayout.patch({ templateId: resolved.context.templateId })
+      .set(kind === "header" ? { headerTemplateId: fragmentTemplateId } : { footerTemplateId: fragmentTemplateId })
+      .go();
+  } else {
+    await SiteLayout.create({
+      id: randomUUID(),
       templateId: resolved.context.templateId,
       organizationId: resolved.context.organizationId,
-      ...(kind === "header" ? { headerTemplateId: fragmentTemplate.id } : { footerTemplateId: fragmentTemplate.id }),
-    },
-    update: kind === "header" ? { headerTemplateId: fragmentTemplate.id } : { footerTemplateId: fragmentTemplate.id },
-  });
+      ...(kind === "header" ? { headerTemplateId: fragmentTemplateId } : { footerTemplateId: fragmentTemplateId }),
+    }).go();
+  }
 
   await recompileSiteLayoutDependents(resolved.context.templateId);
 
-  return NextResponse.json({ fragmentTemplateId: fragmentTemplate.id }, { status: 201 });
+  return NextResponse.json({ fragmentTemplateId }, { status: 201 });
 }
 
 /** Detaches the header/footer (site's pages go back to having none) without deleting the
@@ -155,13 +151,13 @@ export async function DELETE(
   const resolved = await resolveSiteLayoutAdmin(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { template: ["update"] });
+  const permissionError = requirePermission(resolved.context.role, { template: ["update"] });
   if (permissionError) return permissionError;
 
-  await prisma.siteLayout.updateMany({
-    where: { templateId: resolved.context.templateId },
-    data: kind === "header" ? { headerTemplateId: null } : { footerTemplateId: null },
-  });
+  const { data: site } = await SiteLayout.get({ templateId: resolved.context.templateId }).go();
+  if (site) {
+    await SiteLayout.patch({ templateId: resolved.context.templateId }).remove([kind === "header" ? "headerTemplateId" : "footerTemplateId"]).go();
+  }
 
   await recompileSiteLayoutDependents(resolved.context.templateId);
 

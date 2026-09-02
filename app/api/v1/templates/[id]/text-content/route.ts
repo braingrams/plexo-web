@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put, BlobError } from "@vercel/blob";
+import { uploadObject, StorageError } from "@/lib/storage";
 
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { requirePermission } from "@/server/requirePermission";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { requirePermission } from "@/server/requirePermissionDynamo";
 import { contentTypeFor } from "@/server/rawUpload";
+import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { extractTextNodes, applyTextEdits, annotateTextNodesForPreview } from "@/lib/htmlTextExtraction";
 import {
   extractImageNodes,
@@ -42,22 +42,16 @@ export async function GET(
   }
 
   const { id } = await context.params;
-  const template = await prisma.template.findFirst({
-    where: { id, organizationId: resolved.organizationId },
-    select: {
-      sourceType: true,
-      compiledHtml: true,
-      assets: { select: { path: true, blobUrl: true } },
-    },
-  });
-  if (!template) {
+  const { data: template } = await Template.get({ id }).go();
+  if (!template || template.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });
   }
   if (template.sourceType !== "RAW_UPLOAD") {
     return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
   }
+  const { data: assets } = await TemplateAsset.query.primary({ templateId: id }).go();
 
-  const externalStylesheets = await fetchCssStylesheetContents(template.assets);
+  const externalStylesheets = await fetchCssStylesheetContents(assets);
 
   const nodes = extractTextNodes(template.compiledHtml);
   const imageNodes = extractImageNodes(template.compiledHtml);
@@ -85,7 +79,7 @@ export async function GET(
         annotateImageNodesForPreview(
           annotateTextNodesForPreview(annotateColorNodesForPreview(template.compiledHtml, externalStylesheets)),
         ),
-        template.assets,
+        assets,
         externalStylesheets,
       ),
       externalStylesheets,
@@ -110,25 +104,18 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  const permissionError = requirePermission(resolved.role, { template: ["update"] });
   if (permissionError) return permissionError;
 
   const { id } = await context.params;
-  const template = await prisma.template.findFirst({
-    where: { id, organizationId: resolved.organizationId },
-    select: {
-      id: true,
-      sourceType: true,
-      compiledHtml: true,
-      assets: { select: { id: true, path: true, blobUrl: true } },
-    },
-  });
-  if (!template) {
+  const { data: template } = await Template.get({ id }).go();
+  if (!template || template.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });
   }
   if (template.sourceType !== "RAW_UPLOAD") {
     return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
   }
+  const { data: assets } = await TemplateAsset.query.primary({ templateId: id }).go();
 
   const body = (await request.json().catch(() => null)) as {
     edits?: { id?: number; text?: string; href?: string }[];
@@ -160,7 +147,7 @@ export async function PATCH(
   updatedHtml = applyImageEdits(updatedHtml, imgEdits, backgroundEdits);
 
   if (colorEdits.length > 0) {
-    const externalStylesheets = await fetchCssStylesheetContents(template.assets);
+    const externalStylesheets = await fetchCssStylesheetContents(assets);
     const colorResult = applyColorEdits(updatedHtml, colorEdits, externalStylesheets);
     updatedHtml = colorResult.html;
 
@@ -170,26 +157,22 @@ export async function PATCH(
     // any other file edit.
     const stylesheetPaths = Object.keys(colorResult.updatedStylesheets);
     if (stylesheetPaths.length > 0) {
-      const localDevToken = process.env.BLOB_READ_WRITE_TOKEN; // see upload-raw/route.ts — OIDC covers real deployments
       await Promise.all(
         stylesheetPaths.map(async (path) => {
-          const asset = template.assets.find((a) => a.path === path);
+          const asset = assets.find((a) => a.path === path);
           if (!asset) return;
           const newContent = colorResult.updatedStylesheets[path];
           const contentType = contentTypeFor(path);
           try {
-            const blob = await put(`raw-sites/${template.id}/${path}`, Buffer.from(newContent, "utf8"), {
+            const blob = await uploadObject(`raw-sites/${template.id}/${path}`, Buffer.from(newContent, "utf8"), {
               access: "public",
               contentType,
-              allowOverwrite: true,
-              ...(localDevToken ? { token: localDevToken } : {}),
             });
-            await prisma.templateAsset.update({
-              where: { id: asset.id },
-              data: { blobUrl: blob.url, contentType, size: Buffer.byteLength(newContent, "utf8") },
-            });
+            await TemplateAsset.patch({ templateId: template.id, path })
+              .set({ blobUrl: blob.url, contentType, size: Buffer.byteLength(newContent, "utf8") })
+              .go();
           } catch (err) {
-            if (err instanceof BlobError) {
+            if (err instanceof StorageError) {
               console.error(`Failed to save color edit to ${path}:`, err.message);
               return;
             }
@@ -200,18 +183,12 @@ export async function PATCH(
     }
   }
 
-  await prisma.template.update({
-    where: { id: template.id },
-    data: { compiledHtml: updatedHtml },
-  });
+  await Template.patch({ id: template.id }).set({ compiledHtml: updatedHtml }).go();
 
   // Content changed — re-scan every domain it's currently live on, same as files/[...path].
-  const linkedDomains = await prisma.publishedDomain.findMany({
-    where: { templateId: template.id },
-    select: { id: true },
-  });
+  const { data: linkedDomains } = await PublishedDomain.query.primary({ templateId: template.id }).go();
   for (const d of linkedDomains) {
-    void scanPublishedDomain(d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
+    void scanPublishedDomain(d.templateId, d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
   }
 
   return NextResponse.json({ success: true });

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put, BlobError } from "@vercel/blob";
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "../../domains/route";
+
+import { uploadObject, StorageError } from "@/lib/storage";
+import { UploadedImage } from "@/lib/db/coreEntities";
+import { resolveUser } from "@/lib/auth/resolveUser";
 
 // Matches app/api/blog/[templateId]/upload-image/route.ts's limits/allowlist — same kind
 // of user-facing image upload, no reason for a different ceiling here.
@@ -34,43 +35,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const buffer = Buffer.from(await file.arrayBuffer());
     const userId = resolved.userId;
     const extension = file.type.split("/")[1]?.replace("svg+xml", "svg") || "bin";
-    // Vercel's public/ directory is bundled at build time only — there is no writable
-    // runtime filesystem for it, so writeFile() into public/uploads (the previous
-    // implementation) silently discarded every upload the moment this ran on a real
-    // deployment rather than a persistent local dev server. @vercel/blob is this app's
-    // actual, already-established storage for user media (see the blog/template-asset
-    // upload routes) — same pattern here. OIDC covers real deployments; the local-dev
-    // token fallback matches every other put() call site in this codebase.
-    const localDevToken = process.env.BLOB_READ_WRITE_TOKEN;
-
+    // There is no writable runtime filesystem in Lambda either — S3 (lib/storage.ts) is
+    // this app's storage for user media (see the blog/template-asset upload routes) —
+    // same pattern here.
     let blob;
     try {
-      blob = await put(`media/${userId}/${randomKey()}.${extension}`, buffer, {
+      blob = await uploadObject(`media/${userId}/${randomKey()}.${extension}`, buffer, {
         access: "public",
         contentType: file.type,
-        ...(localDevToken ? { token: localDevToken } : {}),
       });
     } catch (err) {
-      if (err instanceof BlobError) {
+      if (err instanceof StorageError) {
         return NextResponse.json({ error: err.message }, { status: 500 });
       }
       throw err;
     }
 
-    const uploadedImage = await prisma.uploadedImage.create({
-      data: {
-        userId,
-        organizationId: resolved.organizationId,
-        name: file.name,
-        url: blob.url,
-      },
-    });
+    const id = crypto.randomUUID();
+    await UploadedImage.create({
+      id,
+      userId,
+      organizationId: resolved.organizationId,
+      name: file.name,
+      url: blob.url,
+    }).go();
 
-    return NextResponse.json({
-      id: uploadedImage.id,
-      name: uploadedImage.name,
-      url: uploadedImage.url,
-    });
+    return NextResponse.json({ id, name: file.name, url: blob.url });
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });

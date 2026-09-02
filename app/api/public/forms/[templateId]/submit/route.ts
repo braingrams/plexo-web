@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { prisma } from "@/server/prisma";
-import { resolveSite } from "@/lib/pub/resolveSite";
-import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimit";
-import { resolveNotificationRecipient } from "@/lib/notificationPreferences";
+import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
+import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
+import { resolveNotificationRecipient } from "@/lib/notificationPreferencesDynamo";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildFormSubmissionEmail } from "@/lib/mail/templates";
+import { FormSubmission } from "@/lib/db/opsEntities";
+import { Template } from "@/lib/db/contentEntities";
+import { User } from "@/lib/db/coreEntities";
 
 /**
  * Receives a real, no-JS browser form submission from a form_container's own <form
@@ -22,7 +24,7 @@ import { buildFormSubmissionEmail } from "@/lib/mail/templates";
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
   const { templateId } = await params;
-  const hostname = (request.headers.get("host") ?? "").split(":")[0];
+  const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
   const siteResult = await resolveSite(hostname);
   if (siteResult.status !== "ok") {
     return NextResponse.json({ error: "Site not found." }, { status: 404 });
@@ -60,15 +62,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const redirectParam = url.searchParams.get("redirect") || "/";
   const redirectPath = redirectParam.startsWith("/") ? redirectParam : "/";
 
-  await prisma.formSubmission.create({
-    data: {
-      templateId,
-      organizationId: organization.id,
-      formName,
-      fields,
-      submitterIp: clientIp(request),
-    },
-  });
+  await FormSubmission.create({
+    id: crypto.randomUUID(),
+    templateId,
+    organizationId: organization.id,
+    formName,
+    fields,
+    submitterIp: clientIp(request),
+  }).go();
 
   void notifyFormSubmission(templateId, organization.id, formName, fields).catch((err) =>
     console.error("[mail] form submission notification failed:", err),
@@ -83,10 +84,11 @@ async function notifyFormSubmission(
   formName: string,
   fields: Record<string, string>,
 ): Promise<void> {
-  const template = await prisma.template.findUnique({ where: { id: templateId }, select: { name: true, user: { select: { email: true } } } });
+  const { data: template } = await Template.get({ id: templateId }).go();
   if (!template) return;
+  const { data: owner } = await User.get({ id: template.userId }).go();
 
-  const to = await resolveNotificationRecipient(organizationId, "formSubmissions", template.user?.email);
+  const to = await resolveNotificationRecipient(organizationId, "formSubmissions", owner?.email);
   if (!to) return;
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

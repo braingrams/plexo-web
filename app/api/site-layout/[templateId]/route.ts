@@ -1,26 +1,25 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveSiteLayoutAdmin, recompileSiteLayoutDependents } from "@/lib/siteLayout";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveSiteLayoutAdmin, recompileSiteLayoutDependents } from "@/lib/siteLayoutDynamo";
+import { SiteLayout, Template } from "@/lib/db/contentEntities";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
   const { templateId } = await context.params;
   const resolved = await resolveSiteLayoutAdmin(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const layout = await prisma.siteLayout.findUnique({
-    where: { templateId },
-    include: {
-      headerTemplate: { select: { id: true, name: true, updatedAt: true } },
-      footerTemplate: { select: { id: true, name: true, updatedAt: true } },
-    },
-  });
+  const { data: layout } = await SiteLayout.get({ templateId }).go();
+  const [header, footer] = await Promise.all([
+    layout?.headerTemplateId ? Template.get({ id: layout.headerTemplateId }).go() : null,
+    layout?.footerTemplateId ? Template.get({ id: layout.footerTemplateId }).go() : null,
+  ]);
 
   return NextResponse.json({
     layout: {
       enabled: layout?.enabled ?? false,
-      header: layout?.headerTemplate ? { templateId: layout.headerTemplate.id, name: layout.headerTemplate.name, updatedAt: layout.headerTemplate.updatedAt } : null,
-      footer: layout?.footerTemplate ? { templateId: layout.footerTemplate.id, name: layout.footerTemplate.name, updatedAt: layout.footerTemplate.updatedAt } : null,
+      header: header?.data ? { templateId: header.data.id, name: header.data.name, updatedAt: header.data.updatedAt } : null,
+      footer: footer?.data ? { templateId: footer.data.id, name: footer.data.name, updatedAt: footer.data.updatedAt } : null,
     },
   });
 }
@@ -35,7 +34,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
   if ("error" in resolved) return resolved.error;
   const { organizationId, role } = resolved.context;
 
-  const permissionError = await requirePermission(request.headers, role, { template: ["update"] });
+  const permissionError = requirePermission(role, { template: ["update"] });
   if (permissionError) return permissionError;
 
   const body = await request.json().catch(() => ({}));
@@ -44,11 +43,12 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     return NextResponse.json({ error: "enabled must be a boolean." }, { status: 400 });
   }
 
-  await prisma.siteLayout.upsert({
-    where: { templateId },
-    create: { templateId, organizationId, enabled },
-    update: { enabled },
-  });
+  const { data: existing } = await SiteLayout.get({ templateId }).go();
+  if (existing) {
+    await SiteLayout.patch({ templateId }).set({ enabled }).go();
+  } else {
+    await SiteLayout.create({ id: randomUUID(), templateId, organizationId, enabled }).go();
+  }
 
   await recompileSiteLayoutDependents(templateId);
 

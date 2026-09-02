@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { getDomainLimit, resolveUser } from "../domains/route";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { getDomainLimit } from "@/lib/domainLimit";
 import { getTierFeatures } from "@/lib/subscription";
+import { User } from "@/lib/db/coreEntities";
+import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 
 /**
  * GET /api/v1/profile
@@ -16,41 +18,34 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: resolved.userId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        subscriptionPlan: true,
-        allowanceBalance: true,
-        topupBalance: true,
-        customDomainLimit: true,
-        layoutMode: true,
-        createdAt: true,
-      },
-    });
+    const { data: user } = await User.get({ id: resolved.userId }).go();
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const domainCount = await prisma.publishedDomain.count({
-      where: { userId: user.id },
-    });
+    // Template/PublishedDomain have no userId index (see contentEntities.ts) — only
+    // organizationId. Fan out over the org's templates (same discipline as
+    // app/dashboard/page.tsx) and filter to this specific user's rows in memory, so the
+    // counts match the original per-user semantics exactly rather than counting the
+    // whole org.
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+    const userTemplates = orgTemplates.filter((t) => t.userId === user.id);
 
-    const emailTemplateCount = await prisma.template.count({
-      where: { userId: user.id, kind: "EMAIL" },
-    });
-    const landingPageCount = await prisma.template.count({
-      // Blog post/listing layouts are internal-only Template rows, not real pages —
-      // excluded here the same way plan-limit counts exclude them elsewhere.
-      where: { userId: user.id, kind: "LANDING_PAGE", isBlogLayout: false, isSiteLayoutFragment: false },
-    });
+    const emailTemplateCount = userTemplates.filter((t) => t.kind === "EMAIL").length;
+    // Blog post/listing layouts are internal-only Template rows, not real pages —
+    // excluded here the same way plan-limit counts exclude them elsewhere.
+    const landingPageCount = userTemplates.filter(
+      (t) => t.kind === "LANDING_PAGE" && !t.isBlogLayout && !t.isSiteLayoutFragment,
+    ).length;
 
-    const features = getTierFeatures(user.subscriptionPlan);
-    const domainLimit = getDomainLimit(user.subscriptionPlan, user.customDomainLimit);
+    const domainBatches = await Promise.all(
+      orgTemplates.map((t) => PublishedDomain.query.primary({ templateId: t.id }).go()),
+    );
+    const domainCount = domainBatches.reduce((sum, batch) => sum + batch.data.filter((d) => d.userId === user.id).length, 0);
+
+    const features = getTierFeatures(user.subscriptionPlan ?? "FREE");
+    const domainLimit = getDomainLimit(user.subscriptionPlan ?? "FREE", user.customDomainLimit ?? null);
 
     return NextResponse.json({
       success: true,
@@ -58,13 +53,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         id: user.id,
         name: user.name,
         email: user.email,
-        image: user.image,
-        subscriptionPlan: user.subscriptionPlan,
-        allowanceBalance: user.allowanceBalance,
-        topupBalance: user.topupBalance,
-        totalCredits: user.allowanceBalance + user.topupBalance,
-        layoutMode: user.layoutMode,
-        createdAt: user.createdAt.toISOString(),
+        image: user.image ?? null,
+        subscriptionPlan: user.subscriptionPlan ?? "FREE",
+        allowanceBalance: user.allowanceBalance ?? 0,
+        topupBalance: user.topupBalance ?? 0,
+        totalCredits: (user.allowanceBalance ?? 0) + (user.topupBalance ?? 0),
+        layoutMode: user.layoutMode ?? "MODERN",
+        createdAt: user.createdAt,
       },
       limits: {
         domains: {

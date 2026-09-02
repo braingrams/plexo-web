@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
-import { generateUniqueAuthorSlug } from "@/lib/blog/authors";
+import { BlogAuthor } from "@/lib/db/contentEntities";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
+import { generateUniqueAuthorSlug } from "@/lib/blog/authorsDynamo";
 
 export async function GET(
   request: NextRequest,
@@ -12,10 +13,8 @@ export async function GET(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const authors = await prisma.blogAuthor.findMany({
-    where: { templateId: resolved.context.templateId },
-    orderBy: { name: "asc" },
-  });
+  const { data: authors } = await BlogAuthor.query.primary({ templateId: resolved.context.templateId }).go();
+  authors.sort((a, b) => a.name.localeCompare(b.name));
   return NextResponse.json({ authors });
 }
 
@@ -27,7 +26,7 @@ export async function POST(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { blog: ["update"] });
+  const permissionError = requirePermission(resolved.context.role, { blog: ["update"] });
   if (permissionError) return permissionError;
 
   const body = (await request.json().catch(() => ({}))) as {
@@ -41,17 +40,18 @@ export async function POST(
 
   const slug = await generateUniqueAuthorSlug(resolved.context.templateId, name);
 
-  const author = await prisma.blogAuthor.create({
-    data: {
-      templateId: resolved.context.templateId,
-      name,
-      slug,
-      avatarUrl: body.avatarUrl?.trim() || null,
-      bio: body.bio?.trim() || null,
-      // A guest byline (no login) when omitted — WordPress supports attributing a post
-      // to an author who never signs in, common for imported/ghost-written content.
-      userId: body.userId || null,
-    },
-  });
+  const id = randomUUID();
+  await BlogAuthor.create({
+    id,
+    templateId: resolved.context.templateId,
+    name,
+    slug,
+    avatarUrl: body.avatarUrl?.trim() || undefined,
+    bio: body.bio?.trim() || undefined,
+    // A guest byline (no login) when omitted — WordPress supports attributing a post
+    // to an author who never signs in, common for imported/ghost-written content.
+    userId: body.userId || undefined,
+  }).go();
+  const { data: author } = await BlogAuthor.get({ templateId: resolved.context.templateId, slug }).go();
   return NextResponse.json({ author }, { status: 201 });
 }

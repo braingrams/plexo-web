@@ -13,6 +13,17 @@ export type OrderSummary = {
   createdAt: string;
   items: { nameSnapshot: string; quantity: number; unitPriceMinor: number }[];
   booking: { scheduledStart: string; status: string } | null;
+  digitalDeliveries: DigitalDeliverySummary[];
+};
+
+export type DigitalDeliverySummary = {
+  id: string;
+  method: "FILE_DOWNLOAD" | "EXTERNAL_LINK" | "ACCESS_LIST";
+  productName: string;
+  deliveredAt: string | null;
+  downloadCount: number;
+  maxDownloads: number | null;
+  resendCount: number;
 };
 
 function formatNaira(minor: number): string {
@@ -68,6 +79,15 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
             createdAt: o.createdAt,
             items: o.items,
             booking: o.booking,
+            digitalDeliveries: (o.digitalDeliveries ?? []).map((d: any) => ({
+              id: d.id,
+              method: d.method,
+              productName: d.product?.name ?? "",
+              deliveredAt: d.deliveredAt,
+              downloadCount: d.downloadCount,
+              maxDownloads: d.maxDownloads,
+              resendCount: d.resendCount,
+            })),
           })),
         );
       }
@@ -90,6 +110,29 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
       setSelected((prev) => (prev && prev.id === order.id ? { ...prev, fulfillmentStatus } : prev));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Failed to update.");
+    }
+  }
+
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
+  async function handleResendDigital(order: OrderSummary, delivery: DigitalDeliverySummary) {
+    setResendingId(delivery.id);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/v1/commerce/${templateId}/orders/${order.id}/resend-digital-delivery`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deliveryId: delivery.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Resend failed.");
+      const bump = (d: DigitalDeliverySummary) => (d.id === delivery.id ? { ...d, resendCount: d.resendCount + 1 } : d);
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, digitalDeliveries: o.digitalDeliveries.map(bump) } : o)));
+      setSelected((prev) => (prev && prev.id === order.id ? { ...prev, digitalDeliveries: prev.digitalDeliveries.map(bump) } : prev));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Resend failed.");
+    } finally {
+      setResendingId(null);
     }
   }
 
@@ -217,6 +260,48 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
             {selected.booking && (
               <div style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.6)", marginBottom: "1rem" }}>
                 Booked for {new Date(selected.booking.scheduledStart).toLocaleString()} — {selected.booking.status}
+              </div>
+            )}
+
+            {selected.digitalDeliveries.length > 0 && (
+              <div style={{ marginBottom: "1rem" }}>
+                <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.4rem" }}>
+                  Digital delivery
+                </span>
+                <div style={{ display: "grid", gap: "0.5rem" }}>
+                  {selected.digitalDeliveries.map((d) => (
+                    <div
+                      key={d.id}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem",
+                        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "0.6rem 0.8rem",
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: "0.82rem", color: "#e2e4f5", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {d.productName}
+                        </div>
+                        <div style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.45)", marginTop: 2 }}>
+                          {d.deliveredAt ? `Delivered ${new Date(d.deliveredAt).toLocaleString()}` : "Not yet delivered"}
+                          {d.method === "FILE_DOWNLOAD" && ` · ${d.downloadCount}${d.maxDownloads !== null ? `/${d.maxDownloads}` : ""} downloads`}
+                          {d.resendCount > 0 && ` · resent ${d.resendCount}×`}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleResendDigital(selected, d)}
+                        disabled={resendingId === d.id}
+                        style={{
+                          flexShrink: 0, padding: "0.4rem 0.7rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)",
+                          background: "rgba(255,255,255,0.05)", color: "#f0f2ff", cursor: resendingId === d.id ? "not-allowed" : "pointer",
+                          fontFamily: "inherit", fontSize: "0.75rem", fontWeight: 600,
+                        }}
+                      >
+                        {resendingId === d.id ? "Sending…" : "Resend"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

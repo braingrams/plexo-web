@@ -1,8 +1,8 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { createHash, randomBytes } from "node:crypto";
+import { auth } from "@/server/authDynamo";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { ApiKey } from "@/lib/db/coreEntities";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { CheckCircle2, Bot, Sparkles, ArrowRight } from "lucide-react";
 
 function sha256(value: string): string {
@@ -16,11 +16,10 @@ export default async function McpLoginPage(props: {
   const callbackUrl = searchParams.callbackUrl;
   const state = searchParams.state;
 
-  const reqHeaders = await headers();
   let session = null;
-  
+
   try {
-    session = await auth.api.getSession({ headers: reqHeaders });
+    session = await auth();
   } catch (err) {
     console.warn("[mcp/login] Session retrieval failed:", err);
   }
@@ -31,29 +30,21 @@ export default async function McpLoginPage(props: {
     redirect(loginTarget);
   }
 
-  // Resolve the org this MCP key should belong to, same as server/org.ts's
+  // Resolve the org this MCP key should belong to, same as server/orgDynamo.ts's
   // ensureActiveOrganization: whichever org is active on the session, falling back to
   // this user's first membership.
-  const activeOrgId = (session.session as { activeOrganizationId?: string }).activeOrganizationId;
-  const membership =
-    (activeOrgId &&
-      (await prisma.member.findUnique({
-        where: { organizationId_userId: { organizationId: activeOrgId, userId: session.user.id } },
-      }))) ||
-    (await prisma.member.findFirst({ where: { userId: session.user.id }, orderBy: { createdAt: "asc" } }));
-
-  if (!membership) {
-    redirect("/dashboard");
+  const orgResolution = await ensureActiveOrganization(session.user.id);
+  if (orgResolution.status === "needs-choice") {
+    redirect("/choose-org");
   }
+  const organizationId = orgResolution.organizationId;
 
   // Find or create an MCP API key for this user's organization
-  let apiKeyRecord = await prisma.apiKey.findFirst({
-    where: {
-      organizationId: membership.organizationId,
-      name: "Plexo MCP AI Integration Key",
-      isActive: true,
-    },
-  });
+  const { data: existingKeys } = await ApiKey.query
+    .primary({ organizationId })
+    .where((attr, op) => `${op.eq(attr.name, "Plexo MCP AI Integration Key")} AND ${op.eq(attr.isActive, true)}`)
+    .go();
+  let apiKeyRecord = existingKeys[0] ?? null;
 
   let rawKey = "";
   if (!apiKeyRecord) {
@@ -61,16 +52,15 @@ export default async function McpLoginPage(props: {
     const hashedKey = sha256(rawKey);
     const maskedKey = `${rawKey.slice(0, 10)}...${rawKey.slice(-4)}`;
 
-    apiKeyRecord = await prisma.apiKey.create({
-      data: {
-        userId: session.user.id,
-        organizationId: membership.organizationId,
-        name: "Plexo MCP AI Integration Key",
-        hashedKey,
-        maskedKey,
-        useAi: true,
-      },
-    });
+    await ApiKey.create({
+      id: randomUUID(),
+      userId: session.user.id,
+      organizationId,
+      name: "Plexo MCP AI Integration Key",
+      hashedKey,
+      maskedKey,
+      useAi: true,
+    }).go();
   } else {
     rawKey = apiKeyRecord.maskedKey;
   }
@@ -82,7 +72,7 @@ export default async function McpLoginPage(props: {
       const redirectTarget = new URL(callbackUrl);
       redirectTarget.searchParams.set("code", rawKey);
       redirectTarget.searchParams.set("token", rawKey);
-      redirectTarget.searchParams.set("user", session.user.email);
+      redirectTarget.searchParams.set("user", session.user.email ?? "");
       if (state) {
         redirectTarget.searchParams.set("state", state);
       }

@@ -1,9 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveBlogAdminSite } from "@/lib/blog/adminAuth";
-import { slugify, avoidPageReservedSlug } from "@/server/slug";
+import { BlogCategory } from "@/lib/db/contentEntities";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
+import { slugify, avoidPageReservedSlug } from "@/server/slugDynamo";
 
 export async function GET(
   request: NextRequest,
@@ -13,10 +13,8 @@ export async function GET(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const categories = await prisma.blogCategory.findMany({
-    where: { templateId: resolved.context.templateId },
-    orderBy: { name: "asc" },
-  });
+  const { data: categories } = await BlogCategory.query.primary({ templateId: resolved.context.templateId }).go();
+  categories.sort((a, b) => a.name.localeCompare(b.name));
   return NextResponse.json({ categories });
 }
 
@@ -28,38 +26,39 @@ export async function POST(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const permissionError = await requirePermission(request.headers, resolved.context.role, { blog: ["update"] });
+  const permissionError = requirePermission(resolved.context.role, { blog: ["update"] });
   if (permissionError) return permissionError;
 
   const body = (await request.json().catch(() => ({}))) as { name?: string; description?: string; parentId?: string | null };
   const name = body.name?.trim();
   if (!name) return NextResponse.json({ error: "Category name is required." }, { status: 400 });
 
+  // No DB-level foreign key here (unlike Prisma's P2003) — validated explicitly instead.
+  if (body.parentId) {
+    const { data: siblings } = await BlogCategory.query.primary({ templateId: resolved.context.templateId }).go();
+    if (!siblings.some((c) => c.id === body.parentId)) {
+      return NextResponse.json({ error: "Parent category not found." }, { status: 400 });
+    }
+  }
+
   const baseSlug = avoidPageReservedSlug(slugify(name) || "category", "category");
   let slug = baseSlug;
   let suffix = 2;
-  while (
-    await prisma.blogCategory.findFirst({ where: { templateId: resolved.context.templateId, slug }, select: { id: true } })
-  ) {
+  while ((await BlogCategory.get({ templateId: resolved.context.templateId, slug }).go()).data) {
     slug = `${baseSlug}-${suffix}`;
     suffix += 1;
   }
 
-  try {
-    const category = await prisma.blogCategory.create({
-      data: {
-        templateId: resolved.context.templateId,
-        name,
-        slug,
-        description: body.description?.trim() || null,
-        parentId: body.parentId || null,
-      },
-    });
-    return NextResponse.json({ category }, { status: 201 });
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2003") {
-      return NextResponse.json({ error: "Parent category not found." }, { status: 400 });
-    }
-    throw err;
-  }
+  const id = randomUUID();
+  await BlogCategory.create({
+    id,
+    templateId: resolved.context.templateId,
+    name,
+    slug,
+    description: body.description?.trim() || undefined,
+    parentId: body.parentId || undefined,
+  }).go();
+  const { data: category } = await BlogCategory.get({ templateId: resolved.context.templateId, slug }).go();
+
+  return NextResponse.json({ category }, { status: 201 });
 }

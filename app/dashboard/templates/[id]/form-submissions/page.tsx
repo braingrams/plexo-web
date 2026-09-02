@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { prisma } from "@/server/prisma";
-import { requireSiteLayoutAccess } from "@/lib/siteLayout";
+import { requireSiteLayoutAccess } from "@/lib/siteLayoutDynamo";
+import { FormSubmission } from "@/lib/db/opsEntities";
 import { PageContainer } from "../../../_components/PageContainer";
 import { Card } from "../../../_components/Card";
 
@@ -31,8 +31,8 @@ function IconMail() {
   );
 }
 
-function formatDateTime(date: Date): string {
-  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+function formatDateTime(date: string): string {
+  return new Date(date).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -67,11 +67,8 @@ export default async function FormSubmissionsPage({ params }: { params: Promise<
   const { id } = await params;
   const access = await requireSiteLayoutAccess(id, `/dashboard/templates/${id}/form-submissions`);
 
-  const submissions = await prisma.formSubmission.findMany({
-    where: { templateId: access.templateId },
-    orderBy: { createdAt: "desc" },
-    take: 200,
-  });
+  const { data: allSubmissions } = await FormSubmission.query.primary({ templateId: access.templateId }).go();
+  const submissions = allSubmissions.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, 200);
 
   return (
     <PageContainer>
@@ -121,11 +118,11 @@ export default async function FormSubmissionsPage({ params }: { params: Promise<
                     >
                       {s.formName}
                     </span>
-                    <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>{formatDateTime(s.createdAt)}</span>
+                    <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>{formatDateTime(s.createdAt ?? new Date().toISOString())}</span>
                   </div>
                   {email && (
                     <a
-                      href={buildMailtoHref(email, s.formName, senderName)}
+                      href={buildMailtoHref(email, s.formName ?? "Website Form", senderName)}
                       style={{
                         display: "inline-flex", alignItems: "center", gap: "0.4rem",
                         padding: "0.4rem 0.8rem", borderRadius: 8,

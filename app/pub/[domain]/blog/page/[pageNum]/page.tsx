@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { resolveBlogSite } from "@/lib/pub/resolveSite";
-import { listPublishedPosts } from "@/lib/blog/queries";
+import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
+import { listPublishedPosts } from "@/lib/blog/queriesDynamo";
 import { listingMetadata, listingJsonLd } from "@/lib/blog/seo";
 import { BlogStyles, SiteHeader, SiteFooter, PostCard, Pagination, EmptyState, JsonLd } from "@/lib/pub/blogTheme";
 
@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   const { domain } = await params;
   const site = await resolveBlogSite(decodeURIComponent(domain));
   if (site.status !== "ok") return {};
-  return listingMetadata(domain, site.blogSite);
+  return listingMetadata(domain, { title: site.blogSite.title ?? "Blog", description: site.blogSite.description ?? null });
 }
 
 export default async function BlogIndexPaginatedPage({ params }: { params: Promise<Params> }) {
@@ -26,29 +26,35 @@ export default async function BlogIndexPaginatedPage({ params }: { params: Promi
   // Page 1 canonically lives at /blog, not /blog/page/1 — avoids two URLs for the same content.
   if (page === 1) notFound();
 
-  const result = await listPublishedPosts(site.published.templateId, { page, perPage: site.blogSite.postsPerPage });
+  const result = await listPublishedPosts(site.published.templateId, { page, perPage: site.blogSite.postsPerPage ?? 10 });
   if (result.posts.length === 0) notFound();
+
+  const blogSiteView = { title: site.blogSite.title ?? "Blog", description: site.blogSite.description ?? null };
 
   return (
     <div className="plexo-blog">
       <BlogStyles appearance={site.blogSite} />
       <SiteHeader
-        title={site.blogSite.title}
+        title={site.blogSite.title ?? "Blog"}
         description={site.blogSite.description}
         basePath="/blog"
         logoUrl={site.blogSite.logoUrl}
         headerImageUrl={site.blogSite.headerImageUrl}
       />
       <main className="plexo-blog__main">
-        <div className="plexo-blog__grid">
-          {result.posts.map((post) => (
-            <PostCard key={post.id} post={post} basePath="/blog" />
-          ))}
-        </div>
+        {result.posts.length === 0 ? (
+          <EmptyState message="No posts published yet." />
+        ) : (
+          <div className="plexo-blog__grid">
+            {result.posts.map((post) => (
+              <PostCard key={post.id} post={post} basePath="/blog" />
+            ))}
+          </div>
+        )}
         <Pagination page={result.page} totalPages={result.totalPages} buildHref={(p) => (p === 1 ? "/blog" : `/blog/page/${p}`)} />
       </main>
       <SiteFooter />
-      <JsonLd items={listingJsonLd(domain, site.blogSite, result.posts)} />
+      <JsonLd items={listingJsonLd(domain, blogSiteView, result.posts)} />
     </div>
   );
 }
