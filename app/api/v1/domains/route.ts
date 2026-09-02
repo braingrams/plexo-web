@@ -129,20 +129,8 @@ export async function resolveUser(
   };
 }
 
-export function getDomainLimit(plan: string, customLimit: number | null): number {
-  if (customLimit !== null && customLimit !== undefined) {
-    return customLimit;
-  }
-  switch (plan) {
-    case "FREE":
-      return 5;
-    case "PRO":
-      return 10;
-    case "ULTRA":
-    default:
-      return 25;
-  }
-}
+export { getDomainLimit } from "@/lib/domainLimit";
+import { getDomainLimit } from "@/lib/domainLimit";
 
 // GET/POST/DELETE below are cut over to DynamoDB — resolveUser above (still Prisma-backed)
 // stays for the 30+ other callers not yet ported; these three use the DynamoDB one instead.
@@ -267,7 +255,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         if (moved) updated = moved;
       }
       // Content changed under this domain — re-scan rather than trust the last result.
-      void scanPublishedDomain(updated.id).catch((err) => console.error("Safe Browsing scan failed:", err));
+      void scanPublishedDomain(updated.templateId, updated.id).catch((err) => console.error("Safe Browsing scan failed:", err));
       return NextResponse.json({ success: true, domain: updated });
     }
 
@@ -327,7 +315,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!created) throw new Error(`PublishedDomain ${newId} vanished immediately after being created`);
 
   // Fire-and-forget abuse scan — never blocks the publish response on an external API call.
-  void scanPublishedDomain(created.id).catch((err) => console.error("Safe Browsing scan failed:", err));
+  void scanPublishedDomain(created.templateId, created.id).catch((err) => console.error("Safe Browsing scan failed:", err));
 
   return NextResponse.json({ success: true, domain: created });
 }

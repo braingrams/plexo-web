@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { prisma } from "@/server/prisma";
+import { Template } from "@/lib/db/contentEntities";
+import { CommerceSettings, CommerceProduct, CommerceOrder, CommerceBooking } from "@/lib/db/commerceEntities";
 
 function formatNaira(minor: number): string {
   return `₦${(minor / 100).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -39,24 +40,27 @@ function StatTile({ label, value, tint, icon }: { label: string; value: string; 
 export default async function CommerceOverviewPage({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = await params;
 
-  const [settings, productCount, orderCount, salesTotal, upcomingBookingCount, lowStockCount, recentOrders] = await Promise.all([
-    prisma.commerceSettings.findUnique({ where: { templateId }, select: { enabled: true } }),
-    prisma.commerceProduct.count({ where: { templateId, active: true } }),
-    prisma.commerceOrder.count({ where: { templateId, status: "PAID" } }),
-    prisma.commerceOrder.aggregate({ where: { templateId, status: "PAID" }, _sum: { amountMinor: true } }),
-    prisma.commerceBooking.count({
-      where: { templateId, status: "CONFIRMED", scheduledStart: { gte: new Date() } },
-    }),
-    prisma.commerceProduct.count({
-      where: { templateId, active: true, kind: "PHYSICAL", stockQuantity: { not: null, lte: 5 } },
-    }),
-    prisma.commerceOrder.findMany({
-      where: { templateId, status: "PAID" },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-      select: { orderNumber: true, customerName: true, customerEmail: true, amountMinor: true, fulfillmentStatus: true, createdAt: true },
-    }),
+  const { data: site } = await Template.get({ id: templateId }).go();
+
+  const [{ data: settings }, { data: products }, { data: orders }] = await Promise.all([
+    CommerceSettings.get({ templateId }).go(),
+    CommerceProduct.query.primary({ templateId }).go(),
+    CommerceOrder.query.primary({ templateId }).go(),
   ]);
+
+  const activeProducts = products.filter((p) => p.active ?? true);
+  const paidOrders = orders.filter((o) => o.status === "PAID");
+  const lowStockCount = activeProducts.filter((p) => p.kind === "PHYSICAL" && p.stockQuantity != null && p.stockQuantity <= 5).length;
+  const salesTotal = paidOrders.reduce((sum, o) => sum + o.amountMinor, 0);
+  const recentOrders = [...paidOrders].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, 6);
+
+  let upcomingBookingCount = 0;
+  if (site) {
+    const now = new Date().toISOString();
+    const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: orgBookings } = await CommerceBooking.query.byOrg({ organizationId: site.organizationId }).between({ scheduledStart: now }, { scheduledStart: farFuture }).go();
+    upcomingBookingCount = orgBookings.filter((b) => b.templateId === templateId && b.status === "CONFIRMED").length;
+  }
 
   return (
     <div>
@@ -102,19 +106,19 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
       <div style={{ display: "flex", gap: "0.85rem", flexWrap: "wrap", marginBottom: "1.75rem" }}>
         <StatTile
           label="Products"
-          value={String(productCount)}
+          value={String(activeProducts.length)}
           tint="rgba(139,92,246,0.16)"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c084fc" strokeWidth="1.8"><path d="M3 9l2-5h14l2 5" /><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z" /></svg>}
         />
         <StatTile
           label="Orders"
-          value={String(orderCount)}
+          value={String(paidOrders.length)}
           tint="rgba(96,165,250,0.16)"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.8"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" /></svg>}
         />
         <StatTile
           label="Total sales"
-          value={formatNaira(salesTotal._sum.amountMinor ?? 0)}
+          value={formatNaira(salesTotal)}
           tint="rgba(52,211,153,0.16)"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="1.8"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>}
         />
@@ -158,8 +162,8 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
                     <td style={{ padding: "10px 0", fontFamily: "ui-monospace, monospace" }}>{order.orderNumber}</td>
                     <td style={{ padding: "10px 0" }}>{order.customerName ?? order.customerEmail}</td>
                     <td style={{ padding: "10px 0", fontFamily: "ui-monospace, monospace" }}>{formatNaira(order.amountMinor)}</td>
-                    <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.55)" }}>{order.fulfillmentStatus.replace(/_/g, " ").toLowerCase()}</td>
-                    <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.4)" }}>{order.createdAt.toLocaleDateString()}</td>
+                    <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.55)" }}>{(order.fulfillmentStatus ?? "UNFULFILLED").replace(/_/g, " ").toLowerCase()}</td>
+                    <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.4)" }}>{new Date(order.createdAt ?? Date.now()).toLocaleDateString()}</td>
                   </tr>
                 ))}
               </tbody>

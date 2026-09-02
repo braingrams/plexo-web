@@ -1,13 +1,16 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { BlogCommentStatus } from "@prisma/client";
-import { prisma } from "@/server/prisma";
-import { resolveBlogSite } from "@/lib/pub/resolveSite";
+import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
+import { getPublishedPostBySlug } from "@/lib/blog/queriesDynamo";
+import { BlogComment, Template } from "@/lib/db/contentEntities";
+import { User } from "@/lib/db/coreEntities";
+import { checkCommerceRateLimit } from "@/lib/commerceRateLimitDynamo";
 import { sanitizeCommentBody, countLinksInCommentBody } from "@/lib/blog/sanitizeComment";
 import { hashRequestIp } from "@/server/ipHash";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildNewBlogCommentEmail } from "@/lib/mail/templates";
-import { resolveNotificationRecipient } from "@/lib/notificationPreferences";
-import { isValidUuid } from "@/server/slug";
+import { resolveNotificationRecipient } from "@/lib/notificationPreferencesDynamo";
+import { isValidUuid } from "@/server/slugDynamo";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const RATE_LIMIT_MAX_PER_HOUR = 5;
@@ -32,6 +35,12 @@ type CommentBody = {
  * WordPress importer) — see prisma/schema.prisma's BlogComment comment. Every comment
  * starts PENDING (or auto-SPAM) and is never publicly visible until the site owner
  * approves it.
+ *
+ * DynamoDB-stack port of the Prisma original — see that file's own comment for behavior.
+ * Rate-limiting by ipHash used a cross-site prisma.blogComment.count(); BlogComment has no
+ * ipHash index in DynamoDB (deliberately — see contentEntities.ts's own comment: "that's
+ * exactly what plexo-ops's RateLimit table already exists for"), so this reuses the same
+ * shared RateLimit-backed limiter Commerce's public endpoints use instead of a new copy.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const body = (await request.json().catch(() => ({}))) as CommentBody;
@@ -71,15 +80,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Comments are disabled for this blog." }, { status: 403 });
   }
 
-  const post = await prisma.blogPost.findFirst({
-    where: {
-      templateId: site.published.templateId,
-      slug,
-      status: { in: ["PUBLISHED", "SCHEDULED"] },
-      publishedAt: { lte: new Date() },
-    },
-    select: { id: true, title: true, commentsEnabled: true },
-  });
+  const post = await getPublishedPostBySlug(site.published.template.id, slug);
   if (!post) {
     return NextResponse.json({ error: "Post not found." }, { status: 404 });
   }
@@ -88,52 +89,48 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   if (body.parentId) {
-    const parent = await prisma.blogComment.findFirst({ where: { id: body.parentId, postId: post.id }, select: { id: true } });
+    const { data: postComments } = await BlogComment.query.primary({ postId: post.id }).go();
+    const parent = postComments.find((c) => c.id === body.parentId);
     if (!parent) {
       return NextResponse.json({ error: "The comment you're replying to no longer exists." }, { status: 400 });
     }
   }
 
   const ipHash = hashRequestIp(request);
-  const recentCount = await prisma.blogComment.count({
-    where: { ipHash, createdAt: { gte: new Date(Date.now() - RATE_LIMIT_WINDOW_MS) } },
-  });
-  if (recentCount >= RATE_LIMIT_MAX_PER_HOUR) {
+  const allowed = await checkCommerceRateLimit(`blog-comment:${ipHash}`, RATE_LIMIT_MAX_PER_HOUR, RATE_LIMIT_WINDOW_MS);
+  if (!allowed) {
     return NextResponse.json({ error: "You're commenting too fast — try again later." }, { status: 429 });
   }
 
-  const status = countLinksInCommentBody(rawBody) >= 2 ? BlogCommentStatus.SPAM : BlogCommentStatus.PENDING;
+  const status: "PENDING" | "SPAM" = countLinksInCommentBody(rawBody) >= 2 ? "SPAM" : "PENDING";
 
-  const comment = await prisma.blogComment.create({
-    data: {
-      postId: post.id,
-      parentId: body.parentId || null,
-      authorName: name,
-      authorEmail: email,
-      body: sanitizeCommentBody(rawBody),
-      status,
-      ipHash,
-    },
-    select: { id: true, status: true },
-  });
+  const id = randomUUID();
+  await BlogComment.create({
+    id,
+    postId: post.id,
+    parentId: body.parentId || undefined,
+    authorName: name,
+    authorEmail: email,
+    body: sanitizeCommentBody(rawBody),
+    status,
+    ipHash,
+  }).go();
 
-  if (status === BlogCommentStatus.PENDING) {
-    void notifySiteOwner(site.published.templateId, post.title, name, rawBody).catch((err) =>
+  if (status === "PENDING") {
+    void notifySiteOwner(site.published.template.id, post.title, name, rawBody).catch((err) =>
       console.error("[mail] blog comment notification failed:", err),
     );
   }
 
-  return NextResponse.json({ ok: true, status: comment.status });
+  return NextResponse.json({ ok: true, status });
 }
 
 async function notifySiteOwner(templateId: string, postTitle: string, commenterName: string, rawBody: string): Promise<void> {
-  const template = await prisma.template.findUnique({
-    where: { id: templateId },
-    select: { organizationId: true, user: { select: { email: true } } },
-  });
+  const { data: template } = await Template.get({ id: templateId }).go();
   if (!template) return;
 
-  const to = await resolveNotificationRecipient(template.organizationId, "blogComments", template.user?.email);
+  const { data: owner } = await User.get({ id: template.userId }).go();
+  const to = await resolveNotificationRecipient(template.organizationId, "blogComments", owner?.email);
   if (!to) return;
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

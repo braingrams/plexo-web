@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
+import { CommerceAvailabilityRule, CommerceAvailabilityException } from "@/lib/db/commerceEntities";
 
 export async function DELETE(
   request: NextRequest,
@@ -12,22 +12,22 @@ export async function DELETE(
   if (resolved.error) return resolved.error;
   const { role } = resolved.context;
 
-  const permissionError = await requirePermission(request.headers, role, { commerce: ["delete"] });
+  const permissionError = requirePermission(role, { commerce: ["delete"] });
   if (permissionError) return permissionError;
 
   const type = request.nextUrl.searchParams.get("type");
 
   if (type === "rule") {
-    const existing = await prisma.commerceAvailabilityRule.findFirst({ where: { id, templateId } });
+    const { data: existing } = await CommerceAvailabilityRule.get({ templateId, id }).go();
     if (!existing) return NextResponse.json({ error: "Rule not found." }, { status: 404 });
-    await prisma.commerceAvailabilityRule.delete({ where: { id } });
+    await CommerceAvailabilityRule.remove({ templateId, id }).go();
     return NextResponse.json({ deleted: true });
   }
 
   if (type === "exception") {
-    const existing = await prisma.commerceAvailabilityException.findFirst({ where: { id, templateId } });
+    const { data: existing } = await CommerceAvailabilityException.get({ templateId, id }).go();
     if (!existing) return NextResponse.json({ error: "Exception not found." }, { status: 404 });
-    await prisma.commerceAvailabilityException.delete({ where: { id } });
+    await CommerceAvailabilityException.remove({ templateId, id }).go();
     return NextResponse.json({ deleted: true });
   }
 

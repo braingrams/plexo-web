@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveSite } from "@/lib/pub/resolveSite";
+import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { decryptMaildripKey } from "@/lib/crypto";
-import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimit";
+import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { tagNewsletterSubscriber } from "@/lib/commerce/maildripNotify";
+import { CommerceSettings } from "@/lib/db/commerceEntities";
 
 const PLATFORM_MAILDRIP_API_KEY = process.env.MAILDRIP_API_KEY;
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Please enter a valid email." }, { status: 400 });
   }
 
-  const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
   if (!settings?.maildripNewsletterGroupId) {
     return NextResponse.json({ error: "Newsletter isn't set up for this site yet." }, { status: 400 });
   }

@@ -50,7 +50,7 @@ function RegisterForm() {
     setLoading(true);
 
     try {
-      const result = await (authClient as any).signUp.email({
+      const result = await authClient.signUp.email({
         name: name.trim() || email.split("@")[0] || "Plexo User",
         email,
         password,

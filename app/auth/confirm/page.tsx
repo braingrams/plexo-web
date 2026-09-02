@@ -4,14 +4,14 @@ import { redirect } from "next/navigation";
 export default async function ConfirmPage({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; email?: string }>;
 }) {
   const params = await searchParams;
   const token = params.token;
-  const callbackURL = "/dashboard";
+  const email = params.email;
 
-  if (token) {
-    const target = `/api/auth/verify-email?token=${encodeURIComponent(token)}&callbackURL=${encodeURIComponent(callbackURL)}`;
+  if (token && email) {
+    const target = `/api/auth/verify-email?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
     redirect(target);
   }
 

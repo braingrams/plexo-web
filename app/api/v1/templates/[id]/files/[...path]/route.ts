@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadObject, StorageError } from "@/lib/storage";
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { requirePermission } from "@/server/requirePermission";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { requirePermission } from "@/server/requirePermissionDynamo";
 import {
   isEditableExtension,
   contentTypeFor,
@@ -10,15 +9,16 @@ import {
   RawUploadValidationError,
 } from "@/server/rawUpload";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
+import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 
 /**
  * PUT /api/v1/templates/:id/files/*path
  *
  * Overwrites the content of one existing file in a RAW_UPLOAD template — the root
  * document (index.html, stored in Template.compiledHtml) or an existing asset (stored
- * in Vercel Blob, overwritten in place at the same URL). This only edits files that
- * already exist from the original upload; it doesn't add or remove files, keeping the
- * same validation surface (extension allowlist, size cap) as the initial upload.
+ * in S3, overwritten in place at the same URL). This only edits files that already
+ * exist from the original upload; it doesn't add or remove files, keeping the same
+ * validation surface (extension allowlist, size cap) as the initial upload.
  *
  * Content is NOT sanitized — same as upload, this is unsanitized-by-design static
  * hosting, safe because of origin isolation (server/pagesDomain.ts), not content
@@ -33,14 +33,14 @@ export async function PUT(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  const permissionError = requirePermission(resolved.role, { template: ["update"] });
   if (permissionError) return permissionError;
 
   const { id, path: pathSegments } = await context.params;
   const filePath = decodeURIComponent(pathSegments.join("/"));
 
-  const template = await prisma.template.findFirst({ where: { id, organizationId: resolved.organizationId } });
-  if (!template) {
+  const { data: template } = await Template.get({ id }).go();
+  if (!template || template.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });
   }
   if (template.sourceType !== "RAW_UPLOAD") {
@@ -60,17 +60,12 @@ export async function PUT(
   }
 
   if (filePath === "index.html") {
-    await prisma.template.update({
-      where: { id: template.id },
-      data: { compiledHtml: content },
-    });
+    await Template.patch({ id: template.id }).set({ compiledHtml: content }).go();
   } else {
     if (!isEditableExtension(filePath)) {
       return NextResponse.json({ error: "This file type isn't text-editable." }, { status: 400 });
     }
-    const asset = await prisma.templateAsset.findUnique({
-      where: { templateId_path: { templateId: template.id, path: filePath } },
-    });
+    const { data: asset } = await TemplateAsset.get({ templateId: template.id, path: filePath }).go();
     if (!asset) {
       return NextResponse.json({
         error: "File not found on this template. Editing only supports files already present from the original upload.",
@@ -83,10 +78,9 @@ export async function PUT(
         access: "public",
         contentType,
       });
-      await prisma.templateAsset.update({
-        where: { id: asset.id },
-        data: { blobUrl: blob.url, contentType, size: contentBuffer.byteLength },
-      });
+      await TemplateAsset.patch({ templateId: template.id, path: filePath })
+        .set({ blobUrl: blob.url, contentType, size: contentBuffer.byteLength })
+        .go();
     } catch (err) {
       if (err instanceof StorageError || err instanceof RawUploadValidationError) {
         return NextResponse.json({ error: err.message }, { status: 500 });
@@ -97,12 +91,9 @@ export async function PUT(
 
   // Content changed under this template — re-scan every domain it's currently live on
   // rather than waiting for the next periodic cron pass.
-  const linkedDomains = await prisma.publishedDomain.findMany({
-    where: { templateId: template.id },
-    select: { id: true },
-  });
+  const { data: linkedDomains } = await PublishedDomain.query.primary({ templateId: template.id }).go();
   for (const d of linkedDomains) {
-    void scanPublishedDomain(d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
+    void scanPublishedDomain(d.templateId, d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
   }
 
   return NextResponse.json({ success: true, path: filePath, size: contentBuffer.byteLength });

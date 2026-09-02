@@ -1,13 +1,15 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { TemplateKind } from "@prisma/client";
-import { prisma } from "@/server/prisma";
+import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { getTierFeatures } from "@/lib/subscription";
-import { getDomainLimit, resolveUser } from "../domains/route";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { getDomainLimit } from "@/lib/domainLimit";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
-import { requirePermission } from "@/server/requirePermission";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { addVercelDomain } from "@/lib/vercelDomains";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -18,33 +20,6 @@ const RESERVED_SUBDOMAINS = new Set([
   "static", "assets", "sdk", "pub", "published", "templates", "compile", "settings",
   "profile", "domains", "account", "login", "register", "signup", "logout", "signin"
 ]);
-
-async function addVercelDomain(domain: string) {
-  const token = process.env.VERCEL_AUTH_TOKEN;
-  const projectId = process.env.VERCEL_PROJECT_ID;
-  const teamId = process.env.VERCEL_TEAM_ID;
-
-  if (!token || !projectId) {
-    console.warn("Vercel configurations missing. Skipping Vercel domain registration in local dev mode.");
-    return;
-  }
-
-  const url = `https://api.vercel.com/v10/projects/${projectId}/domains${teamId ? `?teamId=${teamId}` : ""}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ name: domain }),
-  });
-
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    console.error("Failed to add domain to Vercel project:", data.error);
-    throw new Error(data.error?.message ?? "Failed to configure custom domain routing.");
-  }
-}
 
 /**
  * POST /api/v1/publish
@@ -74,20 +49,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized. Valid API Key or Session required." }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["publish"] });
+  const permissionError = requirePermission(resolved.role, { template: ["publish"] });
   if (permissionError) return permissionError;
 
   const body = await request.json().catch(() => ({}));
-  const kind: TemplateKind =
-    typeof body.kind === "string" && body.kind.toUpperCase() === "EMAIL"
-      ? TemplateKind.EMAIL
-      : TemplateKind.LANDING_PAGE;
+  const kind: "EMAIL" | "LANDING_PAGE" =
+    typeof body.kind === "string" && body.kind.toUpperCase() === "EMAIL" ? "EMAIL" : "LANDING_PAGE";
 
   const features = getTierFeatures(resolved.subscriptionPlan);
 
-  const name = body.name?.trim() || (kind === TemplateKind.EMAIL ? "AI Generated Email Template" : "AI Generated Landing Page");
+  const name = body.name?.trim() || (kind === "EMAIL" ? "AI Generated Email Template" : "AI Generated Landing Page");
   const rawDesignJson = body.designJson;
-  let rawDomain = kind === TemplateKind.EMAIL ? "" : body.domain?.trim().toLowerCase() || "";
+  const rawDomain = kind === "EMAIL" ? "" : body.domain?.trim().toLowerCase() || "";
   let domainType = body.type as "SUBDOMAIN" | "CUSTOM" | undefined;
 
   if (!rawDesignJson || typeof rawDesignJson !== "object") {
@@ -130,10 +103,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Check template creation limits — root/home pages only, per kind, so a landing page
   // with several multipage sub-pages still counts as one against this limit, not several.
   {
-    const limit = kind === TemplateKind.EMAIL ? features.maxEmailTemplates : features.maxLandingPages;
-    const templateCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false } });
+    const limit = kind === "EMAIL" ? features.maxEmailTemplates : features.maxLandingPages;
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const templateCount = orgTemplates.filter(
+      (t) => !t.parentId && t.kind === kind && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
+    ).length;
     if (templateCount >= limit) {
-      const label = kind === TemplateKind.EMAIL ? "email templates" : "landing pages";
+      const label = kind === "EMAIL" ? "email templates" : "landing pages";
       return NextResponse.json(
         { error: `Template limit reached (${limit} ${label}). Upgrade plan to create more.` },
         { status: 403 }
@@ -142,23 +118,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // 1. Create the template
-  const template = await prisma.template.create({
-    data: {
-      userId: resolved.userId,
-      organizationId: resolved.organizationId,
-      name,
-      kind,
-      designJson,
-      compiledHtml,
-    },
-  });
+  const templateId = randomUUID();
+  await Template.create({
+    id: templateId,
+    userId: resolved.userId,
+    organizationId: resolved.organizationId,
+    name,
+    kind,
+    designJson,
+    compiledHtml,
+  }).go();
+  const { data: template } = await Template.get({ id: templateId }).go();
+  if (!template) throw new Error(`Template ${templateId} vanished immediately after being created`);
 
   const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const pagesDomain = getPagesDomain();
   const editableUrl = `${baseAppUrl}/dashboard/templates/${template.id}`;
 
   // Email templates don't publish to a domain — only landing pages do.
-  if (kind === TemplateKind.EMAIL) {
+  if (kind === "EMAIL") {
     return NextResponse.json({
       success: true,
       templateId: template.id,
@@ -206,8 +184,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Check domain limits
-  const currentDomainCount = await prisma.publishedDomain.count({ where: { organizationId: resolved.organizationId } });
+  // Check domain limits — PublishedDomain has no org-wide index (only templateId-primary
+  // and byDomain-GSI1), fans out per org root template same as app/api/v1/domains/route.ts.
+  const { data: orgTemplatesForCount } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+  const rootIds = orgTemplatesForCount.filter((t) => !t.parentId).map((t) => t.id);
+  const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
+  const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);
   const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
   if (currentDomainCount >= domainLimit) {
     return NextResponse.json({
@@ -215,44 +197,61 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }, { status: 403 });
   }
 
-  // Check if domain is already registered
-  const existingDomain = await prisma.publishedDomain.findUnique({
-    where: { domain: finalDomain },
-  });
+  // Check if domain is already registered — THE hot-path lookup (byDomain GSI1).
+  const { data: existingMatches } = await PublishedDomain.query.byDomain({ domain: finalDomain }).go();
+  const existingDomain = existingMatches[0] ?? null;
 
   if (existingDomain) {
     if (existingDomain.organizationId === resolved.organizationId) {
-      // Re-link to new template
-      await prisma.publishedDomain.update({
-        where: { id: existingDomain.id },
-        data: { templateId: template.id },
+      // Re-link to new template. templateId is part of this entity's own primary key
+      // (see contentEntities.ts) — ElectroDB can't .set() a key-composite attribute in
+      // place, so a real re-link moves the item via create-at-new-key + remove-old-key,
+      // same pattern used for a BlogPost slug rename.
+      let updated = existingDomain;
+      if (existingDomain.templateId !== template.id) {
+        await PublishedDomain.create({ ...existingDomain, templateId: template.id }).go();
+        await PublishedDomain.remove({ templateId: existingDomain.templateId, id: existingDomain.id }).go();
+        const { data: moved } = await PublishedDomain.get({ templateId: template.id, id: existingDomain.id }).go();
+        if (moved) updated = moved;
+      }
+      void scanPublishedDomain(updated.templateId, updated.id).catch((err) => console.error("Safe Browsing scan failed:", err));
+
+      const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+      return NextResponse.json({
+        success: true,
+        templateId: template.id,
+        name: template.name,
+        domain: finalDomain,
+        publishedUrl: `${protocol}://${finalDomain}`,
+        editableUrl,
       });
-      void scanPublishedDomain(existingDomain.id).catch((err) => console.error("Safe Browsing scan failed:", err));
     } else {
       return NextResponse.json({ error: `Domain '${finalDomain}' is already registered by another account.` }, { status: 409 });
     }
-  } else {
-    if (domainType === "CUSTOM") {
-      try {
-        await addVercelDomain(finalDomain);
-      } catch (err) {
-        return NextResponse.json({
-          error: err instanceof Error ? err.message : "Failed to register custom domain routing."
-        }, { status: 500 });
-      }
-    }
-
-    const createdDomain = await prisma.publishedDomain.create({
-      data: {
-        userId: resolved.userId,
-        organizationId: resolved.organizationId,
-        templateId: template.id,
-        domain: finalDomain,
-        type: domainType,
-      },
-    });
-    void scanPublishedDomain(createdDomain.id).catch((err) => console.error("Safe Browsing scan failed:", err));
   }
+
+  if (domainType === "CUSTOM") {
+    try {
+      await addVercelDomain(finalDomain);
+    } catch (err) {
+      return NextResponse.json({
+        error: err instanceof Error ? err.message : "Failed to register custom domain routing on the server."
+      }, { status: 500 });
+    }
+  }
+
+  const newDomainId = randomUUID();
+  await PublishedDomain.create({
+    id: newDomainId,
+    userId: resolved.userId,
+    organizationId: resolved.organizationId,
+    templateId: template.id,
+    domain: finalDomain,
+    type: domainType,
+  }).go();
+  const { data: createdDomain } = await PublishedDomain.get({ templateId: template.id, id: newDomainId }).go();
+  if (!createdDomain) throw new Error(`PublishedDomain ${newDomainId} vanished immediately after being created`);
+  void scanPublishedDomain(createdDomain.templateId, createdDomain.id).catch((err) => console.error("Safe Browsing scan failed:", err));
 
   const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
   const publishedUrl = `${protocol}://${finalDomain}`;

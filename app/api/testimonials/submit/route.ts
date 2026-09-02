@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
+import { Testimonial } from "@/lib/db/contentEntities";
 import { sendTestimonialNotificationEmail } from "@/lib/email";
 
 export async function POST(req: Request) {
@@ -25,17 +26,19 @@ export async function POST(req: Request) {
     const numericRating = Math.min(5, Math.max(1, Number(rating) || 5));
 
     // Save testimonial as PENDING
-    const testimonial = await prisma.testimonial.create({
-      data: {
-        name: name.trim(),
-        role: role.trim(),
-        company: company ? String(company).trim() : null,
-        quote: quote.trim(),
-        rating: numericRating,
-        avatarUrl: avatarUrl ? String(avatarUrl).trim() : null,
-        status: "PENDING",
-      },
-    });
+    const id = randomUUID();
+    await Testimonial.create({
+      id,
+      name: name.trim(),
+      role: role.trim(),
+      company: company ? String(company).trim() : undefined,
+      quote: quote.trim(),
+      rating: numericRating,
+      avatarUrl: avatarUrl ? String(avatarUrl).trim() : undefined,
+      status: "PENDING",
+    }).go();
+    const { data: testimonial } = await Testimonial.get({ id }).go();
+    if (!testimonial) throw new Error(`Testimonial ${id} vanished immediately after being created`);
 
     // Send email notification to ADMIN_EMAIL with 1-click approve/reject links
     await sendTestimonialNotificationEmail({
@@ -44,7 +47,7 @@ export async function POST(req: Request) {
       role: testimonial.role,
       company: testimonial.company,
       quote: testimonial.quote,
-      rating: testimonial.rating,
+      rating: testimonial.rating ?? numericRating,
       avatarUrl: testimonial.avatarUrl,
     });
 

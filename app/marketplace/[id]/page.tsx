@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { headers } from "next/headers";
 import Link from "next/link";
 import { ArrowLeft, Sparkles, Layout, Mail, Users, CheckCircle2, ShieldCheck, Zap, Layers } from "lucide-react";
 
-import { auth } from "@/server/auth";
+import { auth } from "@/server/authDynamo";
 import { getMarketplaceTemplateDetail } from "@/lib/marketplace";
 import { LandingNav } from "@/app/landing-nav";
 import { PurchaseAction } from "./PurchaseAction";
@@ -37,7 +36,7 @@ export default async function MarketplaceTemplateDetailPage({
 }) {
   const { id } = await params;
   const { purchase } = await searchParams;
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await auth();
   const detail = await getMarketplaceTemplateDetail(id, session?.user?.id ?? null);
 
   if (!detail) notFound();

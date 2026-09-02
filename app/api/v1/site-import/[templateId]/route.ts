@@ -1,11 +1,12 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { SiteImportPhase, SiteImportPlatform } from "@prisma/client";
-import { prisma } from "@/server/prisma";
-import { resolveSiteImportSite } from "@/lib/siteImport/adminAuth";
+import { resolveSiteImportSite } from "@/lib/siteImport/adminAuthDynamo";
 import { normalizeSiteUrl } from "@/lib/blogImport/wpClient";
 import { checkUrlsForThreats } from "@/lib/safeBrowsing";
+import { SiteImportJob } from "@/lib/db/importEntities";
+import { User } from "@/lib/db/coreEntities";
 
-// Mirrors server/rawUpload.ts's RAW_UPLOAD_DAILY_LIMIT pattern (plain DB count, no Redis in
+// Mirrors server/rawUpload.ts's RAW_UPLOAD_DAILY_LIMIT pattern (plain count, no Redis in
 // this stack) — set lower than that limit's 15/day, since a whole-site crawl is far more
 // expensive than a single zip upload.
 const SITE_IMPORT_DAILY_LIMIT = 3;
@@ -13,18 +14,12 @@ const SITE_IMPORT_DAILY_LIMIT = 3;
 // org-scoped (not template-scoped) so one org can't run several crawls in parallel.
 const SITE_IMPORT_MAX_CONCURRENT = 1;
 
-const NON_TERMINAL_PHASES: SiteImportPhase[] = [
-  SiteImportPhase.PENDING,
-  SiteImportPhase.DETECTING,
-  SiteImportPhase.DISCOVERING,
-  SiteImportPhase.FETCHING,
-  SiteImportPhase.REWRITING,
-  SiteImportPhase.PAUSED_ERROR,
-];
+const NON_TERMINAL_PHASES = new Set(["PENDING", "DETECTING", "DISCOVERING", "FETCHING", "REWRITING", "PAUSED_ERROR"]);
 
-function parsePlatformOverride(value: unknown): SiteImportPlatform | null {
+const VALID_PLATFORMS = new Set(["WORDPRESS", "SQUARESPACE", "WIX", "WEBFLOW", "UNKNOWN"]);
+function parsePlatformOverride(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  return (Object.values(SiteImportPlatform) as string[]).includes(value) ? (value as SiteImportPlatform) : null;
+  return VALID_PLATFORMS.has(value) ? value : null;
 }
 
 export async function GET(
@@ -35,12 +30,9 @@ export async function GET(
   const resolved = await resolveSiteImportSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const jobs = await prisma.siteImportJob.findMany({
-    where: { templateId: resolved.context.templateId },
-    orderBy: { createdAt: "desc" },
-    take: 20,
-  });
-  return NextResponse.json({ jobs });
+  const { data: jobs } = await SiteImportJob.query.primary({ templateId: resolved.context.templateId }).go();
+  const sorted = jobs.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, 20);
+  return NextResponse.json({ jobs: sorted });
 }
 
 /**
@@ -48,7 +40,7 @@ export async function GET(
  *
  * Creates a whole-website import job targeting this site's root Template — its own
  * compiledHtml/assets are overwritten with the source site's crawled homepage, and every
- * other discovered page becomes a new child page underneath it (see lib/siteImport/runJob.ts).
+ * other discovered page becomes a new child page underneath it (see lib/siteImport/runJobDynamo.ts).
  *
  * Body: { sourceUrl, importBlogPosts?, platformOverride?, ownershipAttested: true }
  */
@@ -78,7 +70,7 @@ export async function POST(
   // Imported pages are RAW_UPLOAD under the hood (unsanitized, served byte-for-byte) — same
   // account-level consent gate as a raw zip/HTML upload, checked once per account, not
   // duplicated as a separate dialog in the site-import wizard itself.
-  const user = await prisma.user.findUnique({ where: { id: resolved.context.userId }, select: { aupAcceptedAt: true } });
+  const { data: user } = await User.get({ id: resolved.context.userId }).go();
   if (!user?.aupAcceptedAt) {
     if (body.acceptAup !== true) {
       return NextResponse.json(
@@ -86,7 +78,7 @@ export async function POST(
         { status: 403 },
       );
     }
-    await prisma.user.update({ where: { id: resolved.context.userId }, data: { aupAcceptedAt: new Date() } });
+    await User.patch({ id: resolved.context.userId }).set({ aupAcceptedAt: new Date().toISOString() }).go();
   }
 
   const sourceUrlForScan = normalizeSiteUrl(body.sourceUrl);
@@ -96,21 +88,19 @@ export async function POST(
   }
 
   // One import per site at a time — mirrors blog-import's existingActive dedupe check.
-  const existingActive = await prisma.siteImportJob.findFirst({
-    where: { templateId: resolved.context.templateId, phase: { in: NON_TERMINAL_PHASES } },
-  });
+  const { data: existingJobs } = await SiteImportJob.query.primary({ templateId: resolved.context.templateId }).go();
+  const existingActive = existingJobs.find((j) => NON_TERMINAL_PHASES.has(j.phase ?? "PENDING"));
   if (existingActive) {
     return NextResponse.json({ job: existingActive, alreadyRunning: true });
   }
 
-  const [dailyCount, concurrentCount] = await Promise.all([
-    prisma.siteImportJob.count({
-      where: { organizationId: resolved.context.organizationId, createdAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
-    }),
-    prisma.siteImportJob.count({
-      where: { organizationId: resolved.context.organizationId, phase: { in: NON_TERMINAL_PHASES } },
-    }),
-  ]);
+  // SiteImportJob has no direct "count in last 24h" or "count non-terminal" query for an
+  // org — fan out via the byOrg GSI1 and filter in memory, same bound as every other
+  // rate-limit-style check on a low-cardinality-per-org entity in this migration.
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: orgJobs } = await SiteImportJob.query.byOrg({ organizationId: resolved.context.organizationId }).go();
+  const dailyCount = orgJobs.filter((j) => (j.createdAt ?? "") > dayAgo).length;
+  const concurrentCount = orgJobs.filter((j) => NON_TERMINAL_PHASES.has(j.phase ?? "PENDING")).length;
   if (dailyCount >= SITE_IMPORT_DAILY_LIMIT) {
     return NextResponse.json({ error: `You've reached the limit of ${SITE_IMPORT_DAILY_LIMIT} website imports per 24 hours. Try again later.` }, { status: 429 });
   }
@@ -120,19 +110,20 @@ export async function POST(
 
   const platformOverride = parsePlatformOverride(body.platformOverride);
 
-  const job = await prisma.siteImportJob.create({
-    data: {
-      templateId: resolved.context.templateId,
-      organizationId: resolved.context.organizationId,
-      sourceUrl: sourceUrlForScan,
-      platform: platformOverride ?? SiteImportPlatform.UNKNOWN,
-      importBlogPosts: body.importBlogPosts === true,
-      phase: SiteImportPhase.PENDING,
-      ownershipAttestedAt: new Date(),
-      ownershipAttestedBy: resolved.context.userId,
-      createdBy: resolved.context.userId,
-    },
-  });
+  const jobId = randomUUID();
+  await SiteImportJob.create({
+    id: jobId,
+    templateId: resolved.context.templateId,
+    organizationId: resolved.context.organizationId,
+    sourceUrl: sourceUrlForScan,
+    platform: (platformOverride ?? "UNKNOWN") as any,
+    importBlogPosts: body.importBlogPosts === true,
+    phase: "PENDING",
+    ownershipAttestedAt: new Date().toISOString(),
+    ownershipAttestedBy: resolved.context.userId,
+    createdBy: resolved.context.userId,
+  }).go();
+  const { data: job } = await SiteImportJob.get({ templateId: resolved.context.templateId, id: jobId }).go();
 
   return NextResponse.json({ job }, { status: 201 });
 }

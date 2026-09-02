@@ -10,7 +10,8 @@ import {
   CommerceSettings,
 } from "./commerceEntities";
 import { NotificationPreferences } from "./coreEntities";
-import { Template, PublishedDomain } from "./contentEntities";
+import { Template } from "./contentEntities";
+import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
 import { notifyMaildripOfPaidOrder, resolveMaildripApiKey, sendCommerceEmail } from "@/lib/commerce/maildripNotify";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { decryptDigitalAccessSecret } from "@/lib/crypto";
@@ -83,20 +84,6 @@ export async function confirmPaystackPayment(
   const { data: booking } = await CommerceBooking.get({ templateId, orderId: order.id }).go();
 
   return { order: order as OrderItem, booking: booking && "orderId" in booking ? (booking as BookingItem) : null };
-}
-
-/** Ported from lib/commerce/siteUrl.ts's resolveSitePublicUrl — prefers an active CUSTOM
- * domain, falls back to the shared plexopages SUBDOMAIN, then to Plexo's own app URL. */
-async function resolveSitePublicUrl(templateId: string): Promise<string> {
-  const { data: domains } = await PublishedDomain.query
-    .primary({ templateId })
-    .where((attr, op) => op.eq(attr.active, true))
-    .go();
-  const custom = domains.find((d) => d.type === "CUSTOM");
-  const subdomain = domains.find((d) => d.type === "SUBDOMAIN");
-  const chosen = custom ?? subdomain;
-  if (chosen) return `https://${chosen.domain}`;
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 }
 
 /**

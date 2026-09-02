@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
-import { prisma } from "@/server/prisma";
+import type { EntityItem } from "electrodb";
+import { Template } from "@/lib/db/contentEntities";
 import { RELEASES } from "@/app/releases/data";
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL?.startsWith("http")
@@ -16,6 +17,29 @@ const STATIC_ROUTES: Array<{ path: string; changeFrequency: MetadataRoute.Sitema
   { path: "/legal/acceptable-use", changeFrequency: "yearly", priority: 0.2 },
 ];
 
+/**
+ * Bounded scan over every PUBLISHED template — same documented pattern as
+ * lib/marketplace.ts's own scanPublishedTemplates (not reused directly since it isn't
+ * exported, and sitemap generation is its own low-frequency, non-request-critical job):
+ * Template spent both of its GSI slots on the two hot authenticated-dashboard access
+ * patterns (org list, page tree), so marketplace-wide browsing by marketplaceStatus has no
+ * dedicated index (see contentEntities.ts's own comment on the Template entity). Cursor-
+ * driven `.scan`, capped at 5000 to match the original's `take`.
+ */
+async function scanPublishedTemplatesForSitemap(limit: number): Promise<EntityItem<typeof Template>[]> {
+  const all: EntityItem<typeof Template>[] = [];
+  let cursor: string | null = null;
+  for (;;) {
+    const page: { data: EntityItem<typeof Template>[]; cursor: string | null } = await Template.scan
+      .where(({ marketplaceStatus }, { eq }) => eq(marketplaceStatus, "PUBLISHED"))
+      .go({ cursor });
+    all.push(...page.data);
+    cursor = page.cursor;
+    if (!cursor || all.length >= limit) break;
+  }
+  return all.slice(0, limit);
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map((route) => ({
     url: `${SITE_URL}${route.path}`,
@@ -23,16 +47,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: route.priority,
   }));
 
-  const templates = await prisma.template.findMany({
-    where: { marketplaceStatus: "PUBLISHED" },
-    select: { id: true, marketplacePublishedAt: true, updatedAt: true },
-    orderBy: { marketplacePublishedAt: "desc" },
-    take: 5000,
-  });
+  const templates = await scanPublishedTemplatesForSitemap(5000);
+  templates.sort((a, b) => (b.marketplacePublishedAt ?? "").localeCompare(a.marketplacePublishedAt ?? ""));
 
   const templateEntries: MetadataRoute.Sitemap = templates.map((t) => ({
     url: `${SITE_URL}/marketplace/${t.id}`,
-    lastModified: t.updatedAt ?? t.marketplacePublishedAt ?? undefined,
+    lastModified: (t.updatedAt ?? t.marketplacePublishedAt) ? new Date(t.updatedAt ?? t.marketplacePublishedAt!) : undefined,
     changeFrequency: "monthly",
     priority: 0.6,
   }));

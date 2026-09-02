@@ -92,11 +92,14 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     return NextResponse.rewrite(new URL(`/pub/${lookupDomain}${pathname}`, request.url));
   }
 
-  // 2. Enforce session cookie check for dashboard paths
+  // 2. Enforce session cookie check for dashboard paths. Auth.js's default cookie name
+  // is "authjs.session-token" (or "__Secure-authjs.session-token" over HTTPS) — this
+  // used to check better-auth's "session_token" (underscore) convention before the
+  // Auth.js cutover (server/authDynamo.ts, 2026-09-02).
   if (pathname.startsWith("/dashboard")) {
     const hasSessionCookie = request.cookies
       .getAll()
-      .some((cookie) => cookie.name.includes("session_token"));
+      .some((cookie) => cookie.name.includes("authjs.session-token"));
 
     if (!hasSessionCookie) {
       const loginUrl = new URL("/auth/login", request.url);

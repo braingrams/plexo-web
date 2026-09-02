@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveUser } from "@/app/api/v1/domains/route";
+import { resolveUser } from "@/lib/auth/resolveUser";
 import { getTierFeatures } from "@/lib/subscription";
 import { detectPlatform } from "@/lib/siteImport/detect";
 

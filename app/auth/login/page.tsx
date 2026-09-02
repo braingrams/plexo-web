@@ -32,7 +32,7 @@ function LoginForm() {
     const redirectTo = params.get("redirectTo") ?? "/dashboard";
 
     try {
-      const result = await (authClient as any).signIn.email({
+      const result = await authClient.signIn.email({
         email,
         password,
         callbackURL: redirectTo,

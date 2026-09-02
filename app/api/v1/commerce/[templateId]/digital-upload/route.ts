@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPresignedUploadPost } from "@/lib/storage";
 
-import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
-import { requirePermission } from "@/server/requirePermission";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
+import { requirePermission } from "@/server/requirePermissionDynamo";
 
 // Course zips/ebooks/videos can be tens-to-hundreds of MB — buffering the whole file
 // through a serverless function body (the pattern app/api/v1/media/upload/route.ts uses
@@ -27,7 +27,7 @@ export async function POST(
   if (resolved.error) return resolved.error;
   const { role } = resolved.context;
 
-  const permissionError = await requirePermission(request.headers, role, { commerce: ["update"] });
+  const permissionError = requirePermission(role, { commerce: ["update"] });
   if (permissionError) return permissionError;
 
   const body = (await request.json().catch(() => ({}))) as { filename?: string; contentType?: string };

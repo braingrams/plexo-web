@@ -20,7 +20,7 @@ export function GoogleAuthButton({ callbackURL }: { callbackURL: string }) {
   async function onClick(): Promise<void> {
     setLoading(true);
     try {
-      await (authClient as any).signIn.social({ provider: "google", callbackURL });
+      await authClient.signIn.social({ provider: "google", callbackURL });
     } catch {
       setLoading(false);
     }

@@ -1,6 +1,6 @@
 import { BlogSite, BlogPost, BlogAuthor } from "@/lib/db/contentEntities";
 import { requireBlogSiteAccess } from "@/lib/blog/pageAuthDynamo";
-import { effectiveStatus } from "@/lib/blog/queries";
+import { effectiveStatus } from "@/lib/blog/queriesDynamo";
 import { BlogListClient } from "./BlogListClient";
 
 export default async function BlogListPage({ params }: { params: Promise<{ id: string }> }) {
@@ -36,7 +36,7 @@ export default async function BlogListPage({ params }: { params: Promise<{ id: s
         author: { name: (p.authorId && authorNameById.get(p.authorId)) ?? "" },
         publishedAt: p.publishedAt ?? null,
         updatedAt: p.updatedAt ?? new Date().toISOString(),
-        effectiveStatus: effectiveStatus(p.status ?? "DRAFT", p.publishedAt ? new Date(p.publishedAt) : null),
+        effectiveStatus: effectiveStatus(p.status ?? "DRAFT", p.publishedAt ?? null) as "DRAFT" | "PUBLISHED" | "SCHEDULED" | "ARCHIVED",
       }))}
     />
   );

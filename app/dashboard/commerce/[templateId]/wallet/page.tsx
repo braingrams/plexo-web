@@ -1,34 +1,28 @@
-import { prisma } from "@/server/prisma";
-import { resolveCommerceWallet } from "@/lib/commerce/wallet";
+import { EntityItem } from "electrodb";
+import { Template } from "@/lib/db/contentEntities";
+import { Organization } from "@/lib/db/coreEntities";
+import { CommerceWallet, CommerceWalletLedgerEntry, CommerceWithdrawalRequest } from "@/lib/db/commerceEntities";
 import { WalletClient } from "./WalletClient";
 
 export default async function CommerceWalletPage({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = await params;
 
-  const site = await prisma.template.findUnique({ where: { id: templateId }, select: { organizationId: true } });
+  const { data: site } = await Template.get({ id: templateId }).go();
   if (!site) {
     return null;
   }
 
-  const org = await prisma.organization.findUnique({ where: { id: site.organizationId }, select: { commerceWalletPooled: true } });
-  const wallet = org?.commerceWalletPooled
-    ? await prisma.commerceWallet.findFirst({ where: { organizationId: site.organizationId, templateId: null } })
-    : await prisma.commerceWallet.findUnique({ where: { templateId } });
+  const { data: org } = await Organization.get({ id: site.organizationId }).go();
+  const pooled = org?.commerceWalletPooled ?? false;
+  const { data: wallet } = await CommerceWallet.get({ scopeId: pooled ? site.organizationId : templateId }).go();
 
-  const ledger = wallet
-    ? await prisma.commerceWalletLedgerEntry.findMany({
-        where: { walletId: wallet.id },
-        orderBy: { createdAt: "desc" },
-        take: 26,
-      })
-    : [];
+  const { data: ledger } = wallet
+    ? await CommerceWalletLedgerEntry.query.primary({ walletId: wallet.id }).go({ limit: 26, order: "desc" })
+    : { data: [] as EntityItem<typeof CommerceWalletLedgerEntry>[] };
 
-  const withdrawals = wallet
-    ? await prisma.commerceWithdrawalRequest.findMany({
-        where: { walletId: wallet.id },
-        orderBy: { requestedAt: "desc" },
-      })
-    : [];
+  const { data: withdrawals } = wallet
+    ? await CommerceWithdrawalRequest.query.primary({ walletId: wallet.id }).go({ order: "desc" })
+    : { data: [] as EntityItem<typeof CommerceWithdrawalRequest>[] };
 
   return (
     <WalletClient
@@ -36,26 +30,26 @@ export default async function CommerceWalletPage({ params }: { params: Promise<{
       initial={{
         balanceCents: wallet?.balanceCents ?? 0,
         currency: wallet?.currency ?? "NGN",
-        pooled: Boolean(org?.commerceWalletPooled),
+        pooled,
         ledger: ledger.slice(0, 25).map((e) => ({
           id: e.id,
           type: e.type,
-          grossAmountCents: e.grossAmountCents,
-          feeCents: e.feeCents,
+          grossAmountCents: e.grossAmountCents ?? null,
+          feeCents: e.feeCents ?? null,
           netAmountCents: e.netAmountCents,
           balanceAfterCents: e.balanceAfterCents,
-          description: e.description,
-          createdAt: e.createdAt.toISOString(),
+          description: e.description ?? null,
+          createdAt: e.createdAt ?? new Date().toISOString(),
         })),
         nextCursor: ledger.length > 25 ? ledger[24].id : null,
         withdrawals: withdrawals.map((w) => ({
           id: w.id,
           amountCents: w.amountCents,
           bankName: w.bankName,
-          status: w.status,
-          rejectionReason: w.rejectionReason,
-          requestedAt: w.requestedAt.toISOString(),
-          processedAt: w.processedAt ? w.processedAt.toISOString() : null,
+          status: w.status ?? "PENDING",
+          rejectionReason: w.rejectionReason ?? null,
+          requestedAt: w.requestedAt ?? new Date().toISOString(),
+          processedAt: w.processedAt ?? null,
         })),
       }}
     />

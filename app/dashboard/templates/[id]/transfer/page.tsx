@@ -1,4 +1,4 @@
-import { requireSiteLayoutAccess } from "@/lib/siteLayout";
+import { requireSiteLayoutAccess } from "@/lib/siteLayoutDynamo";
 import { TransferSiteClient } from "./TransferSiteClient";
 
 export default async function TransferSitePage({ params }: { params: Promise<{ id: string }> }) {

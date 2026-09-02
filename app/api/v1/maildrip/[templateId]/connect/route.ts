@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { prisma } from "@/server/prisma";
-import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
 import { encryptMaildripKey } from "@/lib/crypto";
 import { maildripRegister, maildripLogin, maildripVerify, maildripResendVerification, maildripFetchApiKey, isApiError } from "@/lib/maildripAuth";
+import { CommerceSettings } from "@/lib/db/commerceEntities";
 
 /**
  * The "Connect MailDrip" flow behind form_container's 'maildrip' provider — an in-Plexo
@@ -45,11 +46,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (isApiError(keyResult)) {
       return NextResponse.json({ error: keyResult.error }, { status: 502 });
     }
-    await prisma.commerceSettings.upsert({
-      where: { templateId },
-      create: { templateId, organizationId, maildripApiKeyEncrypted: encryptMaildripKey(keyResult.apiKey) },
-      update: { maildripApiKeyEncrypted: encryptMaildripKey(keyResult.apiKey) },
-    });
+    const { data: existing } = await CommerceSettings.get({ templateId }).go();
+    if (existing) {
+      await CommerceSettings.patch({ templateId }).set({ maildripApiKeyEncrypted: encryptMaildripKey(keyResult.apiKey) }).go();
+    } else {
+      await CommerceSettings.create({ id: randomUUID(), templateId, organizationId, maildripApiKeyEncrypted: encryptMaildripKey(keyResult.apiKey) }).go();
+    }
     return NextResponse.json({ status: "connected" });
   }
 

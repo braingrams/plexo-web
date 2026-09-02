@@ -303,7 +303,7 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
   async function handleSignOut() {
     setIsSigningOut(true);
     try {
-      await (authClient as any).signOut();
+      await authClient.signOut();
     } catch (e) {
       console.error("Sign out error:", e);
     }

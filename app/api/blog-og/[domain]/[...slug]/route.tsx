@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
-import { resolveBlogSite } from "@/lib/pub/resolveSite";
-import { getPublishedPostBySlug } from "@/lib/blog/queries";
+import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
+import { getPublishedPostBySlug } from "@/lib/blog/queriesDynamo";
 
 // A plain Route Handler, not Next's opengraph-image file convention — that convention
 // forbids colocating inside a catch-all segment ("Catch-all must be the last part of

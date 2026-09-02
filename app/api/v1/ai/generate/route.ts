@@ -8,9 +8,10 @@ import { generateBuilderAction } from "@/lib/ai/generate";
 import { authorizeHostManagedAction, newRequestId, settleHostManagedAction } from "@/lib/ai/hostAuthorization";
 import { resolveSystemProvider } from "@/lib/ai/systemProvider";
 import type { AiActionMode, AiProvider, ConcreteTier } from "@/lib/ai/types";
-import { chargeUsage, ensureCreditPeriod, estimateWorstCaseCost } from "@/lib/credits/ledger";
+import { chargeUsage, ensureCreditPeriod, estimateWorstCaseCost } from "@/lib/db/ledgerOperations";
 import { canUseHostManagedAi } from "@/lib/subscription";
-import { prisma } from "@/server/prisma";
+import { auth } from "@/server/authDynamo";
+import { ApiKey, User } from "@/lib/db/coreEntities";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -30,6 +31,7 @@ const VALID_TIERS = new Set(["AUTO", "BASIC", "MEDIUM", "HIGH"]);
 interface ResolvedAiKey {
   id: string;
   userId: string;
+  organizationId: string;
   useAi: boolean;
   aiProvider: string;
   aiTier: string;
@@ -40,49 +42,66 @@ interface ResolvedAiKey {
   subscriptionPlan: string;
 }
 
-const RESOLVED_AI_KEY_SELECT = {
-  id: true,
-  userId: true,
-  useAi: true,
-  aiProvider: true,
-  aiTier: true,
-  aiApiKey: true,
-  aiAccessMode: true,
-  hostAuthWebhookUrl: true,
-  hostWebhookSecret: true,
-  user: { select: { subscriptionPlan: true } },
-} as const;
-
-function withSubscriptionPlan<T extends { user: { subscriptionPlan: string } }>(
-  record: T,
-): Omit<T, "user"> & { subscriptionPlan: string } {
-  const { user, ...rest } = record;
-  return { ...rest, subscriptionPlan: user.subscriptionPlan };
-}
-
 type ResolveResult = { key: ResolvedAiKey } | { error: string; status: number };
+
+function toResolvedAiKey(
+  item: {
+    id: string;
+    userId: string;
+    organizationId: string;
+    useAi?: boolean;
+    aiProvider?: string;
+    aiTier?: string;
+    aiApiKey?: string;
+    aiAccessMode?: "SYSTEM" | "BYOK" | "HOST_MANAGED";
+    hostAuthWebhookUrl?: string;
+    hostWebhookSecret?: string;
+  },
+  subscriptionPlan: string,
+): ResolvedAiKey {
+  return {
+    id: item.id,
+    userId: item.userId,
+    organizationId: item.organizationId,
+    useAi: item.useAi ?? false,
+    aiProvider: item.aiProvider ?? "openai",
+    aiTier: item.aiTier ?? "AUTO",
+    aiApiKey: item.aiApiKey ?? null,
+    aiAccessMode: item.aiAccessMode ?? "SYSTEM",
+    hostAuthWebhookUrl: item.hostAuthWebhookUrl ?? null,
+    hostWebhookSecret: item.hostWebhookSecret ?? null,
+    subscriptionPlan,
+  };
+}
 
 async function resolveAiKey(request: NextRequest): Promise<ResolveResult> {
   const xApiKey = request.headers.get("x-api-key")?.trim();
 
   if (xApiKey === "workspace-internal") {
-    const { auth } = await import("@/server/auth");
-    const session = await auth.api.getSession({ headers: request.headers });
+    const session = await auth();
     if (!session?.user) {
       return { error: "Unauthorized", status: 401 };
     }
 
-    const activeKey = await prisma.apiKey.findFirst({
-      where: { userId: session.user.id, isActive: true },
-      orderBy: { createdAt: "desc" },
-      select: RESOLVED_AI_KEY_SELECT,
-    });
+    // ApiKey has no createdAt-sorted index for "this user's keys" (byUser's SK is `id`,
+    // not createdAt) — a user typically has only a handful of API keys, so sorting the
+    // small result set in memory to find the most-recently-created active one is fine,
+    // matching prisma's orderBy: { createdAt: "desc" } take-first semantics.
+    const { data: keys } = await ApiKey.query.byUser({ userId: session.user.id }).go();
+    const activeKey = keys
+      .filter((k) => k.isActive)
+      .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0];
 
     if (!activeKey) {
       return { error: "No active API key configured for this account.", status: 400 };
     }
 
-    return { key: withSubscriptionPlan(activeKey) };
+    const { data: user } = await User.get({ id: activeKey.userId }).go();
+    if (!user) {
+      return { error: "No active API key configured for this account.", status: 400 };
+    }
+
+    return { key: toResolvedAiKey(activeKey, user.subscriptionPlan ?? "FREE") };
   }
 
   // @charisol/plexo-sdk sends the real key via x-api-key (see aiHelper.ts), never
@@ -94,16 +113,19 @@ async function resolveAiKey(request: NextRequest): Promise<ResolveResult> {
   }
 
   const hashedKey = sha256(rawKey);
-  const activeKey = await prisma.apiKey.findFirst({
-    where: { hashedKey, isActive: true },
-    select: RESOLVED_AI_KEY_SELECT,
-  });
+  const { data: matches } = await ApiKey.query.byHashedKey({ hashedKey }).go();
+  const activeKey = matches.find((k) => k.isActive);
 
   if (!activeKey) {
     return { error: "Forbidden", status: 403 };
   }
 
-  return { key: withSubscriptionPlan(activeKey) };
+  const { data: user } = await User.get({ id: activeKey.userId }).go();
+  if (!user) {
+    return { error: "Forbidden", status: 403 };
+  }
+
+  return { key: toResolvedAiKey(activeKey, user.subscriptionPlan ?? "FREE") };
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -277,7 +299,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    await prisma.apiKey.update({ where: { id: key.id }, data: { lastUsedAt: new Date() } });
+    await ApiKey.patch({ organizationId: key.organizationId, id: key.id })
+      .set({ lastUsedAt: new Date().toISOString() })
+      .go();
 
     // Usage/cost accounting is server-internal — the browser only ever gets summary + result.
     return NextResponse.json({ summary: outcome.summary, result: outcome.result });

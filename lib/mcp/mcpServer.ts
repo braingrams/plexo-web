@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { uploadObject, deleteObjects } from "@/lib/storage";
-import { prisma } from "@/server/prisma";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { getTierFeatures } from "@/lib/subscription";
-import { resolveUser, getDomainLimit, removeVercelDomain, addVercelDomain } from "@/app/api/v1/domains/route";
-import { resolveStrataProjectId, fetchStrataTokens } from "@/server/strata";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { getDomainLimit } from "@/lib/domainLimit";
+import { removeVercelDomain, addVercelDomain } from "@/lib/vercelDomains";
+import { resolveStrataProjectId, fetchStrataTokens } from "@/server/strataDynamo";
 import { getPagesDomain } from "@/server/pagesDomain";
 import {
   slugify,
@@ -17,11 +18,13 @@ import {
   getPageTree,
   pathForPage,
   getDescendantIds,
-} from "@/server/slug";
+} from "@/server/slugDynamo";
 import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { BLOG_MCP_TOOLS, BLOG_TOOL_NAMES, handleBlogTool } from "./blogTools";
 import { COMMERCE_MCP_TOOLS, COMMERCE_TOOL_NAMES, handleCommerceTool } from "./commerceTools";
+import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
+import { User } from "@/lib/db/coreEntities";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -62,8 +65,8 @@ function validateDesignJson(rawDesignJson: any): any {
  * Throws an actionable error (fed back to the calling AI) rather than silently proceeding
  * or silently accepting on the account's behalf.
  */
-async function assertRawUploadAllowed(userId: string, acceptAup: boolean): Promise<void> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { aupAcceptedAt: true } });
+async function assertRawUploadAllowed(userId: string, organizationId: string, acceptAup: boolean): Promise<void> {
+  const { data: user } = await User.get({ id: userId }).go();
   if (!user?.aupAcceptedAt) {
     if (!acceptAup) {
       throw new Error(
@@ -72,13 +75,17 @@ async function assertRawUploadAllowed(userId: string, acceptAup: boolean): Promi
         "this call with acceptAup: true once they've explicitly agreed."
       );
     }
-    await prisma.user.update({ where: { id: userId }, data: { aupAcceptedAt: new Date() } });
+    await User.patch({ id: userId }).set({ aupAcceptedAt: new Date().toISOString() }).go();
   }
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const recentUploadCount = await prisma.template.count({
-    where: { userId, sourceType: "RAW_UPLOAD", createdAt: { gte: since } },
-  });
+  // Org-scoped, not global across every org this user has ever created templates in —
+  // same adaptation as app/api/v1/templates/upload-raw/route.ts's identical rate-limit
+  // check, since Template has no cross-org index over userId to check this globally.
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go();
+  const recentUploadCount = orgTemplates.filter(
+    (t) => t.userId === userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
+  ).length;
   if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
     throw new Error(`You've reached the raw-upload limit of ${RAW_UPLOAD_DAILY_LIMIT} per 24 hours. Try again later.`);
   }
@@ -133,21 +140,33 @@ async function linkDomainToTemplate(
     }
   }
 
-  const currentDomainCount = await prisma.publishedDomain.count({ where: { organizationId: resolved.organizationId } });
+  // PublishedDomain has no org-wide index (only templateId-primary and byDomain-GSI1,
+  // see contentEntities.ts) — fan out per org root template, same bound every other
+  // ported org-wide domain count uses (app/api/v1/domains/route.ts, publish/route.ts).
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+  const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
+  const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
+  const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);
   const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
   if (currentDomainCount >= domainLimit) {
     throw new Error(`Published domain limit reached (${domainLimit}). Unlink an existing domain to publish a new one.`);
   }
 
-  const existingDomain = await prisma.publishedDomain.findUnique({ where: { domain: finalDomain } });
+  const { data: domainMatches } = await PublishedDomain.query.byDomain({ domain: finalDomain }).go();
+  const existingDomain = domainMatches[0] ?? null;
   if (existingDomain) {
     if (existingDomain.organizationId !== resolved.organizationId) {
       throw new Error(`Domain '${finalDomain}' is already registered by another account.`);
     }
-    await prisma.publishedDomain.update({
-      where: { id: existingDomain.id },
-      data: { templateId, type: domainType },
-    });
+    // templateId is part of this entity's own primary key (see contentEntities.ts) —
+    // ElectroDB can't .set() a key-composite attribute in place, so a real re-link moves
+    // the item via create-at-new-key + remove-old-key, same pattern used everywhere else
+    // this migration has hit the same constraint (BlogPost slug rename, this same
+    // re-link in app/api/v1/domains/route.ts and app/api/v1/publish/route.ts).
+    if (existingDomain.templateId !== templateId) {
+      await PublishedDomain.create({ ...existingDomain, templateId }).go();
+      await PublishedDomain.remove({ templateId: existingDomain.templateId, id: existingDomain.id }).go();
+    }
   } else {
     // Previously missing entirely for the MCP path: without this, a CUSTOM domain got
     // a database row but was never actually attached to the Vercel project, so it had
@@ -155,9 +174,14 @@ async function linkDomainToTemplate(
     if (domainType === "CUSTOM") {
       await addVercelDomain(finalDomain);
     }
-    await prisma.publishedDomain.create({
-      data: { userId: resolved.userId, organizationId: resolved.organizationId, templateId, domain: finalDomain, type: domainType },
-    });
+    await PublishedDomain.create({
+      id: randomUUID(),
+      userId: resolved.userId,
+      organizationId: resolved.organizationId,
+      templateId,
+      domain: finalDomain,
+      type: domainType,
+    }).go();
   }
 
   const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
@@ -836,7 +860,8 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
         case "publish_landing_page": {
           const features = getTierFeatures(resolved.subscriptionPlan);
           {
-            const rootCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: "LANDING_PAGE" } });
+            const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+            const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
             if (rootCount >= features.maxLandingPages) {
               throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
             }
@@ -868,16 +893,18 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           let rawDomain = args.domain?.trim().toLowerCase() || "";
           let domainType = args.type as "SUBDOMAIN" | "CUSTOM" | undefined;
 
-          const template = await prisma.template.create({
-            data: {
-              userId: resolved.userId,
-              organizationId: resolved.organizationId,
-              name,
-              kind: "LANDING_PAGE",
-              designJson,
-              compiledHtml,
-            },
-          });
+          const newTemplateId = randomUUID();
+          await Template.create({
+            id: newTemplateId,
+            userId: resolved.userId,
+            organizationId: resolved.organizationId,
+            name,
+            kind: "LANDING_PAGE",
+            designJson,
+            compiledHtml,
+          }).go();
+          const { data: template } = await Template.get({ id: newTemplateId }).go();
+          if (!template) throw new Error(`Template ${newTemplateId} vanished immediately after being created`);
 
           const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
           const editableUrl = `${baseAppUrl}/dashboard/templates/${template.id}`;
@@ -908,7 +935,8 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
         case "create_email_template": {
           const features = getTierFeatures(resolved.subscriptionPlan);
           {
-            const rootCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: "EMAIL" } });
+            const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+            const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "EMAIL").length;
             if (rootCount >= features.maxEmailTemplates) {
               throw new Error(`Template limit reached (${features.maxEmailTemplates} email templates). Upgrade plan to create more.`);
             }
@@ -931,16 +959,18 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
 
           const designJson = validateDesignJson(rawDesignJson);
           const compiledHtml = sanitizeHtml(compileToHTML(designJson));
-          const template = await prisma.template.create({
-            data: {
-              userId: resolved.userId,
-              organizationId: resolved.organizationId,
-              name,
-              kind: "EMAIL",
-              designJson,
-              compiledHtml,
-            },
-          });
+          const emailTemplateId = randomUUID();
+          await Template.create({
+            id: emailTemplateId,
+            userId: resolved.userId,
+            organizationId: resolved.organizationId,
+            name,
+            kind: "EMAIL",
+            designJson,
+            compiledHtml,
+          }).go();
+          const { data: template } = await Template.get({ id: emailTemplateId }).go();
+          if (!template) throw new Error(`Template ${emailTemplateId} vanished immediately after being created`);
 
           const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
           toolResult = {
@@ -958,11 +988,8 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw new Error("templateId is required to update a template.");
           }
 
-          const existing = await prisma.template.findFirst({
-            where: { id: templateId, organizationId: resolved.organizationId },
-            select: { id: true, kind: true, name: true, sourceType: true },
-          });
-          if (!existing) {
+          const { data: existing } = await Template.get({ id: templateId }).go();
+          if (!existing || existing.organizationId !== resolved.organizationId) {
             throw new Error(`No template found with id "${templateId}" in this account. Use list_landing_pages or list_email_templates to look up the correct id.`);
           }
           if (existing.sourceType === "RAW_UPLOAD") {
@@ -988,23 +1015,19 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
           const compiledHtml = sanitizeHtml(compileToHTML(designJson));
 
-          const updated = await prisma.template.update({
-            where: { id: existing.id },
-            data: { name, designJson, compiledHtml },
-          });
+          await Template.patch({ id: existing.id }).set({ name, designJson, compiledHtml }).go();
+          const { data: updated } = await Template.get({ id: existing.id }).go();
+          if (!updated) throw new Error(`Template ${existing.id} vanished immediately after being updated`);
 
           const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
           const editableUrl = `${baseAppUrl}/dashboard/templates/${updated.id}`;
 
           let publishedUrl: string | null = null;
           if (existing.kind === "LANDING_PAGE") {
-            const domain = await prisma.publishedDomain.findFirst({
-              where: { templateId: updated.id },
-              select: { domain: true },
-            });
-            if (domain) {
+            const { data: domains } = await PublishedDomain.query.primary({ templateId: updated.id }).go();
+            if (domains[0]) {
               const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
-              publishedUrl = `${protocol}://${domain.domain}`;
+              publishedUrl = `${protocol}://${domains[0].domain}`;
             }
           }
 
@@ -1023,7 +1046,8 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           const features = getTierFeatures(resolved.subscriptionPlan);
           {
             // Root/home pages only — a page's sub-pages don't count against this limit.
-            const rootCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: "LANDING_PAGE" } });
+            const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+            const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
             if (rootCount >= features.maxLandingPages) {
               throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
             }
@@ -1048,9 +1072,18 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
           const compiledHtml = sanitizeHtml(compileToHTML(designJson));
 
-          const template = await prisma.template.create({
-            data: { userId: resolved.userId, organizationId: resolved.organizationId, name, kind: "LANDING_PAGE", designJson, compiledHtml },
-          });
+          const createdId = randomUUID();
+          await Template.create({
+            id: createdId,
+            userId: resolved.userId,
+            organizationId: resolved.organizationId,
+            name,
+            kind: "LANDING_PAGE",
+            designJson,
+            compiledHtml,
+          }).go();
+          const { data: template } = await Template.get({ id: createdId }).go();
+          if (!template) throw new Error(`Template ${createdId} vanished immediately after being created`);
 
           const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
           toolResult = {
@@ -1074,26 +1107,29 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw err;
           }
 
-          await assertRawUploadAllowed(resolved.userId, args.acceptAup === true);
+          await assertRawUploadAllowed(resolved.userId, resolved.organizationId, args.acceptAup === true);
 
           const features = getTierFeatures(resolved.subscriptionPlan);
-          const rootCount = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: "LANDING_PAGE" } });
+          const { data: orgTemplatesRaw } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+          const rootCount = orgTemplatesRaw.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
           if (rootCount >= features.maxLandingPages) {
             throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
           }
 
           const name = typeof args.name === "string" && args.name.trim() ? args.name.trim() : "AI Landing Page";
-          const template = await prisma.template.create({
-            data: {
-              userId: resolved.userId,
-              organizationId: resolved.organizationId,
-              name,
-              kind: "LANDING_PAGE",
-              sourceType: "RAW_UPLOAD",
-              designJson: {},
-              compiledHtml: htmlContent,
-            },
-          });
+          const rawUploadId = randomUUID();
+          await Template.create({
+            id: rawUploadId,
+            userId: resolved.userId,
+            organizationId: resolved.organizationId,
+            name,
+            kind: "LANDING_PAGE",
+            sourceType: "RAW_UPLOAD",
+            designJson: {},
+            compiledHtml: htmlContent,
+          }).go();
+          const { data: template } = await Template.get({ id: rawUploadId }).go();
+          if (!template) throw new Error(`Template ${rawUploadId} vanished immediately after being created`);
 
           const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
           const editableUrl = `${baseAppUrl}/dashboard/templates/${template.id}`;
@@ -1139,11 +1175,8 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw err;
           }
 
-          const existing = await prisma.template.findFirst({
-            where: { id: templateId, organizationId: resolved.organizationId },
-            select: { id: true, name: true, kind: true, sourceType: true },
-          });
-          if (!existing) {
+          const { data: existing } = await Template.get({ id: templateId }).go();
+          if (!existing || existing.organizationId !== resolved.organizationId) {
             throw new Error(`No template found with id "${templateId}" in this account. Use list_landing_pages to look up the correct id.`);
           }
           if (existing.sourceType !== "RAW_UPLOAD") {
@@ -1151,17 +1184,13 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const name = typeof args.name === "string" && args.name.trim() ? args.name.trim() : existing.name;
-          const updated = await prisma.template.update({
-            where: { id: existing.id },
-            data: { name, compiledHtml: htmlContent },
-          });
+          await Template.patch({ id: existing.id }).set({ name, compiledHtml: htmlContent }).go();
+          const { data: updated } = await Template.get({ id: existing.id }).go();
+          if (!updated) throw new Error(`Template ${existing.id} vanished immediately after being updated`);
 
-          const linkedDomains = await prisma.publishedDomain.findMany({
-            where: { templateId: updated.id },
-            select: { id: true, domain: true },
-          });
+          const { data: linkedDomains } = await PublishedDomain.query.primary({ templateId: updated.id }).go();
           for (const d of linkedDomains) {
-            void scanPublishedDomain(d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
+            void scanPublishedDomain(updated.id, d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
           }
 
           const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
@@ -1186,11 +1215,8 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw new Error("domain is required.");
           }
 
-          const template = await prisma.template.findFirst({
-            where: { id: templateId, organizationId: resolved.organizationId, kind: "LANDING_PAGE" },
-            select: { id: true, name: true },
-          });
-          if (!template) {
+          const { data: template } = await Template.get({ id: templateId }).go();
+          if (!template || template.organizationId !== resolved.organizationId || template.kind !== "LANDING_PAGE") {
             throw new Error(`No landing page template found with id "${templateId}" in this account. Use list_landing_pages to look up the correct id.`);
           }
 
@@ -1221,11 +1247,8 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw new Error("parentTemplateId and name are required to create a sub-page.");
           }
 
-          const parent = await prisma.template.findFirst({
-            where: { id: parentTemplateId, organizationId: resolved.organizationId },
-            select: { id: true, kind: true },
-          });
-          if (!parent) {
+          const { data: parent } = await Template.get({ id: parentTemplateId }).go();
+          if (!parent || parent.organizationId !== resolved.organizationId) {
             throw new Error(`No page found with id "${parentTemplateId}" in this account.`);
           }
           if (parent.kind !== "LANDING_PAGE") {
@@ -1256,7 +1279,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
               if (err instanceof RawUploadValidationError) throw new Error(err.message);
               throw err;
             }
-            await assertRawUploadAllowed(resolved.userId, args.acceptAup === true);
+            await assertRawUploadAllowed(resolved.userId, resolved.organizationId, args.acceptAup === true);
             sourceType = "RAW_UPLOAD";
             designJson = {};
             compiledHtml = rawHtmlContent;
@@ -1272,26 +1295,25 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const slug = await ensureUniqueSlug(parentTemplateId, (typeof args.slug === "string" && args.slug.trim()) || name);
-          const lastSibling = await prisma.template.findFirst({
-            where: { parentId: parentTemplateId },
-            orderBy: { order: "desc" },
-            select: { order: true },
-          });
+          const { data: siblings } = await Template.query.byParent({ parentId: parentTemplateId }).go();
+          const nextOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
 
-          const page = await prisma.template.create({
-            data: {
-              userId: resolved.userId,
-              organizationId: resolved.organizationId,
-              name,
-              kind: "LANDING_PAGE",
-              sourceType,
-              parentId: parentTemplateId,
-              slug,
-              order: (lastSibling?.order ?? -1) + 1,
-              designJson,
-              compiledHtml,
-            },
-          });
+          const newPageId = randomUUID();
+          await Template.create({
+            id: newPageId,
+            userId: resolved.userId,
+            organizationId: resolved.organizationId,
+            name,
+            kind: "LANDING_PAGE",
+            sourceType,
+            parentId: parentTemplateId,
+            slug,
+            order: nextOrder,
+            designJson,
+            compiledHtml,
+          }).go();
+          const { data: page } = await Template.get({ id: newPageId }).go();
+          if (!page) throw new Error(`Template ${newPageId} vanished immediately after being created`);
 
           const tree = await getPageTree(resolved.organizationId, page.id);
           const path = tree ? pathForPage(page.id, tree.pages) : `/${slug}`;
@@ -1342,11 +1364,8 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw new Error("templateId is required.");
           }
 
-          const existing = await prisma.template.findFirst({
-            where: { id: templateId, organizationId: resolved.organizationId },
-            select: { id: true, parentId: true, slug: true },
-          });
-          if (!existing) {
+          const { data: existing } = await Template.get({ id: templateId }).go();
+          if (!existing || existing.organizationId !== resolved.organizationId) {
             throw new Error(`No page found with id "${templateId}" in this account.`);
           }
 
@@ -1357,7 +1376,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           if (typeof args.slug === "string") {
-            if (existing.parentId === null) {
+            if (!existing.parentId) {
               throw new Error("The home page doesn't have its own URL segment.");
             }
             const nextSlug = slugify(args.slug);
@@ -1368,18 +1387,15 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           if (typeof args.parentTemplateId === "string" && args.parentTemplateId.trim()) {
-            if (existing.parentId === null) {
+            if (!existing.parentId) {
               throw new Error("The home page can't be nested under another page.");
             }
             const targetParentId = args.parentTemplateId.trim();
             if (targetParentId === existing.id) {
               throw new Error("A page can't be nested under itself.");
             }
-            const targetParent = await prisma.template.findFirst({
-              where: { id: targetParentId, organizationId: resolved.organizationId },
-              select: { id: true },
-            });
-            if (!targetParent) {
+            const { data: targetParent } = await Template.get({ id: targetParentId }).go();
+            if (!targetParent || targetParent.organizationId !== resolved.organizationId) {
               throw new Error(`Target parent page "${targetParentId}" not found.`);
             }
             if (await isSameOrAncestor(targetParentId, existing.id)) {
@@ -1396,25 +1412,25 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw new Error("Provide at least one of name, slug, parentTemplateId, or order to update.");
           }
 
-          const effectiveParentId: string | null = data.parentId ?? existing.parentId;
-          const effectiveSlug: string | null = data.slug ?? existing.slug;
-          if (effectiveSlug && (await isReservedTopLevelSlug(effectiveParentId as string, effectiveSlug))) {
+          const effectiveParentId: string | null = data.parentId ?? existing.parentId ?? null;
+          const effectiveSlug: string | null = data.slug ?? existing.slug ?? null;
+          if (effectiveSlug && effectiveParentId && (await isReservedTopLevelSlug(effectiveParentId, effectiveSlug))) {
             throw new Error("That URL is reserved for the site's blog.");
           }
 
-          let updated;
-          try {
-            updated = await prisma.template.update({
-              where: { id: existing.id },
-              data,
-              select: { id: true, name: true, slug: true, parentId: true, order: true },
-            });
-          } catch (err: any) {
-            if (err?.code === "P2002") {
+          // Sibling-slug uniqueness (prisma: @@unique([parentId, slug])) has no DynamoDB
+          // constraint equivalent — checked explicitly here, same as the REST PATCH route
+          // (app/api/templates/[id]/route.ts).
+          if (data.slug !== undefined && effectiveParentId) {
+            const { data: siblings } = await Template.query.byParent({ parentId: effectiveParentId }).go();
+            if (siblings.some((s) => s.id !== existing.id && s.slug === data.slug)) {
               throw new Error("A page with this URL already exists here.");
             }
-            throw err;
           }
+
+          await Template.patch({ id: existing.id }).set(data).go();
+          const { data: updated } = await Template.get({ id: existing.id }).go();
+          if (!updated) throw new Error(`Template ${existing.id} vanished immediately after being updated`);
 
           toolResult = {
             success: true,
@@ -1436,26 +1452,27 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           // 1. First try exact UUID/id match
-          let existing = await prisma.template.findFirst({
-            where: { id: rawInput, organizationId: resolved.organizationId },
-            select: { id: true, parentId: true, name: true, kind: true },
-          });
+          let existing: { id: string; parentId?: string; name: string; kind: string } | null = null;
+          {
+            const { data: byId } = await Template.get({ id: rawInput }).go();
+            if (byId && byId.organizationId === resolved.organizationId) existing = byId;
+          }
 
-          // 2. If not found by ID, search by case-insensitive name match
+          // 2. If not found by ID, search by case-insensitive name match across the org —
+          // Template has no name index, so this fans out via byOrg (GSI1) and filters in
+          // memory, same bound as every other org-wide non-indexed lookup in this migration.
           if (!existing) {
-            existing = await prisma.template.findFirst({
-              where: {
-                organizationId: resolved.organizationId,
-                OR: [
-                  { name: { equals: rawInput, mode: "insensitive" } },
-                  { name: { contains: rawInput, mode: "insensitive" } },
-                ],
-              },
-              // Tie-break on createdAt — the org-backfill migration's updateMany bumped
-              // every template's updatedAt to the same instant via Prisma's @updatedAt.
-              orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-              select: { id: true, parentId: true, name: true, kind: true },
+            const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+            const needle = rawInput.toLowerCase();
+            const matches = orgTemplates.filter((t) => t.name.toLowerCase().includes(needle));
+            // Tie-break on createdAt — the org-backfill migration's updateMany bumped
+            // every template's updatedAt to the same instant.
+            matches.sort((a, b) => {
+              const byUpdated = (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
+              if (byUpdated !== 0) return byUpdated;
+              return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
             });
+            existing = matches[0] ?? null;
           }
 
           if (!existing) {
@@ -1466,35 +1483,37 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           const allIds = [existing.id, ...descendantIds];
 
           // Same cleanup as the REST DELETE route (app/api/templates/[id]/route.ts) —
-          // TemplateAsset rows and PublishedDomain rows cascade at the DB level, but
-          // Vercel Blob storage and Vercel's own domain registry have no idea Postgres
-          // just deleted anything, so both need explicit cleanup before the cascade.
-          const assets = await prisma.templateAsset.findMany({
-            where: { templateId: { in: allIds } },
-            select: { blobUrl: true },
-          });
+          // TemplateAsset rows and PublishedDomain rows cascade at the DB level under
+          // Prisma, but S3 and Vercel's own domain registry have no idea a delete
+          // happened, so both need explicit cleanup before removing the rows.
+          const assetBatches = await Promise.all(allIds.map((tid) => TemplateAsset.query.primary({ templateId: tid }).go()));
+          const assets = assetBatches.flatMap((b) => b.data);
           if (assets.length > 0) {
             await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
               console.error("Failed to delete blobs during MCP page delete (non-fatal):", err)
             );
           }
-          const domainsToRemove = await prisma.publishedDomain.findMany({
-            where: { templateId: { in: allIds }, type: "CUSTOM" },
-            select: { domain: true },
-          });
-          for (const d of domainsToRemove) {
-            await removeVercelDomain(d.domain).catch((err) =>
-              console.error(`Failed to remove Vercel domain ${d.domain} during MCP page delete (non-fatal):`, err)
-            );
-          }
+          await Promise.all(assets.map((a) => TemplateAsset.remove({ templateId: a.templateId, path: a.path }).go()));
 
-          await prisma.template.delete({ where: { id: existing.id } });
+          const domainBatches = await Promise.all(allIds.map((tid) => PublishedDomain.query.primary({ templateId: tid }).go()));
+          const domains = domainBatches.flatMap((b) => b.data);
+          for (const d of domains) {
+            if (d.type === "CUSTOM") {
+              await removeVercelDomain(d.domain).catch((err) =>
+                console.error(`Failed to remove Vercel domain ${d.domain} during MCP page delete (non-fatal):`, err)
+              );
+            }
+          }
+          await Promise.all(domains.map((d) => PublishedDomain.remove({ templateId: d.templateId, id: d.id }).go()));
+
+          await Promise.all(descendantIds.map((did) => Template.remove({ id: did }).go()));
+          await Template.remove({ id: existing.id }).go();
 
           toolResult = {
             success: true,
             deletedTemplateId: existing.id,
             deletedDescendantCount: descendantIds.length,
-            wasHomePage: existing.parentId === null,
+            wasHomePage: !existing.parentId,
           };
           break;
         }
@@ -1510,35 +1529,29 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             throw new Error("templateId is required.");
           }
 
-          const existing = await prisma.template.findFirst({
-            where: { id: templateId, organizationId: resolved.organizationId },
-            select: { id: true, name: true, kind: true, parentId: true, slug: true, designJson: true, compiledHtml: true, sourceType: true },
-          });
-          if (!existing) {
+          const { data: existing } = await Template.get({ id: templateId }).go();
+          if (!existing || existing.organizationId !== resolved.organizationId) {
             throw new Error(`No page found with id "${templateId}" in this account.`);
           }
           if (!existing.parentId) {
             throw new Error("The home page can't be duplicated from here.");
           }
 
-          const lastSibling = await prisma.template.findFirst({
-            where: { parentId: existing.parentId },
-            orderBy: { order: "desc" },
-            select: { order: true },
-          });
+          const { data: siblings } = await Template.query.byParent({ parentId: existing.parentId }).go();
+          const nextOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
 
           const name = `${existing.name} copy`;
           const slug = await ensureUniqueSlug(existing.parentId, `${existing.slug ?? name}-copy`);
 
-          // Raw-upload pages own real files in Blob storage — copy them independently
-          // rather than sharing a reference, so editing/deleting one page's files can
-          // never silently break its duplicate (or vice versa). Same fix as the REST
-          // duplicate route (app/api/templates/[id]/duplicate/route.ts) — this tool has
-          // its own separate implementation, so it needed the fix separately too.
+          // Raw-upload pages own real files in storage — copy them independently rather
+          // than sharing a reference, so editing/deleting one page's files can never
+          // silently break its duplicate (or vice versa). Same fix as the REST duplicate
+          // route (app/api/templates/[id]/duplicate/route.ts) — this tool has its own
+          // separate implementation, so it needed the fix separately too.
           const newId = randomUUID();
           let copiedAssets: { templateId: string; path: string; blobUrl: string; contentType: string; size: number }[] = [];
           if (existing.sourceType === "RAW_UPLOAD") {
-            const sourceAssets = await prisma.templateAsset.findMany({ where: { templateId: existing.id } });
+            const { data: sourceAssets } = await TemplateAsset.query.primary({ templateId: existing.id }).go();
             if (sourceAssets.length > 0) {
               copiedAssets = await Promise.all(
                 sourceAssets.map(async (asset) => {
@@ -1560,24 +1573,24 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             }
           }
 
-          const duplicate = await prisma.template.create({
-            data: {
-              id: newId,
-              userId: resolved.userId,
-              organizationId: resolved.organizationId,
-              name,
-              kind: existing.kind,
-              sourceType: existing.sourceType,
-              parentId: existing.parentId,
-              slug,
-              order: (lastSibling?.order ?? -1) + 1,
-              designJson: existing.designJson as any,
-              compiledHtml: existing.compiledHtml,
-            },
-          });
+          await Template.create({
+            id: newId,
+            userId: resolved.userId,
+            organizationId: resolved.organizationId,
+            name,
+            kind: existing.kind,
+            sourceType: existing.sourceType,
+            parentId: existing.parentId,
+            slug,
+            order: nextOrder,
+            designJson: existing.designJson,
+            compiledHtml: existing.compiledHtml,
+          }).go();
+          const { data: duplicate } = await Template.get({ id: newId }).go();
+          if (!duplicate) throw new Error(`Template ${newId} vanished immediately after being created`);
 
           if (copiedAssets.length > 0) {
-            await prisma.templateAsset.createMany({ data: copiedAssets });
+            await Promise.all(copiedAssets.map((a) => TemplateAsset.create({ id: randomUUID(), ...a }).go()));
           }
 
           const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
@@ -1593,35 +1606,54 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
         }
 
         case "list_landing_pages": {
-          const templates = await prisma.template.findMany({
-            where: { organizationId: resolved.organizationId, kind: "LANDING_PAGE" },
-            select: { id: true, name: true, parentId: true, slug: true, sourceType: true, createdAt: true, updatedAt: true },
-          });
-          const domains = await prisma.publishedDomain.findMany({
-            where: { organizationId: resolved.organizationId },
-            select: { domain: true, type: true, templateId: true },
-          });
+          const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+          const templates = orgTemplates.filter((t) => t.kind === "LANDING_PAGE");
+
+          // PublishedDomain has no org-wide index (only templateId-primary and
+          // byDomain-GSI1, see contentEntities.ts) — fan out per org root template, same
+          // bound as every other org-wide domain listing in this migration.
+          const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
+          const domainBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
+          const domains = domainBatches.flatMap((b) => b.data).map((d) => ({ domain: d.domain, type: d.type, templateId: d.templateId }));
+
           toolResult = {
-            templates: templates.map((t) => ({ ...t, isHomePage: t.parentId === null })),
+            templates: templates.map((t) => ({
+              id: t.id,
+              name: t.name,
+              parentId: t.parentId ?? null,
+              slug: t.slug ?? null,
+              sourceType: t.sourceType,
+              createdAt: t.createdAt,
+              updatedAt: t.updatedAt,
+              isHomePage: !t.parentId,
+            })),
             publishedDomains: domains,
           };
           break;
         }
 
         case "list_email_templates": {
-          const templates = await prisma.template.findMany({
-            where: { organizationId: resolved.organizationId, kind: "EMAIL" },
-            select: { id: true, name: true, createdAt: true, updatedAt: true },
-          });
+          const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+          const templates = orgTemplates
+            .filter((t) => t.kind === "EMAIL")
+            .map((t) => ({ id: t.id, name: t.name, createdAt: t.createdAt, updatedAt: t.updatedAt }));
           toolResult = { emailTemplates: templates };
           break;
         }
 
         case "get_user_profile": {
-          const user = await prisma.user.findUnique({
-            where: { id: resolved.userId },
-            select: { id: true, name: true, email: true, subscriptionPlan: true, allowanceBalance: true, topupBalance: true, customDomainLimit: true },
-          });
+          const { data: userRow } = await User.get({ id: resolved.userId }).go();
+          const user = userRow
+            ? {
+                id: userRow.id,
+                name: userRow.name,
+                email: userRow.email,
+                subscriptionPlan: userRow.subscriptionPlan,
+                allowanceBalance: userRow.allowanceBalance,
+                topupBalance: userRow.topupBalance,
+                customDomainLimit: userRow.customDomainLimit ?? null,
+              }
+            : null;
           const features = getTierFeatures(user?.subscriptionPlan);
           toolResult = { user, features, limit: getDomainLimit(user?.subscriptionPlan ?? "FREE", user?.customDomainLimit ?? null) };
           break;

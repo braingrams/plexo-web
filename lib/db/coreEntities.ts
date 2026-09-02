@@ -59,6 +59,21 @@ export const User = new Entity(
       // Acceptable Use Policy acceptance gate for publishing unsanitized raw HTML
       // (app/api/templates/route.ts, app/api/v1/templates/upload-raw/route.ts).
       aupAcceptedAt: { type: "string" },
+      // The Strata design-system project this account is connected to, for the MCP
+      // get_strata_tokens tool (server/strata.ts) — null until the user connects one.
+      strataProjectId: { type: "string" },
+      // Auth.js cutover (server/authDynamo.ts's Credentials provider) — schemaless
+      // additive, matching plexo-admin's own identical addition to this same physical
+      // User record shape. Empty-string default matches the Prisma column's own
+      // `@default("")` (Google-only accounts never set this).
+      passwordHash: { type: "string", default: "" },
+      // Mirrors better-auth's `emailVerified` (aliased to this field name in server/auth.ts's
+      // config) — tracked independently of Auth.js's own adapter-managed `emailVerified`
+      // column so the Credentials provider's "is this account allowed to sign in yet" check
+      // doesn't depend on OAuth-account-linking internals it has nothing to do with.
+      isConfirmed: { type: "boolean", default: false },
+      suspendedAt: { type: "string" },
+      suspendedReason: { type: "string" },
     },
     indexes: {
       primary: {

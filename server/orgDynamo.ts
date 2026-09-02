@@ -47,7 +47,7 @@ export type ActiveOrgResolution =
   | { status: "resolved"; organizationId: string; organizationName: string; role: OrgRole }
   | { status: "needs-choice"; organizations: { id: string; name: string; role: OrgRole }[] };
 
-async function membershipsForUser(userId: string): Promise<{ organizationId: string; role: OrgRole; organization: { id: string; name: string } }[]> {
+export async function membershipsForUser(userId: string): Promise<{ organizationId: string; role: OrgRole; organization: { id: string; name: string } }[]> {
   const { data: memberships } = await Member.query.byUser({ userId }).go();
   const orgs = await Promise.all(
     memberships.map(async (m) => {

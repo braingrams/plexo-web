@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveSite } from "@/lib/pub/resolveSite";
-import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimit";
-import { readCartToken, setCartCookie, findOpenCart, createCart, readCartSnapshot } from "@/lib/commerce/cart";
+import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
+import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
+import { readCartToken, setCartCookie, findOpenCart, createCart, readCartSnapshot } from "@/lib/commerce/cartDynamo";
+import { CommerceProduct, CommerceCartItem } from "@/lib/db/commerceEntities";
 
 const MAX_QUANTITY = 50;
 
@@ -29,8 +30,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const requestedQty = typeof body.quantity === "number" && Number.isInteger(body.quantity) && body.quantity > 0 ? body.quantity : 1;
   const quantity = Math.min(requestedQty, MAX_QUANTITY);
 
-  const product = await prisma.commerceProduct.findFirst({ where: { id: body.productId, templateId, active: true } });
-  if (!product) {
+  const { data: product } = await CommerceProduct.get({ templateId, id: body.productId }).go();
+  if (!product || !(product.active ?? true)) {
     return NextResponse.json({ error: "Product not found." }, { status: 404 });
   }
   if (product.kind !== "PHYSICAL") {
@@ -40,16 +41,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let cart = await findOpenCart(templateId, readCartToken(request));
   if (!cart) cart = await createCart(templateId, organization.id);
 
-  const existing = await prisma.commerceCartItem.findUnique({ where: { cartId_productId: { cartId: cart.id, productId: product.id } } });
+  const { data: existingItems } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
+  const existing = existingItems.find((i) => i.productId === product.id);
   if (existing) {
-    await prisma.commerceCartItem.update({
-      where: { id: existing.id },
-      data: { quantity: Math.min(existing.quantity + quantity, MAX_QUANTITY), unitPriceMinorSnapshot: product.priceMinor },
-    });
+    await CommerceCartItem.patch({ templateId, cartId: cart.id, id: existing.id })
+      .set({ quantity: Math.min((existing.quantity ?? 1) + quantity, MAX_QUANTITY), unitPriceMinorSnapshot: product.priceMinor })
+      .go();
   } else {
-    await prisma.commerceCartItem.create({
-      data: { cartId: cart.id, productId: product.id, quantity, unitPriceMinorSnapshot: product.priceMinor },
-    });
+    await CommerceCartItem.create({
+      id: randomUUID(),
+      templateId,
+      cartId: cart.id,
+      productId: product.id,
+      quantity,
+      unitPriceMinorSnapshot: product.priceMinor,
+    }).go();
   }
 
   const snapshot = await readCartSnapshot(templateId, cart.cartToken);

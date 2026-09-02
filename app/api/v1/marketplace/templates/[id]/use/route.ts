@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { uploadObject } from "@/lib/storage";
 
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
+import { Template, TemplateAsset, TemplatePurchase } from "@/lib/db/contentEntities";
+import { resolveUser } from "@/lib/auth/resolveUser";
 import { getTierFeatures } from "@/lib/subscription";
-import { ensureUniqueTemplateName } from "@/server/templateName";
+import { ensureUniqueTemplateName } from "@/server/templateNameDynamo";
 
 /**
  * POST /api/v1/marketplace/templates/:id/use
@@ -26,28 +25,14 @@ export async function POST(
   }
 
   const { id } = await params;
-  const listing = await prisma.template.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      name: true,
-      kind: true,
-      sourceType: true,
-      designJson: true,
-      compiledHtml: true,
-      marketplaceStatus: true,
-      priceCents: true,
-    },
-  });
+  const { data: listing } = await Template.get({ id }).go();
   if (!listing || listing.marketplaceStatus !== "PUBLISHED") {
     return NextResponse.json({ error: "Template not found." }, { status: 404 });
   }
 
   const isFree = !listing.priceCents || listing.priceCents === 0;
   if (!isFree) {
-    const purchase = await prisma.templatePurchase.findUnique({
-      where: { userId_templateId: { userId: resolved.userId, templateId: id } },
-    });
+    const { data: purchase } = await TemplatePurchase.get({ userId: resolved.userId, templateId: id }).go();
     if (!purchase) {
       return NextResponse.json({ error: "Purchase this template before using it." }, { status: 403 });
     }
@@ -56,7 +41,10 @@ export async function POST(
   const features = getTierFeatures(resolved.subscriptionPlan);
   {
     const limit = listing.kind === "LANDING_PAGE" ? features.maxLandingPages : features.maxEmailTemplates;
-    const count = await prisma.template.count({ where: { organizationId: resolved.organizationId, parentId: null, kind: listing.kind, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false } });
+    const { data: orgRoots } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const count = orgRoots.filter(
+      (t) => !t.parentId && t.kind === listing.kind && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
+    ).length;
     if (count >= limit) {
       const label = listing.kind === "LANDING_PAGE" ? "landing pages" : "email templates";
       return NextResponse.json(
@@ -73,7 +61,7 @@ export async function POST(
   const name = await ensureUniqueTemplateName({ organizationId: resolved.organizationId, parentId: null, kind: listing.kind, base: listing.name });
 
   if (listing.sourceType === "RAW_UPLOAD") {
-    const sourceAssets = await prisma.templateAsset.findMany({ where: { templateId: listing.id } });
+    const { data: sourceAssets } = await TemplateAsset.query.primary({ templateId: listing.id }).go();
     if (sourceAssets.length > 0) {
       const copiedAssets = await Promise.all(
         sourceAssets.map(async (asset) => {
@@ -92,37 +80,31 @@ export async function POST(
           };
         }),
       );
-      const created = await prisma.template.create({
-        data: {
-          id: newId,
-          userId: resolved.userId,
-          organizationId: resolved.organizationId,
-          name,
-          kind: listing.kind,
-          sourceType: listing.sourceType,
-          designJson: listing.designJson as Prisma.InputJsonValue,
-          compiledHtml: listing.compiledHtml,
-        },
-        select: { id: true, name: true, kind: true },
-      });
-      await prisma.templateAsset.createMany({ data: copiedAssets });
-      return NextResponse.json({ template: created }, { status: 201 });
+      await Template.create({
+        id: newId,
+        userId: resolved.userId,
+        organizationId: resolved.organizationId,
+        name,
+        kind: listing.kind,
+        sourceType: listing.sourceType,
+        designJson: listing.designJson,
+        compiledHtml: listing.compiledHtml,
+      }).go();
+      await Promise.all(copiedAssets.map((a) => TemplateAsset.create({ id: randomUUID(), ...a }).go()));
+      return NextResponse.json({ template: { id: newId, name, kind: listing.kind } }, { status: 201 });
     }
   }
 
-  const created = await prisma.template.create({
-    data: {
-      id: newId,
-      userId: resolved.userId,
-      organizationId: resolved.organizationId,
-      name,
-      kind: listing.kind,
-      sourceType: listing.sourceType,
-      designJson: listing.designJson as Prisma.InputJsonValue,
-      compiledHtml: listing.compiledHtml,
-    },
-    select: { id: true, name: true, kind: true },
-  });
+  await Template.create({
+    id: newId,
+    userId: resolved.userId,
+    organizationId: resolved.organizationId,
+    name,
+    kind: listing.kind,
+    sourceType: listing.sourceType,
+    designJson: listing.designJson,
+    compiledHtml: listing.compiledHtml,
+  }).go();
 
-  return NextResponse.json({ template: created }, { status: 201 });
+  return NextResponse.json({ template: { id: newId, name, kind: listing.kind } }, { status: 201 });
 }

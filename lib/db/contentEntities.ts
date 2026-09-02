@@ -618,6 +618,11 @@ export const Comment = new Entity(
       resolvedAt: { type: "string" },
       resolvedById: { type: "string" },
       editedAt: { type: "string" },
+      // Soft-delete marker (prisma: Comment.deletedAt) — added here (schemaless attribute
+      // add, same discipline as User.strataProjectId elsewhere in this migration) since the
+      // app/api/v1/comments/** routes' soft-delete-preserves-thread-integrity behavior
+      // depends on it and it was missing from the original port of this entity.
+      deletedAt: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
     },
     indexes: {

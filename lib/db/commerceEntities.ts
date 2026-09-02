@@ -590,7 +590,10 @@ export const CommerceWithdrawalRequest = new Entity(
       encryptedAccountNumber: { type: "string", required: true },
       encryptedAccountHolderName: { type: "string", required: true },
       bankName: { type: "string", required: true },
-      status: { type: ["PENDING", "APPROVED", "REJECTED"] as const, default: "PENDING" },
+      // prisma: enum CommerceWithdrawalStatus { PENDING, PROCESSED, REJECTED } — verified
+      // against prisma/schema.prisma directly (not assumed): this is a DIFFERENT enum from
+      // CommerceStripeAccessStatus/CommerceReviewStatus, which really do use APPROVED.
+      status: { type: ["PENDING", "PROCESSED", "REJECTED"] as const, default: "PENDING" },
       rejectionReason: { type: "string" },
       requestedAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       processedAt: { type: "string" },

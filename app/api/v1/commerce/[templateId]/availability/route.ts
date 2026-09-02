@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
+import { CommerceProduct, CommerceAvailabilityRule, CommerceAvailabilityException } from "@/lib/db/commerceEntities";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
   const { templateId } = await context.params;
@@ -11,13 +12,15 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   const productId = request.nextUrl.searchParams.get("productId");
   if (!productId) return NextResponse.json({ error: "productId is required." }, { status: 400 });
 
-  const product = await prisma.commerceProduct.findFirst({ where: { id: productId, templateId }, select: { id: true } });
+  const { data: product } = await CommerceProduct.get({ templateId, id: productId }).go();
   if (!product) return NextResponse.json({ error: "Product not found." }, { status: 404 });
 
-  const [rules, exceptions] = await Promise.all([
-    prisma.commerceAvailabilityRule.findMany({ where: { productId }, orderBy: [{ dayOfWeek: "asc" }, { startMinute: "asc" }] }),
-    prisma.commerceAvailabilityException.findMany({ where: { productId }, orderBy: { date: "asc" } }),
+  const [{ data: rules }, { data: exceptions }] = await Promise.all([
+    CommerceAvailabilityRule.query.byProduct({ productId }).go(),
+    CommerceAvailabilityException.query.byProduct({ productId }).go(),
   ]);
+  rules.sort((a, b) => (a.dayOfWeek - b.dayOfWeek) || (a.startMinute - b.startMinute));
+  exceptions.sort((a, b) => a.date.localeCompare(b.date));
 
   return NextResponse.json({ rules, exceptions });
 }
@@ -28,7 +31,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   if (resolved.error) return resolved.error;
   const { organizationId, role } = resolved.context;
 
-  const permissionError = await requirePermission(request.headers, role, { commerce: ["create"] });
+  const permissionError = requirePermission(role, { commerce: ["create"] });
   if (permissionError) return permissionError;
 
   const body = await request.json().catch(() => ({}));
@@ -37,8 +40,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   if (typeof productId !== "string") {
     return NextResponse.json({ error: "productId is required." }, { status: 400 });
   }
-  const product = await prisma.commerceProduct.findFirst({ where: { id: productId, templateId, kind: "SERVICE" }, select: { id: true } });
-  if (!product) return NextResponse.json({ error: "Service not found." }, { status: 404 });
+  const { data: product } = await CommerceProduct.get({ templateId, id: productId }).go();
+  if (!product || product.kind !== "SERVICE") return NextResponse.json({ error: "Service not found." }, { status: 404 });
 
   if (type === "rule") {
     const { dayOfWeek, startMinute, endMinute, timezone } = body;
@@ -49,17 +52,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
     ) {
       return NextResponse.json({ error: "Invalid rule: check day and start/end times." }, { status: 400 });
     }
-    const rule = await prisma.commerceAvailabilityRule.create({
-      data: {
-        templateId,
-        organizationId,
-        productId,
-        dayOfWeek,
-        startMinute,
-        endMinute,
-        timezone: typeof timezone === "string" && timezone ? timezone : "Africa/Lagos",
-      },
-    });
+    const id = randomUUID();
+    await CommerceAvailabilityRule.create({
+      id,
+      templateId,
+      organizationId,
+      productId,
+      dayOfWeek,
+      startMinute,
+      endMinute,
+      timezone: typeof timezone === "string" && timezone ? timezone : "Africa/Lagos",
+    }).go();
+    const { data: rule } = await CommerceAvailabilityRule.get({ templateId, id }).go();
     return NextResponse.json({ rule }, { status: 201 });
   }
 
@@ -69,11 +73,22 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
     if (!parsed || Number.isNaN(parsed.getTime())) {
       return NextResponse.json({ error: "A valid date is required." }, { status: 400 });
     }
-    const exception = await prisma.commerceAvailabilityException.upsert({
-      where: { productId_date: { productId, date: parsed } },
-      create: { templateId, organizationId, productId, date: parsed, closed: true },
-      update: { closed: true },
-    });
+    const dateIso = parsed.toISOString();
+
+    // No direct (productId, date) key — CommerceAvailabilityException's primary key is
+    // (templateId, id); byProduct's GSI sort key is (date, id), so a partial-composite
+    // query on just date resolves to this exact upsert target.
+    const { data: existingMatches } = await CommerceAvailabilityException.query.byProduct({ productId, date: dateIso }).go();
+    const existing = existingMatches[0];
+    if (existing) {
+      await CommerceAvailabilityException.patch({ templateId, id: existing.id }).set({ closed: true }).go();
+      const { data: exception } = await CommerceAvailabilityException.get({ templateId, id: existing.id }).go();
+      return NextResponse.json({ exception }, { status: 201 });
+    }
+
+    const id = randomUUID();
+    await CommerceAvailabilityException.create({ id, templateId, organizationId, productId, date: dateIso, closed: true }).go();
+    const { data: exception } = await CommerceAvailabilityException.get({ templateId, id }).go();
     return NextResponse.json({ exception }, { status: 201 });
   }
 

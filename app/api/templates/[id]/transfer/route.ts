@@ -1,17 +1,19 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { isValidUuid } from "@/server/slug";
-import { computeTransferWarnings, generateTransferToken, SITE_TRANSFER_EXPIRY_DAYS } from "@/server/siteTransfer";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { isValidUuid } from "@/server/slugDynamo";
+import { computeTransferWarnings, generateTransferToken, SITE_TRANSFER_EXPIRY_DAYS, listOutgoingTransfers } from "@/lib/siteTransferDynamo";
+import { SiteTransferRequest } from "@/lib/db/importEntities";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildSiteTransferEmail } from "@/lib/mail/templates";
-import { getOrganizationOwnerPlan, getOrgBrand } from "@/lib/subscription";
+import { getOrgBrandDynamo } from "@/server/orgDynamo";
+import { Template } from "@/lib/db/contentEntities";
+import { User, Member } from "@/lib/db/coreEntities";
 
 async function resolveSite(id: string, organizationId: string) {
-  return prisma.template.findFirst({
-    where: { id, organizationId, parentId: null },
-    select: { id: true, name: true, organizationId: true },
-  });
+  const { data: site } = await Template.get({ id }).go();
+  if (!site || site.organizationId !== organizationId || site.parentId) return null;
+  return site;
 }
 
 /** The current pending outgoing transfer for this site, if any. */
@@ -25,10 +27,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const site = await resolveSite(id, resolved.organizationId);
   if (!site) return NextResponse.json({ error: "Site not found." }, { status: 404 });
 
-  const pending = await prisma.siteTransferRequest.findFirst({
-    where: { templateId: id, status: "PENDING" },
-    orderBy: { createdAt: "desc" },
-  });
+  const outgoing = await listOutgoingTransfers(resolved.organizationId);
+  const pending = outgoing.filter((t) => t.templateId === id).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0] ?? null;
 
   return NextResponse.json({ pending });
 }
@@ -59,47 +59,51 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return NextResponse.json({ error: "Enter a valid email address." }, { status: 400 });
   }
 
-  const senderUser = await prisma.user.findUnique({ where: { id: resolved.userId }, select: { email: true, name: true } });
+  const { data: senderUser } = await User.get({ id: resolved.userId }).go();
   if (senderUser && toEmail === senderUser.email.toLowerCase()) {
     return NextResponse.json({ error: "You can't transfer a site to yourself." }, { status: 400 });
   }
 
-  const existingPending = await prisma.siteTransferRequest.findFirst({ where: { templateId: id, status: "PENDING" } });
+  const existingPending = (await listOutgoingTransfers(resolved.organizationId)).find((t) => t.templateId === id);
   if (existingPending) {
     return NextResponse.json({ error: `A transfer to ${existingPending.toEmail} is already pending for this site. Cancel it first.` }, { status: 409 });
   }
 
-  const recipientUser = await prisma.user.findUnique({ where: { email: toEmail }, select: { id: true, subscriptionPlan: true } });
+  const { data: recipientMatches } = await User.query.byEmail({ email: toEmail }).go();
+  const recipientUser = recipientMatches[0] ?? null;
   let recipientOrgId: string | null = null;
   if (recipientUser) {
-    const membership = await prisma.member.findFirst({ where: { userId: recipientUser.id }, orderBy: { createdAt: "asc" }, select: { organizationId: true } });
-    recipientOrgId = membership?.organizationId ?? null;
+    const { data: memberships } = await Member.query.byUser({ userId: recipientUser.id }).go();
+    const earliest = memberships.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))[0];
+    recipientOrgId = earliest?.organizationId ?? null;
   }
-  const recipientPlan = recipientUser?.subscriptionPlan ?? "FREE";
-  const warnings = await computeTransferWarnings(id, recipientPlan as "FREE" | "PRO" | "ULTRA", recipientOrgId);
+  const recipientPlan = (recipientUser?.subscriptionPlan as "FREE" | "PRO" | "ULTRA" | undefined) ?? "FREE";
+  const warnings = await computeTransferWarnings(id, recipientPlan, recipientOrgId);
 
   if (body.confirm !== true) {
     return NextResponse.json({ preview: true, recipientExists: !!recipientUser, warnings });
   }
 
   const token = generateTransferToken();
-  const expiresAt = new Date(Date.now() + SITE_TRANSFER_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+  const transferId = randomUUID();
+  const expiresAt = new Date(Date.now() + SITE_TRANSFER_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-  const created = await prisma.siteTransferRequest.create({
-    data: {
-      templateId: id,
-      fromOrganizationId: resolved.organizationId,
-      fromUserId: resolved.userId,
-      toEmail,
-      toUserId: recipientUser?.id ?? null,
-      token,
-      compatibilityWarnings: warnings as any,
-      expiresAt,
-    },
-  });
+  await SiteTransferRequest.create({
+    id: transferId,
+    templateId: id,
+    fromOrganizationId: resolved.organizationId,
+    fromUserId: resolved.userId,
+    toEmail,
+    toUserId: recipientUser?.id,
+    token,
+    compatibilityWarnings: warnings,
+    expiresAt,
+  }).go();
+  const { data: created } = await SiteTransferRequest.get({ templateId: id, id: transferId }).go();
+  if (!created) throw new Error(`SiteTransferRequest ${transferId} vanished immediately after being created`);
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const brand = await getOrgBrand(resolved.organizationId);
+  const brand = await getOrgBrandDynamo(resolved.organizationId);
   try {
     await sendMaildripEmail({
       to: toEmail,
@@ -134,9 +138,9 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
   const site = await resolveSite(id, resolved.organizationId);
   if (!site) return NextResponse.json({ error: "Site not found." }, { status: 404 });
 
-  const pending = await prisma.siteTransferRequest.findFirst({ where: { templateId: id, status: "PENDING" } });
+  const pending = (await listOutgoingTransfers(resolved.organizationId)).find((t) => t.templateId === id);
   if (!pending) return NextResponse.json({ error: "No pending transfer to cancel." }, { status: 404 });
 
-  await prisma.siteTransferRequest.update({ where: { id: pending.id }, data: { status: "CANCELLED", respondedAt: new Date() } });
+  await SiteTransferRequest.patch({ templateId: pending.templateId, id: pending.id }).set({ status: "CANCELLED", respondedAt: new Date().toISOString() }).go();
   return NextResponse.json({ ok: true });
 }

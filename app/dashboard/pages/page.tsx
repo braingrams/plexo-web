@@ -1,10 +1,10 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { getTierFeatures } from "@/lib/subscription";
+import { Template, BlogSite, PublishedDomain } from "@/lib/db/contentEntities";
+import { User } from "@/lib/db/coreEntities";
 
 import { PagesOverviewClient } from "./PagesOverviewClient";
 import { PagesShell } from "../_components/PagesShell";
@@ -15,19 +15,18 @@ import { PagesShell } from "../_components/PagesShell";
 export const dynamic = "force-dynamic";
 
 export default async function PagesOverviewPage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
 
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/pages");
   }
 
-  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
 
-  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { subscriptionPlan: true } });
+  const { data: user } = await User.get({ id: session.user.id }).go();
   const isUltra = getTierFeatures(user?.subscriptionPlan).multiPageSitesEnabled;
 
   // Root landing-page templates with at least one sub-page — i.e. multi-site templates,
@@ -35,44 +34,48 @@ export default async function PagesOverviewPage() {
   // query in app/dashboard/templates/page.tsx; the publishedDomain join below (same pattern
   // as app/dashboard/domains/page.tsx) is only used to show a live link when one exists, not
   // to filter the list.
-  const templates = await prisma.template.findMany({
-    where: {
-      organizationId: orgResolution.organizationId,
-      parentId: null,
-      kind: "LANDING_PAGE",
-      isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false,
-      marketplaceStatus: null,
-      pages: { some: {} },
-      // Same reasoning as /dashboard/templates: a blog-as-homepage site is a blog now,
-      // not a landing-page template — keep the two lists consistent.
-      NOT: { blogSite: { is: { enabled: true, showOnHomepage: true } } },
-    },
-    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      name: true,
-      compiledHtml: true,
-      updatedAt: true,
-      _count: { select: { pages: true } },
-      publishedDomains: {
-        where: { active: true },
-        select: { domain: true },
-        orderBy: { createdAt: "asc" },
-      },
-    },
+  const { data: all } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go();
+  const candidates = all.filter(
+    (t) => !t.parentId && t.kind === "LANDING_PAGE" && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
+  );
+
+  // Same reasoning as /dashboard/templates: a blog-as-homepage site is a blog now,
+  // not a landing-page template — keep the two lists consistent.
+  const blogSites = await Promise.all(candidates.map((t) => BlogSite.get({ templateId: t.id }).go()));
+  const notBlogHomepages = candidates.filter((t, i) => {
+    const site = blogSites[i].data;
+    return !(site?.enabled && site?.showOnHomepage);
   });
+
+  const childBatches = await Promise.all(notBlogHomepages.map((t) => Template.query.byParent({ parentId: t.id }).go()));
+  const withChildren = notBlogHomepages
+    .map((t, i) => ({ template: t, children: childBatches[i].data }))
+    .filter((r) => r.children.length > 0);
+
+  withChildren.sort((a, b) => {
+    const byUpdated = (b.template.updatedAt ?? "").localeCompare(a.template.updatedAt ?? "");
+    if (byUpdated !== 0) return byUpdated;
+    return (b.template.createdAt ?? "").localeCompare(a.template.createdAt ?? "");
+  });
+
+  const domainBatches = await Promise.all(
+    withChildren.map((r) => PublishedDomain.query.primary({ templateId: r.template.id }).where((attr, op) => op.eq(attr.active, true)).go()),
+  );
 
   return (
     <PagesShell>
       <PagesOverviewClient
         isUltra={isUltra}
-        pages={templates.map((t) => ({
-          id: t.id,
-          name: t.name,
-          compiledHtml: t.compiledHtml,
-          updatedAt: t.updatedAt.toISOString(),
-          pageCount: t._count.pages,
-          domains: t.publishedDomains.map((d) => d.domain),
+        pages={withChildren.map((r, i) => ({
+          id: r.template.id,
+          name: r.template.name,
+          compiledHtml: r.template.compiledHtml,
+          updatedAt: r.template.updatedAt ?? new Date().toISOString(),
+          pageCount: r.children.length,
+          domains: domainBatches[i].data
+            .slice()
+            .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))
+            .map((d) => d.domain),
         }))}
       />
     </PagesShell>

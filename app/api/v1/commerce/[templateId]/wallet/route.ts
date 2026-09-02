@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { prisma } from "@/server/prisma";
-import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
-import { resolveCommerceWallet } from "@/lib/commerce/wallet";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
+import { resolveCommerceWallet } from "@/lib/commerce/walletDynamo";
+import { Organization } from "@/lib/db/coreEntities";
+import { CommerceWallet, CommerceWalletLedgerEntry } from "@/lib/db/commerceEntities";
 
 /**
  * GET /api/v1/commerce/:templateId/wallet
@@ -21,44 +22,38 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
 
   const searchParams = request.nextUrl.searchParams;
   const limit = Math.min(Math.max(Number(searchParams.get("limit")) || 25, 1), 100);
-  const cursor = searchParams.get("cursor") || undefined;
+  const cursor = searchParams.get("cursor") || null;
 
-  const org = await prisma.organization.findUnique({ where: { id: organizationId }, select: { commerceWalletPooled: true } });
-  const existing = org?.commerceWalletPooled
-    ? await prisma.commerceWallet.findFirst({ where: { organizationId, templateId: null } })
-    : await prisma.commerceWallet.findUnique({ where: { templateId } });
+  const { data: org } = await Organization.get({ id: organizationId }).go();
+  const pooled = org?.commerceWalletPooled ?? false;
+  const scopeId = pooled ? organizationId : templateId;
+  const { data: existing } = await CommerceWallet.get({ scopeId }).go();
 
   if (!existing) {
     return NextResponse.json({
-      wallet: { balanceCents: 0, currency: "NGN", pooled: Boolean(org?.commerceWalletPooled) },
+      wallet: { balanceCents: 0, currency: "NGN", pooled },
       ledger: [],
       nextCursor: null,
     });
   }
 
-  const ledger = await prisma.commerceWalletLedgerEntry.findMany({
-    where: { walletId: existing.id },
-    orderBy: { createdAt: "desc" },
-    take: limit + 1,
-    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-  });
-
-  const hasMore = ledger.length > limit;
-  const page = hasMore ? ledger.slice(0, limit) : ledger;
+  const { data: ledger, cursor: nextCursor } = await CommerceWalletLedgerEntry.query
+    .primary({ walletId: existing.id })
+    .go({ limit, cursor, order: "desc" });
 
   return NextResponse.json({
-    wallet: { balanceCents: existing.balanceCents, currency: existing.currency, pooled: Boolean(org?.commerceWalletPooled) },
-    ledger: page.map((entry) => ({
+    wallet: { balanceCents: existing.balanceCents ?? 0, currency: existing.currency ?? "NGN", pooled },
+    ledger: ledger.map((entry) => ({
       id: entry.id,
       type: entry.type,
-      grossAmountCents: entry.grossAmountCents,
-      feeCents: entry.feeCents,
+      grossAmountCents: entry.grossAmountCents ?? null,
+      feeCents: entry.feeCents ?? null,
       netAmountCents: entry.netAmountCents,
       balanceAfterCents: entry.balanceAfterCents,
-      description: entry.description,
+      description: entry.description ?? null,
       createdAt: entry.createdAt,
     })),
-    nextCursor: hasMore ? page[page.length - 1].id : null,
+    nextCursor: nextCursor ?? null,
   });
 }
 
@@ -80,7 +75,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ t
     return NextResponse.json({ error: "pooled must be a boolean." }, { status: 400 });
   }
 
-  await prisma.organization.update({ where: { id: organizationId }, data: { commerceWalletPooled: body.pooled } });
+  await Organization.patch({ id: organizationId }).set({ commerceWalletPooled: body.pooled }).go();
   // Ensure the target wallet shape exists so the very next GET has something to read —
   // harmless no-op if it already does.
   await resolveCommerceWallet(templateId, organizationId).catch(() => undefined);

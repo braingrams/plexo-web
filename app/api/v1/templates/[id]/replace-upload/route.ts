@@ -1,8 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { uploadObject, deleteObjects } from "@/lib/storage";
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { requirePermission } from "@/server/requirePermission";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { requirePermission } from "@/server/requirePermissionDynamo";
 import {
   extractZipUpload,
   validateSingleHtmlUpload,
@@ -11,6 +11,7 @@ import {
   type ExtractedSite,
 } from "@/server/rawUpload";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
+import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 
 /**
  * POST /api/v1/templates/:id/replace-upload
@@ -37,12 +38,12 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  const permissionError = requirePermission(resolved.role, { template: ["update"] });
   if (permissionError) return permissionError;
 
   const { id } = await context.params;
-  const template = await prisma.template.findFirst({ where: { id, organizationId: resolved.organizationId } });
-  if (!template) {
+  const { data: template } = await Template.get({ id }).go();
+  if (!template || template.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });
   }
   if (template.sourceType !== "RAW_UPLOAD") {
@@ -87,7 +88,7 @@ export async function POST(
     throw err;
   }
 
-  const oldAssets = await prisma.templateAsset.findMany({ where: { templateId: template.id } });
+  const { data: oldAssets } = await TemplateAsset.query.primary({ templateId: template.id }).go();
 
   // Upload the new assets FIRST, before touching anything old — if this fails partway,
   // the live template/domain is untouched rather than left half-replaced.
@@ -118,7 +119,7 @@ export async function POST(
   // Now safe to tear down the old files: DB row deletion + blob deletion for whatever
   // isn't present in the new upload (a path reused by both old and new was just
   // overwritten in place above).
-  await prisma.templateAsset.deleteMany({ where: { templateId: template.id } });
+  await Promise.all(oldAssets.map((a) => TemplateAsset.remove({ templateId: a.templateId, path: a.path }).go()));
   const staleBlobUrls = oldAssets
     .filter((a) => !uploaded.some((u) => u.path === a.path))
     .map((a) => a.blobUrl);
@@ -128,25 +129,18 @@ export async function POST(
     );
   }
 
-  await prisma.template.update({
-    where: { id: template.id },
-    data: {
-      compiledHtml: site.indexHtml,
-      ...(name ? { name } : {}),
-    },
-  });
+  await Template.patch({ id: template.id })
+    .set({ compiledHtml: site.indexHtml, ...(name ? { name } : {}) })
+    .go();
   if (uploaded.length > 0) {
-    await prisma.templateAsset.createMany({ data: uploaded });
+    await Promise.all(uploaded.map((a) => TemplateAsset.create({ id: randomUUID(), ...a }).go()));
   }
 
   // Content changed under every domain this template is live on — re-scan rather than
   // wait for the next periodic cron pass.
-  const linkedDomains = await prisma.publishedDomain.findMany({
-    where: { templateId: template.id },
-    select: { id: true },
-  });
+  const { data: linkedDomains } = await PublishedDomain.query.primary({ templateId: template.id }).go();
   for (const d of linkedDomains) {
-    void scanPublishedDomain(d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
+    void scanPublishedDomain(d.templateId, d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
   }
 
   return NextResponse.json({ success: true, templateId: template.id, assetCount: uploaded.length });

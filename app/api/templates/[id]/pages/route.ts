@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { getPageTree } from "@/server/slug";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { getPageTree } from "@/server/slugDynamo";
 
 /**
  * GET /api/templates/:id/pages
@@ -30,6 +30,6 @@ export async function GET(
   return NextResponse.json({
     rootId: tree.rootId,
     currentId: id,
-    pages: tree.pages.map((p) => ({ ...p, updatedAt: p.updatedAt.toISOString() })),
+    pages: tree.pages,
   });
 }

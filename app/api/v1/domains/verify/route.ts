@@ -1,7 +1,7 @@
 import dns from "node:dns/promises";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "../route";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { PublishedDomain } from "@/lib/db/contentEntities";
 import { getPagesDomain } from "@/server/pagesDomain";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -21,9 +21,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // never the dashboard's own app domain — see server/pagesDomain.ts.
   const pagesDomain = getPagesDomain();
 
-  const record = await prisma.publishedDomain.findFirst({
-    where: { domain, organizationId: resolved.organizationId },
-  });
+  // PublishedDomain's byDomain GSI1 is domain-only (see contentEntities.ts) — org
+  // ownership is verified in application code after the lookup, same as the Prisma
+  // version's combined where clause.
+  const { data: matches } = await PublishedDomain.query.byDomain({ domain }).go();
+  const record = matches.find((d) => d.organizationId === resolved.organizationId);
   if (!record) {
     return NextResponse.json({ error: "Domain not found or unauthorized." }, { status: 404 });
   }
@@ -31,13 +33,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const respond = async (result: { valid: boolean; type?: string; records?: string[]; error?: string }) => {
     // Persist the outcome so the frontend doesn't lose "Verified" on reload — previously
     // this endpoint only ever returned a result without writing it anywhere.
-    await prisma.publishedDomain.update({
-      where: { id: record.id },
-      data: {
-        dnsVerified: result.valid,
-        dnsVerifiedAt: result.valid ? new Date() : record.dnsVerifiedAt,
-      },
-    });
+    await PublishedDomain.patch({ templateId: record.templateId, id: record.id })
+      .set(
+        result.valid
+          ? { dnsVerified: true, dnsVerifiedAt: new Date().toISOString() }
+          : { dnsVerified: false },
+      )
+      .go();
     return NextResponse.json(result);
   };
 

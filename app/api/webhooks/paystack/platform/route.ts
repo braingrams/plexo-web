@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import { prisma } from "@/server/prisma";
-import { handleOrderPaid } from "@/lib/commerce/orderFulfillment";
-import { creditCommerceWallet } from "@/lib/commerce/wallet";
+import { handleOrderPaid } from "@/lib/db/commerceWebhookOperations";
+import { creditCommerceWallet } from "@/lib/commerce/walletDynamo";
+import { CommerceOrder, CommerceBooking, CommerceSettings, PlatformPaystackWebhookEvent } from "@/lib/db/commerceEntities";
+
+function isConditionalCheckFailure(err: unknown): boolean {
+  const anyErr = err as { name?: string; cause?: { name?: string } };
+  return anyErr?.name === "ConditionalCheckFailedException" || anyErr?.cause?.name === "ConditionalCheckFailedException";
+}
 
 /**
  * Webhook for orders paid through Plexo's OWN Paystack account (CommercePaymentProvider
@@ -44,32 +49,40 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ received: true });
   }
 
-  // Idempotency: same defensive shape as the per-site webhook's claimPaystackEvent, but
-  // against the shared StripeCommerceEvent-style guard scoped to THIS webhook's own event
-  // stream — reuses PaystackWebhookEvent with a synthetic templateId/organizationId isn't
-  // right here (this event isn't scoped to one site), so it claims by id alone via a
-  // dedicated table.
+  // Idempotency: same insert-first shape as the per-site webhook's claimPaystackEvent, but
+  // against its own dedicated table — this event isn't scoped to one site, so
+  // PaystackWebhookEvent's (templateId, organizationId) shape doesn't fit here.
   try {
-    await prisma.platformPaystackWebhookEvent.create({ data: { id: eventId } });
-  } catch {
-    return NextResponse.json({ received: true });
+    await PlatformPaystackWebhookEvent.create({ id: eventId }).go();
+  } catch (err) {
+    if (isConditionalCheckFailure(err)) return NextResponse.json({ received: true }); // already processed
+    throw err;
   }
 
   if (event.event === "charge.success" && event.data?.reference) {
     const reference = event.data.reference;
 
-    const updated = await prisma.commerceOrder.updateMany({
-      where: { paystackReference: reference, paymentProvider: "PLATFORM_PAYSTACK", status: "PENDING" },
-      data: { status: "PAID" },
-    });
+    const { data: matches } = await CommerceOrder.query.byPaymentRef({ paystackReference: reference }).go();
+    const orderRef = matches[0];
+    if (orderRef && orderRef.paymentProvider === "PLATFORM_PAYSTACK") {
+      try {
+        await CommerceOrder.patch({ templateId: orderRef.templateId, id: orderRef.id })
+          .set({ status: "PAID" })
+          .where((attr, op) => op.eq(attr.status, "PENDING"))
+          .go();
+      } catch (err) {
+        if (!isConditionalCheckFailure(err)) throw err; // already moved past PENDING — not our event to process
+        return NextResponse.json({ received: true });
+      }
 
-    if (updated.count > 0) {
-      const order = await prisma.commerceOrder.findUnique({ where: { paystackReference: reference }, include: { booking: true } });
-      if (order) {
-        const settings = await prisma.commerceSettings.findUnique({ where: { templateId: order.templateId } });
-        if (settings) {
-          await handleOrderPaid(order, settings);
-        }
+      const [{ data: order }, { data: booking }, { data: settings }] = await Promise.all([
+        CommerceOrder.get({ templateId: orderRef.templateId, id: orderRef.id }).go(),
+        CommerceBooking.get({ templateId: orderRef.templateId, orderId: orderRef.id }).go(),
+        CommerceSettings.get({ templateId: orderRef.templateId }).go(),
+      ]);
+
+      if (order && settings) {
+        await handleOrderPaid(order, booking, settings);
         try {
           await creditCommerceWallet(order);
         } catch (err) {

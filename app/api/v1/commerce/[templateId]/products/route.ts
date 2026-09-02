@@ -1,23 +1,30 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
-import { slugify } from "@/server/slug";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
+import { slugify } from "@/server/slugDynamo";
 import { encryptDigitalAccessSecret } from "@/lib/crypto";
+import { CommerceProduct, CommerceCategory, CommerceProductRelation } from "@/lib/db/commerceEntities";
 
 // Never send the encrypted password ciphertext to the client — hasDigitalAccessPassword is
 // enough for the UI to know one is set (see ProductsClient.tsx's "leave blank to keep
 // unchanged" convention).
-function toPublicProduct<T extends { digitalAccessPasswordEncrypted: string | null }>(product: T) {
+function toPublicProduct<T extends { digitalAccessPasswordEncrypted?: string }>(product: T) {
   const { digitalAccessPasswordEncrypted, ...rest } = product;
   return { ...rest, hasDigitalAccessPassword: Boolean(digitalAccessPasswordEncrypted) };
 }
 
+// CommerceProduct/CommerceCategory are both id-keyed (primary: templateId + id, see
+// commerceEntities.ts), not slug-keyed — unlike BlogPost/BlogCategory in the Content
+// context, so a slug/name lookup here has to scan the template's own product or category
+// list in memory rather than a direct .get(). Small in practice (one site's catalog).
 async function ensureUniqueProductSlug(templateId: string, baseInput: string): Promise<string> {
   const base = slugify(baseInput) || "product";
+  const { data: products } = await CommerceProduct.query.primary({ templateId }).go();
+  const slugs = new Set(products.map((p) => p.slug));
   let candidate = base;
   let suffix = 2;
-  while (await prisma.commerceProduct.findFirst({ where: { templateId, slug: candidate }, select: { id: true } })) {
+  while (slugs.has(candidate)) {
     candidate = `${base}-${suffix}`;
     suffix += 1;
   }
@@ -28,12 +35,15 @@ async function resolveCategoryId(templateId: string, organizationId: string, cat
   if (typeof categoryName !== "string" || !categoryName.trim()) return null;
   const name = categoryName.trim();
   const slug = slugify(name) || "category";
-  const category = await prisma.commerceCategory.upsert({
-    where: { templateId_slug: { templateId, slug } },
-    create: { templateId, organizationId, name, slug },
-    update: { name },
-  });
-  return category.id;
+  const { data: categories } = await CommerceCategory.query.primary({ templateId }).go();
+  const existing = categories.find((c) => c.slug === slug);
+  if (existing) {
+    if (existing.name !== name) await CommerceCategory.patch({ templateId, id: existing.id }).set({ name }).go();
+    return existing.id;
+  }
+  const id = randomUUID();
+  await CommerceCategory.create({ id, templateId, organizationId, name, slug }).go();
+  return id;
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
@@ -41,20 +51,22 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   const resolved = await resolveCommerceAdmin(request, templateId);
   if (resolved.error) return resolved.error;
 
-  const products = await prisma.commerceProduct.findMany({
-    where: { templateId },
-    include: { category: { select: { id: true, name: true } } },
-    orderBy: { createdAt: "desc" },
-  });
-  // Powers the shop_grid block's properties-panel "Show" dropdown (a real category, or
-  // best-seller/most-recent) — same shape the public products endpoint already returns.
-  const categories = await prisma.commerceCategory.findMany({
-    where: { templateId },
-    select: { id: true, name: true, slug: true },
-    orderBy: { name: "asc" },
-  });
+  const [{ data: products }, { data: categories }] = await Promise.all([
+    CommerceProduct.query.primary({ templateId }).go(),
+    CommerceCategory.query.primary({ templateId }).go(),
+  ]);
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
 
-  return NextResponse.json({ products: products.map(toPublicProduct), categories });
+  const sortedProducts = [...products].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  const sortedCategories = [...categories].sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ id: c.id, name: c.name, slug: c.slug }));
+
+  return NextResponse.json({
+    products: sortedProducts.map((p) => ({
+      ...toPublicProduct(p),
+      category: p.categoryId && categoryById.has(p.categoryId) ? { id: p.categoryId, name: categoryById.get(p.categoryId)!.name } : null,
+    })),
+    categories: sortedCategories,
+  });
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
@@ -63,7 +75,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   if (resolved.error) return resolved.error;
   const { organizationId, role } = resolved.context;
 
-  const permissionError = await requirePermission(request.headers, role, { commerce: ["create"] });
+  const permissionError = requirePermission(role, { commerce: ["create"] });
   if (permissionError) return permissionError;
 
   const body = await request.json().catch(() => ({}));
@@ -100,43 +112,52 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   const slug = await ensureUniqueProductSlug(templateId, name);
   const categoryId = await resolveCategoryId(templateId, organizationId, category);
 
-  const product = await prisma.commerceProduct.create({
-    data: {
-      templateId,
-      organizationId,
-      categoryId,
-      name: name.trim(),
-      slug,
-      description: typeof description === "string" ? description : null,
-      kind,
-      priceMinor,
-      stockQuantity: kind === "PHYSICAL" && typeof stockQuantity === "number" ? Math.max(0, Math.trunc(stockQuantity)) : null,
-      durationMinutes: kind === "SERVICE" && typeof durationMinutes === "number" ? Math.max(5, Math.trunc(durationMinutes)) : null,
-      imageUrl: typeof imageUrl === "string" && imageUrl ? imageUrl : null,
-      galleryImageUrls: Array.isArray(galleryImageUrls) ? galleryImageUrls.filter((u) => typeof u === "string") : undefined,
-      digitalDeliveryMethod: kind === "DIGITAL" ? digitalDeliveryMethod : null,
-      digitalFileUrl: kind === "DIGITAL" && digitalDeliveryMethod === "FILE_DOWNLOAD" && typeof digitalFileUrl === "string" ? digitalFileUrl : null,
-      digitalFileName: kind === "DIGITAL" && digitalDeliveryMethod === "FILE_DOWNLOAD" && typeof digitalFileName === "string" ? digitalFileName : null,
-      digitalExternalUrl: kind === "DIGITAL" && digitalDeliveryMethod === "EXTERNAL_LINK" && typeof digitalExternalUrl === "string" ? digitalExternalUrl : null,
-      digitalAccessInstructions: kind === "DIGITAL" && digitalDeliveryMethod === "ACCESS_LIST" && typeof digitalAccessInstructions === "string" ? digitalAccessInstructions : null,
-      digitalAccessPasswordEncrypted:
-        kind === "DIGITAL" && digitalDeliveryMethod === "ACCESS_LIST" && typeof digitalAccessPassword === "string" && digitalAccessPassword
-          ? encryptDigitalAccessSecret(digitalAccessPassword)
-          : null,
-      digitalMaxDownloads: kind === "DIGITAL" && typeof digitalMaxDownloads === "number" ? Math.max(1, Math.trunc(digitalMaxDownloads)) : null,
-      digitalLinkExpiryDays: kind === "DIGITAL" && typeof digitalLinkExpiryDays === "number" ? Math.max(1, Math.trunc(digitalLinkExpiryDays)) : null,
-    },
-  });
+  const productId = randomUUID();
+  await CommerceProduct.create({
+    id: productId,
+    templateId,
+    organizationId,
+    categoryId: categoryId ?? undefined,
+    name: name.trim(),
+    slug,
+    description: typeof description === "string" ? description : undefined,
+    kind,
+    priceMinor,
+    stockQuantity: kind === "PHYSICAL" && typeof stockQuantity === "number" ? Math.max(0, Math.trunc(stockQuantity)) : undefined,
+    durationMinutes: kind === "SERVICE" && typeof durationMinutes === "number" ? Math.max(5, Math.trunc(durationMinutes)) : undefined,
+    imageUrl: typeof imageUrl === "string" && imageUrl ? imageUrl : undefined,
+    galleryImageUrls: Array.isArray(galleryImageUrls) ? galleryImageUrls.filter((u) => typeof u === "string") : undefined,
+    digitalDeliveryMethod: kind === "DIGITAL" ? digitalDeliveryMethod : undefined,
+    digitalFileUrl: kind === "DIGITAL" && digitalDeliveryMethod === "FILE_DOWNLOAD" && typeof digitalFileUrl === "string" ? digitalFileUrl : undefined,
+    digitalFileName: kind === "DIGITAL" && digitalDeliveryMethod === "FILE_DOWNLOAD" && typeof digitalFileName === "string" ? digitalFileName : undefined,
+    digitalExternalUrl: kind === "DIGITAL" && digitalDeliveryMethod === "EXTERNAL_LINK" && typeof digitalExternalUrl === "string" ? digitalExternalUrl : undefined,
+    digitalAccessInstructions: kind === "DIGITAL" && digitalDeliveryMethod === "ACCESS_LIST" && typeof digitalAccessInstructions === "string" ? digitalAccessInstructions : undefined,
+    digitalAccessPasswordEncrypted:
+      kind === "DIGITAL" && digitalDeliveryMethod === "ACCESS_LIST" && typeof digitalAccessPassword === "string" && digitalAccessPassword
+        ? encryptDigitalAccessSecret(digitalAccessPassword)
+        : undefined,
+    digitalMaxDownloads: kind === "DIGITAL" && typeof digitalMaxDownloads === "number" ? Math.max(1, Math.trunc(digitalMaxDownloads)) : undefined,
+    digitalLinkExpiryDays: kind === "DIGITAL" && typeof digitalLinkExpiryDays === "number" ? Math.max(1, Math.trunc(digitalLinkExpiryDays)) : undefined,
+  }).go();
+  const { data: product } = await CommerceProduct.get({ templateId, id: productId }).go();
+  if (!product) throw new Error(`CommerceProduct ${productId} vanished immediately after being created`);
 
   if (Array.isArray(relatedProductIds) && relatedProductIds.length > 0) {
-    const validIds = (
-      await prisma.commerceProduct.findMany({ where: { id: { in: relatedProductIds }, templateId }, select: { id: true } })
-    ).map((p) => p.id);
-    await prisma.commerceProductRelation.createMany({
-      data: validIds.map((relatedProductId) => ({ templateId, organizationId, productId: product.id, relatedProductId })),
-      skipDuplicates: true,
-    });
+    const { data: candidateProducts } = await CommerceProduct.query.primary({ templateId }).go();
+    const validIds = candidateProducts.filter((p) => relatedProductIds.includes(p.id)).map((p) => p.id);
+    await Promise.all(
+      validIds.map((relatedProductId) =>
+        CommerceProductRelation.create({ id: randomUUID(), templateId, organizationId, productId: product.id, relatedProductId }).go().catch((err) => {
+          if (!isConditionalCheckFailure(err)) throw err; // already related — idempotent
+        }),
+      ),
+    );
   }
 
   return NextResponse.json({ product: toPublicProduct(product) }, { status: 201 });
+}
+
+function isConditionalCheckFailure(err: unknown): boolean {
+  const anyErr = err as { name?: string; cause?: { name?: string } };
+  return anyErr?.name === "ConditionalCheckFailedException" || anyErr?.cause?.name === "ConditionalCheckFailedException";
 }

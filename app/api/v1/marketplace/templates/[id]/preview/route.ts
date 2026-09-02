@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { prisma } from "@/server/prisma";
+import { Template } from "@/lib/db/contentEntities";
 
 /**
  * GET /api/v1/marketplace/templates/:id/preview
@@ -15,10 +15,7 @@ export async function GET(
 ): Promise<NextResponse> {
   const { id } = await params;
 
-  const template = await prisma.template.findUnique({
-    where: { id },
-    select: { marketplaceStatus: true, compiledHtml: true, name: true },
-  });
+  const { data: template } = await Template.get({ id }).go();
 
   if (!template || template.marketplaceStatus !== "PUBLISHED") {
     return NextResponse.json({ error: "Template not found." }, { status: 404 });

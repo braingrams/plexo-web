@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
+import { auth } from "@/server/authDynamo";
+import { Template } from "@/lib/db/contentEntities";
 
 /**
  * PATCH /api/admin/templates/[id]/official
@@ -13,7 +13,7 @@ import { prisma } from "@/server/prisma";
  */
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   try {
-    const session = await auth.api.getSession({ headers: request.headers });
+    const session = await auth();
     const sessionEmail = session?.user?.email?.toLowerCase().trim();
 
     if (!sessionEmail) {
@@ -36,18 +36,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Body must include a boolean `isOfficial`." }, { status: 400 });
     }
 
-    const existing = await prisma.template.findUnique({ where: { id }, select: { id: true, name: true, isOfficial: true } });
+    const { data: existing } = await Template.get({ id }).go();
     if (!existing) {
       return NextResponse.json({ error: "Template not found." }, { status: 404 });
     }
 
-    const updated = await prisma.template.update({
-      where: { id },
-      data: { isOfficial: body.isOfficial },
-      select: { id: true, name: true, isOfficial: true },
-    });
+    await Template.patch({ id }).set({ isOfficial: body.isOfficial }).go();
+    const { data: updated } = await Template.get({ id }).go();
+    if (!updated) throw new Error(`Template ${id} vanished immediately after being updated`);
 
-    return NextResponse.json({ success: true, template: updated });
+    return NextResponse.json({ success: true, template: { id: updated.id, name: updated.name, isOfficial: updated.isOfficial } });
   } catch (error: any) {
     console.error("[Plexo Web Admin Templates Error]:", error);
     return NextResponse.json({ error: error.message || "Failed to update template." }, { status: 500 });

@@ -4,6 +4,9 @@ import { docClient } from "./client";
 import { User } from "./coreEntities";
 import { CreditLedgerEntry, StripeEvent } from "./ledgerEntities";
 import { PLAN_MONTHLY_CREDITS } from "@/lib/subscription";
+import { computeCostUsd, creditsForUsd } from "@/lib/credits/pricing";
+import { MAX_TOKENS } from "@/lib/ai/generate";
+import type { AiActionMode, AiProvider, ConcreteTier, GenerateOutcome } from "@/lib/ai/types";
 
 type UserItem = EntityItem<typeof User>;
 
@@ -142,12 +145,58 @@ async function debitCredits(
   throw new Error(`debitCredits: exhausted retries for user ${userId} — too much concurrent balance contention`);
 }
 
+/**
+ * Ported from lib/credits/ledger.ts. Pure/no-I/O — computes an upper-bound credit cost for
+ * a request before calling the provider, using MAX_TOKENS[mode] as the output ceiling and a
+ * conservative ~3-chars/token estimate for input. Used purely as a pre-flight balance gate;
+ * `chargeUsage` bills the real, usually-lower amount after.
+ */
+export function estimateWorstCaseCost(
+  provider: AiProvider,
+  tier: ConcreteTier,
+  mode: AiActionMode,
+  approxInputChars: number,
+): number {
+  const conservativeInputTokens = Math.ceil(approxInputChars / 3);
+  const maxOutputTokens = MAX_TOKENS[mode];
+  const usd = computeCostUsd(provider, tier, {
+    inputTokens: conservativeInputTokens,
+    outputTokens: maxOutputTokens,
+  });
+  return creditsForUsd(usd);
+}
+
 export async function chargeFlatCredits(
   userId: string,
   credits: number,
   description: string,
 ): Promise<{ allowanceBalance: number; topupBalance: number }> {
   return debitCredits(userId, credits, "AI_USAGE", description);
+}
+
+/**
+ * Ported from lib/credits/ledger.ts's chargeUsage, now that app/api/v1/ai/generate/route.ts
+ * (its only real call site) is itself being cut over. Deducts the real, usage-based cost of
+ * a completed system-AI request — same allowance-then-topup transaction as debitCredits,
+ * just with the token-usage pricing math folded in first.
+ */
+export async function chargeUsage(
+  userId: string,
+  params: { provider: AiProvider; tier: ConcreteTier; mode: AiActionMode; usage: GenerateOutcome["usage"] },
+): Promise<{ creditsCharged: number; allowanceBalance: number; topupBalance: number }> {
+  const usd = computeCostUsd(params.provider, params.tier, params.usage);
+  const credits = creditsForUsd(usd);
+  const description = `${params.mode} (${params.provider}/${params.tier})`;
+  const metadata = {
+    provider: params.provider,
+    tier: params.tier,
+    mode: params.mode,
+    inputTokens: params.usage?.inputTokens ?? null,
+    outputTokens: params.usage?.outputTokens ?? null,
+    costUsd: usd,
+  };
+  const { allowanceBalance, topupBalance } = await debitCredits(userId, credits, "AI_USAGE", description, metadata);
+  return { creditsCharged: credits, allowanceBalance, topupBalance };
 }
 
 export interface CreditBalance {
@@ -212,11 +261,6 @@ export async function ensureCreditPeriod(userId: string): Promise<CreditBalance>
     return { allowanceBalance: freshAllowance, topupBalance: freshTopup, total: freshAllowance + freshTopup, allowanceResetAt: freshResetAt };
   }
 }
-
-// chargeUsage (real token-usage pricing) ports the same way as chargeFlatCredits above —
-// read User, compute, conditional TransactWriteCommand. Omitted here since nothing has
-// been cut over to it yet (lib/ai/generate.ts is still Prisma-backed) — add when that
-// call site's own cutover happens, not speculatively ahead of it.
 
 // ElectroDB's .params() returns the exact runtime shape TransactWriteItems' Update/Put
 // members need (TableName, Key/Item, UpdateExpression, ExpressionAttributeNames/Values,

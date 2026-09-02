@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { resolveBlogSite, type ResolveBlogSiteResult } from "@/lib/pub/resolveSite";
-import { listAllPublishedSlugs } from "@/lib/blog/queries";
+import { resolveBlogSite, type ResolveBlogSiteResult } from "@/lib/pub/resolveSiteDynamo";
+import { listAllPublishedSlugs } from "@/lib/blog/queriesDynamo";
 import { siteOrigin } from "@/lib/blog/seo";
 
 export const revalidate = 60;
@@ -39,7 +39,7 @@ export async function GET(
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
-    <title>${escapeXml(site.blogSite.title)}</title>
+    <title>${escapeXml(site.blogSite.title ?? "Blog")}</title>
     <link>${origin}/blog</link>
     <description>${escapeXml(site.blogSite.description ?? "")}</description>${items}
   </channel>

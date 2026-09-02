@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { headers } from "next/headers";
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { Template } from "@/lib/db/contentEntities";
 import { PageContainer } from "../_components/PageContainer";
 
 /** Commerce is scoped per site (own catalog, own Paystack keys — see CommerceSettings),
@@ -12,18 +11,17 @@ import { PageContainer } from "../_components/PageContainer";
  * lets them switch to a different one. An org with no sites yet gets a real empty state
  * instead of a silent redirect somewhere unrelated. */
 export default async function CommerceRootPage() {
-  const reqHeaders = await headers();
-  const session = await auth.api.getSession({ headers: reqHeaders });
+  const session = await auth();
   if (!session?.user) redirect("/auth/login");
 
-  const orgResolution = await ensureActiveOrganization(reqHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") redirect("/choose-org");
 
-  const mostRecentSite = await prisma.template.findFirst({
-    where: { organizationId: orgResolution.organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false },
-    select: { id: true },
-    orderBy: { updatedAt: "desc" },
-  });
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go();
+  const eligibleSites = orgTemplates
+    .filter((t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout)
+    .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+  const mostRecentSite = eligibleSites[0];
 
   if (mostRecentSite) {
     redirect(`/dashboard/commerce/${mostRecentSite.id}`);

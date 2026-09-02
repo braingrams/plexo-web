@@ -1,7 +1,33 @@
-import { TemplateKind } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveApiKey } from "../_lib/apiKeyAuth";
+import type { EntityItem } from "electrodb";
+import { Template } from "@/lib/db/contentEntities";
+import { User } from "@/lib/db/coreEntities";
+import { resolveApiKey } from "../_lib/apiKeyAuthDynamo";
+
+type TemplateKind = "EMAIL" | "LANDING_PAGE";
+
+/**
+ * Bounded scan for every isOfficial template — like Template's marketplaceStatus
+ * (see lib/marketplace.ts / contentEntities.ts's own comment), there's no index for
+ * "browse platform-wide by isOfficial" (both of Template's GSI slots are spent on the
+ * org-scoped dashboard access patterns). Official/curated templates are expected to be a
+ * small, admin-curated handful (see PATCH /api/admin/templates/[id]/official), so a
+ * cursor-driven `.scan`, filtered in application code, is the same honest v1 answer as
+ * app/api/internal/scan-domains/route.ts rather than a speculative new GSI.
+ */
+async function scanOfficialTemplates(): Promise<EntityItem<typeof Template>[]> {
+  const all: EntityItem<typeof Template>[] = [];
+  let cursor: string | null = null;
+  for (;;) {
+    const page: { data: EntityItem<typeof Template>[]; cursor: string | null } = await Template.scan
+      .where(({ isOfficial }, { eq }) => eq(isOfficial, true))
+      .go({ cursor });
+    all.push(...page.data);
+    cursor = page.cursor;
+    if (!cursor) break;
+  }
+  return all;
+}
 
 /**
  * GET /api/v1/public-templates
@@ -33,55 +59,53 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     let targetKind: TemplateKind | null = null;
     if (kindParam === "LANDING_PAGE" || kindParam === "EMAIL") {
-      targetKind = kindParam as TemplateKind;
+      targetKind = kindParam;
     } else if (category === "landing-page" || category === "opt-in-page") {
-      targetKind = TemplateKind.LANDING_PAGE;
+      targetKind = "LANDING_PAGE";
     } else if (category === "email") {
-      targetKind = TemplateKind.EMAIL;
+      targetKind = "EMAIL";
     }
 
-    // Platform-wide, unscoped by owner — the whole point of this being "public."
-    const dbWhere: any = { parentId: null, isOfficial: true };
-    if (targetKind) {
-      dbWhere.kind = targetKind;
-    }
-
-    let dbTemplates: Array<any> = [];
+    let templates: Array<{
+      id: string;
+      name: string;
+      kind: TemplateKind;
+      category: string;
+      previewImage: null;
+      designJson: unknown;
+      compiledHtml: string;
+      authorName: string;
+      createdAt: string;
+      updatedAt: string;
+    }> = [];
     try {
-      dbTemplates = await prisma.template.findMany({
-        where: dbWhere,
-        // Tie-break on createdAt — the org-backfill migration's updateMany bumped every
-        // template's updatedAt to the same instant via Prisma's @updatedAt.
-        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-        take: limit,
-        skip: skip,
-        select: {
-          id: true,
-          name: true,
-          kind: true,
-          designJson: true,
-          compiledHtml: true,
-          createdAt: true,
-          updatedAt: true,
-          user: { select: { name: true } },
-        },
-      });
+      const official = await scanOfficialTemplates();
+      let filtered = official.filter((t) => !t.parentId);
+      if (targetKind) filtered = filtered.filter((t) => t.kind === targetKind);
+      filtered.sort(
+        (a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
+      );
+      const page = filtered.slice(skip, skip + limit);
+
+      const authorNames = await Promise.all(
+        page.map(async (t) => (await User.get({ id: t.userId }).go()).data?.name || "Plexo"),
+      );
+
+      templates = page.map((t, i) => ({
+        id: t.id,
+        name: t.name,
+        kind: t.kind,
+        category: t.kind === "LANDING_PAGE" ? (category || "landing-page") : "email",
+        previewImage: null,
+        designJson: t.designJson,
+        compiledHtml: t.compiledHtml,
+        authorName: authorNames[i],
+        createdAt: t.createdAt ?? new Date().toISOString(),
+        updatedAt: t.updatedAt ?? new Date().toISOString(),
+      }));
     } catch (dbErr) {
       console.warn("[Plexo Web] DB query for public-templates warning:", dbErr);
     }
-
-    const templates = dbTemplates.map((t) => ({
-      id: t.id,
-      name: t.name,
-      kind: t.kind,
-      category: t.kind === TemplateKind.LANDING_PAGE ? (category || "landing-page") : "email",
-      previewImage: null,
-      designJson: t.designJson,
-      compiledHtml: t.compiledHtml,
-      authorName: t.user?.name || "Plexo",
-      createdAt: t.createdAt.toISOString(),
-      updatedAt: t.updatedAt.toISOString(),
-    }));
 
     return NextResponse.json({
       success: true,

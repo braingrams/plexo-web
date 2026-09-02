@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
-import { resendDigitalDelivery } from "@/lib/commerce/digitalDelivery";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
+import { resendDigitalDelivery } from "@/lib/commerce/digitalDeliveryDynamo";
 
 /**
  * Re-sends an already-created CommerceDigitalDelivery's email using its EXISTING token —
@@ -17,7 +17,7 @@ export async function POST(
   if (resolved.error) return resolved.error;
   const { role } = resolved.context;
 
-  const permissionError = await requirePermission(request.headers, role, { commerce: ["update"] });
+  const permissionError = requirePermission(role, { commerce: ["update"] });
   if (permissionError) return permissionError;
 
   const body = await request.json().catch(() => ({}));

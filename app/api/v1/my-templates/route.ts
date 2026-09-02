@@ -1,7 +1,9 @@
-import { TemplateKind } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveApiKey } from "../_lib/apiKeyAuth";
+import { Template } from "@/lib/db/contentEntities";
+import { User } from "@/lib/db/coreEntities";
+import { resolveApiKey } from "../_lib/apiKeyAuthDynamo";
+
+type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
 /**
  * GET /api/v1/my-templates
@@ -22,7 +24,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // Every template returned below belongs to this same owner, so the real account name only
     // needs fetching once.
-    const ownerUser = await prisma.user.findUnique({ where: { id: ownerUserId }, select: { name: true } });
+    const { data: ownerUser } = await User.get({ id: ownerUserId }).go();
     const ownerName = ownerUser?.name || null;
 
     const { searchParams } = new URL(request.url);
@@ -33,37 +35,45 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     let targetKind: TemplateKind | null = null;
     if (kindParam === "LANDING_PAGE" || kindParam === "EMAIL") {
-      targetKind = kindParam as TemplateKind;
+      targetKind = kindParam;
     } else if (category === "landing-page" || category === "opt-in-page") {
-      targetKind = TemplateKind.LANDING_PAGE;
+      targetKind = "LANDING_PAGE";
     } else if (category === "email") {
-      targetKind = TemplateKind.EMAIL;
+      targetKind = "EMAIL";
     }
 
-    const dbWhere: any = { parentId: null, organizationId, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false };
-    if (targetKind) {
-      dbWhere.kind = targetKind;
-    }
-
-    let dbTemplates: Array<any> = [];
+    let dbTemplates: Array<{
+      id: string;
+      name: string;
+      kind: TemplateKind;
+      designJson: unknown;
+      compiledHtml: string;
+      createdAt: string;
+      updatedAt: string;
+    }> = [];
     try {
-      dbTemplates = await prisma.template.findMany({
-        where: dbWhere,
-        // Tie-break on createdAt — the org-backfill migration's updateMany bumped every
-        // template's updatedAt to the same instant via Prisma's @updatedAt.
-        orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-        take: limit,
-        skip: skip,
-        select: {
-          id: true,
-          name: true,
-          kind: true,
-          designJson: true,
-          compiledHtml: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
+      // byOrg (GSI1) is the real index here — "this org's templates," newest first
+      // (contentEntities.ts). The parentId/isBlogLayout/isSiteLayoutFragment/
+      // isCommerceLayout/kind narrowing is filtered in memory over that same
+      // partition, same as every other "org's root templates" call site in this
+      // migration (e.g. app/api/templates/[id]/convert-type/route.ts).
+      const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go();
+      let filtered = orgTemplates.filter(
+        (t) => !t.parentId && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
+      );
+      if (targetKind) filtered = filtered.filter((t) => t.kind === targetKind);
+      filtered.sort(
+        (a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
+      );
+      dbTemplates = filtered.slice(skip, skip + limit).map((t) => ({
+        id: t.id,
+        name: t.name,
+        kind: t.kind,
+        designJson: t.designJson,
+        compiledHtml: t.compiledHtml,
+        createdAt: t.createdAt ?? new Date().toISOString(),
+        updatedAt: t.updatedAt ?? new Date().toISOString(),
+      }));
     } catch (dbErr) {
       console.warn("[Plexo Web] DB query for my-templates warning:", dbErr);
     }
@@ -72,13 +82,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       id: t.id,
       name: t.name,
       kind: t.kind,
-      category: t.kind === TemplateKind.LANDING_PAGE ? (category || "landing-page") : "email",
+      category: t.kind === "LANDING_PAGE" ? (category || "landing-page") : "email",
       previewImage: null,
       designJson: t.designJson,
       compiledHtml: t.compiledHtml,
       authorName: ownerName,
-      createdAt: t.createdAt.toISOString(),
-      updatedAt: t.updatedAt.toISOString(),
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
     }));
 
     return NextResponse.json({

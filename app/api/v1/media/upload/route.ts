@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+
 import { uploadObject, StorageError } from "@/lib/storage";
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "../../domains/route";
+import { UploadedImage } from "@/lib/db/coreEntities";
+import { resolveUser } from "@/lib/auth/resolveUser";
 
 // Matches app/api/blog/[templateId]/upload-image/route.ts's limits/allowlist — same kind
 // of user-facing image upload, no reason for a different ceiling here.
@@ -50,20 +51,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       throw err;
     }
 
-    const uploadedImage = await prisma.uploadedImage.create({
-      data: {
-        userId,
-        organizationId: resolved.organizationId,
-        name: file.name,
-        url: blob.url,
-      },
-    });
+    const id = crypto.randomUUID();
+    await UploadedImage.create({
+      id,
+      userId,
+      organizationId: resolved.organizationId,
+      name: file.name,
+      url: blob.url,
+    }).go();
 
-    return NextResponse.json({
-      id: uploadedImage.id,
-      name: uploadedImage.name,
-      url: uploadedImage.url,
-    });
+    return NextResponse.json({ id, name: file.name, url: blob.url });
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });

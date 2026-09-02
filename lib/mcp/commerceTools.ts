@@ -1,17 +1,32 @@
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { slugify } from "@/server/slug";
-import { encryptDigitalAccessSecret, encryptBankDetail, decryptPaystackKey, decryptMaildripKey } from "@/lib/crypto";
-import { maskSecret } from "@/lib/commerce/adminAuth";
-import { resolveCommerceWallet } from "@/lib/commerce/wallet";
-import { resendDigitalDelivery } from "@/lib/commerce/digitalDelivery";
+import { randomUUID } from "node:crypto";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { slugify } from "@/server/slugDynamo";
+import { encryptDigitalAccessSecret, encryptBankDetail, encryptPaystackKey, encryptMaildripKey, decryptPaystackKey, decryptMaildripKey } from "@/lib/crypto";
+import { maskSecret } from "@/lib/commerce/adminAuthDynamo";
+import { resolveCommerceWallet } from "@/lib/commerce/walletDynamo";
+import { resendDigitalDelivery } from "@/lib/commerce/digitalDeliveryDynamo";
 import { sendCommerceStripeAccessRequestNotificationEmail, sendCommerceWithdrawalRequestNotificationEmail } from "@/lib/email";
+import { Template } from "@/lib/db/contentEntities";
+import { Organization, User } from "@/lib/db/coreEntities";
+import {
+  CommerceProduct,
+  CommerceCategory,
+  CommerceSettings,
+  CommerceOrder,
+  CommerceOrderItem,
+  CommerceBooking,
+  CommerceDigitalDelivery,
+  CommerceWallet,
+  CommerceWalletLedgerEntry,
+  CommerceWithdrawalRequest,
+  CommerceStripeAccessRequest,
+} from "@/lib/db/commerceEntities";
 
 type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
 
 // Never send the encrypted password ciphertext to a caller — same helper as
 // app/api/v1/commerce/[templateId]/products/route.ts's own copy.
-function toPublicProduct<T extends { digitalAccessPasswordEncrypted: string | null }>(product: T) {
+function toPublicProduct<T extends { digitalAccessPasswordEncrypted?: string }>(product: T) {
   const { digitalAccessPasswordEncrypted, ...rest } = product;
   return { ...rest, hasDigitalAccessPassword: Boolean(digitalAccessPasswordEncrypted) };
 }
@@ -23,11 +38,8 @@ async function resolveCommerceSiteId(resolved: ResolvedUser, templateId: unknown
   if (!trimmed) {
     throw new Error("templateId is required — pass the site's home page id (see list_landing_pages).");
   }
-  const site = await prisma.template.findFirst({
-    where: { id: trimmed, organizationId: resolved.organizationId, parentId: null },
-    select: { id: true },
-  });
-  if (!site) {
+  const { data: site } = await Template.get({ id: trimmed }).go();
+  if (!site || site.organizationId !== resolved.organizationId || site.parentId) {
     throw new Error(`No site found with id "${trimmed}" in this account. templateId must be a site's home page (no parent) — use list_landing_pages to find it.`);
   }
   return site.id;
@@ -35,9 +47,11 @@ async function resolveCommerceSiteId(resolved: ResolvedUser, templateId: unknown
 
 async function ensureUniqueProductSlug(templateId: string, baseInput: string): Promise<string> {
   const base = slugify(baseInput) || "product";
+  const { data: products } = await CommerceProduct.query.primary({ templateId }).go();
+  const slugs = new Set(products.map((p) => p.slug));
   let candidate = base;
   let suffix = 2;
-  while (await prisma.commerceProduct.findFirst({ where: { templateId, slug: candidate }, select: { id: true } })) {
+  while (slugs.has(candidate)) {
     candidate = `${base}-${suffix}`;
     suffix += 1;
   }
@@ -49,12 +63,15 @@ async function resolveCategoryId(templateId: string, organizationId: string, cat
   if (typeof categoryName !== "string" || !categoryName.trim()) return null;
   const name = categoryName.trim();
   const slug = slugify(name) || "category";
-  const category = await prisma.commerceCategory.upsert({
-    where: { templateId_slug: { templateId, slug } },
-    create: { templateId, organizationId, name, slug },
-    update: { name },
-  });
-  return category.id;
+  const { data: categories } = await CommerceCategory.query.primary({ templateId }).go();
+  const existing = categories.find((c) => c.slug === slug);
+  if (existing) {
+    if (existing.name !== name) await CommerceCategory.patch({ templateId, id: existing.id }).set({ name }).go();
+    return existing.id;
+  }
+  const id = randomUUID();
+  await CommerceCategory.create({ id, templateId, organizationId, name, slug }).go();
+  return id;
 }
 
 const DIGITAL_PRODUCT_NOTE =
@@ -280,10 +297,11 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
   switch (toolName) {
     case "list_commerce_products": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const where: any = { templateId: siteId };
-      if (typeof args.kind === "string" && ["PHYSICAL", "SERVICE", "DIGITAL"].includes(args.kind)) where.kind = args.kind;
-      if (args.activeOnly) where.active = true;
-      const products = await prisma.commerceProduct.findMany({ where, orderBy: { createdAt: "desc" } });
+      const { data: allProducts } = await CommerceProduct.query.primary({ templateId: siteId }).go();
+      let products = allProducts;
+      if (typeof args.kind === "string" && ["PHYSICAL", "SERVICE", "DIGITAL"].includes(args.kind)) products = products.filter((p) => p.kind === args.kind);
+      if (args.activeOnly) products = products.filter((p) => p.active ?? true);
+      products = [...products].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
       return { products: products.map(toPublicProduct) };
     }
 
@@ -291,7 +309,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
       const productId = typeof args.productId === "string" ? args.productId.trim() : "";
       if (!productId) throw new Error("productId is required.");
-      const product = await prisma.commerceProduct.findFirst({ where: { id: productId, templateId: siteId } });
+      const { data: product } = await CommerceProduct.get({ templateId: siteId, id: productId }).go();
       if (!product) throw new Error(`Product not found with id "${productId}".`);
       return { product: toPublicProduct(product) };
     }
@@ -317,34 +335,36 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       }
 
       const slug = await ensureUniqueProductSlug(siteId, name);
-      const categoryId = (await resolveCategoryId(siteId, resolved.organizationId, args.category)) ?? null;
+      const categoryId = (await resolveCategoryId(siteId, resolved.organizationId, args.category)) ?? undefined;
 
-      const product = await prisma.commerceProduct.create({
-        data: {
-          templateId: siteId,
-          organizationId: resolved.organizationId,
-          categoryId,
-          name,
-          slug,
-          description: typeof args.description === "string" ? args.description : null,
-          kind,
-          priceMinor,
-          imageUrl: typeof args.imageUrl === "string" && args.imageUrl ? args.imageUrl : null,
-          stockQuantity: kind === "PHYSICAL" && typeof args.stockQuantity === "number" ? Math.max(0, Math.trunc(args.stockQuantity)) : null,
-          durationMinutes: kind === "SERVICE" && typeof args.durationMinutes === "number" ? Math.max(5, Math.trunc(args.durationMinutes)) : null,
-          digitalDeliveryMethod: kind === "DIGITAL" ? args.digitalDeliveryMethod : null,
-          digitalFileUrl: kind === "DIGITAL" && args.digitalDeliveryMethod === "FILE_DOWNLOAD" ? String(args.digitalFileUrl) : null,
-          digitalFileName: kind === "DIGITAL" && args.digitalDeliveryMethod === "FILE_DOWNLOAD" && typeof args.digitalFileName === "string" ? args.digitalFileName : null,
-          digitalExternalUrl: kind === "DIGITAL" && args.digitalDeliveryMethod === "EXTERNAL_LINK" ? String(args.digitalExternalUrl) : null,
-          digitalAccessInstructions: kind === "DIGITAL" && args.digitalDeliveryMethod === "ACCESS_LIST" ? String(args.digitalAccessInstructions) : null,
-          digitalAccessPasswordEncrypted:
-            kind === "DIGITAL" && args.digitalDeliveryMethod === "ACCESS_LIST" && typeof args.digitalAccessPassword === "string" && args.digitalAccessPassword
-              ? encryptDigitalAccessSecret(args.digitalAccessPassword)
-              : null,
-          digitalMaxDownloads: kind === "DIGITAL" && typeof args.digitalMaxDownloads === "number" ? Math.max(1, Math.trunc(args.digitalMaxDownloads)) : null,
-          digitalLinkExpiryDays: kind === "DIGITAL" && typeof args.digitalLinkExpiryDays === "number" ? Math.max(1, Math.trunc(args.digitalLinkExpiryDays)) : null,
-        },
-      });
+      const productId = randomUUID();
+      await CommerceProduct.create({
+        id: productId,
+        templateId: siteId,
+        organizationId: resolved.organizationId,
+        categoryId,
+        name,
+        slug,
+        description: typeof args.description === "string" ? args.description : undefined,
+        kind,
+        priceMinor,
+        imageUrl: typeof args.imageUrl === "string" && args.imageUrl ? args.imageUrl : undefined,
+        stockQuantity: kind === "PHYSICAL" && typeof args.stockQuantity === "number" ? Math.max(0, Math.trunc(args.stockQuantity)) : undefined,
+        durationMinutes: kind === "SERVICE" && typeof args.durationMinutes === "number" ? Math.max(5, Math.trunc(args.durationMinutes)) : undefined,
+        digitalDeliveryMethod: kind === "DIGITAL" ? args.digitalDeliveryMethod : undefined,
+        digitalFileUrl: kind === "DIGITAL" && args.digitalDeliveryMethod === "FILE_DOWNLOAD" ? String(args.digitalFileUrl) : undefined,
+        digitalFileName: kind === "DIGITAL" && args.digitalDeliveryMethod === "FILE_DOWNLOAD" && typeof args.digitalFileName === "string" ? args.digitalFileName : undefined,
+        digitalExternalUrl: kind === "DIGITAL" && args.digitalDeliveryMethod === "EXTERNAL_LINK" ? String(args.digitalExternalUrl) : undefined,
+        digitalAccessInstructions: kind === "DIGITAL" && args.digitalDeliveryMethod === "ACCESS_LIST" ? String(args.digitalAccessInstructions) : undefined,
+        digitalAccessPasswordEncrypted:
+          kind === "DIGITAL" && args.digitalDeliveryMethod === "ACCESS_LIST" && typeof args.digitalAccessPassword === "string" && args.digitalAccessPassword
+            ? encryptDigitalAccessSecret(args.digitalAccessPassword)
+            : undefined,
+        digitalMaxDownloads: kind === "DIGITAL" && typeof args.digitalMaxDownloads === "number" ? Math.max(1, Math.trunc(args.digitalMaxDownloads)) : undefined,
+        digitalLinkExpiryDays: kind === "DIGITAL" && typeof args.digitalLinkExpiryDays === "number" ? Math.max(1, Math.trunc(args.digitalLinkExpiryDays)) : undefined,
+      }).go();
+      const { data: product } = await CommerceProduct.get({ templateId: siteId, id: productId }).go();
+      if (!product) throw new Error(`CommerceProduct ${productId} vanished immediately after being created`);
 
       return { success: true, product: toPublicProduct(product) };
     }
@@ -353,7 +373,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
       const productId = typeof args.productId === "string" ? args.productId.trim() : "";
       if (!productId) throw new Error("productId is required.");
-      const existing = await prisma.commerceProduct.findFirst({ where: { id: productId, templateId: siteId } });
+      const { data: existing } = await CommerceProduct.get({ templateId: siteId, id: productId }).go();
       if (!existing) throw new Error(`Product not found with id "${productId}".`);
 
       if (args.priceMinor !== undefined && (!Number.isInteger(args.priceMinor) || args.priceMinor < 0)) {
@@ -367,42 +387,64 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
 
       const categoryId = await resolveCategoryId(siteId, resolved.organizationId, args.category);
 
-      const product = await prisma.commerceProduct.update({
-        where: { id: productId },
-        data: {
-          name: typeof args.name === "string" && args.name.trim() ? args.name.trim() : undefined,
-          description: args.description === undefined ? undefined : (typeof args.description === "string" ? args.description : null),
-          priceMinor: typeof args.priceMinor === "number" ? args.priceMinor : undefined,
-          imageUrl: args.imageUrl === undefined ? undefined : (typeof args.imageUrl === "string" && args.imageUrl ? args.imageUrl : null),
-          categoryId,
-          active: typeof args.active === "boolean" ? args.active : undefined,
-          stockQuantity: existing.kind === "PHYSICAL" && typeof args.stockQuantity === "number" ? Math.max(0, Math.trunc(args.stockQuantity)) : undefined,
-          durationMinutes: existing.kind === "SERVICE" && typeof args.durationMinutes === "number" ? Math.max(5, Math.trunc(args.durationMinutes)) : undefined,
-          digitalDeliveryMethod: isDigital ? effectiveDeliveryMethod : undefined,
-          digitalFileUrl:
-            isDigital && effectiveDeliveryMethod === "FILE_DOWNLOAD" && typeof args.digitalFileUrl === "string"
-              ? args.digitalFileUrl || null
-              : isDigital && effectiveDeliveryMethod !== "FILE_DOWNLOAD" ? null : undefined,
-          digitalFileName:
-            isDigital && effectiveDeliveryMethod === "FILE_DOWNLOAD" && typeof args.digitalFileName === "string"
-              ? args.digitalFileName || null
-              : isDigital && effectiveDeliveryMethod !== "FILE_DOWNLOAD" ? null : undefined,
-          digitalExternalUrl:
-            isDigital && effectiveDeliveryMethod === "EXTERNAL_LINK"
-              ? (typeof args.digitalExternalUrl === "string" ? args.digitalExternalUrl || null : undefined)
-              : isDigital ? null : undefined,
-          digitalAccessInstructions:
-            isDigital && effectiveDeliveryMethod === "ACCESS_LIST"
-              ? (typeof args.digitalAccessInstructions === "string" ? args.digitalAccessInstructions || null : undefined)
-              : isDigital ? null : undefined,
-          digitalAccessPasswordEncrypted:
-            isDigital && effectiveDeliveryMethod === "ACCESS_LIST"
-              ? (typeof args.digitalAccessPassword === "string" && args.digitalAccessPassword ? encryptDigitalAccessSecret(args.digitalAccessPassword) : undefined)
-              : isDigital ? null : undefined,
-          digitalMaxDownloads: isDigital && typeof args.digitalMaxDownloads === "number" ? Math.max(1, Math.trunc(args.digitalMaxDownloads)) : undefined,
-          digitalLinkExpiryDays: isDigital && typeof args.digitalLinkExpiryDays === "number" ? Math.max(1, Math.trunc(args.digitalLinkExpiryDays)) : undefined,
-        },
-      });
+      const data: Record<string, unknown> = {};
+      const toRemove: string[] = [];
+      if (typeof args.name === "string" && args.name.trim()) data.name = args.name.trim();
+      if (args.description !== undefined) {
+        if (typeof args.description === "string" && args.description) data.description = args.description;
+        else toRemove.push("description");
+      }
+      if (typeof args.priceMinor === "number") data.priceMinor = args.priceMinor;
+      if (args.imageUrl !== undefined) {
+        if (typeof args.imageUrl === "string" && args.imageUrl) data.imageUrl = args.imageUrl;
+        else toRemove.push("imageUrl");
+      }
+      if (categoryId !== undefined) {
+        if (categoryId) data.categoryId = categoryId;
+        else toRemove.push("categoryId");
+      }
+      if (typeof args.active === "boolean") data.active = args.active;
+      if (existing.kind === "PHYSICAL" && typeof args.stockQuantity === "number") data.stockQuantity = Math.max(0, Math.trunc(args.stockQuantity));
+      if (existing.kind === "SERVICE" && typeof args.durationMinutes === "number") data.durationMinutes = Math.max(5, Math.trunc(args.durationMinutes));
+
+      if (isDigital) {
+        data.digitalDeliveryMethod = effectiveDeliveryMethod;
+        if (effectiveDeliveryMethod === "FILE_DOWNLOAD") {
+          if (typeof args.digitalFileUrl === "string") {
+            if (args.digitalFileUrl) data.digitalFileUrl = args.digitalFileUrl;
+            else toRemove.push("digitalFileUrl");
+          }
+          if (typeof args.digitalFileName === "string") {
+            if (args.digitalFileName) data.digitalFileName = args.digitalFileName;
+            else toRemove.push("digitalFileName");
+          }
+          toRemove.push("digitalExternalUrl", "digitalAccessInstructions", "digitalAccessPasswordEncrypted");
+        } else if (effectiveDeliveryMethod === "EXTERNAL_LINK") {
+          if (typeof args.digitalExternalUrl === "string") {
+            if (args.digitalExternalUrl) data.digitalExternalUrl = args.digitalExternalUrl;
+            else toRemove.push("digitalExternalUrl");
+          }
+          toRemove.push("digitalFileUrl", "digitalFileName", "digitalAccessInstructions", "digitalAccessPasswordEncrypted");
+        } else if (effectiveDeliveryMethod === "ACCESS_LIST") {
+          if (typeof args.digitalAccessInstructions === "string") {
+            if (args.digitalAccessInstructions) data.digitalAccessInstructions = args.digitalAccessInstructions;
+            else toRemove.push("digitalAccessInstructions");
+          }
+          if (typeof args.digitalAccessPassword === "string" && args.digitalAccessPassword) {
+            data.digitalAccessPasswordEncrypted = encryptDigitalAccessSecret(args.digitalAccessPassword);
+          }
+          toRemove.push("digitalFileUrl", "digitalFileName", "digitalExternalUrl");
+        }
+        if (typeof args.digitalMaxDownloads === "number") data.digitalMaxDownloads = Math.max(1, Math.trunc(args.digitalMaxDownloads));
+        if (typeof args.digitalLinkExpiryDays === "number") data.digitalLinkExpiryDays = Math.max(1, Math.trunc(args.digitalLinkExpiryDays));
+      }
+
+      let patch = CommerceProduct.patch({ templateId: siteId, id: productId }).set(data);
+      const uniqueRemove = [...new Set(toRemove)].filter((f) => !(f in data));
+      if (uniqueRemove.length) patch = patch.remove(uniqueRemove as any);
+      await patch.go();
+      const { data: product } = await CommerceProduct.get({ templateId: siteId, id: productId }).go();
+      if (!product) throw new Error(`CommerceProduct ${productId} vanished immediately after being updated`);
 
       return { success: true, product: toPublicProduct(product) };
     }
@@ -411,15 +453,17 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
       const productId = typeof args.productId === "string" ? args.productId.trim() : "";
       if (!productId) throw new Error("productId is required.");
-      const existing = await prisma.commerceProduct.findFirst({ where: { id: productId, templateId: siteId } });
+      const { data: existing } = await CommerceProduct.get({ templateId: siteId, id: productId }).go();
       if (!existing) throw new Error(`Product not found with id "${productId}".`);
-      const product = await prisma.commerceProduct.update({ where: { id: productId }, data: { active: false, suspendedAt: new Date() } });
+      await CommerceProduct.patch({ templateId: siteId, id: productId }).set({ active: false, suspendedAt: new Date().toISOString() }).go();
+      const { data: product } = await CommerceProduct.get({ templateId: siteId, id: productId }).go();
+      if (!product) throw new Error(`CommerceProduct ${productId} vanished immediately after being updated`);
       return { success: true, product: toPublicProduct(product) };
     }
 
     case "get_commerce_settings": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const settings = await prisma.commerceSettings.findUnique({ where: { templateId: siteId } });
+      const { data: settings } = await CommerceSettings.get({ templateId: siteId }).go();
       return {
         settings: {
           enabled: settings?.enabled ?? false,
@@ -447,37 +491,55 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         throw new Error("paymentProvider must be BYO_PAYSTACK, PLATFORM_PAYSTACK, or PLATFORM_STRIPE.");
       }
       if (paymentProvider === "PLATFORM_STRIPE") {
-        const approved = await prisma.commerceStripeAccessRequest.findFirst({ where: { organizationId: resolved.organizationId, status: "APPROVED" } });
-        if (!approved) throw new Error("Platform Stripe isn't approved for this organization yet — call request_commerce_stripe_access first.");
+        const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go();
+        if (!requests.some((r) => r.status === "APPROVED")) throw new Error("Platform Stripe isn't approved for this organization yet — call request_commerce_stripe_access first.");
       }
 
       const data: Record<string, unknown> = {};
+      const toRemove: string[] = [];
       if (typeof args.enabled === "boolean") data.enabled = args.enabled;
       if (paymentProvider !== undefined) data.paymentProvider = paymentProvider;
       if (paystackMode !== undefined) data.paystackMode = paystackMode;
-      if (typeof args.paystackTestPublicKey === "string") data.paystackTestPublicKey = args.paystackTestPublicKey || null;
-      if (typeof args.paystackLivePublicKey === "string") data.paystackLivePublicKey = args.paystackLivePublicKey || null;
+      if (typeof args.paystackTestPublicKey === "string") {
+        if (args.paystackTestPublicKey) data.paystackTestPublicKey = args.paystackTestPublicKey;
+        else toRemove.push("paystackTestPublicKey");
+      }
+      if (typeof args.paystackLivePublicKey === "string") {
+        if (args.paystackLivePublicKey) data.paystackLivePublicKey = args.paystackLivePublicKey;
+        else toRemove.push("paystackLivePublicKey");
+      }
       if (typeof args.paystackTestSecretKey === "string" && args.paystackTestSecretKey) {
-        const { encryptPaystackKey } = await import("@/lib/crypto");
         data.paystackTestSecretKeyEncrypted = encryptPaystackKey(args.paystackTestSecretKey);
       }
       if (typeof args.paystackLiveSecretKey === "string" && args.paystackLiveSecretKey) {
-        const { encryptPaystackKey } = await import("@/lib/crypto");
         data.paystackLiveSecretKeyEncrypted = encryptPaystackKey(args.paystackLiveSecretKey);
       }
       if (typeof args.maildripApiKey === "string" && args.maildripApiKey) {
-        const { encryptMaildripKey } = await import("@/lib/crypto");
         data.maildripApiKeyEncrypted = encryptMaildripKey(args.maildripApiKey);
       }
-      if (typeof args.maildripPaidGroupId === "string") data.maildripPaidGroupId = args.maildripPaidGroupId || null;
-      if (typeof args.maildripNewsletterGroupId === "string") data.maildripNewsletterGroupId = args.maildripNewsletterGroupId || null;
-      if (typeof args.notificationEmail === "string") data.notificationEmail = args.notificationEmail || null;
+      if (typeof args.maildripPaidGroupId === "string") {
+        if (args.maildripPaidGroupId) data.maildripPaidGroupId = args.maildripPaidGroupId;
+        else toRemove.push("maildripPaidGroupId");
+      }
+      if (typeof args.maildripNewsletterGroupId === "string") {
+        if (args.maildripNewsletterGroupId) data.maildripNewsletterGroupId = args.maildripNewsletterGroupId;
+        else toRemove.push("maildripNewsletterGroupId");
+      }
+      if (typeof args.notificationEmail === "string") {
+        if (args.notificationEmail) data.notificationEmail = args.notificationEmail;
+        else toRemove.push("notificationEmail");
+      }
 
-      const settings = await prisma.commerceSettings.upsert({
-        where: { templateId: siteId },
-        create: { templateId: siteId, organizationId: resolved.organizationId, ...data },
-        update: data,
-      });
+      const { data: existingSettings } = await CommerceSettings.get({ templateId: siteId }).go();
+      if (existingSettings) {
+        let patch = CommerceSettings.patch({ templateId: siteId }).set(data);
+        if (toRemove.length) patch = patch.remove(toRemove as any);
+        await patch.go();
+      } else {
+        await CommerceSettings.create({ id: randomUUID(), templateId: siteId, organizationId: resolved.organizationId, ...data }).go();
+      }
+      const { data: settings } = await CommerceSettings.get({ templateId: siteId }).go();
+      if (!settings) throw new Error(`CommerceSettings for template ${siteId} vanished immediately after being saved`);
 
       return { success: true, settings: { enabled: settings.enabled, paymentProvider: settings.paymentProvider, paystackMode: settings.paystackMode } };
     }
@@ -486,26 +548,27 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
       const page = Math.max(1, Number(args.page) || 1);
       const pageSize = 25;
-      const where: any = { templateId: siteId };
-      if (typeof args.status === "string") where.status = args.status;
+
+      const { data: allOrders } = await CommerceOrder.query.primary({ templateId: siteId }).go();
+      let filtered = allOrders;
+      if (typeof args.status === "string") filtered = filtered.filter((o) => o.status === args.status);
       if (typeof args.q === "string" && args.q.trim()) {
-        const q = args.q.trim();
-        where.OR = [
-          { orderNumber: { contains: q, mode: "insensitive" } },
-          { customerEmail: { contains: q, mode: "insensitive" } },
-          { customerName: { contains: q, mode: "insensitive" } },
-        ];
+        const q = args.q.trim().toLowerCase();
+        filtered = filtered.filter(
+          (o) => o.orderNumber.toLowerCase().includes(q) || o.customerEmail.toLowerCase().includes(q) || (o.customerName ?? "").toLowerCase().includes(q),
+        );
       }
-      const [orders, total] = await Promise.all([
-        prisma.commerceOrder.findMany({
-          where,
-          orderBy: { createdAt: "desc" },
-          skip: (page - 1) * pageSize,
-          take: pageSize,
-          include: { items: { select: { nameSnapshot: true, quantity: true, unitPriceMinor: true } } },
+      filtered = [...filtered].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+      const total = filtered.length;
+      const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+      const orders = await Promise.all(
+        pageRows.map(async (order) => {
+          const { data: items } = await CommerceOrderItem.query.primary({ templateId: siteId, orderId: order.id }).go();
+          return { ...order, items: items.map((i) => ({ nameSnapshot: i.nameSnapshot, quantity: i.quantity ?? 1, unitPriceMinor: i.unitPriceMinor })) };
         }),
-        prisma.commerceOrder.count({ where }),
-      ]);
+      );
+
       return { orders, total, page, pageSize };
     }
 
@@ -513,16 +576,30 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
       const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
       if (!orderId) throw new Error("orderId is required.");
-      const order = await prisma.commerceOrder.findFirst({
-        where: { id: orderId, templateId: siteId },
-        include: {
-          items: true,
-          booking: { select: { scheduledStart: true, status: true } },
-          digitalDeliveries: { select: { id: true, method: true, deliveredAt: true, downloadCount: true, maxDownloads: true, resendCount: true, product: { select: { name: true } } } },
-        },
-      });
+      const { data: order } = await CommerceOrder.get({ templateId: siteId, id: orderId }).go();
       if (!order) throw new Error(`Order not found with id "${orderId}".`);
-      return { order };
+
+      const [{ data: items }, { data: booking }, { data: deliveries }] = await Promise.all([
+        CommerceOrderItem.query.primary({ templateId: siteId, orderId }).go(),
+        CommerceBooking.get({ templateId: siteId, orderId }).go(),
+        CommerceDigitalDelivery.query.primary({ orderId }).go(),
+      ]);
+      const digitalDeliveries = await Promise.all(
+        deliveries.map(async (d) => {
+          const { data: product } = await CommerceProduct.get({ templateId: siteId, id: d.productId }).go();
+          return {
+            id: d.id,
+            method: d.method,
+            deliveredAt: d.deliveredAt ?? null,
+            downloadCount: d.downloadCount ?? 0,
+            maxDownloads: d.maxDownloads ?? null,
+            resendCount: d.resendCount ?? 0,
+            product: { name: product?.name ?? "" },
+          };
+        }),
+      );
+
+      return { order: { ...order, items, booking: booking ? { scheduledStart: booking.scheduledStart, status: booking.status } : null, digitalDeliveries } };
     }
 
     case "resend_digital_delivery": {
@@ -536,23 +613,21 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
 
     case "get_commerce_wallet": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const org = await prisma.organization.findUnique({ where: { id: resolved.organizationId }, select: { commerceWalletPooled: true } });
-      const wallet = org?.commerceWalletPooled
-        ? await prisma.commerceWallet.findFirst({ where: { organizationId: resolved.organizationId, templateId: null } })
-        : await prisma.commerceWallet.findUnique({ where: { templateId: siteId } });
-      if (!wallet) return { wallet: { balanceCents: 0, currency: "NGN", pooled: Boolean(org?.commerceWalletPooled) }, ledger: [] };
-      const ledger = await prisma.commerceWalletLedgerEntry.findMany({ where: { walletId: wallet.id }, orderBy: { createdAt: "desc" }, take: 25 });
-      return { wallet: { balanceCents: wallet.balanceCents, currency: wallet.currency, pooled: Boolean(org?.commerceWalletPooled) }, ledger };
+      const { data: org } = await Organization.get({ id: resolved.organizationId }).go();
+      const pooled = org?.commerceWalletPooled ?? false;
+      const { data: wallet } = await CommerceWallet.get({ scopeId: pooled ? resolved.organizationId : siteId }).go();
+      if (!wallet) return { wallet: { balanceCents: 0, currency: "NGN", pooled }, ledger: [] };
+      const { data: ledger } = await CommerceWalletLedgerEntry.query.primary({ walletId: wallet.id }).go({ limit: 25, order: "desc" });
+      return { wallet: { balanceCents: wallet.balanceCents ?? 0, currency: wallet.currency ?? "NGN", pooled }, ledger };
     }
 
     case "list_commerce_withdrawals": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const org = await prisma.organization.findUnique({ where: { id: resolved.organizationId }, select: { commerceWalletPooled: true } });
-      const wallet = org?.commerceWalletPooled
-        ? await prisma.commerceWallet.findFirst({ where: { organizationId: resolved.organizationId, templateId: null } })
-        : await prisma.commerceWallet.findUnique({ where: { templateId: siteId } });
+      const { data: org } = await Organization.get({ id: resolved.organizationId }).go();
+      const pooled = org?.commerceWalletPooled ?? false;
+      const { data: wallet } = await CommerceWallet.get({ scopeId: pooled ? resolved.organizationId : siteId }).go();
       if (!wallet) return { withdrawals: [] };
-      const withdrawals = await prisma.commerceWithdrawalRequest.findMany({ where: { walletId: wallet.id }, orderBy: { requestedAt: "desc" } });
+      const { data: withdrawals } = await CommerceWithdrawalRequest.query.primary({ walletId: wallet.id }).go({ order: "desc" });
       return { withdrawals };
     }
 
@@ -566,70 +641,92 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       if (!accountNumber || !accountHolderName || !bankName) throw new Error("accountNumber, accountHolderName, and bankName are required.");
 
       const wallet = await resolveCommerceWallet(siteId, resolved.organizationId);
-      const result = await prisma.$transaction(async (tx) => {
-        const current = await tx.commerceWallet.findUniqueOrThrow({ where: { id: wallet.id } });
-        if (amountCents > current.balanceCents) throw new Error("Requested amount exceeds the wallet's available balance.");
-        const nextBalance = current.balanceCents - amountCents;
-        await tx.commerceWallet.update({ where: { id: wallet.id }, data: { balanceCents: nextBalance } });
-        const withdrawal = await tx.commerceWithdrawalRequest.create({
-          data: {
-            walletId: wallet.id,
-            organizationId: resolved.organizationId,
-            requestedByUserId: resolved.userId,
-            amountCents,
-            encryptedAccountNumber: encryptBankDetail(accountNumber),
-            encryptedAccountHolderName: encryptBankDetail(accountHolderName),
-            bankName,
-          },
-        });
-        await tx.commerceWalletLedgerEntry.create({
-          data: { walletId: wallet.id, type: "WITHDRAWAL_DEBIT", netAmountCents: -amountCents, balanceAfterCents: nextBalance, withdrawalRequestId: withdrawal.id, description: `Withdrawal requested — ${bankName}` },
-        });
-        return withdrawal;
-      });
 
-      const [organization, user] = await Promise.all([
-        prisma.organization.findUnique({ where: { id: resolved.organizationId }, select: { name: true } }),
-        prisma.user.findUnique({ where: { id: resolved.userId }, select: { email: true, name: true } }),
+      let balanceCents = 0;
+      let nextBalance = 0;
+      const MAX_RETRIES = 5;
+      let claimed = false;
+      for (let attempt = 0; attempt < MAX_RETRIES && !claimed; attempt++) {
+        const { data: current } = await CommerceWallet.get({ scopeId: wallet.scopeId }).go();
+        if (!current) throw new Error("Wallet not found.");
+        balanceCents = current.balanceCents ?? 0;
+        if (amountCents > balanceCents) throw new Error("Requested amount exceeds the wallet's available balance.");
+        nextBalance = balanceCents - amountCents;
+        try {
+          await CommerceWallet.patch({ scopeId: wallet.scopeId })
+            .set({ balanceCents: nextBalance })
+            .where((attr, op) => op.eq(attr.balanceCents, balanceCents))
+            .go();
+          claimed = true;
+        } catch (err) {
+          const anyErr = err as { name?: string; cause?: { name?: string } };
+          if (anyErr?.name !== "ConditionalCheckFailedException" && anyErr?.cause?.name !== "ConditionalCheckFailedException") throw err;
+        }
+      }
+      if (!claimed) throw new Error("Too much concurrent balance contention — try again.");
+
+      const withdrawalId = randomUUID();
+      await CommerceWithdrawalRequest.create({
+        id: withdrawalId,
+        walletId: wallet.id,
+        organizationId: resolved.organizationId,
+        requestedByUserId: resolved.userId,
+        amountCents,
+        encryptedAccountNumber: encryptBankDetail(accountNumber),
+        encryptedAccountHolderName: encryptBankDetail(accountHolderName),
+        bankName,
+      }).go();
+      await CommerceWalletLedgerEntry.create({
+        id: randomUUID(),
+        walletId: wallet.id,
+        type: "WITHDRAWAL_DEBIT",
+        netAmountCents: -amountCents,
+        balanceAfterCents: nextBalance,
+        withdrawalRequestId: withdrawalId,
+        description: `Withdrawal requested — ${bankName}`,
+      }).go();
+
+      const [{ data: organization }, { data: user }] = await Promise.all([
+        Organization.get({ id: resolved.organizationId }).go(),
+        User.get({ id: resolved.userId }).go(),
       ]);
       if (organization && user) {
         await sendCommerceWithdrawalRequestNotificationEmail({
-          id: result.id, organizationName: organization.name, userEmail: user.email, userName: user.name, amountCents: result.amountCents, bankName: result.bankName,
+          id: withdrawalId, organizationName: organization.name, userEmail: user.email, userName: user.name ?? "A seller", amountCents, bankName,
         }).catch((err) => console.error("Failed to send Commerce withdrawal admin notification email:", err));
       }
 
-      return { success: true, withdrawal: { id: result.id, status: result.status } };
+      return { success: true, withdrawal: { id: withdrawalId, status: "PENDING" } };
     }
 
     case "get_commerce_stripe_access_status": {
-      const latest = await prisma.commerceStripeAccessRequest.findFirst({ where: { organizationId: resolved.organizationId }, orderBy: { requestedAt: "desc" } });
+      const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go({ order: "desc" });
+      const latest = requests[0];
       if (!latest) return { status: "NONE", requestId: null, rejectionReason: null, reason: null };
-      return { status: latest.status, requestId: latest.id, rejectionReason: latest.status === "REJECTED" ? latest.rejectionReason : null, reason: latest.reason };
+      return { status: latest.status ?? "PENDING", requestId: latest.id, rejectionReason: latest.status === "REJECTED" ? (latest.rejectionReason ?? null) : null, reason: latest.reason ?? null };
     }
 
     case "request_commerce_stripe_access": {
-      const [organization, user] = await Promise.all([
-        prisma.organization.findUnique({ where: { id: resolved.organizationId }, select: { name: true } }),
-        prisma.user.findUnique({ where: { id: resolved.userId }, select: { email: true, name: true } }),
+      const [{ data: organization }, { data: user }] = await Promise.all([
+        Organization.get({ id: resolved.organizationId }).go(),
+        User.get({ id: resolved.userId }).go(),
       ]);
       if (!organization || !user) throw new Error("Unauthorized.");
 
-      const blocking = await prisma.commerceStripeAccessRequest.findFirst({
-        where: { organizationId: resolved.organizationId, OR: [{ status: "PENDING" }, { status: "APPROVED" }] },
-      });
+      const { data: existingRequests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go();
+      const blocking = existingRequests.some((r) => r.status === "PENDING" || r.status === "APPROVED");
       if (blocking) throw new Error("A Stripe access request is already pending or approved for this organization.");
 
-      const reason = typeof args.reason === "string" ? args.reason.trim() || null : null;
-      const expectedVolume = typeof args.expectedVolume === "string" ? args.expectedVolume.trim() || null : null;
-      const created = await prisma.commerceStripeAccessRequest.create({
-        data: { organizationId: resolved.organizationId, requestedByUserId: resolved.userId, reason, expectedVolume },
-      });
+      const reason = typeof args.reason === "string" ? args.reason.trim() || undefined : undefined;
+      const expectedVolume = typeof args.expectedVolume === "string" ? args.expectedVolume.trim() || undefined : undefined;
+      const id = randomUUID();
+      await CommerceStripeAccessRequest.create({ id, organizationId: resolved.organizationId, requestedByUserId: resolved.userId, reason, expectedVolume }).go();
 
       await sendCommerceStripeAccessRequestNotificationEmail({
-        id: created.id, organizationName: organization.name, userEmail: user.email, userName: user.name, reason, expectedVolume,
+        id, organizationName: organization.name, userEmail: user.email, userName: user.name ?? "A user", reason: reason ?? null, expectedVolume: expectedVolume ?? null,
       }).catch((err) => console.error("Failed to send Commerce Stripe access admin notification email:", err));
 
-      return { success: true, request: { id: created.id, status: created.status, requestedAt: created.requestedAt } };
+      return { success: true, request: { id, status: "PENDING" } };
     }
 
     default:

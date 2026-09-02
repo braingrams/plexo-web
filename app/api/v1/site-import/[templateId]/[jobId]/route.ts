@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { SiteImportPhase } from "@prisma/client";
-import { prisma } from "@/server/prisma";
-import { resolveSiteImportSite } from "@/lib/siteImport/adminAuth";
+import { resolveSiteImportSite } from "@/lib/siteImport/adminAuthDynamo";
 import { isValidUuid } from "@/server/slug";
+import { SiteImportJob, SiteImportPage } from "@/lib/db/importEntities";
 
 export async function GET(
   request: NextRequest,
@@ -13,13 +12,13 @@ export async function GET(
   if ("error" in resolved) return resolved.error;
   if (!isValidUuid(jobId)) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
-  const job = await prisma.siteImportJob.findFirst({
-    where: { id: jobId, templateId: resolved.context.templateId },
-    include: { pages: { orderBy: { updatedAt: "desc" }, take: 50 } },
-  });
+  const { data: job } = await SiteImportJob.get({ templateId: resolved.context.templateId, id: jobId }).go();
   if (!job) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
-  return NextResponse.json({ job });
+  const { data: pages } = await SiteImportPage.query.primary({ jobId }).go();
+  const sortedPages = pages.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")).slice(0, 50);
+
+  return NextResponse.json({ job: { ...job, pages: sortedPages } });
 }
 
 export async function DELETE(
@@ -31,10 +30,12 @@ export async function DELETE(
   if ("error" in resolved) return resolved.error;
   if (!isValidUuid(jobId)) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
-  const job = await prisma.siteImportJob.findFirst({ where: { id: jobId, templateId: resolved.context.templateId } });
+  const { data: job } = await SiteImportJob.get({ templateId: resolved.context.templateId, id: jobId }).go();
   if (!job) return NextResponse.json({ error: "Import job not found." }, { status: 404 });
 
   // Pages/posts already imported stay — cancelling only stops future steps.
-  await prisma.siteImportJob.update({ where: { id: jobId }, data: { phase: SiteImportPhase.CANCELLED, finishedAt: new Date() } });
+  await SiteImportJob.patch({ templateId: resolved.context.templateId, id: jobId })
+    .set({ phase: "CANCELLED", finishedAt: new Date().toISOString() })
+    .go();
   return NextResponse.json({ ok: true });
 }

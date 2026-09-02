@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSignedDownloadUrl } from "@/lib/storage";
 
-import { prisma } from "@/server/prisma";
 import { decryptDigitalAccessSecret } from "@/lib/crypto";
-import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimit";
+import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
+import { CommerceDigitalDelivery } from "@/lib/db/commerceEntities";
 
 /**
  * The only credential this route trusts is the token itself — a random 32-byte value,
  * unguessable, scoped to exactly one (order, product) pair by
- * CommerceDigitalDelivery.@@unique([orderId, productId]). No site/hostname resolution is
- * needed for authorization; it's still rate-limited by IP alone as basic abuse protection
- * (this endpoint has no natural per-site bucket the way checkout/order-lookup do, since a
- * token isn't tied to any one request's hostname).
+ * CommerceDigitalDelivery's own primary key (orderId, productId), see
+ * commerceEntities.ts. No site/hostname resolution is needed for authorization; it's
+ * still rate-limited by IP alone as basic abuse protection (this endpoint has no natural
+ * per-site bucket the way checkout/order-lookup do, since a token isn't tied to any one
+ * request's hostname).
  */
 export async function GET(request: NextRequest, context: { params: Promise<{ token: string }> }): Promise<NextResponse> {
   const { token } = await context.params;
@@ -21,11 +22,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tok
     return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
   }
 
-  const delivery = await prisma.commerceDigitalDelivery.findUnique({ where: { token } });
+  const { data: matches } = await CommerceDigitalDelivery.query.byToken({ token }).go();
+  const delivery = matches[0];
   if (!delivery) {
     return NextResponse.json({ error: "This link is invalid." }, { status: 404 });
   }
-  if (delivery.expiresAt && delivery.expiresAt.getTime() < Date.now()) {
+  if (delivery.expiresAt && new Date(delivery.expiresAt).getTime() < Date.now()) {
     return NextResponse.json({ error: "This link has expired. Contact the seller for a new one." }, { status: 410 });
   }
 
@@ -33,11 +35,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tok
     if (!delivery.fileUrl) {
       return NextResponse.json({ error: "This product has no file attached." }, { status: 404 });
     }
-    if (delivery.maxDownloads !== null && delivery.downloadCount >= delivery.maxDownloads) {
+    if (delivery.maxDownloads != null && (delivery.downloadCount ?? 0) >= delivery.maxDownloads) {
       return NextResponse.json({ error: "This link has reached its download limit. Contact the seller for a new one." }, { status: 410 });
     }
 
-    await prisma.commerceDigitalDelivery.update({ where: { id: delivery.id }, data: { downloadCount: { increment: 1 } } });
+    await CommerceDigitalDelivery.patch({ orderId: delivery.orderId, productId: delivery.productId }).add({ downloadCount: 1 }).go();
 
     // Never expose the permanent private storage URL directly — mint a short-lived
     // (5 min) signed read URL and redirect to that instead.

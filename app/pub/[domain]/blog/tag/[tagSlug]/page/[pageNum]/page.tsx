@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { resolveBlogSite } from "@/lib/pub/resolveSite";
-import { BlogArchivePage, buildArchiveMetadata } from "@/lib/pub/blogArchivePage";
+import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
+import { BlogArchivePage, buildArchiveMetadata } from "@/lib/pub/blogArchivePageDynamo";
 
 export const revalidate = 60;
 

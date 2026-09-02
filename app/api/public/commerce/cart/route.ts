@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveSite } from "@/lib/pub/resolveSite";
-import { readCartToken, readCartSnapshot } from "@/lib/commerce/cart";
+import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
+import { readCartToken, readCartSnapshot } from "@/lib/commerce/cartDynamo";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const hostname = (request.headers.get("host") ?? "").split(":")[0];

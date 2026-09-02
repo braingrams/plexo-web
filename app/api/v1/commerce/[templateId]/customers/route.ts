@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
 import { decryptPaystackKey } from "@/lib/crypto";
 import { listPaystackCustomers } from "@/lib/paystack";
 import { resolveActivePaystackKeys } from "@/lib/commerce/paystack";
+import { CommerceSettings } from "@/lib/db/commerceEntities";
 
 /**
  * Lists this site's customers straight from Paystack (the merchant account that actually
@@ -16,8 +16,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   const resolved = await resolveCommerceAdmin(request, templateId);
   if (resolved.error) return resolved.error;
 
-  const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
-  const activeSecretKeyEncrypted = settings ? resolveActivePaystackKeys(settings).secretKeyEncrypted : null;
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  const activeSecretKeyEncrypted = settings
+    ? resolveActivePaystackKeys({
+        paystackMode: settings.paystackMode ?? "TEST",
+        paystackTestPublicKey: settings.paystackTestPublicKey ?? null,
+        paystackTestSecretKeyEncrypted: settings.paystackTestSecretKeyEncrypted ?? null,
+        paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
+        paystackLiveSecretKeyEncrypted: settings.paystackLiveSecretKeyEncrypted ?? null,
+      }).secretKeyEncrypted
+    : null;
   if (!activeSecretKeyEncrypted) {
     return NextResponse.json({ error: "Paystack isn't configured for this site yet." }, { status: 400 });
   }

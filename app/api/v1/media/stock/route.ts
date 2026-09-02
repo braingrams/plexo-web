@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "../../domains/route";
+import { StockCache } from "@/lib/db/opsEntities";
+import { resolveUser } from "@/lib/auth/resolveUser";
 
 export interface StockImageResult {
   id: string;
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const provider = (searchParams.get("provider") || "all").trim().toLowerCase();
 
     const targetProviders = provider === "all" ? ["unsplash", "pexels", "pixabay"] : [provider];
-    
+
     // API keys MUST ONLY come from request headers — DO NOT FALL BACK to server environment variables
     const unsplashKey = (request.headers.get("x-unsplash-key") || "").trim();
     const pexelsKey = (request.headers.get("x-pexels-key") || "").trim();
@@ -33,23 +34,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     // Query and fetch all providers concurrently using Promise.all
     const providerPromises = targetProviders.map(async (p): Promise<StockImageResult[]> => {
-      // 1. Check database cache
+      // 1. Check cache (StockCache — lib/db/opsEntities.ts; provider+query is its whole
+      // primary key, so this is a direct .get(), no index gap here).
       try {
-        const cached = await prisma.stockCache.findUnique({
-          where: {
-            provider_query: {
-              provider: p,
-              query,
-            },
-          },
-        });
-
-        const isCacheValid = cached && (Date.now() - new Date(cached.createdAt).getTime() < 24 * 60 * 60 * 1000);
-        if (isCacheValid) {
+        const { data: cached } = await StockCache.get({ provider: p, query }).go();
+        const isCacheValid = !!cached?.createdAt && Date.now() - new Date(cached.createdAt).getTime() < 24 * 60 * 60 * 1000;
+        if (isCacheValid && cached) {
           return cached.results as unknown as StockImageResult[];
         }
       } catch (cacheErr) {
-        console.warn(`Prisma cache read failed for provider ${p}:`, cacheErr);
+        console.warn(`Cache read failed for provider ${p}:`, cacheErr);
       }
 
       // 2. Fetch fresh results from APIs
@@ -111,28 +105,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         console.warn(`Direct fetch failed for provider ${p}:`, fetchErr);
       }
 
-      // 3. Cache the results if we found any actual data
+      // 3. Cache the results if we found any actual data — create-or-refresh, since
+      // StockCache has no updateMany/upsert helper in ElectroDB's write API, just create
+      // (fails if the item already exists) and patch (fails if it doesn't). createdAt is
+      // readOnly (opsEntities.ts), so a refresh can't `.set()` it directly — remove then
+      // recreate instead, which resets both createdAt and the TTL clock for free.
       if (providerResults.length > 0) {
         try {
-          await prisma.stockCache.upsert({
-            where: {
-              provider_query: {
-                provider: p,
-                query,
-              },
-            },
-            create: {
-              provider: p,
-              query,
-              results: providerResults as any,
-            },
-            update: {
-              results: providerResults as any,
-              createdAt: new Date(),
-            },
-          });
-        } catch (cacheWriteErr) {
-          console.warn(`Failed to write cache for provider ${p}:`, cacheWriteErr);
+          await StockCache.create({ id: randomUUID(), provider: p, query, results: providerResults }).go();
+        } catch {
+          await StockCache.remove({ provider: p, query })
+            .go()
+            .then(() => StockCache.create({ id: randomUUID(), provider: p, query, results: providerResults }).go())
+            .catch((cacheWriteErr) => console.warn(`Failed to refresh cache for provider ${p}:`, cacheWriteErr));
         }
       }
 

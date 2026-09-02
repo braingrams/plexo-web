@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteObjects } from "@/lib/storage";
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { requirePermission } from "@/server/requirePermission";
-import { isValidUuid } from "@/server/slug";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { isValidUuid } from "@/server/slugDynamo";
+import { Template, TemplateAsset } from "@/lib/db/contentEntities";
 
 const BLANK_TEMPLATE_SHELL = {
   body: {
@@ -33,7 +33,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  const permissionError = requirePermission(resolved.role, { template: ["update"] });
   if (permissionError) return permissionError;
 
   const { id } = await context.params;
@@ -41,19 +41,16 @@ export async function POST(
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
 
-  const existing = await prisma.template.findFirst({
-    where: { id, organizationId: resolved.organizationId },
-    select: { id: true, sourceType: true },
-  });
-  if (!existing) {
+  const { data: existing } = await Template.get({ id }).go();
+  if (!existing || existing.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
   if (existing.sourceType === "BUILDER") {
     return NextResponse.json({ error: "This page is already a DnD builder page." }, { status: 400 });
   }
 
-  const assets = await prisma.templateAsset.findMany({ where: { templateId: existing.id } });
-  await prisma.templateAsset.deleteMany({ where: { templateId: existing.id } });
+  const { data: assets } = await TemplateAsset.query.primary({ templateId: existing.id }).go();
+  await Promise.all(assets.map((a) => TemplateAsset.remove({ templateId: a.templateId, path: a.path }).go()));
 
   if (assets.length > 0) {
     await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
@@ -61,15 +58,11 @@ export async function POST(
     );
   }
 
-  const updated = await prisma.template.update({
-    where: { id: existing.id },
-    data: {
-      sourceType: "BUILDER",
-      designJson: BLANK_TEMPLATE_SHELL,
-      compiledHtml: "",
-    },
-    select: { id: true, sourceType: true },
-  });
+  await Template.patch({ id: existing.id })
+    .set({ sourceType: "BUILDER", designJson: BLANK_TEMPLATE_SHELL, compiledHtml: "" })
+    .go();
+  const { data: updated } = await Template.get({ id: existing.id }).go();
+  if (!updated) throw new Error(`Template ${existing.id} vanished immediately after being updated`);
 
-  return NextResponse.json({ page: updated });
+  return NextResponse.json({ page: { id: updated.id, sourceType: updated.sourceType } });
 }

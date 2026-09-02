@@ -3,7 +3,7 @@ import { safeFetch } from "@/lib/siteImport/fetchSafe";
 import { fetchWordPressPostsPage } from "./wpClient";
 import { parseWxr, wxrDateToIso } from "./wxrParser";
 import { findOrCreateCategory, findOrCreateTag, findOrCreateAuthor } from "./taxonomyDynamo";
-import { rehostMediaUrls, extractImageUrls, rewriteImageUrls } from "./mediaRehost";
+import { rehostMediaUrls, extractImageUrls, rewriteImageUrls } from "./mediaRehostDynamo";
 import { convertWordPressHtmlToTiptapJson, tiptapJsonToHtml, detectShortcodes } from "./htmlToTiptap";
 import { createBlogPost, updateBlogPost, findPostByExternalId } from "@/lib/blog/savePostDynamo";
 import { createRedirectsForImportedPost } from "./redirectsDynamo";

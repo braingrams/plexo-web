@@ -2,10 +2,11 @@ import { createHash } from "node:crypto";
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { prisma } from "@/server/prisma";
 import { compileToHTML } from "@/lib/compiler";
 import { parseJsonToTargetFormat } from "@/lib/compilerClient";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues } from "@/server/sanitizer";
+import { auth } from "@/server/authDynamo";
+import { ApiKey } from "@/lib/db/coreEntities";
 
 type CompileTargetType = "landing_page" | "email";
 
@@ -166,8 +167,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // ── Path 1: workspace-internal (dashboard session) ──────────────────────
   const xApiKey = request.headers.get("x-api-key")?.trim();
   if (xApiKey === "workspace-internal") {
-    const { auth } = await import("@/server/auth");
-    const session = await auth.api.getSession({ headers: request.headers });
+    const session = await auth();
     if (!session?.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -209,18 +209,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const hashedKey = sha256(rawKey);
 
-  const apiKey = await prisma.apiKey.findFirst({
-    where: {
-      hashedKey,
-      isActive: true,
-    },
-    select: {
-      id: true,
-      useAi: true,
-      aiProvider: true,
-      aiTier: true,
-    },
-  });
+  const { data: matches } = await ApiKey.query.byHashedKey({ hashedKey }).go();
+  const apiKey = matches.find((k) => k.isActive);
 
   if (!apiKey) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -254,14 +244,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   if (apiKey.useAi) {
-    const signature = `<!-- Optimized via Plexo AI Proxy Provider: ${providerLabel(apiKey.aiProvider)} | Tier: ${tierLabel(apiKey.aiTier)} -->`;
+    const signature = `<!-- Optimized via Plexo AI Proxy Provider: ${providerLabel(apiKey.aiProvider ?? "openai")} | Tier: ${tierLabel(apiKey.aiTier ?? "AUTO")} -->`;
     compiledHtmlString = `${compiledHtmlString}\n${signature}`;
   }
 
-  await prisma.apiKey.update({
-    where: { id: apiKey.id },
-    data: { lastUsedAt: new Date() },
-  });
+  await ApiKey.patch({ organizationId: apiKey.organizationId, id: apiKey.id })
+    .set({ lastUsedAt: new Date().toISOString() })
+    .go();
 
   return NextResponse.json({
     html: compiledHtmlString,

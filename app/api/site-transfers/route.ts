@@ -1,31 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
+import { auth } from "@/server/authDynamo";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { listIncomingTransfers, listOutgoingTransfers } from "@/lib/siteTransferDynamo";
+import { Template } from "@/lib/db/contentEntities";
+import { Organization, User } from "@/lib/db/coreEntities";
 
 /** Every pending transfer touching the signed-in user — incoming (sent to their email)
  * and outgoing (sent from their active org) — for the /dashboard/transfers list. */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const reqHeaders = await headers();
-  const session = await auth.api.getSession({ headers: reqHeaders });
-  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const session = await auth();
+  if (!session?.user?.id || !session.user.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const activeOrgId = (session.session as { activeOrganizationId?: string } | undefined)?.activeOrganizationId;
+  const orgResolution = await ensureActiveOrganization(session.user.id);
+  const activeOrgId = orgResolution.status === "resolved" ? orgResolution.organizationId : null;
 
   const [incoming, outgoing] = await Promise.all([
-    prisma.siteTransferRequest.findMany({
-      where: { toEmail: session.user.email.toLowerCase(), status: "PENDING" },
-      include: { template: { select: { id: true, name: true } }, fromOrganization: { select: { name: true } }, fromUser: { select: { name: true, email: true } } },
-      orderBy: { createdAt: "desc" },
-    }),
-    activeOrgId
-      ? prisma.siteTransferRequest.findMany({
-          where: { fromOrganizationId: activeOrgId, status: "PENDING" },
-          include: { template: { select: { id: true, name: true } } },
-          orderBy: { createdAt: "desc" },
-        })
-      : Promise.resolve([]),
+    listIncomingTransfers(session.user.email.toLowerCase()),
+    activeOrgId ? listOutgoingTransfers(activeOrgId) : Promise.resolve([]),
   ]);
 
-  return NextResponse.json({ incoming, outgoing });
+  const [incomingTemplates, incomingOrgs, incomingUsers] = await Promise.all([
+    Promise.all(incoming.map((t) => Template.get({ id: t.templateId }).go())),
+    Promise.all(incoming.map((t) => Organization.get({ id: t.fromOrganizationId }).go())),
+    Promise.all(incoming.map((t) => User.get({ id: t.fromUserId }).go())),
+  ]);
+  const outgoingTemplates = await Promise.all(outgoing.map((t) => Template.get({ id: t.templateId }).go()));
+
+  return NextResponse.json({
+    incoming: incoming.map((t, i) => ({
+      id: t.id,
+      templateId: t.templateId,
+      template: { id: t.templateId, name: incomingTemplates[i].data?.name ?? "Untitled site" },
+      fromOrganization: { name: incomingOrgs[i].data?.name ?? "Unknown organization" },
+      fromUser: { name: incomingUsers[i].data?.name ?? "Unknown", email: incomingUsers[i].data?.email ?? "" },
+      status: t.status,
+      createdAt: t.createdAt,
+      expiresAt: t.expiresAt,
+    })),
+    outgoing: outgoing.map((t, i) => ({
+      id: t.id,
+      templateId: t.templateId,
+      template: { id: t.templateId, name: outgoingTemplates[i].data?.name ?? "Untitled site" },
+      toEmail: t.toEmail,
+      status: t.status,
+      createdAt: t.createdAt,
+    })),
+  });
 }

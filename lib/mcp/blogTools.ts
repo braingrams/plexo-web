@@ -1,17 +1,21 @@
-import { BlogPostStatus, BlogCommentStatus, TemplateKind } from "@prisma/client";
-import { prisma } from "@/server/prisma";
+import { randomUUID } from "node:crypto";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { createBlogPost, updateBlogPost, deleteBlogPost } from "@/lib/blog/savePost";
-import { generateUniqueAuthorSlug } from "@/lib/blog/authors";
-import { effectiveStatus } from "@/lib/blog/queries";
-import { slugify, avoidPageReservedSlug, isValidUuid } from "@/server/slug";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { createBlogPost, updateBlogPost, deleteBlogPost } from "@/lib/blog/savePostDynamo";
+import { generateUniqueAuthorSlug } from "@/lib/blog/authorsDynamo";
+import { effectiveStatus } from "@/lib/blog/queriesDynamo";
+import { findCommentById, getDescendantCommentIds } from "@/lib/blog/commentsDynamo";
+import { slugify, avoidPageReservedSlug, isValidUuid } from "@/server/slugDynamo";
 import { convertWordPressHtmlToTiptapJson } from "@/lib/blogImport/htmlToTiptap";
 import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogTheme";
 import { hasBlogMarker, type BlogMarkerName } from "@/lib/pub/blogLayoutRender";
+import { Template, BlogSite, BlogCategory, BlogTag, BlogAuthor, BlogPost, BlogPostCategory, BlogPostTag, BlogComment } from "@/lib/db/contentEntities";
 
 type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
+
+const BLOG_POST_STATUSES = new Set(["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"]);
+const BLOG_COMMENT_STATUSES = new Set(["PENDING", "APPROVED", "SPAM", "REJECTED"]);
 
 const HEX_COLOR_REGEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const VALID_FONT_PRESETS = new Set(FONT_PRESET_OPTIONS.map((o) => o.value));
@@ -39,11 +43,8 @@ async function resolveBlogSiteId(resolved: ResolvedUser, templateId: unknown): P
   if (!trimmed) {
     throw new Error("templateId is required — pass the site's home page id (see list_landing_pages).");
   }
-  const site = await prisma.template.findFirst({
-    where: { id: trimmed, organizationId: resolved.organizationId, parentId: null },
-    select: { id: true },
-  });
-  if (!site) {
+  const { data: site } = await Template.get({ id: trimmed }).go();
+  if (!site || site.organizationId !== resolved.organizationId || site.parentId) {
     throw new Error(
       `No site found with id "${trimmed}" in this account. templateId must be a site's home page (no parent) — use list_landing_pages to find it.`
     );
@@ -66,18 +67,21 @@ async function resolveAuthorId(templateId: string, authorName: unknown): Promise
   if (authorName === null) return null;
   const name = String(authorName).trim();
   if (!name) return null;
-  const existing = await prisma.blogAuthor.findFirst({ where: { templateId, name: { equals: name, mode: "insensitive" } } });
+  const { data: authors } = await BlogAuthor.query.primary({ templateId }).go();
+  const existing = authors.find((a) => a.name.toLowerCase() === name.toLowerCase());
   if (existing) return existing.id;
   const slug = await generateUniqueAuthorSlug(templateId, name);
-  const created = await prisma.blogAuthor.create({ data: { templateId, name, slug } });
-  return created.id;
+  const id = randomUUID();
+  await BlogAuthor.create({ id, templateId, name, slug }).go();
+  return id;
 }
 
 async function resolveCategoryIds(templateId: string, names: string[] | undefined): Promise<string[] | undefined> {
   if (names === undefined) return undefined;
+  const { data: categories } = await BlogCategory.query.primary({ templateId }).go();
   const ids: string[] = [];
   for (const name of names) {
-    const existing = await prisma.blogCategory.findFirst({ where: { templateId, name: { equals: name, mode: "insensitive" } } });
+    const existing = categories.find((c) => c.name.toLowerCase() === name.toLowerCase());
     if (existing) {
       ids.push(existing.id);
       continue;
@@ -85,21 +89,24 @@ async function resolveCategoryIds(templateId: string, names: string[] | undefine
     const baseSlug = avoidPageReservedSlug(slugify(name) || "category", "category");
     let slug = baseSlug;
     let suffix = 2;
-    while (await prisma.blogCategory.findFirst({ where: { templateId, slug }, select: { id: true } })) {
+    while ((await BlogCategory.get({ templateId, slug }).go()).data) {
       slug = `${baseSlug}-${suffix}`;
       suffix += 1;
     }
-    const created = await prisma.blogCategory.create({ data: { templateId, name, slug } });
-    ids.push(created.id);
+    const id = randomUUID();
+    await BlogCategory.create({ id, templateId, name, slug }).go();
+    ids.push(id);
+    categories.push({ id, templateId, name, slug } as any); // keep in-memory list consistent for later duplicate names in the same call
   }
   return ids;
 }
 
 async function resolveTagIds(templateId: string, names: string[] | undefined): Promise<string[] | undefined> {
   if (names === undefined) return undefined;
+  const { data: tags } = await BlogTag.query.primary({ templateId }).go();
   const ids: string[] = [];
   for (const name of names) {
-    const existing = await prisma.blogTag.findFirst({ where: { templateId, name: { equals: name, mode: "insensitive" } } });
+    const existing = tags.find((t) => t.name.toLowerCase() === name.toLowerCase());
     if (existing) {
       ids.push(existing.id);
       continue;
@@ -107,12 +114,14 @@ async function resolveTagIds(templateId: string, names: string[] | undefined): P
     const baseSlug = avoidPageReservedSlug(slugify(name) || "tag", "tag");
     let slug = baseSlug;
     let suffix = 2;
-    while (await prisma.blogTag.findFirst({ where: { templateId, slug }, select: { id: true } })) {
+    while ((await BlogTag.get({ templateId, slug }).go()).data) {
       slug = `${baseSlug}-${suffix}`;
       suffix += 1;
     }
-    const created = await prisma.blogTag.create({ data: { templateId, name, slug } });
-    ids.push(created.id);
+    const id = randomUUID();
+    await BlogTag.create({ id, templateId, name, slug }).go();
+    ids.push(id);
+    tags.push({ id, templateId, name, slug } as any);
   }
   return ids;
 }
@@ -125,33 +134,30 @@ function isLayoutKind(value: unknown): value is LayoutKind {
 /** Mirrors app/api/blog/[templateId]/layout/[kind]/route.ts's POST — idempotent: returns
  * the existing layout template if one's already attached rather than creating a duplicate. */
 async function ensureBlogLayoutTemplate(resolved: ResolvedUser, siteId: string, kind: LayoutKind): Promise<string> {
-  const site = await prisma.blogSite.findUnique({ where: { templateId: siteId } });
+  const { data: site } = await BlogSite.get({ templateId: siteId }).go();
   const existingId = kind === "post" ? site?.postLayoutTemplateId : site?.listingLayoutTemplateId;
   if (existingId) return existingId;
 
-  const layoutTemplate = await prisma.template.create({
-    data: {
-      userId: resolved.userId,
-      organizationId: resolved.organizationId,
-      name: kind === "post" ? "Blog Post Layout" : "Blog Listing Layout",
-      kind: TemplateKind.LANDING_PAGE,
-      isBlogLayout: true,
-      designJson: { body: { style: { background: "#ffffff", padding: "24px" }, rows: [] } },
-      compiledHtml: "",
-    },
-    select: { id: true },
-  });
+  const layoutId = randomUUID();
+  await Template.create({
+    id: layoutId,
+    userId: resolved.userId,
+    organizationId: resolved.organizationId,
+    name: kind === "post" ? "Blog Post Layout" : "Blog Listing Layout",
+    kind: "LANDING_PAGE",
+    isBlogLayout: true,
+    designJson: { body: { style: { background: "#ffffff", padding: "24px" }, rows: [] } },
+    compiledHtml: "",
+  }).go();
 
-  await prisma.blogSite.upsert({
-    where: { templateId: siteId },
-    create: {
-      templateId: siteId,
-      ...(kind === "post" ? { postLayoutTemplateId: layoutTemplate.id } : { listingLayoutTemplateId: layoutTemplate.id }),
-    },
-    update: kind === "post" ? { postLayoutTemplateId: layoutTemplate.id } : { listingLayoutTemplateId: layoutTemplate.id },
-  });
+  const layoutField = kind === "post" ? { postLayoutTemplateId: layoutId } : { listingLayoutTemplateId: layoutId };
+  if (site) {
+    await BlogSite.patch({ templateId: siteId }).set(layoutField).go();
+  } else {
+    await BlogSite.create({ id: randomUUID(), templateId: siteId, ...layoutField }).go();
+  }
 
-  return layoutTemplate.id;
+  return layoutId;
 }
 
 const BLOG_LAYOUT_EXAMPLE = `
@@ -532,7 +538,7 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       if (!isLayoutKind(args.kind)) throw new Error('kind must be "post" or "listing".');
       const kind = args.kind;
 
-      const site = await prisma.blogSite.findUnique({ where: { templateId: siteId } });
+      const { data: site } = await BlogSite.get({ templateId: siteId }).go();
       const layoutTemplateId = kind === "post" ? site?.postLayoutTemplateId : site?.listingLayoutTemplateId;
       if (!layoutTemplateId) {
         return {
@@ -542,10 +548,7 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
         };
       }
 
-      const layout = await prisma.template.findUnique({
-        where: { id: layoutTemplateId },
-        select: { id: true, name: true, designJson: true, compiledHtml: true },
-      });
+      const { data: layout } = await Template.get({ id: layoutTemplateId }).go();
       if (!layout) {
         return { exists: false, kind, message: "The linked layout template no longer exists — call design_blog_layout to create a new one." };
       }
@@ -587,16 +590,13 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const hasRequired = hasBlogMarker(compiledHtml, requiredMarker);
 
       const name = typeof args.name === "string" && args.name.trim() ? args.name.trim() : undefined;
-      const updated = await prisma.template.update({
-        where: { id: layoutTemplateId },
-        data: { designJson, compiledHtml, ...(name ? { name } : {}) },
-      });
+      await Template.patch({ id: layoutTemplateId }).set({ designJson, compiledHtml, ...(name ? { name } : {}) }).go();
 
       return {
         success: true,
-        layoutTemplateId: updated.id,
+        layoutTemplateId,
         kind,
-        editableUrl: `${baseAppUrl}/dashboard/templates/${updated.id}`,
+        editableUrl: `${baseAppUrl}/dashboard/templates/${layoutTemplateId}`,
         ...(hasRequired
           ? {}
           : {
@@ -610,10 +610,12 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       if (!isLayoutKind(args.kind)) throw new Error('kind must be "post" or "listing".');
       const kind = args.kind;
 
-      await prisma.blogSite.updateMany({
-        where: { templateId: siteId },
-        data: kind === "post" ? { postLayoutTemplateId: null } : { listingLayoutTemplateId: null },
-      });
+      const { data: siteRow } = await BlogSite.get({ templateId: siteId }).go();
+      if (siteRow) {
+        await BlogSite.patch({ templateId: siteId })
+          .remove(kind === "post" ? ["postLayoutTemplateId"] : ["listingLayoutTemplateId"])
+          .go();
+      }
 
       return {
         success: true,
@@ -624,7 +626,7 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
 
     case "get_blog_settings": {
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
-      const site = await prisma.blogSite.findUnique({ where: { templateId: siteId } });
+      const { data: site } = await BlogSite.get({ templateId: siteId }).go();
       return {
         site: site ?? {
           templateId: siteId,
@@ -645,6 +647,8 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
     case "update_blog_settings": {
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
       const data: Record<string, unknown> = {};
+      type RemovableField = "description" | "accentColor" | "logoUrl" | "headerImageUrl";
+      const toRemove: RemovableField[] = [];
 
       if (args.enabled !== undefined) data.enabled = Boolean(args.enabled);
       if (args.title !== undefined) {
@@ -652,7 +656,11 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
         if (!title) throw new Error("Blog title can't be empty.");
         data.title = title;
       }
-      if (args.description !== undefined) data.description = (typeof args.description === "string" && args.description.trim()) || null;
+      if (args.description !== undefined) {
+        const description = typeof args.description === "string" ? args.description.trim() : "";
+        if (description) data.description = description;
+        else toRemove.push("description");
+      }
       if (args.postsPerPage !== undefined) {
         const n = Number(args.postsPerPage);
         if (!Number.isInteger(n) || n < 1 || n > 50) throw new Error("postsPerPage must be an integer between 1 and 50.");
@@ -661,73 +669,127 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       if (args.showOnHomepage !== undefined) data.showOnHomepage = Boolean(args.showOnHomepage);
       if (args.accentColor !== undefined) {
         if (args.accentColor && !HEX_COLOR_REGEX.test(args.accentColor)) throw new Error("accentColor must be a hex value like #6d28d9.");
-        data.accentColor = args.accentColor || null;
+        if (args.accentColor) data.accentColor = args.accentColor;
+        else toRemove.push("accentColor");
       }
       if (args.fontPreset !== undefined) {
         if (!VALID_FONT_PRESETS.has(args.fontPreset)) throw new Error(`fontPreset must be one of: ${[...VALID_FONT_PRESETS].join(", ")}.`);
         data.fontPreset = args.fontPreset;
       }
-      if (args.logoUrl !== undefined) data.logoUrl = args.logoUrl || null;
-      if (args.headerImageUrl !== undefined) data.headerImageUrl = args.headerImageUrl || null;
+      if (args.logoUrl !== undefined) {
+        if (args.logoUrl) data.logoUrl = args.logoUrl;
+        else toRemove.push("logoUrl");
+      }
+      if (args.headerImageUrl !== undefined) {
+        if (args.headerImageUrl) data.headerImageUrl = args.headerImageUrl;
+        else toRemove.push("headerImageUrl");
+      }
       if (args.commentsEnabled !== undefined) data.commentsEnabled = Boolean(args.commentsEnabled);
 
-      if (Object.keys(data).length === 0) {
+      if (Object.keys(data).length === 0 && toRemove.length === 0) {
         throw new Error("Provide at least one setting to update (enabled, title, description, postsPerPage, showOnHomepage, accentColor, fontPreset, logoUrl, headerImageUrl, commentsEnabled).");
       }
 
-      const site = await prisma.blogSite.upsert({ where: { templateId: siteId }, create: { templateId: siteId, ...data }, update: data });
+      const { data: existing } = await BlogSite.get({ templateId: siteId }).go();
+      if (existing) {
+        let patch = BlogSite.patch({ templateId: siteId }).set(data);
+        if (toRemove.length) patch = patch.remove(toRemove);
+        await patch.go();
+      } else {
+        await BlogSite.create({ id: randomUUID(), templateId: siteId, ...data }).go();
+      }
+      const { data: site } = await BlogSite.get({ templateId: siteId }).go();
       return { success: true, site };
     }
 
     case "list_blog_posts": {
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
-      const where: any = { templateId: siteId };
-      if (typeof args.status === "string" && args.status in BlogPostStatus) where.status = args.status;
-      if (typeof args.search === "string" && args.search.trim()) where.title = { contains: args.search.trim(), mode: "insensitive" };
+      const [{ data: allPosts }, { data: categories }, { data: authors }] = await Promise.all([
+        BlogPost.query.byStatus({ templateId: siteId }).go(),
+        BlogCategory.query.primary({ templateId: siteId }).go(),
+        BlogAuthor.query.primary({ templateId: siteId }).go(),
+      ]);
+
+      let filtered = allPosts;
+      if (typeof args.status === "string" && BLOG_POST_STATUSES.has(args.status)) {
+        filtered = filtered.filter((p) => p.status === args.status);
+      }
+      if (typeof args.search === "string" && args.search.trim()) {
+        const needle = args.search.trim().toLowerCase();
+        filtered = filtered.filter((p) => p.title.toLowerCase().includes(needle));
+      }
       if (typeof args.categorySlug === "string" && args.categorySlug.trim()) {
-        const category = await prisma.blogCategory.findFirst({ where: { templateId: siteId, slug: args.categorySlug.trim() }, select: { id: true } });
-        where.categories = { some: { categoryId: category?.id ?? "__no_match__" } };
+        const category = categories.find((c) => c.slug === args.categorySlug.trim());
+        const { data: linked } = category
+          ? await BlogPostCategory.query.byCategory({ categoryId: category.id }).go()
+          : { data: [] as { postId: string; templateId: string }[] };
+        const postIdsInCategory = new Set(linked.filter((l) => l.templateId === siteId).map((l) => l.postId));
+        filtered = filtered.filter((p) => postIdsInCategory.has(p.id));
       }
 
-      const posts = await prisma.blogPost.findMany({
-        where,
-        orderBy: { updatedAt: "desc" },
-        take: 200,
-        select: {
-          id: true,
-          title: true,
-          slug: true,
-          status: true,
-          publishedAt: true,
-          scheduledAt: true,
-          updatedAt: true,
-          viewCount: true,
-          featuredImageUrl: true,
-          author: { select: { id: true, name: true } },
-          categories: { select: { category: { select: { id: true, name: true, slug: true } } } },
-        },
-      });
+      filtered = [...filtered].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")).slice(0, 200);
 
-      return { posts: posts.map((p) => ({ ...p, effectiveStatus: effectiveStatus(p.status, p.publishedAt) })) };
+      const categoryById = new Map(categories.map((c) => [c.id, c]));
+      const authorById = new Map(authors.map((a) => [a.id, a]));
+      const postCategoryBatches = await Promise.all(filtered.map((p) => BlogPostCategory.query.primary({ templateId: siteId, postId: p.id }).go()));
+
+      return {
+        posts: filtered.map((p, i) => ({
+          id: p.id,
+          title: p.title,
+          slug: p.slug,
+          status: p.status ?? "DRAFT",
+          publishedAt: p.publishedAt ?? null,
+          scheduledAt: p.scheduledAt ?? null,
+          updatedAt: p.updatedAt ?? new Date().toISOString(),
+          viewCount: p.viewCount ?? 0,
+          featuredImageUrl: p.featuredImageUrl ?? null,
+          author: p.authorId && authorById.has(p.authorId) ? { id: p.authorId, name: authorById.get(p.authorId)!.name } : null,
+          categories: postCategoryBatches[i].data
+            .map((pc) => categoryById.get(pc.categoryId))
+            .filter((c): c is NonNullable<typeof c> => !!c)
+            .map((c) => ({ category: { id: c.id, name: c.name, slug: c.slug } })),
+          effectiveStatus: effectiveStatus(p.status ?? "DRAFT", p.publishedAt ?? null),
+        })),
+      };
     }
 
     case "get_blog_post": {
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
       const postId = typeof args.postId === "string" ? args.postId.trim() : "";
-      const slug = typeof args.slug === "string" ? args.slug.trim() : "";
-      if (!postId && !slug) throw new Error("postId or slug is required.");
+      const slugArg = typeof args.slug === "string" ? args.slug.trim() : "";
+      if (!postId && !slugArg) throw new Error("postId or slug is required.");
 
-      const post = await prisma.blogPost.findFirst({
-        where: { templateId: siteId, ...(postId ? { id: postId } : { slug }) },
-        include: {
-          categories: { select: { category: { select: { id: true, name: true, slug: true } } } },
-          tags: { select: { tag: { select: { id: true, name: true, slug: true } } } },
-          author: { select: { id: true, name: true, slug: true } },
+      let post: { id: string; slug: string; [k: string]: unknown } | null = null;
+      if (slugArg) {
+        const { data } = await BlogPost.get({ templateId: siteId, slug: slugArg }).go();
+        post = data;
+      } else {
+        const { data: allPosts } = await BlogPost.query.byStatus({ templateId: siteId }).go();
+        post = allPosts.find((p) => p.id === postId) ?? null;
+      }
+      if (!post) throw new Error(`Post not found (${postId ? `id "${postId}"` : `slug "${slugArg}"`}).`);
+
+      const [{ data: categories }, { data: tags }, { data: authors }, { data: postCategories }, { data: postTags }] = await Promise.all([
+        BlogCategory.query.primary({ templateId: siteId }).go(),
+        BlogTag.query.primary({ templateId: siteId }).go(),
+        BlogAuthor.query.primary({ templateId: siteId }).go(),
+        BlogPostCategory.query.primary({ templateId: siteId, postId: post.id }).go(),
+        BlogPostTag.query.primary({ templateId: siteId, postId: post.id }).go(),
+      ]);
+      const categoryById = new Map(categories.map((c) => [c.id, c]));
+      const tagById = new Map(tags.map((t) => [t.id, t]));
+      const author = post.authorId ? authors.find((a) => a.id === post!.authorId) : undefined;
+
+      return {
+        post: {
+          ...post,
+          categories: postCategories.map((pc) => categoryById.get(pc.categoryId)).filter((c): c is NonNullable<typeof c> => !!c),
+          tags: postTags.map((pt) => tagById.get(pt.tagId)).filter((t): t is NonNullable<typeof t> => !!t),
+          author: author ? { id: author.id, name: author.name, slug: author.slug } : null,
+          effectiveStatus: effectiveStatus((post.status as string) ?? "DRAFT", (post.publishedAt as string | null) ?? null),
         },
-      });
-      if (!post) throw new Error(`Post not found (${postId ? `id "${postId}"` : `slug "${slug}"`}).`);
-
-      return { post: { ...post, effectiveStatus: effectiveStatus(post.status, post.publishedAt) } };
+      };
     }
 
     case "create_blog_post": {
@@ -741,7 +803,7 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const authorId = await resolveAuthorId(siteId, args.authorName);
       const categoryIds = await resolveCategoryIds(siteId, normalizeStringArray(args.categoryNames));
       const tagIds = await resolveTagIds(siteId, normalizeStringArray(args.tagNames));
-      const status = typeof args.status === "string" && args.status in BlogPostStatus ? (args.status as BlogPostStatus) : BlogPostStatus.DRAFT;
+      const status = typeof args.status === "string" && BLOG_POST_STATUSES.has(args.status) ? (args.status as "DRAFT" | "SCHEDULED" | "PUBLISHED" | "ARCHIVED") : "DRAFT";
 
       const post = await createBlogPost(siteId, {
         title,
@@ -786,7 +848,7 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       }
       if (typeof args.featuredImageUrl === "string" || args.featuredImageUrl === null) input.featuredImageUrl = args.featuredImageUrl;
       if (typeof args.featuredImageAlt === "string" || args.featuredImageAlt === null) input.featuredImageAlt = args.featuredImageAlt;
-      if (typeof args.status === "string" && args.status in BlogPostStatus) input.status = args.status;
+      if (typeof args.status === "string" && BLOG_POST_STATUSES.has(args.status)) input.status = args.status;
       if (typeof args.scheduledAt === "string" || args.scheduledAt === null) input.scheduledAt = args.scheduledAt;
       if (typeof args.metaTitle === "string" || args.metaTitle === null) input.metaTitle = args.metaTitle;
       if (typeof args.metaDescription === "string" || args.metaDescription === null) input.metaDescription = args.metaDescription;
@@ -817,7 +879,8 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
 
     case "list_blog_categories": {
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
-      const categories = await prisma.blogCategory.findMany({ where: { templateId: siteId }, orderBy: { name: "asc" } });
+      const { data: categories } = await BlogCategory.query.primary({ templateId: siteId }).go();
+      categories.sort((a, b) => a.name.localeCompare(b.name));
       return { categories };
     }
 
@@ -826,9 +889,11 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const name = typeof args.name === "string" ? args.name.trim() : "";
       if (!name) throw new Error("name is required.");
 
-      let parentId: string | null = null;
+      const { data: siblings } = await BlogCategory.query.primary({ templateId: siteId }).go();
+
+      let parentId: string | undefined;
       if (typeof args.parentName === "string" && args.parentName.trim()) {
-        const parent = await prisma.blogCategory.findFirst({ where: { templateId: siteId, name: { equals: args.parentName.trim(), mode: "insensitive" } } });
+        const parent = siblings.find((c) => c.name.toLowerCase() === args.parentName.trim().toLowerCase());
         if (!parent) throw new Error(`Parent category "${args.parentName}" not found.`);
         parentId = parent.id;
       }
@@ -836,14 +901,21 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const baseSlug = avoidPageReservedSlug(slugify(name) || "category", "category");
       let slug = baseSlug;
       let suffix = 2;
-      while (await prisma.blogCategory.findFirst({ where: { templateId: siteId, slug }, select: { id: true } })) {
+      while ((await BlogCategory.get({ templateId: siteId, slug }).go()).data) {
         slug = `${baseSlug}-${suffix}`;
         suffix += 1;
       }
 
-      const category = await prisma.blogCategory.create({
-        data: { templateId: siteId, name, slug, description: typeof args.description === "string" ? args.description.trim() || null : null, parentId },
-      });
+      const id = randomUUID();
+      await BlogCategory.create({
+        id,
+        templateId: siteId,
+        name,
+        slug,
+        description: (typeof args.description === "string" && args.description.trim()) || undefined,
+        parentId,
+      }).go();
+      const { data: category } = await BlogCategory.get({ templateId: siteId, slug }).go();
       return { success: true, category };
     }
 
@@ -852,17 +924,24 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const idOrName = (typeof args.categoryId === "string" && args.categoryId.trim()) || (typeof args.name === "string" && args.name.trim()) || "";
       if (!idOrName) throw new Error("categoryId or name is required.");
 
-      let category = isValidUuid(idOrName) ? await prisma.blogCategory.findFirst({ where: { id: idOrName, templateId: siteId } }) : null;
-      if (!category) category = await prisma.blogCategory.findFirst({ where: { templateId: siteId, name: { equals: idOrName, mode: "insensitive" } } });
+      const { data: categories } = await BlogCategory.query.primary({ templateId: siteId }).go();
+      let category = isValidUuid(idOrName) ? categories.find((c) => c.id === idOrName) : undefined;
+      if (!category) category = categories.find((c) => c.name.toLowerCase() === idOrName.toLowerCase());
       if (!category) throw new Error(`Category "${idOrName}" not found.`);
 
-      await prisma.blogCategory.delete({ where: { id: category.id } });
+      // Postgres's onDelete: Cascade on BlogPostCategory -> BlogCategory has no DynamoDB
+      // equivalent — clean up the join rows explicitly via byCategory (GSI1) first.
+      const { data: links } = await BlogPostCategory.query.byCategory({ categoryId: category.id }).go();
+      await Promise.all(links.map((l) => BlogPostCategory.remove({ templateId: l.templateId, postId: l.postId, categoryId: l.categoryId }).go()));
+
+      await BlogCategory.remove({ templateId: siteId, slug: category.slug }).go();
       return { success: true, deletedCategoryId: category.id };
     }
 
     case "list_blog_tags": {
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
-      const tags = await prisma.blogTag.findMany({ where: { templateId: siteId }, orderBy: { name: "asc" } });
+      const { data: tags } = await BlogTag.query.primary({ templateId: siteId }).go();
+      tags.sort((a, b) => a.name.localeCompare(b.name));
       return { tags };
     }
 
@@ -874,12 +953,14 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const baseSlug = avoidPageReservedSlug(slugify(name) || "tag", "tag");
       let slug = baseSlug;
       let suffix = 2;
-      while (await prisma.blogTag.findFirst({ where: { templateId: siteId, slug }, select: { id: true } })) {
+      while ((await BlogTag.get({ templateId: siteId, slug }).go()).data) {
         slug = `${baseSlug}-${suffix}`;
         suffix += 1;
       }
 
-      const tag = await prisma.blogTag.create({ data: { templateId: siteId, name, slug } });
+      const id = randomUUID();
+      await BlogTag.create({ id, templateId: siteId, name, slug }).go();
+      const { data: tag } = await BlogTag.get({ templateId: siteId, slug }).go();
       return { success: true, tag };
     }
 
@@ -888,17 +969,24 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const idOrName = (typeof args.tagId === "string" && args.tagId.trim()) || (typeof args.name === "string" && args.name.trim()) || "";
       if (!idOrName) throw new Error("tagId or name is required.");
 
-      let tag = isValidUuid(idOrName) ? await prisma.blogTag.findFirst({ where: { id: idOrName, templateId: siteId } }) : null;
-      if (!tag) tag = await prisma.blogTag.findFirst({ where: { templateId: siteId, name: { equals: idOrName, mode: "insensitive" } } });
+      const { data: tags } = await BlogTag.query.primary({ templateId: siteId }).go();
+      let tag = isValidUuid(idOrName) ? tags.find((t) => t.id === idOrName) : undefined;
+      if (!tag) tag = tags.find((t) => t.name.toLowerCase() === idOrName.toLowerCase());
       if (!tag) throw new Error(`Tag "${idOrName}" not found.`);
 
-      await prisma.blogTag.delete({ where: { id: tag.id } });
+      // Postgres's onDelete: Cascade on BlogPostTag -> BlogTag has no DynamoDB
+      // equivalent — clean up the join rows explicitly via byTag (GSI1) first.
+      const { data: links } = await BlogPostTag.query.byTag({ tagId: tag.id }).go();
+      await Promise.all(links.map((l) => BlogPostTag.remove({ templateId: l.templateId, postId: l.postId, tagId: l.tagId }).go()));
+
+      await BlogTag.remove({ templateId: siteId, slug: tag.slug }).go();
       return { success: true, deletedTagId: tag.id };
     }
 
     case "list_blog_authors": {
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
-      const authors = await prisma.blogAuthor.findMany({ where: { templateId: siteId }, orderBy: { name: "asc" } });
+      const { data: authors } = await BlogAuthor.query.primary({ templateId: siteId }).go();
+      authors.sort((a, b) => a.name.localeCompare(b.name));
       return { authors };
     }
 
@@ -908,15 +996,16 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       if (!name) throw new Error("name is required.");
 
       const slug = await generateUniqueAuthorSlug(siteId, name);
-      const author = await prisma.blogAuthor.create({
-        data: {
-          templateId: siteId,
-          name,
-          slug,
-          avatarUrl: typeof args.avatarUrl === "string" ? args.avatarUrl.trim() || null : null,
-          bio: typeof args.bio === "string" ? args.bio.trim() || null : null,
-        },
-      });
+      const id = randomUUID();
+      await BlogAuthor.create({
+        id,
+        templateId: siteId,
+        name,
+        slug,
+        avatarUrl: (typeof args.avatarUrl === "string" && args.avatarUrl.trim()) || undefined,
+        bio: (typeof args.bio === "string" && args.bio.trim()) || undefined,
+      }).go();
+      const { data: author } = await BlogAuthor.get({ templateId: siteId, slug }).go();
       return { success: true, author };
     }
 
@@ -925,48 +1014,69 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const idOrName = (typeof args.authorId === "string" && args.authorId.trim()) || (typeof args.name === "string" && args.name.trim()) || "";
       if (!idOrName) throw new Error("authorId or name is required.");
 
-      let author = isValidUuid(idOrName) ? await prisma.blogAuthor.findFirst({ where: { id: idOrName, templateId: siteId } }) : null;
-      if (!author) author = await prisma.blogAuthor.findFirst({ where: { templateId: siteId, name: { equals: idOrName, mode: "insensitive" } } });
+      const { data: authors } = await BlogAuthor.query.primary({ templateId: siteId }).go();
+      let author = isValidUuid(idOrName) ? authors.find((a) => a.id === idOrName) : undefined;
+      if (!author) author = authors.find((a) => a.name.toLowerCase() === idOrName.toLowerCase());
       if (!author) throw new Error(`Author "${idOrName}" not found.`);
 
-      await prisma.blogAuthor.delete({ where: { id: author.id } });
+      // Posts keep their content — they just lose the byline (Prisma: onDelete: SetNull).
+      // No DynamoDB equivalent, so every post referencing this author is patched first.
+      const { data: posts } = await BlogPost.query.byStatus({ templateId: siteId }).go();
+      const affected = posts.filter((p) => p.authorId === author!.id);
+      await Promise.all(affected.map((p) => BlogPost.patch({ templateId: siteId, slug: p.slug }).remove(["authorId"]).go()));
+
+      await BlogAuthor.remove({ templateId: siteId, slug: author.slug }).go();
       return { success: true, deletedAuthorId: author.id };
     }
 
     case "list_blog_comments": {
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
-      const statusFilter = typeof args.status === "string" && args.status in BlogCommentStatus ? (args.status as BlogCommentStatus) : undefined;
+      const statusFilter = typeof args.status === "string" && BLOG_COMMENT_STATUSES.has(args.status) ? args.status : undefined;
 
-      const comments = await prisma.blogComment.findMany({
-        where: { post: { templateId: siteId }, ...(statusFilter ? { status: statusFilter } : {}) },
-        orderBy: { createdAt: "desc" },
-        take: 200,
-        select: {
-          id: true,
-          authorName: true,
-          authorEmail: true,
-          body: true,
-          status: true,
-          createdAt: true,
-          parentId: true,
-          post: { select: { id: true, title: true, slug: true } },
-        },
-      });
-      return { comments };
+      // BlogComment is scoped by postId, not templateId (see contentEntities.ts) — no
+      // direct "every comment on this site" index, so this fans out per post.
+      const { data: posts } = await BlogPost.query.byStatus({ templateId: siteId }).go();
+      const postById = new Map(posts.map((p) => [p.id, p]));
+      const commentBatches = await Promise.all(posts.map((p) => BlogComment.query.primary({ postId: p.id }).go()));
+      let comments = commentBatches.flatMap((b) => b.data);
+      if (statusFilter) comments = comments.filter((c) => c.status === statusFilter);
+      comments = comments.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, 200);
+
+      return {
+        comments: comments.map((c) => {
+          const post = postById.get(c.postId);
+          return {
+            id: c.id,
+            authorName: c.authorName,
+            authorEmail: c.authorEmail,
+            body: c.body,
+            status: c.status ?? "PENDING",
+            createdAt: c.createdAt ?? new Date().toISOString(),
+            parentId: c.parentId ?? null,
+            post: { id: c.postId, title: post?.title ?? "", slug: post?.slug ?? "" },
+          };
+        }),
+      };
     }
 
     case "moderate_blog_comment": {
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
       const commentId = typeof args.commentId === "string" ? args.commentId.trim() : "";
       if (!commentId) throw new Error("commentId is required.");
-      if (typeof args.status !== "string" || !(args.status in BlogCommentStatus)) {
-        throw new Error(`status must be one of: ${Object.values(BlogCommentStatus).join(", ")}.`);
+      if (typeof args.status !== "string" || !BLOG_COMMENT_STATUSES.has(args.status)) {
+        throw new Error(`status must be one of: ${[...BLOG_COMMENT_STATUSES].join(", ")}.`);
       }
+      const newStatus = args.status as "PENDING" | "APPROVED" | "SPAM" | "REJECTED";
 
-      const comment = await prisma.blogComment.findFirst({ where: { id: commentId, post: { templateId: siteId } }, select: { id: true } });
+      const comment = await findCommentById(siteId, commentId);
       if (!comment) throw new Error(`Comment not found with id "${commentId}".`);
 
-      const updated = await prisma.blogComment.update({ where: { id: commentId }, data: { status: args.status as BlogCommentStatus } });
+      // status is part of this entity's own sort key (see contentEntities.ts) — same
+      // create-at-new-key + remove-old-key pattern savePostDynamo.ts uses for a slug rename.
+      await BlogComment.create({ ...comment, status: newStatus }).go();
+      await BlogComment.remove({ postId: comment.postId, status: comment.status ?? "PENDING", createdAt: comment.createdAt ?? "", id: comment.id }).go();
+      const { data: updated } = await BlogComment.get({ postId: comment.postId, status: newStatus, createdAt: comment.createdAt ?? "", id: comment.id }).go();
+
       return { success: true, comment: updated };
     }
 
@@ -975,10 +1085,17 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const commentId = typeof args.commentId === "string" ? args.commentId.trim() : "";
       if (!commentId) throw new Error("commentId is required.");
 
-      const comment = await prisma.blogComment.findFirst({ where: { id: commentId, post: { templateId: siteId } }, select: { id: true } });
+      const comment = await findCommentById(siteId, commentId);
       if (!comment) throw new Error(`Comment not found with id "${commentId}".`);
 
-      await prisma.blogComment.delete({ where: { id: commentId } });
+      // Cascade (Prisma schema's onDelete: Cascade on parentId) also removes any replies
+      // to this comment — walked explicitly since DynamoDB has no equivalent.
+      const replies = await getDescendantCommentIds(comment.postId, commentId);
+      await Promise.all(
+        [...replies, comment].map((c) =>
+          BlogComment.remove({ postId: c.postId, status: c.status ?? "PENDING", createdAt: c.createdAt ?? "", id: c.id }).go(),
+        ),
+      );
       return { success: true, deletedCommentId: commentId };
     }
 

@@ -1,14 +1,16 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { requirePermission } from "@/server/requirePermission";
-import { resolveCommerceAdmin } from "@/lib/commerce/adminAuth";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
+import { CommerceDiscountCode } from "@/lib/db/commerceEntities";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
   const { templateId } = await context.params;
   const resolved = await resolveCommerceAdmin(request, templateId);
   if (resolved.error) return resolved.error;
 
-  const discounts = await prisma.commerceDiscountCode.findMany({ where: { templateId }, orderBy: { createdAt: "desc" } });
+  const { data: discounts } = await CommerceDiscountCode.query.primary({ templateId }).go();
+  discounts.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
   return NextResponse.json({ discounts });
 }
 
@@ -18,7 +20,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   if (resolved.error) return resolved.error;
   const { organizationId, role } = resolved.context;
 
-  const permissionError = await requirePermission(request.headers, role, { commerce: ["create"] });
+  const permissionError = requirePermission(role, { commerce: ["create"] });
   if (permissionError) return permissionError;
 
   const body = await request.json().catch(() => ({}));
@@ -38,22 +40,23 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
     return NextResponse.json({ error: "A percentage discount can't exceed 100." }, { status: 400 });
   }
 
-  const existing = await prisma.commerceDiscountCode.findUnique({ where: { templateId_code: { templateId, code: normalizedCode } } });
-  if (existing) {
+  const { data: byCode } = await CommerceDiscountCode.query.byCode({ templateId, code: normalizedCode }).go();
+  if (byCode[0]) {
     return NextResponse.json({ error: `"${normalizedCode}" is already in use.` }, { status: 409 });
   }
 
-  const discount = await prisma.commerceDiscountCode.create({
-    data: {
-      templateId,
-      organizationId,
-      code: normalizedCode,
-      type,
-      value,
-      expiresAt: typeof expiresAt === "string" && expiresAt ? new Date(expiresAt) : null,
-      usageLimit: typeof usageLimit === "number" && usageLimit > 0 ? Math.trunc(usageLimit) : null,
-    },
-  });
+  const id = randomUUID();
+  await CommerceDiscountCode.create({
+    id,
+    templateId,
+    organizationId,
+    code: normalizedCode,
+    type,
+    value,
+    expiresAt: typeof expiresAt === "string" && expiresAt ? new Date(expiresAt).toISOString() : undefined,
+    usageLimit: typeof usageLimit === "number" && usageLimit > 0 ? Math.trunc(usageLimit) : undefined,
+  }).go();
+  const { data: discount } = await CommerceDiscountCode.get({ templateId, id }).go();
 
   return NextResponse.json({ discount }, { status: 201 });
 }

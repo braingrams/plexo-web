@@ -1,35 +1,35 @@
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
-import { ensureActiveOrganization } from "@/server/org";
+import { auth } from "@/server/authDynamo";
+import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { Template } from "@/lib/db/contentEntities";
+import { PlatformSettings } from "@/lib/db/coreEntities";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
 import { PageContainer } from "@/app/dashboard/_components/PageContainer";
 import { SellTemplateForm } from "./SellTemplateForm";
 
 export default async function SellTemplatePage() {
-  const requestHeaders = await headers();
-  const session = await auth.api.getSession({ headers: requestHeaders });
+  const session = await auth();
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/marketplace/sell");
   }
 
-  const orgResolution = await ensureActiveOrganization(requestHeaders, session.user.id);
+  const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
   }
 
   // Only the seller's own working templates (not sub-pages, not existing listing clones)
   // are eligible to become a new listing — same exclusion as the main Templates page.
-  const [templates, platformSettings] = await Promise.all([
-    prisma.template.findMany({
-      where: { organizationId: orgResolution.organizationId, parentId: null, marketplaceStatus: null, isBlogLayout: false, isSiteLayoutFragment: false, isCommerceLayout: false },
-      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
-      select: { id: true, name: true, kind: true, compiledHtml: true },
-    }),
-    prisma.platformSettings.findUnique({ where: { id: "global" }, select: { autoPublishMarketplaceListings: true, marketplaceFeeBps: true } }),
+  const [{ data: orgTemplates }, { data: platformSettings }] = await Promise.all([
+    Template.query.byOrg({ organizationId: orgResolution.organizationId }).go(),
+    PlatformSettings.get({}).go(),
   ]);
+
+  const templates = orgTemplates
+    .filter((t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout)
+    .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+
   const autoPublish = platformSettings?.autoPublishMarketplaceListings ?? false;
   const feeBps = platformSettings?.marketplaceFeeBps ?? 2000;
   const feePercent = (feeBps / 100).toFixed(feeBps % 100 === 0 ? 0 : 2);

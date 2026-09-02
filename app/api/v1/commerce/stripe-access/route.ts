@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { prisma } from "@/server/prisma";
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { requirePermission } from "@/server/requirePermission";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { requirePermission } from "@/server/requirePermissionDynamo";
 import { sendCommerceStripeAccessRequestNotificationEmail } from "@/lib/email";
+import { Organization, User } from "@/lib/db/coreEntities";
+import { CommerceStripeAccessRequest } from "@/lib/db/commerceEntities";
 
 type CommerceStripeAccessStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED";
 
@@ -21,20 +23,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const latest = await prisma.commerceStripeAccessRequest.findFirst({
-    where: { organizationId: resolved.organizationId },
-    orderBy: { requestedAt: "desc" },
-  });
+  const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go({ order: "desc" });
+  const latest = requests[0];
 
   if (!latest) {
     return NextResponse.json({ status: "NONE" satisfies CommerceStripeAccessStatus, requestId: null, rejectionReason: null, reason: null });
   }
 
   return NextResponse.json({
-    status: latest.status satisfies CommerceStripeAccessStatus,
+    status: (latest.status ?? "PENDING") satisfies CommerceStripeAccessStatus,
     requestId: latest.id,
-    rejectionReason: latest.status === "REJECTED" ? latest.rejectionReason : null,
-    reason: latest.reason,
+    rejectionReason: latest.status === "REJECTED" ? (latest.rejectionReason ?? null) : null,
+    reason: latest.reason ?? null,
   });
 }
 
@@ -51,20 +51,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { commerce: ["update"] });
+  const permissionError = requirePermission(resolved.role, { commerce: ["update"] });
   if (permissionError) return permissionError;
 
-  const [organization, user] = await Promise.all([
-    prisma.organization.findUnique({ where: { id: resolved.organizationId }, select: { name: true } }),
-    prisma.user.findUnique({ where: { id: resolved.userId }, select: { email: true, name: true } }),
+  const [{ data: organization }, { data: user }] = await Promise.all([
+    Organization.get({ id: resolved.organizationId }).go(),
+    User.get({ id: resolved.userId }).go(),
   ]);
   if (!organization || !user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const blocking = await prisma.commerceStripeAccessRequest.findFirst({
-    where: { organizationId: resolved.organizationId, OR: [{ status: "PENDING" }, { status: "APPROVED" }] },
-  });
+  const { data: existingRequests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go();
+  const blocking = existingRequests.some((r) => r.status === "PENDING" || r.status === "APPROVED");
   if (blocking) {
     return NextResponse.json(
       { error: "A Stripe access request is already pending or approved for this organization." },
@@ -73,21 +72,26 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const body = (await request.json().catch(() => null)) as { reason?: string; expectedVolume?: string } | null;
-  const reason = body?.reason?.trim() || null;
-  const expectedVolume = body?.expectedVolume?.trim() || null;
+  const reason = body?.reason?.trim() || undefined;
+  const expectedVolume = body?.expectedVolume?.trim() || undefined;
 
-  const created = await prisma.commerceStripeAccessRequest.create({
-    data: { organizationId: resolved.organizationId, requestedByUserId: resolved.userId, reason, expectedVolume },
-  });
-
-  await sendCommerceStripeAccessRequestNotificationEmail({
-    id: created.id,
-    organizationName: organization.name,
-    userEmail: user.email,
-    userName: user.name,
+  const id = randomUUID();
+  await CommerceStripeAccessRequest.create({
+    id,
+    organizationId: resolved.organizationId,
+    requestedByUserId: resolved.userId,
     reason,
     expectedVolume,
+  }).go();
+
+  await sendCommerceStripeAccessRequestNotificationEmail({
+    id,
+    organizationName: organization.name,
+    userEmail: user.email,
+    userName: user.name ?? "A user",
+    reason: reason ?? null,
+    expectedVolume: expectedVolume ?? null,
   }).catch((err) => console.error("Failed to send Commerce Stripe access admin notification email:", err));
 
-  return NextResponse.json({ request: { id: created.id, status: created.status, requestedAt: created.requestedAt } }, { status: 201 });
+  return NextResponse.json({ request: { id, status: "PENDING" } }, { status: 201 });
 }

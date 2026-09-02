@@ -1,21 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/server/prisma";
-import { resolveSite } from "@/lib/pub/resolveSite";
+import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
+import { CommerceProduct, CommerceCategory, CommerceOrder, CommerceOrderItem } from "@/lib/db/commerceEntities";
 
 const SPECIAL_CATEGORIES = new Set(["best_seller", "most_recent"]);
 
 /** Total units sold (from PAID orders only) per product, most-sold first — used for
  * `sort=best_seller`/`category=best_seller`. A product with zero sales simply doesn't
  * appear here; the caller appends those at the end so a brand-new catalog still shows
- * something sensible instead of an empty "best sellers" shelf. */
+ * something sensible instead of an empty "best sellers" shelf.
+ *
+ * No productId-indexed access pattern for CommerceOrderItem exists (it's co-located
+ * under its parent order, see commerceEntities.ts) — this fans out across every PAID
+ * order for the site and sums in memory, same "small in practice" bound as the rest of
+ * this migration's site-scoped aggregations. */
 async function bestSellerProductIds(templateId: string): Promise<string[]> {
-  const rows = await prisma.commerceOrderItem.groupBy({
-    by: ["productId"],
-    where: { order: { templateId, status: "PAID" } },
-    _sum: { quantity: true },
-    orderBy: { _sum: { quantity: "desc" } },
-  });
-  return rows.map((r) => r.productId);
+  const { data: orders } = await CommerceOrder.query.primary({ templateId }).go();
+  const paidOrderIds = orders.filter((o) => o.status === "PAID").map((o) => o.id);
+  const itemBatches = await Promise.all(paidOrderIds.map((orderId) => CommerceOrderItem.query.primary({ templateId, orderId }).go()));
+  const totals = new Map<string, number>();
+  for (const batch of itemBatches) {
+    for (const item of batch.data) {
+      totals.set(item.productId, (totals.get(item.productId) ?? 0) + (item.quantity ?? 1));
+    }
+  }
+  return [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([productId]) => productId);
 }
 
 /** Powers both shop_grid modes (see plexo-sdk's shop_grid storeMode attr):
@@ -33,7 +41,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const { templateId } = siteResult.published;
 
   const categoryParam = request.nextUrl.searchParams.get("category");
-  const search = request.nextUrl.searchParams.get("q")?.trim();
+  const search = request.nextUrl.searchParams.get("q")?.trim().toLowerCase();
   const isSpecialCategory = categoryParam ? SPECIAL_CATEGORIES.has(categoryParam) : false;
   const categorySlug = categoryParam && !isSpecialCategory ? categoryParam : null;
 
@@ -44,61 +52,68 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const pageSizeParam = Number(request.nextUrl.searchParams.get("pageSize"));
   const pageSize = Number.isFinite(pageSizeParam) && pageSizeParam > 0 ? Math.min(Math.floor(pageSizeParam), 100) : null;
 
-  const baseWhere = {
-    templateId,
-    active: true,
-    ...(categorySlug ? { category: { slug: categorySlug } } : {}),
-    ...(search ? { name: { contains: search, mode: "insensitive" as const } } : {}),
-  };
+  const [{ data: allProducts }, { data: categories }] = await Promise.all([
+    CommerceProduct.query.primary({ templateId }).go(),
+    CommerceCategory.query.primary({ templateId }).go(),
+  ]);
+  const categoryBySlug = new Map(categories.map((c) => [c.slug, c]));
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const targetCategory = categorySlug ? categoryBySlug.get(categorySlug) : null;
 
-  const selectFields = {
-    id: true,
-    name: true,
-    slug: true,
-    description: true,
-    imageUrl: true,
-    kind: true,
-    priceMinor: true,
-    currency: true,
-    stockQuantity: true,
-    durationMinutes: true,
-    createdAt: true,
-    category: { select: { name: true, slug: true } },
-  } as const;
+  let filtered = allProducts.filter((p) => p.active ?? true);
+  if (categorySlug) {
+    filtered = targetCategory ? filtered.filter((p) => p.categoryId === targetCategory.id) : [];
+  }
+  if (search) {
+    filtered = filtered.filter((p) => p.name.toLowerCase().includes(search));
+  }
 
-  let products: Array<Record<string, unknown>>;
+  const selectProduct = (p: (typeof allProducts)[number]) => ({
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    description: p.description ?? null,
+    imageUrl: p.imageUrl ?? null,
+    kind: p.kind ?? "PHYSICAL",
+    priceMinor: p.priceMinor,
+    currency: p.currency ?? "NGN",
+    stockQuantity: p.stockQuantity ?? null,
+    durationMinutes: p.durationMinutes ?? null,
+    createdAt: p.createdAt,
+    category: p.categoryId && categoryById.has(p.categoryId) ? { name: categoryById.get(p.categoryId)!.name, slug: categoryById.get(p.categoryId)!.slug } : null,
+  });
+
+  let products: ReturnType<typeof selectProduct>[];
   let total: number;
 
   if (categoryParam === "best_seller") {
-    // Sorted by real sales — can't express "order by an external aggregate, with
-    // never-sold rows appended at the end" as a single Prisma orderBy, so this fetches
-    // the ranked id list, then the full rows, then reorders in memory.
+    // Sorted by real sales, never-sold rows appended at the end.
     const rankedIds = await bestSellerProductIds(templateId);
-    const all = await prisma.commerceProduct.findMany({ where: baseWhere, select: selectFields, orderBy: { name: "asc" } });
     const rank = new Map(rankedIds.map((id, i) => [id, i]));
-    all.sort((a, b) => {
-      const ra = rank.has(a.id as string) ? (rank.get(a.id as string) as number) : Infinity;
-      const rb = rank.has(b.id as string) ? (rank.get(b.id as string) as number) : Infinity;
-      return ra - rb;
+    const sorted = [...filtered].sort((a, b) => {
+      const ra = rank.has(a.id) ? rank.get(a.id)! : Infinity;
+      const rb = rank.has(b.id) ? rank.get(b.id)! : Infinity;
+      if (ra !== rb) return ra - rb;
+      return a.name.localeCompare(b.name);
     });
-    total = all.length;
-    products = pageSize ? all.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize) : limit ? all.slice(0, limit) : all;
+    total = sorted.length;
+    const mapped = sorted.map(selectProduct);
+    products = pageSize ? mapped.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize) : limit ? mapped.slice(0, limit) : mapped;
   } else {
-    const orderBy = categoryParam === "most_recent" ? ({ createdAt: "desc" } as const) : ({ name: "asc" } as const);
-    total = await prisma.commerceProduct.count({ where: baseWhere });
-    products = await prisma.commerceProduct.findMany({
-      where: baseWhere,
-      select: selectFields,
-      orderBy,
-      ...(pageSize ? { skip: (page - 1) * pageSize, take: pageSize } : limit ? { take: limit } : {}),
-    });
+    const sorted =
+      categoryParam === "most_recent"
+        ? [...filtered].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+        : [...filtered].sort((a, b) => a.name.localeCompare(b.name));
+    total = sorted.length;
+    const mapped = sorted.map(selectProduct);
+    products = pageSize ? mapped.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize) : limit ? mapped.slice(0, limit) : mapped;
   }
 
-  const categories = await prisma.commerceCategory.findMany({ where: { templateId }, select: { name: true, slug: true }, orderBy: { name: "asc" } });
+  const sortedCategories = [...categories].sort((a, b) => a.name.localeCompare(b.name)).map((c) => ({ name: c.name, slug: c.slug }));
 
   return NextResponse.json({
     products,
-    categories,
+    categories: sortedCategories,
     total,
     page,
     pageSize: pageSize ?? total,

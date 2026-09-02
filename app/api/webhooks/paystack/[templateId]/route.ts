@@ -1,23 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import { prisma } from "@/server/prisma";
 import { decryptPaystackKey } from "@/lib/crypto";
 import { listConfiguredPaystackSecretKeys } from "@/lib/commerce/paystack";
-import { handleOrderPaid } from "@/lib/commerce/orderFulfillment";
-
-// Idempotency guard for Paystack's at-least-once webhook delivery, same defensive shape
-// as claimStripeEvent (app/api/webhooks/stripe/route.ts) — claim the event id via a
-// standalone insert BEFORE doing any mutation; a unique-constraint failure means it's
-// already been processed.
-async function claimPaystackEvent(eventId: string, templateId: string, organizationId: string): Promise<boolean> {
-  try {
-    await prisma.paystackWebhookEvent.create({ data: { id: eventId, templateId, organizationId } });
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { claimPaystackEvent, confirmPaystackPayment, handleOrderPaid } from "@/lib/db/commerceWebhookOperations";
+import { CommerceSettings } from "@/lib/db/commerceEntities";
 
 /**
  * Paystack signs with the MERCHANT'S OWN secret key (HMAC-SHA512 of the raw body), unlike
@@ -32,8 +19,16 @@ export async function POST(
 ): Promise<NextResponse> {
   const { templateId } = await context.params;
 
-  const settings = await prisma.commerceSettings.findUnique({ where: { templateId } });
-  const configuredKeys = settings ? listConfiguredPaystackSecretKeys(settings) : [];
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  const configuredKeys = settings
+    ? listConfiguredPaystackSecretKeys({
+        paystackMode: settings.paystackMode ?? "TEST",
+        paystackTestPublicKey: settings.paystackTestPublicKey ?? null,
+        paystackTestSecretKeyEncrypted: settings.paystackTestSecretKeyEncrypted ?? null,
+        paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
+        paystackLiveSecretKeyEncrypted: settings.paystackLiveSecretKeyEncrypted ?? null,
+      })
+    : [];
   if (!settings || configuredKeys.length === 0) {
     // No Commerce site should ever have this URL registered unless it configured Paystack
     // itself — a 404 here can't cause a legitimate webhook to retry-storm.
@@ -83,25 +78,9 @@ export async function POST(
   }
 
   if (event.event === "charge.success" && event.data?.reference) {
-    const reference = event.data.reference;
-
-    // Atomic guard: only flips PENDING -> PAID, so a duplicate delivery of an event we
-    // somehow claimed twice (or a stale retry after a later refund) can never re-process
-    // an order that already moved on.
-    const updated = await prisma.commerceOrder.updateMany({
-      where: { paystackReference: reference, templateId, status: "PENDING" },
-      data: { status: "PAID" },
-    });
-
-    if (updated.count > 0) {
-      const order = await prisma.commerceOrder.findUnique({
-        where: { paystackReference: reference },
-        include: { booking: true },
-      });
-
-      if (order) {
-        await handleOrderPaid(order, settings);
-      }
+    const confirmed = await confirmPaystackPayment(event.data.reference, templateId);
+    if (confirmed) {
+      await handleOrderPaid(confirmed.order, confirmed.booking, settings);
     }
   }
 

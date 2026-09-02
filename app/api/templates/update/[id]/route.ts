@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 
-import { auth } from "@/server/auth";
-import { prisma } from "@/server/prisma";
 import { sanitizePlexoPayload, sanitizeHtml } from "@/server/sanitizer";
 import { compileToHTML } from "@/lib/compiler";
 
-import { resolveUser } from "@/app/api/v1/domains/route";
-import { requirePermission } from "@/server/requirePermission";
-import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayout";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { requirePermission } from "@/server/requirePermissionDynamo";
+import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
+import { Template } from "@/lib/db/contentEntities";
 
 type UpdateTemplateBody = {
   designJson?: unknown;
@@ -24,7 +22,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const permissionError = await requirePermission(request.headers, resolved.role, { template: ["update"] });
+  const permissionError = requirePermission(resolved.role, { template: ["update"] });
   if (permissionError) return permissionError;
 
   const params = await context.params;
@@ -43,17 +41,10 @@ export async function POST(
     );
   }
 
-  const designJson = sanitizedPayload.designJson as Prisma.InputJsonValue;
+  const designJson = sanitizedPayload.designJson;
 
-  const existing = await prisma.template.findFirst({
-    where: {
-      id: params.id,
-      organizationId: resolved.organizationId,
-    },
-    select: { id: true, kind: true, parentId: true },
-  });
-
-  if (!existing) {
+  const { data: existing } = await Template.get({ id: params.id }).go();
+  if (!existing || existing.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Template not found." }, { status: 404 });
   }
 
@@ -65,29 +56,22 @@ export async function POST(
   // with no active layout keep exactly the prior behavior: trust the client's compile.
   let compiledHtml = sanitizedPayload.compiledHtml;
   if (existing.kind === "LANDING_PAGE") {
-    const forCompile = await compileWithSiteLayout(existing, sanitizedPayload.designJson);
+    const forCompile = await compileWithSiteLayout({ id: existing.id, parentId: existing.parentId ?? null }, sanitizedPayload.designJson);
     if (forCompile !== sanitizedPayload.designJson) {
       compiledHtml = sanitizeHtml(compileToHTML(forCompile));
     }
   }
 
-  const updated = await prisma.template.update({
-    where: { id: existing.id },
-    data: {
-      designJson,
-      compiledHtml,
-    },
-    select: {
-      id: true,
-      updatedAt: true,
-    },
-  });
+  await Template.patch({ id: existing.id }).set({ designJson, compiledHtml }).go();
+  const { data: updated } = await Template.get({ id: existing.id }).go();
+  if (!updated) throw new Error(`Template ${existing.id} vanished immediately after being updated`);
+
   await onTemplateSaved(existing.id);
 
   return NextResponse.json({
     template: {
       id: updated.id,
-      updatedAt: updated.updatedAt.toISOString(),
+      updatedAt: updated.updatedAt,
     },
   });
 }
