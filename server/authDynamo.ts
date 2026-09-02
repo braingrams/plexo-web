@@ -42,6 +42,18 @@ export class UnverifiedEmailError extends CredentialsSignin {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: dynamoAdapter,
+  // Required self-hosted (not Vercel, where Auth.js auto-trusts Vercel's own edge) — Auth.js
+  // refuses to construct callback/reset-link URLs from a request's Host by default
+  // (UntrustedHost) unless explicitly told the reverse proxy validates it. Safe here: the
+  // CloudFront Function (cdk/lib/forward-host-function.js) is the only source of
+  // x-forwarded-host Auth.js reads, and it runs upstream of the origin request policy that
+  // would otherwise strip the header entirely, so nothing downstream of CloudFront can
+  // override what it forwards on a per-distribution basis. The dashboard's own distribution
+  // (compute-stack.ts) currently has no alias restriction on its default *.cloudfront.net
+  // domain, so a direct request there COULD still present an arbitrary Host — tightening
+  // that (requiring the real custom domain, rejecting the bare CloudFront domain) is a
+  // follow-up hardening step, not yet done.
+  trustHost: true,
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID,
@@ -68,14 +80,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  session: { strategy: "database" },
+  // JWT, not database, sessions — confirmed directly against @auth/core's own source
+  // (lib/actions/callback/index.js's credentials branch): the Credentials provider
+  // unconditionally jwt.encode()s the session cookie and never calls adapter.createSession,
+  // regardless of session.strategy. With strategy:"database" (this file's original setting)
+  // auth() then tries to look up that JWT string as a stored session id via
+  // getSessionAndUser() and always finds nothing — every credentials login appeared to
+  // succeed (password verified, cookie set) but session() always came back null, bouncing
+  // straight back to the login page. This is documented upstream Auth.js behavior, not
+  // something a second provider works around — JWT strategy applies uniformly to every
+  // provider including Google; the adapter is still used for User/Account/
+  // VerificationToken persistence, just not Session rows.
+  session: { strategy: "jwt" },
   callbacks: {
-    // Auth.js doesn't put `id` on session.user by default even with the database
-    // strategy (verified — it's a documented, deliberate omission, not a bug) — every
-    // call site across the app (server/orgDynamo.ts, /api/org/*, etc.) reads
-    // session.user.id, so this is required, not an enhancement.
-    session({ session, user }) {
-      session.user.id = user.id;
+    // Every call site across the app (server/orgDynamo.ts, /api/org/*, etc.) reads
+    // session.user.id — under jwt strategy the session callback receives `token`, not
+    // `user` (token.sub is the user id, set from authorize()'s returned `id` on login).
+    jwt({ token, user }) {
+      if (user?.id) token.sub = user.id;
+      return token;
+    },
+    session({ session, token }) {
+      if (token.sub) session.user.id = token.sub;
       return session;
     },
   },

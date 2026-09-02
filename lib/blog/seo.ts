@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import type { BlogSite } from "@prisma/client";
-import type { BlogPostCard, BlogPostDetail } from "./queries";
+import type { BlogPostCard, BlogPostDetail } from "./queriesDynamo";
 import { autoExcerpt } from "./content";
 
 /** Every tenant blog lives on its own domain — metadataBase must be set per-request. */
@@ -8,7 +7,7 @@ export function siteOrigin(domain: string): string {
   return `https://${domain}`;
 }
 
-export function listingMetadata(domain: string, blogSite: Pick<BlogSite, "title" | "description">): Metadata {
+export function listingMetadata(domain: string, blogSite: { title: string; description: string | null }): Metadata {
   return {
     metadataBase: new URL(siteOrigin(domain)),
     title: blogSite.title,
@@ -71,7 +70,7 @@ export function postMetadata(domain: string, post: BlogPostDetail): Metadata {
 }
 
 /** JSON-LD `@graph` array (not the full script tag) — callers embed via one shared <script>. */
-export function listingJsonLd(domain: string, blogSite: Pick<BlogSite, "title" | "description">, posts: BlogPostCard[]) {
+export function listingJsonLd(domain: string, blogSite: { title: string; description: string | null }, posts: BlogPostCard[]) {
   const origin = siteOrigin(domain);
   return [
     {

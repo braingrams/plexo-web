@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { TemplateKind } from "@prisma/client";
+import type { TemplateKind } from "@/lib/db/contentEntities";
 
 import { listMarketplaceTemplates } from "@/lib/marketplace";
 import { MarketplaceFilters } from "../../marketplace/MarketplaceFilters";

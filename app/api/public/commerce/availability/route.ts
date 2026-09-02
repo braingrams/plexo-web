@@ -15,7 +15,7 @@ const MAX_RANGE_DAYS = 60;
  * bookings each call, never pre-materialized — see the Commerce plan.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const hostname = (request.headers.get("host") ?? "").split(":")[0];
+  const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
   const siteResult = await resolveSite(hostname);
   if (siteResult.status !== "ok") {
     return NextResponse.json({ error: "Site not found." }, { status: 404 });

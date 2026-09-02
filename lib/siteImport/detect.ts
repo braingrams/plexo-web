@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { SiteImportPlatform } from "@prisma/client";
+import { SiteImportPlatform } from "@/lib/siteImport/platform";
 import { safeFetch } from "./fetchSafe";
 import { normalizeSiteUrl } from "@/lib/blogImport/wpClient";
 

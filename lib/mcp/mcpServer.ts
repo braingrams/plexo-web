@@ -6,7 +6,7 @@ import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, 
 import { getTierFeatures } from "@/lib/subscription";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { getDomainLimit } from "@/lib/domainLimit";
-import { removeVercelDomain, addVercelDomain } from "@/lib/vercelDomains";
+import { removeCloudFrontDomain, requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
 import { resolveStrataProjectId, fetchStrataTokens } from "@/server/strataDynamo";
 import { getPagesDomain } from "@/server/pagesDomain";
 import {
@@ -104,7 +104,13 @@ async function linkDomainToTemplate(
   templateId: string,
   rawDomainInput: string,
   domainTypeInput?: "SUBDOMAIN" | "CUSTOM"
-): Promise<{ finalDomain: string; publishedUrl: string }> {
+): Promise<{
+  finalDomain: string;
+  publishedUrl: string;
+  routingEndpoint: string | undefined;
+  certificateValidationName: string | undefined;
+  certificateValidationValue: string | undefined;
+}> {
   const rawDomain = rawDomainInput.trim().toLowerCase();
   if (!rawDomain) {
     throw new Error("A domain is required to publish.");
@@ -168,11 +174,23 @@ async function linkDomainToTemplate(
       await PublishedDomain.remove({ templateId: existingDomain.templateId, id: existingDomain.id }).go();
     }
   } else {
-    // Previously missing entirely for the MCP path: without this, a CUSTOM domain got
-    // a database row but was never actually attached to the Vercel project, so it had
-    // no valid routing or TLS cert and would never work when visited.
+    // A CUSTOM domain needs a real CloudFront distribution tenant (cdk/lib/published-
+    // sites-stack.ts) before it has any valid routing or TLS cert — without this, the
+    // database row alone would never actually work when visited. Connecting one is now a
+    // two-phase, asynchronous process (see lib/cloudfrontDomains.ts's own comment): this
+    // only requests the certificate and records what's needed to finish later;
+    // lib/lambda/certificateAttachment.ts's scheduled check creates the actual
+    // distribution tenant once ACM issues it.
+    let cfRoutingEndpoint: string | undefined;
+    let certificateArn: string | undefined;
+    let certificateValidationName: string | undefined;
+    let certificateValidationValue: string | undefined;
     if (domainType === "CUSTOM") {
-      await addVercelDomain(finalDomain);
+      const result = await requestCustomDomainConnection(finalDomain);
+      cfRoutingEndpoint = result.routingEndpoint;
+      certificateArn = result.certificateArn;
+      certificateValidationName = result.certificateValidationName;
+      certificateValidationValue = result.certificateValidationValue;
     }
     await PublishedDomain.create({
       id: randomUUID(),
@@ -181,11 +199,20 @@ async function linkDomainToTemplate(
       templateId,
       domain: finalDomain,
       type: domainType,
+      ...(domainType === "CUSTOM" ? { certificateArn, certificateStatus: "PENDING_VALIDATION" as const, certificateValidationName, certificateValidationValue } : {}),
     }).go();
+    const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+    return {
+      finalDomain,
+      publishedUrl: `${protocol}://${finalDomain}`,
+      routingEndpoint: cfRoutingEndpoint,
+      certificateValidationName,
+      certificateValidationValue,
+    };
   }
 
   const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
-  return { finalDomain, publishedUrl: `${protocol}://${finalDomain}` };
+  return { finalDomain, publishedUrl: `${protocol}://${finalDomain}`, routingEndpoint: undefined, certificateValidationName: undefined, certificateValidationValue: undefined };
 }
 
 export const PLEXO_MCP_TOOLS = [
@@ -920,7 +947,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             break;
           }
 
-          const { finalDomain, publishedUrl } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
+          const { finalDomain, publishedUrl, routingEndpoint, certificateValidationName, certificateValidationValue } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
           toolResult = {
             success: true,
             templateId: template.id,
@@ -928,6 +955,9 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             domain: finalDomain,
             publishedUrl,
             editableUrl,
+            routingEndpoint,
+            certificateValidationName,
+            certificateValidationValue,
           };
           break;
         }
@@ -1150,7 +1180,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const domainType = args.type === "SUBDOMAIN" || args.type === "CUSTOM" ? args.type : undefined;
-          const { finalDomain, publishedUrl } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
+          const { finalDomain, publishedUrl, routingEndpoint, certificateValidationName, certificateValidationValue } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
           toolResult = {
             success: true,
             templateId: template.id,
@@ -1158,6 +1188,9 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             domain: finalDomain,
             publishedUrl,
             editableUrl,
+            routingEndpoint,
+            certificateValidationName,
+            certificateValidationValue,
           };
           break;
         }
@@ -1221,7 +1254,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
 
           const domainType = args.type === "SUBDOMAIN" || args.type === "CUSTOM" ? args.type : undefined;
-          const { finalDomain, publishedUrl } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
+          const { finalDomain, publishedUrl, routingEndpoint, certificateValidationName, certificateValidationValue } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
 
           const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
           toolResult = {
@@ -1231,6 +1264,9 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
             domain: finalDomain,
             publishedUrl,
             editableUrl: `${baseAppUrl}/dashboard/templates/${template.id}`,
+            routingEndpoint,
+            certificateValidationName,
+            certificateValidationValue,
           };
           break;
         }
@@ -1499,8 +1535,8 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           const domains = domainBatches.flatMap((b) => b.data);
           for (const d of domains) {
             if (d.type === "CUSTOM") {
-              await removeVercelDomain(d.domain).catch((err) =>
-                console.error(`Failed to remove Vercel domain ${d.domain} during MCP page delete (non-fatal):`, err)
+              await removeCloudFrontDomain(d.domain, { tenantId: d.tenantId, certificateArn: d.certificateArn }).catch((err) =>
+                console.error(`Failed to remove CloudFront distribution tenant for ${d.domain} during MCP page delete (non-fatal):`, err)
               );
             }
           }

@@ -9,7 +9,7 @@ import { getDomainLimit } from "@/lib/domainLimit";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { requirePermission } from "@/server/requirePermissionDynamo";
-import { addVercelDomain } from "@/lib/vercelDomains";
+import { requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -230,12 +230,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  let routingEndpoint: string | undefined;
+  let certificateArn: string | undefined;
+  let certificateValidationName: string | undefined;
+  let certificateValidationValue: string | undefined;
   if (domainType === "CUSTOM") {
     try {
-      await addVercelDomain(finalDomain);
+      const result = await requestCustomDomainConnection(finalDomain);
+      routingEndpoint = result.routingEndpoint;
+      certificateArn = result.certificateArn;
+      certificateValidationName = result.certificateValidationName;
+      certificateValidationValue = result.certificateValidationValue;
     } catch (err) {
       return NextResponse.json({
-        error: err instanceof Error ? err.message : "Failed to register custom domain routing on the server."
+        error: err instanceof Error ? err.message : "Failed to request a certificate for this domain."
       }, { status: 500 });
     }
   }
@@ -248,6 +256,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     templateId: template.id,
     domain: finalDomain,
     type: domainType,
+    ...(domainType === "CUSTOM" ? { certificateArn, certificateStatus: "PENDING_VALIDATION" as const, certificateValidationName, certificateValidationValue } : {}),
   }).go();
   const { data: createdDomain } = await PublishedDomain.get({ templateId: template.id, id: newDomainId }).go();
   if (!createdDomain) throw new Error(`PublishedDomain ${newDomainId} vanished immediately after being created`);
@@ -263,5 +272,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     domain: finalDomain,
     publishedUrl,
     editableUrl,
+    routingEndpoint,
   });
 }

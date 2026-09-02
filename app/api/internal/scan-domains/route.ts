@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthorizedAdmin } from "@/server/adminAuth";
+import { isCronRequest } from "@/lib/cronAuth";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { PublishedDomain } from "@/lib/db/contentEntities";
 
@@ -24,15 +25,11 @@ const BATCH_SIZE = 50;
  * low-frequency batch job. Revisit via the Athena/export path if this ever needs to run
  * more often than daily.
  *
- * Accepts either Vercel Cron's bearer auth (CRON_SECRET) or the internal admin token,
- * so it can also be triggered manually for testing.
+ * Accepts either the x-cron-secret header (see lib/cronAuth.ts) or the internal admin
+ * token, so it can also be triggered manually for testing.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-  const isCronRequest = !!cronSecret && authHeader === `Bearer ${cronSecret}`;
-
-  if (!isCronRequest && !isAuthorizedAdmin(request)) {
+  if (!isCronRequest(request) && !isAuthorizedAdmin(request)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 

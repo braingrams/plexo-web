@@ -192,7 +192,7 @@ export async function createInvitation(
   await Invitation.create({ id, organizationId, email, role, inviterId, expiresAt }).go();
 
   const brand = await getOrgBrandDynamo(organizationId);
-  const baseUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   await sendMaildripEmail({
     to: email,
     subject: `${inviterName} invited you to join ${organizationName} on Plexo`,

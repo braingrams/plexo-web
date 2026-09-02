@@ -1,4 +1,4 @@
-import type { BlogPostCard, BlogPostDetail } from "@/lib/blog/queries";
+import type { BlogPostCard, BlogPostDetail } from "@/lib/blog/queriesDynamo";
 
 // Plain HTML string builders, not JSX/renderToStaticMarkup — Next's App Router disallows
 // importing react-dom/server inside a Server Component (it already owns rendering), so

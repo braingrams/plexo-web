@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CustomSelect } from "../../_components/CustomSelect";
 
-// Vercel's generic, stable CNAME target — works for both subdomains and apex/root
-// domains via CNAME flattening (registrar-dependent) and is documented as permanently
-// supported, unlike the old A-record + static IP recommendation it replaced.
-const DNS_CNAME_TARGET = "cname.vercel-dns.com";
+// Fallback only — real value comes from GET /api/v1/domains's routingEndpoint (see the
+// `routingEndpoint` state below). CloudFront SaaS Manager's connection-group endpoint is
+// a real per-environment value (cdk/lib/published-sites-stack.ts), not a fixed platform-
+// wide constant the way Vercel's "cname.vercel-dns.com" was — shown only for the instant
+// before that fetch resolves.
+const DNS_CNAME_TARGET_FALLBACK = "connecting…";
 
 type DomainType = "SUBDOMAIN" | "CUSTOM";
 
@@ -21,6 +23,11 @@ type DomainRecord = {
   createdAt: string;
   dnsVerified?: boolean;
   dnsVerifiedAt?: string | null;
+  // CUSTOM domains only — kept current by lib/lambda/certificateAttachment.ts's scheduled
+  // check, not by this page loading (see app/api/v1/domains/route.ts's own GET comment).
+  certificateStatus?: "PENDING_VALIDATION" | "ISSUED" | "ATTACHED" | "FAILED";
+  certificateValidationName?: string;
+  certificateValidationValue?: string;
 };
 
 type LandingPage = {
@@ -163,6 +170,14 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   // correct on first paint with no hardcoded domain guess and no flash of a stale
   // value before the /api/v1/domains fetch below confirms it server-side.
   const [baseDomain, setBaseDomain] = useState<string>(process.env.NEXT_PUBLIC_PAGES_DOMAIN || "localhost");
+  const [dnsCnameTarget, setDnsCnameTarget] = useState<string>(DNS_CNAME_TARGET_FALLBACK);
+  // Populated from the POST response right after adding a CUSTOM domain — the certificate
+  // validation record this app's own ACM certificate request needs (see
+  // lib/cloudfrontDomains.ts's own comment on why this replaced CloudFront's built-in
+  // ManagedCertificateRequest mechanism). Already-added pending domains show their own
+  // stored copy of this straight from the domains list (see DomainRecord's
+  // certificateValidationName/Value) instead of this transient form-local state.
+  const [justAddedCertValidation, setJustAddedCertValidation] = useState<{ name: string; value: string } | null>(null);
   const [count, setCount] = useState<number>(initialDomains.length);
   const [limit, setLimit] = useState<number>(25);
 
@@ -261,6 +276,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
         if (data.baseDomain) setBaseDomain(data.baseDomain);
         if (data.limit) setLimit(data.limit);
         if (data.count !== undefined) setCount(data.count);
+        if (data.routingEndpoint) setDnsCnameTarget(data.routingEndpoint);
       })
       .catch((err) => console.error("Error loading domain settings:", err));
   }, [domains]);
@@ -299,6 +315,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+    setJustAddedCertValidation(null);
 
     const inputDomain = domainType === "SUBDOMAIN" ? subdomainPrefix : customDomainInput;
     if (!inputDomain.trim()) {
@@ -329,7 +346,15 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
         throw new Error(payload.error ?? "Failed to publish domain.");
       }
 
-      setSuccessMsg("Domain published successfully!");
+      const isCustom = payload.domain?.type === "CUSTOM";
+      setSuccessMsg(
+        isCustom
+          ? "Domain added — add the DNS records below, then this finishes automatically. No need to resubmit."
+          : "Domain published successfully!"
+      );
+      if (isCustom && payload.domain?.certificateValidationName && payload.domain?.certificateValidationValue) {
+        setJustAddedCertValidation({ name: payload.domain.certificateValidationName, value: payload.domain.certificateValidationValue });
+      }
       setSubdomainPrefix("");
       setCustomDomainInput("");
 
@@ -344,14 +369,19 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
           templateId: d.templateId,
           templateName: d.template?.name ?? "Unknown",
           createdAt: d.createdAt,
+          certificateStatus: d.certificateStatus,
+          certificateValidationName: d.certificateValidationName,
+          certificateValidationValue: d.certificateValidationValue,
         })));
       }
       if (updatedData.count !== undefined) setCount(updatedData.count);
 
+      // CUSTOM domains keep the drawer open with the DNS instructions visible — the
+      // customer needs to actually copy these, not just glance at a toast before it closes.
       setTimeout(() => {
         setSuccessMsg(null);
-        setIsDrawerOpen(false);
-      }, 1500);
+        if (!isCustom) setIsDrawerOpen(false);
+      }, isCustom ? 6000 : 1500);
     } catch (error) {
       setErrorMsg(error instanceof Error ? error.message : "An unexpected error occurred.");
     } finally {
@@ -719,6 +749,29 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                             </span>
                           ) : (
                             <div>
+                              {/* Certificate/tenant status — kept current by
+                                  lib/lambda/certificateAttachment.ts's scheduled check, not
+                                  by this page loading. Separate from the DNS check below,
+                                  which only verifies the routing CNAME resolves; a domain
+                                  can pass that and still be certificate-pending. */}
+                              {item.certificateStatus && item.certificateStatus !== "ATTACHED" && (
+                                <div style={{ marginBottom: "0.4rem" }}>
+                                  {item.certificateStatus === "PENDING_VALIDATION" || item.certificateStatus === "ISSUED" ? (
+                                    <span style={{ color: "#f59e0b", display: "inline-flex", alignItems: "center", gap: "0.3rem", fontWeight: 500, fontSize: "0.75rem" }}>
+                                      Certificate pending
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: "#f87171", display: "inline-flex", alignItems: "center", gap: "0.3rem", fontWeight: 500, fontSize: "0.75rem" }}>
+                                      <IconAlert /> Certificate failed
+                                    </span>
+                                  )}
+                                  {item.certificateStatus === "PENDING_VALIDATION" && item.certificateValidationName && item.certificateValidationValue && (
+                                    <div style={{ fontFamily: "monospace", fontSize: "0.68rem", color: "rgba(240,242,255,0.4)", marginTop: "0.2rem", wordBreak: "break-all" }}>
+                                      CNAME {item.certificateValidationName} → {item.certificateValidationValue}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                               {dns === undefined ? (
                                 <button
                                   onClick={() => void handleVerifyDns(item.domain)}
@@ -966,10 +1019,10 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                           </button>
                         </span>
                         <span style={{ width: "40%", color: "var(--brand)", fontWeight: 600, textAlign: "right", wordBreak: "break-all", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.25rem" }}>
-                          {DNS_CNAME_TARGET}
+                          {dnsCnameTarget}
                           <button
                             type="button"
-                            onClick={() => handleCopy(DNS_CNAME_TARGET, 'target')}
+                            onClick={() => handleCopy(dnsCnameTarget, 'target')}
                             style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", alignSelf: "center" }}
                             title="Copy Target"
                           >
@@ -978,10 +1031,59 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                         </span>
                       </div>
                     </div>
+                    <p style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.45)", marginTop: "0.6rem", margin: "0.6rem 0 0" }}>
+                      After you submit, we'll also give you a certificate validation record to add — that one's unique to your domain, so it isn't shown until then.
+                    </p>
                     <p style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.35)", marginTop: "0.6rem", fontStyle: "italic", margin: "0.6rem 0 0" }}>
                       * DNS changes can take anywhere from a few minutes up to 24 hours to take effect worldwide.
                     </p>
                   </div>
+
+                  {/* Shown right after submitting — the certificate validation record is
+                      unique per domain, generated only once the backend actually requests
+                      the certificate (see app/api/v1/domains/route.ts's POST handler), so
+                      it can't be shown proactively the way the routing CNAME above can. */}
+                  {justAddedCertValidation && (
+                    <div style={{
+                      marginTop: "0.75rem", padding: "0.85rem", background: "rgba(52,211,153,0.05)",
+                      border: "1px solid rgba(52,211,153,0.2)", borderRadius: 10, fontSize: "0.75rem",
+                      color: "rgba(240,242,255,0.7)", lineHeight: 1.45
+                    }}>
+                      <p style={{ fontWeight: 700, color: "#34d399", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <IconCheck /> Certificate Validation Record
+                      </p>
+                      <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.45)", marginBottom: "0.75rem" }}>
+                        Add this CNAME too — it proves you own the domain so we can issue its certificate. Needed for every domain, root or subdomain.
+                      </p>
+                      <div style={{ background: "rgba(0,0,0,0.25)", borderRadius: 8, padding: "0.6rem 0.75rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: "0.72rem", alignItems: "center" }}>
+                          <span style={{ width: "25%", color: "#6ee7b7", fontWeight: 600 }}>CNAME</span>
+                          <span style={{ width: "35%", color: "#f0f2ff", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                            {justAddedCertValidation.name}
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(justAddedCertValidation.name, 'certHost')}
+                              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", alignSelf: "center" }}
+                              title="Copy Host"
+                            >
+                              {copiedField === 'certHost' ? <IconCheck /> : <IconCopy />}
+                            </button>
+                          </span>
+                          <span style={{ width: "40%", color: "#34d399", fontWeight: 600, textAlign: "right", wordBreak: "break-all", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.25rem" }}>
+                            {justAddedCertValidation.value}
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(justAddedCertValidation.value, 'certValue')}
+                              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", alignSelf: "center" }}
+                              title="Copy Value"
+                            >
+                              {copiedField === 'certValue' ? <IconCheck /> : <IconCopy />}
+                            </button>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -14,22 +14,50 @@
  * / importEntities.ts / opsEntities.ts for the target shapes), batch-write, checkpoint,
  * repeat — not new design for each additional model, just repetition of this pattern.
  *
+ * Extended to also cover ApiKey and Invitation (still identity/access-control-adjacent,
+ * same plexo-core table) — same mechanical pattern as User/Organization/Member below.
+ *
  * Usage: tsx scripts/migration/backfillCore.ts [--dry-run] [--resume]
  */
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { prisma } from "@/server/prisma";
-import { User, Organization, Member } from "@/lib/db/coreEntities";
+import { User, Organization, Member, ApiKey, Invitation } from "@/lib/db/coreEntities";
 
 const PAGE_SIZE = 200;
 const CHECKPOINT_FILE = ".migration-checkpoint-core.json";
 
-type Checkpoint = { userCursor: string | null; userDone: boolean; orgCursor: string | null; orgDone: boolean };
+// Member.role and Invitation.role are both plain strings in Prisma (better-auth's own
+// shape, see schema.prisma comment on Organization) validated here against the six real
+// OrgRole values accessControl.ts actually defines, since ElectroDB's Member/Invitation
+// entities both type role as that closed enum, not an open string. A row failing this
+// check means real, pre-existing bad data worth surfacing loudly, not silently coercing.
+const VALID_ROLES = new Set(["owner", "admin", "editor", "blogger", "commenter", "viewer"]);
+
+type Checkpoint = {
+  userCursor: string | null;
+  userDone: boolean;
+  orgCursor: string | null;
+  orgDone: boolean;
+  apiKeyCursor: string | null;
+  apiKeyDone: boolean;
+  invitationCursor: string | null;
+  invitationDone: boolean;
+};
 
 function loadCheckpoint(): Checkpoint {
   if (existsSync(CHECKPOINT_FILE)) {
     return JSON.parse(readFileSync(CHECKPOINT_FILE, "utf-8"));
   }
-  return { userCursor: null, userDone: false, orgCursor: null, orgDone: false };
+  return {
+    userCursor: null,
+    userDone: false,
+    orgCursor: null,
+    orgDone: false,
+    apiKeyCursor: null,
+    apiKeyDone: false,
+    invitationCursor: null,
+    invitationDone: false,
+  };
 }
 
 function saveCheckpoint(cp: Checkpoint): void {
@@ -64,6 +92,18 @@ async function migrateUsers(dryRun: boolean, cp: Checkpoint): Promise<void> {
         sellerBalanceCents: true,
         adminRole: true,
         createdAt: true,
+        // Auth.js Credentials-provider fields (server/authDynamo.ts, added this same
+        // session) — isConfirmed/suspendedAt/suspendedReason live directly on Prisma's
+        // User. passwordHash does NOT: `User.passwordHash` is a dead, always-`""` column
+        // (confirmed via a direct query — every real account has it empty); better-auth
+        // actually stored the real credential hash on the separate Account row where
+        // providerId = "credential" (Account.password), which this join reads instead.
+        // Omitting this would migrate every real account into a state where the new
+        // email/password login could never succeed (every passwordHash empty).
+        isConfirmed: true,
+        suspendedAt: true,
+        suspendedReason: true,
+        accounts: { where: { providerId: "credential" }, select: { password: true }, take: 1 },
       },
     });
 
@@ -83,6 +123,10 @@ async function migrateUsers(dryRun: boolean, cp: Checkpoint): Promise<void> {
       sellerBalanceCents: u.sellerBalanceCents,
       adminRole: u.adminRole ?? undefined,
       createdAt: u.createdAt.toISOString(),
+      passwordHash: u.accounts[0]?.password ?? "",
+      isConfirmed: u.isConfirmed,
+      suspendedAt: u.suspendedAt?.toISOString() ?? undefined,
+      suspendedReason: u.suspendedReason ?? undefined,
     }));
 
     if (!dryRun) {
@@ -137,12 +181,6 @@ async function migrateOrganizationsAndMembers(dryRun: boolean, cp: Checkpoint): 
       createdAt: o.createdAt.toISOString(),
     }));
 
-    // Member.role in Prisma is a free-form string (better-auth's own shape) — validated
-    // here against the six real OrgRole values accessControl.ts actually defines, since
-    // ElectroDB's Member entity types role as that closed enum, not an open string. A
-    // row failing this check means real, pre-existing bad data worth surfacing loudly,
-    // not silently coercing.
-    const VALID_ROLES = new Set(["owner", "admin", "editor", "blogger", "commenter", "viewer"]);
     const memberItems = batch.flatMap((o) =>
       o.members.map((m) => {
         if (!VALID_ROLES.has(m.role)) {
@@ -179,6 +217,155 @@ async function migrateOrganizationsAndMembers(dryRun: boolean, cp: Checkpoint): 
   console.log(`Organizations: complete, ${orgTotal} orgs, ${memberTotal} members total`);
 }
 
+async function migrateApiKeys(dryRun: boolean, cp: Checkpoint): Promise<void> {
+  if (cp.apiKeyDone) {
+    console.log("ApiKeys: already complete, skipping");
+    return;
+  }
+
+  let cursor = cp.apiKeyCursor;
+  let total = 0;
+
+  while (true) {
+    const batch = await prisma.apiKey.findMany({
+      take: PAGE_SIZE,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { id: "asc" },
+      select: {
+        id: true,
+        userId: true,
+        organizationId: true,
+        name: true,
+        hashedKey: true,
+        maskedKey: true,
+        useAi: true,
+        aiProvider: true,
+        aiTier: true,
+        aiApiKey: true,
+        isActive: true,
+        aiAccessMode: true,
+        hostAuthWebhookUrl: true,
+        hostWebhookSecret: true,
+        createdAt: true,
+        lastUsedAt: true,
+      },
+    });
+
+    if (batch.length === 0) break;
+
+    const items = batch.map((k) => ({
+      id: k.id,
+      userId: k.userId,
+      organizationId: k.organizationId,
+      name: k.name,
+      // hashedKey/maskedKey carried over verbatim — this is already-hashed/masked data,
+      // never re-derived or re-hashed here (see ApiKey's byHashedKey GSI2 in coreEntities.ts).
+      hashedKey: k.hashedKey,
+      maskedKey: k.maskedKey,
+      useAi: k.useAi,
+      aiProvider: k.aiProvider,
+      aiTier: k.aiTier,
+      // aiApiKey/hostWebhookSecret are already ciphertext at rest (lib/crypto.ts) —
+      // transferred verbatim, never decrypted/re-encrypted by this script.
+      aiApiKey: k.aiApiKey ?? undefined,
+      isActive: k.isActive,
+      aiAccessMode: k.aiAccessMode,
+      hostAuthWebhookUrl: k.hostAuthWebhookUrl ?? undefined,
+      hostWebhookSecret: k.hostWebhookSecret ?? undefined,
+      createdAt: k.createdAt.toISOString(),
+      lastUsedAt: k.lastUsedAt?.toISOString() ?? undefined,
+    }));
+
+    if (!dryRun) {
+      await ApiKey.put(items).go();
+    }
+
+    total += items.length;
+    cursor = batch[batch.length - 1].id;
+    console.log(`ApiKeys: ${total} migrated${dryRun ? " (dry run)" : ""}, cursor=${cursor}`);
+
+    cp.apiKeyCursor = cursor;
+    saveCheckpoint(cp);
+
+    if (batch.length < PAGE_SIZE) break;
+  }
+
+  cp.apiKeyDone = true;
+  saveCheckpoint(cp);
+  console.log(`ApiKeys: complete, ${total} total`);
+}
+
+async function migrateInvitations(dryRun: boolean, cp: Checkpoint): Promise<void> {
+  if (cp.invitationDone) {
+    console.log("Invitations: already complete, skipping");
+    return;
+  }
+
+  // Invitation.status is a free-form string in Prisma (default "pending") — validated
+  // here against the four values ElectroDB's Invitation entity actually accepts, same
+  // "surface bad data loudly, don't coerce" discipline as VALID_ROLES above.
+  const VALID_STATUSES = new Set(["pending", "accepted", "rejected", "canceled"]);
+
+  let cursor = cp.invitationCursor;
+  let total = 0;
+
+  while (true) {
+    const batch = await prisma.invitation.findMany({
+      take: PAGE_SIZE,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      orderBy: { id: "asc" },
+      select: {
+        id: true,
+        organizationId: true,
+        email: true,
+        role: true,
+        status: true,
+        inviterId: true,
+        expiresAt: true,
+        createdAt: true,
+      },
+    });
+
+    if (batch.length === 0) break;
+
+    const items = batch.map((inv) => {
+      if (!VALID_ROLES.has(inv.role)) {
+        throw new Error(`Invitation ${inv.id} has unrecognized role "${inv.role}" — fix data before continuing migration`);
+      }
+      if (!VALID_STATUSES.has(inv.status)) {
+        throw new Error(`Invitation ${inv.id} has unrecognized status "${inv.status}" — fix data before continuing migration`);
+      }
+      return {
+        id: inv.id,
+        organizationId: inv.organizationId,
+        email: inv.email,
+        role: inv.role as "owner" | "admin" | "editor" | "blogger" | "commenter" | "viewer",
+        status: inv.status as "pending" | "accepted" | "rejected" | "canceled",
+        inviterId: inv.inviterId,
+        expiresAt: inv.expiresAt.toISOString(),
+        createdAt: inv.createdAt.toISOString(),
+      };
+    });
+
+    if (!dryRun) {
+      await Invitation.put(items).go();
+    }
+
+    total += items.length;
+    cursor = batch[batch.length - 1].id;
+    console.log(`Invitations: ${total} migrated${dryRun ? " (dry run)" : ""}, cursor=${cursor}`);
+
+    cp.invitationCursor = cursor;
+    saveCheckpoint(cp);
+
+    if (batch.length < PAGE_SIZE) break;
+  }
+
+  cp.invitationDone = true;
+  saveCheckpoint(cp);
+  console.log(`Invitations: complete, ${total} total`);
+}
+
 async function main(): Promise<void> {
   const dryRun = process.argv.includes("--dry-run");
   const resume = process.argv.includes("--resume");
@@ -189,11 +376,24 @@ async function main(): Promise<void> {
     );
   }
 
-  const cp = resume ? loadCheckpoint() : { userCursor: null, userDone: false, orgCursor: null, orgDone: false };
+  const cp = resume
+    ? loadCheckpoint()
+    : {
+        userCursor: null,
+        userDone: false,
+        orgCursor: null,
+        orgDone: false,
+        apiKeyCursor: null,
+        apiKeyDone: false,
+        invitationCursor: null,
+        invitationDone: false,
+      };
 
   console.log(`Starting backfill (dryRun=${dryRun}, resume=${resume})`);
   await migrateUsers(dryRun, cp);
   await migrateOrganizationsAndMembers(dryRun, cp);
+  await migrateApiKeys(dryRun, cp);
+  await migrateInvitations(dryRun, cp);
   console.log("Backfill complete.");
 }
 

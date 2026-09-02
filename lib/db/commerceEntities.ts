@@ -11,6 +11,11 @@ import { docClient, TABLES } from "./client";
 
 const table = TABLES.commerce;
 
+// Local replacements for the Prisma-generated CommercePaymentProvider/CommercePaystackMode
+// enums — match the paymentProvider/paystackMode attributes below exactly.
+export type CommercePaymentProvider = "BYO_PAYSTACK" | "PLATFORM_PAYSTACK" | "PLATFORM_STRIPE";
+export type CommercePaystackMode = "TEST" | "LIVE";
+
 export const CommerceCategory = new Entity(
   {
     model: { entity: "commerceCategory", version: "1", service: "plexoCommerce" },

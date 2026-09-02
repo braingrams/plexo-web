@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { TemplateKind } from "@prisma/client";
+import type { TemplateKind } from "@/lib/db/contentEntities";
 import { Sparkles, SearchX, ChevronLeft, ChevronRight, Zap, ShieldCheck, Smartphone } from "lucide-react";
 
 import { listMarketplaceTemplates } from "@/lib/marketplace";

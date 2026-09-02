@@ -202,41 +202,7 @@ export function canWhiteLabel(plan: SubscriptionPlan | string | null | undefined
   return canDo(plan, "whiteLabelEnabled");
 }
 
-/**
- * Billing lives entirely on User today (subscriptionPlan, stripeCustomerId, etc.) — there
- * is no plan column on Organization. This resolves an org's effective plan by joining to
- * whichever Member has role "owner" and reading *their* subscriptionPlan, rather than
- * denormalizing plan onto Organization (a much larger change touching the Stripe webhook,
- * checkout flow, and credit ledger — see the white-labeling plan's notes on this). Use
- * this anywhere a feature needs to gate on "does this organization's plan allow X".
- */
-export async function getOrganizationOwnerPlan(organizationId: string): Promise<SubscriptionPlan> {
-  const { prisma } = await import("@/server/prisma");
-  const owner = await prisma.member.findFirst({
-    where: { organizationId, role: "owner" },
-    select: { user: { select: { subscriptionPlan: true } } },
-  });
-  return (owner?.user.subscriptionPlan as SubscriptionPlan | undefined) ?? "FREE";
-}
-
-/**
- * Resolves the white-label identity for an organization — dashboard chrome
- * (dashboard-shell-{modern,classic}.tsx), transactional emails (lib/mail/templates.ts),
- * and the SDK-facing /api/v1/validate-key response all call this. Returns undefined if the org
- * isn't entitled, or hasn't explicitly turned white-labeling on (Organization.whiteLabelEnabled —
- * being Pro/Ultra only makes the org ELIGIBLE, it doesn't apply branding by itself), in which
- * case callers fall back to the default Plexo identity.
- */
-export async function getOrgBrand(
-  organizationId: string,
-): Promise<{ name: string; logoUrl?: string; color?: string } | undefined> {
-  const { prisma } = await import("@/server/prisma");
-  const plan = await getOrganizationOwnerPlan(organizationId);
-  if (!canWhiteLabel(plan)) return undefined;
-  const org = await prisma.organization.findUnique({
-    where: { id: organizationId },
-    select: { name: true, logo: true, brandColor: true, whiteLabelEnabled: true },
-  });
-  if (!org || !org.whiteLabelEnabled) return undefined;
-  return { name: org.name, logoUrl: org.logo ?? undefined, color: org.brandColor ?? undefined };
-}
+// getOrganizationOwnerPlan/getOrgBrand (Prisma-backed) were fully superseded by
+// server/orgDynamo.ts's getOrganizationOwnerPlanDynamo/getOrgBrandDynamo — every real
+// caller already used the Dynamo versions; these were dead code, removed with the rest of
+// the Postgres/Prisma stack.

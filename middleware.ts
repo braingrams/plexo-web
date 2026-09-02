@@ -1,9 +1,28 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
+  // CloudFront's OAC can't reliably sign POST bodies to a Lambda Function URL origin (see
+  // cdk/lib/compute-stack.ts's own comment on originVerifySecret) — this Lambda's Function
+  // URL is public instead, protected only by a secret CloudFront attaches as a custom
+  // origin header (set on the origin config itself, never sent by any viewer, so a client
+  // can't forge it). Anything reaching the raw *.lambda-url.on.aws address directly,
+  // bypassing CloudFront, is rejected here before any other request handling runs. Only
+  // enforced when the secret is actually configured (deployed environments, loaded from SSM
+  // at cold start) — local dev has no CloudFront in front of it, so there's nothing to check.
+  const expectedOriginSecret = process.env.PLEXO_ORIGIN_VERIFY_SECRET;
+  if (expectedOriginSecret && request.headers.get("x-origin-verify") !== expectedOriginSecret) {
+    return new NextResponse("Not found.", { status: 404 });
+  }
+
   const url = request.nextUrl;
   const pathname = url.pathname;
-  const host = request.headers.get("host") || "";
+  // CloudFront's origin request policy (AllViewerExceptHostHeader — required for the
+  // Lambda Function URL origin to work at all) unconditionally replaces the real Host
+  // header with the origin's own domain before forwarding. A CloudFront Function on
+  // viewer-request (cdk/lib/forward-host-function.js) copies the real host into
+  // x-forwarded-host before that happens; prefer it, falling back to host for local dev
+  // and any other context that isn't behind that CloudFront distribution.
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
   const hostname = host.split(":")[0];
 
   // Handle CORS and preflight requests for API endpoints

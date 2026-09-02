@@ -27,6 +27,12 @@ function LoginForm() {
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setError(null);
+
+    if (!email.trim() || !password) {
+      setError("Enter your email and password.");
+      return;
+    }
+
     setLoading(true);
 
     const redirectTo = params.get("redirectTo") ?? "/dashboard";

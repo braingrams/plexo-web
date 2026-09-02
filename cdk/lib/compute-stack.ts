@@ -7,6 +7,7 @@ import * as sqs from "aws-cdk-lib/aws-sqs";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
+import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 import * as cr from "aws-cdk-lib/custom-resources";
 import * as iam from "aws-cdk-lib/aws-iam";
@@ -48,6 +49,67 @@ const ssmEnv = isProd ? "production" : "staging";
 // .open-next/ output — `npm run build && npx @opennextjs/aws build` must have been run
 // before `cdk deploy` for this stack kind. Not committed to git (build output).
 const OPEN_NEXT_DIR = path.join(__dirname, "..", "..", ".open-next");
+
+// Same naming convention as data-stack.ts's own nameFor() — production keeps the bare
+// literal table names ("plexo-core", etc.) it's already deployed with; every other
+// environment gets a "-${stackID}" suffix. This MUST match data-stack.ts exactly, or a
+// deployed Lambda resolves to a table that doesn't exist (or worse, silently falls back
+// to lib/db/client.ts's bare-name default and reads/writes a DIFFERENT environment's
+// live data — this was previously the actual bug here: these 6 env vars were never
+// injected at all, so every deployed Lambda regardless of environment fell back to the
+// production table names).
+const stackID = process.env.STACK_ID || "pr-1-plexo";
+const nameFor = (base: string): string => (isProd ? base : `${base}-${stackID}`);
+
+// CloudFront's Origin Access Control cannot reliably sign POST/PUT request bodies to a
+// Lambda Function URL origin — confirmed by directly reproducing InvalidSignatureException
+// against a real deployed distribution (GET and empty-body POST succeed, any POST with a
+// body fails), matching AWS's own known limitation for this exact origin type. The server
+// function's URL is public (AuthType NONE) instead; this random secret is attached as a
+// CloudFront-only custom origin header (set on the origin config itself, not forwarded from
+// any viewer header, so it can't be spoofed) and checked first thing in middleware.ts —
+// anything reaching the raw *.lambda-url.on.aws address directly, bypassing CloudFront,
+// gets rejected before any app logic runs. The image-optimization function is GET-only and
+// keeps its existing OAC/IAM protection untouched; only the server function needed this.
+const originVerifySecret = process.env.ORIGIN_VERIFY_SECRET;
+if (!originVerifySecret) throw new Error("ORIGIN_VERIFY_SECRET is required (see PLEXO_ORIGIN_VERIFY_SECRET in SSM for this environment).");
+
+// Baked in as a literal Lambda env var for the same reason as PLEXO_ORIGIN_VERIFY_SECRET
+// just above, PLUS a second, independent reason found by direct testing: this app's
+// entire "load secrets from SSM at cold start" mechanism (lib/ssmEnv.ts, via
+// instrumentation.ts) has never actually been exercised in any real deployed
+// environment — every /plexo/<env>/<KEY> SSM parameter is still the literal placeholder
+// value "REPLACE_ME" sync-secrets-to-ssm.yml's own setup left behind, and
+// loadSecretsFromSsm()'s own short-circuit (`if (process.env.AUTH_SECRET) return`) has
+// been silently true from cold start every time, because Next.js's `output: "standalone"`
+// build (required by OpenNext) always copies the repo's own root .env file into the
+// deployed bundle, and Next.js's generated server bootstrap loads it before
+// instrumentation.ts's register() ever runs — so every deployed Lambda has actually been
+// running on whatever local/dev secret values happened to be in .env at build time, not
+// the SSM-managed ones at all. That's a separate, much bigger gap (covers AUTH_SECRET,
+// GOOGLE_CLIENT_ID/SECRET, STRIPE_*, MAILDRIP_*, PUSHER_*, every encryption key) flagged
+// to the user rather than silently fixed here — fixing loadSecretsFromSsm()'s
+// short-circuit is pointless until real (non-"REPLACE_ME") values actually exist in SSM
+// for every key, which requires secrets only the user has. This one value is narrow
+// enough to bake in directly without waiting on that broader fix.
+const cronSecret = process.env.CRON_SECRET;
+if (!cronSecret) throw new Error("CRON_SECRET is required (see CRON_SECRET in SSM for this environment — /plexo/<env>/CRON_SECRET).");
+
+// Optional real custom domain for the dashboard's own distribution (e.g.
+// "plexo.charisol.io" for production) — omitted for staging/PR previews, which stay on
+// their own bare *.cloudfront.net domain. charisol.io's DNS lives on Cloudflare, not
+// Route53 (confirmed via `dig NS charisol.io`), same as plexopages.com — so, like that
+// domain's own wildcard cert in published-sites-stack.ts, this validates via a manual
+// CNAME the deploy waits on rather than DnsValidatedCertificate/hostedZone.
+const appDomain = process.env.APP_DOMAIN;
+const tableEnv = {
+  PLEXO_CORE_TABLE: nameFor("plexo-core"),
+  PLEXO_LEDGER_TABLE: nameFor("plexo-ledger"),
+  PLEXO_COMMERCE_TABLE: nameFor("plexo-commerce"),
+  PLEXO_CONTENT_TABLE: nameFor("plexo-content"),
+  PLEXO_OPS_TABLE: nameFor("plexo-ops"),
+  PLEXO_IMPORT_TABLE: nameFor("plexo-import"),
+};
 
 export class ComputeStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -106,11 +168,29 @@ export class ComputeStack extends cdk.Stack {
       code: lambda.Code.fromAsset(path.join(OPEN_NEXT_DIR, "server-functions", "default")),
       memorySize: 1024,
       timeout: cdk.Duration.seconds(30),
-      // PLEXO_ENV is the only app-secret-adjacent thing set here — it's what
+      // PLEXO_ENV is the only other app-secret-adjacent thing set here — it's what
       // lib/ssmEnv.ts reads to build the /plexo/<env>/<KEY> path it fetches from at cold
       // start (via instrumentation.ts). Not sensitive itself, just "staging" or
-      // "production".
-      environment: { ...commonEnv, PLEXO_ENV: ssmEnv },
+      // "production". tableEnv (see above) is what makes lib/db/client.ts's TABLES
+      // resolve to THIS environment's tables instead of silently falling back to
+      // production's bare names. AWS_REGION itself is a Lambda-reserved env var name
+      // (CloudFormation rejects setting it explicitly) — Lambda injects it automatically,
+      // and lib/db/client.ts already falls back to it correctly.
+      //
+      // PLEXO_ORIGIN_VERIFY_SECRET is baked in here as a literal value (not left to
+      // instrumentation.ts's async SSM backfill like every other secret) for a real reason,
+      // found by direct testing: middleware.ts — the ONLY reader of this value — runs under
+      // Next.js's Edge runtime by default, which OpenNext executes in an isolated
+      // `edge-runtime` VM context with its own process.env snapshot, taken before
+      // instrumentation.ts's register() (Node-runtime only; it explicitly no-ops when
+      // NEXT_RUNTIME !== "nodejs") ever runs. A direct curl against this function's raw
+      // Function URL — with no x-origin-verify header at all — proved the check was being
+      // silently skipped in the deployed environment: expectedOriginSecret read as
+      // undefined inside middleware even though the exact same env var was correctly
+      // populated (via SSM) for ordinary Node-runtime route handlers in the very same
+      // Lambda. Setting it directly here is required at `cdk deploy` time anyway
+      // (originVerifySecret throws above if unset), so this has no new operational cost.
+      environment: { ...commonEnv, ...tableEnv, PLEXO_ENV: ssmEnv, PLEXO_ORIGIN_VERIFY_SECRET: originVerifySecret!, CRON_SECRET: cronSecret! },
       logGroup: buildLogGroup(this, "ServerFn"),
     });
     assetsBucket.grantReadWrite(serverFn);
@@ -143,7 +223,68 @@ export class ComputeStack extends cdk.Stack {
         resources: [`arn:aws:s3:::plexo-user-content*/*`],
       }),
     );
-    const serverFnUrl = serverFn.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.AWS_IAM });
+    // CloudFront SaaS Manager tenant management — app/api/v1/domains/route.ts calls
+    // CreateDistributionTenant/DeleteDistributionTenant/GetDistributionTenant at RUNTIME
+    // (one customer connecting/disconnecting a custom domain at a time), unlike the
+    // published-sites-stack.ts's own resources below, which are pre-provisioned per
+    // deploy. Scoped to distribution-tenant resources only, not full CloudFront admin —
+    // this Lambda never creates/deletes the multi-tenant distribution or connection group
+    // itself, only individual tenants under it.
+    serverFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "cloudfront:CreateDistributionTenant",
+          "cloudfront:DeleteDistributionTenant",
+          "cloudfront:GetDistributionTenant",
+          "cloudfront:UpdateDistributionTenant",
+          "cloudfront:ListDistributionTenants",
+        ],
+        // A real `arn:aws:cloudfront::<account>:distribution-tenant/<id>` resource type
+        // exists, but CreateDistributionTenant's whole purpose is minting a tenant ID that
+        // doesn't exist yet, so it can't be pre-scoped to one; "*" here is scoped at the
+        // ACTION level instead (only these 5 tenant-management calls, not cloudfront:*),
+        // matching this migration's other least-privilege-by-action-set policies.
+        resources: ["*"],
+      }),
+    );
+    // The six business-data tables (lib/db/client.ts's TABLES) — same cross-stack
+    // situation as the S3 bucket above: provisioned by data-stack.ts, not this stack, so
+    // scoped by tableEnv's own resolved names (already environment-correct via nameFor())
+    // rather than a real CDK cross-stack import. Broad CRUD, not per-action-minimized —
+    // every one of ElectroDB's query/get/put/patch/remove/scan/transact operations this
+    // migration built, plus @auth/dynamodb-adapter's own session/account/verification-
+    // token reads and writes, run against these tables from this one Lambda. `/index/*`
+    // covers every GSI query this migration relies on (byOrg, byStatus, byHashedKey, etc.)
+    // — without it, every indexed Query throws AccessDeniedException even though the base
+    // table grant succeeds.
+    serverFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem",
+          "dynamodb:TransactGetItems",
+          "dynamodb:TransactWriteItems",
+        ],
+        resources: Object.values(tableEnv).flatMap((tableName) => [
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${tableName}`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${tableName}/index/*`,
+        ]),
+      }),
+    );
+    const serverFnUrl = serverFn.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.NONE });
+    // AuthType.NONE still requires an explicit resource policy granting invocation — CDK
+    // does not add this automatically the way it does for the AWS_IAM+OAC case above.
+    serverFn.addPermission("AllowPublicInvokeServerFnUrl", {
+      principal: new iam.AnyPrincipal(),
+      action: "lambda:InvokeFunctionUrl",
+      functionUrlAuthType: lambda.FunctionUrlAuthType.NONE,
+    });
 
     const imageFn = new lambda.Function(this, "ImageOptimizationFn", {
       runtime: lambda.Runtime.NODEJS_24_X,
@@ -203,16 +344,37 @@ export class ComputeStack extends cdk.Stack {
       ]),
     });
 
+    // ALL_VIEWER_EXCEPT_HOST_HEADER (required below for the Lambda Function URL origin to
+    // work at all) unconditionally replaces the real Host header with the origin's own
+    // domain before forwarding — confirmed against AWS's own docs, not guessed. This
+    // CloudFront Function runs on viewer-request, before that swap happens, and copies the
+    // real requested host into x-forwarded-host so middleware.ts can still do its own
+    // host-based tenant-vs-dashboard routing.
+    const forwardHostFn = new cloudfront.Function(this, "ForwardHostFunction", {
+      code: cloudfront.FunctionCode.fromFile({ filePath: path.join(__dirname, "forward-host-function.js") }),
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+    });
+
+    // DNS-validated via a manual CNAME (see appDomain's own comment above) — `cdk deploy`
+    // blocks here until that CNAME is added and ACM sees it, same wait behavior
+    // published-sites-stack.ts's own wildcardCert already relies on.
+    const appCert = appDomain
+      ? new acm.Certificate(this, "AppCert", { domainName: appDomain, validation: acm.CertificateValidation.fromDns() })
+      : undefined;
+
     // CloudFront — behaviors match open-next.output.json exactly: image paths to the
     // image function, everything else dynamic to the server function, static file
     // patterns straight to S3.
     const distribution = new cloudfront.Distribution(this, "Distribution", {
+      domainNames: appDomain ? [appDomain] : undefined,
+      certificate: appCert,
       defaultBehavior: {
-        origin: origins.FunctionUrlOrigin.withOriginAccessControl(serverFnUrl),
+        origin: new origins.FunctionUrlOrigin(serverFnUrl, { customHeaders: { "x-origin-verify": originVerifySecret! } }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
         allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
         originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+        functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
       },
       additionalBehaviors: {
         "_next/image*": {
@@ -242,15 +404,32 @@ export class ComputeStack extends cdk.Stack {
     // automatically. AWS's own OAC-for-Lambda doc (confirmed by actually hitting a 403
     // AccessDeniedException in a real deploy before this was added) requires a SECOND,
     // separate grant for plain lambda:InvokeFunction — CloudFront's OAC signing needs both.
-    for (const [name, fn] of [["Server", serverFn] as const, ["Image", imageFn] as const]) {
-      fn.addPermission(`AllowCloudFront${name}InvokeFunction`, {
-        principal: new iam.ServicePrincipal("cloudfront.amazonaws.com"),
-        action: "lambda:InvokeFunction",
-        sourceArn: `arn:aws:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
-      });
-    }
+    // Server function excluded: it's no longer OAC-protected (see originVerifySecret above).
+    imageFn.addPermission("AllowCloudFrontImageInvokeFunction", {
+      principal: new iam.ServicePrincipal("cloudfront.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: `arn:aws:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
+    });
 
     new cdk.CfnOutput(this, "DistributionDomainName", { value: distribution.distributionDomainName });
+    if (appCert) {
+      new cdk.CfnOutput(this, "AppCertArn", { value: appCert.certificateArn });
+    }
     new cdk.CfnOutput(this, "ServerFunctionName", { value: serverFn.functionName });
+
+    // Real CloudFormation cross-stack exports — published-sites-stack.ts (a separate
+    // `cdk deploy` invocation, same as data-stack.ts/compute-stack.ts already are) points
+    // its own multi-tenant distribution at these SAME two Lambdas rather than deploying a
+    // second copy of the app: the Next.js middleware already does host-based tenant-vs-
+    // dashboard routing regardless of which CloudFront distribution a request arrived
+    // through, so one deployed Lambda pair correctly serves both. Exported as plain
+    // strings (ARN/name/URL), not live CDK object references, since cross-`cdk deploy`
+    // stacks in this app were never wired for the same-synthesis object-reference style
+    // of cross-stack reference (see cdk/bin/app.ts — one STACK_KIND per invocation).
+    new cdk.CfnOutput(this, "ServerFnArn", { value: serverFn.functionArn, exportName: `${this.stackName}-ServerFnArn` });
+    new cdk.CfnOutput(this, "ServerFnUrl", { value: serverFnUrl.url, exportName: `${this.stackName}-ServerFnUrl` });
+    new cdk.CfnOutput(this, "ImageFnArn", { value: imageFn.functionArn, exportName: `${this.stackName}-ImageFnArn` });
+    new cdk.CfnOutput(this, "ImageFnUrl", { value: imageFnUrl.url, exportName: `${this.stackName}-ImageFnUrl` });
+    new cdk.CfnOutput(this, "AssetsBucketName", { value: assetsBucket.bucketName, exportName: `${this.stackName}-AssetsBucketName` });
   }
 }

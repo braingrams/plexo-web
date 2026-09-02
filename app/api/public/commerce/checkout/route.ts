@@ -31,7 +31,7 @@ function isValidEmail(email: string): boolean {
  * "production hardening" notes.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const hostname = (request.headers.get("host") ?? "").split(":")[0];
+  const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
   const siteResult = await resolveSite(hostname);
   if (siteResult.status !== "ok") {
     return NextResponse.json({ error: "Site not found." }, { status: 404 });

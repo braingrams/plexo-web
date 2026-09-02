@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio";
-import { SiteImportPlatform } from "@prisma/client";
+import { SiteImportPlatform } from "@/lib/siteImport/platform";
 
 // A static clone can preserve markup/CSS/JS byte-for-byte, but any widget that talks to the
 // SOURCE platform's own backend (form submission endpoints, search index, membership/auth,

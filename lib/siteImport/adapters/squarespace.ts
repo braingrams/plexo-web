@@ -1,4 +1,4 @@
-import { SiteImportPlatform } from "@prisma/client";
+import { SiteImportPlatform } from "@/lib/siteImport/platform";
 import type { AdapterPostContent, PlatformAdapter } from "../types";
 import { detectInteractiveFeatures } from "../interactiveFeatureDetect";
 import { safeFetch } from "../fetchSafe";

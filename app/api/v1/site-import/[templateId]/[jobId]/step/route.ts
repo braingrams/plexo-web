@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveSiteImportSite } from "@/lib/siteImport/adminAuthDynamo";
-import { isValidUuid } from "@/server/slug";
+import { isValidUuid } from "@/lib/slugUtils";
 import { processSiteImportStep } from "@/lib/siteImport/runJobDynamo";
 import { SiteImportJob } from "@/lib/db/importEntities";
 

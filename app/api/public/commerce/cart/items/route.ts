@@ -11,7 +11,7 @@ const MAX_QUANTITY = 50;
  * there). Services never go through the cart — a booking's time-slot hold checks out
  * immediately via /api/public/commerce/checkout, same as before this cart existed. */
 export async function POST(request: NextRequest): Promise<NextResponse> {
-  const hostname = (request.headers.get("host") ?? "").split(":")[0];
+  const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
   const siteResult = await resolveSite(hostname);
   if (siteResult.status !== "ok") {
     return NextResponse.json({ error: "Site not found." }, { status: 404 });

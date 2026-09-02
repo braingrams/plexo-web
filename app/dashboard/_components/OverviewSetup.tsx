@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { TemplateKind } from "@prisma/client";
+import type { TemplateKind } from "@/lib/db/contentEntities";
 
 export type StarterTemplate = {
   id: string;

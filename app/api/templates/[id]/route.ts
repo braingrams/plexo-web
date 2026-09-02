@@ -3,7 +3,7 @@ import { deleteObjects } from "@/lib/storage";
 
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { resolveUser } from "@/lib/auth/resolveUser";
-import { removeVercelDomain } from "@/lib/vercelDomains";
+import { removeCloudFrontDomain } from "@/lib/cloudfrontDomains";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { isValidSlugSegment, isReservedTopLevelSlug, isSameOrAncestor, isValidUuid, slugify, getDescendantIds } from "@/server/slugDynamo";
 import { isTemplateNameTaken } from "@/server/templateNameDynamo";
@@ -185,17 +185,17 @@ export async function DELETE(
   }
   await Promise.all(assets.map((a) => TemplateAsset.remove({ templateId: a.templateId, path: a.path }).go()));
 
-  // Same problem for CUSTOM PublishedDomain rows: Vercel's own domain registry has no
-  // idea a delete happened — a CUSTOM domain (added via addVercelDomain at link time)
-  // stays attached to this Vercel project forever unless explicitly removed, blocking
-  // that domain from ever being re-added ("already in use by one of your projects") even
-  // though it no longer appears anywhere in the dashboard.
+  // Same problem for CUSTOM PublishedDomain rows: CloudFront SaaS Manager has no idea a
+  // delete happened — a CUSTOM domain (added via addCloudFrontDomain at link time) stays
+  // attached as a live distribution tenant forever unless explicitly removed, blocking
+  // that domain from ever being re-added even though it no longer appears anywhere in
+  // the dashboard.
   const domainBatches = await Promise.all(allIds.map((tid) => PublishedDomain.query.primary({ templateId: tid }).go()));
   const domains = domainBatches.flatMap((b) => b.data);
   for (const d of domains) {
     if (d.type === "CUSTOM") {
-      await removeVercelDomain(d.domain).catch((err) =>
-        console.error(`Failed to remove Vercel domain ${d.domain} during page delete (non-fatal):`, err),
+      await removeCloudFrontDomain(d.domain, { tenantId: d.tenantId, certificateArn: d.certificateArn }).catch((err) =>
+        console.error(`Failed to remove CloudFront distribution tenant for ${d.domain} during page delete (non-fatal):`, err),
       );
     }
   }

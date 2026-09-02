@@ -9,6 +9,7 @@ import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
 import { Template, TemplateAsset, BlogSite } from "@/lib/db/contentEntities";
 import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
 import { PageView } from "@/lib/db/opsEntities";
+import { recordPageViewRollup } from "@/lib/analyticsRollup";
 
 type TemplateItem = EntityItem<typeof Template>;
 
@@ -352,6 +353,7 @@ export async function GET(
       const { deviceType, browser, os } = parseUserAgent(userAgent);
       const { country, region, city } = extractGeoFromHeaders(request.headers);
 
+      const viewCreatedAt = new Date();
       void PageView.create({
         id: randomUUID(),
         templateId: cursor.id,
@@ -365,6 +367,9 @@ export async function GET(
         region: region ?? undefined,
         city: city ?? undefined,
       }).go().catch((err) => console.error("Failed to log PageView:", err));
+      void recordPageViewRollup({ createdAt: viewCreatedAt, templateId: cursor.id, deviceType, browser, os }).catch((err) =>
+        console.error("Failed to record PageView rollup:", err),
+      );
     } catch (err) {
       console.error("Error logging PageView:", err);
     }

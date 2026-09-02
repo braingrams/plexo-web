@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveSiteImportSite } from "@/lib/siteImport/adminAuthDynamo";
-import { isValidUuid } from "@/server/slug";
+import { isValidUuid } from "@/lib/slugUtils";
 import { describeInteractiveFeatureFlag } from "@/lib/siteImport/interactiveFeatureDetect";
 import { SiteImportJob, SiteImportPage, SiteImportAssetBlob } from "@/lib/db/importEntities";
 

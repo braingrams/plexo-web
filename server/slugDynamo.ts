@@ -1,11 +1,11 @@
 import { Template, BlogPost } from "@/lib/db/contentEntities";
-import { slugify, isValidUuid } from "./slug";
+import { slugify, isValidUuid } from "@/lib/slugUtils";
 
-// DynamoDB-stack port of server/slug.ts — same behavior, same rationale on every
-// function (see that file's comments), just backed by Template/BlogPost queries instead
-// of Prisma. isValidUuid/slugify/isValidSlugSegment/avoidPageReservedSlug are pure and
-// unchanged (re-exported from the original rather than duplicated).
-export { isValidUuid, slugify, isValidSlugSegment, avoidPageReservedSlug } from "./slug";
+// DynamoDB-stack port of the old server/slug.ts (now deleted) — same behavior, same
+// rationale on every function, just backed by Template/BlogPost queries instead of
+// Prisma. isValidUuid/slugify/isValidSlugSegment/avoidPageReservedSlug are pure and
+// unchanged (re-exported from lib/slugUtils.ts rather than duplicated).
+export { isValidUuid, slugify, isValidSlugSegment, avoidPageReservedSlug } from "@/lib/slugUtils";
 
 const RESERVED_TOP_LEVEL_PAGE_SLUGS = new Set(["blog"]);
 

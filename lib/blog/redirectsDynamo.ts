@@ -1,13 +1,13 @@
 import { BlogRedirect } from "@/lib/db/contentEntities";
-import { normalizeRedirectPath } from "./redirects";
 
 /**
- * DynamoDB port of lib/blog/redirects.ts's resolveBlogRedirect — same contract (see that
- * file's own comment). normalizeRedirectPath is pure (no Prisma dependency) and re-exported
- * from the original rather than duplicated, same pattern server/slugDynamo.ts uses for
- * slugify/isValidUuid.
+ * Canonical form BlogRedirect.fromPath/toPath are always stored and looked up in
+ * (leading slash, no trailing slash) — used both when the WordPress importer writes a
+ * redirect row and here when reading it back, so the two never drift out of sync.
  */
-export { normalizeRedirectPath };
+export function normalizeRedirectPath(path: string): string {
+  return "/" + path.replace(/^\/+/, "").replace(/\/+$/, "");
+}
 
 /** fromPath is BlogRedirect's own sort key (see contentEntities.ts) — an O(1) .get(), not a scan. */
 export async function resolveBlogRedirect(templateId: string, path: string): Promise<string | null> {

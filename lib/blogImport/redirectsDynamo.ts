@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { BlogRedirect } from "@/lib/db/contentEntities";
-import { normalizeRedirectPath } from "@/lib/blog/redirects";
+import { normalizeRedirectPath } from "@/lib/blog/redirectsDynamo";
 
 /**
  * DynamoDB port of lib/blogImport/redirects.ts's createRedirectsForImportedPost — same

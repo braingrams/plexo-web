@@ -10,6 +10,10 @@ import { docClient, TABLES } from "./client";
 
 const table = TABLES.content;
 
+// Local replacement for the Prisma-generated TemplateKind enum — matches Template.kind's
+// own literal union below exactly.
+export type TemplateKind = "EMAIL" | "LANDING_PAGE";
+
 export const Template = new Entity(
   {
     model: { entity: "template", version: "1", service: "plexoContent" },
@@ -162,6 +166,19 @@ export const PublishedDomain = new Entity(
       lastScannedAt: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      // CUSTOM domains only — replaces the earlier CloudFront-managed-certificate approach
+      // (ManagedCertificateRequest), which turned out to reproducibly issue a certificate
+      // that never actually attaches to its distribution tenant, even on a clean first
+      // attempt (confirmed directly, not assumed — see lib/acmCertificates.ts's own
+      // comment). This app now requests its own ACM certificate directly and attaches it
+      // once issued, same reliable customizations.certificate.arn mechanism the
+      // plexopages.com/plexo.charisol.io wildcard certs already use, just per-customer-
+      // domain and at runtime instead of CDK-deploy-time.
+      certificateArn: { type: "string" },
+      certificateStatus: { type: ["PENDING_VALIDATION", "ISSUED", "ATTACHED", "FAILED"] as const },
+      certificateValidationName: { type: "string" },
+      certificateValidationValue: { type: "string" },
+      tenantId: { type: "string" },
     },
     indexes: {
       primary: {
@@ -624,6 +641,12 @@ export const Comment = new Entity(
       // depends on it and it was missing from the original port of this entity.
       deletedAt: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      // prisma: @updatedAt — distinct from editedAt above (an explicit "the author edited
+      // this comment's body" marker); this one is Prisma's own any-column-changed
+      // timestamp. Missing from the original port of this entity (found auditing the
+      // Postgres->DynamoDB data migration, 2026-09-02) — added the same way every other
+      // schemaless attribute in this migration was, no redeploy needed.
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },
     indexes: {
       primary: {

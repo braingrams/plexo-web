@@ -6,7 +6,7 @@ import { requirePermission } from "@/server/requirePermissionDynamo";
 import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
 import { getDescendantIds } from "@/server/slugDynamo";
 import { deleteObjects } from "@/lib/storage";
-import { removeVercelDomain } from "@/lib/vercelDomains";
+import { removeCloudFrontDomain } from "@/lib/cloudfrontDomains";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 
 /**
@@ -202,8 +202,8 @@ export async function DELETE(
   const domains = domainBatches.flatMap((b) => b.data);
   for (const d of domains) {
     if (d.type === "CUSTOM") {
-      await removeVercelDomain(d.domain).catch((err) =>
-        console.error(`Failed to remove Vercel domain ${d.domain} during template delete (non-fatal):`, err)
+      await removeCloudFrontDomain(d.domain, { tenantId: d.tenantId, certificateArn: d.certificateArn }).catch((err) =>
+        console.error(`Failed to remove CloudFront distribution tenant for ${d.domain} during template delete (non-fatal):`, err)
       );
     }
   }

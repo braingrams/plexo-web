@@ -45,6 +45,53 @@ export const PageView = new Entity(
   { table, client: docClient },
 );
 
+// Pre-aggregated rollup for platform-wide PageView analytics (plexo-admin's Overview
+// dashboard: daily totals, hour-of-day heatmap, device/browser/OS breakdown, top sites).
+// PageView's own primary key is templateId-scoped (one partition per site) — great for
+// "this site's traffic," but a platform-wide aggregate has no realistic per-key access
+// pattern to hang a GSI off of, and raw PageView volume grows unboundedly with real
+// traffic, unlike every other entity plexo-admin's dashboard bounded-scans (accounts,
+// domains, templates, admin actions — all bounded by account/catalog size, not traffic).
+// So instead of a GSI or a scan, every PageView write also atomically increments a small,
+// fixed set of rollup counters for that day — the dashboard then reads N days of small,
+// bounded rollup rows instead of scanning however many millions of raw page views exist.
+//
+// One row per (date, dimension#value) — not one row per date with nested map counters,
+// because ElectroDB/DynamoDB's atomic `ADD` only increments plain top-level numeric
+// attributes cleanly; a dynamic key inside a map attribute needs a hand-rolled
+// UpdateExpression per key, which doesn't compose with ElectroDB's `.add()` builder the
+// same way. Sparse rows per dimension avoids that entirely at the cost of a few more
+// small items per day (bounded by device/browser/OS cardinality + daily distinct
+// templates-with-traffic, not by raw view count).
+export const PageViewDailyStat = new Entity(
+  {
+    model: { entity: "pageViewDailyStat", version: "1", service: "plexoOps" },
+    attributes: {
+      date: { type: "string", required: true }, // "YYYY-MM-DD", UTC
+      // "TOTAL" | "HOUR#<0-23>" | "DEVICE#<type>" | "BROWSER#<name>" | "OS#<name>" |
+      // "SITE#<templateId>" — see recordPageViewRollup in lib/analyticsRollup.ts, the
+      // only writer. Kept as a plain string (not a union) since device/browser/os/site
+      // values are open-ended, unlike PageView's own attributes.
+      dimension: { type: "string", required: true },
+      views: { type: "number", default: 0 },
+      // Matches PageView's own 180-day retention — a rollup for data that's about to be
+      // deleted has nothing left to roll up.
+      ttl: { type: "number", default: () => days(180) },
+    },
+    indexes: {
+      // One partition per day (not one global partition) — spreads write load across
+      // days instead of funneling every page view platform-wide into a single hot
+      // partition, while still making "read the last N days" a small, bounded number of
+      // single-partition queries (one per day) rather than a scan.
+      primary: {
+        pk: { field: "pk", composite: ["date"], template: "PVDAY#${date}" },
+        sk: { field: "sk", composite: ["dimension"], template: "DIM#${dimension}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const RateLimit = new Entity(
   {
     model: { entity: "rateLimit", version: "1", service: "plexoOps" },
@@ -157,6 +204,6 @@ export const FormSubmission = new Entity(
 );
 
 export const plexoOpsService = new Service(
-  { PageView, RateLimit, StockCache, AdminAuditLog, FormSubmission },
+  { PageView, PageViewDailyStat, RateLimit, StockCache, AdminAuditLog, FormSubmission },
   { table, client: docClient },
 );

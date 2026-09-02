@@ -4,7 +4,7 @@ import { redirect, notFound } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { resolveUser } from "@/lib/auth/resolveUser";
-import { isValidUuid } from "@/server/slug";
+import { isValidUuid } from "@/lib/slugUtils";
 import { compileToHTML } from "@/lib/compiler";
 import { sanitizeHtml } from "@/server/sanitizer";
 import { Template, BlogSite, SiteLayout } from "@/lib/db/contentEntities";

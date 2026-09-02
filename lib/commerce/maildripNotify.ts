@@ -1,5 +1,9 @@
+import type { EntityItem } from "electrodb";
 import { decryptMaildripKey } from "@/lib/crypto";
-import type { CommerceOrder, CommerceSettings } from "@prisma/client";
+import type { CommerceOrder as CommerceOrderEntity, CommerceSettings as CommerceSettingsEntity } from "@/lib/db/commerceEntities";
+
+type CommerceOrder = EntityItem<typeof CommerceOrderEntity>;
+type CommerceSettings = EntityItem<typeof CommerceSettingsEntity>;
 
 const PLATFORM_MAILDRIP_API_URL =
   process.env.MAILDRIP_API_URL ?? "https://api.maildrip.io/api/v1/emails/transaction";

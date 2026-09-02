@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { TemplateKind } from "@prisma/client";
+import type { TemplateKind } from "@/lib/db/contentEntities";
 
 import { listMarketplaceTemplates } from "@/lib/marketplace";
 

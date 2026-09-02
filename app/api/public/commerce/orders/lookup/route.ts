@@ -7,7 +7,7 @@ import { CommerceOrder, CommerceOrderItem, CommerceBooking } from "@/lib/db/comm
  * orderNumber and email — deliberately, so nobody can browse another customer's order by
  * guessing a short human-facing code (see the Commerce plan's hardening notes). */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const hostname = (request.headers.get("host") ?? "").split(":")[0];
+  const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
   const siteResult = await resolveSite(hostname);
   if (siteResult.status !== "ok") {
     return NextResponse.json({ error: "Site not found." }, { status: 404 });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
-import { isValidUuid } from "@/server/slug";
+import { isValidUuid } from "@/lib/slugUtils";
 import { getTierFeatures } from "@/lib/subscription";
 import { Template } from "@/lib/db/contentEntities";
 import type { OrgRole } from "@/server/accessControl";

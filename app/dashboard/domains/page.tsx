@@ -61,6 +61,9 @@ export default async function DomainsPage() {
     createdAt: d.createdAt ?? new Date().toISOString(),
     dnsVerified: d.dnsVerified ?? false,
     dnsVerifiedAt: d.dnsVerifiedAt ?? null,
+    certificateStatus: d.certificateStatus,
+    certificateValidationName: d.certificateValidationName,
+    certificateValidationValue: d.certificateValidationValue,
   }));
 
   return (

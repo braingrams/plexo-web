@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { BlogPostCard } from "@/lib/blog/queries";
+import type { BlogPostCard } from "@/lib/blog/queriesDynamo";
 import { GOOGLE_FONTS_LIST, buildGoogleFontHref } from "./googleFonts";
 
 const HEX_COLOR_REGEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;

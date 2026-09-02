@@ -1,4 +1,4 @@
-import type { CommercePaymentProvider, CommercePaystackMode } from "@prisma/client";
+import type { CommercePaymentProvider, CommercePaystackMode } from "@/lib/db/commerceEntities";
 
 type PaystackKeyFields = {
   paystackMode: CommercePaystackMode;

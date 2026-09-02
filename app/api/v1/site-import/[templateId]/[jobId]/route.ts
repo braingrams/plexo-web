@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveSiteImportSite } from "@/lib/siteImport/adminAuthDynamo";
-import { isValidUuid } from "@/server/slug";
+import { isValidUuid } from "@/lib/slugUtils";
 import { SiteImportJob, SiteImportPage } from "@/lib/db/importEntities";
 
 export async function GET(

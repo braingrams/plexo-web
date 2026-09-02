@@ -33,7 +33,7 @@ async function bestSellerProductIds(templateId: string): Promise<string[]> {
  *   "best_seller"/"most_recent", which sort instead of filter), a `limit`, and optional
  *   `page`/`pageSize` pagination — for a marketing section rather than a full shop page. */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const hostname = (request.headers.get("host") ?? "").split(":")[0];
+  const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
   const siteResult = await resolveSite(hostname);
   if (siteResult.status !== "ok") {
     return NextResponse.json({ error: "Site not found." }, { status: 404 });
