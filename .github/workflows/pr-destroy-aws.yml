@@ -87,10 +87,20 @@ jobs:
       - name: Verify the stack is actually gone
         run: |
           FULL_STACK="${STACK_ID}-compute-stack"
-          STATUS=$(aws cloudformation describe-stacks --stack-name "$FULL_STACK" \
-            --query 'Stacks[0].StackStatus' --output text 2>&1 || echo "DOES_NOT_EXIST")
+          # A successful `cdk destroy` can leave describe-stacks briefly inconsistent —
+          # confirmed by a real run where this printed the literal string "None" (an empty
+          # --query result rendered as text, not an error) for a stack that a follow-up
+          # describe-stacks call moments later correctly reported as gone. Retry a few
+          # times before treating it as a real failure.
+          STATUS="None"
+          for attempt in 1 2 3 4 5; do
+            STATUS=$(aws cloudformation describe-stacks --stack-name "$FULL_STACK" \
+              --query 'Stacks[0].StackStatus' --output text 2>&1 || echo "DOES_NOT_EXIST")
+            if [[ "$STATUS" != "None" ]]; then break; fi
+            sleep 5
+          done
 
-          if [[ "$STATUS" == "DOES_NOT_EXIST" || "$STATUS" == *"does not exist"* ]]; then
+          if [[ "$STATUS" == "DOES_NOT_EXIST" || "$STATUS" == "None" || "$STATUS" == *"does not exist"* ]]; then
             echo "✓ Stack $FULL_STACK: deleted"
           elif [ "$STATUS" = "DELETE_IN_PROGRESS" ]; then
             echo "Stack $FULL_STACK still deleting — waiting up to 20min..."
