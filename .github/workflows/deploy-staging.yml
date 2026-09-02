@@ -1,0 +1,90 @@
+name: Deploy | Staging
+
+# Fires on every push to `staging` — builds the app and deploys BOTH the compute stack
+# (dashboard + tenant Lambdas) and the published-sites stack (the CloudFront SaaS Manager
+# distribution + the certificate-attachment EventBridge schedule) to the real, persistent
+# staging environment. No manual gate: staging exists specifically so this is safe to do
+# on every push.
+
+on:
+  push:
+    branches:
+      - staging
+
+permissions:
+  id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
+  contents: read
+
+jobs:
+  deploy:
+    if: github.repository == 'Challaris/plexo-web'
+    runs-on: ubuntu-latest
+    env:
+      STACK_ID: staging-plexo
+      PLEXO_ENV: staging
+      AWS_ACCOUNT_ID: "919927637684"
+      AWS_REGION: us-east-1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::919927637684:role/github-actions-plexo-deploy
+          aws-region: us-east-1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install app dependencies
+        run: npm ci
+
+      # AUTH_SECRET is needed at build time too (Auth.js's own NextAuth() config throws
+      # without it in production mode) — see lib/ssmEnv.ts's own comment on why this
+      # can't just be read at runtime alone for every value (that mechanism silently
+      # never ran at all until this exact bug was found and fixed this same day).
+      - name: Fetch build-time secrets from SSM
+        run: |
+          echo "AUTH_SECRET=$(aws ssm get-parameter --name /plexo/staging/AUTH_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+          echo "ORIGIN_VERIFY_SECRET=$(aws ssm get-parameter --name /plexo/staging/PLEXO_ORIGIN_VERIFY_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+          echo "CRON_SECRET=$(aws ssm get-parameter --name /plexo/staging/CRON_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+
+      - name: Build the app (OpenNext)
+        env:
+          NEXT_PUBLIC_APP_URL: https://d3i92fgfanqz2.cloudfront.net
+          NEXT_PUBLIC_PAGES_DOMAIN: plexo.aws.charisol.io
+        run: npx open-next build
+
+      - name: Install CDK project
+        working-directory: ./cdk
+        run: npm install
+
+      - name: Deploy the compute stack
+        working-directory: ./cdk
+        env:
+          STACK_KIND: compute
+        run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively
+
+      - name: Deploy the published-sites stack
+        working-directory: ./cdk
+        env:
+          STACK_KIND: published-sites
+          WILDCARD_DOMAIN: plexo.aws.charisol.io
+          WILDCARD_ZONE_ID: ${{ vars.STAGING_WILDCARD_ZONE_ID }}
+          WILDCARD_ZONE_NAME: plexo.aws.charisol.io
+          APP_URL: https://d3i92fgfanqz2.cloudfront.net
+        run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
+
+      - name: Smoke test — dashboard responds
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://d3i92fgfanqz2.cloudfront.net/)
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Dashboard returned HTTP $STATUS after deploy"
+            exit 1
+          fi
+          echo "✓ Dashboard responded 200"

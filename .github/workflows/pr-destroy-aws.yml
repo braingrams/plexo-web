@@ -48,11 +48,19 @@ jobs:
         with:
           node-version: 22.x
 
-      - name: Install & build CDK project
+      - name: Install CDK project
         working-directory: ./cdk
+        run: npm install
+
+      # cdk/bin/app.ts unconditionally imports compute-stack.ts (every STACK_KIND does,
+      # not just "compute" — see cdk/bin/app.ts), which throws at module load if these
+      # aren't set (see that file's own comment) — required even to run `cdk destroy`,
+      # not just `cdk deploy`. Reuses staging's real values; nothing here depends on
+      # them matching what the stack was originally deployed with.
+      - name: Fetch staging's secrets required just to load the CDK app
         run: |
-          npm install
-          npm run build
+          echo "ORIGIN_VERIFY_SECRET=$(aws ssm get-parameter --name /plexo/staging/PLEXO_ORIGIN_VERIFY_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+          echo "CRON_SECRET=$(aws ssm get-parameter --name /plexo/staging/CRON_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
 
       - name: Destroy the PR's compute stack only — never --all, never the data stack
         working-directory: ./cdk

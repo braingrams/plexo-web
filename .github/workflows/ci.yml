@@ -4,13 +4,16 @@ name: CI
 # ever be caught by Vercel's own production build, after a push. This is deliberately minimal
 # (typecheck only, no test run — see package.json's "test" script, which has no real tests to
 # run yet) to establish the habit of a required PR check without blocking on work this repo
-# doesn't have yet.
+# doesn't have yet. tsconfig.json excludes cdk/ (its own separate TS project, with its own
+# package.json/node_modules never installed here) and scripts/ (one-off migration tooling),
+# so this needs no AWS credentials and no Prisma generate step (removed with Prisma itself).
 
 on:
   pull_request:
   push:
     branches:
       - main
+      - staging
 
 permissions:
   contents: read
@@ -31,9 +34,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Generate Prisma client
-        run: npm run db:generate
 
       - name: Typecheck
         run: npx tsc --noEmit
