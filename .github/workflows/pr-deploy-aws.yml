@@ -56,11 +56,22 @@ jobs:
       # environment (see compute-stack.ts's own comment on why) rather than loaded async,
       # so cdk deploy itself needs them as plain shell env vars — reusing staging's real
       # ones here rather than minting new ones with nothing to validate against.
+      # `::add-mask::` BEFORE writing to $GITHUB_ENV — without it these values print in
+      # plaintext in this step's own log (confirmed by a real run: both secrets appeared
+      # unmasked in the "##[endgroup]" env dump every later step logs). $GITHUB_ENV only
+      # makes a value available to subsequent steps; it does not register it as a secret
+      # to redact from output.
       - name: Fetch staging's shared secrets for the build + deploy
         run: |
-          echo "AUTH_SECRET=$(aws ssm get-parameter --name /plexo/staging/AUTH_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
-          echo "ORIGIN_VERIFY_SECRET=$(aws ssm get-parameter --name /plexo/staging/PLEXO_ORIGIN_VERIFY_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
-          echo "CRON_SECRET=$(aws ssm get-parameter --name /plexo/staging/CRON_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+          AUTH_SECRET="$(aws ssm get-parameter --name /plexo/staging/AUTH_SECRET --with-decryption --query Parameter.Value --output text)"
+          ORIGIN_VERIFY_SECRET="$(aws ssm get-parameter --name /plexo/staging/PLEXO_ORIGIN_VERIFY_SECRET --with-decryption --query Parameter.Value --output text)"
+          CRON_SECRET="$(aws ssm get-parameter --name /plexo/staging/CRON_SECRET --with-decryption --query Parameter.Value --output text)"
+          echo "::add-mask::$AUTH_SECRET"
+          echo "::add-mask::$ORIGIN_VERIFY_SECRET"
+          echo "::add-mask::$CRON_SECRET"
+          echo "AUTH_SECRET=$AUTH_SECRET" >> "$GITHUB_ENV"
+          echo "ORIGIN_VERIFY_SECRET=$ORIGIN_VERIFY_SECRET" >> "$GITHUB_ENV"
+          echo "CRON_SECRET=$CRON_SECRET" >> "$GITHUB_ENV"
 
       # No real domain exists for a PR preview before its first deploy (the CloudFront
       # domain is an OUTPUT of `cdk deploy`, not known beforehand) — NEXT_PUBLIC_* vars
