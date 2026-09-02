@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthorizedAdmin } from "@/server/adminAuth";
+import { isCronRequest } from "@/lib/cronAuth";
 import { CommerceOrder, CommerceOrderItem, CommerceProduct, CommerceBooking, CommerceBookingSlotLock } from "@/lib/db/commerceEntities";
 
 // Matches the hold window checkout sets on a new booking (see
@@ -29,17 +30,20 @@ function isConditionalCheckFailure(err: unknown): boolean {
  *
  * CommerceOrder has no status-indexed access pattern across every site (primary is
  * templateId+id, byPaymentRef/byOrderNumber are for a single order lookup — see
- * commerceEntities.ts) — this only exists for this once-a-day internal job, so a bounded
- * Scan (filtered in application code, same as app/api/internal/scan-domains's
- * PublishedDomain scan) is the honest v1 answer rather than a GSI on the busiest entity
- * in the table for a low-frequency batch job.
+ * commerceEntities.ts) — this only exists for this internal job, so a bounded Scan
+ * (filtered in application code, same as app/api/internal/scan-domains's PublishedDomain
+ * scan) is the honest v1 answer rather than a GSI on the busiest entity in the table for a
+ * low-frequency batch job.
+ *
+ * Runs every 15 minutes (see cdk/lib/published-sites-stack.ts's own comment), not once a
+ * day like the other app/api/internal/* backstops — daily was a Vercel Hobby cron-plan
+ * ceiling, never the actually-desired cadence here: STALE_ORDER_AGE_MS above is 15 minutes,
+ * so a once-a-day sweep would leave an abandoned order's booking slot lock (and any
+ * reserved inventory) squatted for up to ~24h before release, blocking a real customer
+ * from booking that same slot in the meantime.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-  const isCronRequest = !!cronSecret && authHeader === `Bearer ${cronSecret}`;
-
-  if (!isCronRequest && !isAuthorizedAdmin(request)) {
+  if (!isCronRequest(request) && !isAuthorizedAdmin(request)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 

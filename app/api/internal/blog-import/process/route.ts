@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthorizedAdmin } from "@/server/adminAuth";
+import { isCronRequest } from "@/lib/cronAuth";
 import { processImportBatch } from "@/lib/blogImport/runBatchDynamo";
 
 // Import jobs normally progress via the dashboard tab driving batches one at a time
@@ -14,9 +15,7 @@ export const maxDuration = 60;
 const BATCH_LOOP_BUDGET_MS = 50_000;
 
 function isAuthorized(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-  return (!!cronSecret && authHeader === `Bearer ${cronSecret}`) || isAuthorizedAdmin(request);
+  return isCronRequest(request) || isAuthorizedAdmin(request);
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

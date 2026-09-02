@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthorizedAdmin } from "@/server/adminAuth";
+import { isCronRequest } from "@/lib/cronAuth";
 import { processSiteImportStep } from "@/lib/siteImport/runJobDynamo";
 
 // Same in-process, time-boxed loop as app/api/internal/blog-import/process/route.ts — a
@@ -10,9 +11,7 @@ export const maxDuration = 60;
 const STEP_LOOP_BUDGET_MS = 50_000;
 
 function isAuthorized(request: NextRequest): boolean {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-  return (!!cronSecret && authHeader === `Bearer ${cronSecret}`) || isAuthorizedAdmin(request);
+  return isCronRequest(request) || isAuthorizedAdmin(request);
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {

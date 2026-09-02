@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAuthorizedAdmin } from "@/server/adminAuth";
+import { isCronRequest } from "@/lib/cronAuth";
 import { SiteImportJob } from "@/lib/db/importEntities";
 
 const STALL_THRESHOLD_MS = 5 * 60 * 1000;
@@ -11,10 +12,11 @@ const GIVEUP_THRESHOLD_MS = 48 * 60 * 60 * 1000;
 const TERMINAL_PHASES = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
 
 /**
- * Same role as app/api/internal/blog-import/resume-stalled/route.ts: a Vercel Cron backstop
- * (see vercel.json) for a job whose tab isn't open, since a site-import job is normally driven
- * batch-by-batch by the dashboard tab itself. On Hobby's daily-max cron frequency this is a
- * once-a-day catch-up, not a tight polling loop.
+ * Same role as app/api/internal/blog-import/resume-stalled/route.ts: an EventBridge
+ * schedule backstop (see cdk/lib/published-sites-stack.ts's own comment) for a job whose
+ * tab isn't open, since a site-import job is normally driven batch-by-batch by the
+ * dashboard tab itself. Once a day is the right cadence — this is a catch-up backstop, not
+ * a tight polling loop.
  *
  * SiteImportJob has no index over phase (only primary/byOrg, see importEntities.ts) — this
  * cross-org "every non-terminal job" sweep only exists for this once-daily internal job,
@@ -23,11 +25,7 @@ const TERMINAL_PHASES = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
  * this entity for a low-frequency batch job.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-  const isCronRequest = !!cronSecret && authHeader === `Bearer ${cronSecret}`;
-
-  if (!isCronRequest && !isAuthorizedAdmin(request)) {
+  if (!isCronRequest(request) && !isAuthorizedAdmin(request)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
@@ -61,12 +59,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .filter((j) => !giveUpIds.has(j.id) && ((j.lastHeartbeatAt && j.lastHeartbeatAt < stalledSince) || (!j.lastHeartbeatAt && (j.createdAt ?? "") < stalledSince)))
     .slice(0, 20);
 
+  // x-cron-secret, NOT Authorization — see lib/cronAuth.ts's own comment: a Lambda
+  // Function URL intercepts any request carrying an Authorization header and rejects it
+  // as an invalid SigV4 signature attempt before this app's own code ever runs, even for
+  // a same-app self-call like this one.
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const results = await Promise.allSettled(
     stalledJobs.map((job) =>
       fetch(`${base}/api/internal/site-import/process`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${cronSecret}` },
+        headers: { "Content-Type": "application/json", "x-cron-secret": process.env.CRON_SECRET ?? "" },
         body: JSON.stringify({ jobId: job.id, templateId: job.templateId }),
       }),
     ),

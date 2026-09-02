@@ -256,6 +256,23 @@ export class ComputeStack extends cdk.Stack {
         resources: ["*"],
       }),
     );
+    // lib/acmCertificates.ts's own runtime ACM calls — requestCertificate (on adding a
+    // custom domain), getCertificateStatus (the certificate-attachment cron route,
+    // polling every 5 minutes), deleteCertificate (on disconnecting a domain). A real
+    // gap this migration shipped without: confirmed by a live production run of the
+    // certificate-attachment route returning "acm:DescribeCertificate ... is not
+    // authorized" for every certificate, meaning NEITHER the request nor the attachment
+    // half of the whole self-managed-ACM flow had ever actually worked end-to-end for a
+    // real (non-manually-CLI'd) domain. "*" because RequestCertificate mints an ARN that
+    // doesn't exist yet (can't be pre-scoped, same reasoning as the CloudFront tenant
+    // grant above), and this Lambda has no way to know in advance which ARNs its own
+    // later Describe/Delete calls will target.
+    serverFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["acm:RequestCertificate", "acm:DescribeCertificate", "acm:DeleteCertificate"],
+        resources: ["*"],
+      }),
+    );
     // The six business-data tables (lib/db/client.ts's TABLES) — same cross-stack
     // situation as the S3 bucket above: provisioned by data-stack.ts, not this stack, so
     // scoped by tableEnv's own resolved names (already environment-correct via nameFor())

@@ -254,41 +254,73 @@ export class PublishedSitesStack extends cdk.Stack {
     wildcardTenant.addDependency(primaryDistribution);
     wildcardTenant.addDependency(connectionGroup);
 
-    // --- Certificate-attachment schedule — finishes connecting every CUSTOM domain whose
-    // self-managed ACM certificate (requested by app/api/v1/domains/route.ts at
-    // lib/acmCertificates.ts's requestCertificate, NOT CloudFront's own
-    // ManagedCertificateRequest — see lib/acmCertificates.ts's own comment on why that
-    // built-in mechanism was abandoned) has finished DNS validation. An EventBridge API
-    // Destination on a fixed schedule, not a new Lambda: this reuses the exact
-    // "internal route + bearer-token auth" pattern app/api/internal/scan-domains/route.ts
-    // already established (see that route's own doc comment), and at rate(5 minutes) costs
-    // nothing extra worth tracking — ~8,640 invocations/month, both EventBridge's own free
-    // tier and this account's existing traffic dwarf that.
+    // --- Scheduled internal routes — replaces every vercel.json cron entry (deleted along
+    // with that file; Vercel no longer hosts anything) plus the certificate-attachment job
+    // this stack already needed of its own accord. One EventBridge API Destination per
+    // route rather than a new Lambda per job: all of these are already real Next.js routes
+    // under app/api/internal/*, each gated by the exact "x-cron-secret header + CRON_SECRET"
+    // pattern lib/cronAuth.ts establishes — reused here as a single shared Connection.
+    //
+    // Header name deliberately NOT "Authorization" — confirmed by direct reproduction (see
+    // lib/cronAuth.ts's own comment) that a Lambda Function URL with FunctionUrlAuthType.NONE
+    // still intercepts any request carrying that header and rejects it as an invalid SigV4
+    // signature attempt before this app's own code ever runs, regardless of the header's
+    // actual content. This is also why app/api/internal/scan-domains/route.ts's own Vercel-
+    // Cron-era doc comment about "Authorization: Bearer" no longer matches its actual code.
     const cronSecret = process.env.CRON_SECRET;
     if (!cronSecret) throw new Error("CRON_SECRET is required (see CRON_SECRET in SSM for this environment — /plexo/<env>/CRON_SECRET).");
 
-    // Header name deliberately NOT "Authorization" — confirmed by direct reproduction
-    // (see lib/cronAuth.ts's own comment) that a Lambda Function URL with
-    // FunctionUrlAuthType.NONE still intercepts any request carrying that header and
-    // rejects it as an invalid SigV4 signature attempt before this app's own code ever
-    // runs, regardless of the header's actual content.
-    const certAttachmentConnection = new events.Connection(this, "CertAttachmentConnection", {
-      connectionName: `${this.stackName}-cert-attachment`,
+    const cronConnection = new events.Connection(this, "CronConnection", {
+      connectionName: `${this.stackName}-cron`,
       authorization: events.Authorization.apiKey("x-cron-secret", cdk.SecretValue.unsafePlainText(cronSecret)),
     });
 
-    const certAttachmentDestination = new events.ApiDestination(this, "CertAttachmentApiDestination", {
-      apiDestinationName: `${this.stackName}-cert-attachment`,
-      connection: certAttachmentConnection,
-      endpoint: `${appUrl}/api/internal/certificate-attachment`,
-      httpMethod: events.HttpMethod.GET,
-      rateLimitPerSecond: 1,
-    });
+    // rateLimitPerSecond: 1 on every destination below — none of these jobs are ever
+    // invoked more than once per schedule tick, so this is purely a safety ceiling, not a
+    // real throughput need.
+    const scheduledRoute = (id: string, routePath: string, schedule: events.Schedule): void => {
+      const destination = new events.ApiDestination(this, `${id}ApiDestination`, {
+        apiDestinationName: `${this.stackName}-${id.toLowerCase()}`,
+        connection: cronConnection,
+        endpoint: `${appUrl}${routePath}`,
+        httpMethod: events.HttpMethod.GET,
+        rateLimitPerSecond: 1,
+      });
+      new events.Rule(this, `${id}Schedule`, {
+        schedule,
+        targets: [new targets.ApiDestination(destination)],
+      });
+    };
 
-    new events.Rule(this, "CertAttachmentSchedule", {
-      schedule: events.Schedule.rate(cdk.Duration.minutes(5)),
-      targets: [new targets.ApiDestination(certAttachmentDestination)],
-    });
+    // Finishes connecting every CUSTOM domain whose self-managed ACM certificate
+    // (requested by app/api/v1/domains/route.ts at lib/acmCertificates.ts's
+    // requestCertificate, NOT CloudFront's own ManagedCertificateRequest — see
+    // lib/acmCertificates.ts's own comment on why that built-in mechanism was abandoned)
+    // has finished DNS validation. At rate(5 minutes) this costs nothing extra worth
+    // tracking — ~8,640 invocations/month, both EventBridge's own free tier and this
+    // account's existing traffic dwarf that.
+    scheduledRoute("CertAttachment", "/api/internal/certificate-attachment", events.Schedule.rate(cdk.Duration.minutes(5)));
+
+    // Re-scans already-published domains for newly-flagged threats — see that route's own
+    // doc comment. Daily matches its own stated cadence (a catch-up sweep, not a tight
+    // loop) — Vercel Hobby's cron-plan ceiling forced daily originally, but that happens to
+    // already be the right cadence here, unlike expire-stale-holds below.
+    scheduledRoute("ScanDomains", "/api/internal/scan-domains", events.Schedule.cron({ minute: "0", hour: "0" }));
+
+    // Catch-up backstops for an import whose dashboard tab isn't open — see each route's
+    // own doc comment. Daily is the right cadence for both: "stalled" just means nobody's
+    // watching, not that anything's broken, so there's no cost to a job sitting stalled for
+    // up to a day before this catches it.
+    scheduledRoute("BlogImportResumeStalled", "/api/internal/blog-import/resume-stalled", events.Schedule.cron({ minute: "0", hour: "12" }));
+    scheduledRoute("SiteImportResumeStalled", "/api/internal/site-import/resume-stalled", events.Schedule.cron({ minute: "0", hour: "13" }));
+
+    // Every 15 minutes, NOT once a day like the other backstops above — see that route's
+    // own doc comment on why: its 15-minute hold window means a once-daily sweep would
+    // leave an abandoned order's booking slot lock (and any reserved inventory) squatted
+    // for up to ~24h, blocking a real customer from booking that same slot in the
+    // meantime. Daily was a Vercel Hobby cron-plan ceiling this migration is no longer
+    // bound by, not the actually-desired cadence.
+    scheduledRoute("CommerceExpireStaleHolds", "/api/internal/commerce/expire-stale-holds", events.Schedule.rate(cdk.Duration.minutes(15)));
 
     new cdk.CfnOutput(this, "ConnectionGroupRoutingEndpoint", { value: connectionGroup.attrRoutingEndpoint });
     new cdk.CfnOutput(this, "PrimaryDistributionId", { value: primaryDistribution.attrId, exportName: `${this.stackName}-PrimaryDistributionId` });
