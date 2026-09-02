@@ -62,6 +62,24 @@ jobs:
           echo "ORIGIN_VERIFY_SECRET=$(aws ssm get-parameter --name /plexo/staging/PLEXO_ORIGIN_VERIFY_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
           echo "CRON_SECRET=$(aws ssm get-parameter --name /plexo/staging/CRON_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
 
+      # `cdk destroy` still synthesizes the stack before deleting it — every
+      # lambda.Code.fromAsset()/s3deploy.Source.asset() call in compute-stack.ts needs its
+      # directory to actually exist on disk at synth time, same as a real `cdk deploy`
+      # (confirmed by a real destroy failure: "CannotFindAsset" at .open-next/assets — this
+      # workflow never ran the real OpenNext build at all). A real `npx open-next build`
+      # would work too, but it's pointless cost for a stack that's about to be deleted —
+      # these placeholders just need to exist, their content is irrelevant.
+      - name: Create placeholder OpenNext assets (real build is unnecessary for a destroy)
+        run: |
+          mkdir -p .open-next/assets .open-next/server-functions/default \
+            .open-next/image-optimization-function .open-next/revalidation-function \
+            .open-next/dynamodb-provider
+          for dir in .open-next/assets .open-next/server-functions/default \
+            .open-next/image-optimization-function .open-next/revalidation-function \
+            .open-next/dynamodb-provider; do
+            echo "// placeholder — this stack is being destroyed" > "$dir/index.js"
+          done
+
       - name: Destroy the PR's compute stack only — never --all, never the data stack
         working-directory: ./cdk
         run: npx aws-cdk destroy "${STACK_ID}-compute-stack" --force --exclusively
