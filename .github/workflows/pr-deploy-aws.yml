@@ -41,13 +41,46 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22.x
+          cache: 'npm'
+
+      - name: Install app dependencies
+        run: npm ci
+
+      # PR previews share staging's real DynamoDB tables (data-stack.ts is deployed once
+      # for staging/production only — see cdk/bin/app.ts's own comment — a PR's own
+      # STACK_ID has no tables of its own) and staging's own secrets (Google/Stripe/
+      # Maildrip/Pusher/encryption keys, all real values in /plexo/staging/* by now),
+      # loaded at runtime the same way staging's own deploy loads them (lib/ssmEnv.ts,
+      # via instrumentation.ts) since PLEXO_ENV is "staging" here too. ORIGIN_VERIFY_SECRET
+      # and CRON_SECRET are the two exceptions baked directly into the Lambda's own
+      # environment (see compute-stack.ts's own comment on why) rather than loaded async,
+      # so cdk deploy itself needs them as plain shell env vars — reusing staging's real
+      # ones here rather than minting new ones with nothing to validate against.
+      - name: Fetch staging's shared secrets for the build + deploy
+        run: |
+          echo "AUTH_SECRET=$(aws ssm get-parameter --name /plexo/staging/AUTH_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+          echo "ORIGIN_VERIFY_SECRET=$(aws ssm get-parameter --name /plexo/staging/PLEXO_ORIGIN_VERIFY_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+          echo "CRON_SECRET=$(aws ssm get-parameter --name /plexo/staging/CRON_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+
+      # No real domain exists for a PR preview before its first deploy (the CloudFront
+      # domain is an OUTPUT of `cdk deploy`, not known beforehand) — NEXT_PUBLIC_* vars
+      # are inlined into the JS bundle at build time either way, so this can only ever be
+      # a placeholder for previews. See middleware.ts's own "http://localhost:3000"
+      # fallback for the same constraint; harmless for reviewing app behavior in a
+      # preview, only affects the credentialed-CORS allowlist for genuinely cross-origin
+      # calls into this exact preview's own API, which previews don't exercise.
+      - name: Build the app (OpenNext)
+        env:
+          PLEXO_ENV: staging
+          NEXT_PUBLIC_PAGES_DOMAIN: plexo.aws.charisol.io
+        run: npx open-next build
 
       - name: Install & build CDK project
         working-directory: ./cdk
-        run: |
-          npm install
-          npm run build
+        run: npm install
 
       - name: Deploy the PR's compute stack only — never --all, never the data stack
         working-directory: ./cdk
+        env:
+          TABLE_STACK_ID: staging-plexo
         run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively

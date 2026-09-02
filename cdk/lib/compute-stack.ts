@@ -58,8 +58,17 @@ const OPEN_NEXT_DIR = path.join(__dirname, "..", "..", ".open-next");
 // live data — this was previously the actual bug here: these 6 env vars were never
 // injected at all, so every deployed Lambda regardless of environment fell back to the
 // production table names).
+//
+// TABLE_STACK_ID (falling back to STACK_ID) exists because a PR preview's own STACK_ID
+// (e.g. "pr-5-plexo") does NOT have its own DynamoDB tables — data-stack.ts is deployed
+// once for staging/production only (see cdk/bin/app.ts's own comment: "never per-PR"),
+// so naming a PR preview's tables after its own stackID would point every DynamoDB call
+// at tables that don't exist. pr-deploy-aws.yml sets this to "staging-plexo" so PR
+// previews share staging's real tables instead; staging/production's own deploys never
+// set it, so STACK_ID (their own real name) is used, unchanged from before.
 const stackID = process.env.STACK_ID || "pr-1-plexo";
-const nameFor = (base: string): string => (isProd ? base : `${base}-${stackID}`);
+const tableStackID = process.env.TABLE_STACK_ID || stackID;
+const nameFor = (base: string): string => (isProd ? base : `${base}-${tableStackID}`);
 
 // CloudFront's Origin Access Control cannot reliably sign POST/PUT request bodies to a
 // Lambda Function URL origin — confirmed by directly reproducing InvalidSignatureException

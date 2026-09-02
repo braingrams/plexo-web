@@ -1,0 +1,90 @@
+name: Deploy | Production
+
+# Fires on every push to `main` — which only ever happens via a reviewed, approved PR
+# merge (branch protection on `main` requires 1 approval + a passing `typecheck` check
+# before a merge is even allowed — see the repo's branch protection settings). That
+# review, not a second gate here, is the manual checkpoint before anything reaches real
+# customers: GitHub's per-environment "required reviewers" protection rule (a second,
+# deploy-time approval step) needs a paid plan this org's plan doesn't have (confirmed by
+# a real 422 attempting to configure it), so this is the closest equivalent without one.
+# `environment: production` is kept for its own sake (scopes any environment-specific
+# secrets/variables, shows up in the repo's Deployments tab) even without that rule.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
+  contents: read
+
+jobs:
+  deploy:
+    if: github.repository == 'Challaris/plexo-web'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      STACK_ID: production-plexo
+      PLEXO_ENV: production
+      AWS_ACCOUNT_ID: "919927637684"
+      AWS_REGION: us-east-1
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::919927637684:role/github-actions-plexo-deploy
+          aws-region: us-east-1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Fetch build-time secrets from SSM
+        run: |
+          echo "AUTH_SECRET=$(aws ssm get-parameter --name /plexo/production/AUTH_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+          echo "ORIGIN_VERIFY_SECRET=$(aws ssm get-parameter --name /plexo/production/PLEXO_ORIGIN_VERIFY_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+          echo "CRON_SECRET=$(aws ssm get-parameter --name /plexo/production/CRON_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+
+      - name: Build the app (OpenNext)
+        env:
+          NEXT_PUBLIC_APP_URL: https://plexo.charisol.io
+          NEXT_PUBLIC_PAGES_DOMAIN: plexopages.com
+        run: npx open-next build
+
+      - name: Install CDK project
+        working-directory: ./cdk
+        run: npm install
+
+      - name: Deploy the compute stack
+        working-directory: ./cdk
+        env:
+          STACK_KIND: compute
+          APP_DOMAIN: plexo.charisol.io
+        run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively
+
+      - name: Deploy the published-sites stack
+        working-directory: ./cdk
+        env:
+          STACK_KIND: published-sites
+          WILDCARD_DOMAIN: plexopages.com
+          APP_URL: https://plexo.charisol.io
+        run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
+
+      - name: Smoke test — dashboard responds
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://plexo.charisol.io/)
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::Dashboard returned HTTP $STATUS after deploy"
+            exit 1
+          fi
+          echo "✓ Dashboard responded 200"
