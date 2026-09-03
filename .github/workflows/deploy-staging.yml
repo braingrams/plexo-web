@@ -23,6 +23,7 @@ jobs:
   deploy:
     if: github.repository == 'Challaris/plexo-web'
     runs-on: ubuntu-latest
+    environment: staging
     env:
       STACK_ID: staging-plexo
       PLEXO_ENV: staging
@@ -47,6 +48,62 @@ jobs:
 
       - name: Install app dependencies
         run: npm ci
+
+      # GitHub's "staging" Environment secrets are the source of truth for everything
+      # lib/ssmEnv.ts loads at runtime — change a value here in GitHub, push, and this
+      # step lands it in SSM before the deploy below ever runs, so the next cold start
+      # picks it up. Previously SSM itself was the only source of truth, updated by hand
+      # via the AWS CLI or the separate, manually-triggered sync-secrets-to-ssm.yml — this
+      # folds that same sync into every deploy instead of requiring a second step.
+      - name: Sync secrets from GitHub to SSM
+        env:
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_SAFE_BROWSING_API_KEY: ${{ secrets.GOOGLE_SAFE_BROWSING_API_KEY }}
+          AI_KEY_ENCRYPTION_SECRET: ${{ secrets.AI_KEY_ENCRYPTION_SECRET }}
+          PAYSTACK_KEY_ENCRYPTION_SECRET: ${{ secrets.PAYSTACK_KEY_ENCRYPTION_SECRET }}
+          COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET: ${{ secrets.COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET }}
+          MAILDRIP_KEY_ENCRYPTION_SECRET: ${{ secrets.MAILDRIP_KEY_ENCRYPTION_SECRET }}
+          MAILDRIP_API_URL: ${{ secrets.MAILDRIP_API_URL }}
+          MAILDRIP_API_KEY: ${{ secrets.MAILDRIP_API_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRICE_PRO: ${{ secrets.STRIPE_PRICE_PRO }}
+          STRIPE_PRICE_ULTRA: ${{ secrets.STRIPE_PRICE_ULTRA }}
+          STRIPE_PRICE_TOPUP_SMALL: ${{ secrets.STRIPE_PRICE_TOPUP_SMALL }}
+          STRIPE_PRICE_TOPUP_MEDIUM: ${{ secrets.STRIPE_PRICE_TOPUP_MEDIUM }}
+          STRIPE_PRICE_TOPUP_LARGE: ${{ secrets.STRIPE_PRICE_TOPUP_LARGE }}
+          SYSTEM_AI_PROVIDER: ${{ secrets.SYSTEM_AI_PROVIDER }}
+          SYSTEM_AI_KEY_ANTHROPIC_CLAUDE: ${{ secrets.SYSTEM_AI_KEY_ANTHROPIC_CLAUDE }}
+          SYSTEM_AI_KEY_OPENAI: ${{ secrets.SYSTEM_AI_KEY_OPENAI }}
+          SYSTEM_AI_KEY_GOOGLE_GEMINI: ${{ secrets.SYSTEM_AI_KEY_GOOGLE_GEMINI }}
+          PUSHER_APP_ID: ${{ secrets.PUSHER_APP_ID }}
+          PUSHER_KEY: ${{ secrets.PUSHER_KEY }}
+          PUSHER_SECRET: ${{ secrets.PUSHER_SECRET }}
+          PUSHER_CLUSTER: ${{ secrets.PUSHER_CLUSTER }}
+          BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
+          PEXELS_KEY: ${{ secrets.PEXELS_KEY }}
+          PIXABAY_KEY: ${{ secrets.PIXABAY_KEY }}
+          UNSPLASH_KEY: ${{ secrets.UNSPLASH_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PLEXO_ORIGIN_VERIFY_SECRET: ${{ secrets.PLEXO_ORIGIN_VERIFY_SECRET }}
+        run: |
+          for NAME in AUTH_SECRET GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GOOGLE_SAFE_BROWSING_API_KEY \
+            AI_KEY_ENCRYPTION_SECRET PAYSTACK_KEY_ENCRYPTION_SECRET COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET \
+            MAILDRIP_KEY_ENCRYPTION_SECRET MAILDRIP_API_URL MAILDRIP_API_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
+            STRIPE_PRICE_PRO STRIPE_PRICE_ULTRA STRIPE_PRICE_TOPUP_SMALL STRIPE_PRICE_TOPUP_MEDIUM STRIPE_PRICE_TOPUP_LARGE \
+            SYSTEM_AI_PROVIDER SYSTEM_AI_KEY_ANTHROPIC_CLAUDE SYSTEM_AI_KEY_OPENAI SYSTEM_AI_KEY_GOOGLE_GEMINI \
+            PUSHER_APP_ID PUSHER_KEY PUSHER_SECRET PUSHER_CLUSTER BROWSERBASE_API_KEY PEXELS_KEY PIXABAY_KEY UNSPLASH_KEY \
+            CRON_SECRET PLEXO_ORIGIN_VERIFY_SECRET; do
+            VALUE="${!NAME}"
+            if [ -z "$VALUE" ]; then
+              echo "::warning::$NAME is not set in the staging GitHub Environment — skipping, leaving SSM value unchanged"
+              continue
+            fi
+            aws ssm put-parameter --name "/plexo/staging/${NAME}" --value "$VALUE" --type SecureString --key-id "alias/aws/ssm" --overwrite --region us-east-1 > /dev/null
+          done
+          echo "✓ Synced secrets to /plexo/staging/*"
 
       # AUTH_SECRET is needed at build time too (Auth.js's own NextAuth() config throws
       # without it in production mode) — see lib/ssmEnv.ts's own comment on why this
