@@ -419,6 +419,15 @@ export class ComputeStack extends cdk.Stack {
       runtime: cloudfront.FunctionRuntime.JS_2_0,
     });
 
+    // See unmangle-www-authenticate-function.js's own comment — the Lambda Function URL
+    // origin silently renames any WWW-Authenticate response header (the MCP OAuth flow's
+    // 401 challenge, see mcpServer.ts) to x-amzn-remapped-www-authenticate; this restores
+    // the real header name on the way out to the viewer.
+    const unmangleWwwAuthenticateFn = new cloudfront.Function(this, "UnmangleWwwAuthenticateFunction", {
+      code: cloudfront.FunctionCode.fromFile({ filePath: path.join(__dirname, "unmangle-www-authenticate-function.js") }),
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+    });
+
     // DNS-validated via a manual CNAME (see appDomain's own comment above) — `cdk deploy`
     // blocks here until that CNAME is added and ACM sees it, same wait behavior
     // published-sites-stack.ts's own wildcardCert already relies on. Imported instead when
@@ -441,7 +450,10 @@ export class ComputeStack extends cdk.Stack {
         cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
         allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
         originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-        functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+        functionAssociations: [
+          { function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST },
+          { function: unmangleWwwAuthenticateFn, eventType: cloudfront.FunctionEventType.VIEWER_RESPONSE },
+        ],
       },
       additionalBehaviors: {
         "_next/image*": {
