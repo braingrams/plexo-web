@@ -218,6 +218,8 @@ async function linkDomainToTemplate(
 export const PLEXO_MCP_TOOLS = [
   {
     name: "publish_landing_page",
+    title: "Publish Landing Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description: `Creates, compiles, and publishes a landing page template to a subdomain or custom domain in 1 step.
 
 IMPORTANT INSTRUCTION FOR AI CLIENTS:
@@ -376,6 +378,8 @@ EXAMPLE VALID designJson PAYLOAD (hero row, plus a 3-item product grid row):
   },
   {
     name: "create_email_template",
+    title: "Create Email Template",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description: `Creates and saves a responsive HTML email template for newsletters or promotional campaigns.
 
 Uses the SAME fully-hydrated layout schema as publish_landing_page — designJson MUST be { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [{ "id", "type", "style", "attributes" }] }] }] } }. There is no shorthand row format; rows without a 'columns' array are rejected. Text content for heading/paragraph/text/button elements MUST be under attributes.text (NOT attributes.content) — a "content" key is silently ignored by the editor and renders as empty/placeholder text. See publish_landing_page's description for a full worked example.`,
@@ -469,6 +473,8 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page — designJso
   },
   {
     name: "get_strata_tokens",
+    title: "Get Strata Design Tokens",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: `Checks whether the account has a Strata design-system project connected and, if so, fetches its design tokens (colors, typography, spacing, etc).
 
 Call this BEFORE publish_landing_page or create_email_template whenever the user wants their brand/Strata colors and styles used. Call with no arguments first to check the currently connected project. If the result has "connected": false, ask the user for their Strata project id (found in their Strata project's snapshot/share URL) and call this tool again with that projectId — it connects the account to that project (remembered for future calls) and fetches its tokens in the same call.
@@ -486,6 +492,8 @@ Map the returned tokens into designJson style fields: color-type tokens into bac
   },
   {
     name: "update_template",
+    title: "Update Landing Page Template",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: `Edits an existing landing page or email template in place, under the same template ID. Recompiles and re-saves the HTML from the new designJson — the editable URL stays the same, and for a published landing page the live URL and domain are unchanged too (this does not publish/unpublish or change the domain; call publish_landing_page again with a domain for that).
 
 This is for drag-and-drop BUILDER pages only — it REJECTS a page created via create_raw_landing_page/publish_raw_landing_page/create_landing_page_subpage's htmlContent option. Use update_raw_landing_page for those instead. If unsure which kind an existing page is, check its sourceType via list_landing_pages/get_landing_page_pages first.
@@ -516,6 +524,8 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page/create_email_
   },
   {
     name: "update_raw_landing_page",
+    title: "Update Raw HTML Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: `Replaces an existing RAW_UPLOAD page's HTML in place, under the same template ID — the editable URL, live URL, and domain (if published) are all unchanged. This is for pages created via create_raw_landing_page/publish_raw_landing_page/create_landing_page_subpage's htmlContent option ONLY — it REJECTS a drag-and-drop BUILDER page (use update_template for those). If unsure which kind an existing page is, check its sourceType via list_landing_pages/get_landing_page_pages first.
 
 This replaces the ENTIRE HTML document, not a patch — send back the full modified document. Same 1MB single-document scope as create_raw_landing_page.`,
@@ -540,6 +550,8 @@ This replaces the ENTIRE HTML document, not a patch — send back the full modif
   },
   {
     name: "create_landing_page",
+    title: "Create Landing Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description: `Creates and saves a landing page template WITHOUT publishing it to a domain — use this when the user wants to build a page (or start a multi-page site) first and go live later. Call publish_existing_landing_page afterward with the returned templateId to link a subdomain or custom domain whenever they're ready. To create a page AND publish it in one step, use publish_landing_page instead.
 
 Uses the SAME fully-hydrated layout schema as publish_landing_page — designJson MUST be { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [...] }] }] } }. See publish_landing_page's description for a full worked example.`,
@@ -560,6 +572,8 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page — designJso
   },
   {
     name: "create_raw_landing_page",
+    title: "Create Raw HTML Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description: `Creates a landing page from a RAW HTML document you supply directly, WITHOUT publishing it to a domain — for when the user wants a page built from hand-written or externally-sourced HTML/CSS/JS instead of Plexo's drag-and-drop builder. The page is served byte-for-byte as given, completely unsanitized (no designJson, no compilation) — this is a DIFFERENT storage mode from create_landing_page/publish_landing_page/update_template, which are for the drag-and-drop BUILDER pages built from designJson. Do NOT use this tool for a page you want to build with designJson — use create_landing_page instead.
 
 Scope: a single self-contained HTML document only (inline or CDN-linked CSS/JS), up to 1MB — no zip/multi-file sites with separate local asset files (that's a dashboard-only "import a website" feature with no MCP equivalent yet).
@@ -586,6 +600,8 @@ Because this serves unsanitized content, the account must accept the Acceptable 
   },
   {
     name: "publish_raw_landing_page",
+    title: "Publish Raw HTML Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description: `Creates, and publishes to a domain, a landing page from a RAW HTML document you supply directly — the combined create+publish equivalent of create_raw_landing_page. See create_raw_landing_page's description for the unsanitized-content, AUP, and scope caveats (single self-contained HTML document, up to 1MB, no zip/multi-file sites). For drag-and-drop BUILDER pages built from designJson, use publish_landing_page instead — this tool is a different storage mode.`,
     inputSchema: {
       type: "object",
@@ -617,6 +633,8 @@ Because this serves unsanitized content, the account must accept the Acceptable 
   },
   {
     name: "publish_existing_landing_page",
+    title: "Publish Existing Landing Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: `Links a subdomain or custom domain to an already-existing landing page template — for a template created via create_landing_page, or the home page of a multi-page site (see create_landing_page_subpage) once its sub-pages are ready. Unlike publish_landing_page, this does NOT create a new template — it publishes the one you already have. Every sub-page nested under templateId automatically becomes reachable at this domain too (e.g. domain.com/about) — no separate publish call is needed per sub-page.`,
     inputSchema: {
       type: "object",
@@ -640,6 +658,8 @@ Because this serves unsanitized content, the account must accept the Acceptable 
   },
   {
     name: "create_landing_page_subpage",
+    title: "Create Sub-Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description: `Adds a new page nested under an existing landing page, reachable at <site domain>/<slug> — or nested deeper (e.g. /blog/post-1) if parentTemplateId is itself a sub-page rather than the home page. This is how a single landing page becomes a multi-page site (BUILDER and RAW_UPLOAD pages can be freely mixed within the same site — each page's own sourceType is independent of its siblings). No separate publish step is needed for sub-pages: they automatically become reachable once the site's home page has a domain linked (see publish_existing_landing_page). Requires an Ultra subscription plan — sub-pages are otherwise unlimited per site once enabled (the plan's template limit only counts home pages, not their sub-pages).
 
 Provide EITHER designJson (a drag-and-drop BUILDER sub-page) OR htmlContent (a raw-HTML sub-page, same unsanitized/AUP/1MB caveats as create_raw_landing_page) — not both. Omit both to create a blank BUILDER page (fill it in afterward with update_template using the returned templateId). Edit an existing sub-page's content afterward with update_template (BUILDER) or update_raw_landing_page (RAW_UPLOAD) depending on which mode it was created with.`,
@@ -676,6 +696,8 @@ Provide EITHER designJson (a drag-and-drop BUILDER sub-page) OR htmlContent (a r
   },
   {
     name: "get_landing_page_pages",
+    title: "Get Site Pages",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: "Returns every page belonging to the same multi-page site as the given template — its home page plus all nested sub-pages, each with its name, URL segment (slug), parent, and full resolved path (e.g. '/blog/post-1'). Pass the home page's ID or any sub-page's ID — either way you get the whole tree back. Use this before create_landing_page_subpage/update_landing_page_page when you need to know what pages already exist or what a page's current slug/parent is.",
     inputSchema: {
       type: "object",
@@ -690,6 +712,8 @@ Provide EITHER designJson (a drag-and-drop BUILDER sub-page) OR htmlContent (a r
   },
   {
     name: "update_landing_page_page",
+    title: "Update Page Structure",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: `Renames a page, changes its URL segment (slug), moves it under a different parent page, or reorders it among its siblings. The home page of a site (no parent) can be renamed but has no slug of its own and can't be re-parented — use publish_existing_landing_page to manage its domain instead.
 
 To edit a page's CONTENT (designJson), use update_template with the same templateId instead — this tool only manages the page's place in the site's structure, not what's on it.`,
@@ -722,6 +746,8 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   },
   {
     name: "delete_template",
+    title: "Delete Template",
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     description: "Permanently deletes any landing page or email template by templateId or template name (e.g. 'buzm'). Cleans up attached sub-pages, Vercel Blob assets, and custom domain routing. Confirm with user before calling as this action cannot be undone.",
     inputSchema: {
       type: "object",
@@ -739,6 +765,8 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   },
   {
     name: "delete_landing_page_page",
+    title: "Delete Page",
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     description: "Deletes a page. If it has sub-pages nested under it, they're deleted too (cascade) — the response reports how many. Deleting a site's home page deletes the whole site, including every page nested under it and its published domain link — this can't be undone, confirm with the user first.",
     inputSchema: {
       type: "object",
@@ -753,6 +781,8 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   },
   {
     name: "duplicate_landing_page_page",
+    title: "Duplicate Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description: "Clones a sub-page's content into a new sibling page under the same parent — handy for building several similar pages (e.g. multiple product pages) without starting blank. Not available for a site's home page. Requires an Ultra subscription plan.",
     inputSchema: {
       type: "object",
@@ -767,6 +797,8 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   },
   {
     name: "list_landing_pages",
+    title: "List Landing Pages",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: "Lists all saved landing page templates and published domain URLs in the user's Plexo account.",
     inputSchema: {
       type: "object",
@@ -775,6 +807,8 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   },
   {
     name: "list_email_templates",
+    title: "List Email Templates",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: "Lists all saved email templates in the user's Plexo account.",
     inputSchema: {
       type: "object",
@@ -783,6 +817,8 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   },
   {
     name: "get_analytics",
+    title: "Get Analytics",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: "Fetches visitor analytics, total page views, unique visitor counts, and daily timeline metrics.",
     inputSchema: {
       type: "object",
@@ -796,6 +832,8 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   },
   {
     name: "get_user_profile",
+    title: "Get User Profile",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: "Retrieves user details, subscription plan (FREE, PRO, ULTRA), AI credit balance, and domain usage limits.",
     inputSchema: {
       type: "object",
@@ -804,6 +842,8 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   },
   {
     name: "delete_published_domain",
+    title: "Delete Published Domain",
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     description: "Deletes or unlinks a published domain routing from a landing page.",
     inputSchema: {
       type: "object",
@@ -827,6 +867,33 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
   const jsonrpc = body?.jsonrpc || "2.0";
   const id = body?.id ?? null;
   const method = body?.method;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+
+  // Every method below needs a specific user/org's data — there's no anonymous
+  // capability worth exposing here — so auth is checked once, up front, for all of them.
+  // Previously only tools/call checked auth at all, and even then it returned HTTP 200
+  // with the auth failure buried inside a JSON-RPC result (isError: true) instead of a
+  // real 401. Per the MCP Authorization spec, a client only knows to start the OAuth
+  // flow when it receives an actual 401 with a WWW-Authenticate challenge pointing at
+  // this resource's protected-resource metadata — a 200 with an error message in the
+  // payload gives it nothing to act on, which is exactly why Claude's own "add custom
+  // connector" flow detected this server as requiring no authentication at all.
+  const resolved = await resolveUser(request);
+  if (!resolved) {
+    return NextResponse.json(
+      {
+        jsonrpc,
+        id,
+        error: { code: -32001, message: "Authentication required. See WWW-Authenticate header." },
+      },
+      {
+        status: 401,
+        headers: {
+          "WWW-Authenticate": `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
+        },
+      },
+    );
+  }
 
   // 1. Handle initialize handshake
   if (method === "initialize") {
@@ -861,24 +928,6 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
   if (method === "tools/call") {
     const toolName = body?.params?.name;
     const args = body?.params?.arguments || {};
-
-    const resolved = await resolveUser(request);
-    if (!resolved) {
-      const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io"}/mcp/login`;
-      return NextResponse.json({
-        jsonrpc,
-        id,
-        result: {
-          content: [
-            {
-              type: "text",
-              text: `Authentication Required: Valid API key or OAuth session required.\nPlease authorize at ${loginUrl}`,
-            },
-          ],
-          isError: true,
-        },
-      });
-    }
 
     try {
       let toolResult: any;

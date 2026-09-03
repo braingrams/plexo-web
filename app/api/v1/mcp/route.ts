@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleMcpJsonRpc, PLEXO_MCP_TOOLS } from "@/lib/mcp/mcpServer";
+import { resolveUser } from "@/lib/auth/resolveUser";
 
 export async function GET(request: NextRequest): Promise<Response> {
   const acceptHeader = request.headers.get("accept") || "";
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
 
-  // If client requests SSE streamable transport (e.g. Claude Web Remote MCP Connector)
+  // If client requests SSE streamable transport (e.g. Claude Web Remote MCP Connector) —
+  // deliberately left unauthenticated: this only hands back an "endpoint" event pointing
+  // back at this same URL, no account data, and the browser EventSource API most SSE
+  // clients use can't attach a custom Authorization header to the initial handshake
+  // anyway — real authorization happens on the JSON-RPC POST channel below.
   if (acceptHeader.includes("text/event-stream")) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
@@ -24,6 +29,26 @@ export async function GET(request: NextRequest): Promise<Response> {
         "Access-Control-Allow-Origin": "*",
       },
     });
+  }
+
+  // The plain (non-SSE) GET is what a connector-setup UI's discovery probe most likely
+  // hits first — previously this always returned 200 with the full tool catalog, with
+  // no real 401 challenge anywhere, which is exactly why Claude's own "add custom
+  // connector" flow detected this server as needing no authentication at all. A regular
+  // HTTP GET can carry a Bearer/x-api-key header (unlike the SSE branch above), so this
+  // is challenged the same way POST tools/call etc. are (see mcpServer.ts).
+  const resolved = await resolveUser(request);
+  if (!resolved) {
+    return NextResponse.json(
+      { error: "authentication_required", error_description: "See WWW-Authenticate header." },
+      {
+        status: 401,
+        headers: {
+          "WWW-Authenticate": `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
+          "Access-Control-Allow-Origin": "*",
+        },
+      },
+    );
   }
 
   // Return server info, capabilities, authentication endpoints & tool catalog metadata
