@@ -125,9 +125,11 @@ const appCertArn = process.env.APP_CERT_ARN;
 // only switching to the real key ARN resolved it. KMS key ARNs are permanent for the
 // life of the key (rotation only rotates backing key material, not the ARN), so — like
 // appCertArn above — this is safe to pin once per environment rather than re-resolved
-// on every deploy.
-const ledgerKmsKeyArn = process.env.LEDGER_KMS_KEY_ARN;
-if (!ledgerKmsKeyArn) throw new Error("LEDGER_KMS_KEY_ARN is required (the real key/ ARN, not alias/ — run: aws kms describe-key --key-id alias/<plexo-ledger alias for this env> --query KeyMetadata.Arn).");
+// on every deploy. Read (and validated) inside the constructor below, NOT at module
+// scope like cronSecret/originVerifySecret — bin/app.ts imports this module
+// unconditionally regardless of STACK_KIND, so a module-scope throw here broke every
+// non-compute deploy (confirmed live: it took down a published-sites-stack deploy that
+// never even touches this variable).
 const tableEnv = {
   PLEXO_CORE_TABLE: nameFor("plexo-core"),
   PLEXO_LEDGER_TABLE: nameFor("plexo-ledger"),
@@ -140,6 +142,9 @@ const tableEnv = {
 export class ComputeStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
+
+    const ledgerKmsKeyArn = process.env.LEDGER_KMS_KEY_ARN;
+    if (!ledgerKmsKeyArn) throw new Error("LEDGER_KMS_KEY_ARN is required (the real key/ ARN, not alias/ — run: aws kms describe-key --key-id alias/<plexo-ledger alias for this env> --query KeyMetadata.Arn).");
 
     // Static assets + incremental cache — matches open-next.output.json's "s3" origin
     // exactly: assets copied to `_assets`, cache to `_cache`.
