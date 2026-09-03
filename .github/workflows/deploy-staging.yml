@@ -127,14 +127,11 @@ jobs:
 
       - name: Build the app (OpenNext)
         env:
-          NEXT_PUBLIC_APP_URL: https://d3i92fgfanqz2.cloudfront.net
-          NEXT_PUBLIC_PAGES_DOMAIN: plexo.aws.charisol.io
-          # Same Charisol app client as production (see deploy-production.yml's comment on
-          # why this is hardcoded, not SSM-fetched) — but Cognito only accepts a redirect_uri
-          # it already has on file for this client. Confirm
-          # https://d3i92fgfanqz2.cloudfront.net/auth/charisol/callback and .../auth/login
-          # are registered as redirect/logout URIs in the Developer Portal, or sign-in will
-          # fail on staging even though the build itself succeeds.
+          # staging-plexo.charisol.io's redirect/logout URIs are already registered for
+          # this Charisol app client in the Developer Portal — confirmed before this
+          # cutover, not assumed.
+          NEXT_PUBLIC_APP_URL: https://staging-plexo.charisol.io
+          NEXT_PUBLIC_PAGES_DOMAIN: staging-plexo.charisol.io
           NEXT_PUBLIC_CHARISOL_CLIENT_ID: 2rpia2i7sa1ns9pa1hncs2od3a
           NEXT_PUBLIC_CHARISOL_DOMAIN: auth.charisol.io
         run: npx open-next build
@@ -147,21 +144,36 @@ jobs:
         working-directory: ./cdk
         env:
           STACK_KIND: compute
+          # Registers staging-plexo.charisol.io on the distribution (so it's ready to
+          # accept traffic once DNS points there) without yet changing what the app
+          # itself thinks its own URL is (NEXT_PUBLIC_APP_URL, below, stays on the bare
+          # *.cloudfront.net domain until the real routing CNAME — not just the ACM
+          # validation one — is confirmed live, to avoid a window where the app's
+          # self-perceived origin doesn't match where it's actually reachable).
+          APP_DOMAIN: staging-plexo.charisol.io
+          APP_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/22886607-0c7c-456b-8449-4794898fcfa9
         run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively
 
       - name: Deploy the published-sites stack
         working-directory: ./cdk
         env:
           STACK_KIND: published-sites
-          WILDCARD_DOMAIN: plexo.aws.charisol.io
-          WILDCARD_ZONE_ID: ${{ vars.STAGING_WILDCARD_ZONE_ID }}
-          WILDCARD_ZONE_NAME: plexo.aws.charisol.io
+          # Replaces plexo.aws.charisol.io as staging's real published-sites wildcard —
+          # charisol.io's DNS lives on Cloudflare (manual CNAME, no WILDCARD_ZONE_ID/NAME
+          # needed here, unlike plexo.aws.charisol.io's own Route53-hosted zone).
+          WILDCARD_DOMAIN: staging-plexo.charisol.io
+          WILDCARD_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/6c17fa15-95ef-4efc-a95f-2d1dad8fcbc8
           APP_URL: https://d3i92fgfanqz2.cloudfront.net
         run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
 
+      # Checks the distribution's own *.cloudfront.net domain, NOT staging-plexo.charisol.io
+      # directly — this must keep working even in the window before that domain's own
+      # routing CNAME (as opposed to the ACM validation one, already long in place) is
+      # added, which this step has no way to know the status of.
       - name: Smoke test — dashboard responds
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://d3i92fgfanqz2.cloudfront.net/)
+          DOMAIN=$(aws cloudformation describe-stacks --stack-name "${STACK_ID}-compute-stack" --query "Stacks[0].Outputs[?OutputKey=='DistributionDomainName'].OutputValue" --output text)
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/")
           if [ "$STATUS" != "200" ]; then
             echo "::error::Dashboard returned HTTP $STATUS after deploy"
             exit 1
