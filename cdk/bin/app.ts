@@ -73,6 +73,10 @@ if (stackKind === "data") {
   // value, hand-picked once per environment, that must never change across redeploys.
   const primaryDistributionCertArn = process.env.PRIMARY_DISTRIBUTION_CERT_ARN;
   if (!primaryDistributionCertArn) throw new Error('STACK_KIND=published-sites requires PRIMARY_DISTRIBUTION_CERT_ARN (a fixed, never-changing cert ARN — see published-sites-stack.ts\'s own comment).');
+  // See published-sites-stack.ts's own comment on includeBareWildcardDomain — set to
+  // "false" when wildcardDomain is the SAME bare domain as compute-stack.ts's own
+  // APP_DOMAIN for this environment.
+  const includeBareWildcardDomain = process.env.INCLUDE_BARE_WILDCARD_DOMAIN !== "false";
 
   new PublishedSitesStack(app, `${stackID}-published-sites-stack`, {
     env,
@@ -80,6 +84,7 @@ if (stackKind === "data") {
     wildcardDomain,
     wildcardCertArn,
     primaryDistributionCertArn,
+    includeBareWildcardDomain,
     appUrl,
     hostedZone:
       zoneId && zoneName

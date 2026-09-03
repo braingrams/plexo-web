@@ -167,6 +167,11 @@ jobs:
           # what was already live on this exact distribution before this migration ever
           # touched WILDCARD_DOMAIN/WILDCARD_CERT_ARN above.
           PRIMARY_DISTRIBUTION_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/841223fd-8978-4046-bc57-d58cd402b62d
+          # staging-plexo.charisol.io's bare apex is the dashboard's OWN domain (see the
+          # compute-stack deploy step's APP_DOMAIN above) — the wildcard tenant below must
+          # NOT also claim it (confirmed by a real deploy failure: CloudFront enforces
+          # domain uniqueness across every distribution/tenant in the account).
+          INCLUDE_BARE_WILDCARD_DOMAIN: "false"
           APP_URL: https://d3i92fgfanqz2.cloudfront.net
         run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
 

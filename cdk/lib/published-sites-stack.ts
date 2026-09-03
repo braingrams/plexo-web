@@ -67,13 +67,23 @@ export interface PublishedSitesStackProps extends cdk.StackProps {
    * live (`aws cloudfront get-distribution-config --id <id> --query
    * DistributionConfig.ViewerCertificate.ACMCertificateArn`) and hardcode it here forever. */
   primaryDistributionCertArn: string;
+  /** Whether the wildcard tenant below also claims the bare `wildcardDomain` apex (not
+   * just `*.wildcardDomain`) — true by default, matching production's own convention
+   * (plexopages.com's bare apex serves a default tenant page same as any subdomain would).
+   * Set to false when the dashboard's own APP_DOMAIN (compute-stack.ts) is the SAME bare
+   * domain as this stack's wildcardDomain — confirmed by a real deploy failure ("One or
+   * more of the CNAMEs you provided are already associated with a different resource")
+   * when both tried to claim it: CloudFront enforces domain uniqueness across every
+   * distribution AND distribution tenant in the account, so only one resource can ever
+   * hold a given hostname. */
+  includeBareWildcardDomain?: boolean;
 }
 
 export class PublishedSitesStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: PublishedSitesStackProps) {
     super(scope, id, props);
 
-    const { computeStackName, wildcardDomain, hostedZone, wildcardCertArn, appUrl, primaryDistributionCertArn } = props;
+    const { computeStackName, wildcardDomain, hostedZone, wildcardCertArn, appUrl, primaryDistributionCertArn, includeBareWildcardDomain = true } = props;
 
     // Same secret compute-stack.ts uses for its own distribution, same reason (see that
     // file's own comment on originVerifySecret): CloudFront OAC can't reliably sign POST
@@ -274,7 +284,7 @@ export class PublishedSitesStack extends cdk.Stack {
       distributionId: primaryDistribution.attrId,
       connectionGroupId: connectionGroup.attrId,
       name: `${this.stackName}-wildcard`,
-      domains: [`*.${wildcardDomain}`, wildcardDomain],
+      domains: includeBareWildcardDomain ? [`*.${wildcardDomain}`, wildcardDomain] : [`*.${wildcardDomain}`],
       enabled: true,
       customizations: { certificate: { arn: wildcardCert.certificateArn } },
     });
