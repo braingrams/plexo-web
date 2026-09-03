@@ -73,6 +73,14 @@ jobs:
         env:
           NEXT_PUBLIC_APP_URL: https://d3i92fgfanqz2.cloudfront.net
           NEXT_PUBLIC_PAGES_DOMAIN: plexo.aws.charisol.io
+          # Same Charisol app client as production (see deploy-production.yml's comment on
+          # why this is hardcoded, not SSM-fetched) — but Cognito only accepts a redirect_uri
+          # it already has on file for this client. Confirm
+          # https://d3i92fgfanqz2.cloudfront.net/auth/charisol/callback and .../auth/login
+          # are registered as redirect/logout URIs in the Developer Portal, or sign-in will
+          # fail on staging even though the build itself succeeds.
+          NEXT_PUBLIC_CHARISOL_CLIENT_ID: 2rpia2i7sa1ns9pa1hncs2od3a
+          NEXT_PUBLIC_CHARISOL_DOMAIN: auth.charisol.io
         run: npx open-next build
 
       - name: Install CDK project

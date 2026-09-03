@@ -77,6 +77,14 @@ jobs:
         env:
           NEXT_PUBLIC_APP_URL: https://plexo.charisol.io
           NEXT_PUBLIC_PAGES_DOMAIN: plexopages.com
+          # Charisol/Cognito-issued client ID (Developer Portal) — a public PKCE client ID,
+          # not a secret (it's already inlined into the browser bundle either way), so it's
+          # hardcoded here rather than round-tripped through SSM like the real secrets above.
+          # Must be set here explicitly: NEXT_PUBLIC_ vars are baked into the client bundle
+          # at `next build` time, not read at Lambda runtime, so lib/ssmEnv.ts's backfill
+          # mechanism (which CHARISOL_USER_POOL_ID below does use) can't reach this one.
+          NEXT_PUBLIC_CHARISOL_CLIENT_ID: 2rpia2i7sa1ns9pa1hncs2od3a
+          NEXT_PUBLIC_CHARISOL_DOMAIN: auth.charisol.io
         run: npx open-next build
 
       - name: Install CDK project
