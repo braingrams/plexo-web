@@ -116,6 +116,18 @@ if (!cronSecret) throw new Error("CRON_SECRET is required (see CRON_SECRET in SS
 // wildcardCertArn comment for why this exists).
 const appDomain = process.env.APP_DOMAIN;
 const appCertArn = process.env.APP_CERT_ARN;
+// plexo-ledger's customer-managed KMS key's real key ARN (arn:...:key/<uuid>), NOT its
+// alias ARN (arn:...:alias/plexo-ledger) — an IAM policy scoped to the alias ARN silently
+// fails to authorize the kms:Decrypt/kms:GenerateDataKey calls DynamoDB actually makes
+// under the hood, because those calls reference the resolved key ARN, not the alias the
+// table was configured with. Confirmed live: granting the alias ARN (an earlier version
+// of this same fix) still produced the identical AccessDeniedException in production —
+// only switching to the real key ARN resolved it. KMS key ARNs are permanent for the
+// life of the key (rotation only rotates backing key material, not the ARN), so — like
+// appCertArn above — this is safe to pin once per environment rather than re-resolved
+// on every deploy.
+const ledgerKmsKeyArn = process.env.LEDGER_KMS_KEY_ARN;
+if (!ledgerKmsKeyArn) throw new Error("LEDGER_KMS_KEY_ARN is required (the real key/ ARN, not alias/ — run: aws kms describe-key --key-id alias/<plexo-ledger alias for this env> --query KeyMetadata.Arn).");
 const tableEnv = {
   PLEXO_CORE_TABLE: nameFor("plexo-core"),
   PLEXO_LEDGER_TABLE: nameFor("plexo-ledger"),
@@ -234,12 +246,12 @@ export class ComputeStack extends cdk.Stack {
     // above — that grant alone is only sufficient for AWS-owned/AWS-managed encryption,
     // which is what the other five tables use. data-stack.ts and this stack are separate
     // `cdk deploy` invocations (no automatic cross-stack IAM relationship), so this has
-    // to be granted explicitly here, by the same alias/nameFor() convention tableEnv
-    // above already uses for the table names themselves.
+    // to be granted explicitly here — see ledgerKmsKeyArn's own comment above for why
+    // this must be the real key ARN, not an alias/nameFor() one.
     serverFn.addToRolePolicy(
       new iam.PolicyStatement({
         actions: ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"],
-        resources: [`arn:aws:kms:${this.region}:${this.account}:alias/${nameFor("plexo-ledger")}`],
+        resources: [ledgerKmsKeyArn!],
       }),
     );
     // lib/storage.ts (Vercel Blob replacement) — the bucket itself lives in the data

@@ -190,6 +190,10 @@ jobs:
           # self-perceived origin doesn't match where it's actually reachable).
           APP_DOMAIN: staging-plexo.charisol.io
           APP_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/22886607-0c7c-456b-8449-4794898fcfa9
+          # The real key/ ARN of plexo-ledger's customer-managed KMS key, NOT its alias
+          # ARN — see compute-stack.ts's own ledgerKmsKeyArn comment for why an alias ARN
+          # silently fails to authorize the kms:Decrypt calls DynamoDB actually makes.
+          LEDGER_KMS_KEY_ARN: arn:aws:kms:us-east-1:919927637684:key/91672c29-e32c-4524-ad2d-b9b2b2b1ef92
         run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively
 
       - name: Deploy the published-sites stack
