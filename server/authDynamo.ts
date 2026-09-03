@@ -1,11 +1,39 @@
+import { randomUUID } from "node:crypto";
 import NextAuth, { CredentialsSignin } from "next-auth";
-import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { DynamoDBAdapter } from "@auth/dynamodb-adapter";
 import { verifyPassword } from "@better-auth/utils/password";
+import { CognitoJwtVerifier } from "aws-jwt-verify";
 
 import { docClient, TABLES } from "@/lib/db/client";
 import { User } from "@/lib/db/coreEntities";
+
+// Verifies Charisol/Cognito-issued ID tokens server-side before trusting any claim in
+// them — checks signature against the shared products User Pool's JWKS *and* that the
+// token was issued to Plexo's own client_id specifically, since the pool is shared across
+// every Charisol product (see docs/verifying-tokens.md in the Charisol Auth repo).
+//
+// Built lazily (on first actual authorize() call below), not at module scope, deliberately:
+// Next.js's build process imports route handler modules like app/api/auth/[...all]/route.ts
+// to read their static exports, which executes this file's top-level code during `next
+// build` itself — confirmed the hard way by this same migration's AUTH_SECRET, where
+// NextAuth()'s own eager validation threw at build time until it was fetched into the CI
+// build env specially (see deploy-staging.yml's comment on that step). CHARISOL_USER_POOL_ID
+// is never set in the build environment (only at Lambda runtime, via lib/ssmEnv.ts's
+// register()-time backfill) — constructing this eagerly would permanently bake in an empty
+// userPoolId. Deferring construction to first real use guarantees it only ever runs inside
+// a request, after that backfill has already populated process.env.
+let charisolVerifier: ReturnType<typeof CognitoJwtVerifier.create> | undefined;
+function getCharisolVerifier() {
+  if (!charisolVerifier) {
+    charisolVerifier = CognitoJwtVerifier.create({
+      userPoolId: process.env.CHARISOL_USER_POOL_ID ?? "",
+      tokenUse: "id",
+      clientId: process.env.NEXT_PUBLIC_CHARISOL_CLIENT_ID ?? "",
+    });
+  }
+  return charisolVerifier;
+}
 
 // The DynamoDB-backed replacement for server/auth.ts (better-auth). Wired in as the live
 // login handler (app/api/auth/[...all]/route.ts, middleware.ts's session-cookie check) as
@@ -15,10 +43,11 @@ import { User } from "@/lib/db/coreEntities";
 // grew a Credentials provider (email/password, mirroring plexo-admin's own scrypt-based
 // verifyPassword approach) and lib/auth-client.ts's 9 callers were rewired onto
 // next-auth/react + the new app/api/auth/{register,verify-email,forgot-password,
-// reset-password}/route.ts + app/api/org/route.ts endpoints. Database session strategy +
-// Credentials is only valid in Auth.js when at least one non-Credentials provider is also
-// configured (verified directly against @auth/core's own assert.js — Google satisfies
-// this here); a Credentials-only provider list would need JWT sessions instead.
+// reset-password}/route.ts + app/api/org/route.ts endpoints. Both providers below are
+// Credentials providers (the Google one was replaced by the "charisol" bridge further
+// down) — fine under `session: {strategy: "jwt"}` below; a database session strategy would
+// require at least one non-Credentials provider instead (verified against @auth/core's
+// own assert.js), which is why that strategy isn't used here.
 //
 // Shares plexo-core with our own Organization/Member/User(-profile) entities
 // (lib/db/coreEntities.ts) via the adapter's configurable table/key names — same
@@ -55,9 +84,47 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // follow-up hardening step, not yet done.
   trustHost: true,
   providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    // "Continue with Google", routed through Charisol's centralized Cognito-fronted
+    // Google IdP instead of a Plexo-owned Google Cloud OAuth client — app/auth/
+    // GoogleAuthButton.tsx drives @charisol/auth-sdk-web's browser-side PKCE flow
+    // directly, and app/auth/charisol/callback/page.tsx hands the resulting ID token to
+    // this provider once the redirect completes. No Google client ID/secret lives in
+    // Plexo anymore; charisolVerifier above is what actually re-establishes trust in the
+    // token before any claim in it is used.
+    Credentials({
+      id: "charisol",
+      name: "Charisol",
+      credentials: { idToken: {} },
+      async authorize(credentials) {
+        const idToken = typeof credentials?.idToken === "string" ? credentials.idToken : "";
+        if (!idToken) return null;
+
+        let claims;
+        try {
+          claims = await getCharisolVerifier().verify(idToken);
+        } catch {
+          return null; // bad signature, wrong client_id/aud, expired, or malformed
+        }
+
+        const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
+        if (!email) return null;
+
+        const { data: matches } = await User.query.byEmail({ email }).go();
+        const existing = matches[0];
+        if (existing?.suspendedAt) return null;
+        if (existing) {
+          return { id: existing.id, email: existing.email, name: existing.name, image: existing.image ?? null };
+        }
+
+        const id = randomUUID();
+        const name = typeof claims.name === "string" && claims.name ? claims.name : email.split("@")[0];
+        const image = typeof claims.picture === "string" ? claims.picture : undefined;
+        // Google-verified email via Cognito — same trust level the old Google provider
+        // implicitly granted, so this account doesn't need Plexo's own email-verification
+        // step (isConfirmed gate only applies to the Credentials/password provider above).
+        await User.create({ id, email, name, image, isConfirmed: true }).go();
+        return { id, email, name, image: image ?? null };
+      },
     }),
     Credentials({
       credentials: { email: {}, password: {} },
@@ -89,8 +156,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // succeed (password verified, cookie set) but session() always came back null, bouncing
   // straight back to the login page. This is documented upstream Auth.js behavior, not
   // something a second provider works around — JWT strategy applies uniformly to every
-  // provider including Google; the adapter is still used for User/Account/
-  // VerificationToken persistence, just not Session rows.
+  // provider; the adapter is still used for User/Account/VerificationToken persistence,
+  // just not Session rows.
   session: { strategy: "jwt" },
   callbacks: {
     // Every call site across the app (server/orgDynamo.ts, /api/org/*, etc.) reads

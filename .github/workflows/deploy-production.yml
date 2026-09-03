@@ -10,10 +10,17 @@ name: Deploy | Production
 # `environment: production` is kept for its own sake (scopes any environment-specific
 # secrets/variables, shows up in the repo's Deployments tab) even without that rule.
 
+# workflow_dispatch covers redeploys with no code change — e.g. after rotating a secret
+# in SSM, which needs a fresh deploy to actually take effect (see ORIGIN_VERIFY_SECRET/
+# CRON_SECRET's own comments in cdk/lib/compute-stack.ts: they're baked in as literal
+# Lambda env vars at deploy time, not loaded at runtime). Deliberately NOT gated the same
+# way push-to-main is (branch protection) — this dispatches whatever's already on `main`,
+# it can't introduce unreviewed code, only redeploy code that already passed that gate.
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
@@ -49,16 +56,91 @@ jobs:
       - name: Install app dependencies
         run: npm ci
 
+      # GitHub's "production" Environment secrets are the source of truth for everything
+      # lib/ssmEnv.ts loads at runtime — change a value here in GitHub, push (via a
+      # reviewed PR merge), and this step lands it in SSM before the deploy below ever
+      # runs, so the next cold start picks it up. Previously SSM itself was the only
+      # source of truth, updated by hand via the AWS CLI or the separate, manually-
+      # triggered sync-secrets-to-ssm.yml — this folds that same sync into every deploy
+      # instead of requiring a second step.
+      - name: Sync secrets from GitHub to SSM
+        env:
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          GOOGLE_SAFE_BROWSING_API_KEY: ${{ secrets.GOOGLE_SAFE_BROWSING_API_KEY }}
+          CHARISOL_USER_POOL_ID: ${{ secrets.CHARISOL_USER_POOL_ID }}
+          AI_KEY_ENCRYPTION_SECRET: ${{ secrets.AI_KEY_ENCRYPTION_SECRET }}
+          PAYSTACK_KEY_ENCRYPTION_SECRET: ${{ secrets.PAYSTACK_KEY_ENCRYPTION_SECRET }}
+          COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET: ${{ secrets.COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET }}
+          MAILDRIP_KEY_ENCRYPTION_SECRET: ${{ secrets.MAILDRIP_KEY_ENCRYPTION_SECRET }}
+          MAILDRIP_API_URL: ${{ secrets.MAILDRIP_API_URL }}
+          MAILDRIP_API_KEY: ${{ secrets.MAILDRIP_API_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRICE_PRO: ${{ secrets.STRIPE_PRICE_PRO }}
+          STRIPE_PRICE_ULTRA: ${{ secrets.STRIPE_PRICE_ULTRA }}
+          STRIPE_PRICE_TOPUP_SMALL: ${{ secrets.STRIPE_PRICE_TOPUP_SMALL }}
+          STRIPE_PRICE_TOPUP_MEDIUM: ${{ secrets.STRIPE_PRICE_TOPUP_MEDIUM }}
+          STRIPE_PRICE_TOPUP_LARGE: ${{ secrets.STRIPE_PRICE_TOPUP_LARGE }}
+          SYSTEM_AI_PROVIDER: ${{ secrets.SYSTEM_AI_PROVIDER }}
+          SYSTEM_AI_KEY_ANTHROPIC_CLAUDE: ${{ secrets.SYSTEM_AI_KEY_ANTHROPIC_CLAUDE }}
+          SYSTEM_AI_KEY_OPENAI: ${{ secrets.SYSTEM_AI_KEY_OPENAI }}
+          SYSTEM_AI_KEY_GOOGLE_GEMINI: ${{ secrets.SYSTEM_AI_KEY_GOOGLE_GEMINI }}
+          PUSHER_APP_ID: ${{ secrets.PUSHER_APP_ID }}
+          PUSHER_KEY: ${{ secrets.PUSHER_KEY }}
+          PUSHER_SECRET: ${{ secrets.PUSHER_SECRET }}
+          PUSHER_CLUSTER: ${{ secrets.PUSHER_CLUSTER }}
+          BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
+          PEXELS_KEY: ${{ secrets.PEXELS_KEY }}
+          PIXABAY_KEY: ${{ secrets.PIXABAY_KEY }}
+          UNSPLASH_KEY: ${{ secrets.UNSPLASH_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PLEXO_ORIGIN_VERIFY_SECRET: ${{ secrets.PLEXO_ORIGIN_VERIFY_SECRET }}
+        run: |
+          for NAME in AUTH_SECRET GOOGLE_SAFE_BROWSING_API_KEY CHARISOL_USER_POOL_ID \
+            AI_KEY_ENCRYPTION_SECRET PAYSTACK_KEY_ENCRYPTION_SECRET COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET \
+            MAILDRIP_KEY_ENCRYPTION_SECRET MAILDRIP_API_URL MAILDRIP_API_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
+            STRIPE_PRICE_PRO STRIPE_PRICE_ULTRA STRIPE_PRICE_TOPUP_SMALL STRIPE_PRICE_TOPUP_MEDIUM STRIPE_PRICE_TOPUP_LARGE \
+            SYSTEM_AI_PROVIDER SYSTEM_AI_KEY_ANTHROPIC_CLAUDE SYSTEM_AI_KEY_OPENAI SYSTEM_AI_KEY_GOOGLE_GEMINI \
+            PUSHER_APP_ID PUSHER_KEY PUSHER_SECRET PUSHER_CLUSTER BROWSERBASE_API_KEY PEXELS_KEY PIXABAY_KEY UNSPLASH_KEY \
+            CRON_SECRET PLEXO_ORIGIN_VERIFY_SECRET; do
+            VALUE="${!NAME}"
+            if [ -z "$VALUE" ]; then
+              echo "::warning::$NAME is not set in the production GitHub Environment — skipping, leaving SSM value unchanged"
+              continue
+            fi
+            aws ssm put-parameter --name "/plexo/production/${NAME}" --value "$VALUE" --type SecureString --key-id "alias/aws/ssm" --overwrite --region us-east-1 > /dev/null
+          done
+          echo "✓ Synced secrets to /plexo/production/*"
+
+      # `::add-mask::` BEFORE writing to $GITHUB_ENV — without it these values print in
+      # plaintext in this step's own log (confirmed by a real run: both secrets appeared
+      # unmasked in the "##[endgroup]" env dump every later step logs). $GITHUB_ENV only
+      # makes a value available to subsequent steps; it does not register it as a secret
+      # to redact from output.
       - name: Fetch build-time secrets from SSM
         run: |
-          echo "AUTH_SECRET=$(aws ssm get-parameter --name /plexo/production/AUTH_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
-          echo "ORIGIN_VERIFY_SECRET=$(aws ssm get-parameter --name /plexo/production/PLEXO_ORIGIN_VERIFY_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
-          echo "CRON_SECRET=$(aws ssm get-parameter --name /plexo/production/CRON_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+          AUTH_SECRET="$(aws ssm get-parameter --name /plexo/production/AUTH_SECRET --with-decryption --query Parameter.Value --output text)"
+          ORIGIN_VERIFY_SECRET="$(aws ssm get-parameter --name /plexo/production/PLEXO_ORIGIN_VERIFY_SECRET --with-decryption --query Parameter.Value --output text)"
+          CRON_SECRET="$(aws ssm get-parameter --name /plexo/production/CRON_SECRET --with-decryption --query Parameter.Value --output text)"
+          echo "::add-mask::$AUTH_SECRET"
+          echo "::add-mask::$ORIGIN_VERIFY_SECRET"
+          echo "::add-mask::$CRON_SECRET"
+          echo "AUTH_SECRET=$AUTH_SECRET" >> "$GITHUB_ENV"
+          echo "ORIGIN_VERIFY_SECRET=$ORIGIN_VERIFY_SECRET" >> "$GITHUB_ENV"
+          echo "CRON_SECRET=$CRON_SECRET" >> "$GITHUB_ENV"
 
       - name: Build the app (OpenNext)
         env:
           NEXT_PUBLIC_APP_URL: https://plexo.charisol.io
           NEXT_PUBLIC_PAGES_DOMAIN: plexopages.com
+          # Charisol/Cognito-issued client ID (Developer Portal) — a public PKCE client ID,
+          # not a secret (it's already inlined into the browser bundle either way), so it's
+          # hardcoded here rather than round-tripped through SSM like the real secrets above.
+          # Must be set here explicitly: NEXT_PUBLIC_ vars are baked into the client bundle
+          # at `next build` time, not read at Lambda runtime, so lib/ssmEnv.ts's backfill
+          # mechanism (which CHARISOL_USER_POOL_ID below does use) can't reach this one.
+          NEXT_PUBLIC_CHARISOL_CLIENT_ID: 2rpia2i7sa1ns9pa1hncs2od3a
+          NEXT_PUBLIC_CHARISOL_DOMAIN: auth.charisol.io
         run: npx open-next build
 
       - name: Install CDK project
@@ -77,6 +159,11 @@ jobs:
         env:
           STACK_KIND: published-sites
           WILDCARD_DOMAIN: plexopages.com
+          # Fixed forever (see published-sites-stack.ts's own comment) — captured from
+          # what's already live on this distribution. Must never change even if
+          # WILDCARD_DOMAIN itself ever does — see the real deploy failure that
+          # necessitated this on staging.
+          PRIMARY_DISTRIBUTION_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/0c7258c0-532d-45b2-90ae-16458501f83a
           APP_URL: https://plexo.charisol.io
         run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
 

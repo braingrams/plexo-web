@@ -43,6 +43,15 @@ export interface PublishedSitesStackProps extends cdk.StackProps {
    * CNAME added at that provider before the deploy can finish; see the stack's own
    * CfnOutput for the exact validation record to add. */
   hostedZone?: route53.IHostedZone;
+  /** An already-ISSUED ACM certificate ARN covering `*.<wildcardDomain>` + `wildcardDomain`
+   * — set this instead of leaving `hostedZone` unset when you've requested and manually
+   * DNS-validated the cert yourself (e.g. via `aws acm request-certificate` + a manual
+   * CNAME at a non-Route53 DNS provider like Cloudflare) BEFORE running `cdk deploy`.
+   * Without this, the `acm.Certificate` construct below always creates its OWN brand-new
+   * certificate request on every first deploy — even if an identical, already-validated
+   * cert for the same domain exists — and `cdk deploy` blocks waiting for ITS validation
+   * too, needing a second, different CNAME. Importing an existing ARN skips that entirely. */
+  wildcardCertArn?: string;
   /** This environment's own dashboard URL (e.g. "https://plexo.charisol.io" for
    * production, or the bare "https://<id>.cloudfront.net" compute-stack.ts's own
    * DistributionDomainName output prints for staging, which has no APP_DOMAIN) —
@@ -50,13 +59,31 @@ export interface PublishedSitesStackProps extends cdk.StackProps {
    * certificate-attachment EventBridge schedule below calls; nothing about tenant
    * routing depends on it. */
   appUrl: string;
+  /** The PrimaryDistribution's own ViewerCertificate ARN — see that resource's own
+   * comment for why this must be a fixed, hand-picked value that NEVER changes across
+   * redeploys, completely decoupled from wildcardDomain/wildcardCertArn above. On first
+   * deploy ever for a given environment, any valid us-east-1 ACM cert ARN works (it's
+   * never actually served to real viewers); once deployed, capture whatever's actually
+   * live (`aws cloudfront get-distribution-config --id <id> --query
+   * DistributionConfig.ViewerCertificate.ACMCertificateArn`) and hardcode it here forever. */
+  primaryDistributionCertArn: string;
+  /** Whether the wildcard tenant below also claims the bare `wildcardDomain` apex (not
+   * just `*.wildcardDomain`) — true by default, matching production's own convention
+   * (plexopages.com's bare apex serves a default tenant page same as any subdomain would).
+   * Set to false when the dashboard's own APP_DOMAIN (compute-stack.ts) is the SAME bare
+   * domain as this stack's wildcardDomain — confirmed by a real deploy failure ("One or
+   * more of the CNAMEs you provided are already associated with a different resource")
+   * when both tried to claim it: CloudFront enforces domain uniqueness across every
+   * distribution AND distribution tenant in the account, so only one resource can ever
+   * hold a given hostname. */
+  includeBareWildcardDomain?: boolean;
 }
 
 export class PublishedSitesStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: PublishedSitesStackProps) {
     super(scope, id, props);
 
-    const { computeStackName, wildcardDomain, hostedZone, appUrl } = props;
+    const { computeStackName, wildcardDomain, hostedZone, wildcardCertArn, appUrl, primaryDistributionCertArn, includeBareWildcardDomain = true } = props;
 
     // Same secret compute-stack.ts uses for its own distribution, same reason (see that
     // file's own comment on originVerifySecret): CloudFront OAC can't reliably sign POST
@@ -129,31 +156,41 @@ export class PublishedSitesStack extends cdk.Stack {
     // real domain (the wildcard AND every customer's own) is attached via a
     // CfnDistributionTenant below/at runtime, never directly on this resource. ---
 
-    // Wildcard cert for this environment's own plexopages-style domain — created before
-    // the primary distribution because CloudFront requires an explicit ViewerCertificate
-    // on the primary distribution's own DistributionConfig even in tenant-only mode
-    // (confirmed by a real deploy failure without it: "The specified distribution is
-    // configured for SNI and the minimum SSL protocol version is specified as SSLv3" —
-    // CloudFront's implicit default cert isn't SNI-compatible). This cert is never what
-    // actually serves real tenant traffic (every real request matches a
-    // CfnDistributionTenant, each with its own certificate — the wildcard tenant's own
-    // below, or a customer's ManagedCertificateRequest at runtime); it only satisfies this
-    // resource's own validation. DNS-validated via Route53 when `hostedZone` is supplied
-    // (zero manual step); otherwise the deploy waits for a manual CNAME at whatever DNS
-    // provider actually hosts `wildcardDomain` — see this stack's own
-    // `WildcardCertArn`/`describe-certificate` for the exact record to add.
-    const wildcardCert = new acm.Certificate(this, "WildcardCert", {
-      domainName: `*.${wildcardDomain}`,
-      subjectAlternativeNames: [wildcardDomain],
-      validation: hostedZone ? acm.CertificateValidation.fromDns(hostedZone) : acm.CertificateValidation.fromDns(),
-    });
+    // Wildcard cert for this environment's own plexopages-style domain — the REAL cert
+    // customer/tenant traffic actually gets, attached below via wildcardTenant's own
+    // customizations.certificate.arn. DNS-validated via Route53 when `hostedZone` is
+    // supplied (zero manual step); otherwise the deploy waits for a manual CNAME at
+    // whatever DNS provider actually hosts `wildcardDomain` — see this stack's own
+    // `WildcardCertArn`/`describe-certificate` for the exact record to add. Imported
+    // instead of created fresh when `wildcardCertArn` is supplied (see that prop's own
+    // comment) — an already-issued cert someone requested and DNS-validated by hand.
+    const wildcardCert = wildcardCertArn
+      ? acm.Certificate.fromCertificateArn(this, "WildcardCert", wildcardCertArn)
+      : new acm.Certificate(this, "WildcardCert", {
+          domainName: `*.${wildcardDomain}`,
+          subjectAlternativeNames: [wildcardDomain],
+          validation: hostedZone ? acm.CertificateValidation.fromDns(hostedZone) : acm.CertificateValidation.fromDns(),
+        });
 
+    // primaryDistribution's own ViewerCertificate — CloudFront requires one explicitly
+    // even in tenant-only mode (confirmed by a real deploy failure without it: "The
+    // specified distribution is configured for SNI and the minimum SSL protocol version
+    // is specified as SSLv3" — CloudFront's implicit default cert isn't SNI-compatible),
+    // but this cert is never what actually serves real tenant traffic (every real request
+    // matches a CfnDistributionTenant, each with its own certificate) — it only satisfies
+    // this resource's own validation. Uses the fixed primaryDistributionCertArn prop, NOT
+    // wildcardCert above (which DOES change — a customer domain gets reconnected, or as
+    // happened here, this environment's own wildcardDomain gets migrated) — a real deploy
+    // failure confirmed CloudFront rejects an in-place ViewerCertificate swap on an
+    // existing distribution outright ("Invalid request provided: The updated certificate
+    // is not compatible with the current certificate"), so this property must never
+    // change again once first deployed, regardless of what real tenant traffic uses.
     const primaryDistribution = new cloudfront.CfnDistribution(this, "PrimaryDistribution", {
       distributionConfig: {
         enabled: true,
         connectionMode: "tenant-only",
         tenantConfig: { parameterDefinitions: [] },
-        viewerCertificate: { acmCertificateArn: wildcardCert.certificateArn, sslSupportMethod: "sni-only" },
+        viewerCertificate: { acmCertificateArn: primaryDistributionCertArn, sslSupportMethod: "sni-only" },
         origins: [
           {
             id: "ServerFn",
@@ -247,7 +284,7 @@ export class PublishedSitesStack extends cdk.Stack {
       distributionId: primaryDistribution.attrId,
       connectionGroupId: connectionGroup.attrId,
       name: `${this.stackName}-wildcard`,
-      domains: [`*.${wildcardDomain}`, wildcardDomain],
+      domains: includeBareWildcardDomain ? [`*.${wildcardDomain}`, wildcardDomain] : [`*.${wildcardDomain}`],
       enabled: true,
       customizations: { certificate: { arn: wildcardCert.certificateArn } },
     });

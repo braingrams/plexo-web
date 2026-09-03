@@ -65,11 +65,26 @@ if (stackKind === "data") {
   // EventBridge schedule's call target (see published-sites-stack.ts's own comment).
   const appUrl = process.env.APP_URL;
   if (!appUrl) throw new Error('STACK_KIND=published-sites requires APP_URL (e.g. "https://plexo.charisol.io").');
+  // See published-sites-stack.ts's own comment on wildcardCertArn — set this to reuse an
+  // already-issued cert (requested + DNS-validated by hand) instead of `cdk deploy`
+  // creating and blocking on a brand-new one for the same domain.
+  const wildcardCertArn = process.env.WILDCARD_CERT_ARN;
+  // See published-sites-stack.ts's own comment on primaryDistributionCertArn — a fixed
+  // value, hand-picked once per environment, that must never change across redeploys.
+  const primaryDistributionCertArn = process.env.PRIMARY_DISTRIBUTION_CERT_ARN;
+  if (!primaryDistributionCertArn) throw new Error('STACK_KIND=published-sites requires PRIMARY_DISTRIBUTION_CERT_ARN (a fixed, never-changing cert ARN — see published-sites-stack.ts\'s own comment).');
+  // See published-sites-stack.ts's own comment on includeBareWildcardDomain — set to
+  // "false" when wildcardDomain is the SAME bare domain as compute-stack.ts's own
+  // APP_DOMAIN for this environment.
+  const includeBareWildcardDomain = process.env.INCLUDE_BARE_WILDCARD_DOMAIN !== "false";
 
   new PublishedSitesStack(app, `${stackID}-published-sites-stack`, {
     env,
     computeStackName: `${stackID}-compute-stack`,
     wildcardDomain,
+    wildcardCertArn,
+    primaryDistributionCertArn,
+    includeBareWildcardDomain,
     appUrl,
     hostedZone:
       zoneId && zoneName

@@ -1,6 +1,7 @@
 "use client";
 
 import { signIn as nextAuthSignIn, signOut as nextAuthSignOut } from "next-auth/react";
+import { CharisolAuth } from "@/lib/charisolAuth";
 
 // Auth.js-backed replacement for better-auth's client SDK (createAuthClient). Preserves
 // the exact call shape every existing caller already used (app/auth/{login,register,
@@ -54,6 +55,18 @@ export const authClient = {
       // an OAuth handoff.
       await nextAuthSignIn(provider, { callbackUrl: callbackURL });
     },
+    // Bridges an already-verified Charisol/Cognito ID token (app/auth/charisol/callback)
+    // into a Plexo session — server/authDynamo.ts's "charisol" Credentials provider
+    // re-verifies it (aws-jwt-verify) before trusting any claim, this call is not itself
+    // a trust boundary. `redirect: false` since the callback page drives its own
+    // navigation once it knows whether this succeeded.
+    async charisol({ idToken }: { idToken: string }): Promise<AuthResult> {
+      const result = await nextAuthSignIn("charisol", { idToken, redirect: false });
+      if (result?.error) {
+        return { error: { status: 401, message: "Could not complete Google sign-in." } };
+      }
+      return { data: {} };
+    },
   },
   signUp: {
     email(input: { name: string; email: string; password: string; callbackURL?: string; pendingPlan?: string }): Promise<AuthResult<{ id: string; email: string }>> {
@@ -61,7 +74,15 @@ export const authClient = {
     },
   },
   async signOut(): Promise<void> {
-    await nextAuthSignOut();
+    // redirect:false — we drive the navigation ourselves below instead of letting
+    // next-auth/react send the browser straight back to the current page.
+    await nextAuthSignOut({ redirect: false });
+    // Single logout: also end the shared auth.charisol.io session, not just Plexo's own
+    // cookie. This is a hard redirect (see CharisolAuthClient.signOut()) to Cognito's
+    // /logout, which clears its hosted-UI session cookie and then lands the browser on
+    // lib/charisolAuth.ts's logoutRedirectUri (/auth/login) — without it, Cognito's session
+    // would outlive Plexo's and the user would land back on Maildrip/etc. still signed in.
+    await CharisolAuth.signOut();
   },
   forgetPassword(input: { email: string; redirectTo?: string }): Promise<AuthResult<{ ok: boolean }>> {
     return postJson("/api/auth/forgot-password", input);

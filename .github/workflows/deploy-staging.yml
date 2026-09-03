@@ -4,12 +4,16 @@ name: Deploy | Staging
 # (dashboard + tenant Lambdas) and the published-sites stack (the CloudFront SaaS Manager
 # distribution + the certificate-attachment EventBridge schedule) to the real, persistent
 # staging environment. No manual gate: staging exists specifically so this is safe to do
-# on every push.
+# on every push. workflow_dispatch covers redeploys with no code change — e.g. after
+# rotating a secret in SSM, which needs a fresh deploy to actually take effect (see
+# ORIGIN_VERIFY_SECRET/CRON_SECRET's own comments in cdk/lib/compute-stack.ts: they're
+# baked in as literal Lambda env vars at deploy time, not loaded at runtime).
 
 on:
   push:
     branches:
       - staging
+  workflow_dispatch:
 
 permissions:
   id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
@@ -19,6 +23,7 @@ jobs:
   deploy:
     if: github.repository == 'Challaris/plexo-web'
     runs-on: ubuntu-latest
+    environment: staging
     env:
       STACK_ID: staging-plexo
       PLEXO_ENV: staging
@@ -44,20 +49,91 @@ jobs:
       - name: Install app dependencies
         run: npm ci
 
+      # GitHub's "staging" Environment secrets are the source of truth for everything
+      # lib/ssmEnv.ts loads at runtime — change a value here in GitHub, push, and this
+      # step lands it in SSM before the deploy below ever runs, so the next cold start
+      # picks it up. Previously SSM itself was the only source of truth, updated by hand
+      # via the AWS CLI or the separate, manually-triggered sync-secrets-to-ssm.yml — this
+      # folds that same sync into every deploy instead of requiring a second step.
+      - name: Sync secrets from GitHub to SSM
+        env:
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          GOOGLE_SAFE_BROWSING_API_KEY: ${{ secrets.GOOGLE_SAFE_BROWSING_API_KEY }}
+          CHARISOL_USER_POOL_ID: ${{ secrets.CHARISOL_USER_POOL_ID }}
+          AI_KEY_ENCRYPTION_SECRET: ${{ secrets.AI_KEY_ENCRYPTION_SECRET }}
+          PAYSTACK_KEY_ENCRYPTION_SECRET: ${{ secrets.PAYSTACK_KEY_ENCRYPTION_SECRET }}
+          COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET: ${{ secrets.COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET }}
+          MAILDRIP_KEY_ENCRYPTION_SECRET: ${{ secrets.MAILDRIP_KEY_ENCRYPTION_SECRET }}
+          MAILDRIP_API_URL: ${{ secrets.MAILDRIP_API_URL }}
+          MAILDRIP_API_KEY: ${{ secrets.MAILDRIP_API_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRICE_PRO: ${{ secrets.STRIPE_PRICE_PRO }}
+          STRIPE_PRICE_ULTRA: ${{ secrets.STRIPE_PRICE_ULTRA }}
+          STRIPE_PRICE_TOPUP_SMALL: ${{ secrets.STRIPE_PRICE_TOPUP_SMALL }}
+          STRIPE_PRICE_TOPUP_MEDIUM: ${{ secrets.STRIPE_PRICE_TOPUP_MEDIUM }}
+          STRIPE_PRICE_TOPUP_LARGE: ${{ secrets.STRIPE_PRICE_TOPUP_LARGE }}
+          SYSTEM_AI_PROVIDER: ${{ secrets.SYSTEM_AI_PROVIDER }}
+          SYSTEM_AI_KEY_ANTHROPIC_CLAUDE: ${{ secrets.SYSTEM_AI_KEY_ANTHROPIC_CLAUDE }}
+          SYSTEM_AI_KEY_OPENAI: ${{ secrets.SYSTEM_AI_KEY_OPENAI }}
+          SYSTEM_AI_KEY_GOOGLE_GEMINI: ${{ secrets.SYSTEM_AI_KEY_GOOGLE_GEMINI }}
+          PUSHER_APP_ID: ${{ secrets.PUSHER_APP_ID }}
+          PUSHER_KEY: ${{ secrets.PUSHER_KEY }}
+          PUSHER_SECRET: ${{ secrets.PUSHER_SECRET }}
+          PUSHER_CLUSTER: ${{ secrets.PUSHER_CLUSTER }}
+          BROWSERBASE_API_KEY: ${{ secrets.BROWSERBASE_API_KEY }}
+          PEXELS_KEY: ${{ secrets.PEXELS_KEY }}
+          PIXABAY_KEY: ${{ secrets.PIXABAY_KEY }}
+          UNSPLASH_KEY: ${{ secrets.UNSPLASH_KEY }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          PLEXO_ORIGIN_VERIFY_SECRET: ${{ secrets.PLEXO_ORIGIN_VERIFY_SECRET }}
+        run: |
+          for NAME in AUTH_SECRET GOOGLE_SAFE_BROWSING_API_KEY CHARISOL_USER_POOL_ID \
+            AI_KEY_ENCRYPTION_SECRET PAYSTACK_KEY_ENCRYPTION_SECRET COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET \
+            MAILDRIP_KEY_ENCRYPTION_SECRET MAILDRIP_API_URL MAILDRIP_API_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
+            STRIPE_PRICE_PRO STRIPE_PRICE_ULTRA STRIPE_PRICE_TOPUP_SMALL STRIPE_PRICE_TOPUP_MEDIUM STRIPE_PRICE_TOPUP_LARGE \
+            SYSTEM_AI_PROVIDER SYSTEM_AI_KEY_ANTHROPIC_CLAUDE SYSTEM_AI_KEY_OPENAI SYSTEM_AI_KEY_GOOGLE_GEMINI \
+            PUSHER_APP_ID PUSHER_KEY PUSHER_SECRET PUSHER_CLUSTER BROWSERBASE_API_KEY PEXELS_KEY PIXABAY_KEY UNSPLASH_KEY \
+            CRON_SECRET PLEXO_ORIGIN_VERIFY_SECRET; do
+            VALUE="${!NAME}"
+            if [ -z "$VALUE" ]; then
+              echo "::warning::$NAME is not set in the staging GitHub Environment — skipping, leaving SSM value unchanged"
+              continue
+            fi
+            aws ssm put-parameter --name "/plexo/staging/${NAME}" --value "$VALUE" --type SecureString --key-id "alias/aws/ssm" --overwrite --region us-east-1 > /dev/null
+          done
+          echo "✓ Synced secrets to /plexo/staging/*"
+
       # AUTH_SECRET is needed at build time too (Auth.js's own NextAuth() config throws
       # without it in production mode) — see lib/ssmEnv.ts's own comment on why this
       # can't just be read at runtime alone for every value (that mechanism silently
       # never ran at all until this exact bug was found and fixed this same day).
+      # `::add-mask::` BEFORE writing to $GITHUB_ENV — without it these values print in
+      # plaintext in this step's own log (confirmed by a real run: both secrets appeared
+      # unmasked in the "##[endgroup]" env dump every later step logs). $GITHUB_ENV only
+      # makes a value available to subsequent steps; it does not register it as a secret
+      # to redact from output.
       - name: Fetch build-time secrets from SSM
         run: |
-          echo "AUTH_SECRET=$(aws ssm get-parameter --name /plexo/staging/AUTH_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
-          echo "ORIGIN_VERIFY_SECRET=$(aws ssm get-parameter --name /plexo/staging/PLEXO_ORIGIN_VERIFY_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
-          echo "CRON_SECRET=$(aws ssm get-parameter --name /plexo/staging/CRON_SECRET --with-decryption --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+          AUTH_SECRET="$(aws ssm get-parameter --name /plexo/staging/AUTH_SECRET --with-decryption --query Parameter.Value --output text)"
+          ORIGIN_VERIFY_SECRET="$(aws ssm get-parameter --name /plexo/staging/PLEXO_ORIGIN_VERIFY_SECRET --with-decryption --query Parameter.Value --output text)"
+          CRON_SECRET="$(aws ssm get-parameter --name /plexo/staging/CRON_SECRET --with-decryption --query Parameter.Value --output text)"
+          echo "::add-mask::$AUTH_SECRET"
+          echo "::add-mask::$ORIGIN_VERIFY_SECRET"
+          echo "::add-mask::$CRON_SECRET"
+          echo "AUTH_SECRET=$AUTH_SECRET" >> "$GITHUB_ENV"
+          echo "ORIGIN_VERIFY_SECRET=$ORIGIN_VERIFY_SECRET" >> "$GITHUB_ENV"
+          echo "CRON_SECRET=$CRON_SECRET" >> "$GITHUB_ENV"
 
       - name: Build the app (OpenNext)
         env:
-          NEXT_PUBLIC_APP_URL: https://d3i92fgfanqz2.cloudfront.net
-          NEXT_PUBLIC_PAGES_DOMAIN: plexo.aws.charisol.io
+          # staging-plexo.charisol.io's redirect/logout URIs are already registered for
+          # this Charisol app client in the Developer Portal — confirmed before this
+          # cutover, not assumed.
+          NEXT_PUBLIC_APP_URL: https://staging-plexo.charisol.io
+          NEXT_PUBLIC_PAGES_DOMAIN: staging-plexo.charisol.io
+          NEXT_PUBLIC_CHARISOL_CLIENT_ID: 2rpia2i7sa1ns9pa1hncs2od3a
+          NEXT_PUBLIC_CHARISOL_DOMAIN: auth.charisol.io
         run: npx open-next build
 
       - name: Install CDK project
@@ -68,21 +144,45 @@ jobs:
         working-directory: ./cdk
         env:
           STACK_KIND: compute
+          # Registers staging-plexo.charisol.io on the distribution (so it's ready to
+          # accept traffic once DNS points there) without yet changing what the app
+          # itself thinks its own URL is (NEXT_PUBLIC_APP_URL, below, stays on the bare
+          # *.cloudfront.net domain until the real routing CNAME — not just the ACM
+          # validation one — is confirmed live, to avoid a window where the app's
+          # self-perceived origin doesn't match where it's actually reachable).
+          APP_DOMAIN: staging-plexo.charisol.io
+          APP_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/22886607-0c7c-456b-8449-4794898fcfa9
         run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively
 
       - name: Deploy the published-sites stack
         working-directory: ./cdk
         env:
           STACK_KIND: published-sites
-          WILDCARD_DOMAIN: plexo.aws.charisol.io
-          WILDCARD_ZONE_ID: ${{ vars.STAGING_WILDCARD_ZONE_ID }}
-          WILDCARD_ZONE_NAME: plexo.aws.charisol.io
+          # Replaces plexo.aws.charisol.io as staging's real published-sites wildcard —
+          # charisol.io's DNS lives on Cloudflare (manual CNAME, no WILDCARD_ZONE_ID/NAME
+          # needed here, unlike plexo.aws.charisol.io's own Route53-hosted zone).
+          WILDCARD_DOMAIN: staging-plexo.charisol.io
+          WILDCARD_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/6c17fa15-95ef-4efc-a95f-2d1dad8fcbc8
+          # Fixed forever (see published-sites-stack.ts's own comment) — captured from
+          # what was already live on this exact distribution before this migration ever
+          # touched WILDCARD_DOMAIN/WILDCARD_CERT_ARN above.
+          PRIMARY_DISTRIBUTION_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/841223fd-8978-4046-bc57-d58cd402b62d
+          # staging-plexo.charisol.io's bare apex is the dashboard's OWN domain (see the
+          # compute-stack deploy step's APP_DOMAIN above) — the wildcard tenant below must
+          # NOT also claim it (confirmed by a real deploy failure: CloudFront enforces
+          # domain uniqueness across every distribution/tenant in the account).
+          INCLUDE_BARE_WILDCARD_DOMAIN: "false"
           APP_URL: https://d3i92fgfanqz2.cloudfront.net
         run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
 
+      # Checks the distribution's own *.cloudfront.net domain, NOT staging-plexo.charisol.io
+      # directly — this must keep working even in the window before that domain's own
+      # routing CNAME (as opposed to the ACM validation one, already long in place) is
+      # added, which this step has no way to know the status of.
       - name: Smoke test — dashboard responds
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://d3i92fgfanqz2.cloudfront.net/)
+          DOMAIN=$(aws cloudformation describe-stacks --stack-name "${STACK_ID}-compute-stack" --query "Stacks[0].Outputs[?OutputKey=='DistributionDomainName'].OutputValue" --output text)
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/")
           if [ "$STATUS" != "200" ]; then
             echo "::error::Dashboard returned HTTP $STATUS after deploy"
             exit 1
