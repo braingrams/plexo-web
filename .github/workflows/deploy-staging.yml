@@ -163,6 +163,10 @@ jobs:
           # needed here, unlike plexo.aws.charisol.io's own Route53-hosted zone).
           WILDCARD_DOMAIN: staging-plexo.charisol.io
           WILDCARD_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/6c17fa15-95ef-4efc-a95f-2d1dad8fcbc8
+          # Fixed forever (see published-sites-stack.ts's own comment) — captured from
+          # what was already live on this exact distribution before this migration ever
+          # touched WILDCARD_DOMAIN/WILDCARD_CERT_ARN above.
+          PRIMARY_DISTRIBUTION_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/841223fd-8978-4046-bc57-d58cd402b62d
           APP_URL: https://d3i92fgfanqz2.cloudfront.net
         run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
 

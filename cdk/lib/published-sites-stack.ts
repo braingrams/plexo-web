@@ -59,13 +59,21 @@ export interface PublishedSitesStackProps extends cdk.StackProps {
    * certificate-attachment EventBridge schedule below calls; nothing about tenant
    * routing depends on it. */
   appUrl: string;
+  /** The PrimaryDistribution's own ViewerCertificate ARN — see that resource's own
+   * comment for why this must be a fixed, hand-picked value that NEVER changes across
+   * redeploys, completely decoupled from wildcardDomain/wildcardCertArn above. On first
+   * deploy ever for a given environment, any valid us-east-1 ACM cert ARN works (it's
+   * never actually served to real viewers); once deployed, capture whatever's actually
+   * live (`aws cloudfront get-distribution-config --id <id> --query
+   * DistributionConfig.ViewerCertificate.ACMCertificateArn`) and hardcode it here forever. */
+  primaryDistributionCertArn: string;
 }
 
 export class PublishedSitesStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: PublishedSitesStackProps) {
     super(scope, id, props);
 
-    const { computeStackName, wildcardDomain, hostedZone, wildcardCertArn, appUrl } = props;
+    const { computeStackName, wildcardDomain, hostedZone, wildcardCertArn, appUrl, primaryDistributionCertArn } = props;
 
     // Same secret compute-stack.ts uses for its own distribution, same reason (see that
     // file's own comment on originVerifySecret): CloudFront OAC can't reliably sign POST
@@ -138,18 +146,11 @@ export class PublishedSitesStack extends cdk.Stack {
     // real domain (the wildcard AND every customer's own) is attached via a
     // CfnDistributionTenant below/at runtime, never directly on this resource. ---
 
-    // Wildcard cert for this environment's own plexopages-style domain — created before
-    // the primary distribution because CloudFront requires an explicit ViewerCertificate
-    // on the primary distribution's own DistributionConfig even in tenant-only mode
-    // (confirmed by a real deploy failure without it: "The specified distribution is
-    // configured for SNI and the minimum SSL protocol version is specified as SSLv3" —
-    // CloudFront's implicit default cert isn't SNI-compatible). This cert is never what
-    // actually serves real tenant traffic (every real request matches a
-    // CfnDistributionTenant, each with its own certificate — the wildcard tenant's own
-    // below, or a customer's ManagedCertificateRequest at runtime); it only satisfies this
-    // resource's own validation. DNS-validated via Route53 when `hostedZone` is supplied
-    // (zero manual step); otherwise the deploy waits for a manual CNAME at whatever DNS
-    // provider actually hosts `wildcardDomain` — see this stack's own
+    // Wildcard cert for this environment's own plexopages-style domain — the REAL cert
+    // customer/tenant traffic actually gets, attached below via wildcardTenant's own
+    // customizations.certificate.arn. DNS-validated via Route53 when `hostedZone` is
+    // supplied (zero manual step); otherwise the deploy waits for a manual CNAME at
+    // whatever DNS provider actually hosts `wildcardDomain` — see this stack's own
     // `WildcardCertArn`/`describe-certificate` for the exact record to add. Imported
     // instead of created fresh when `wildcardCertArn` is supplied (see that prop's own
     // comment) — an already-issued cert someone requested and DNS-validated by hand.
@@ -161,12 +162,25 @@ export class PublishedSitesStack extends cdk.Stack {
           validation: hostedZone ? acm.CertificateValidation.fromDns(hostedZone) : acm.CertificateValidation.fromDns(),
         });
 
+    // primaryDistribution's own ViewerCertificate — CloudFront requires one explicitly
+    // even in tenant-only mode (confirmed by a real deploy failure without it: "The
+    // specified distribution is configured for SNI and the minimum SSL protocol version
+    // is specified as SSLv3" — CloudFront's implicit default cert isn't SNI-compatible),
+    // but this cert is never what actually serves real tenant traffic (every real request
+    // matches a CfnDistributionTenant, each with its own certificate) — it only satisfies
+    // this resource's own validation. Uses the fixed primaryDistributionCertArn prop, NOT
+    // wildcardCert above (which DOES change — a customer domain gets reconnected, or as
+    // happened here, this environment's own wildcardDomain gets migrated) — a real deploy
+    // failure confirmed CloudFront rejects an in-place ViewerCertificate swap on an
+    // existing distribution outright ("Invalid request provided: The updated certificate
+    // is not compatible with the current certificate"), so this property must never
+    // change again once first deployed, regardless of what real tenant traffic uses.
     const primaryDistribution = new cloudfront.CfnDistribution(this, "PrimaryDistribution", {
       distributionConfig: {
         enabled: true,
         connectionMode: "tenant-only",
         tenantConfig: { parameterDefinitions: [] },
-        viewerCertificate: { acmCertificateArn: wildcardCert.certificateArn, sslSupportMethod: "sni-only" },
+        viewerCertificate: { acmCertificateArn: primaryDistributionCertArn, sslSupportMethod: "sni-only" },
         origins: [
           {
             id: "ServerFn",

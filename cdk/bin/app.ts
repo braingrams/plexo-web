@@ -69,12 +69,17 @@ if (stackKind === "data") {
   // already-issued cert (requested + DNS-validated by hand) instead of `cdk deploy`
   // creating and blocking on a brand-new one for the same domain.
   const wildcardCertArn = process.env.WILDCARD_CERT_ARN;
+  // See published-sites-stack.ts's own comment on primaryDistributionCertArn — a fixed
+  // value, hand-picked once per environment, that must never change across redeploys.
+  const primaryDistributionCertArn = process.env.PRIMARY_DISTRIBUTION_CERT_ARN;
+  if (!primaryDistributionCertArn) throw new Error('STACK_KIND=published-sites requires PRIMARY_DISTRIBUTION_CERT_ARN (a fixed, never-changing cert ARN — see published-sites-stack.ts\'s own comment).');
 
   new PublishedSitesStack(app, `${stackID}-published-sites-stack`, {
     env,
     computeStackName: `${stackID}-compute-stack`,
     wildcardDomain,
     wildcardCertArn,
+    primaryDistributionCertArn,
     appUrl,
     hostedZone:
       zoneId && zoneName

@@ -159,6 +159,11 @@ jobs:
         env:
           STACK_KIND: published-sites
           WILDCARD_DOMAIN: plexopages.com
+          # Fixed forever (see published-sites-stack.ts's own comment) — captured from
+          # what's already live on this distribution. Must never change even if
+          # WILDCARD_DOMAIN itself ever does — see the real deploy failure that
+          # necessitated this on staging.
+          PRIMARY_DISTRIBUTION_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/0c7258c0-532d-45b2-90ae-16458501f83a
           APP_URL: https://plexo.charisol.io
         run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
 
