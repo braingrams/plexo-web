@@ -38,8 +38,12 @@ jobs:
       AWS_REGION: us-east-1
 
     steps:
+      # fetch-depth: 2 — needed to diff against the pre-merge commit below (github.event.
+      # before) to decide whether published-sites-stack actually needs a deploy.
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -53,8 +57,35 @@ jobs:
           node-version: 22.x
           cache: 'npm'
 
+      # Speeds up `next build`'s incremental compilation — a cache MISS still produces a
+      # correct build (this is a performance cache, not a correctness dependency), just
+      # slower, same as a fresh checkout always was before this existed.
+      - name: Cache Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: nextjs-production-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            nextjs-production-${{ hashFiles('package-lock.json') }}-
+            nextjs-production-
+
       - name: Install app dependencies
         run: npm ci
+
+      # See deploy-staging.yml's own matching comment on why published-sites-stack (unlike
+      # compute-stack) is safe to skip when none of its real inputs changed.
+      - name: Check whether published-sites-stack needs a deploy
+        id: published_sites_diff
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "workflow_dispatch — always redeploying published-sites-stack"
+          elif git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- cdk/lib/published-sites-stack.ts cdk/lib/conventions.ts cdk/lib/forward-host-function.js cdk/bin/app.ts .github/workflows/deploy-production.yml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No relevant changes — skipping published-sites-stack deploy"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       # GitHub's "production" Environment secrets are the source of truth for everything
       # lib/ssmEnv.ts loads at runtime — change a value here in GitHub, push (via a
@@ -155,6 +186,7 @@ jobs:
         run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively
 
       - name: Deploy the published-sites stack
+        if: steps.published_sites_diff.outputs.changed == 'true'
         working-directory: ./cdk
         env:
           STACK_KIND: published-sites
