@@ -29,6 +29,11 @@ const APP_SECRET_KEYS = [
   "AI_KEY_ENCRYPTION_SECRET",
   "PAYSTACK_KEY_ENCRYPTION_SECRET",
   "COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET",
+  // Missing from this list until now — encryptBankDetail/decryptBankDetail (lib/crypto.ts)
+  // call requireEnv("BANK_DETAILS_ENCRYPTION_SECRET") unconditionally, so every withdrawal
+  // request (marketplace and Commerce wallet) was throwing "not configured" in production,
+  // not just failing to decrypt.
+  "BANK_DETAILS_ENCRYPTION_SECRET",
   "MAILDRIP_KEY_ENCRYPTION_SECRET",
   "MAILDRIP_API_URL",
   "MAILDRIP_API_KEY",

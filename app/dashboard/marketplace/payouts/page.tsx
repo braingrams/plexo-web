@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { auth } from "@/server/authDynamo";
 import { User, PlatformSettings } from "@/lib/db/coreEntities";
@@ -36,7 +37,25 @@ export default async function PayoutsPage() {
 
   return (
     <PageContainer>
-      <PageHeader eyebrow="Marketplace" title="Payouts" subtitle="Your marketplace earnings and withdrawal history." />
+      <PageHeader
+        eyebrow="Marketplace"
+        title="Payouts"
+        subtitle="Your marketplace earnings and withdrawal history."
+        action={
+          // Different wallet — a site's own Commerce sales (Platform Paystack/Stripe) live
+          // separately per-site, not here. Cross-linked from Commerce's own Wallet page too.
+          <Link
+            href="/dashboard/commerce"
+            style={{
+              fontSize: "0.78rem", fontWeight: 600, color: "rgba(240,242,255,0.6)",
+              textDecoration: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
+              padding: "0.45rem 0.8rem", background: "rgba(255,255,255,0.03)", whiteSpace: "nowrap",
+            }}
+          >
+            Commerce site earnings →
+          </Link>
+        }
+      />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "1.5rem", marginBottom: "2rem" }}>
         <Card>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
-import { decryptMaildripKey } from "@/lib/crypto";
+import { decryptMaildripKey, tryDecrypt } from "@/lib/crypto";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { tagNewsletterSubscriber } from "@/lib/commerce/maildripNotify";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
@@ -33,7 +33,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!settings?.maildripNewsletterGroupId) {
     return NextResponse.json({ error: "Newsletter isn't set up for this site yet." }, { status: 400 });
   }
-  const apiKey = settings.maildripApiKeyEncrypted ? decryptMaildripKey(settings.maildripApiKeyEncrypted) : PLATFORM_MAILDRIP_API_KEY;
+  const apiKey = settings.maildripApiKeyEncrypted
+    ? tryDecrypt(() => decryptMaildripKey(settings.maildripApiKeyEncrypted!))
+    : PLATFORM_MAILDRIP_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ error: "Newsletter isn't set up for this site yet." }, { status: 400 });
   }

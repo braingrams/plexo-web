@@ -150,11 +150,27 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
 
   return (
     <div>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ fontSize: "1.35rem", fontWeight: 600, color: "#f0f2ff", margin: 0 }}>Wallet</h1>
-        <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginTop: 4 }}>
-          Proceeds from Platform Paystack / Platform Stripe sales. Balance-tracking only — withdrawals are processed manually by the Plexo team.
-        </p>
+      <div style={{ marginBottom: "1.5rem", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: "1.35rem", fontWeight: 600, color: "#f0f2ff", margin: 0 }}>Wallet</h1>
+          <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginTop: 4 }}>
+            Proceeds from Platform Paystack / Platform Stripe sales. Balance-tracking only — withdrawals are processed manually by the Plexo team.
+          </p>
+        </div>
+        {/* Different wallet — template-marketplace earnings (per-account, not per-site)
+         * live separately at /dashboard/marketplace/payouts. Cross-linked here since both
+         * are "where's my money" pages a seller could reasonably look for from either
+         * side, without merging their genuinely different per-user vs per-site models. */}
+        <a
+          href="/dashboard/marketplace/payouts"
+          style={{
+            flexShrink: 0, fontSize: "0.78rem", fontWeight: 600, color: "rgba(240,242,255,0.6)",
+            textDecoration: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
+            padding: "0.45rem 0.8rem", background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          Template marketplace earnings →
+        </a>
       </div>
 
       <Section title="Balance">
