@@ -43,6 +43,15 @@ export interface PublishedSitesStackProps extends cdk.StackProps {
    * CNAME added at that provider before the deploy can finish; see the stack's own
    * CfnOutput for the exact validation record to add. */
   hostedZone?: route53.IHostedZone;
+  /** An already-ISSUED ACM certificate ARN covering `*.<wildcardDomain>` + `wildcardDomain`
+   * — set this instead of leaving `hostedZone` unset when you've requested and manually
+   * DNS-validated the cert yourself (e.g. via `aws acm request-certificate` + a manual
+   * CNAME at a non-Route53 DNS provider like Cloudflare) BEFORE running `cdk deploy`.
+   * Without this, the `acm.Certificate` construct below always creates its OWN brand-new
+   * certificate request on every first deploy — even if an identical, already-validated
+   * cert for the same domain exists — and `cdk deploy` blocks waiting for ITS validation
+   * too, needing a second, different CNAME. Importing an existing ARN skips that entirely. */
+  wildcardCertArn?: string;
   /** This environment's own dashboard URL (e.g. "https://plexo.charisol.io" for
    * production, or the bare "https://<id>.cloudfront.net" compute-stack.ts's own
    * DistributionDomainName output prints for staging, which has no APP_DOMAIN) —
@@ -56,7 +65,7 @@ export class PublishedSitesStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: PublishedSitesStackProps) {
     super(scope, id, props);
 
-    const { computeStackName, wildcardDomain, hostedZone, appUrl } = props;
+    const { computeStackName, wildcardDomain, hostedZone, wildcardCertArn, appUrl } = props;
 
     // Same secret compute-stack.ts uses for its own distribution, same reason (see that
     // file's own comment on originVerifySecret): CloudFront OAC can't reliably sign POST
@@ -141,12 +150,16 @@ export class PublishedSitesStack extends cdk.Stack {
     // resource's own validation. DNS-validated via Route53 when `hostedZone` is supplied
     // (zero manual step); otherwise the deploy waits for a manual CNAME at whatever DNS
     // provider actually hosts `wildcardDomain` — see this stack's own
-    // `WildcardCertArn`/`describe-certificate` for the exact record to add.
-    const wildcardCert = new acm.Certificate(this, "WildcardCert", {
-      domainName: `*.${wildcardDomain}`,
-      subjectAlternativeNames: [wildcardDomain],
-      validation: hostedZone ? acm.CertificateValidation.fromDns(hostedZone) : acm.CertificateValidation.fromDns(),
-    });
+    // `WildcardCertArn`/`describe-certificate` for the exact record to add. Imported
+    // instead of created fresh when `wildcardCertArn` is supplied (see that prop's own
+    // comment) — an already-issued cert someone requested and DNS-validated by hand.
+    const wildcardCert = wildcardCertArn
+      ? acm.Certificate.fromCertificateArn(this, "WildcardCert", wildcardCertArn)
+      : new acm.Certificate(this, "WildcardCert", {
+          domainName: `*.${wildcardDomain}`,
+          subjectAlternativeNames: [wildcardDomain],
+          validation: hostedZone ? acm.CertificateValidation.fromDns(hostedZone) : acm.CertificateValidation.fromDns(),
+        });
 
     const primaryDistribution = new cloudfront.CfnDistribution(this, "PrimaryDistribution", {
       distributionConfig: {

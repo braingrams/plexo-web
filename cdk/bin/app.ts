@@ -65,11 +65,16 @@ if (stackKind === "data") {
   // EventBridge schedule's call target (see published-sites-stack.ts's own comment).
   const appUrl = process.env.APP_URL;
   if (!appUrl) throw new Error('STACK_KIND=published-sites requires APP_URL (e.g. "https://plexo.charisol.io").');
+  // See published-sites-stack.ts's own comment on wildcardCertArn — set this to reuse an
+  // already-issued cert (requested + DNS-validated by hand) instead of `cdk deploy`
+  // creating and blocking on a brand-new one for the same domain.
+  const wildcardCertArn = process.env.WILDCARD_CERT_ARN;
 
   new PublishedSitesStack(app, `${stackID}-published-sites-stack`, {
     env,
     computeStackName: `${stackID}-compute-stack`,
     wildcardDomain,
+    wildcardCertArn,
     appUrl,
     hostedZone:
       zoneId && zoneName

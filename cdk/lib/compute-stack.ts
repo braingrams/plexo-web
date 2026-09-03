@@ -109,8 +109,13 @@ if (!cronSecret) throw new Error("CRON_SECRET is required (see CRON_SECRET in SS
 // their own bare *.cloudfront.net domain. charisol.io's DNS lives on Cloudflare, not
 // Route53 (confirmed via `dig NS charisol.io`), same as plexopages.com — so, like that
 // domain's own wildcard cert in published-sites-stack.ts, this validates via a manual
-// CNAME the deploy waits on rather than DnsValidatedCertificate/hostedZone.
+// CNAME the deploy waits on rather than DnsValidatedCertificate/hostedZone — UNLESS
+// APP_CERT_ARN is set to an already-ISSUED cert someone requested and DNS-validated by
+// hand beforehand, in which case that's imported instead of creating (and blocking on)
+// a brand-new one for the same domain (see published-sites-stack.ts's matching
+// wildcardCertArn comment for why this exists).
 const appDomain = process.env.APP_DOMAIN;
+const appCertArn = process.env.APP_CERT_ARN;
 const tableEnv = {
   PLEXO_CORE_TABLE: nameFor("plexo-core"),
   PLEXO_LEDGER_TABLE: nameFor("plexo-ledger"),
@@ -383,8 +388,11 @@ export class ComputeStack extends cdk.Stack {
 
     // DNS-validated via a manual CNAME (see appDomain's own comment above) — `cdk deploy`
     // blocks here until that CNAME is added and ACM sees it, same wait behavior
-    // published-sites-stack.ts's own wildcardCert already relies on.
-    const appCert = appDomain
+    // published-sites-stack.ts's own wildcardCert already relies on. Imported instead when
+    // appCertArn is set (see that const's own comment).
+    const appCert = appCertArn
+      ? acm.Certificate.fromCertificateArn(this, "AppCert", appCertArn)
+      : appDomain
       ? new acm.Certificate(this, "AppCert", { domainName: appDomain, validation: acm.CertificateValidation.fromDns() })
       : undefined;
 
