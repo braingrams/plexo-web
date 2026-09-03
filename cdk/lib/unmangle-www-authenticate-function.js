@@ -11,6 +11,7 @@
 // sits after the Lambda's renaming and before the header reaches a real client.
 function handler(event) {
   var headers = event.response.headers;
+  headers["x-debug-fn-ran"] = { value: "true" };
   var remapped = headers["x-amzn-remapped-www-authenticate"];
   if (remapped) {
     headers["www-authenticate"] = { value: remapped.value };
