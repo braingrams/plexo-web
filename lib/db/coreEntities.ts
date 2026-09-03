@@ -200,6 +200,38 @@ export const ApiKey = new Entity(
   { table, client: docClient },
 );
 
+// A registered OAuth client (the MCP directory submission's Dynamic Client Registration
+// requirement — RFC 7591). Previously /api/v1/auth/oauth/register handed every caller
+// back the SAME hardcoded client_id/client_secret regardless of what it registered, so
+// there was nothing here to actually look up — /authorize trusted whatever redirect_uri
+// a caller supplied with zero validation, a real open-redirect: a crafted authorize link
+// could redirect a logged-in user's real Plexo API key to an attacker's domain. This
+// persists what each client actually registered so /authorize can reject any redirect_uri
+// that doesn't exactly match what that client_id registered.
+export const OAuthClient = new Entity(
+  {
+    model: { entity: "oauthClient", version: "1", service: "plexoCore" },
+    attributes: {
+      clientId: { type: "string", required: true },
+      // Unset for a public client (token_endpoint_auth_method: "none", PKCE-only — what
+      // every MCP client we've seen actually uses). Hashed the same way ApiKey.hashedKey
+      // is — never store the raw secret.
+      clientSecretHash: { type: "string" },
+      clientName: { type: "string", required: true },
+      redirectUris: { type: "list", items: { type: "string" }, required: true },
+      tokenEndpointAuthMethod: { type: ["none", "client_secret_post", "client_secret_basic"] as const, default: "none" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["clientId"], template: "OAUTHCLIENT#${clientId}" },
+        sk: { field: "sk", composite: [], template: "OAUTHCLIENT" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const UploadedImage = new Entity(
   {
     model: { entity: "uploadedImage", version: "1", service: "plexoCore" },

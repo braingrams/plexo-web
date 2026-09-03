@@ -1,20 +1,41 @@
 import { redirect } from "next/navigation";
+import { randomBytes } from "node:crypto";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
-import { ApiKey } from "@/lib/db/coreEntities";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { CheckCircle2, Bot, Sparkles, ArrowRight } from "lucide-react";
+import { OAuthClient } from "@/lib/db/coreEntities";
+import { OAuthAuthorizationCode } from "@/lib/db/opsEntities";
+import { rotateMcpApiKey } from "@/lib/mcp/issueApiKey";
+import { CheckCircle2, Bot, Sparkles, ArrowRight, ShieldAlert } from "lucide-react";
 
-function sha256(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
+function errorPage(message: string) {
+  return (
+    <div className="min-h-screen bg-[#08090f] text-[#f0f2ff] flex flex-col items-center justify-center p-6 font-sans">
+      <div className="max-w-md w-full bg-[#111827]/90 border border-white/10 rounded-3xl p-8 shadow-2xl backdrop-blur-xl flex items-start gap-3">
+        <ShieldAlert className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-red-400">Can't complete this request</p>
+          <p className="text-xs text-white/70 mt-1">{message}</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default async function McpLoginPage(props: {
-  searchParams: Promise<{ callbackUrl?: string; state?: string }>;
+  searchParams: Promise<{
+    callbackUrl?: string;
+    state?: string;
+    client_id?: string;
+    code_challenge?: string;
+    code_challenge_method?: string;
+  }>;
 }) {
   const searchParams = await props.searchParams;
   const callbackUrl = searchParams.callbackUrl;
   const state = searchParams.state;
+  const clientId = searchParams.client_id;
+  const codeChallenge = searchParams.code_challenge;
+  const codeChallengeMethod = searchParams.code_challenge_method;
 
   let session = null;
 
@@ -26,7 +47,14 @@ export default async function McpLoginPage(props: {
 
   // Handle unauthenticated state outside try/catch so Next.js redirect works
   if (!session?.user) {
-    const loginTarget = `/auth/login?redirectTo=${encodeURIComponent(`/mcp/login${callbackUrl ? `?callbackUrl=${encodeURIComponent(callbackUrl)}${state ? `&state=${encodeURIComponent(state)}` : ""}` : ""}`)}`;
+    const resumeParams = new URLSearchParams();
+    if (callbackUrl) resumeParams.set("callbackUrl", callbackUrl);
+    if (state) resumeParams.set("state", state);
+    if (clientId) resumeParams.set("client_id", clientId);
+    if (codeChallenge) resumeParams.set("code_challenge", codeChallenge);
+    if (codeChallengeMethod) resumeParams.set("code_challenge_method", codeChallengeMethod);
+    const resumeQuery = resumeParams.toString();
+    const loginTarget = `/auth/login?redirectTo=${encodeURIComponent(`/mcp/login${resumeQuery ? `?${resumeQuery}` : ""}`)}`;
     redirect(loginTarget);
   }
 
@@ -39,57 +67,58 @@ export default async function McpLoginPage(props: {
   }
   const organizationId = orgResolution.organizationId;
 
-  // Find any existing MCP API key for this user's organization. A raw key can never be
-  // recovered once hashed (only maskedKey — a display placeholder like "plexo_mcp_...ab12"
-  // — survives), so every /mcp/login completion rotates: deactivate whatever's there and
-  // mint a fresh one. Previously this handed back `maskedKey` on the existing-key branch,
-  // which is not a usable credential — every login past the very first one for an org
-  // silently issued a token that could never resolve, looping the external MCP client back
-  // through this same page forever (found live: a user's tool-call session kept expiring
-  // immediately after every reconnect).
-  const { data: existingKeys } = await ApiKey.query
-    .primary({ organizationId })
-    .where((attr, op) => `${op.eq(attr.name, "Plexo MCP AI Integration Key")} AND ${op.eq(attr.isActive, true)}`)
-    .go();
-
-  await Promise.all(
-    existingKeys.map((key) => ApiKey.patch({ organizationId, id: key.id }).set({ isActive: false }).go()),
-  );
-
-  const rawKey = `plexo_mcp_${randomBytes(24).toString("hex")}`;
-  const hashedKey = sha256(rawKey);
-  const maskedKey = `${rawKey.slice(0, 10)}...${rawKey.slice(-4)}`;
-
-  await ApiKey.create({
-    id: randomUUID(),
-    userId: session.user.id,
-    organizationId,
-    name: "Plexo MCP AI Integration Key",
-    hashedKey,
-    maskedKey,
-    useAi: true,
-  }).go();
-
-  // Build target redirect URL outside try/catch to ensure NEXT_REDIRECT exception propagates
-  let targetRedirectUrl = "";
+  // Real OAuth redirect flow (came via /api/v1/auth/oauth/authorize, or a direct link
+  // carrying the same params). This page is itself a public URL, so it re-validates
+  // client_id/redirect_uri here rather than trusting that /authorize already did —
+  // otherwise anyone could hit /mcp/login directly with an arbitrary callbackUrl and get
+  // it treated as trusted. Every previous version of this flow skipped that check
+  // entirely (a real open-redirect: a crafted link could redirect a logged-in user's real
+  // API key to an attacker's domain), so this validates client_id against a registered
+  // OAuthClient and requires an EXACT redirect_uri match against what that client
+  // registered — no prefix/substring matching, which is how open redirects usually creep
+  // back in.
   if (callbackUrl) {
-    try {
-      const redirectTarget = new URL(callbackUrl);
-      redirectTarget.searchParams.set("code", rawKey);
-      redirectTarget.searchParams.set("token", rawKey);
-      redirectTarget.searchParams.set("user", session.user.email ?? "");
-      if (state) {
-        redirectTarget.searchParams.set("state", state);
-      }
-      targetRedirectUrl = redirectTarget.toString();
-    } catch (e) {
-      console.warn("Invalid callbackUrl format:", callbackUrl, e);
+    if (!clientId) {
+      return errorPage("Missing client_id for this sign-in request.");
     }
+    const { data: client } = await OAuthClient.get({ clientId }).go();
+    if (!client) {
+      return errorPage("Unrecognized client. This integration may need to reconnect from scratch.");
+    }
+    if (!client.redirectUris.includes(callbackUrl)) {
+      return errorPage("This app's redirect URL doesn't match what was registered. Reconnect the integration to try again.");
+    }
+
+    // Mint a short-lived, single-use, PKCE-bound authorization code — NOT a real
+    // credential. The previous version handed back a real, long-lived API key directly
+    // as "code" (and "token"), which meant a real secret sat in a browser redirect URL
+    // (and, if any hop along the way — proxy, load balancer, browser history —  ever
+    // gets logged, so would the credential). The external client now has to exchange
+    // this code at /api/v1/auth/oauth/token to actually get a usable key.
+    const code = `plexo_oac_${randomBytes(24).toString("hex")}`;
+    await OAuthAuthorizationCode.create({
+      code,
+      clientId,
+      redirectUri: callbackUrl,
+      codeChallenge,
+      codeChallengeMethod: codeChallengeMethod === "plain" ? "plain" : codeChallenge ? "S256" : undefined,
+      userId: session.user.id,
+      organizationId,
+    }).go();
+
+    const redirectTarget = new URL(callbackUrl);
+    redirectTarget.searchParams.set("code", code);
+    if (state) {
+      redirectTarget.searchParams.set("state", state);
+    }
+    redirect(redirectTarget.toString());
   }
 
-  if (targetRedirectUrl) {
-    redirect(targetRedirectUrl);
-  }
+  // No callbackUrl — direct interactive use (a user visiting /mcp/login themselves to
+  // grab a raw key for manual setup, not via an external OAuth client redirect). This is
+  // the user directly authenticating in their own browser, so handing back a real,
+  // immediately-usable credential here is fine — nothing is being redirected anywhere.
+  const rawKey = await rotateMcpApiKey(session.user.id, organizationId);
 
   return (
     <div className="min-h-screen bg-[#08090f] text-[#f0f2ff] flex flex-col items-center justify-center p-6 font-sans">

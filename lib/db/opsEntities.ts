@@ -14,6 +14,7 @@ const table = TABLES.ops;
 
 const days = (n: number): number => Math.floor(Date.now() / 1000) + n * 24 * 60 * 60;
 const hours = (n: number): number => Math.floor(Date.now() / 1000) + n * 60 * 60;
+const minutes = (n: number): number => Math.floor(Date.now() / 1000) + n * 60;
 
 export const PageView = new Entity(
   {
@@ -133,6 +134,46 @@ export const StockCache = new Entity(
       primary: {
         pk: { field: "pk", composite: ["provider", "query"], template: "STOCKCACHE#${provider}#${query}" },
         sk: { field: "sk", composite: [], template: "STOCKCACHE" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// An OAuth authorization code (RFC 6749 §4.1.2 / RFC 6749 §10.5's short-lifetime
+// requirement — 10 minutes here). Replaces the previous /mcp/login behavior of handing
+// back a real, long-lived API key directly as the "code" — this is a genuinely
+// short-lived, single-use, PKCE-bound value that only /api/v1/auth/oauth/token can
+// redeem for a real credential, so the code itself is worthless if intercepted in transit
+// or logged (e.g. in a proxy's access log) the way a real API key handed over in a URL
+// query string would not be.
+export const OAuthAuthorizationCode = new Entity(
+  {
+    model: { entity: "oauthAuthorizationCode", version: "1", service: "plexoOps" },
+    attributes: {
+      code: { type: "string", required: true },
+      clientId: { type: "string", required: true },
+      redirectUri: { type: "string", required: true },
+      // PKCE (RFC 7636) — optional at the type level since a confidential client could in
+      // principle skip it, but every real MCP client uses PKCE, and /token requires it
+      // whenever codeChallenge is present on the record.
+      codeChallenge: { type: "string" },
+      codeChallengeMethod: { type: ["S256", "plain"] as const },
+      userId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      // Explicit single-use flag, checked in application code — DynamoDB's own TTL sweep
+      // (via `ttl` below) can lag up to 48 hours behind the actual expiry, so it's a
+      // storage-cost cleanup, not the thing enforcing single-use or the 10-minute window.
+      used: { type: "boolean", default: false },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      ttl: { type: "number", default: () => minutes(10) },
+    },
+    indexes: {
+      // The code itself is the natural, sufficient key — same "no separate id needed"
+      // reasoning as RateLimit above.
+      primary: {
+        pk: { field: "pk", composite: ["code"], template: "OAUTHCODE#${code}" },
+        sk: { field: "sk", composite: [], template: "OAUTHCODE" },
       },
     },
   },
