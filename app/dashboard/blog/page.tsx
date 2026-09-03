@@ -28,7 +28,7 @@ export default async function BlogOverviewPage() {
   // the org, newest-updated first — filtered here in memory for the root/LANDING_PAGE/
   // not-a-layout shape, same "one partition per org" bound this migration uses throughout
   // (an org's own template count is small enough that this isn't a real cost concern).
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go();
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go({ pages: "all" });
   const candidates = orgTemplates.filter(
     (t) =>
       !t.parentId &&

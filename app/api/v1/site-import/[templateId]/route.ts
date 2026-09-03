@@ -98,7 +98,7 @@ export async function POST(
   // org — fan out via the byOrg GSI1 and filter in memory, same bound as every other
   // rate-limit-style check on a low-cardinality-per-org entity in this migration.
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: orgJobs } = await SiteImportJob.query.byOrg({ organizationId: resolved.context.organizationId }).go();
+  const { data: orgJobs } = await SiteImportJob.query.byOrg({ organizationId: resolved.context.organizationId }).go({ pages: "all" });
   const dailyCount = orgJobs.filter((j) => (j.createdAt ?? "") > dayAgo).length;
   const concurrentCount = orgJobs.filter((j) => NON_TERMINAL_PHASES.has(j.phase ?? "PENDING")).length;
   if (dailyCount >= SITE_IMPORT_DAILY_LIMIT) {

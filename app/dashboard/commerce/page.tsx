@@ -17,7 +17,7 @@ export default async function CommerceRootPage() {
   const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") redirect("/choose-org");
 
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go();
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go({ pages: "all" });
   const eligibleSites = orgTemplates
     .filter((t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout)
     .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));

@@ -104,7 +104,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // with several multipage sub-pages still counts as one against this limit, not several.
   {
     const limit = kind === "EMAIL" ? features.maxEmailTemplates : features.maxLandingPages;
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
     const templateCount = orgTemplates.filter(
       (t) => !t.parentId && t.kind === kind && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
     ).length;
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   // Check domain limits — PublishedDomain has no org-wide index (only templateId-primary
   // and byDomain-GSI1), fans out per org root template same as app/api/v1/domains/route.ts.
-  const { data: orgTemplatesForCount } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+  const { data: orgTemplatesForCount } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const rootIds = orgTemplatesForCount.filter((t) => !t.parentId).map((t) => t.id);
   const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
   const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);

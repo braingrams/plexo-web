@@ -24,7 +24,7 @@ export default async function DomainsPage() {
     redirect("/auth/login");
   }
 
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go();
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go({ pages: "all" });
 
   // Fetch the org's landing pages to link/re-link — root/home pages only. A domain always
   // links to a page tree's root; its sub-pages ride along under that same domain via the

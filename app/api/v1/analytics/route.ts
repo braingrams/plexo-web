@@ -15,7 +15,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   try {
     // 1. Fetch all templates owned by the org, newest first (Template.byOrg, GSI1).
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ order: "desc" });
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ order: "desc", pages: "all" });
     let templates = orgTemplates.map((t) => ({ id: t.id, name: t.name }));
 
     if (filter === "published") {

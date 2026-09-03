@@ -34,7 +34,7 @@ export default async function PagesOverviewPage() {
   // query in app/dashboard/templates/page.tsx; the publishedDomain join below (same pattern
   // as app/dashboard/domains/page.tsx) is only used to show a live link when one exists, not
   // to filter the list.
-  const { data: all } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go();
+  const { data: all } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go({ pages: "all" });
   const candidates = all.filter(
     (t) => !t.parentId && t.kind === "LANDING_PAGE" && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
   );

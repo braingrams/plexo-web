@@ -22,7 +22,7 @@ export default async function SellTemplatePage() {
   // Only the seller's own working templates (not sub-pages, not existing listing clones)
   // are eligible to become a new listing — same exclusion as the main Templates page.
   const [{ data: orgTemplates }, { data: platformSettings }] = await Promise.all([
-    Template.query.byOrg({ organizationId: orgResolution.organizationId }).go(),
+    Template.query.byOrg({ organizationId: orgResolution.organizationId }).go({ pages: "all" }),
     PlatformSettings.get({}).go(),
   ]);
 
