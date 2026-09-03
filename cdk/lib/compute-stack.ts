@@ -226,6 +226,22 @@ export class ComputeStack extends cdk.Stack {
         resources: [`arn:aws:kms:${this.region}:${this.account}:alias/aws/ssm`],
       }),
     );
+    // plexo-ledger's own customer-managed KMS key (data-stack.ts's ledgerKey) — a real
+    // gap found live in production: every read/write against that ONE table (financial
+    // data — credit ledger, seller payouts, webhook logs) failed with
+    // "AccessDeniedException: ... is not authorized to perform: kms:Decrypt", since a
+    // customer-managed key's IAM policy is separate from the DynamoDB table-level grant
+    // above — that grant alone is only sufficient for AWS-owned/AWS-managed encryption,
+    // which is what the other five tables use. data-stack.ts and this stack are separate
+    // `cdk deploy` invocations (no automatic cross-stack IAM relationship), so this has
+    // to be granted explicitly here, by the same alias/nameFor() convention tableEnv
+    // above already uses for the table names themselves.
+    serverFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"],
+        resources: [`arn:aws:kms:${this.region}:${this.account}:alias/${nameFor("plexo-ledger")}`],
+      }),
+    );
     // lib/storage.ts (Vercel Blob replacement) — the bucket itself lives in the data
     // stack (cdk/lib/data-stack.ts), a separate `cdk deploy` invocation, so this can't
     // reference it as a real CDK cross-stack object; scoped by the "plexo-user-content*"
