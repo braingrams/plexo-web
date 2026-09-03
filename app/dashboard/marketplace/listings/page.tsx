@@ -30,7 +30,7 @@ export default async function MyListingsPage() {
   // (GSI1) already covers "this org's templates," so filtering to the ones that carry a
   // marketplaceStatus happens in memory over that same query rather than adding a GSI
   // for what's a small per-org list in practice.
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go();
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go({ pages: "all" });
   const listingTemplates = orgTemplates
     .filter((t) => !!t.marketplaceStatus)
     .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));

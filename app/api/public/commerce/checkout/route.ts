@@ -110,7 +110,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const [{ data: ruleRows }, { data: exceptionRows }, { data: orgBookings }] = await Promise.all([
       CommerceAvailabilityRule.query.byProduct({ productId: product.id }).go(),
       CommerceAvailabilityException.query.byProduct({ productId: product.id }).go(),
-      CommerceBooking.query.byOrg({ organizationId }).go(),
+      CommerceBooking.query.byOrg({ organizationId }).go({ pages: "all" }),
     ]);
     const rules = ruleRows.map((r) => ({ dayOfWeek: r.dayOfWeek, startMinute: r.startMinute, endMinute: r.endMinute, timezone: r.timezone ?? "Africa/Lagos" }));
     const exceptions = exceptionRows.filter((e) => e.closed ?? true).map((e) => ({ date: new Date(e.date), closed: true as const }));

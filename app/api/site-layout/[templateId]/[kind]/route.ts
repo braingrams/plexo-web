@@ -35,7 +35,7 @@ export async function GET(
   // SiteLayout has no org-wide index (keyed by templateId, see contentEntities.ts) — fan
   // out per org root template, same bound as every other "list across my org's sites"
   // query on Template-keyed entities.
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go();
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go({ pages: "all" });
   const templateNameById = new Map(orgTemplates.map((t) => [t.id, t.name]));
   const rootIds = orgTemplates.filter((t) => !t.parentId && t.id !== resolved.context.templateId).map((t) => t.id);
   const siteLayouts = (await Promise.all(rootIds.map((id) => SiteLayout.get({ templateId: id }).go()))).map((b) => b.data);
@@ -95,7 +95,7 @@ export async function POST(
     // Never trust a bare template id from the client — re-verify it the same way GET
     // surfaced it: reachable as THIS EXACT KIND's attached fragment on some SiteLayout in
     // the same organization. Prevents cross-org access and kind-mismatches.
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go();
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go({ pages: "all" });
     const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
     const siteLayouts = (await Promise.all(rootIds.map((id) => SiteLayout.get({ templateId: id }).go()))).map((b) => b.data);
     const fragmentField = kind === "header" ? "headerTemplateId" : "footerTemplateId";

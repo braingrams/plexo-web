@@ -67,7 +67,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // (marketplaceStatus set) are a separate concept from the seller's own working
   // templates — they live in /dashboard/marketplace/listings instead of cluttering this
   // list with a second, non-editable-in-the-same-way copy of the same content.
-  const { data: all } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+  const { data: all } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const roots = all.filter(
     (t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
   );
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // The plan's template limit counts root/home pages only, per kind — a page with
     // five sub-pages still counts as one landing page against this limit, not six.
     const limit = kind === "LANDING_PAGE" ? features.maxLandingPages : features.maxEmailTemplates;
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
     const count = orgTemplates.filter(
       (t) => !t.parentId && t.kind === kind && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
     ).length;
@@ -200,7 +200,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
     const recentUploadCount = orgTemplates.filter(
       (t) => t.userId === resolved.userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
     ).length;

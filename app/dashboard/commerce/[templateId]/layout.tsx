@@ -28,7 +28,7 @@ export default async function CommerceSiteLayout({
 
   const [{ data: site }, { data: orgTemplates }] = await Promise.all([
     Template.get({ id: templateId }).go(),
-    Template.query.byOrg({ organizationId }).go(),
+    Template.query.byOrg({ organizationId }).go({ pages: "all" }),
   ]);
 
   if (!site || site.organizationId !== organizationId || site.parentId) notFound();

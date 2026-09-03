@@ -24,7 +24,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const offset = Math.max(parseInt(searchParams.get("offset") || "0", 10) || 0, 0);
 
   try {
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
     let templates = orgTemplates.map((t) => ({ id: t.id, name: t.name }));
 
     if (filter === "published") {

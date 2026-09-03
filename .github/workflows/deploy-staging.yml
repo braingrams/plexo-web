@@ -31,8 +31,12 @@ jobs:
       AWS_REGION: us-east-1
 
     steps:
+      # fetch-depth: 2 — needed to diff against the pre-push commit below (github.event.
+      # before) to decide whether published-sites-stack actually needs a deploy.
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -46,8 +50,42 @@ jobs:
           node-version: 22.x
           cache: 'npm'
 
+      # Speeds up `next build`'s incremental compilation — a cache MISS still produces a
+      # correct build (this is a performance cache, not a correctness dependency), just
+      # slower, same as a fresh checkout always was before this existed.
+      - name: Cache Next.js build cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: nextjs-staging-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            nextjs-staging-${{ hashFiles('package-lock.json') }}-
+            nextjs-staging-
+
       - name: Install app dependencies
         run: npm ci
+
+      # published-sites-stack.ts has no reference to this app's own Lambda code (it
+      # cross-imports compute-stack's ARNs, never rebuilds them) — its only real inputs are
+      # its own source file, the shared conventions/forward-host-function files, bin/app.ts,
+      # and this workflow's own hardcoded env values for that step. When none of those
+      # changed since the last push, `cdk deploy` would find zero diff anyway; skipping it
+      # outright saves the ~1-2 minutes CDK still spends synthesizing + diffing to reach
+      # that same "no changes" conclusion. compute-stack, by contrast, is NOT skippable this
+      # way — its Lambda code asset hash changes on nearly every push regardless of which
+      # files changed, since OpenNext re-bundles the whole app each time.
+      - name: Check whether published-sites-stack needs a deploy
+        id: published_sites_diff
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "workflow_dispatch — always redeploying published-sites-stack"
+          elif git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- cdk/lib/published-sites-stack.ts cdk/lib/conventions.ts cdk/lib/forward-host-function.js cdk/bin/app.ts .github/workflows/deploy-staging.yml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No relevant changes — skipping published-sites-stack deploy"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
 
       # GitHub's "staging" Environment secrets are the source of truth for everything
       # lib/ssmEnv.ts loads at runtime — change a value here in GitHub, push, and this
@@ -155,6 +193,7 @@ jobs:
         run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively
 
       - name: Deploy the published-sites stack
+        if: steps.published_sites_diff.outputs.changed == 'true'
         working-directory: ./cdk
         env:
           STACK_KIND: published-sites
@@ -175,14 +214,18 @@ jobs:
           APP_URL: https://d3i92fgfanqz2.cloudfront.net
         run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
 
-      # Checks the distribution's own *.cloudfront.net domain, NOT staging-plexo.charisol.io
-      # directly — this must keep working even in the window before that domain's own
-      # routing CNAME (as opposed to the ACM validation one, already long in place) is
-      # added, which this step has no way to know the status of.
+      # Checks staging-plexo.charisol.io directly, NOT the distribution's own
+      # *.cloudfront.net domain — now that NEXT_PUBLIC_APP_URL is the custom domain,
+      # middleware.ts's own tenant-vs-dashboard routing no longer recognizes the bare
+      # CloudFront domain as "home" at all (confirmed by a real false-failure here: the
+      # raw domain now 404s with the app's own "this landing page domain has not been
+      # published" page, even though the real domain is healthy) — checking the actual
+      # domain real traffic uses is both more accurate and no longer blocked on DNS
+      # propagation, since the routing CNAME (not just the ACM validation one) is
+      # confirmed permanently in place at this point.
       - name: Smoke test — dashboard responds
         run: |
-          DOMAIN=$(aws cloudformation describe-stacks --stack-name "${STACK_ID}-compute-stack" --query "Stacks[0].Outputs[?OutputKey=='DistributionDomainName'].OutputValue" --output text)
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/")
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://staging-plexo.charisol.io/")
           if [ "$STATUS" != "200" ]; then
             echo "::error::Dashboard returned HTTP $STATUS after deploy"
             exit 1

@@ -37,7 +37,7 @@ export default async function OverviewPage() {
     redirect("/auth/complete-subscription");
   }
 
-  const { data: allTemplates } = await Template.query.byOrg({ organizationId }).go();
+  const { data: allTemplates } = await Template.query.byOrg({ organizationId }).go({ pages: "all" });
   const rootTemplates = allTemplates.filter(
     (t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
   );

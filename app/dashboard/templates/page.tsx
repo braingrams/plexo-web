@@ -41,7 +41,7 @@ export default async function TemplatesDashboardPage() {
   // entries here. Marketplace listing clones (marketplaceStatus set) live in
   // /dashboard/marketplace/listings instead — see app/api/templates/route.ts's identical
   // filter for why.
-  const { data: all } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go();
+  const { data: all } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go({ pages: "all" });
   const candidates = all.filter(
     (t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
   );

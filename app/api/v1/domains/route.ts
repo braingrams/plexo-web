@@ -32,7 +32,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   // PublishedDomain has no org-wide index (only templateId-primary and byDomain-GSI1) —
   // fans out per org template, same bound as the dashboard domains page's identical query.
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const templateById = new Map(orgTemplates.map((t) => [t.id, t]));
   const templateIds = templateIdFilter ? [templateIdFilter] : orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
   const domainBatches = await Promise.all(templateIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
@@ -172,7 +172,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // Check org limits before creating new domain mapping
-  const { data: orgTemplatesForCount } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+  const { data: orgTemplatesForCount } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const rootIds = orgTemplatesForCount.filter((t) => !t.parentId).map((t) => t.id);
   const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
   const currentCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);
@@ -257,7 +257,7 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
     // No id-only index — fan out across the org's templates to find it, same pattern
     // used throughout this migration for entities whose real key isn't the id field
     // callers pass around.
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
     const batches = await Promise.all(
       orgTemplates.filter((t) => !t.parentId).map((t) => PublishedDomain.query.primary({ templateId: t.id }).go()),
     );

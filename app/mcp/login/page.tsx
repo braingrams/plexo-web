@@ -39,31 +39,36 @@ export default async function McpLoginPage(props: {
   }
   const organizationId = orgResolution.organizationId;
 
-  // Find or create an MCP API key for this user's organization
+  // Find any existing MCP API key for this user's organization. A raw key can never be
+  // recovered once hashed (only maskedKey — a display placeholder like "plexo_mcp_...ab12"
+  // — survives), so every /mcp/login completion rotates: deactivate whatever's there and
+  // mint a fresh one. Previously this handed back `maskedKey` on the existing-key branch,
+  // which is not a usable credential — every login past the very first one for an org
+  // silently issued a token that could never resolve, looping the external MCP client back
+  // through this same page forever (found live: a user's tool-call session kept expiring
+  // immediately after every reconnect).
   const { data: existingKeys } = await ApiKey.query
     .primary({ organizationId })
     .where((attr, op) => `${op.eq(attr.name, "Plexo MCP AI Integration Key")} AND ${op.eq(attr.isActive, true)}`)
     .go();
-  let apiKeyRecord = existingKeys[0] ?? null;
 
-  let rawKey = "";
-  if (!apiKeyRecord) {
-    rawKey = `plexo_mcp_${randomBytes(24).toString("hex")}`;
-    const hashedKey = sha256(rawKey);
-    const maskedKey = `${rawKey.slice(0, 10)}...${rawKey.slice(-4)}`;
+  await Promise.all(
+    existingKeys.map((key) => ApiKey.patch({ organizationId, id: key.id }).set({ isActive: false }).go()),
+  );
 
-    await ApiKey.create({
-      id: randomUUID(),
-      userId: session.user.id,
-      organizationId,
-      name: "Plexo MCP AI Integration Key",
-      hashedKey,
-      maskedKey,
-      useAi: true,
-    }).go();
-  } else {
-    rawKey = apiKeyRecord.maskedKey;
-  }
+  const rawKey = `plexo_mcp_${randomBytes(24).toString("hex")}`;
+  const hashedKey = sha256(rawKey);
+  const maskedKey = `${rawKey.slice(0, 10)}...${rawKey.slice(-4)}`;
+
+  await ApiKey.create({
+    id: randomUUID(),
+    userId: session.user.id,
+    organizationId,
+    name: "Plexo MCP AI Integration Key",
+    hashedKey,
+    maskedKey,
+    useAi: true,
+  }).go();
 
   // Build target redirect URL outside try/catch to ensure NEXT_REDIRECT exception propagates
   let targetRedirectUrl = "";

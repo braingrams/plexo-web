@@ -82,7 +82,7 @@ async function assertRawUploadAllowed(userId: string, organizationId: string, ac
   // same adaptation as app/api/v1/templates/upload-raw/route.ts's identical rate-limit
   // check, since Template has no cross-org index over userId to check this globally.
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go();
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go({ pages: "all" });
   const recentUploadCount = orgTemplates.filter(
     (t) => t.userId === userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
   ).length;
@@ -149,7 +149,7 @@ async function linkDomainToTemplate(
   // PublishedDomain has no org-wide index (only templateId-primary and byDomain-GSI1,
   // see contentEntities.ts) — fan out per org root template, same bound every other
   // ported org-wide domain count uses (app/api/v1/domains/route.ts, publish/route.ts).
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
   const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
   const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);
@@ -887,7 +887,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
         case "publish_landing_page": {
           const features = getTierFeatures(resolved.subscriptionPlan);
           {
-            const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+            const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
             const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
             if (rootCount >= features.maxLandingPages) {
               throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
@@ -965,7 +965,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
         case "create_email_template": {
           const features = getTierFeatures(resolved.subscriptionPlan);
           {
-            const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+            const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
             const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "EMAIL").length;
             if (rootCount >= features.maxEmailTemplates) {
               throw new Error(`Template limit reached (${features.maxEmailTemplates} email templates). Upgrade plan to create more.`);
@@ -1076,7 +1076,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           const features = getTierFeatures(resolved.subscriptionPlan);
           {
             // Root/home pages only — a page's sub-pages don't count against this limit.
-            const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+            const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
             const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
             if (rootCount >= features.maxLandingPages) {
               throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
@@ -1140,7 +1140,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           await assertRawUploadAllowed(resolved.userId, resolved.organizationId, args.acceptAup === true);
 
           const features = getTierFeatures(resolved.subscriptionPlan);
-          const { data: orgTemplatesRaw } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+          const { data: orgTemplatesRaw } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
           const rootCount = orgTemplatesRaw.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
           if (rootCount >= features.maxLandingPages) {
             throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
@@ -1498,7 +1498,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           // Template has no name index, so this fans out via byOrg (GSI1) and filters in
           // memory, same bound as every other org-wide non-indexed lookup in this migration.
           if (!existing) {
-            const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+            const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
             const needle = rawInput.toLowerCase();
             const matches = orgTemplates.filter((t) => t.name.toLowerCase().includes(needle));
             // Tie-break on createdAt — the org-backfill migration's updateMany bumped
@@ -1642,7 +1642,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
         }
 
         case "list_landing_pages": {
-          const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+          const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
           const templates = orgTemplates.filter((t) => t.kind === "LANDING_PAGE");
 
           // PublishedDomain has no org-wide index (only templateId-primary and
@@ -1669,7 +1669,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
         }
 
         case "list_email_templates": {
-          const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+          const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
           const templates = orgTemplates
             .filter((t) => t.kind === "EMAIL")
             .map((t) => ({ id: t.id, name: t.name, createdAt: t.createdAt, updatedAt: t.updatedAt }));

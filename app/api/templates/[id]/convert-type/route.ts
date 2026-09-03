@@ -81,7 +81,7 @@ export async function POST(
         { status: 400 },
       );
     }
-    const { data: orgRoots } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const { data: orgRoots } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
     const emailCount = orgRoots.filter((t) => !t.parentId && t.kind === "EMAIL" && !t.isBlogLayout && !t.isCommerceLayout).length;
     if (emailCount >= features.maxEmailTemplates) {
       return NextResponse.json(
@@ -90,7 +90,7 @@ export async function POST(
       );
     }
   } else {
-    const { data: orgRoots } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const { data: orgRoots } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
     const landingPageCount = orgRoots.filter((t) => !t.parentId && t.kind === "LANDING_PAGE" && !t.isBlogLayout && !t.isCommerceLayout).length;
     if (landingPageCount >= features.maxLandingPages) {
       return NextResponse.json(

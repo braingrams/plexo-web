@@ -26,7 +26,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   // CommerceSettings has no org-wide index (keyed by templateId, see commerceEntities.ts)
   // — fan out per org root template, same bound as every other "list across my org's
   // sites" query on Template-keyed entities (see DomainsPage, dashboard overview).
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go();
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go({ pages: "all" });
   const rootIds = orgTemplates.filter((t) => !t.parentId && t.id !== templateId).map((t) => t.id);
   const settingsBatches = await Promise.all(rootIds.map((id) => CommerceSettings.get({ templateId: id }).go()));
   const templateNameById = new Map(orgTemplates.map((t) => [t.id, t.name]));
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
     // Never trust a bare template id from the client — re-verify it the same way GET
     // surfaced it: it must be reachable as another site in this org's actually-attached
     // product detail layout. Prevents cross-org access.
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go();
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go({ pages: "all" });
     const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
     const settingsBatches = await Promise.all(rootIds.map((id) => CommerceSettings.get({ templateId: id }).go()));
     const sourceSettings = settingsBatches.map((b) => b.data).find((s) => s?.productDetailTemplateId === sourceLayoutTemplateId);

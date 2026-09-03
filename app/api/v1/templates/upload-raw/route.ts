@@ -129,7 +129,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } else {
     // The plan's landing-page limit counts root/home pages only, matching /api/templates.
     // Raw uploads always create a LANDING_PAGE, so this checks maxLandingPages.
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
     const templateCount = orgTemplates.filter(
       (t) => !t.parentId && t.kind === "LANDING_PAGE" && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
     ).length;
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // (unsanitized, arbitrary JS), so it gets its own tighter ceiling independent of the
   // general template limit above.
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: orgTemplatesForRateLimit } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+  const { data: orgTemplatesForRateLimit } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const recentUploadCount = orgTemplatesForRateLimit.filter(
     (t) => t.userId === resolved.userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
   ).length;

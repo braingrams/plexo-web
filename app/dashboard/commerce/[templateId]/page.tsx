@@ -58,7 +58,7 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
   if (site) {
     const now = new Date().toISOString();
     const farFuture = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: orgBookings } = await CommerceBooking.query.byOrg({ organizationId: site.organizationId }).between({ scheduledStart: now }, { scheduledStart: farFuture }).go();
+    const { data: orgBookings } = await CommerceBooking.query.byOrg({ organizationId: site.organizationId }).between({ scheduledStart: now }, { scheduledStart: farFuture }).go({ pages: "all" });
     upcomingBookingCount = orgBookings.filter((b) => b.templateId === templateId && b.status === "CONFIRMED").length;
   }
 

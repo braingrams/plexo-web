@@ -34,7 +34,7 @@ export async function GET(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go();
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go({ pages: "all" });
   const otherRoots = orgTemplates.filter((t) => !t.parentId && t.id !== resolved.context.templateId);
 
   const blogSites = await Promise.all(otherRoots.map((t) => BlogSite.get({ templateId: t.id }).go()));
@@ -109,7 +109,7 @@ export async function POST(
     // surfaced it: it must be reachable as THIS EXACT KIND's attached layout on some
     // BlogSite belonging to the same organization. Prevents cross-org access and
     // kind-mismatches (e.g. cloning a listing layout into a post slot).
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go();
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.context.organizationId }).go({ pages: "all" });
     const roots = orgTemplates.filter((t) => !t.parentId);
     const blogSites = await Promise.all(roots.map((t) => BlogSite.get({ templateId: t.id }).go()));
     const isAttached = blogSites.some((s) =>

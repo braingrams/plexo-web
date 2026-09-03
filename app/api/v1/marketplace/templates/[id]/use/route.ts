@@ -41,7 +41,7 @@ export async function POST(
   const features = getTierFeatures(resolved.subscriptionPlan);
   {
     const limit = listing.kind === "LANDING_PAGE" ? features.maxLandingPages : features.maxEmailTemplates;
-    const { data: orgRoots } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go();
+    const { data: orgRoots } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
     const count = orgRoots.filter(
       (t) => !t.parentId && t.kind === listing.kind && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
     ).length;

@@ -57,7 +57,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       // isCommerceLayout/kind narrowing is filtered in memory over that same
       // partition, same as every other "org's root templates" call site in this
       // migration (e.g. app/api/templates/[id]/convert-type/route.ts).
-      const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go();
+      const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go({ pages: "all" });
       let filtered = orgTemplates.filter(
         (t) => !t.parentId && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
       );
