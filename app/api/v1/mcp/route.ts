@@ -44,7 +44,16 @@ export async function GET(request: NextRequest): Promise<Response> {
       {
         status: 401,
         headers: {
-          "WWW-Authenticate": `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
+          // NOT literally "WWW-Authenticate" — CloudFront classifies any ORIGIN response
+          // containing that exact header name as an error response (x-cache: Error from
+          // cloudfront) and, critically, SKIPS running viewer-response CloudFront
+          // Functions for responses in that classification — confirmed live: the
+          // unmangle-www-authenticate-function.js fix never once executed, even though
+          // it was correctly deployed and associated. So the real header can only be
+          // introduced AFTER that classification already happened, i.e. by the
+          // CloudFront Function itself renaming this safe, non-reserved header name into
+          // the real one at viewer-response — see that function's own updated comment.
+          "x-oauth-www-authenticate": `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
           "Access-Control-Allow-Origin": "*",
         },
       },

@@ -889,7 +889,12 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
       {
         status: 401,
         headers: {
-          "WWW-Authenticate": `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
+          // NOT literally "WWW-Authenticate" — see app/api/v1/mcp/route.ts's own comment
+          // and unmangle-www-authenticate-function.js: CloudFront classifies any ORIGIN
+          // response containing that exact header name as an error response and skips
+          // running viewer-response CloudFront Functions for it, so the real header can
+          // only be introduced by the CloudFront Function itself, after the fact.
+          "x-oauth-www-authenticate": `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
         },
       },
     );
