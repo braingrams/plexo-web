@@ -39,24 +39,15 @@ export async function GET(request: NextRequest): Promise<Response> {
   // is challenged the same way POST tools/call etc. are (see mcpServer.ts).
   const resolved = await resolveUser(request);
   if (!resolved) {
+    // The real WWW-Authenticate header is added by CloudFront's own McpResponseHeadersPolicy
+    // (see compute-stack.ts) on this route's dedicated behavior, not set here — a Lambda
+    // Function URL origin can't send that header name directly (CloudFront error-classifies
+    // and remaps it, then skips even a CloudFront Function trying to fix it up after the
+    // fact — confirmed live). This response body still names it for any client inspecting
+    // the JSON directly instead of the header.
     return NextResponse.json(
       { error: "authentication_required", error_description: "See WWW-Authenticate header." },
-      {
-        status: 401,
-        headers: {
-          // NOT literally "WWW-Authenticate" — CloudFront classifies any ORIGIN response
-          // containing that exact header name as an error response (x-cache: Error from
-          // cloudfront) and, critically, SKIPS running viewer-response CloudFront
-          // Functions for responses in that classification — confirmed live: the
-          // unmangle-www-authenticate-function.js fix never once executed, even though
-          // it was correctly deployed and associated. So the real header can only be
-          // introduced AFTER that classification already happened, i.e. by the
-          // CloudFront Function itself renaming this safe, non-reserved header name into
-          // the real one at viewer-response — see that function's own updated comment.
-          "x-oauth-www-authenticate": `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
-          "Access-Control-Allow-Origin": "*",
-        },
-      },
+      { status: 401, headers: { "Access-Control-Allow-Origin": "*" } },
     );
   }
 

@@ -419,13 +419,30 @@ export class ComputeStack extends cdk.Stack {
       runtime: cloudfront.FunctionRuntime.JS_2_0,
     });
 
-    // See unmangle-www-authenticate-function.js's own comment — the Lambda Function URL
-    // origin silently renames any WWW-Authenticate response header (the MCP OAuth flow's
-    // 401 challenge, see mcpServer.ts) to x-amzn-remapped-www-authenticate; this restores
-    // the real header name on the way out to the viewer.
-    const unmangleWwwAuthenticateFn = new cloudfront.Function(this, "UnmangleWwwAuthenticateFunction", {
-      code: cloudfront.FunctionCode.fromFile({ filePath: path.join(__dirname, "unmangle-www-authenticate-function.js") }),
-      runtime: cloudfront.FunctionRuntime.JS_2_0,
+    // The MCP OAuth flow's 401 challenge (see mcpServer.ts) needs a real WWW-Authenticate
+    // response header — but a Lambda Function URL origin can't send that header name
+    // directly: CloudFront classifies ANY origin response containing it as an error
+    // response (x-cache: Error from cloudfront) and renames it to
+    // x-amzn-remapped-www-authenticate (reserved for CloudFront's own AWS_IAM
+    // auth-challenge responses). A CloudFront Function can't work around this either —
+    // confirmed live with a debug canary header: viewer-response functions simply don't
+    // run at all for responses CloudFront classifies as errors, regardless of what
+    // header name triggered that classification. A ResponseHeadersPolicy is a native
+    // CloudFront mechanism (not a customer function) applied to the final response
+    // CloudFront sends the viewer, including error-classified ones — confirmed this one
+    // isn't skipped the same way. Scoped to its own behavior below (api/v1/mcp*) rather
+    // than the whole distribution, since the header's only meaningful on that route.
+    const mcpBaseUrl = appDomain ? `https://${appDomain}` : "https://plexo.charisol.io";
+    const mcpResponseHeadersPolicy = new cloudfront.ResponseHeadersPolicy(this, "McpResponseHeadersPolicy", {
+      customHeadersBehavior: {
+        customHeaders: [
+          {
+            header: "WWW-Authenticate",
+            value: `Bearer resource_metadata="${mcpBaseUrl}/.well-known/oauth-protected-resource"`,
+            override: true,
+          },
+        ],
+      },
     });
 
     // DNS-validated via a manual CNAME (see appDomain's own comment above) — `cdk deploy`
@@ -450,12 +467,18 @@ export class ComputeStack extends cdk.Stack {
         cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
         allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
         originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
-        functionAssociations: [
-          { function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST },
-          { function: unmangleWwwAuthenticateFn, eventType: cloudfront.FunctionEventType.VIEWER_RESPONSE },
-        ],
+        functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
       },
       additionalBehaviors: {
+        "api/v1/mcp*": {
+          origin: new origins.FunctionUrlOrigin(serverFnUrl, { customHeaders: { "x-origin-verify": originVerifySecret! } }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+          responseHeadersPolicy: mcpResponseHeadersPolicy,
+        },
         "_next/image*": {
           origin: origins.FunctionUrlOrigin.withOriginAccessControl(imageFnUrl),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
