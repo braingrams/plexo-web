@@ -214,14 +214,18 @@ jobs:
           APP_URL: https://d3i92fgfanqz2.cloudfront.net
         run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
 
-      # Checks the distribution's own *.cloudfront.net domain, NOT staging-plexo.charisol.io
-      # directly — this must keep working even in the window before that domain's own
-      # routing CNAME (as opposed to the ACM validation one, already long in place) is
-      # added, which this step has no way to know the status of.
+      # Checks staging-plexo.charisol.io directly, NOT the distribution's own
+      # *.cloudfront.net domain — now that NEXT_PUBLIC_APP_URL is the custom domain,
+      # middleware.ts's own tenant-vs-dashboard routing no longer recognizes the bare
+      # CloudFront domain as "home" at all (confirmed by a real false-failure here: the
+      # raw domain now 404s with the app's own "this landing page domain has not been
+      # published" page, even though the real domain is healthy) — checking the actual
+      # domain real traffic uses is both more accurate and no longer blocked on DNS
+      # propagation, since the routing CNAME (not just the ACM validation one) is
+      # confirmed permanently in place at this point.
       - name: Smoke test — dashboard responds
         run: |
-          DOMAIN=$(aws cloudformation describe-stacks --stack-name "${STACK_ID}-compute-stack" --query "Stacks[0].Outputs[?OutputKey=='DistributionDomainName'].OutputValue" --output text)
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${DOMAIN}/")
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://staging-plexo.charisol.io/")
           if [ "$STATUS" != "200" ]; then
             echo "::error::Dashboard returned HTTP $STATUS after deploy"
             exit 1
