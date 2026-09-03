@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import { decryptPaystackKey } from "@/lib/crypto";
+import { decryptPaystackKey, tryDecrypt } from "@/lib/crypto";
 import { listConfiguredPaystackSecretKeys } from "@/lib/commerce/paystack";
 import { claimPaystackEvent, confirmPaystackPayment, handleOrderPaid } from "@/lib/db/commerceWebhookOperations";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
@@ -51,7 +51,11 @@ export async function POST(
   // Constant-time comparison per candidate — a naive === here is a well-known timing
   // side-channel for exactly this kind of check.
   const signatureValid = configuredKeys.some(({ secretKeyEncrypted }) => {
-    const secretKey = decryptPaystackKey(secretKeyEncrypted);
+    // A candidate whose stored key can't be decrypted (wrong/rotated encryption secret,
+    // corrupted ciphertext) can never validate any signature — treat it as simply not
+    // matching rather than letting the whole webhook 500 on every retry.
+    const secretKey = tryDecrypt(() => decryptPaystackKey(secretKeyEncrypted));
+    if (!secretKey) return false;
     const expectedSignature = createHmac("sha512", secretKey).update(rawBody).digest("hex");
     const expectedBuf = Buffer.from(expectedSignature, "utf8");
     return expectedBuf.length === providedBuf.length && timingSafeEqual(expectedBuf, providedBuf);

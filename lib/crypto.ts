@@ -108,3 +108,21 @@ export function encryptDigitalAccessSecret(plainText: string): string {
 export function decryptDigitalAccessSecret(encoded: string): string {
   return decryptWithKey(encoded, deriveKey(requireEnv("COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET")));
 }
+
+/**
+ * Wraps any of the decryptX functions above and turns a failure into `null` instead of
+ * throwing — every decrypt* function here throws on a wrong/rotated key or corrupted
+ * ciphertext (AES-GCM auth-tag mismatch), which is a REAL possibility for pre-existing
+ * data if the encryption secret was ever rotated without re-encrypting stored values.
+ * Callers that already treat "no value" as a valid, handled state (e.g. "this field was
+ * never configured") should use this so a decrypt failure degrades to that same state —
+ * prompting whoever owns the record to re-enter the secret — instead of crashing the
+ * whole page/request.
+ */
+export function tryDecrypt(fn: () => string): string | null {
+  try {
+    return fn();
+  } catch {
+    return null;
+  }
+}

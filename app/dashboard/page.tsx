@@ -89,7 +89,10 @@ export default async function OverviewPage() {
     ),
     ApiKey.query.primary({ organizationId }).go(),
   ]);
-  const apiKeys = apiKeysResult.data;
+  // Matches app/dashboard/settings/api-keys/page.tsx's own filter — a revoked key stays in
+  // the table (never hard-deleted) but shouldn't count here or on the management page, or
+  // this stat and the "never used" nudge below both drift from what that page actually shows.
+  const apiKeys = apiKeysResult.data.filter((k) => k.isActive);
 
   const allDomains = domainsByTemplate.flatMap((d) => d.data);
   const domainsCount = allDomains.length;

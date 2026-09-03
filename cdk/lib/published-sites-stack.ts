@@ -3,7 +3,6 @@ import { Construct } from "constructs";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as route53 from "aws-cdk-lib/aws-route53";
-import * as iam from "aws-cdk-lib/aws-iam";
 import * as s3 from "aws-cdk-lib/aws-s3";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as events from "aws-cdk-lib/aws-events";
@@ -254,16 +253,16 @@ export class PublishedSitesStack extends cdk.Stack {
         sourceArn: `arn:aws:cloudfront::${this.account}:distribution/${primaryDistribution.attrId}`,
       });
     }
-    // S3 bucket policy grant for this distribution's OAC — the bucket itself is owned by
-    // compute-stack.ts, but any stack may extend an imported bucket's resource policy.
-    assetsBucket.addToResourcePolicy(
-      new iam.PolicyStatement({
-        principals: [new iam.ServicePrincipal("cloudfront.amazonaws.com")],
-        actions: ["s3:GetObject"],
-        resources: [assetsBucket.arnForObjects("*")],
-        conditions: { StringEquals: { "AWS:SourceArn": `arn:aws:cloudfront::${this.account}:distribution/${primaryDistribution.attrId}` } },
-      }),
-    );
+    // Deliberately NOT calling assetsBucket.addToResourcePolicy() here, despite this
+    // distribution needing S3 read access too: this bucket is IMPORTED (owned by
+    // compute-stack.ts), and PutBucketPolicy fully replaces the whole document — a second,
+    // independently-CloudFormation-managed AWS::S3::BucketPolicy on the same physical
+    // bucket from THIS stack would race with compute-stack's own on every alternating
+    // deploy, each silently clobbering the other's grant (confirmed live: this is exactly
+    // what broke every published site's /commerce.js with a 403 after compute-stack's most
+    // recent deploy). compute-stack.ts now grants s3:GetObject to the whole AWS account
+    // (aws:SourceAccount) instead of one specific distribution ARN, which already covers
+    // this distribution — see its own comment at that grant.
 
     // --- Connection group — the actual routing endpoint every tenant's DNS CNAME points
     // at (one shared endpoint domain for every tenant using it, wildcard AND custom-domain

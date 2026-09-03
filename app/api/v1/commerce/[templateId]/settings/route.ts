@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin, maskSecret } from "@/lib/commerce/adminAuthDynamo";
-import { encryptPaystackKey, decryptPaystackKey, encryptMaildripKey, decryptMaildripKey } from "@/lib/crypto";
+import { encryptPaystackKey, decryptPaystackKey, encryptMaildripKey, decryptMaildripKey, tryDecrypt } from "@/lib/crypto";
 import { CommerceSettings, CommerceStripeAccessRequest } from "@/lib/db/commerceEntities";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
@@ -22,12 +22,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
       // Secrets are never returned in plaintext — only a masked hint that something is
       // configured, same idea as ApiKey.maskedKey.
       paystackTestSecretKeyMasked: settings?.paystackTestSecretKeyEncrypted
-        ? maskSecret(decryptPaystackKey(settings.paystackTestSecretKeyEncrypted))
+        ? maskSecret(tryDecrypt(() => decryptPaystackKey(settings.paystackTestSecretKeyEncrypted!)))
         : null,
       paystackLiveSecretKeyMasked: settings?.paystackLiveSecretKeyEncrypted
-        ? maskSecret(decryptPaystackKey(settings.paystackLiveSecretKeyEncrypted))
+        ? maskSecret(tryDecrypt(() => decryptPaystackKey(settings.paystackLiveSecretKeyEncrypted!)))
         : null,
-      maildripApiKeyMasked: settings?.maildripApiKeyEncrypted ? maskSecret(decryptMaildripKey(settings.maildripApiKeyEncrypted)) : null,
+      maildripApiKeyMasked: settings?.maildripApiKeyEncrypted ? maskSecret(tryDecrypt(() => decryptMaildripKey(settings.maildripApiKeyEncrypted!))) : null,
       maildripPaidGroupId: settings?.maildripPaidGroupId ?? null,
       maildripNewsletterGroupId: settings?.maildripNewsletterGroupId ?? null,
       notificationEmail: settings?.notificationEmail ?? null,
@@ -151,9 +151,9 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
       paystackMode: settings.paystackMode,
       paystackTestPublicKey: settings.paystackTestPublicKey ?? null,
       paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
-      paystackTestSecretKeyMasked: settings.paystackTestSecretKeyEncrypted ? maskSecret(decryptPaystackKey(settings.paystackTestSecretKeyEncrypted)) : null,
-      paystackLiveSecretKeyMasked: settings.paystackLiveSecretKeyEncrypted ? maskSecret(decryptPaystackKey(settings.paystackLiveSecretKeyEncrypted)) : null,
-      maildripApiKeyMasked: settings.maildripApiKeyEncrypted ? maskSecret(decryptMaildripKey(settings.maildripApiKeyEncrypted)) : null,
+      paystackTestSecretKeyMasked: settings.paystackTestSecretKeyEncrypted ? maskSecret(tryDecrypt(() => decryptPaystackKey(settings.paystackTestSecretKeyEncrypted!))) : null,
+      paystackLiveSecretKeyMasked: settings.paystackLiveSecretKeyEncrypted ? maskSecret(tryDecrypt(() => decryptPaystackKey(settings.paystackLiveSecretKeyEncrypted!))) : null,
+      maildripApiKeyMasked: settings.maildripApiKeyEncrypted ? maskSecret(tryDecrypt(() => decryptMaildripKey(settings.maildripApiKeyEncrypted!))) : null,
       maildripPaidGroupId: settings.maildripPaidGroupId ?? null,
       maildripNewsletterGroupId: settings.maildripNewsletterGroupId ?? null,
       notificationEmail: settings.notificationEmail ?? null,

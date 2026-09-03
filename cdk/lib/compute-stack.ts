@@ -164,6 +164,32 @@ export class ComputeStack extends cdk.Stack {
       prune: false,
     });
 
+    // This bucket is ALSO read by published-sites-stack.ts's own separate CloudFront
+    // distribution (via s3.Bucket.fromBucketName + an imported-bucket origin there) — but
+    // this stack is the bucket's owner, so it's the only one that may safely manage its
+    // AWS::S3::BucketPolicy. Each S3BucketOrigin.withOriginAccessControl() call below
+    // auto-adds its OWN narrow per-distribution statement (scoped to THIS stack's
+    // distribution only) into that same policy document; that alone starved
+    // published-sites-stack's distribution of access, because published-sites-stack used
+    // to separately call addToResourcePolicy() on the imported bucket for its own
+    // distribution ARN — a SECOND, independently-CloudFormation-managed BucketPolicy on
+    // the same physical bucket. PutBucketPolicy fully replaces the document, so the two
+    // stacks silently clobbered each other's grant on every alternating deploy (confirmed
+    // live: this stack's most recent deploy left only its own distribution able to read
+    // /commerce.js, breaking every published site's shop/cart/checkout blocks with a 403).
+    // Fix: one explicit account-wide grant here (covers every current and future
+    // distribution in this account, not just the two that exist today) instead of a
+    // per-distribution one, and published-sites-stack.ts no longer touches this bucket's
+    // policy at all — see that file's own comment at the removed call site.
+    assetsBucket.addToResourcePolicy(
+      new iam.PolicyStatement({
+        principals: [new iam.ServicePrincipal("cloudfront.amazonaws.com")],
+        actions: ["s3:GetObject"],
+        resources: [assetsBucket.arnForObjects("*")],
+        conditions: { StringEquals: { "aws:SourceAccount": this.account } },
+      }),
+    );
+
     // ISR tag-cache table — DynamoDB, per open-next's tagCache/dynamodb.js contract
     // (CACHE_DYNAMO_TABLE). Not part of the six bounded-context business-data tables;
     // this is OpenNext's own internal bookkeeping, kept separate on purpose.
