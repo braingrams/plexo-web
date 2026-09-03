@@ -17,6 +17,11 @@ if (typeof window !== "undefined") {
     // the Developer Portal, same as redirectUri above is registered as a redirect URI.
     logoutRedirectUri: `${window.location.origin}/auth/login`,
     appName: "Plexo",
+    // Next.js's app/icon.tsx conventional route — a real, publicly fetchable 32x32 PNG of
+    // the same mark app/plexo-logo.tsx renders as React elsewhere in the app (there's no
+    // static logo file to point at directly; this is the one place Plexo's mark already
+    // gets rendered to an actual image).
+    appLogoUrl: `${window.location.origin}/icon`,
     showRedirectNotice: true,
   });
 }

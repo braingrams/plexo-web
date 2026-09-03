@@ -1,21 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CharisolAuth, POST_LOGIN_REDIRECT_KEY } from "@/lib/charisolAuth";
 import { authClient } from "@/lib/auth-client";
+import { DashboardSkeleton } from "./dashboard-skeleton";
 
 // redirectUri target registered for Plexo's Charisol app client (Developer Portal) and
 // passed to CharisolAuth.init() in lib/charisolAuth.ts. CharisolAuth.init() already saw
 // this page's ?code=&state= on import (module scope, ahead of this component's own effect
 // — see lib/charisolAuth.ts's comment) and kicked off the PKCE code exchange; getSession()
 // here just awaits that in-flight exchange rather than starting a new one.
+//
+// No inline error/success state here — a failure routes back to /auth/login with the
+// message as a query param (?error=...) rather than rendering an error on this page, and
+// success routes straight into the real dashboard. The skeleton below is only ever shown
+// mid-flight, so there's nothing for this page itself to render once the exchange settles
+// either way.
 export default function CharisolCallbackPage() {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+
+    function failAndReturnToLogin(message: string): void {
+      if (cancelled) return;
+      router.replace(`/auth/login?error=${encodeURIComponent(message)}`);
+    }
 
     async function completeSignIn(): Promise<void> {
       const redirectTo = window.sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY) ?? "/dashboard";
@@ -25,12 +36,12 @@ export default function CharisolCallbackPage() {
       try {
         session = await CharisolAuth.getSession();
       } catch {
-        if (!cancelled) setError("That sign-in link expired or was already used. Please try again.");
+        failAndReturnToLogin("That sign-in link expired or was already used. Please try again.");
         return;
       }
 
       if (!session) {
-        if (!cancelled) setError("Google sign-in didn't complete. Please try again.");
+        failAndReturnToLogin("Google sign-in didn't complete. Please try again.");
         return;
       }
 
@@ -38,7 +49,7 @@ export default function CharisolCallbackPage() {
       if (cancelled) return;
 
       if (result.error) {
-        setError(result.error.message);
+        failAndReturnToLogin(result.error.message ?? "Google sign-in didn't complete. Please try again.");
         return;
       }
 
@@ -51,18 +62,5 @@ export default function CharisolCallbackPage() {
     };
   }, [router]);
 
-  return (
-    <main className="min-h-screen bg-[#0b0f19] text-white flex items-center justify-center px-4">
-      {error ? (
-        <div className="max-w-sm text-center space-y-4">
-          <p className="text-sm font-semibold text-red-300">{error}</p>
-          <a href="/auth/login" className="inline-block text-sm font-bold text-purple-400 hover:underline">
-            Back to sign in
-          </a>
-        </div>
-      ) : (
-        <p className="text-sm font-mono text-slate-400">Finishing sign-in…</p>
-      )}
-    </main>
-  );
+  return <DashboardSkeleton />;
 }

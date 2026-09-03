@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { ArrowLeft, Sparkles, ShieldCheck, CheckCircle2, Lock, Eye, EyeOff } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Mulish } from "next/font/google";
@@ -22,7 +22,18 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => params.get("error"));
+
+  // A failed Charisol/Google sign-in routes back here with ?error=... (see
+  // app/auth/charisol/callback/page.tsx) rather than showing anything on that page
+  // itself. Strip it from the URL once read so a refresh doesn't keep re-showing it.
+  useEffect(() => {
+    if (!params.get("error")) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("error");
+    router.replace(`${url.pathname}${url.search}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
