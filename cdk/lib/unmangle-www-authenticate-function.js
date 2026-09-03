@@ -17,6 +17,7 @@
 // get created.
 function handler(event) {
   var headers = event.response.headers;
+  headers["x-debug-fn-ran"] = { value: "true" };
   var challenge = headers["x-oauth-www-authenticate"];
   if (challenge) {
     headers["www-authenticate"] = { value: challenge.value };
