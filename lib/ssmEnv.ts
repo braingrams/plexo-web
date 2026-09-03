@@ -34,6 +34,13 @@ const APP_SECRET_KEYS = [
   "MAILDRIP_API_KEY",
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
+  // Plexo's platform-hosted Commerce Stripe account (app/api/webhooks/stripe/commerce,
+  // lib/commerce/stripeClient.ts) — a separate account/key concept from STRIPE_SECRET_KEY
+  // above by design (keeps marketplace seller charges out of the platform billing ledger),
+  // though the two CAN point at the same underlying Stripe account if that's how it's
+  // configured in SSM; the code doesn't assume either way.
+  "PLATFORM_COMMERCE_STRIPE_SECRET_KEY",
+  "PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET",
   "STRIPE_PRICE_PRO",
   "STRIPE_PRICE_ULTRA",
   "STRIPE_PRICE_TOPUP_SMALL",
