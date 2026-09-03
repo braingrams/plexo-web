@@ -94,4 +94,9 @@ jobs:
         working-directory: ./cdk
         env:
           TABLE_STACK_ID: staging-plexo
+          # PR previews share staging's data tables (TABLE_STACK_ID above), including its
+          # plexo-ledger table and the customer-managed KMS key that guards it — so this
+          # is staging's own key, not a per-PR one. See compute-stack.ts's own
+          # ledgerKmsKeyArn comment for why this must be the real key/ ARN, not alias/.
+          LEDGER_KMS_KEY_ARN: arn:aws:kms:us-east-1:919927637684:key/91672c29-e32c-4524-ad2d-b9b2b2b1ef92
         run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively
