@@ -867,7 +867,6 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
   const jsonrpc = body?.jsonrpc || "2.0";
   const id = body?.id ?? null;
   const method = body?.method;
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
 
   // Every method below needs a specific user/org's data — there's no anonymous
   // capability worth exposing here — so auth is checked once, up front, for all of them.
@@ -877,7 +876,11 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
   // flow when it receives an actual 401 with a WWW-Authenticate challenge pointing at
   // this resource's protected-resource metadata — a 200 with an error message in the
   // payload gives it nothing to act on, which is exactly why Claude's own "add custom
-  // connector" flow detected this server as requiring no authentication at all.
+  // connector" flow detected this server as requiring no authentication at all. The
+  // header itself is added by CloudFront's own McpResponseHeadersPolicy on this route's
+  // dedicated behavior (see compute-stack.ts), not here — a Lambda Function URL origin
+  // can't send that header name directly (CloudFront error-classifies and remaps it,
+  // then skips even a CloudFront Function trying to fix it up after the fact).
   const resolved = await resolveUser(request);
   if (!resolved) {
     return NextResponse.json(
@@ -886,12 +889,7 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
         id,
         error: { code: -32001, message: "Authentication required. See WWW-Authenticate header." },
       },
-      {
-        status: 401,
-        headers: {
-          "WWW-Authenticate": `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`,
-        },
-      },
+      { status: 401 },
     );
   }
 
