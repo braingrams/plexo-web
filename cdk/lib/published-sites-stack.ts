@@ -143,28 +143,65 @@ export class PublishedSitesStack extends cdk.Stack {
       functionCode: fs.readFileSync(path.join(__dirname, "forward-host-function.js"), "utf8"),
     });
 
-    const CACHING_DISABLED = cloudfront.CachePolicy.CACHING_DISABLED.cachePolicyId;
     const CACHING_OPTIMIZED = cloudfront.CachePolicy.CACHING_OPTIMIZED.cachePolicyId;
     const ALL_VIEWER_EXCEPT_HOST = cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER.originRequestPolicyId;
     const ALLOW_ALL_METHODS = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"];
     const CACHED_METHODS = ["GET", "HEAD"];
 
-    // EMERGENCY REVERT (2026-09-04): a short-TTL cache policy briefly lived here, allow-
-    // listing "Host" so the cache key varied per tenant domain. That broke EVERY published
-    // site in production within minutes of deploying: CloudFront forwards any header named
-    // in a cache policy's allowList to the origin regardless of what the origin request
-    // policy says, so "Host" being in that allowlist put the viewer's tenant domain back
-    // into the Host header sent to the ServerFn Lambda Function URL origin — exactly what
-    // ALL_VIEWER_EXCEPT_HOST_HEADER below exists to strip (a Function URL only routes
-    // correctly when Host matches ITS OWN domain). Every request 403'd with a raw
-    // `{"Message":null}` straight from Lambda's Function URL service, before this app's own
-    // code ever ran. Reverted to CACHING_DISABLED (this distribution's original, known-good
-    // behavior) to stop the outage immediately. A correct version of this optimization
-    // needs the cache key to vary by tenant WITHOUT reusing the literal "Host" header name —
-    // e.g. allow-listing "x-forwarded-host" instead (forward-host-function.js, the
-    // CloudFront Function below, already copies the real viewer host there before
-    // ALL_VIEWER_EXCEPT_HOST_HEADER strips the real Host) — deliberately not attempted here
-    // again without full staging verification first.
+    // Short-TTL cache policy for the page HTML itself (ServerFn's default behavior below).
+    // SECOND ATTEMPT (2026-09-04) — the first one broke every published site in production:
+    // it allow-listed the literal "Host" header for the cache key. CloudFront forwards any
+    // header named in a cache policy's allowList to the origin regardless of what the origin
+    // request policy says, so that put the viewer's tenant domain back into the Host header
+    // sent to the ServerFn Lambda Function URL origin — exactly what ALL_VIEWER_EXCEPT_HOST
+    // below exists to strip (a Function URL only routes correctly when Host matches ITS OWN
+    // domain). Every request 403'd with a raw `{"Message":null}` straight from Lambda's
+    // Function URL service, before this app's own code ever ran — reverted to
+    // CACHING_DISABLED to stop the outage, then re-attempted here properly.
+    //
+    // The fix: allow-list "x-forwarded-host" instead of "Host". forward-host-function.js
+    // (the CloudFront Function below, viewer-request — runs before both the cache lookup
+    // and the origin request policy) already copies the real viewer Host into this custom
+    // header before ALL_VIEWER_EXCEPT_HOST strips the real one. Naming it in the cache
+    // policy still varies the cache key correctly per tenant (this app's own middleware.ts
+    // already reads x-forwarded-host for its own host-based routing, same mechanism), but
+    // being a custom header rather than the reserved "Host" name, CloudFront forwarding it
+    // to the origin is harmless — it never touches the actual HTTP Host header the origin
+    // connection uses, which stays governed by the origin's own configured domain.
+    // Verified end-to-end on staging (a real published test site, not just cdk synth)
+    // before this went anywhere near production again — see this session's own notes.
+    //
+    // Why not CACHING_OPTIMIZED: route.ts's own served HTML is not uniformly static — it
+    // bakes in server-resolved, DB-driven state per request (branding bar visibility,
+    // white-label favicon, per-product SEO tags) that can change the moment an owner edits
+    // their site/plan/branding. 10s default / 60s max TTL bounds that staleness window to
+    // something an owner editing their own site won't perceive as broken, while still
+    // turning repeat traffic within that window into a cache hit instead of a fresh Lambda
+    // invocation.
+    //
+    // cookieBehavior: none — verified by reading route.ts (and every helper it calls:
+    // resolveSite, resolveHideBranding/canWhiteLabel, resolveBlogRedirect) end to end: this
+    // handler never reads request.cookies. The "personalized" pieces (cart state, session
+    // data) are handled client-side by commerce.js AFTER this cached HTML loads.
+    //
+    // queryStringBehavior: allowList("p"), not "none" — the WordPress shortlink redirect
+    // (`/?p=123`) shares the exact same path ("/") as the plain homepage and every other
+    // `?p=N` value; dropping query strings entirely would let whichever response CloudFront
+    // cached first for "/" get served to every other visitor of "/", including ones with no
+    // `p` at all. Allow-listing just "p" keeps that one param in the cache key without
+    // fragmenting the cache on ordinary marketing querystrings (utm_source, fbclid, etc).
+    const pageCachePolicy = new cloudfront.CachePolicy(this, "PublishedPageCachePolicy", {
+      cachePolicyName: `${this.stackName}-page`,
+      comment: "Short-TTL cache for published page HTML — see published-sites-stack.ts's own comment at this resource",
+      defaultTtl: cdk.Duration.seconds(10),
+      minTtl: cdk.Duration.seconds(0),
+      maxTtl: cdk.Duration.seconds(60),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("p"),
+      headerBehavior: cloudfront.CacheHeaderBehavior.allowList("x-forwarded-host"),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    });
 
     // --- The multi-tenant "primary" distribution — behaviors are a straight port of
     // compute-stack.ts's own Distribution (see that file's comment: "behaviors match
@@ -243,7 +280,7 @@ export class PublishedSitesStack extends cdk.Stack {
         defaultCacheBehavior: {
           targetOriginId: "ServerFn",
           viewerProtocolPolicy: "redirect-to-https",
-          cachePolicyId: CACHING_DISABLED,
+          cachePolicyId: pageCachePolicy.cachePolicyId,
           originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST,
           allowedMethods: ALLOW_ALL_METHODS,
           cachedMethods: CACHED_METHODS,
