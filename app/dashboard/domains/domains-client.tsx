@@ -1847,7 +1847,7 @@ export function BuyDomainFlow({
                         className="btn-secondary"
                         style={{ padding: "0.4rem 0.8rem", fontSize: "0.78rem", textDecoration: "none", whiteSpace: "nowrap" }}
                       >
-                        Get this domain
+                        Search for it
                       </a>
                     ) : null}
                   </div>

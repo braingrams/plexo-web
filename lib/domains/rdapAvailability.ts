@@ -38,22 +38,22 @@ export async function checkExternalAvailability(domain: string): Promise<Externa
 }
 
 /**
- * Where to send a customer to register a domain Plexo can't buy for them directly. This
- * used to link straight to one commercial registrar's search page — wrong, confirmed live:
- * a domain under a ccTLD that registrar doesn't resell at all (e.g. Nigeria's .ng, which
- * needs a NiRA-accredited registrar) landed the customer on that registrar's own
- * "Unsupported TLD" page, a dead end.
+ * Where to send a customer to register a domain Plexo can't buy for them directly.
  *
- * There is no single commercial registrar that covers every TLD in existence — plenty of
- * ccTLDs are only sold through country-specific accredited registrars. IANA's own root zone
- * database is the one destination that's authoritative and correct for literally every TLD,
- * gTLD or ccTLD: it names that TLD's actual registry and (for the common case) links onward
- * to where it's actually sold, rather than guessing at a reseller that may not carry it.
- * Verified live against real TLDs (including "ng") before shipping this — every one
- * resolves.
+ * Two things were tried and both failed for real reasons, confirmed live:
+ * 1. One fixed commercial registrar's search page — broke for any ccTLD that registrar
+ *    doesn't resell (Nigeria's .ng needs a NiRA-accredited registrar), landing on that
+ *    registrar's own "Unsupported TLD" dead end.
+ * 2. IANA's root zone database — correct for every TLD without exception, but it's a raw
+ *    registry record (Technical Contact, Name Servers, RDAP Server...), not something a
+ *    regular customer should ever have to read to figure out where to buy a domain.
+ *
+ * There's no single destination that's both universally correct AND consumer-friendly —
+ * ccTLD registrar coverage varies too much to hardcode a mapping that won't eventually be
+ * wrong for someone. A plain search is the honest answer: it never 404s, never shows a
+ * registrar's own "not supported" page, and always lands the customer somewhere they can
+ * actually act on, whatever TLD they searched.
  */
 export function externalRegistrationUrl(domain: string): string {
-  const labels = domain.trim().toLowerCase().split(".");
-  const rootTld = labels[labels.length - 1] ?? "";
-  return `https://www.iana.org/domains/root/db/${encodeURIComponent(rootTld)}.html`;
+  return `https://www.google.com/search?q=${encodeURIComponent(`register the domain ${domain}`)}`;
 }
