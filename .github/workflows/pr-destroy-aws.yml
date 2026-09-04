@@ -91,6 +91,17 @@ jobs:
 
       - name: Destroy the PR's compute stack only — never --all, never the data stack
         working-directory: ./cdk
+        env:
+          # compute-stack.ts's constructor throws if this is unset (see its own
+          # ledgerKmsKeyArn comment) — cdk/bin/app.ts unconditionally constructs it for
+          # STACK_KIND=compute, so `cdk destroy` needs this just as much as `cdk deploy`
+          # does. Missing here for a real stretch of this workflow's history: every PR-close
+          # teardown failed before `cdk destroy` ever ran, silently leaving every closed
+          # PR's compute stack (and its cost) alive — see pr-deploy-aws.yml's own use of
+          # this same value, staging's real ledger KMS key (nothing here depends on it
+          # matching what the stack was originally deployed with, same as the two SSM-
+          # fetched secrets above).
+          LEDGER_KMS_KEY_ARN: arn:aws:kms:us-east-1:919927637684:key/91672c29-e32c-4524-ad2d-b9b2b2b1ef92
         run: npx aws-cdk destroy "${STACK_ID}-compute-stack" --force --exclusively
 
       - name: Verify the stack is actually gone
