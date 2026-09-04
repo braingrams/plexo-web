@@ -25,7 +25,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const portalSession = await getStripe().billingPortal.sessions.create({
       customer: user.stripeCustomerId,
-      return_url: `${appUrl}/dashboard/settings`,
+      // Stripe's Billing Portal has no embeddable mode (unlike Checkout) — it's always a
+      // hosted redirect. `/dashboard/settings` was never a real page though, so this
+      // always landed on a 404 after "Manage subscription" closed.
+      return_url: `${appUrl}/dashboard/settings/subscription`,
     });
     return NextResponse.json({ url: portalSession.url });
   } catch (err) {

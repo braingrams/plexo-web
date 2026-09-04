@@ -1,7 +1,10 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
+import { getStripePromise } from "@/lib/stripeClientPromise";
 
 type LedgerEntryType = "MONTHLY_GRANT" | "TOPUP_PURCHASE" | "AI_USAGE" | "REFUND" | "ADJUSTMENT";
 
@@ -82,11 +85,96 @@ function daysUntil(iso: string): number {
   return Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
 }
 
+/** The card-entry step now renders in this modal (Stripe's embedded Checkout, an iframe) —
+ * the visitor never leaves the app to pay. Stripe still does one final navigation to
+ * `return_url` once payment completes (that part of embedded Checkout isn't avoidable), which
+ * is what BillingSection's own ?session_id handling below picks up. */
+function CheckoutModal({ clientSecret, onClose }: { clientSecret: string; onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,7,15,0.75)", backdropFilter: "blur(6px)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#fff", borderRadius: 16, width: "100%", maxWidth: 560, maxHeight: "90vh",
+          overflow: "auto", position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          style={{
+            position: "absolute", top: "0.75rem", right: "0.75rem", zIndex: 1, width: 30, height: 30,
+            display: "grid", placeItems: "center", background: "rgba(15,15,25,0.06)", border: "none",
+            borderRadius: 8, color: "rgba(15,15,25,0.6)", cursor: "pointer", fontSize: "1rem", lineHeight: 1,
+          }}
+        >
+          ✕
+        </button>
+        <EmbeddedCheckoutProvider stripe={getStripePromise()} options={{ clientSecret }}>
+          <EmbeddedCheckout />
+        </EmbeddedCheckoutProvider>
+      </div>
+    </div>
+  );
+}
+
 export function BillingSection({ plan, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
+  const [checkoutStatus, setCheckoutStatus] = useState<{ kind: "success" | "processing" | "error"; text: string } | null>(null);
 
   const total = allowanceBalance + topupBalance;
+
+  // Picks up the `?session_id=` Stripe's embedded Checkout lands back on after a completed
+  // payment (see CheckoutModal's comment) — confirms the real status via our own backend
+  // rather than trusting the query string, then strips it from the URL so a refresh doesn't
+  // re-trigger this. The actual plan/credit change is applied by the checkout.session.completed
+  // webhook, same as before switching to embedded Checkout — this only drives the banner and a
+  // follow-up refresh to reflect it.
+  useEffect(() => {
+    const sessionId = searchParams.get("session_id");
+    if (!sessionId) return;
+    let cancelled = false;
+    fetch(`/api/billing/checkout/session?session_id=${encodeURIComponent(sessionId)}`)
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (cancelled) return;
+        if (!ok) {
+          setCheckoutStatus({ kind: "error", text: data.error ?? "Couldn't confirm your payment." });
+          return;
+        }
+        if (data.status === "complete") {
+          setCheckoutStatus({ kind: "success", text: "Payment received — your plan is updating now." });
+          setTimeout(() => {
+            if (!cancelled) router.refresh();
+          }, 2000);
+        } else {
+          setCheckoutStatus({ kind: "processing", text: "Your payment is still processing — check back in a moment." });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCheckoutStatus({ kind: "error", text: "Couldn't confirm your payment." });
+      });
+    router.replace(pathname);
+    return () => {
+      cancelled = true;
+    };
+    // Deliberately once-on-mount: reads the session_id that was present on first load, then
+    // clears it via router.replace — re-running on searchParams change would just re-fire on
+    // that same clear.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function startCheckout(body: CheckoutBody, actionKey: string): Promise<void> {
     setBusyAction(actionKey);
@@ -97,11 +185,12 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !data.url) throw new Error(data.error ?? "Could not start checkout.");
-      window.location.href = data.url;
+      const data = (await res.json()) as { clientSecret?: string; error?: string };
+      if (!res.ok || !data.clientSecret) throw new Error(data.error ?? "Could not start checkout.");
+      setCheckoutSecret(data.clientSecret);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start checkout.");
+    } finally {
       setBusyAction(null);
     }
   }
@@ -169,6 +258,19 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
       </div>
 
       <div style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        {checkoutStatus && (
+          <div
+            style={{
+              display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.7rem 1rem", borderRadius: 10, fontSize: "0.82rem",
+              background: checkoutStatus.kind === "success" ? "rgba(52,211,153,0.1)" : checkoutStatus.kind === "error" ? "rgba(248,113,113,0.1)" : "rgba(251,191,36,0.1)",
+              border: `1px solid ${checkoutStatus.kind === "success" ? "rgba(52,211,153,0.25)" : checkoutStatus.kind === "error" ? "rgba(248,113,113,0.25)" : "rgba(251,191,36,0.25)"}`,
+              color: checkoutStatus.kind === "success" ? "#4ade80" : checkoutStatus.kind === "error" ? "#f87171" : "#fbbf24",
+            }}
+          >
+            {checkoutStatus.text}
+          </div>
+        )}
+
         {/* Balance */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem" }}>
           <div>
@@ -208,7 +310,7 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
                 onClick={() => void startCheckout({ kind: "subscription", plan: "PRO" }, "sub-PRO")}
                 style={{ ...actionButtonStyle, opacity: busyAction === "sub-PRO" ? 0.7 : 1 }}
               >
-                {busyAction === "sub-PRO" ? "Redirecting…" : "Upgrade to PRO"}
+                {busyAction === "sub-PRO" ? "Opening…" : "Upgrade to PRO"}
               </button>
             )}
             {plan !== "ULTRA" && (
@@ -218,7 +320,7 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
                 onClick={() => void startCheckout({ kind: "subscription", plan: "ULTRA" }, "sub-ULTRA")}
                 style={{ ...actionButtonStyle, opacity: busyAction === "sub-ULTRA" ? 0.7 : 1 }}
               >
-                {busyAction === "sub-ULTRA" ? "Redirecting…" : "Upgrade to ULTRA"}
+                {busyAction === "sub-ULTRA" ? "Opening…" : "Upgrade to ULTRA"}
               </button>
             )}
             {plan === "ULTRA" && (
@@ -253,7 +355,7 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
                   onClick={() => void startCheckout({ kind: "topup", pack }, actionKey)}
                   style={{ ...actionButtonStyle, opacity: busyAction === actionKey ? 0.7 : 1 }}
                 >
-                  <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>{busyAction === actionKey ? "Redirecting…" : label}</span>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>{busyAction === actionKey ? "Opening…" : label}</span>
                   <span style={{ fontSize: "0.68rem", opacity: 0.7, fontWeight: 500 }}>{sub}</span>
                 </button>
               );
@@ -303,6 +405,8 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
           )}
         </div>
       </div>
+
+      {checkoutSecret && <CheckoutModal clientSecret={checkoutSecret} onClose={() => setCheckoutSecret(null)} />}
     </div>
   );
 }

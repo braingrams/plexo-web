@@ -15,6 +15,8 @@ import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
 import { notifyMaildripOfPaidOrder, resolveMaildripApiKey, sendCommerceEmail } from "@/lib/commerce/maildripNotify";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { decryptDigitalAccessSecret } from "@/lib/crypto";
+import { formatMoney } from "@/lib/commerce/formatMoney";
+import { logEmailDelivery } from "@/lib/mail/logEmail";
 import {
   buildPaymentReceivedEmail,
   buildDigitalFileDeliveryEmail,
@@ -135,12 +137,26 @@ async function notifyPaymentReceived(order: OrderItem): Promise<void> {
   const base = await resolveSitePublicUrl(order.templateId);
   const html = buildPaymentReceivedEmail({
     siteName: template.name,
-    amountFormatted: `₦${(order.amountMinor / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`,
+    amountFormatted: formatMoney(order.amountMinor, order.currency ?? "NGN"),
     customerEmail: order.customerEmail,
     orderNumber: order.orderNumber,
     orderUrl: `${base}/dashboard/commerce/${order.templateId}/orders`,
   });
-  await sendMaildripEmail({ to: recipient, subject: `Payment received on ${template.name} — ${order.orderNumber}`, html });
+  const subject = `Payment received on ${template.name} — ${order.orderNumber}`;
+  try {
+    await sendMaildripEmail({ to: recipient, subject, html });
+    logEmailDelivery({
+      kind: "maildrip", to: recipient, subject, status: "sent",
+      context: "commerce_payment_received", organizationId: order.organizationId, templateId: order.templateId,
+    });
+  } catch (err) {
+    logEmailDelivery({
+      kind: "maildrip", to: recipient, subject, status: "failed",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      context: "commerce_payment_received", organizationId: order.organizationId, templateId: order.templateId,
+    });
+    throw err;
+  }
 }
 
 /** Ported from lib/notificationPreferences.ts's resolveNotificationRecipient, "payments"
@@ -233,7 +249,7 @@ async function deliverDigitalProducts(order: OrderItem, settings: SettingsItem):
 
     if (apiKey) {
       try {
-        await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html });
+        await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html, organizationId: order.organizationId, templateId: order.templateId });
         await CommerceDigitalDelivery.patch({ orderId: order.id, productId: product.id })
           .set({ deliveredAt: new Date().toISOString() })
           .go();

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { formatMoney } from "@/lib/commerce/formatMoney";
+import { SUPPORTED_STORE_CURRENCIES } from "@/lib/commerce/currency";
 
 export type DiscountSummary = {
   id: string;
@@ -14,8 +16,8 @@ export type DiscountSummary = {
   createdAt: string;
 };
 
-function formatValue(d: Pick<DiscountSummary, "type" | "value">): string {
-  return d.type === "PERCENT" ? `${d.value}% off` : `₦${(d.value / 100).toLocaleString("en-NG")} off`;
+function formatValue(d: Pick<DiscountSummary, "type" | "value">, currency: string): string {
+  return d.type === "PERCENT" ? `${d.value}% off` : `${formatMoney(d.value, currency)} off`;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -33,7 +35,8 @@ function FieldLabel({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-export function DiscountsClient({ templateId, initialDiscounts }: { templateId: string; initialDiscounts: DiscountSummary[] }) {
+export function DiscountsClient({ templateId, initialDiscounts, currency }: { templateId: string; initialDiscounts: DiscountSummary[]; currency: string }) {
+  const currencySymbol = SUPPORTED_STORE_CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency;
   const [discounts, setDiscounts] = useState(initialDiscounts);
   const [modalOpen, setModalOpen] = useState(false);
   const [code, setCode] = useState("");
@@ -114,11 +117,8 @@ export function DiscountsClient({ templateId, initialDiscounts }: { templateId: 
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
-        <div>
-          <h1 style={{ fontSize: "1.35rem", fontWeight: 600, color: "#f0f2ff", margin: 0 }}>Discount codes</h1>
-          <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginTop: 4 }}>Percentage or fixed-amount codes customers can apply at checkout.</p>
-        </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "1.5rem" }}>
+        <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", margin: 0 }}>Percentage or fixed-amount codes customers can apply at checkout.</p>
         <button
           type="button" onClick={openCreate}
           style={{ padding: "0.6rem 1.1rem", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff" }}
@@ -148,7 +148,7 @@ export function DiscountsClient({ templateId, initialDiscounts }: { templateId: 
               {discounts.map((d) => (
                 <tr key={d.id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "#e2e4f5" }}>
                   <td style={{ padding: "0.7rem 1rem", fontFamily: "ui-monospace, monospace", fontWeight: 700 }}>{d.code}</td>
-                  <td style={{ padding: "0.7rem 1rem" }}>{formatValue(d)}</td>
+                  <td style={{ padding: "0.7rem 1rem" }}>{formatValue(d, currency)}</td>
                   <td style={{ padding: "0.7rem 1rem", color: "rgba(240,242,255,0.55)" }}>{d.usedCount}{d.usageLimit ? ` / ${d.usageLimit}` : ""}</td>
                   <td style={{ padding: "0.7rem 1rem", color: "rgba(240,242,255,0.55)" }}>{d.expiresAt ? new Date(d.expiresAt).toLocaleDateString() : "Never"}</td>
                   <td style={{ padding: "0.7rem 1rem" }}>
@@ -196,12 +196,12 @@ export function DiscountsClient({ templateId, initialDiscounts }: { templateId: 
                       color: type === t ? "var(--brand)" : "rgba(240,242,255,0.6)", fontWeight: 600, fontSize: "0.82rem",
                     }}
                   >
-                    {t === "PERCENT" ? "% off" : "₦ off"}
+                    {t === "PERCENT" ? "% off" : `${currencySymbol} off`}
                   </button>
                 ))}
               </div>
 
-              <FieldLabel label={type === "PERCENT" ? "Percent off" : "Amount off (₦)"}>
+              <FieldLabel label={type === "PERCENT" ? "Percent off" : `Amount off (${currencySymbol})`}>
                 <input type="number" value={value} onChange={(e) => setValue(e.target.value)} placeholder={type === "PERCENT" ? "10" : "1000"} style={inputStyle} />
               </FieldLabel>
 

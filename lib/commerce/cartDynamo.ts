@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { NextRequest, NextResponse } from "next/server";
-import { CommerceCart, CommerceCartItem, CommerceProduct } from "@/lib/db/commerceEntities";
+import { CommerceCart, CommerceCartItem, CommerceProduct, CommerceSettings } from "@/lib/db/commerceEntities";
 
 /**
  * Multi-item cart for the shop_grid/cart_summary/checkout_flow marker family — separate
@@ -63,6 +63,7 @@ export type CartSnapshot = {
     quantity: number;
     lineTotalMinor: number;
     inStock: boolean;
+    kind: string;
   }>;
   subtotalMinor: number;
   currency: string;
@@ -71,14 +72,21 @@ export type CartSnapshot = {
 /** Reads live product data for the price/stock shown — never the stale cart-item snapshot,
  * so a visitor sees a price change (or a since-sold-out item) before they pay for it. */
 export async function readCartSnapshot(templateId: string, token: string | null): Promise<CartSnapshot> {
+  // Currency is a site-wide setting (Settings > General), not a per-product value —
+  // reading it from the first item's own product used to mean an empty/mixed cart could
+  // show the wrong currency; the site's own setting is always right regardless of what's
+  // actually in the cart.
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  const currency = settings?.currency ?? "NGN";
+
   const cart = await findOpenCart(templateId, token);
-  if (!cart) return { cartToken: null, items: [], subtotalMinor: 0, currency: "NGN" };
+  if (!cart) return { cartToken: null, items: [], subtotalMinor: 0, currency };
 
   const { data: items } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
   items.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
   const products = await Promise.all(items.map((item) => CommerceProduct.get({ templateId, id: item.productId }).go()));
 
-  const snapshot: CartSnapshot = { cartToken: cart.cartToken, items: [], subtotalMinor: 0, currency: products[0]?.data?.currency ?? "NGN" };
+  const snapshot: CartSnapshot = { cartToken: cart.cartToken, items: [], subtotalMinor: 0, currency };
   items.forEach((item, i) => {
     const product = products[i].data;
     if (!product || !(product.active ?? true)) return;
@@ -93,6 +101,7 @@ export async function readCartSnapshot(templateId: string, token: string | null)
       quantity: item.quantity ?? 1,
       lineTotalMinor: lineTotal,
       inStock: product.stockQuantity == null || product.stockQuantity >= (item.quantity ?? 1),
+      kind: product.kind ?? "PHYSICAL",
     });
     snapshot.subtotalMinor += lineTotal;
   });

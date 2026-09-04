@@ -63,6 +63,7 @@ export async function POST(
 
   try {
     const checkoutSession = await stripe.checkout.sessions.create({
+      ui_mode: "embedded_page",
       mode: "payment",
       customer: customerId,
       line_items: [
@@ -85,10 +86,12 @@ export async function POST(
         // webhook skips crediting when this resolves to the marketplace system owner.
         sellerUserId: template.userId,
       },
-      success_url: `${appUrl}/marketplace/${id}?purchase=success`,
-      cancel_url: `${appUrl}/marketplace/${id}?purchase=cancelled`,
+      // Card entry itself is now embedded in-page (see PurchaseAction.tsx's checkout
+      // modal) — Stripe still does one final navigation to return_url once payment
+      // completes, same as every other embedded Checkout session in this codebase.
+      return_url: `${appUrl}/marketplace/${id}?purchase=success`,
     });
-    return NextResponse.json({ url: checkoutSession.url });
+    return NextResponse.json({ clientSecret: checkoutSession.client_secret });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not start checkout." },

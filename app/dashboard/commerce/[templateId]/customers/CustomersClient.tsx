@@ -39,12 +39,9 @@ export function CustomersClient({ templateId, paystackConfigured }: { templateId
 
   return (
     <div>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ fontSize: "1.35rem", fontWeight: 600, color: "#f0f2ff", margin: 0 }}>Customers</h1>
-        <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginTop: 4 }}>
-          Pulled straight from Paystack — everyone who's ever paid you.
-        </p>
-      </div>
+      <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginBottom: "1.25rem" }}>
+        Pulled straight from Paystack — everyone who's ever paid you.
+      </p>
 
       {!paystackConfigured ? (
         <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)" }}>

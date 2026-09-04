@@ -84,6 +84,21 @@ export function decryptPaystackKey(encoded: string): string {
 }
 
 /**
+ * Encrypts/decrypts a Commerce site's own BYO Stripe secrets — secret keys AND webhook
+ * signing secrets both live here (a leak of either is equally sensitive), on another
+ * DELIBERATELY separate secret (STRIPE_KEY_ENCRYPTION_SECRET), same isolation rationale
+ * as encryptPaystackKey: a leak of any other secret in this file must never expose a
+ * site owner's own Stripe credentials, and vice versa.
+ */
+export function encryptStripeKey(plainText: string): string {
+  return encryptWithKey(plainText, deriveKey(requireEnv("STRIPE_KEY_ENCRYPTION_SECRET")));
+}
+
+export function decryptStripeKey(encoded: string): string {
+  return decryptWithKey(encoded, deriveKey(requireEnv("STRIPE_KEY_ENCRYPTION_SECRET")));
+}
+
+/**
  * Encrypts/decrypts a Commerce site's own MailDrip API key — another DELIBERATELY separate
  * secret (MAILDRIP_KEY_ENCRYPTION_SECRET), same isolation rationale as the other three: a
  * leak of any one of these secrets must never expose what the others protect.

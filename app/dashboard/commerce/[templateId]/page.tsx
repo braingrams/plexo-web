@@ -1,10 +1,7 @@
 import Link from "next/link";
 import { Template } from "@/lib/db/contentEntities";
 import { CommerceSettings, CommerceProduct, CommerceOrder, CommerceBooking } from "@/lib/db/commerceEntities";
-
-function formatNaira(minor: number): string {
-  return `₦${(minor / 100).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { formatMoney } from "@/lib/commerce/formatMoney";
 
 function StatTile({ label, value, tint, icon }: { label: string; value: string; tint: string; icon: React.ReactNode }) {
   return (
@@ -64,13 +61,6 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
 
   return (
     <div>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ fontSize: "1.35rem", fontWeight: 600, color: "#f0f2ff", margin: 0 }}>Commerce</h1>
-        <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginTop: 4 }}>
-          Products, bookings, and orders for this site.
-        </p>
-      </div>
-
       {!settings?.enabled && (
         <Link
           href={`/dashboard/commerce/${templateId}/settings`}
@@ -118,7 +108,7 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
         />
         <StatTile
           label="Total sales"
-          value={formatNaira(salesTotal)}
+          value={formatMoney(salesTotal, settings?.currency ?? "NGN")}
           tint="rgba(52,211,153,0.16)"
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="1.8"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>}
         />
@@ -161,7 +151,7 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
                   <tr key={order.orderNumber} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "#e2e4f5" }}>
                     <td style={{ padding: "10px 0", fontFamily: "ui-monospace, monospace" }}>{order.orderNumber}</td>
                     <td style={{ padding: "10px 0" }}>{order.customerName ?? order.customerEmail}</td>
-                    <td style={{ padding: "10px 0", fontFamily: "ui-monospace, monospace" }}>{formatNaira(order.amountMinor)}</td>
+                    <td style={{ padding: "10px 0", fontFamily: "ui-monospace, monospace" }}>{formatMoney(order.amountMinor, settings?.currency ?? "NGN")}</td>
                     <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.55)" }}>{(order.fulfillmentStatus ?? "UNFULFILLED").replace(/_/g, " ").toLowerCase()}</td>
                     <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.4)" }}>{new Date(order.createdAt ?? Date.now()).toLocaleDateString()}</td>
                   </tr>

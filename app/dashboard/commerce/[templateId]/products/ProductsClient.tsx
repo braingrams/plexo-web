@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { formatMoney } from "@/lib/commerce/formatMoney";
+import { SUPPORTED_STORE_CURRENCIES } from "@/lib/commerce/currency";
 
 export type ProductSummary = {
   id: string;
@@ -26,10 +28,6 @@ export type ProductSummary = {
   digitalMaxDownloads: number | null;
   digitalLinkExpiryDays: number | null;
 };
-
-function formatNaira(minor: number): string {
-  return `₦${(minor / 100).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 function kindLabel(kind: ProductSummary["kind"]): string {
   return kind === "PHYSICAL" ? "Product" : kind === "SERVICE" ? "Service" : "Digital";
@@ -94,7 +92,8 @@ const EMPTY_FORM: FormState = {
   digitalLinkExpiryDays: "",
 };
 
-export function ProductsClient({ templateId, initialProducts }: { templateId: string; initialProducts: ProductSummary[] }) {
+export function ProductsClient({ templateId, initialProducts, currency }: { templateId: string; initialProducts: ProductSummary[]; currency: string }) {
+  const currencySymbol = SUPPORTED_STORE_CURRENCIES.find((c) => c.code === currency)?.symbol ?? currency;
   const [products, setProducts] = useState<ProductSummary[]>(initialProducts);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -269,7 +268,11 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
         description: saved.description,
         kind: saved.kind,
         priceMinor: saved.priceMinor,
-        currency: saved.currency,
+        // Deliberately the site's currency prop, not saved.currency — currency is a
+        // site-wide setting now (see Settings > General), not a per-product value, so
+        // every product on this page always displays in the same currency regardless of
+        // what the API happens to return for this still-vestigial per-record field.
+        currency,
         stockQuantity: saved.stockQuantity,
         durationMinutes: saved.durationMinutes,
         imageUrl: saved.imageUrl,
@@ -360,11 +363,8 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.5rem" }}>
-        <div>
-          <h1 style={{ fontSize: "1.35rem", fontWeight: 600, color: "#f0f2ff", margin: 0 }}>Products</h1>
-          <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginTop: 4 }}>Catalog for this site.</p>
-        </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "1.5rem" }}>
+        <span style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)" }}>{products.length} product{products.length === 1 ? "" : "s"}</span>
         <button
           type="button"
           onClick={openCreate}
@@ -496,7 +496,7 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
                     </div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "0.6rem" }}>
                       <span style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--brand)", fontVariantNumeric: "tabular-nums" }}>
-                        {formatNaira(product.priceMinor)}
+                        {formatMoney(product.priceMinor, product.currency)}
                       </span>
                       <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)" }}>
                         {kindMetaText(product)}
@@ -555,7 +555,7 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
                     </div>
                   </div>
                   <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--brand)", fontVariantNumeric: "tabular-nums", flexShrink: 0, width: 100, textAlign: "right" }}>
-                    {formatNaira(product.priceMinor)}
+                    {formatMoney(product.priceMinor, product.currency)}
                   </span>
                   <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", flexShrink: 0, width: 90, textAlign: "right" }}>
                     {kindMetaText(product)}
@@ -711,8 +711,8 @@ export function ProductsClient({ templateId, initialProducts }: { templateId: st
                 />
               </FieldLabel>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                <FieldLabel label="Price (₦)">
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.75rem" }}>
+                <FieldLabel label={`Price (${currencySymbol})`}>
                   <TextInput value={form.priceNaira} onChange={(v) => setForm((p) => ({ ...p, priceNaira: v }))} placeholder="5000" type="number" />
                 </FieldLabel>
                 <FieldLabel label="Category">
@@ -1032,7 +1032,7 @@ function DigitalDeliveryFields({
               {uploading ? "Uploading…" : form.digitalFileName ? `Change file (currently: ${form.digitalFileName})` : "Click to upload a file"}
             </button>
           </FieldLabel>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.75rem" }}>
             <FieldLabel label="Max downloads (blank = unlimited)">
               <TextInput value={form.digitalMaxDownloads} onChange={(v) => setForm((p) => ({ ...p, digitalMaxDownloads: v }))} placeholder="e.g. 3" type="number" />
             </FieldLabel>

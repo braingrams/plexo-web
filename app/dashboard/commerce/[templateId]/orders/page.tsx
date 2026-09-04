@@ -35,6 +35,7 @@ export default async function CommerceOrdersPage({ params }: { params: Promise<{
         status: o.status ?? "PENDING",
         fulfillmentStatus: o.fulfillmentStatus ?? "UNFULFILLED",
         amountMinor: o.amountMinor,
+        currency: o.currency ?? "NGN",
         customerEmail: o.customerEmail,
         customerName: o.customerName ?? null,
         createdAt: o.createdAt ?? new Date().toISOString(),

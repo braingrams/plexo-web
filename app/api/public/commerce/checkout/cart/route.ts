@@ -3,19 +3,16 @@ import { randomBytes } from "node:crypto";
 import { EntityItem } from "electrodb";
 
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
-import { decryptPaystackKey } from "@/lib/crypto";
+import { decryptPaystackKey, decryptStripeKey } from "@/lib/crypto";
 import { initializePaystackTransaction } from "@/lib/paystack";
 import { resolveCheckoutPaystackSecret } from "@/lib/commerce/paystack";
+import { resolveCheckoutStripeSecret } from "@/lib/commerce/stripe";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { readCartToken, findOpenCart, clearCartCookie } from "@/lib/commerce/cartDynamo";
 import { createCommerceStripeCheckoutSession } from "@/lib/commerce/stripeClient";
 import { createCommerceCartOrder, failCommerceCartOrder, OutOfStockError, InvalidDiscountError, CartAlreadyCheckedOutError } from "@/lib/commerce/checkoutDynamo";
+import { resolveOrderDeliveryMethod, InvalidDeliveryMethodError } from "@/lib/commerce/delivery";
 import { CommerceOrder, CommerceSettings, CommerceCartItem, CommerceProduct, CommerceDiscountCode } from "@/lib/db/commerceEntities";
-
-// Placeholder flat courier fee until a site owner can configure their own delivery pricing
-// (not modeled anywhere yet — CommerceSettings has no delivery-fee field). Matches the "from
-// ₦1,500" figure already shown on the approved Checkout design.
-const COURIER_FEE_MINOR = 150_000;
 
 function generateOrderNumber(): string {
   return `ORD-${randomBytes(4).toString("hex").toUpperCase()}`;
@@ -58,19 +55,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
-  const { customerEmail, customerName, customerPhone, deliveryMethod, discountCode: rawDiscountCode } = body;
+  const { customerEmail, customerName, customerPhone, deliveryMethodId, shippingCountry, shippingState, shippingAddressLine, discountCode: rawDiscountCode } = body;
 
   if (typeof customerEmail !== "string" || !isValidEmail(customerEmail)) {
     return NextResponse.json({ error: "A valid customerEmail is required." }, { status: 400 });
   }
-  const deliveryMethodValue: "PICKUP" | "COURIER" = deliveryMethod === "PICKUP" || deliveryMethod === "COURIER" ? deliveryMethod : "PICKUP";
-  const deliveryFeeMinor = deliveryMethodValue === "COURIER" ? COURIER_FEE_MINOR : 0;
 
   const { data: settings } = await CommerceSettings.get({ templateId }).go();
   if (!settings || !settings.enabled) {
     return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
   }
-  const isStripeFlow = settings.paymentProvider === "PLATFORM_STRIPE";
+  const isStripeFlow = settings.paymentProvider === "PLATFORM_STRIPE" || settings.paymentProvider === "BYO_STRIPE";
   const paystackKeys = isStripeFlow
     ? null
     : resolveCheckoutPaystackSecret({
@@ -81,7 +76,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
         paystackLiveSecretKeyEncrypted: settings.paystackLiveSecretKeyEncrypted ?? null,
       });
+  const stripeKeys = isStripeFlow
+    ? resolveCheckoutStripeSecret({
+        paymentProvider: settings.paymentProvider ?? "BYO_PAYSTACK",
+        stripeMode: settings.stripeMode ?? "TEST",
+        stripeTestPublishableKey: settings.stripeTestPublishableKey ?? null,
+        stripeTestSecretKeyEncrypted: settings.stripeTestSecretKeyEncrypted ?? null,
+        stripeTestWebhookSecretEncrypted: settings.stripeTestWebhookSecretEncrypted ?? null,
+        stripeLivePublishableKey: settings.stripeLivePublishableKey ?? null,
+        stripeLiveSecretKeyEncrypted: settings.stripeLiveSecretKeyEncrypted ?? null,
+        stripeLiveWebhookSecretEncrypted: settings.stripeLiveWebhookSecretEncrypted ?? null,
+      })
+    : null;
   if (!isStripeFlow && (!paystackKeys?.secretKeyEncrypted || !paystackKeys.publicKey)) {
+    return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
+  }
+  if (isStripeFlow && !stripeKeys?.secretKeyEncrypted) {
     return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
   }
 
@@ -93,7 +103,36 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (activeItems.length === 0) {
     return NextResponse.json({ error: "Your cart is empty." }, { status: 400 });
   }
-  const currency = activeItems[0].product.currency ?? "NGN";
+  // Currency is a site-wide setting (Settings > General), not a per-product value —
+  // reading it from settings instead of the first cart item's own `currency` attribute
+  // also fixes what used to be a real bug: a cart mixing items would silently charge
+  // everything at whichever product happened to be first.
+  const currency = settings.currency ?? "NGN";
+
+  const shippingAddress = {
+    shippingCountry: typeof shippingCountry === "string" && shippingCountry ? shippingCountry : null,
+    shippingState: typeof shippingState === "string" && shippingState ? shippingState : null,
+    shippingAddressLine: typeof shippingAddressLine === "string" && shippingAddressLine ? shippingAddressLine : null,
+  };
+
+  // Re-validated server-side, never trusting the client-supplied id or its fee. Only
+  // required when the cart actually has something to ship — an all-DIGITAL/SERVICE cart
+  // skips delivery entirely.
+  let resolvedDeliveryMethod: Awaited<ReturnType<typeof resolveOrderDeliveryMethod>> = null;
+  if (activeItems.some((i) => i.product.kind === "PHYSICAL")) {
+    try {
+      resolvedDeliveryMethod = await resolveOrderDeliveryMethod(
+        templateId,
+        typeof deliveryMethodId === "string" ? deliveryMethodId : null,
+        { country: shippingAddress.shippingCountry, state: shippingAddress.shippingState },
+      );
+    } catch (err) {
+      if (err instanceof InvalidDeliveryMethodError) {
+        return NextResponse.json({ error: err.message }, { status: 400 });
+      }
+      throw err;
+    }
+  }
 
   // Prices are never trusted from the cart snapshot at this point either — re-read fresh
   // right before charging, same "server always re-derives the amount" rule the single-
@@ -120,7 +159,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       ? Math.round((subtotalMinor * discount.value) / 100)
       : Math.min(discount.value, subtotalMinor)
     : 0;
-  const amountMinor = subtotalMinor + deliveryFeeMinor - discountAmountMinor;
+  const amountMinor = subtotalMinor + (resolvedDeliveryMethod?.feeMinor ?? 0) - discountAmountMinor;
 
   if (amountMinor <= 0) {
     return NextResponse.json({ error: "This discount would reduce the order to zero — pick a smaller code or a larger order." }, { status: 400 });
@@ -142,8 +181,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       customerEmail,
       customerName: typeof customerName === "string" ? customerName : null,
       customerPhone: typeof customerPhone === "string" ? customerPhone : null,
-      deliveryMethod: deliveryMethodValue,
-      deliveryFeeMinor,
+      deliveryMethod: resolvedDeliveryMethod,
+      shippingAddress,
       discount,
       discountAmountMinor,
       amountMinor,
@@ -167,46 +206,58 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const callbackUrl = `${request.nextUrl.origin}/order-confirmation?order=${order.orderNumber}&email=${encodeURIComponent(customerEmail)}`;
 
   try {
-    let authorizationUrl: string;
-
     if (isStripeFlow) {
+      // stripeKeys is confirmed non-null above (isStripeFlow is true in this branch).
+      const stripeSecretKey = stripeKeys!.isPlatform ? stripeKeys!.secretKeyEncrypted! : decryptStripeKey(stripeKeys!.secretKeyEncrypted!);
       const session = await createCommerceStripeCheckoutSession({
+        secretKey: stripeSecretKey,
         orderId: order.id,
+        templateId,
         amountMinor,
         currency,
         customerEmail,
         productName: activeItems.length === 1 ? activeItems[0].product.name : `${activeItems.length} items`,
-        successUrl: callbackUrl,
-        cancelUrl: `${request.nextUrl.origin}/checkout`,
+        returnUrl: callbackUrl,
       });
       await CommerceOrder.patch({ templateId: order.templateId, id: order.id }).set({ stripeCheckoutSessionId: session.id }).go();
-      authorizationUrl = session.url;
-    } else {
-      const secretKey = paystackKeys!.isPlatform ? paystackKeys!.secretKeyEncrypted! : decryptPaystackKey(paystackKeys!.secretKeyEncrypted!);
-      const result = await initializePaystackTransaction({
-        secretKey,
-        email: customerEmail,
-        amountMinor,
-        reference: order.paystackReference!,
-        // email travels alongside order — the order-confirmation page has no session/account
-        // to identify the visitor with, and the strict order-lookup endpoint deliberately
-        // requires orderNumber+email together (never orderNumber alone) to prevent a stranger
-        // from browsing someone else's order by guessing a short code. The visitor just typed
-        // this email into the checkout form seconds ago, so this is a same-session redirect,
-        // not a new disclosure.
-        callbackUrl,
-        metadata: { orderId: order.id, orderNumber: order.orderNumber, templateId },
+      // Card entry happens in-page (embedded Checkout) — no authorizationUrl to redirect
+      // to; the storefront mounts Stripe.js against clientSecret/publishableKey instead.
+      const response = NextResponse.json({
+        orderNumber: order.orderNumber,
+        checkout: { provider: "stripe", clientSecret: session.clientSecret, publishableKey: stripeKeys!.publishableKey },
       });
-      await CommerceOrder.patch({ templateId: order.templateId, id: order.id }).set({ paystackAuthorizationUrl: result.authorizationUrl }).go();
-      authorizationUrl = result.authorizationUrl;
+      clearCartCookie(response);
+      return response;
     }
 
-    const response = NextResponse.json({ orderNumber: order.orderNumber, reference: order.paystackReference, authorizationUrl });
+    const secretKey = paystackKeys!.isPlatform ? paystackKeys!.secretKeyEncrypted! : decryptPaystackKey(paystackKeys!.secretKeyEncrypted!);
+    const result = await initializePaystackTransaction({
+      secretKey,
+      email: customerEmail,
+      amountMinor,
+      currency,
+      reference: order.paystackReference!,
+      // email travels alongside order — the order-confirmation page has no session/account
+      // to identify the visitor with, and the strict order-lookup endpoint deliberately
+      // requires orderNumber+email together (never orderNumber alone) to prevent a stranger
+      // from browsing someone else's order by guessing a short code. The visitor just typed
+      // this email into the checkout form seconds ago, so this is a same-session redirect,
+      // not a new disclosure.
+      callbackUrl,
+      metadata: { orderId: order.id, orderNumber: order.orderNumber, templateId },
+    });
+    await CommerceOrder.patch({ templateId: order.templateId, id: order.id }).set({ paystackAuthorizationUrl: result.authorizationUrl }).go();
+
+    const response = NextResponse.json({ orderNumber: order.orderNumber, reference: order.paystackReference, authorizationUrl: result.authorizationUrl });
     clearCartCookie(response);
     return response;
-  } catch {
+  } catch (err) {
     // Reopens the cart so the visitor doesn't lose their items over a payment-provider hiccup.
+    // Surface the real provider error (e.g. a currency the connected account isn't
+    // provisioned for) instead of a generic message — same reasoning as the single-product
+    // checkout route.
     await failCommerceCartOrder(order, activeItems, discount);
-    return NextResponse.json({ error: "Unable to start payment. Please try again." }, { status: 502 });
+    const message = err instanceof Error ? err.message : "Unable to start payment. Please try again.";
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }
