@@ -10,9 +10,8 @@ import type { SubscriptionPlan } from "@/lib/subscription";
 import { getMarketplaceOwnerUserId } from "@/lib/marketplaceListing";
 import { docClient } from "@/lib/db/client";
 import { User, PlatformSettings } from "@/lib/db/coreEntities";
-import { TemplatePurchase, RegisteredDomain } from "@/lib/db/contentEntities";
+import { TemplatePurchase } from "@/lib/db/contentEntities";
 import { SellerLedgerEntry, StripeEvent } from "@/lib/db/ledgerEntities";
-import { activateDomainRegistration } from "@/lib/domains/activateDomainRegistration";
 
 // DynamoDB-stack port of this file — Plexo's own SaaS-billing Stripe webhook (distinct
 // from app/api/webhooks/stripe/commerce/route.ts, which handles Plexo-hosted Commerce
@@ -114,41 +113,6 @@ async function creditMarketplaceSeller(sellerUserId: string, priceCents: number,
   throw new Error(`creditMarketplaceSeller: exhausted retries for user ${sellerUserId} — too much concurrent balance contention`);
 }
 
-/**
- * Fires once Stripe confirms payment for a domain purchase (see
- * app/api/v1/domains/purchase/route.ts, which creates the RegisteredDomain row in
- * PENDING_PAYMENT before starting checkout). Kicks off registration synchronously here
- * (via the shared activateDomainRegistration(), also used by the wallet-payment branch of
- * the purchase route, which has no webhook of its own) rather than waiting for the next
- * registration-poller run — the poller
- * (app/api/internal/domain-registration-poller/route.ts) still exists to advance
- * REGISTERING → DNS_PROVISIONING → ... once Route53's own async RegisterDomain operation
- * completes, but there's no reason to add up to a poller-interval's worth of extra latency
- * before even STARTING it when this webhook already knows payment succeeded.
- */
-async function activateDomainPurchase(templateId: string, registeredDomainId: string, paymentIntentId?: string): Promise<void> {
-  const { data: registeredDomain } = await RegisteredDomain.get({ templateId, id: registeredDomainId }).go();
-  if (!registeredDomain) return;
-
-  // Capture the off-session-usable payment method (setup_future_usage: "off_session" on
-  // the checkout session — see app/api/v1/domains/purchase/route.ts) before kicking off
-  // registration, so it's on the row even if activateDomainRegistration's own patches run
-  // concurrently with a webhook retry.
-  if (paymentIntentId && registeredDomain.paymentMethod === "STRIPE" && !registeredDomain.stripePaymentMethodId) {
-    try {
-      const paymentIntent = await getStripe().paymentIntents.retrieve(paymentIntentId);
-      const paymentMethodId = typeof paymentIntent.payment_method === "string" ? paymentIntent.payment_method : undefined;
-      if (paymentMethodId) {
-        await RegisteredDomain.patch({ templateId, id: registeredDomainId }).set({ stripePaymentMethodId: paymentMethodId }).go();
-      }
-    } catch (err) {
-      console.error(`Failed to capture off-session payment method for domain purchase ${registeredDomainId}:`, err);
-    }
-  }
-
-  await activateDomainRegistration(registeredDomain);
-}
-
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const signature = request.headers.get("stripe-signature");
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -213,15 +177,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           }
         }
       }
-      if (checkoutSession.mode === "payment" && checkoutSession.metadata?.kind === "domain_purchase") {
-        const templateId = checkoutSession.metadata.templateId;
-        const registeredDomainId = checkoutSession.metadata.registeredDomainId;
-        const paymentIntentId = typeof checkoutSession.payment_intent === "string" ? checkoutSession.payment_intent : undefined;
-        if (templateId && registeredDomainId) {
-          await activateDomainPurchase(templateId, registeredDomainId, paymentIntentId);
-        }
-      }
-
       // Subscription-mode sessions don't carry the confirmed plan reliably here —
       // customer.subscription.created/updated below is the source of truth for that.
       break;
