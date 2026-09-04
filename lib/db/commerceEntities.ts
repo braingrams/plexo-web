@@ -13,8 +13,9 @@ const table = TABLES.commerce;
 
 // Local replacements for the Prisma-generated CommercePaymentProvider/CommercePaystackMode
 // enums — match the paymentProvider/paystackMode attributes below exactly.
-export type CommercePaymentProvider = "BYO_PAYSTACK" | "PLATFORM_PAYSTACK" | "PLATFORM_STRIPE";
+export type CommercePaymentProvider = "BYO_PAYSTACK" | "PLATFORM_PAYSTACK" | "PLATFORM_STRIPE" | "BYO_STRIPE";
 export type CommercePaystackMode = "TEST" | "LIVE";
+export type CommerceStripeMode = "TEST" | "LIVE";
 
 export const CommerceCategory = new Entity(
   {
@@ -165,6 +166,19 @@ export const CommerceOrder = new Entity(
       customerPhone: { type: "string" },
       deliveryMethod: { type: ["PICKUP", "COURIER"] as const },
       deliveryFeeMinor: { type: "number", default: 0 },
+      // References CommerceDeliveryMethod — nullable, since a cart of only
+      // DIGITAL/SERVICE products never resolves one. Name is snapshotted (same
+      // discipline as CommerceOrderItem.nameSnapshot) so editing/deleting the method
+      // later never rewrites history on an already-placed order.
+      deliveryMethodId: { type: "string" },
+      deliveryMethodNameSnapshot: { type: "string" },
+      // Only meaningfully set when the resolved method's type is COURIER. Deliberately
+      // a single free-text address line + country/state, not a fully structured
+      // address — enough to match delivery-method scope and give a courier somewhere
+      // to ship to, without over-building v1.
+      shippingCountry: { type: "string" },
+      shippingState: { type: "string" },
+      shippingAddressLine: { type: "string" },
       discountCode: { type: "string" },
       discountAmountMinor: { type: "number", default: 0 },
       amountMinor: { type: "number", required: true },
@@ -174,7 +188,10 @@ export const CommerceOrder = new Entity(
         type: ["UNFULFILLED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "COMPLETED"] as const,
         default: "UNFULFILLED",
       },
-      paymentProvider: { type: ["BYO_PAYSTACK", "PLATFORM_PAYSTACK", "PLATFORM_STRIPE"] as const, default: "BYO_PAYSTACK" },
+      paymentProvider: {
+        type: ["BYO_PAYSTACK", "PLATFORM_PAYSTACK", "PLATFORM_STRIPE", "BYO_STRIPE"] as const,
+        default: "BYO_PAYSTACK",
+      },
       paystackMode: { type: ["TEST", "LIVE"] as const },
       paystackReference: { type: "string" },
       paystackAuthorizationUrl: { type: "string" },
@@ -336,6 +353,43 @@ export const CommerceDiscountCode = new Entity(
   { table, client: docClient },
 );
 
+// A site's configurable fulfillment options — replaces what used to be a hardcoded
+// PICKUP/COURIER toggle with a flat platform-wide fee. "International" is not a third
+// `type` value — it's expressed via `countries`/`states` scope: an empty list on either
+// means unrestricted (worldwide / any state); a non-empty list restricts the method to
+// those ISO-3166-1 alpha-2 country codes / free-text state names. See
+// lib/commerce/delivery.ts for the matching algorithm. No GSI — both of this table's
+// GSIs are already owned by CommerceOrder, and "list every method for this site" is
+// answered entirely by the primary key's SK prefix, same as CommerceDiscountCode.
+export const CommerceDeliveryMethod = new Entity(
+  {
+    model: { entity: "commerceDeliveryMethod", version: "1", service: "plexoCommerce" },
+    attributes: {
+      id: { type: "string", required: true },
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      name: { type: "string", required: true },
+      type: { type: ["PICKUP", "COURIER"] as const, required: true },
+      feeMinor: { type: "number", default: 0 },
+      description: { type: "string" },
+      countries: { type: "list", items: { type: "string" } },
+      states: { type: "list", items: { type: "string" } },
+      estimatedTimeLabel: { type: "string" },
+      status: { type: ["ACTIVE", "INACTIVE"] as const, default: "ACTIVE" },
+      sortOrder: { type: "number", default: 0 },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["id"], template: "DELIVERY#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const CommerceAvailabilityRule = new Entity(
   {
     model: { entity: "commerceAvailabilityRule", version: "1", service: "plexoCommerce" },
@@ -441,12 +495,30 @@ export const CommerceSettings = new Entity(
       paystackLivePublicKey: { type: "string" },
       paystackLiveSecretKeyEncrypted: { type: "string" },
       paystackMode: { type: ["TEST", "LIVE"] as const, default: "TEST" },
-      paymentProvider: { type: ["BYO_PAYSTACK", "PLATFORM_PAYSTACK", "PLATFORM_STRIPE"] as const, default: "BYO_PAYSTACK" },
+      // BYO Stripe mirrors the Paystack test/live key-pair shape exactly, plus a
+      // webhook signing secret per mode — Stripe requires a separate endpoint
+      // registration (and therefore a separate signing secret) per dashboard mode,
+      // same "try both configured secrets" need Paystack's own dual-mode setup has.
+      stripeMode: { type: ["TEST", "LIVE"] as const, default: "TEST" },
+      stripeTestPublishableKey: { type: "string" },
+      stripeTestSecretKeyEncrypted: { type: "string" },
+      stripeTestWebhookSecretEncrypted: { type: "string" },
+      stripeLivePublishableKey: { type: "string" },
+      stripeLiveSecretKeyEncrypted: { type: "string" },
+      stripeLiveWebhookSecretEncrypted: { type: "string" },
+      paymentProvider: {
+        type: ["BYO_PAYSTACK", "PLATFORM_PAYSTACK", "PLATFORM_STRIPE", "BYO_STRIPE"] as const,
+        default: "BYO_PAYSTACK",
+      },
       maildripApiKeyEncrypted: { type: "string" },
       maildripPaidGroupId: { type: "string" },
       maildripNewsletterGroupId: { type: "string" },
       notificationEmail: { type: "string" },
       enabled: { type: "boolean", default: false },
+      // Site-wide store currency (ISO 4217) — one per site, not per product. See
+      // lib/commerce/currency.ts for the curated set of currencies this app actually
+      // accepts and lib/paystack.ts for where this replaces a hardcoded "NGN" literal.
+      currency: { type: "string", default: "NGN" },
       productDetailTemplateId: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
@@ -729,6 +801,7 @@ export const plexoCommerceService = new Service(
     CommerceBooking,
     CommerceBookingSlotLock,
     CommerceDiscountCode,
+    CommerceDeliveryMethod,
     CommerceAvailabilityRule,
     CommerceAvailabilityException,
     CommerceProductReview,

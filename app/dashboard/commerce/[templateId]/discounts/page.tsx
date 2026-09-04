@@ -1,10 +1,13 @@
-import { CommerceDiscountCode } from "@/lib/db/commerceEntities";
+import { CommerceDiscountCode, CommerceSettings } from "@/lib/db/commerceEntities";
 import { DiscountsClient, type DiscountSummary } from "./DiscountsClient";
 
 export default async function CommerceDiscountsPage({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = await params;
 
-  const { data: discounts } = await CommerceDiscountCode.query.primary({ templateId }).go();
+  const [{ data: discounts }, { data: settings }] = await Promise.all([
+    CommerceDiscountCode.query.primary({ templateId }).go(),
+    CommerceSettings.get({ templateId }).go(),
+  ]);
   discounts.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   const initialDiscounts: DiscountSummary[] = discounts.map((d) => ({
@@ -19,5 +22,5 @@ export default async function CommerceDiscountsPage({ params }: { params: Promis
     createdAt: d.createdAt ?? new Date().toISOString(),
   }));
 
-  return <DiscountsClient templateId={templateId} initialDiscounts={initialDiscounts} />;
+  return <DiscountsClient templateId={templateId} initialDiscounts={initialDiscounts} currency={settings?.currency ?? "NGN"} />;
 }

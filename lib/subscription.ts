@@ -67,7 +67,14 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
   FREE: {
     maxEmailTemplates: 5,
     maxLandingPages: 5,
-    aiEnabled: false,
+    // Free ships 10 monthly AI credits (PLAN_MONTHLY_CREDITS.FREE below) — hard-locking the
+    // AI entry point here made those credits impossible to ever spend (a free user could
+    // never even open the AI prompt box to try one). The real, already-enforced limit is
+    // ensureCreditPeriod/chargeUsage in app/api/v1/ai/generate/route.ts rejecting a request
+    // once the balance hits zero — that's the correct gate; this flag only controls whether
+    // the entry point is visible at all, so it should track "has a credit allowance" (every
+    // tier does), not "is a paid tier."
+    aiEnabled: true,
     compileApiEnabled: false,
     strataEnabled: false,
     maxApiKeys: 1,

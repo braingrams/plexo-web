@@ -23,7 +23,22 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ u
     return NextResponse.json({ error: "You can't change your own role." }, { status: 400 });
   }
 
-  await updateMemberRole(ctx.organizationId, userId, role as OrgRole);
+  // Granular-permissions v1: scopedTemplateIds is only ever meaningful for role "editor" —
+  // owner/admin (and every other role) are never scopable in this pass (see
+  // lib/db/coreEntities.ts's Member.scopedTemplateIds doc comment).
+  const rawScopedTemplateIds = body.scopedTemplateIds;
+  let scopedTemplateIds: string[] | undefined;
+  if (rawScopedTemplateIds !== undefined) {
+    if (!Array.isArray(rawScopedTemplateIds) || !rawScopedTemplateIds.every((v) => typeof v === "string")) {
+      return NextResponse.json({ error: "scopedTemplateIds must be an array of template ids." }, { status: 400 });
+    }
+    scopedTemplateIds = rawScopedTemplateIds;
+  }
+  if (scopedTemplateIds && scopedTemplateIds.length > 0 && role !== "editor") {
+    return NextResponse.json({ error: "Only the editor role can be scoped to specific pages." }, { status: 400 });
+  }
+
+  await updateMemberRole(ctx.organizationId, userId, role as OrgRole, scopedTemplateIds);
   return NextResponse.json({ ok: true });
 }
 

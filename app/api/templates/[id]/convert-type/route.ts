@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
+import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { getTierFeatures } from "@/lib/subscription";
 import { compileDesignJsonForKind } from "@/lib/compileForKind";
 import { isValidUuid } from "@/server/slugDynamo";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
+import { Member } from "@/lib/db/coreEntities";
 
 type ConvertTypeBody = {
   targetKind?: "EMAIL" | "LANDING_PAGE";
@@ -37,6 +39,12 @@ export async function POST(
   const { id } = await context.params;
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
+  }
+
+  if (resolved.role !== null) {
+    const { data: member } = await Member.get({ organizationId: resolved.organizationId, userId: resolved.userId }).go();
+    const scopeError = requireTemplateScope(member, id);
+    if (scopeError) return scopeError;
   }
 
   const body = (await request.json().catch(() => ({}))) as ConvertTypeBody;

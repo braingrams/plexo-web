@@ -117,6 +117,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
           userEmail: user.email,
           userName: user.name ?? "A seller",
           amountCents,
+          currency: wallet.currency ?? "NGN",
           bankName,
         }).catch((err) => console.error("Failed to send Commerce withdrawal admin notification email:", err));
       }

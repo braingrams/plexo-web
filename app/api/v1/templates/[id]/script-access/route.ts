@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
+import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { sendScriptAccessRequestNotificationEmail } from "@/lib/email";
 import { Template, ScriptAccessRequest } from "@/lib/db/contentEntities";
-import { User } from "@/lib/db/coreEntities";
+import { User, Member } from "@/lib/db/coreEntities";
 
 type ScriptAccessStatus = "NONE" | "PENDING" | "APPROVED_ACTIVE" | "APPROVED_EXPIRED" | "REJECTED";
 
@@ -112,6 +113,13 @@ export async function POST(
   if (permissionError) return permissionError;
 
   const { id } = await context.params;
+
+  if (resolved.role !== null) {
+    const { data: member } = await Member.get({ organizationId: resolved.organizationId, userId: resolved.userId }).go();
+    const scopeError = requireTemplateScope(member, id);
+    if (scopeError) return scopeError;
+  }
+
   const { data: template } = await Template.get({ id }).go();
   if (!template || template.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });
@@ -178,6 +186,13 @@ export async function PATCH(
   if (permissionError) return permissionError;
 
   const { id } = await context.params;
+
+  if (resolved.role !== null) {
+    const { data: member } = await Member.get({ organizationId: resolved.organizationId, userId: resolved.userId }).go();
+    const scopeError = requireTemplateScope(member, id);
+    if (scopeError) return scopeError;
+  }
+
   const { data: template } = await Template.get({ id }).go();
   if (!template || template.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });

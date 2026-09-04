@@ -299,7 +299,7 @@ export function OverviewClient(props: Props) {
 
       {/* Stat strip */}
       <div style={{ height: 1, background: hairline }} />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", padding: "26px 0" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", padding: "26px 0" }}>
         <div style={{ paddingRight: 32 }}>
           <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
             Templates

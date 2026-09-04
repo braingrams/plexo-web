@@ -164,6 +164,10 @@ export const PublishedDomain = new Entity(
       flagged: { type: "boolean", default: false },
       flagReason: { type: "string" },
       lastScannedAt: { type: "string" },
+      // Site-wide "discourage search engines" toggle (WordPress's Reading Settings
+      // equivalent) — read by app/pub/[domain]/[[...slug]]/route.ts to emit
+      // <meta name="robots" content="noindex,nofollow"> on every page this domain serves.
+      noindex: { type: "boolean", default: false },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
       // CUSTOM domains only — replaces the earlier CloudFront-managed-certificate approach

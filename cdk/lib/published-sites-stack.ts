@@ -9,6 +9,7 @@ import * as events from "aws-cdk-lib/aws-events";
 import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { buildCloudFrontWebAcl, isWafEnabled } from "./conventions";
 
 // CloudFront SaaS Manager (GA April 2025) — serves every PUBLISHED tenant site (the
 // plexopages.com wildcard, plus every customer's own custom domain via
@@ -142,11 +143,67 @@ export class PublishedSitesStack extends cdk.Stack {
       functionCode: fs.readFileSync(path.join(__dirname, "forward-host-function.js"), "utf8"),
     });
 
-    const CACHING_DISABLED = cloudfront.CachePolicy.CACHING_DISABLED.cachePolicyId;
     const CACHING_OPTIMIZED = cloudfront.CachePolicy.CACHING_OPTIMIZED.cachePolicyId;
     const ALL_VIEWER_EXCEPT_HOST = cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER.originRequestPolicyId;
     const ALLOW_ALL_METHODS = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"];
     const CACHED_METHODS = ["GET", "HEAD"];
+
+    // Short-TTL cache policy for the page HTML itself (ServerFn's default behavior below) —
+    // the middle ground between CACHING_DISABLED (what shipped originally: every single
+    // published-page view re-invokes the Lambda origin, confirmed as a real perf gap in an
+    // enterprise evaluation) and CACHING_OPTIMIZED's day-long defaults (used below for
+    // genuinely static _next/*, commerce.js, uploads/* — wrong here, see next paragraph).
+    //
+    // Why not CACHING_OPTIMIZED: route.ts's own served HTML is not uniformly static. It
+    // bakes in server-resolved, DB-driven state per request — the branding bar's visibility
+    // (resolveHideBranding on the owning user's plan), a white-label favicon (org logo +
+    // entitlement), per-product SEO tags — none of which are visitor-specific, but all of
+    // which can change the moment an owner edits their site/plan/branding, and a day-long
+    // cache would then keep serving the pre-edit page long after. 10s default / 60s max
+    // TTL bounds that staleness window to something an owner editing their own site won't
+    // perceive as broken, while still turning a page that gets any repeat traffic within
+    // that window into a cache hit instead of a fresh Lambda invocation.
+    //
+    // cookieBehavior: none — deliberately NOT following CACHING_DISABLED's
+    // implicit "vary by everything" — verified by reading route.ts (and every helper it
+    // calls: resolveSite, resolveHideBranding/canWhiteLabel, resolveBlogRedirect) end to
+    // end: this handler never once reads `request.cookies` or any cookie header. The
+    // "personalized" pieces the eval doc worried about (cart state, session-specific
+    // commerce data) are handled client-side by commerce.js AFTER this cached HTML loads —
+    // this route's own response is identical for every visitor of the same URL at the same
+    // moment, so cookies have no business being part of the cache key.
+    //
+    // headerBehavior: allowList(["Host"]) only — required, not optional: this is a
+    // CloudFront SaaS Manager multi-tenant distribution (see this file's own top-of-file
+    // comment), every tenant domain shares the same ServerFn origin, so without Host in the
+    // cache key a cache hit for one customer's domain would serve another customer's page.
+    //
+    // queryStringBehavior: allowList(["p"]), NOT "none" — this is a deliberate deviation
+    // from "page content never varies by querystring, so drop query strings from the cache
+    // key entirely." That's true for ordinary marketing querystrings (utm_source, fbclid,
+    // etc. — real traffic on landing pages carries these constantly, and none of them
+    // should fragment the cache), but it's NOT true for one specific case this route
+    // handles: the WordPress shortlink redirect (`/?p=123`, ~line 346 in route.ts). That
+    // request shares the exact same path ("/") as the plain homepage AND every other
+    // `?p=N` value — if query strings were dropped from the cache key entirely, whichever
+    // response CloudFront happened to cache first for "/" (the real homepage, or a redirect
+    // baked for one specific old post) would get served to every other visitor of "/" for
+    // up to maxTtl, including visitors who never sent a `p` param at all. Allow-listing just
+    // "p" keeps that one param in the cache key (so each distinct value — and the "no p at
+    // all" case — gets its own cache entry) without fragmenting the cache on every other
+    // querystring a visitor's link happens to carry.
+    const pageCachePolicy = new cloudfront.CachePolicy(this, "PublishedPageCachePolicy", {
+      cachePolicyName: `${this.stackName}-page`,
+      comment: "Short-TTL cache for published page HTML — see published-sites-stack.ts's own comment at this resource",
+      defaultTtl: cdk.Duration.seconds(10),
+      minTtl: cdk.Duration.seconds(0),
+      maxTtl: cdk.Duration.seconds(60),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("p"),
+      headerBehavior: cloudfront.CacheHeaderBehavior.allowList("Host"),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    });
 
     // --- The multi-tenant "primary" distribution — behaviors are a straight port of
     // compute-stack.ts's own Distribution (see that file's comment: "behaviors match
@@ -184,11 +241,22 @@ export class PublishedSitesStack extends cdk.Stack {
     // existing distribution outright ("Invalid request provided: The updated certificate
     // is not compatible with the current certificate"), so this property must never
     // change again once first deployed, regardless of what real tenant traffic uses.
+    // Associated at the PRIMARY distribution's config — CloudFront's multi-tenant model
+    // (connectionMode: "tenant-only" below) inherits WAF protection from here across every
+    // per-customer-domain CfnDistributionTenant automatically; CfnDistributionTenant has no
+    // webAclId of its own to set (confirmed: not present on its property interface), so this
+    // is the one and only place to attach it for every published customer site at once.
+    // Gated behind WAF_ENABLED (see conventions.ts) — omitted here means this distribution
+    // (and every per-customer CfnDistributionTenant that inherits from it) deploys with no
+    // webAclId, exactly as it did before the WAF was written.
+    const webAcl = isWafEnabled() ? buildCloudFrontWebAcl(this, "WebAcl", "PlexoPublishedSites") : undefined;
+
     const primaryDistribution = new cloudfront.CfnDistribution(this, "PrimaryDistribution", {
       distributionConfig: {
         enabled: true,
         connectionMode: "tenant-only",
         tenantConfig: { parameterDefinitions: [] },
+        webAclId: webAcl?.attrArn,
         viewerCertificate: { acmCertificateArn: primaryDistributionCertArn, sslSupportMethod: "sni-only" },
         origins: [
           {
@@ -214,7 +282,7 @@ export class PublishedSitesStack extends cdk.Stack {
         defaultCacheBehavior: {
           targetOriginId: "ServerFn",
           viewerProtocolPolicy: "redirect-to-https",
-          cachePolicyId: CACHING_DISABLED,
+          cachePolicyId: pageCachePolicy.cachePolicyId,
           originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST,
           allowedMethods: ALLOW_ALL_METHODS,
           cachedMethods: CACHED_METHODS,

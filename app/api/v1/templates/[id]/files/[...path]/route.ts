@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadObject, StorageError } from "@/lib/storage";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
+import { requireTemplateScope } from "@/server/requireTemplateScope";
 import {
   isEditableExtension,
   contentTypeFor,
@@ -10,6 +11,7 @@ import {
 } from "@/server/rawUpload";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
+import { Member } from "@/lib/db/coreEntities";
 
 /**
  * PUT /api/v1/templates/:id/files/*path
@@ -38,6 +40,12 @@ export async function PUT(
 
   const { id, path: pathSegments } = await context.params;
   const filePath = decodeURIComponent(pathSegments.join("/"));
+
+  if (resolved.role !== null) {
+    const { data: member } = await Member.get({ organizationId: resolved.organizationId, userId: resolved.userId }).go();
+    const scopeError = requireTemplateScope(member, id);
+    if (scopeError) return scopeError;
+  }
 
   const { data: template } = await Template.get({ id }).go();
   if (!template || template.organizationId !== resolved.organizationId) {

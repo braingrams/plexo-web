@@ -15,6 +15,17 @@ type Pin = { id: string; x: number; y: number };
  * PlexoBuilderRef.getNodeRect (see plexo-sdk's playground.interfaces.ts) to resolve each
  * node's current on-screen position. Recomputed on scroll/resize plus a light interval,
  * since device-view toggles and drag-reorders inside the canvas don't fire either event.
+ *
+ * getNodeRect can legitimately return null for a real, correctly-anchored comment — e.g.
+ * the compiled-iframe engine's node-rect map (plexo-sdk's useFrameNodeRects) is only
+ * refreshed by its own observers, so there's a real window (an iframe re-render triggered
+ * by something other than a DOM childList/subtree mutation it watches, or simply a
+ * measurement not having landed yet) where a just-created comment's own anchor briefly, or
+ * persistently in some cases, isn't resolvable. Previously an unresolved anchor just
+ * vanished from `pins` with nothing else — from the user's side, indistinguishable from
+ * "the pin was never created." `unresolvedCount` surfaces that state instead of hiding it,
+ * and a retry loop (capped, not indefinite) gives a transient miss a real chance to
+ * self-heal once the canvas catches up.
  */
 function useCommentPins(
   builderRef: RefObject<PlexoBuilderRef | null>,
@@ -22,10 +33,12 @@ function useCommentPins(
   active: boolean,
 ) {
   const [pins, setPins] = useState<Pin[]>([]);
+  const [unresolvedCount, setUnresolvedCount] = useState(0);
 
   useEffect(() => {
     if (!active) {
       setPins([]);
+      setUnresolvedCount(0);
       return;
     }
 
@@ -33,10 +46,14 @@ function useCommentPins(
       const builder = builderRef.current;
       if (!builder) return;
       const next: Pin[] = [];
+      const unresolved: string[] = [];
       for (const a of anchors) {
         if (!a.anchorNodeId) continue;
         const rect = builder.getNodeRect(a.anchorNodeId);
-        if (!rect) continue;
+        if (!rect) {
+          unresolved.push(a.id);
+          continue;
+        }
         next.push({
           id: a.id,
           x: rect.left + rect.width * (a.anchorX ?? 0.5),
@@ -44,13 +61,32 @@ function useCommentPins(
         });
       }
       setPins(next);
+      setUnresolvedCount(unresolved.length);
+      if (unresolved.length > 0) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[comments] ${unresolved.length} comment pin(s) couldn't be positioned on canvas — anchorNodeId not found by getNodeRect (comment id(s): ${unresolved.join(", ")}). The comment itself is intact; only its on-canvas marker is affected.`,
+        );
+      }
     }
 
     recompute();
+    // A tighter retry burst right after (re)activating/anchor-set-changing, on top of the
+    // steady 400ms poll below — gives a fresh iframe measurement (which can lag a beat
+    // behind a just-created comment or a just-toggled device view) a real chance to catch
+    // up quickly instead of sitting unresolved for up to 400ms, capped at 10 tries (~3s) so
+    // a genuinely-gone node doesn't retry forever.
+    let retries = 0;
+    const retryTimer = setInterval(() => {
+      retries += 1;
+      recompute();
+      if (retries >= 10) clearInterval(retryTimer);
+    }, 300);
     const interval = setInterval(recompute, 400);
     window.addEventListener("resize", recompute);
     document.addEventListener("scroll", recompute, { capture: true, passive: true });
     return () => {
+      clearInterval(retryTimer);
       clearInterval(interval);
       window.removeEventListener("resize", recompute);
       document.removeEventListener("scroll", recompute, { capture: true });
@@ -61,7 +97,7 @@ function useCommentPins(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, JSON.stringify(anchors), builderRef]);
 
-  return pins;
+  return { pins, unresolvedCount };
 }
 
 export function CommentLayer({
@@ -97,7 +133,7 @@ export function CommentLayer({
         .map((c) => ({ id: c.id, anchorNodeId: c.anchorNodeId, anchorX: c.anchorX, anchorY: c.anchorY })),
     [comments],
   );
-  const pins = useCommentPins(builderRef, topLevelAnchors, active);
+  const { pins, unresolvedCount } = useCommentPins(builderRef, topLevelAnchors, active);
 
   useEffect(() => {
     if (!deepLinkCommentId) return;
@@ -130,6 +166,32 @@ export function CommentLayer({
           </span>
         </button>
       ))}
+
+      {/* A comment whose row/element couldn't be located on canvas right now still needs to
+          be visible SOMEWHERE — otherwise it's indistinguishable from having never been
+          created. Not a real pin (no on-canvas position to anchor to), just a way in. */}
+      {unresolvedCount > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            const first = topLevelAnchors.find((a) => !pins.some((p) => p.id === a.id));
+            if (first) {
+              setHighlightedId(first.id);
+              document.getElementById(`comment-thread-${first.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          }}
+          title="Some comments couldn't be positioned on canvas — click to view"
+          style={{
+            position: "fixed", right: 24, bottom: 24, zIndex: 70,
+            display: "flex", alignItems: "center", gap: "0.4rem",
+            padding: "0.5rem 0.8rem", borderRadius: 999, cursor: "pointer",
+            background: "#f59e0b", color: "#1a1200", border: "2px solid #0b0f19",
+            fontSize: "0.75rem", fontWeight: 700, boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+          }}
+        >
+          💬 {unresolvedCount} comment{unresolvedCount === 1 ? "" : "s"} not shown on canvas
+        </button>
+      )}
 
       {pendingPin && (
         <div

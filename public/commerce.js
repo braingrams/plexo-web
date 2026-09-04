@@ -20,14 +20,26 @@
   var STYLE_ID = "plexo-commerce-style";
   var CART_EVENT = "plexo:cart-updated";
   var CHECKOUT_STATE_EVENT = "plexo:checkout-state-changed";
-  var COURIER_FEE_MINOR = 150000;
   // Shared between the checkout page's two independent marker blocks — checkout_flow
   // (delivery method + contact details + discount code) and cart_summary (the order
-  // summary sidebar, which needs the current delivery method to compute the total, and
-  // the contact details to actually submit payment). Module-level rather than passed
-  // through props since the two markers render into separate DOM nodes with no direct
-  // reference to each other — see renderCheckoutFlow/renderCartSummary.
-  var checkoutFormState = { deliveryMethod: "PICKUP", customerName: "", customerEmail: "", customerPhone: "", discountCode: "" };
+  // summary sidebar, which needs the current delivery method's real fee to compute the
+  // total, and the contact details to actually submit payment). Module-level rather than
+  // passed through props since the two markers render into separate DOM nodes with no
+  // direct reference to each other — see renderCheckoutFlow/renderCartSummary.
+  // deliveryMethodId/deliveryFeeMinor are re-validated server-side at checkout anyway
+  // (see resolveOrderDeliveryMethod) — deliveryFeeMinor here is only ever used for the
+  // sidebar's displayed total, never trusted for the actual charge.
+  var checkoutFormState = {
+    deliveryMethodId: null,
+    deliveryFeeMinor: 0,
+    shippingCountry: "",
+    shippingState: "",
+    shippingAddressLine: "",
+    customerName: "",
+    customerEmail: "",
+    customerPhone: "",
+    discountCode: "",
+  };
 
   // ---------------------------------------------------------------------
   // Shared helpers
@@ -101,6 +113,99 @@
           return data;
         });
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // Stripe embedded checkout — mounted in-page instead of redirecting to
+  // checkout.stripe.com. Loaded lazily (only once a Stripe order actually needs it) since
+  // most sites use Paystack and would otherwise pay for an unused script fetch.
+  // ---------------------------------------------------------------------
+  var stripeJsPromise = null;
+  function loadStripeJs() {
+    if (window.Stripe) return Promise.resolve(window.Stripe);
+    if (!stripeJsPromise) {
+      stripeJsPromise = new Promise(function (resolve, reject) {
+        var script = document.createElement("script");
+        script.src = "https://js.stripe.com/v3/";
+        script.onload = function () {
+          resolve(window.Stripe);
+        };
+        script.onerror = function () {
+          reject(new Error("Couldn't load Stripe."));
+        };
+        document.head.appendChild(script);
+      });
+    }
+    return stripeJsPromise;
+  }
+
+  // `checkout` is the {provider:"stripe", clientSecret, publishableKey} object the checkout
+  // routes return in place of authorizationUrl for Stripe orders. Opens a full-screen modal,
+  // mounts Stripe's own embedded Checkout iframe into it, and lets the visitor close it
+  // (Stripe still does one final same-tab navigation to the order-confirmation return_url
+  // once payment actually completes — only the card-entry step is embedded).
+  function openStripeEmbeddedCheckout(checkout, onError) {
+    var overlay = el("div", {
+      style: {
+        position: "fixed", inset: "0", zIndex: "999", background: "rgba(6,7,15,0.75)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: "24px",
+      },
+    });
+    var box = el("div", {
+      style: {
+        background: "#fff", borderRadius: "16px", width: "100%", maxWidth: "560px", maxHeight: "90vh",
+        overflow: "auto", position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+      },
+    });
+    var mountPoint = el("div", { id: "pc-stripe-embedded-checkout" });
+    var closeBtn = el(
+      "button",
+      {
+        type: "button",
+        onclick: function () {
+          close();
+        },
+        style: {
+          position: "absolute", top: "12px", right: "12px", zIndex: "1", width: "30px", height: "30px",
+          display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(15,15,25,0.06)",
+          border: "none", borderRadius: "8px", color: "rgba(15,15,25,0.6)", cursor: "pointer", fontSize: "16px", lineHeight: "1",
+        },
+      },
+      ["✕"]
+    );
+    box.appendChild(closeBtn);
+    box.appendChild(mountPoint);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    var embeddedInstance = null;
+    function close() {
+      if (embeddedInstance) {
+        try {
+          embeddedInstance.destroy();
+        } catch (e) {}
+      }
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) close();
+    });
+
+    loadStripeJs()
+      .then(function (Stripe) {
+        var stripe = Stripe(checkout.publishableKey);
+        return stripe.initEmbeddedCheckout({ clientSecret: checkout.clientSecret });
+      })
+      .then(function (instance) {
+        embeddedInstance = instance;
+        instance.mount("#pc-stripe-embedded-checkout");
+      })
+      .catch(function (err) {
+        close();
+        if (onError) onError(err instanceof Error ? err : new Error("Couldn't start payment. Please try again."));
+      });
+
+    return close;
   }
 
   function money(minor, currency) {
@@ -490,8 +595,8 @@
           el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
             el("span", { html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 21h18M5 21V9l7-6 7 6v12M9 21v-6h6v6"></path></svg>' }),
             el("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } }, [
-              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, ["Pickup in Ilorin"]),
-              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, ["Ready next business day"]),
+              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, ["Pickup available"]),
+              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, ["Choose your delivery method at checkout"]),
             ]),
           ]),
           el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
@@ -667,6 +772,15 @@
                 }),
               })
                 .then(function (result) {
+                  if (result.checkout && result.checkout.provider === "stripe") {
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = "Confirm & Pay — " + money(product.priceMinor, product.currency);
+                    openStripeEmbeddedCheckout(result.checkout, function (err) {
+                      errorBox = el("div", { class: "pc-error" }, [err.message]);
+                      confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
+                    });
+                    return;
+                  }
                   window.location.href = result.authorizationUrl;
                 })
                 .catch(function (err) {
@@ -1104,8 +1218,14 @@
   function renderCartSummary(node) {
     var latestSnapshot = null;
 
+    function needsDelivery(snapshot) {
+      return snapshot.items.some(function (i) {
+        return i.kind === "PHYSICAL";
+      });
+    }
+
     function computeTotal(snapshot) {
-      return snapshot.subtotalMinor + (checkoutFormState.deliveryMethod === "COURIER" ? COURIER_FEE_MINOR : 0);
+      return snapshot.subtotalMinor + (needsDelivery(snapshot) ? checkoutFormState.deliveryFeeMinor : 0);
     }
 
     function totalsRow(label, value, muted) {
@@ -1171,6 +1291,11 @@
               payBtn.parentNode.insertBefore(errorBox, payBtn);
               return;
             }
+            if (needsDelivery(snapshot) && !checkoutFormState.deliveryMethodId) {
+              errorBox = el("div", { class: "pc-error" }, ["Please choose a delivery method."]);
+              payBtn.parentNode.insertBefore(errorBox, payBtn);
+              return;
+            }
             payBtn.disabled = true;
             payBtn.textContent = "Starting payment…";
             api("/api/public/commerce/checkout/cart", {
@@ -1179,11 +1304,23 @@
                 customerName: checkoutFormState.customerName || undefined,
                 customerEmail: checkoutFormState.customerEmail,
                 customerPhone: checkoutFormState.customerPhone || undefined,
-                deliveryMethod: checkoutFormState.deliveryMethod,
+                deliveryMethodId: checkoutFormState.deliveryMethodId || undefined,
+                shippingCountry: checkoutFormState.shippingCountry || undefined,
+                shippingState: checkoutFormState.shippingState || undefined,
+                shippingAddressLine: checkoutFormState.shippingAddressLine || undefined,
                 discountCode: checkoutFormState.discountCode || undefined,
               }),
             })
               .then(function (result) {
+                if (result.checkout && result.checkout.provider === "stripe") {
+                  payBtn.disabled = false;
+                  payBtn.textContent = "Continue to Payment →";
+                  openStripeEmbeddedCheckout(result.checkout, function (err) {
+                    errorBox = el("div", { class: "pc-error" }, [err.message]);
+                    payBtn.parentNode.insertBefore(errorBox, payBtn);
+                  });
+                  return;
+                }
                 window.location.href = result.authorizationUrl;
               })
               .catch(function (err) {
@@ -1201,10 +1338,15 @@
         el("div", { class: "pc-card", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "18px" } }, [
           heading,
           list,
-          el("div", { style: { display: "flex", flexDirection: "column", gap: "8px", paddingTop: "16px", borderTop: "1px solid #E4E1D6" } }, [
-            totalsRow("Subtotal", money(snapshot.subtotalMinor, snapshot.currency)),
-            totalsRow("Delivery", checkoutFormState.deliveryMethod === "COURIER" ? money(COURIER_FEE_MINOR, snapshot.currency) : "Free", checkoutFormState.deliveryMethod !== "COURIER"),
-          ]),
+          el(
+            "div",
+            { style: { display: "flex", flexDirection: "column", gap: "8px", paddingTop: "16px", borderTop: "1px solid #E4E1D6" } },
+            [totalsRow("Subtotal", money(snapshot.subtotalMinor, snapshot.currency))].concat(
+              needsDelivery(snapshot)
+                ? [totalsRow("Delivery", checkoutFormState.deliveryFeeMinor > 0 ? money(checkoutFormState.deliveryFeeMinor, snapshot.currency) : "Free", checkoutFormState.deliveryFeeMinor === 0)]
+                : []
+            )
+          ),
           el("div", { style: { display: "flex", justifyContent: "space-between", paddingTop: "14px", borderTop: "1px solid #E4E1D6", fontSize: "16px", fontWeight: "700", color: "#16233F" } }, [
             el("span", {}, ["Total"]),
             el("span", {}, [money(total, snapshot.currency)]),
@@ -1250,13 +1392,19 @@
           return;
         }
 
-        function deliveryOption(value, label, feeText) {
+        var needsDelivery = cart.items.some(function (i) {
+          return i.kind === "PHYSICAL";
+        });
+
+        function deliveryOption(method) {
           var dot;
+          var selected = method.id === checkoutFormState.deliveryMethodId;
+          var feeText = (method.feeMinor > 0 ? money(method.feeMinor, cart.currency) : "Free") + (method.estimatedTimeLabel ? " · " + method.estimatedTimeLabel : "");
           var wrap = el(
             "div",
             {
               style: {
-                border: "1.5px solid " + (value === checkoutFormState.deliveryMethod ? "#16233F" : "#E4E1D6"),
+                border: "1.5px solid " + (selected ? "#16233F" : "#E4E1D6"),
                 padding: "16px 18px",
                 cursor: "pointer",
                 display: "flex",
@@ -1267,8 +1415,9 @@
                 minWidth: "180px",
               },
               onclick: function () {
-                checkoutFormState.deliveryMethod = value;
-                Array.prototype.forEach.call(node.querySelectorAll("[data-pc-delivery-option]"), function (o) {
+                checkoutFormState.deliveryMethodId = method.id;
+                checkoutFormState.deliveryFeeMinor = method.feeMinor || 0;
+                Array.prototype.forEach.call(deliverySection.querySelectorAll("[data-pc-delivery-option]"), function (o) {
                   o.style.borderColor = "#E4E1D6";
                   var d = o.querySelector("[data-pc-delivery-dot]");
                   if (d) d.style.background = "transparent";
@@ -1281,16 +1430,70 @@
             },
             [
               el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } }, [
-                el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F" } }, [label]),
+                el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F" } }, [method.name]),
                 el("span", { class: "pc-muted", style: { fontSize: "12px" } }, [feeText]),
               ]),
               (dot = el("span", {
                 "data-pc-delivery-dot": "true",
-                style: { width: "16px", height: "16px", borderRadius: "50%", border: "1.5px solid #16233F", background: value === checkoutFormState.deliveryMethod ? "#16233F" : "transparent", flexShrink: "0" },
+                style: { width: "16px", height: "16px", borderRadius: "50%", border: "1.5px solid #16233F", background: selected ? "#16233F" : "transparent", flexShrink: "0" },
               })),
             ]
           );
           return wrap;
+        }
+
+        // Populated once /api/public/commerce/delivery-methods answers — starts as a
+        // loading placeholder since a real fetch has to happen before anything can be
+        // selected. Re-fetched whenever the country/state inputs change so the option list
+        // only ever shows methods that actually cover the typed address.
+        var deliverySection = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
+          el("p", { class: "pc-muted", style: { fontSize: "13px" } }, ["Loading delivery options…"]),
+        ]);
+        var deliveryFetchTimer = null;
+
+        function paintDeliveryOptions(methods) {
+          clear(deliverySection);
+          if (!methods.length) {
+            checkoutFormState.deliveryMethodId = null;
+            checkoutFormState.deliveryFeeMinor = 0;
+            deliverySection.appendChild(
+              el("p", { class: "pc-muted", style: { fontSize: "13px" } }, [
+                "No delivery methods are available for this address yet — try a different country or state, or contact the seller directly.",
+              ])
+            );
+            document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
+            return;
+          }
+          if (checkoutFormState.deliveryMethodId && !methods.some(function (m) { return m.id === checkoutFormState.deliveryMethodId; })) {
+            checkoutFormState.deliveryMethodId = null;
+            checkoutFormState.deliveryFeeMinor = 0;
+          }
+          if (!checkoutFormState.deliveryMethodId && methods.length === 1) {
+            checkoutFormState.deliveryMethodId = methods[0].id;
+            checkoutFormState.deliveryFeeMinor = methods[0].feeMinor || 0;
+          }
+          deliverySection.appendChild(el("div", { style: { display: "flex", gap: "12px", flexWrap: "wrap" } }, methods.map(deliveryOption)));
+          document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
+        }
+
+        function loadDeliveryOptions() {
+          clear(deliverySection);
+          deliverySection.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px" } }, ["Loading delivery options…"]));
+          var qs = [];
+          if (checkoutFormState.shippingCountry) qs.push("country=" + encodeURIComponent(checkoutFormState.shippingCountry));
+          if (checkoutFormState.shippingState) qs.push("state=" + encodeURIComponent(checkoutFormState.shippingState));
+          api("/api/public/commerce/delivery-methods" + (qs.length ? "?" + qs.join("&") : ""))
+            .then(function (data) {
+              paintDeliveryOptions(data.methods || []);
+            })
+            .catch(function () {
+              paintDeliveryOptions([]);
+            });
+        }
+
+        function scheduleDeliveryReload() {
+          if (deliveryFetchTimer) clearTimeout(deliveryFetchTimer);
+          deliveryFetchTimer = setTimeout(loadDeliveryOptions, 350);
         }
 
         function field(label, type, stateKey) {
@@ -1308,46 +1511,87 @@
         var discountInput = el("input", { class: "pc-input", placeholder: "Enter code", value: checkoutFormState.discountCode || "" });
         var discountMsg = el("span", { class: "pc-muted", style: { fontSize: "12px" } });
 
-        node.appendChild(
-          el("div", { style: { display: "flex", flexDirection: "column", gap: "30px" } }, [
+        var sections = [];
+
+        if (needsDelivery) {
+          var countryInput = el("input", {
+            class: "pc-input",
+            value: checkoutFormState.shippingCountry,
+            placeholder: "e.g. NG",
+            oninput: function (e) {
+              checkoutFormState.shippingCountry = e.target.value.trim().toUpperCase();
+              scheduleDeliveryReload();
+            },
+          });
+          var stateInput = el("input", {
+            class: "pc-input",
+            value: checkoutFormState.shippingState,
+            placeholder: "e.g. Lagos",
+            oninput: function (e) {
+              checkoutFormState.shippingState = e.target.value.trim();
+              scheduleDeliveryReload();
+            },
+          });
+          var addressLineInput = el("input", {
+            class: "pc-input",
+            value: checkoutFormState.shippingAddressLine,
+            placeholder: "Street address",
+            oninput: function (e) {
+              checkoutFormState.shippingAddressLine = e.target.value;
+            },
+          });
+
+          sections.push(
             el("div", {}, [
-              el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Delivery method"]),
-              el("div", { style: { display: "flex", gap: "12px", flexWrap: "wrap" } }, [
-                deliveryOption("PICKUP", "Pickup — Ilorin", "Free"),
-                deliveryOption("COURIER", "Courier delivery", "from " + money(COURIER_FEE_MINOR, cart.currency)),
+              el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Delivery"]),
+              el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "14px" } }, [
+                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["Country"]), countryInput]),
+                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["State / region"]), stateInput]),
               ]),
-            ]),
-            el("div", {}, [
-              el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Your details"]),
-              el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, [
-                el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap" } }, [
-                  el("div", { style: { flex: "1", minWidth: "180px" } }, [field("Full name", "text", "customerName")]),
-                  el("div", { style: { flex: "1", minWidth: "180px" } }, [field("Phone number", "tel", "customerPhone")]),
-                ]),
-                field("Email", "email", "customerEmail"),
+              el("div", { style: { marginBottom: "16px" } }, [el("label", { class: "pc-label" }, ["Street address"]), addressLineInput]),
+              deliverySection,
+            ])
+          );
+        }
+
+        sections.push(
+          el("div", {}, [
+            el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Your details"]),
+            el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, [
+              el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap" } }, [
+                el("div", { style: { flex: "1", minWidth: "180px" } }, [field("Full name", "text", "customerName")]),
+                el("div", { style: { flex: "1", minWidth: "180px" } }, [field("Phone number", "tel", "customerPhone")]),
               ]),
-            ]),
-            el("div", {}, [
-              el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Discount code"]),
-              el("div", { style: { display: "flex", gap: "10px" } }, [
-                discountInput,
-                el(
-                  "button",
-                  {
-                    class: "pc-btn-outline",
-                    style: { flexShrink: "0", padding: "0 22px" },
-                    onclick: function () {
-                      checkoutFormState.discountCode = discountInput.value.trim();
-                      discountMsg.textContent = checkoutFormState.discountCode ? "Will be applied at payment." : "";
-                    },
-                  },
-                  ["Apply"]
-                ),
-              ]),
-              discountMsg,
+              field("Email", "email", "customerEmail"),
             ]),
           ])
         );
+
+        sections.push(
+          el("div", {}, [
+            el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Discount code"]),
+            el("div", { style: { display: "flex", gap: "10px" } }, [
+              discountInput,
+              el(
+                "button",
+                {
+                  class: "pc-btn-outline",
+                  style: { flexShrink: "0", padding: "0 22px" },
+                  onclick: function () {
+                    checkoutFormState.discountCode = discountInput.value.trim();
+                    discountMsg.textContent = checkoutFormState.discountCode ? "Will be applied at payment." : "";
+                  },
+                },
+                ["Apply"]
+              ),
+            ]),
+            discountMsg,
+          ])
+        );
+
+        node.appendChild(el("div", { style: { display: "flex", flexDirection: "column", gap: "30px" } }, sections));
+
+        if (needsDelivery) loadDeliveryOptions();
       })
       .catch(function (err) {
         showError(node, err.message);

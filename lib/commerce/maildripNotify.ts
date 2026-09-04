@@ -1,6 +1,8 @@
 import type { EntityItem } from "electrodb";
 import { decryptMaildripKey } from "@/lib/crypto";
+import { formatMoney } from "@/lib/commerce/formatMoney";
 import type { CommerceOrder as CommerceOrderEntity, CommerceSettings as CommerceSettingsEntity } from "@/lib/db/commerceEntities";
+import { logEmailDelivery } from "@/lib/mail/logEmail";
 
 type CommerceOrder = EntityItem<typeof CommerceOrderEntity>;
 type CommerceSettings = EntityItem<typeof CommerceSettingsEntity>;
@@ -33,18 +35,32 @@ async function tagContactIntoGroup(apiKey: string, groupId: string, order: Comme
 }
 
 async function sendReceiptEmail(apiKey: string, order: CommerceOrder): Promise<void> {
-  const amount = `₦${(order.amountMinor / 100).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
-  const response = await fetch(PLATFORM_MAILDRIP_API_URL, {
-    method: "POST",
-    headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      to: order.customerEmail,
-      subject: `Order ${order.orderNumber} confirmed`,
-      html: `<p>Thanks for your order — <strong>${order.orderNumber}</strong> is confirmed.</p><p>Amount paid: <strong>${amount}</strong></p>`,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`MailDrip receipt send failed (${response.status}): ${await response.text()}`);
+  const amount = formatMoney(order.amountMinor, order.currency ?? "NGN");
+  const subject = `Order ${order.orderNumber} confirmed`;
+  try {
+    const response = await fetch(PLATFORM_MAILDRIP_API_URL, {
+      method: "POST",
+      headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: order.customerEmail,
+        subject,
+        html: `<p>Thanks for your order — <strong>${order.orderNumber}</strong> is confirmed.</p><p>Amount paid: <strong>${amount}</strong></p>`,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`MailDrip receipt send failed (${response.status}): ${await response.text()}`);
+    }
+    logEmailDelivery({
+      kind: "maildrip", to: order.customerEmail, subject, status: "sent",
+      context: "commerce_receipt", organizationId: order.organizationId, templateId: order.templateId,
+    });
+  } catch (err) {
+    logEmailDelivery({
+      kind: "maildrip", to: order.customerEmail, subject, status: "failed",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      context: "commerce_receipt", organizationId: order.organizationId, templateId: order.templateId,
+    });
+    throw err;
   }
 }
 
@@ -81,15 +97,34 @@ export function resolveMaildripApiKey(settings: CommerceSettings): string | null
 /** Sends a transactional email through a SPECIFIC MailDrip key (e.g. resolveMaildripApiKey's
  * result) — unlike lib/mail/maildrip.ts's sendMaildripEmail, which always uses Plexo's
  * shared platform key, this lets a Commerce email go out under the site's own connected
- * MailDrip account when it has one. */
-export async function sendCommerceEmail(apiKey: string, input: { to: string; subject: string; html: string }): Promise<void> {
-  const response = await fetch(PLATFORM_MAILDRIP_API_URL, {
-    method: "POST",
-    headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!response.ok) {
-    throw new Error(`MailDrip send failed (${response.status}): ${await response.text()}`);
+ * MailDrip account when it has one. organizationId/templateId are optional and only used
+ * for EmailLog attribution — every current caller is a digital-delivery send and has both
+ * on hand (via the order), but they aren't required by the MailDrip request itself. */
+export async function sendCommerceEmail(
+  apiKey: string,
+  input: { to: string; subject: string; html: string; organizationId?: string; templateId?: string },
+): Promise<void> {
+  const { organizationId, templateId, ...body } = input;
+  try {
+    const response = await fetch(PLATFORM_MAILDRIP_API_URL, {
+      method: "POST",
+      headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(`MailDrip send failed (${response.status}): ${await response.text()}`);
+    }
+    logEmailDelivery({
+      kind: "maildrip", to: input.to, subject: input.subject, status: "sent",
+      context: "commerce_digital_delivery", organizationId, templateId,
+    });
+  } catch (err) {
+    logEmailDelivery({
+      kind: "maildrip", to: input.to, subject: input.subject, status: "failed",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      context: "commerce_digital_delivery", organizationId, templateId,
+    });
+    throw err;
   }
 }
 

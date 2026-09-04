@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadObject, deleteObjects } from "@/lib/storage";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
+import { requireTemplateScope } from "@/server/requireTemplateScope";
 import {
   extractZipUpload,
   validateSingleHtmlUpload,
@@ -12,6 +13,7 @@ import {
 } from "@/server/rawUpload";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
+import { Member } from "@/lib/db/coreEntities";
 
 /**
  * POST /api/v1/templates/:id/replace-upload
@@ -42,6 +44,13 @@ export async function POST(
   if (permissionError) return permissionError;
 
   const { id } = await context.params;
+
+  if (resolved.role !== null) {
+    const { data: member } = await Member.get({ organizationId: resolved.organizationId, userId: resolved.userId }).go();
+    const scopeError = requireTemplateScope(member, id);
+    if (scopeError) return scopeError;
+  }
+
   const { data: template } = await Template.get({ id }).go();
   if (!template || template.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });

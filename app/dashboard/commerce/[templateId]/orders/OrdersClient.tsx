@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatMoney } from "@/lib/commerce/formatMoney";
 
 export type OrderSummary = {
   id: string;
@@ -8,6 +9,7 @@ export type OrderSummary = {
   status: "PENDING" | "PAID" | "FAILED" | "REFUNDED" | "CANCELLED";
   fulfillmentStatus: "UNFULFILLED" | "PROCESSING" | "READY_FOR_PICKUP" | "SHIPPED" | "COMPLETED";
   amountMinor: number;
+  currency: string;
   customerEmail: string;
   customerName: string | null;
   createdAt: string;
@@ -25,10 +27,6 @@ export type DigitalDeliverySummary = {
   maxDownloads: number | null;
   resendCount: number;
 };
-
-function formatNaira(minor: number): string {
-  return `₦${(minor / 100).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 const STATUS_COLORS: Record<OrderSummary["status"], string> = {
   PENDING: "#fbbf24",
@@ -154,11 +152,6 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
 
   return (
     <div>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ fontSize: "1.35rem", fontWeight: 600, color: "#f0f2ff", margin: 0 }}>Orders</h1>
-        <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginTop: 4 }}>Every order for this site.</p>
-      </div>
-
       <div style={{ display: "flex", gap: "0.6rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
         <input
           type="search" value={q} onChange={(e) => setQ(e.target.value)}
@@ -209,7 +202,7 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
                 >
                   <td style={{ padding: "0.7rem 1rem", fontFamily: "ui-monospace, monospace" }}>{order.orderNumber}</td>
                   <td style={{ padding: "0.7rem 1rem" }}>{order.customerName ?? order.customerEmail}</td>
-                  <td style={{ padding: "0.7rem 1rem", fontFamily: "ui-monospace, monospace" }}>{formatNaira(order.amountMinor)}</td>
+                  <td style={{ padding: "0.7rem 1rem", fontFamily: "ui-monospace, monospace" }}>{formatMoney(order.amountMinor, order.currency)}</td>
                   <td style={{ padding: "0.7rem 1rem" }}><StatusPill status={order.status} /></td>
                   <td style={{ padding: "0.7rem 1rem", color: "rgba(240,242,255,0.55)" }}>{order.fulfillmentStatus.replace(/_/g, " ").toLowerCase()}</td>
                   <td style={{ padding: "0.7rem 1rem", color: "rgba(240,242,255,0.4)" }}>{new Date(order.createdAt).toLocaleDateString()}</td>
@@ -248,12 +241,12 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
               {selected.items.map((item, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "#e2e4f5", padding: "0.25rem 0" }}>
                   <span>{item.quantity}× {item.nameSnapshot}</span>
-                  <span style={{ fontFamily: "ui-monospace, monospace" }}>{formatNaira(item.unitPriceMinor * item.quantity)}</span>
+                  <span style={{ fontFamily: "ui-monospace, monospace" }}>{formatMoney(item.unitPriceMinor * item.quantity, selected.currency)}</span>
                 </div>
               ))}
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", fontWeight: 700, color: "#f0f2ff", borderTop: "1px solid rgba(255,255,255,0.08)", marginTop: "0.5rem", paddingTop: "0.5rem" }}>
                 <span>Total</span>
-                <span style={{ fontFamily: "ui-monospace, monospace" }}>{formatNaira(selected.amountMinor)}</span>
+                <span style={{ fontFamily: "ui-monospace, monospace" }}>{formatMoney(selected.amountMinor, selected.currency)}</span>
               </div>
             </div>
 

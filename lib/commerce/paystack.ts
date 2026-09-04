@@ -51,13 +51,13 @@ export function resolvePaystackKeysForMode(
  * ops-controlled key pair (no per-site test/live split — see PLATFORM_PAYSTACK_SECRET_KEY
  * in .env.example) instead of anything stored on CommerceSettings; the resulting order's
  * proceeds get credited to the site's CommerceWallet by the platform webhook rather than
- * landing in the site owner's own Paystack account. Returns null for PLATFORM_STRIPE — that
- * provider doesn't use Paystack at all, see lib/commerce/stripeClient.ts.
+ * landing in the site owner's own Paystack account. Returns null for PLATFORM_STRIPE and
+ * BYO_STRIPE — neither provider uses Paystack at all, see lib/commerce/stripe.ts.
  */
 export function resolveCheckoutPaystackSecret(
   settings: PaystackKeyFields & { paymentProvider: CommercePaymentProvider },
 ): { publicKey: string | null; secretKeyEncrypted: string | null; isPlatform: boolean } | null {
-  if (settings.paymentProvider === "PLATFORM_STRIPE") return null;
+  if (settings.paymentProvider === "PLATFORM_STRIPE" || settings.paymentProvider === "BYO_STRIPE") return null;
   if (settings.paymentProvider === "PLATFORM_PAYSTACK") {
     const publicKey = process.env.PLATFORM_PAYSTACK_PUBLIC_KEY ?? null;
     const secretKey = process.env.PLATFORM_PAYSTACK_SECRET_KEY ?? null;

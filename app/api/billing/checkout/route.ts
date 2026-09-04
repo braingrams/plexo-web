@@ -43,26 +43,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const successUrl = `${appUrl}/dashboard/settings?billing=success`;
-  const cancelUrl = `${appUrl}/dashboard/settings?billing=cancelled`;
+  // Was `/dashboard/settings?billing=success` — that path was never a real page (the
+  // actual page lives at /dashboard/settings/subscription), so a completed payment landed
+  // on a 404. Embedded Checkout still needs a `return_url` (Stripe navigates there once
+  // the payment finishes, even though the card-entry form itself now renders in-page
+  // instead of on checkout.stripe.com) — session_id lets the page confirm the real status
+  // via GET /api/billing/checkout/session rather than trusting the query string alone.
+  const returnUrl = `${appUrl}/dashboard/settings/subscription?session_id={CHECKOUT_SESSION_ID}`;
 
   try {
     if (body.kind === "subscription") {
       const priceId = resolvePriceId(PLAN_PRICE_ENV[body.plan]);
       const checkoutSession = await stripe.checkout.sessions.create({
+        ui_mode: "embedded_page",
         mode: "subscription",
         customer: customerId,
         line_items: [{ price: priceId, quantity: 1 }],
         subscription_data: { metadata: { plexoUserId: session.user.id, plan: body.plan } },
-        success_url: successUrl,
-        cancel_url: cancelUrl,
+        return_url: returnUrl,
       });
-      return NextResponse.json({ url: checkoutSession.url });
+      return NextResponse.json({ clientSecret: checkoutSession.client_secret });
     }
 
     const pack = TOPUP_PACKS[body.pack];
     const priceId = resolvePriceId(pack.priceEnv);
     const checkoutSession = await stripe.checkout.sessions.create({
+      ui_mode: "embedded_page",
       mode: "payment",
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
@@ -72,10 +78,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         pack: body.pack,
         credits: String(pack.credits),
       },
-      success_url: successUrl,
-      cancel_url: cancelUrl,
+      return_url: returnUrl,
     });
-    return NextResponse.json({ url: checkoutSession.url });
+    return NextResponse.json({ clientSecret: checkoutSession.client_secret });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not start checkout." },

@@ -2,6 +2,37 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
+import { getStripePromise } from "@/lib/stripeClientPromise";
+
+/** The card-entry step renders here, in-page, instead of redirecting to checkout.stripe.com
+ * — Stripe still navigates to `return_url` once payment completes (see the purchase route's
+ * own comment), which is what lands back on this same marketplace page with ?purchase=success. */
+function CheckoutModal({ clientSecret, onClose }: { clientSecret: string; onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-8 backdrop-blur-sm"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative max-h-[90vh] w-full max-w-lg overflow-auto rounded-2xl bg-white shadow-2xl"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-3 top-3 z-10 grid h-8 w-8 place-items-center rounded-lg bg-black/5 text-black/60 hover:bg-black/10"
+        >
+          ✕
+        </button>
+        <EmbeddedCheckoutProvider stripe={getStripePromise()} options={{ clientSecret }}>
+          <EmbeddedCheckout />
+        </EmbeddedCheckoutProvider>
+      </div>
+    </div>
+  );
+}
 
 export function PurchaseAction({
   templateId,
@@ -20,6 +51,7 @@ export function PurchaseAction({
   const router = useRouter();
   const [pending, setPending] = useState(autoUse);
   const [error, setError] = useState<string | null>(null);
+  const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
   const autoUseFired = useRef(false);
 
   async function useTemplate() {
@@ -74,8 +106,9 @@ export function PurchaseAction({
       setPending(false);
       return;
     }
-    if (data.url) {
-      window.location.href = data.url;
+    if (data.clientSecret) {
+      setCheckoutSecret(data.clientSecret);
+      setPending(false);
       return;
     }
     // alreadyOwned raced in between page load and click — just use it.
@@ -92,6 +125,7 @@ export function PurchaseAction({
       >
         {pending ? "Working…" : owned ? "Use this template" : isFree ? "Get this template" : "Buy this template"}
       </button>
+      {checkoutSecret && <CheckoutModal clientSecret={checkoutSecret} onClose={() => setCheckoutSecret(null)} />}
     </div>
   );
 }

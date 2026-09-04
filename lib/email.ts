@@ -3,6 +3,8 @@ import { createHmac } from "node:crypto";
 
 import { emailShell } from "@/lib/mail/maildrip";
 import { CTA_BUTTON } from "@/lib/mail/templates";
+import { formatMoney } from "@/lib/commerce/formatMoney";
+import { logEmailDelivery, type EmailDeliveryContext } from "@/lib/mail/logEmail";
 
 /**
  * Every admin-notification email below goes through emailShell (logo at top, same card/
@@ -76,7 +78,7 @@ function twoButtonRow(
   </table>`;
 }
 
-async function deliver(params: { to: string; subject: string; html: string; logLabel: string; logLines: string[] }): Promise<void> {
+async function deliver(params: { to: string; subject: string; html: string; logLabel: string; logLines: string[]; context: EmailDeliveryContext }): Promise<void> {
   if (process.env.SMTP_HOST && process.env.SMTP_USER) {
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -88,18 +90,38 @@ async function deliver(params: { to: string; subject: string; html: string; logL
       },
     });
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || `"Plexo Notifications" <noreply@plexopages.com>`,
-      to: params.to,
-      subject: params.subject,
-      html: params.html,
-    });
+    try {
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || `"Plexo Notifications" <noreply@plexopages.com>`,
+        to: params.to,
+        subject: params.subject,
+        html: params.html,
+      });
+      logEmailDelivery({ kind: "smtp", to: params.to, subject: params.subject, status: "sent", context: params.context });
+    } catch (err) {
+      // Previously uncaught entirely — a SMTP failure here propagated as an unhandled
+      // rejection to whichever caller awaited deliver(). Behavior is unchanged (still
+      // rethrown); this only adds a queryable record of the failure before it does.
+      logEmailDelivery({
+        kind: "smtp", to: params.to, subject: params.subject, status: "failed",
+        errorMessage: err instanceof Error ? err.message : String(err), context: params.context,
+      });
+      throw err;
+    }
   } else {
     console.log("--------------------------------------------------");
     console.log(`[${params.logLabel}]`);
     console.log(`To: ${params.to}`);
     for (const line of params.logLines) console.log(line);
     console.log("--------------------------------------------------");
+    // SMTP isn't configured, so nothing was actually sent — logged as "failed" (not
+    // skipped entirely) since that's the true answer to "did this email actually send,"
+    // the whole point of this log.
+    logEmailDelivery({
+      kind: "smtp", to: params.to, subject: params.subject, status: "failed",
+      errorMessage: "SMTP not configured — no-op fallback, email was only logged to the console.",
+      context: params.context,
+    });
   }
 }
 
@@ -149,6 +171,7 @@ export async function sendTestimonialNotificationEmail(testimonial: SendTestimon
     html,
     logLabel: "TESTIMONIAL EMAIL NOTIFICATION LOG",
     logLines: [`Approve Link: ${approveUrl}`, `Reject Link: ${rejectUrl}`],
+    context: "testimonial_notification",
   });
 }
 
@@ -186,6 +209,7 @@ export async function sendFeedbackNotificationEmail(feedback: SendFeedbackEmailP
     html,
     logLabel: "FEEDBACK EMAIL NOTIFICATION LOG",
     logLines: [`From: ${feedback.userName} (${feedback.userEmail})`, `Message: ${feedback.message}`],
+    context: "feedback_notification",
   });
 }
 
@@ -229,6 +253,7 @@ export async function sendWithdrawalRequestNotificationEmail(withdrawal: SendWit
     html,
     logLabel: "WITHDRAWAL REQUEST EMAIL NOTIFICATION LOG",
     logLines: [`Requested by: ${withdrawal.userName} (${withdrawal.userEmail})`, `Amount: $${amount}`, `Review: ${reviewUrl}`],
+    context: "withdrawal_request_notification",
   });
 }
 
@@ -276,6 +301,7 @@ export async function sendScriptAccessRequestNotificationEmail(req: SendScriptAc
       ...(req.reason ? [`Reason: ${req.reason}`] : []),
       `Review: ${reviewUrl}`,
     ],
+    context: "script_access_request_notification",
   });
 }
 
@@ -322,6 +348,7 @@ export async function sendCommerceStripeAccessRequestNotificationEmail(req: Send
       ...(req.reason ? [`Reason: ${req.reason}`] : []),
       `Review: ${reviewUrl}`,
     ],
+    context: "commerce_stripe_access_request_notification",
   });
 }
 
@@ -331,6 +358,7 @@ export type SendCommerceWithdrawalRequestEmailParams = {
   userEmail: string;
   userName: string;
   amountCents: number;
+  currency: string;
   bankName: string;
 };
 
@@ -341,7 +369,7 @@ export async function sendCommerceWithdrawalRequestNotificationEmail(req: SendCo
   const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM || "admin@plexopages.com";
   const adminAppUrl = process.env.ADMIN_APP_URL || "http://localhost:3001";
   const reviewUrl = `${adminAppUrl}/commerce-withdrawals`;
-  const amount = (req.amountCents / 100).toFixed(2);
+  const amount = formatMoney(req.amountCents, req.currency);
 
   const html = emailShell({
     title: "New Commerce Withdrawal Request",
@@ -351,7 +379,7 @@ export async function sendCommerceWithdrawalRequestNotificationEmail(req: SendCo
       ${detailsBlock([
         detailRow("Organization", escapeHtml(req.organizationName)),
         detailRow("Requested by", `${escapeHtml(req.userName)} (${escapeHtml(req.userEmail)})`),
-        detailRow("Amount", `₦${amount}`),
+        detailRow("Amount", amount),
         detailRow("Bank", escapeHtml(req.bankName)),
       ].join(""))}
       ${CTA_BUTTON(reviewUrl, "Review in Admin")}
@@ -366,8 +394,9 @@ export async function sendCommerceWithdrawalRequestNotificationEmail(req: SendCo
     logLines: [
       `Organization: ${req.organizationName}`,
       `Requested by: ${req.userName} (${req.userEmail})`,
-      `Amount: ₦${amount}`,
+      `Amount: ${amount}`,
       `Review: ${reviewUrl}`,
     ],
+    context: "commerce_withdrawal_request_notification",
   });
 }

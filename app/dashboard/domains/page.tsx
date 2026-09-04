@@ -64,6 +64,7 @@ export default async function DomainsPage() {
     certificateStatus: d.certificateStatus,
     certificateValidationName: d.certificateValidationName,
     certificateValidationValue: d.certificateValidationValue,
+    noindex: d.noindex ?? false,
   }));
 
   return (

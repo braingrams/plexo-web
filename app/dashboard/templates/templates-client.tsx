@@ -80,6 +80,28 @@ export function TemplatesClient({ initialTemplates }: Props) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // Duplicate state
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
+
+  async function handleDuplicate(template: TemplateSummary) {
+    setDuplicatingId(template.id);
+    setDuplicateError(null);
+    try {
+      const res = await fetch(`/api/templates/${template.id}/duplicate-site`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to duplicate site");
+      setTemplates((prev) => [
+        { ...template, id: data.template.id, name: data.template.name, pageCount: data.template.pageCount ?? 0, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+        ...prev,
+      ]);
+    } catch (err: any) {
+      setDuplicateError(err.message || "Failed to duplicate site");
+    } finally {
+      setDuplicatingId(null);
+    }
+  }
+
   async function handleConfirmDelete() {
     if (!deleteTarget) return;
     setIsDeleting(true);
@@ -256,6 +278,23 @@ export function TemplatesClient({ initialTemplates }: Props) {
         </div>
       </div>
 
+      {duplicateError && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem",
+          background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 10,
+          padding: "0.7rem 1rem", marginBottom: "1rem", fontSize: "0.83rem", color: "#f87171",
+        }}>
+          {duplicateError}
+          <button
+            type="button"
+            onClick={() => setDuplicateError(null)}
+            style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.85rem", fontFamily: "inherit" }}
+          >
+            <IconX />
+          </button>
+        </div>
+      )}
+
       {/* Grid */}
       {filtered.length > 0 ? (
         <div className="templates-grid" style={{
@@ -264,7 +303,13 @@ export function TemplatesClient({ initialTemplates }: Props) {
           gap: "1.25rem",
         }}>
           {filtered.map((template) => (
-            <TemplateCard key={template.id} template={template} onDelete={setDeleteTarget} />
+            <TemplateCard
+              key={template.id}
+              template={template}
+              onDelete={setDeleteTarget}
+              onDuplicate={handleDuplicate}
+              duplicating={duplicatingId === template.id}
+            />
           ))}
         </div>
       ) : (
@@ -472,7 +517,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
                     Template Type
                   </p>
                   <div style={{
-                    display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem",
+                    display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.5rem",
                   }}>
                     {(["EMAIL","LANDING_PAGE"] as const).map((kind) => {
                       const label = kind === "EMAIL" ? "Email Template" : "Landing Page";

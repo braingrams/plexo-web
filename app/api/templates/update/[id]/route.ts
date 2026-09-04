@@ -5,8 +5,11 @@ import { compileToHTML } from "@/lib/compiler";
 
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
+import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
+import { snapshotTemplateRevision } from "@/lib/templateRevisions";
 import { Template } from "@/lib/db/contentEntities";
+import { Member } from "@/lib/db/coreEntities";
 
 type UpdateTemplateBody = {
   designJson?: unknown;
@@ -26,6 +29,13 @@ export async function POST(
   if (permissionError) return permissionError;
 
   const params = await context.params;
+
+  if (resolved.role !== null) {
+    const { data: member } = await Member.get({ organizationId: resolved.organizationId, userId: resolved.userId }).go();
+    const scopeError = requireTemplateScope(member, params.id);
+    if (scopeError) return scopeError;
+  }
+
   const body = (await request.json().catch(() => ({}))) as UpdateTemplateBody;
 
   let sanitizedPayload;
@@ -61,6 +71,12 @@ export async function POST(
       compiledHtml = sanitizeHtml(compileToHTML(forCompile));
     }
   }
+
+  // Snapshot the pre-overwrite content before it's gone — never blocks or fails the save
+  // itself if the revision write hiccups (see lib/templateRevisions.ts).
+  void snapshotTemplateRevision(existing).catch((err) =>
+    console.error(`Failed to snapshot revision for template ${existing.id} (non-fatal):`, err),
+  );
 
   await Template.patch({ id: existing.id }).set({ designJson, compiledHtml }).go();
   const { data: updated } = await Template.get({ id: existing.id }).go();

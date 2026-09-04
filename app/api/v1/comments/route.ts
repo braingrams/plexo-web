@@ -10,6 +10,7 @@ import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildMentionEmail, buildCommentReplyEmail } from "@/lib/mail/templates";
 import { isNotificationEnabled } from "@/lib/notificationPreferencesDynamo";
 import { getOrgBrandDynamo as getOrgBrand } from "@/server/orgDynamo";
+import { logEmailDelivery } from "@/lib/mail/logEmail";
 
 function isConditionalCheckFailure(err: unknown): boolean {
   const anyErr = err as { name?: string; cause?: { name?: string } };
@@ -237,11 +238,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         target.type === "MENTION"
           ? buildMentionEmail({ mentionerName: authorInfo.name, templateName: template.name, commentSnippet: snippet, deepLinkUrl, brand })
           : buildCommentReplyEmail({ replierName: authorInfo.name, templateName: template.name, commentSnippet: snippet, deepLinkUrl, brand });
-      sendMaildripEmail({
-        to,
-        subject: target.type === "MENTION" ? `${authorInfo.name} mentioned you on Plexo` : `${authorInfo.name} replied on Plexo`,
-        html,
-      }).catch((err) => console.error("[mail] comment notification failed:", err));
+      const subject = target.type === "MENTION" ? `${authorInfo.name} mentioned you on Plexo` : `${authorInfo.name} replied on Plexo`;
+      const context = target.type === "MENTION" ? "comment_mention_notification" : "comment_reply_notification";
+      sendMaildripEmail({ to, subject, html })
+        .then(() => {
+          logEmailDelivery({ kind: "maildrip", to, subject, status: "sent", context, organizationId: resolved.organizationId, templateId: template.id });
+        })
+        .catch((err) => {
+          console.error("[mail] comment notification failed:", err);
+          logEmailDelivery({
+            kind: "maildrip", to, subject, status: "failed",
+            errorMessage: err instanceof Error ? err.message : String(err),
+            context, organizationId: resolved.organizationId, templateId: template.id,
+          });
+        });
     }
   }
 

@@ -105,23 +105,15 @@ export function AvailabilityClient({ templateId, services }: { templateId: strin
 
   if (services.length === 0) {
     return (
-      <div>
-        <div style={{ marginBottom: "1.5rem" }}>
-          <h1 style={{ fontSize: "1.35rem", fontWeight: 600, color: "#f0f2ff", margin: 0 }}>Availability</h1>
-        </div>
-        <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", color: "rgba(240,242,255,0.45)", fontSize: "0.85rem" }}>
-          No bookable services yet — add one under Products first (choose "Service / Booking").
-        </div>
+      <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", color: "rgba(240,242,255,0.45)", fontSize: "0.85rem" }}>
+        No bookable services yet — add one under Products first (choose "Service / Booking").
       </div>
     );
   }
 
   return (
     <div>
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ fontSize: "1.35rem", fontWeight: 600, color: "#f0f2ff", margin: 0 }}>Availability</h1>
-        <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginTop: 4 }}>Weekly hours and one-off closures per service.</p>
-      </div>
+      <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginBottom: "1.25rem" }}>Weekly hours and one-off closures per service.</p>
 
       <select value={productId} onChange={(e) => setProductId(e.target.value)} style={{ ...inputStyle, marginBottom: "1.5rem", width: "100%", maxWidth: 320 }}>
         {services.map((s) => (

@@ -132,6 +132,17 @@ export const Member = new Entity(
       // Values match accessControl.ts's OrgRole — this is entirely our own data now
       // (no external identity provider to defer to), same as it was under Prisma.
       role: { type: ["owner", "admin", "editor", "blogger", "commenter", "viewer"] as const, required: true },
+      // Granular-permissions v1 (enterprise-eval gap: today every role is org-wide — an
+      // `editor` can touch every template in the org, no way to say "this page only").
+      // Absent or empty = unchanged today's behavior (org-wide access for whatever the
+      // role's accessControl.ts statement already allows) — fully backward compatible,
+      // no migration needed. Only ever meaningful for role "editor" (see
+      // server/requireTemplateScope.ts and server/orgDynamo.ts's updateMemberRole, which
+      // clears this outright for every other role) — owner/admin are never scopable in
+      // this v1. Checked by server/requireTemplateScope.ts in every template-mutation
+      // route, same "second, narrower check after the role check" pattern as
+      // requirePermissionDynamo.ts itself.
+      scopedTemplateIds: { type: "list", items: { type: "string" } },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
     },
     indexes: {
@@ -347,6 +358,10 @@ export const Invitation = new Entity(
       organizationId: { type: "string", required: true },
       email: { type: "string", required: true },
       role: { type: ["owner", "admin", "editor", "blogger", "commenter", "viewer"] as const, required: true },
+      // Same granular-permissions v1 field as Member.scopedTemplateIds above, set at
+      // invite time so a scoped editor can be configured before they've even accepted —
+      // carried over onto the Member row acceptInvitation creates (server/orgDynamo.ts).
+      scopedTemplateIds: { type: "list", items: { type: "string" } },
       status: { type: ["pending", "accepted", "rejected", "canceled"] as const, default: "pending" },
       inviterId: { type: "string", required: true },
       expiresAt: { type: "string", required: true },

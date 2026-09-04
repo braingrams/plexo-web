@@ -2,7 +2,20 @@ import { randomUUID } from "node:crypto";
 import { TransactWriteCommand, type TransactWriteCommandInput } from "@aws-sdk/lib-dynamodb";
 import { EntityItem } from "electrodb";
 import { docClient } from "@/lib/db/client";
-import { CommerceOrder, CommerceOrderItem, CommerceProduct, CommerceDiscountCode, CommerceBooking, CommerceBookingSlotLock, CommerceCart } from "@/lib/db/commerceEntities";
+import {
+  CommerceOrder,
+  CommerceOrderItem,
+  CommerceProduct,
+  CommerceDiscountCode,
+  CommerceDeliveryMethod,
+  CommerceBooking,
+  CommerceBookingSlotLock,
+  CommerceCart,
+  type CommercePaymentProvider,
+} from "@/lib/db/commerceEntities";
+
+type ResolvedDeliveryMethod = EntityItem<typeof CommerceDeliveryMethod>;
+type ShippingAddress = { shippingCountry: string | null; shippingState: string | null; shippingAddressLine: string | null };
 
 export class OutOfStockError extends Error {
   constructor(public productName?: string) {
@@ -42,16 +55,18 @@ export async function createCommerceOrder(params: {
   customerEmail: string;
   customerName: string | null;
   customerPhone: string | null;
-  deliveryMethod: "PICKUP" | "COURIER" | null;
+  deliveryMethod: ResolvedDeliveryMethod | null;
+  shippingAddress: ShippingAddress;
   discount: EntityItem<typeof CommerceDiscountCode> | null;
   discountAmountMinor: number;
   amountMinor: number;
-  paymentProvider: "BYO_PAYSTACK" | "PLATFORM_PAYSTACK" | "PLATFORM_STRIPE";
+  currency: string;
+  paymentProvider: CommercePaymentProvider;
   paystackMode: "TEST" | "LIVE" | null;
   scheduledStart: Date | null;
   scheduledEnd: Date | null;
 }): Promise<EntityItem<typeof CommerceOrder>> {
-  const { templateId, organizationId, product, quantity, orderNumber, paystackReference, customerEmail, customerName, customerPhone, deliveryMethod, discount, discountAmountMinor, amountMinor, paymentProvider, paystackMode, scheduledStart, scheduledEnd } = params;
+  const { templateId, organizationId, product, quantity, orderNumber, paystackReference, customerEmail, customerName, customerPhone, deliveryMethod, shippingAddress, discount, discountAmountMinor, amountMinor, currency, paymentProvider, paystackMode, scheduledStart, scheduledEnd } = params;
 
   const orderId = randomUUID();
   const orderItemId = randomUUID();
@@ -117,12 +132,17 @@ export async function createCommerceOrder(params: {
       customerEmail,
       customerName: customerName ?? undefined,
       customerPhone: customerPhone ?? undefined,
-      deliveryMethod: deliveryMethod ?? undefined,
-      deliveryFeeMinor: 0,
+      deliveryMethod: deliveryMethod?.type ?? undefined,
+      deliveryMethodId: deliveryMethod?.id ?? undefined,
+      deliveryMethodNameSnapshot: deliveryMethod?.name ?? undefined,
+      deliveryFeeMinor: deliveryMethod?.feeMinor ?? 0,
+      shippingCountry: deliveryMethod?.type === "COURIER" ? shippingAddress.shippingCountry ?? undefined : undefined,
+      shippingState: deliveryMethod?.type === "COURIER" ? shippingAddress.shippingState ?? undefined : undefined,
+      shippingAddressLine: deliveryMethod?.type === "COURIER" ? shippingAddress.shippingAddressLine ?? undefined : undefined,
       discountCode: discount?.code,
       discountAmountMinor,
       amountMinor,
-      currency: product.currency ?? "NGN",
+      currency,
       paymentProvider,
       paystackMode: paystackMode ?? undefined,
       paystackReference: paystackReference ?? undefined,
@@ -235,16 +255,16 @@ export async function createCommerceCartOrder(params: {
   customerEmail: string;
   customerName: string | null;
   customerPhone: string | null;
-  deliveryMethod: "PICKUP" | "COURIER";
-  deliveryFeeMinor: number;
+  deliveryMethod: ResolvedDeliveryMethod | null;
+  shippingAddress: ShippingAddress;
   discount: EntityItem<typeof CommerceDiscountCode> | null;
   discountAmountMinor: number;
   amountMinor: number;
   currency: string;
-  paymentProvider: "BYO_PAYSTACK" | "PLATFORM_PAYSTACK" | "PLATFORM_STRIPE";
+  paymentProvider: CommercePaymentProvider;
   paystackMode: "TEST" | "LIVE" | null;
 }): Promise<EntityItem<typeof CommerceOrder>> {
-  const { templateId, organizationId, cartId, items: cartItems, orderNumber, paystackReference, customerEmail, customerName, customerPhone, deliveryMethod, deliveryFeeMinor, discount, discountAmountMinor, amountMinor, currency, paymentProvider, paystackMode } = params;
+  const { templateId, organizationId, cartId, items: cartItems, orderNumber, paystackReference, customerEmail, customerName, customerPhone, deliveryMethod, shippingAddress, discount, discountAmountMinor, amountMinor, currency, paymentProvider, paystackMode } = params;
 
   const orderId = randomUUID();
   const transactItems: TransactItem[] = [];
@@ -285,8 +305,13 @@ export async function createCommerceCartOrder(params: {
       customerEmail,
       customerName: customerName ?? undefined,
       customerPhone: customerPhone ?? undefined,
-      deliveryMethod,
-      deliveryFeeMinor,
+      deliveryMethod: deliveryMethod?.type ?? undefined,
+      deliveryMethodId: deliveryMethod?.id ?? undefined,
+      deliveryMethodNameSnapshot: deliveryMethod?.name ?? undefined,
+      deliveryFeeMinor: deliveryMethod?.feeMinor ?? 0,
+      shippingCountry: deliveryMethod?.type === "COURIER" ? shippingAddress.shippingCountry ?? undefined : undefined,
+      shippingState: deliveryMethod?.type === "COURIER" ? shippingAddress.shippingState ?? undefined : undefined,
+      shippingAddressLine: deliveryMethod?.type === "COURIER" ? shippingAddress.shippingAddressLine ?? undefined : undefined,
       discountCode: discount?.code,
       discountAmountMinor,
       amountMinor,

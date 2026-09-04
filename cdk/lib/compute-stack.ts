@@ -12,7 +12,7 @@ import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 import * as cr from "aws-cdk-lib/custom-resources";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as path from "node:path";
-import { buildLogGroup } from "./conventions";
+import { buildLogGroup, buildCloudFrontWebAcl, isWafEnabled } from "./conventions";
 
 // Real OpenNext deployment (SSR Lambda + image-optimization Lambda + CloudFront + S3 +
 // SQS/DynamoDB for ISR), built from a verified `.open-next/` build output — not
@@ -471,6 +471,28 @@ export class ComputeStack extends cdk.Stack {
       },
     });
 
+    // Baseline security headers for the dashboard/app distribution — closes a real,
+    // confirmed gap (no CSP/HSTS/X-Frame-Options/X-Content-Type-Options were set anywhere
+    // in the stack). Deliberately conservative: everything here is safe to add without
+    // live-testing every page (the app is already HTTPS-only end to end, and nothing here
+    // expects to be iframed by a third party), EXCEPT Content-Security-Policy, which is not
+    // set — a CSP has to enumerate every legitimate external script/style/font/connect
+    // origin the app actually loads, and getting that wrong from static reading alone risks
+    // silently breaking real functionality (Stripe.js, MailDrip embeds, uploaded assets,
+    // etc.) with no way to verify here. Follow-up: audit real network requests in a running
+    // session, then add a real CSP separately. Separate from mcpResponseHeadersPolicy above
+    // (which stays scoped to api/v1/mcp* only, for the WWW-Authenticate reason explained
+    // there) — a CloudFront behavior accepts only one responseHeadersPolicy, so this is a
+    // second, independent policy applied to the other behaviors below.
+    const securityHeadersPolicy = new cloudfront.ResponseHeadersPolicy(this, "SecurityHeadersPolicy", {
+      securityHeadersBehavior: {
+        contentTypeOptions: { override: true },
+        frameOptions: { frameOption: cloudfront.HeadersFrameOption.SAMEORIGIN, override: true },
+        referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
+        strictTransportSecurity: { accessControlMaxAge: cdk.Duration.days(365), includeSubdomains: true, preload: true, override: true },
+      },
+    });
+
     // DNS-validated via a manual CNAME (see appDomain's own comment above) — `cdk deploy`
     // blocks here until that CNAME is added and ACM sees it, same wait behavior
     // published-sites-stack.ts's own wildcardCert already relies on. Imported instead when
@@ -481,12 +503,17 @@ export class ComputeStack extends cdk.Stack {
       ? new acm.Certificate(this, "AppCert", { domainName: appDomain, validation: acm.CertificateValidation.fromDns() })
       : undefined;
 
+    // Gated behind WAF_ENABLED (see conventions.ts) — undefined/omitted here means this
+    // distribution deploys with no webAclId, exactly as it did before the WAF was written.
+    const webAcl = isWafEnabled() ? buildCloudFrontWebAcl(this, "WebAcl", "PlexoApp") : undefined;
+
     // CloudFront — behaviors match open-next.output.json exactly: image paths to the
     // image function, everything else dynamic to the server function, static file
     // patterns straight to S3.
     const distribution = new cloudfront.Distribution(this, "Distribution", {
       domainNames: appDomain ? [appDomain] : undefined,
       certificate: appCert,
+      webAclId: webAcl?.attrArn,
       defaultBehavior: {
         origin: new origins.FunctionUrlOrigin(serverFnUrl, { customHeaders: { "x-origin-verify": originVerifySecret! } }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -494,6 +521,7 @@ export class ComputeStack extends cdk.Stack {
         allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
         originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
         functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+        responseHeadersPolicy: securityHeadersPolicy,
       },
       additionalBehaviors: {
         "api/v1/mcp*": {
@@ -503,27 +531,33 @@ export class ComputeStack extends cdk.Stack {
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
           originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
           functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+          // Stays on its own dedicated policy (WWW-Authenticate only) — see that policy's
+          // own comment on why this route can't share the general security-headers policy.
           responseHeadersPolicy: mcpResponseHeadersPolicy,
         },
         "_next/image*": {
           origin: origins.FunctionUrlOrigin.withOriginAccessControl(imageFnUrl),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          responseHeadersPolicy: securityHeadersPolicy,
         },
         "_next/*": {
           origin: origins.S3BucketOrigin.withOriginAccessControl(assetsBucket, { originPath: "/_assets" }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          responseHeadersPolicy: securityHeadersPolicy,
         },
         "commerce.js": {
           origin: origins.S3BucketOrigin.withOriginAccessControl(assetsBucket, { originPath: "/_assets" }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          responseHeadersPolicy: securityHeadersPolicy,
         },
         "uploads/*": {
           origin: origins.S3BucketOrigin.withOriginAccessControl(assetsBucket, { originPath: "/_assets" }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          responseHeadersPolicy: securityHeadersPolicy,
         },
       },
     });

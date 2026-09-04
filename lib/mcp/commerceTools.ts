@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { slugify } from "@/server/slugDynamo";
-import { encryptDigitalAccessSecret, encryptBankDetail, encryptPaystackKey, encryptMaildripKey, decryptPaystackKey, decryptMaildripKey } from "@/lib/crypto";
+import { encryptDigitalAccessSecret, encryptBankDetail, encryptPaystackKey, encryptMaildripKey, encryptStripeKey, decryptPaystackKey, decryptMaildripKey, decryptStripeKey, tryDecrypt } from "@/lib/crypto";
+import { isKnownCurrency, isPaystackCompatibleCurrency } from "@/lib/commerce/currency";
+import { ensureProductDetailLayout } from "@/lib/commerce/productDetailLayout";
 import { maskSecret } from "@/lib/commerce/adminAuthDynamo";
 import { resolveCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { resendDigitalDelivery } from "@/lib/commerce/digitalDeliveryDynamo";
@@ -172,7 +174,7 @@ export const COMMERCE_MCP_TOOLS = [
   },
   {
     name: "get_commerce_settings",
-    description: "Fetches a site's Commerce settings: enabled state, payment provider, Paystack mode/keys (masked), MailDrip config, and notification email.",
+    description: "Fetches a site's Commerce settings: enabled state, store currency, payment provider, Paystack/Stripe mode/keys (masked), MailDrip config, and notification email.",
     inputSchema: {
       type: "object",
       properties: { templateId: { type: "string", description: "The site's home page template id." } },
@@ -181,18 +183,26 @@ export const COMMERCE_MCP_TOOLS = [
   },
   {
     name: "update_commerce_settings",
-    description: `Updates a site's Commerce settings. Only the fields provided are changed. paymentProvider: BYO_PAYSTACK (default — the site's own Paystack keys below), PLATFORM_PAYSTACK (Plexo's own Paystack account, no keys needed, proceeds credit the Commerce wallet), or PLATFORM_STRIPE (Plexo's own Stripe account for international payments — requires prior approval, see request_commerce_stripe_access/get_commerce_stripe_access_status).`,
+    description: `Updates a site's Commerce settings. Only the fields provided are changed. paymentProvider: BYO_PAYSTACK (default — the site's own Paystack keys below), PLATFORM_PAYSTACK (Plexo's own Paystack account, no keys needed, proceeds credit the Commerce wallet), BYO_STRIPE (the site's own Stripe keys below), or PLATFORM_STRIPE (Plexo's own Stripe account — requires prior approval, see request_commerce_stripe_access/get_commerce_stripe_access_status). currency can't be changed once the site has any orders.`,
     inputSchema: {
       type: "object",
       properties: {
         templateId: { type: "string", description: "The site's home page template id." },
         enabled: { type: "boolean", description: "Master on/off switch for Commerce on this site." },
-        paymentProvider: { type: "string", enum: ["BYO_PAYSTACK", "PLATFORM_PAYSTACK", "PLATFORM_STRIPE"] },
+        currency: { type: "string", description: "Site-wide store currency (ISO 4217, e.g. NGN/USD/GBP/EUR/GHS/KES/ZAR). Set this before taking orders — it can't be changed afterward." },
+        paymentProvider: { type: "string", enum: ["BYO_PAYSTACK", "PLATFORM_PAYSTACK", "PLATFORM_STRIPE", "BYO_STRIPE"] },
         paystackMode: { type: "string", enum: ["TEST", "LIVE"], description: "Which BYO Paystack key pair is active." },
         paystackTestPublicKey: { type: "string" },
         paystackTestSecretKey: { type: "string" },
         paystackLivePublicKey: { type: "string" },
         paystackLiveSecretKey: { type: "string" },
+        stripeMode: { type: "string", enum: ["TEST", "LIVE"], description: "Which BYO Stripe key pair is active." },
+        stripeTestPublishableKey: { type: "string" },
+        stripeTestSecretKey: { type: "string" },
+        stripeTestWebhookSecret: { type: "string", description: "From the site owner's own Stripe Dashboard webhook endpoint (Test mode), signing secret starting with whsec_." },
+        stripeLivePublishableKey: { type: "string" },
+        stripeLiveSecretKey: { type: "string" },
+        stripeLiveWebhookSecret: { type: "string", description: "Same as stripeTestWebhookSecret, for the Live mode webhook endpoint." },
         maildripApiKey: { type: "string" },
         maildripPaidGroupId: { type: "string" },
         maildripNewsletterGroupId: { type: "string" },
@@ -467,12 +477,20 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       return {
         settings: {
           enabled: settings?.enabled ?? false,
+          currency: settings?.currency ?? "NGN",
           paymentProvider: settings?.paymentProvider ?? "BYO_PAYSTACK",
           paystackMode: settings?.paystackMode ?? "TEST",
           paystackTestPublicKey: settings?.paystackTestPublicKey ?? null,
           paystackLivePublicKey: settings?.paystackLivePublicKey ?? null,
           paystackTestSecretKeyMasked: settings?.paystackTestSecretKeyEncrypted ? maskSecret(decryptPaystackKey(settings.paystackTestSecretKeyEncrypted)) : null,
           paystackLiveSecretKeyMasked: settings?.paystackLiveSecretKeyEncrypted ? maskSecret(decryptPaystackKey(settings.paystackLiveSecretKeyEncrypted)) : null,
+          stripeMode: settings?.stripeMode ?? "TEST",
+          stripeTestPublishableKey: settings?.stripeTestPublishableKey ?? null,
+          stripeLivePublishableKey: settings?.stripeLivePublishableKey ?? null,
+          stripeTestSecretKeyMasked: settings?.stripeTestSecretKeyEncrypted ? maskSecret(tryDecrypt(() => decryptStripeKey(settings.stripeTestSecretKeyEncrypted!))) : null,
+          stripeLiveSecretKeyMasked: settings?.stripeLiveSecretKeyEncrypted ? maskSecret(tryDecrypt(() => decryptStripeKey(settings.stripeLiveSecretKeyEncrypted!))) : null,
+          stripeTestWebhookSecretMasked: settings?.stripeTestWebhookSecretEncrypted ? maskSecret(tryDecrypt(() => decryptStripeKey(settings.stripeTestWebhookSecretEncrypted!))) : null,
+          stripeLiveWebhookSecretMasked: settings?.stripeLiveWebhookSecretEncrypted ? maskSecret(tryDecrypt(() => decryptStripeKey(settings.stripeLiveWebhookSecretEncrypted!))) : null,
           maildripApiKeyMasked: settings?.maildripApiKeyEncrypted ? maskSecret(decryptMaildripKey(settings.maildripApiKeyEncrypted)) : null,
           maildripPaidGroupId: settings?.maildripPaidGroupId ?? null,
           maildripNewsletterGroupId: settings?.maildripNewsletterGroupId ?? null,
@@ -483,21 +501,42 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
 
     case "update_commerce_settings": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const { paystackMode, paymentProvider } = args;
+      const { paystackMode, paymentProvider, stripeMode, currency } = args;
       if (paystackMode !== undefined && paystackMode !== "TEST" && paystackMode !== "LIVE") {
         throw new Error("paystackMode must be TEST or LIVE.");
       }
-      if (paymentProvider !== undefined && !["BYO_PAYSTACK", "PLATFORM_PAYSTACK", "PLATFORM_STRIPE"].includes(paymentProvider)) {
-        throw new Error("paymentProvider must be BYO_PAYSTACK, PLATFORM_PAYSTACK, or PLATFORM_STRIPE.");
+      if (stripeMode !== undefined && stripeMode !== "TEST" && stripeMode !== "LIVE") {
+        throw new Error("stripeMode must be TEST or LIVE.");
+      }
+      if (paymentProvider !== undefined && !["BYO_PAYSTACK", "PLATFORM_PAYSTACK", "PLATFORM_STRIPE", "BYO_STRIPE"].includes(paymentProvider)) {
+        throw new Error("paymentProvider must be BYO_PAYSTACK, PLATFORM_PAYSTACK, PLATFORM_STRIPE, or BYO_STRIPE.");
       }
       if (paymentProvider === "PLATFORM_STRIPE") {
         const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go();
         if (!requests.some((r) => r.status === "APPROVED")) throw new Error("Platform Stripe isn't approved for this organization yet — call request_commerce_stripe_access first.");
       }
 
+      let currencyWarning: string | null = null;
+      if (currency !== undefined) {
+        if (typeof currency !== "string" || !isKnownCurrency(currency)) throw new Error("That currency isn't supported yet.");
+        const { data: existingForCurrencyCheck } = await CommerceSettings.get({ templateId: siteId }).go();
+        const currentCurrency = existingForCurrencyCheck?.currency ?? "NGN";
+        if (currency.toUpperCase() !== currentCurrency.toUpperCase()) {
+          const { data: existingOrders } = await CommerceOrder.query.primary({ templateId: siteId }).go({ pages: 1 });
+          if (existingOrders.length > 0) {
+            throw new Error("Can't change currency after orders exist — existing prices were entered in the current currency and won't be converted.");
+          }
+        }
+        const effectiveProvider = paymentProvider ?? existingForCurrencyCheck?.paymentProvider ?? "BYO_PAYSTACK";
+        if ((effectiveProvider === "BYO_PAYSTACK" || effectiveProvider === "PLATFORM_PAYSTACK") && !isPaystackCompatibleCurrency(currency)) {
+          currencyWarning = `Paystack may not support charging in ${currency.toUpperCase()} for every merchant account — this depends on your Paystack account's own configuration and can't be verified from here.`;
+        }
+      }
+
       const data: Record<string, unknown> = {};
       const toRemove: string[] = [];
       if (typeof args.enabled === "boolean") data.enabled = args.enabled;
+      if (typeof currency === "string") data.currency = currency.toUpperCase();
       if (paymentProvider !== undefined) data.paymentProvider = paymentProvider;
       if (paystackMode !== undefined) data.paystackMode = paystackMode;
       if (typeof args.paystackTestPublicKey === "string") {
@@ -513,6 +552,27 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       }
       if (typeof args.paystackLiveSecretKey === "string" && args.paystackLiveSecretKey) {
         data.paystackLiveSecretKeyEncrypted = encryptPaystackKey(args.paystackLiveSecretKey);
+      }
+      if (stripeMode !== undefined) data.stripeMode = stripeMode;
+      if (typeof args.stripeTestPublishableKey === "string") {
+        if (args.stripeTestPublishableKey) data.stripeTestPublishableKey = args.stripeTestPublishableKey;
+        else toRemove.push("stripeTestPublishableKey");
+      }
+      if (typeof args.stripeLivePublishableKey === "string") {
+        if (args.stripeLivePublishableKey) data.stripeLivePublishableKey = args.stripeLivePublishableKey;
+        else toRemove.push("stripeLivePublishableKey");
+      }
+      if (typeof args.stripeTestSecretKey === "string" && args.stripeTestSecretKey) {
+        data.stripeTestSecretKeyEncrypted = encryptStripeKey(args.stripeTestSecretKey);
+      }
+      if (typeof args.stripeLiveSecretKey === "string" && args.stripeLiveSecretKey) {
+        data.stripeLiveSecretKeyEncrypted = encryptStripeKey(args.stripeLiveSecretKey);
+      }
+      if (typeof args.stripeTestWebhookSecret === "string" && args.stripeTestWebhookSecret) {
+        data.stripeTestWebhookSecretEncrypted = encryptStripeKey(args.stripeTestWebhookSecret);
+      }
+      if (typeof args.stripeLiveWebhookSecret === "string" && args.stripeLiveWebhookSecret) {
+        data.stripeLiveWebhookSecretEncrypted = encryptStripeKey(args.stripeLiveWebhookSecret);
       }
       if (typeof args.maildripApiKey === "string" && args.maildripApiKey) {
         data.maildripApiKeyEncrypted = encryptMaildripKey(args.maildripApiKey);
@@ -538,10 +598,23 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       } else {
         await CommerceSettings.create({ id: randomUUID(), templateId: siteId, organizationId: resolved.organizationId, ...data }).go();
       }
+
+      // Mirrors the settings PUT route: auto-provision the starter product page the moment
+      // Commerce is (or becomes) enabled, so this MCP path doesn't leave a site enabled with
+      // no working product page just because it didn't go through the dashboard UI.
+      const effectiveEnabled = typeof args.enabled === "boolean" ? args.enabled : (existingSettings?.enabled ?? false);
+      if (effectiveEnabled) {
+        await ensureProductDetailLayout(siteId, resolved.organizationId, resolved.userId);
+      }
+
       const { data: settings } = await CommerceSettings.get({ templateId: siteId }).go();
       if (!settings) throw new Error(`CommerceSettings for template ${siteId} vanished immediately after being saved`);
 
-      return { success: true, settings: { enabled: settings.enabled, paymentProvider: settings.paymentProvider, paystackMode: settings.paystackMode } };
+      return {
+        success: true,
+        settings: { enabled: settings.enabled, currency: settings.currency ?? "NGN", paymentProvider: settings.paymentProvider, paystackMode: settings.paystackMode, stripeMode: settings.stripeMode ?? "TEST" },
+        ...(currencyWarning ? { warning: currencyWarning } : {}),
+      };
     }
 
     case "list_commerce_orders": {
@@ -692,7 +765,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       ]);
       if (organization && user) {
         await sendCommerceWithdrawalRequestNotificationEmail({
-          id: withdrawalId, organizationName: organization.name, userEmail: user.email, userName: user.name ?? "A seller", amountCents, bankName,
+          id: withdrawalId, organizationName: organization.name, userEmail: user.email, userName: user.name ?? "A seller", amountCents, currency: wallet.currency ?? "NGN", bankName,
         }).catch((err) => console.error("Failed to send Commerce withdrawal admin notification email:", err));
       }
 

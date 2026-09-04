@@ -3,7 +3,8 @@ const PAYSTACK_BASE_URL = "https://api.paystack.co";
 export interface PaystackInitializeParams {
   secretKey: string;
   email: string;
-  amountMinor: number; // kobo
+  amountMinor: number; // minor unit (kobo for NGN, cents for USD, etc.)
+  currency: string;
   reference: string;
   callbackUrl: string;
   metadata?: Record<string, unknown>;
@@ -33,7 +34,7 @@ export async function initializePaystackTransaction(
     body: JSON.stringify({
       email: params.email,
       amount: params.amountMinor,
-      currency: "NGN",
+      currency: params.currency,
       reference: params.reference,
       callback_url: params.callbackUrl,
       metadata: params.metadata,

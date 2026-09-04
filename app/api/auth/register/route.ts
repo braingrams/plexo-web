@@ -6,6 +6,8 @@ import { dynamoAdapter } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildVerificationEmail } from "@/lib/mail/templates";
+import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
+import { logEmailDelivery } from "@/lib/mail/logEmail";
 
 const VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -24,11 +26,16 @@ const VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
  * first time they reach the dashboard, same as it always has for Google sign-ins.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const allowed = await checkCommerceRateLimit(`register:${clientIp(request)}`, 8, 60 * 60_000);
+  if (!allowed) {
+    return NextResponse.json({ error: { message: "Too many accounts created from this network recently. Please try again later." } }, { status: 429 });
+  }
+
   const body = await request.json().catch(() => ({}));
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
   const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : email.split("@")[0] || "Plexo User";
-  const pendingPlan = body.pendingPlan === "PRO" || body.pendingPlan === "ULTRA" ? body.pendingPlan : null;
+  const pendingPlan = body.pendingPlan === "PRO" || body.pendingPlan === "ULTRA" ? body.pendingPlan : undefined;
 
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: { message: "Enter a valid email address." } }, { status: 400 });
@@ -54,17 +61,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   });
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const verifySubject = "Verify your Plexo account";
   try {
     await sendMaildripEmail({
       to: email,
-      subject: "Verify your Plexo account",
+      subject: verifySubject,
       html: buildVerificationEmail(`${baseUrl}/auth/confirm?token=${token}&email=${encodeURIComponent(email)}`),
     });
+    logEmailDelivery({ kind: "maildrip", to: email, subject: verifySubject, status: "sent", context: "verification_email" });
   } catch (err) {
     // The account is real either way — a transient mail-provider error shouldn't fail
     // registration outright, same discipline as this migration's other non-fatal-email
     // patterns (e.g. site transfer offers).
     console.error("Failed to send verification email:", err);
+    logEmailDelivery({
+      kind: "maildrip",
+      to: email,
+      subject: verifySubject,
+      status: "failed",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      context: "verification_email",
+    });
   }
 
   return NextResponse.json({ data: { id, email } }, { status: 201 });

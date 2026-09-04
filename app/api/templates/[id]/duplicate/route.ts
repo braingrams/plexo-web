@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadObject } from "@/lib/storage";
 
 import { Template, TemplateAsset } from "@/lib/db/contentEntities";
+import { Member } from "@/lib/db/coreEntities";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
+import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { ensureUniqueSlug, isValidUuid } from "@/server/slugDynamo";
 import { ensureUniqueTemplateName } from "@/server/templateNameDynamo";
 import { getTierFeatures } from "@/lib/subscription";
@@ -40,6 +42,15 @@ export async function POST(
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
+
+  // Scoped by the SOURCE page being duplicated — an editor scoped to page A shouldn't be
+  // able to read/clone page B's content just because they generically hold template:create.
+  if (resolved.role !== null) {
+    const { data: member } = await Member.get({ organizationId: resolved.organizationId, userId: resolved.userId }).go();
+    const scopeError = requireTemplateScope(member, id);
+    if (scopeError) return scopeError;
+  }
+
   const { data: existing } = await Template.get({ id }).go();
   if (!existing || existing.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });

@@ -60,7 +60,7 @@ export function OverviewSetup({ userName, starterTemplates }: Props) {
   }
 
   return (
-    <div style={{ color: "var(--text-main)" }}>
+    <div style={{ color: "var(--text-main)", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
       {/* Header */}
       <div style={{ marginBottom: "2.25rem" }}>
         <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 10 }}>
@@ -121,7 +121,7 @@ export function OverviewSetup({ userName, starterTemplates }: Props) {
             instead.
           </p>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
+          <div style={{ display: "flex", gap: 20, overflowX: "auto", paddingBottom: 4 }}>
             {starterTemplates.map((item, i) => {
               const isFree = item.priceCents === 0;
               const busy = busyId === item.id;
@@ -139,6 +139,12 @@ export function OverviewSetup({ userName, starterTemplates }: Props) {
                     cursor: busy ? "wait" : "pointer",
                     fontFamily: "inherit",
                     color: "inherit",
+                    // Sized so 5 cards fill the row at full width (even with fewer than 5
+                    // templates, so the row doesn't dead-end in blank space) — clamped to a
+                    // comfortable minimum so a narrow screen scrolls horizontally instead of
+                    // squeezing cards illegibly thin or wrapping to more rows.
+                    flex: "0 0 calc((100% - 80px) / 5)",
+                    minWidth: 200,
                   }}
                 >
                   <div

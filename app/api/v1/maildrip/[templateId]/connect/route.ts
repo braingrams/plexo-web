@@ -96,3 +96,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   return NextResponse.json({ error: "Unknown action." }, { status: 400 });
 }
+
+/** Disconnects MailDrip from this site — clears the stored key and the two group selections
+ * (both are only meaningful in the context of whichever account they were picked from). The
+ * Template resource this created via a prior "quick campaign"/opt-in page, if any, is
+ * untouched — this only forgets the credential, same "detach, don't delete" idea as the
+ * product-detail-layout DELETE route. */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
+  const { templateId } = await params;
+  const auth = await resolveCommerceAdmin(request, templateId);
+  if (auth.error) return auth.error;
+
+  const { data: existing } = await CommerceSettings.get({ templateId }).go();
+  if (existing) {
+    await CommerceSettings.patch({ templateId }).remove(["maildripApiKeyEncrypted", "maildripPaidGroupId", "maildripNewsletterGroupId"]).go();
+  }
+  return NextResponse.json({ ok: true });
+}

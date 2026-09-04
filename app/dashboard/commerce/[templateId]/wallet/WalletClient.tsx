@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatMoney } from "@/lib/commerce/formatMoney";
 
 type LedgerEntry = {
   id: string;
@@ -24,6 +25,8 @@ type Withdrawal = {
 };
 
 type InitialWallet = {
+  showWallet: boolean;
+  commerceEnabled: boolean;
   balanceCents: number;
   currency: string;
   pooled: boolean;
@@ -46,12 +49,6 @@ function Section({ title, description, children }: { title: string; description?
       <div style={{ display: "grid", gap: "0.9rem", marginTop: description ? 0 : "1rem" }}>{children}</div>
     </div>
   );
-}
-
-function formatMoney(cents: number, currency: string): string {
-  const amount = (cents / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const symbol = currency === "NGN" ? "₦" : currency === "USD" ? "$" : `${currency} `;
-  return `${symbol}${amount}`;
 }
 
 const LEDGER_LABEL: Record<LedgerEntry["type"], string> = {
@@ -148,15 +145,55 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
     }
   }
 
+  if (!initial.showWallet) {
+    return (
+      <div>
+        <div style={{ marginBottom: "1.5rem", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+          <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", margin: 0, maxWidth: 520 }}>
+            Proceeds from Platform Paystack / Platform Stripe sales. Balance-tracking only — withdrawals are processed manually by the Plexo team.
+          </p>
+          <a
+            href="/dashboard/marketplace/payouts"
+            style={{
+              flexShrink: 0, fontSize: "0.78rem", fontWeight: 600, color: "rgba(240,242,255,0.6)",
+              textDecoration: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
+              padding: "0.45rem 0.8rem", background: "rgba(255,255,255,0.03)",
+            }}
+          >
+            Template marketplace earnings →
+          </a>
+        </div>
+
+        <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)" }}>
+          <p style={{ fontSize: "0.9rem", color: "rgba(240,242,255,0.6)", margin: "0 0 0.5rem", fontWeight: 600 }}>
+            No wallet to show yet
+          </p>
+          <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.4)", margin: "0 auto", maxWidth: 420, lineHeight: 1.6 }}>
+            {!initial.commerceEnabled
+              ? "Enable Commerce first, then use Plexo-hosted Paystack or Stripe in Settings → Payments — that's what settles into a wallet here."
+              : "You're using your own Paystack or Stripe keys, so sales settle directly to your own account — there's nothing for Plexo to hold. Switch to Plexo-hosted payments in Settings → Payments to use a wallet instead."}
+          </p>
+          <a
+            href={`/dashboard/commerce/${templateId}/settings/payments`}
+            style={{
+              display: "inline-block", marginTop: "1.1rem", padding: "0.55rem 1rem", borderRadius: 9,
+              border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff",
+              fontSize: "0.8rem", fontWeight: 600, textDecoration: "none", fontFamily: "inherit",
+            }}
+          >
+            Go to Payment settings
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={{ marginBottom: "1.5rem", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ fontSize: "1.35rem", fontWeight: 600, color: "#f0f2ff", margin: 0 }}>Wallet</h1>
-          <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginTop: 4 }}>
-            Proceeds from Platform Paystack / Platform Stripe sales. Balance-tracking only — withdrawals are processed manually by the Plexo team.
-          </p>
-        </div>
+        <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", margin: 0, maxWidth: 520 }}>
+          Proceeds from Platform Paystack / Platform Stripe sales. Balance-tracking only — withdrawals are processed manually by the Plexo team.
+        </p>
         {/* Different wallet — template-marketplace earnings (per-account, not per-site)
          * live separately at /dashboard/marketplace/payouts. Cross-linked here since both
          * are "where's my money" pages a seller could reasonably look for from either

@@ -5,7 +5,7 @@ import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
 import { compileToHTML } from "@/lib/compiler";
 import { sanitizeHtml } from "@/server/sanitizer";
 import { getEnabledSiteLayoutRows, spliceLayoutRows } from "@/lib/siteLayoutDynamo";
-import { PRODUCT_DETAIL_STARTER_DESIGN_JSON } from "@/lib/commerce/productDetailLayout";
+import { ensureProductDetailLayout } from "@/lib/commerce/productDetailLayout";
 import { Template } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
 
@@ -75,24 +75,27 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   const body = (await request.json().catch(() => ({}))) as { sourceLayoutTemplateId?: string };
   const sourceLayoutTemplateId = typeof body.sourceLayoutTemplateId === "string" ? body.sourceLayoutTemplateId.trim() : "";
 
-  let name = "Product Detail Layout";
-  let designJson: object = PRODUCT_DETAIL_STARTER_DESIGN_JSON;
-
-  if (sourceLayoutTemplateId) {
-    // Never trust a bare template id from the client — re-verify it the same way GET
-    // surfaced it: it must be reachable as another site in this org's actually-attached
-    // product detail layout. Prevents cross-org access.
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go({ pages: "all" });
-    const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
-    const settingsBatches = await Promise.all(rootIds.map((id) => CommerceSettings.get({ templateId: id }).go()));
-    const sourceSettings = settingsBatches.map((b) => b.data).find((s) => s?.productDetailTemplateId === sourceLayoutTemplateId);
-    const sourceTemplate = sourceSettings ? (await Template.get({ id: sourceLayoutTemplateId }).go()).data : null;
-    if (!sourceTemplate) {
-      return NextResponse.json({ error: "That layout is no longer available to reuse — it may have been detached from its site." }, { status: 400 });
-    }
-    name = sourceTemplate.name;
-    designJson = sourceTemplate.designJson as object;
+  // No source given: this is the common "give me the starter" path — Commerce enabling
+  // already calls this same helper, so a re-click here (or a call on a site that predates
+  // auto-provisioning) just returns whatever's attached rather than creating a duplicate.
+  if (!sourceLayoutTemplateId) {
+    const layoutTemplateId = await ensureProductDetailLayout(templateId, organizationId, userId);
+    return NextResponse.json({ layoutTemplateId }, { status: 201 });
   }
+
+  // Never trust a bare template id from the client — re-verify it the same way GET
+  // surfaced it: it must be reachable as another site in this org's actually-attached
+  // product detail layout. Prevents cross-org access.
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go({ pages: "all" });
+  const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
+  const settingsBatches = await Promise.all(rootIds.map((id) => CommerceSettings.get({ templateId: id }).go()));
+  const sourceSettings = settingsBatches.map((b) => b.data).find((s) => s?.productDetailTemplateId === sourceLayoutTemplateId);
+  const sourceTemplate = sourceSettings ? (await Template.get({ id: sourceLayoutTemplateId }).go()).data : null;
+  if (!sourceTemplate) {
+    return NextResponse.json({ error: "That layout is no longer available to reuse — it may have been detached from its site." }, { status: 400 });
+  }
+  const name = sourceTemplate.name;
+  const designJson = sourceTemplate.designJson as object;
 
   // Splice this site's own header/footer in at creation time (rather than leaving it
   // unspliced until the layout is first opened and saved in the builder) so a brand-new

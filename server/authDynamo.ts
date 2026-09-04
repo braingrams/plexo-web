@@ -7,6 +7,7 @@ import { CognitoJwtVerifier } from "aws-jwt-verify";
 
 import { docClient, TABLES } from "@/lib/db/client";
 import { User } from "@/lib/db/coreEntities";
+import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 
 // Verifies Charisol/Cognito-issued ID tokens server-side before trusting any claim in
 // them — checks signature against the shared products User Pool's JWKS *and* that the
@@ -69,6 +70,38 @@ export class UnverifiedEmailError extends CredentialsSignin {
   code = "unverified_email";
 }
 
+// Thrown when a single email address has had too many failed/attempted password logins in
+// the current window — closes a real gap (there was previously zero brute-force protection
+// on this provider). Deliberately per-email rather than per-IP: the more directly useful
+// protection against credential stuffing/guessing a specific account's password, regardless
+// of which IP an attacker uses (a botnet spreads attempts across many IPs precisely to
+// dodge an IP-scoped limit). Reuses the same fixed-window limiter Commerce/forms/
+// blog-comments already rely on — see lib/commerceRateLimitDynamo.ts's own comment on why
+// this trade-off (not linearizable under extreme concurrency) is fine for abuse-throttling.
+// (authorize()'s second `request` param below DOES carry the real Request — see
+// GoogleAccountOnlyError's own reveal cap for where IP-scoping is actually the right tool.)
+export class TooManyLoginAttemptsError extends CredentialsSignin {
+  code = "too_many_attempts";
+}
+
+// How many distinct Google-only-account reveals a single IP gets per 15-minute window —
+// see GoogleAccountOnlyError's own comment for why this is IP- rather than email-scoped.
+const GOOGLE_REVEAL_LIMIT = 5;
+
+// Thrown instead of the generic null when a password-login attempt matches a real,
+// existing account that has no passwordHash set (created via "Continue with Google" and
+// never given a password) — lets the client prompt "this account uses Google sign-in"
+// and trigger CharisolAuth.signIn() directly instead of a dead-end "Invalid credentials."
+// Trade-off, deliberate: this is a narrow account-enumeration signal (distinguishes "no
+// such account" from "account exists, Google-only") that didn't exist before — accepted
+// here because the UX win (no dead end for a real, common case) outweighs it for this app.
+// Capped by IP below (GOOGLE_REVEAL_LIMIT) so the signal can't be farmed at volume: a real
+// user hits this at most once or twice a session (their own account, maybe a mistyped
+// email); an enumeration attempt needs it for every candidate email it wants an answer for.
+export class GoogleAccountOnlyError extends CredentialsSignin {
+  code = "google_account_only";
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: dynamoAdapter,
   // Required self-hosted (not Vercel, where Auth.js auto-trusts Vercel's own edge) — Auth.js
@@ -128,14 +161,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
     Credentials({
       credentials: { email: {}, password: {} },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const email = typeof credentials?.email === "string" ? credentials.email.trim().toLowerCase() : "";
         const password = typeof credentials?.password === "string" ? credentials.password : "";
         if (!email || !password) return null;
 
+        // 10 attempts / 15 minutes per email — checked before touching the DB/password
+        // hash at all, so a lockout can't be raced by hammering just under the window.
+        const allowed = await checkCommerceRateLimit(`login:${email}`, 10, 15 * 60_000);
+        if (!allowed) throw new TooManyLoginAttemptsError();
+
         const { data: matches } = await User.query.byEmail({ email }).go();
         const user = matches[0];
-        if (!user || !user.passwordHash) return null; // Google-only accounts have no passwordHash to check against
+        if (!user) return null; // no account at all — stays generic, no enumeration signal beyond this
+        if (!user.passwordHash) {
+          // GOOGLE_REVEAL_LIMIT below caps how many DISTINCT accounts one IP can learn are
+          // Google-only within the window — deliberately per-IP (unlike the per-email
+          // lockout above), since the thing being throttled here is "how many different
+          // emails has this source probed for this signal", not "how hard is this source
+          // hammering one account". Once exhausted, degrade to the same generic null a
+          // wrong password gets — indistinguishable from the outside, so hitting the cap
+          // itself leaks nothing new.
+          const revealAllowed = await checkCommerceRateLimit(`login-google-reveal:${clientIp(request)}`, GOOGLE_REVEAL_LIMIT, 15 * 60_000);
+          if (!revealAllowed) return null;
+          throw new GoogleAccountOnlyError();
+        }
 
         const valid = await verifyPassword(user.passwordHash, password);
         if (!valid) return null;
