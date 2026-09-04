@@ -1532,8 +1532,10 @@ type SearchResult = {
   domain: string;
   registrarKind: "ROUTE53" | "MANUAL";
   available: boolean;
+  reason?: string;
   registrationPriceUsdCents: number | null;
   renewalPriceUsdCents: number | null;
+  externalRegistrationUrl: string | null;
   error?: string;
 };
 
@@ -1780,7 +1782,7 @@ export function BuyDomainFlow({
                 </button>
               </div>
               <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", margin: 0 }}>
-                We'll check it against popular TLDs (.com, .co, .io, and more) — or type a full domain like "acmestudio.io" to check that one specifically.
+                We'll check popular endings (.com, .co, .io, and more) — or type a full domain like "acmestudio.io" to check that one specifically. Already own a domain? Switch to "Custom Domain" above to connect it.
               </p>
             </form>
 
@@ -1797,36 +1799,60 @@ export function BuyDomainFlow({
             )}
 
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              {!searching && results.map((r) => (
-                <div
-                  key={r.domain}
-                  style={{
-                    display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 1rem",
-                    borderRadius: 10, border: "1px solid var(--surface-border)",
-                    background: r.registrarKind === "MANUAL" ? "rgba(245,158,11,0.05)" : "var(--surface)",
-                    opacity: r.available ? 1 : 0.5,
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text-main)" }}>{r.domain}</div>
-                    <div style={{ fontSize: "0.72rem", color: r.registrarKind === "MANUAL" ? "#f59e0b" : "var(--text-muted)" }}>
-                      {!r.available ? "Taken" : r.registrarKind === "MANUAL" ? "Not instantly available — registered within 1 business day" : "Available now — instant setup"}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "right", fontSize: "0.85rem", fontWeight: 700, color: "var(--text-main)" }}>
-                    {formatUsd(r.registrationPriceUsdCents)}
-                  </div>
-                  <button
-                    type="button"
-                    disabled={!r.available}
-                    onClick={() => pickResult(r)}
-                    className="btn-primary"
-                    style={{ padding: "0.4rem 0.8rem", fontSize: "0.78rem" }}
+              {!searching && results.map((r) => {
+                // Plexo can only sell/set up ROUTE53-kind results directly — a MANUAL
+                // result is a real, honest availability check (see
+                // lib/domains/rdapAvailability.ts) for a domain Plexo can't buy for the
+                // customer, so it always points them to grab it themselves instead of
+                // offering a purchase button that would never work.
+                const canBuyHere = r.registrarKind === "ROUTE53" && r.available;
+                const statusText = r.registrarKind === "MANUAL"
+                  ? r.available
+                    ? "Looks free — grab it yourself, then connect it here"
+                    : r.reason === "EXTERNAL_UNKNOWN"
+                      ? "We can't check this one automatically"
+                      : "Already taken"
+                  : r.available
+                    ? "Available now — instant setup"
+                    : "Already taken";
+
+                return (
+                  <div
+                    key={r.domain}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.75rem 1rem",
+                      borderRadius: 10, border: "1px solid var(--surface-border)",
+                      background: "var(--surface)",
+                      opacity: canBuyHere || (r.registrarKind === "MANUAL" && r.externalRegistrationUrl) ? 1 : 0.5,
+                    }}
                   >
-                    {r.registrarKind === "MANUAL" ? "Request" : "Choose"}
-                  </button>
-                </div>
-              ))}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--text-main)" }}>{r.domain}</div>
+                      <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{statusText}</div>
+                    </div>
+                    {canBuyHere && (
+                      <div style={{ textAlign: "right", fontSize: "0.85rem", fontWeight: 700, color: "var(--text-main)" }}>
+                        {formatUsd(r.registrationPriceUsdCents)}
+                      </div>
+                    )}
+                    {canBuyHere ? (
+                      <button type="button" onClick={() => pickResult(r)} className="btn-primary" style={{ padding: "0.4rem 0.8rem", fontSize: "0.78rem" }}>
+                        Choose
+                      </button>
+                    ) : r.registrarKind === "MANUAL" && r.externalRegistrationUrl ? (
+                      <a
+                        href={r.externalRegistrationUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-secondary"
+                        style={{ padding: "0.4rem 0.8rem", fontSize: "0.78rem", textDecoration: "none", whiteSpace: "nowrap" }}
+                      >
+                        Get this domain
+                      </a>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </>
         )}

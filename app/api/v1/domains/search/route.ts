@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser as resolveUserDynamo } from "@/lib/auth/resolveUser";
 import { resolveRegistrarProvider } from "@/lib/domains/registrarProvider";
+import { externalRegistrationUrl } from "@/lib/domains/rdapAvailability";
 import { PublishedDomain } from "@/lib/db/contentEntities";
 
 // Every TLD Plexo offers a search result for, in priority order — route53DomainsProvider's
-// own SUPPORTED_TLDS is the authority on which of these actually get "instant setup" vs
-// routing to manual fulfillment (resolveRegistrarProvider below decides that per-candidate,
-// not this list).
+// own SUPPORTED_TLDS is the authority on which of these Plexo can actually sell instantly vs
+// routing to manualFulfillmentProvider's real-but-external availability check
+// (resolveRegistrarProvider below decides that per-candidate, not this list).
 const CANDIDATE_TLDS = ["com", "co", "io", "studio", "shop", "xyz", "dev", "app", "online", "store", "ai"];
 
 // A bare label ("acmestudio") — checked against every CANDIDATE_TLDS entry.
@@ -64,16 +65,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           domain,
           registrarKind: kind,
           available: availability.available,
+          // For a MANUAL-kind result this is a REAL check (RDAP — see
+          // lib/domains/rdapAvailability.ts), not a guess: "EXTERNAL_AVAILABLE" /
+          // "EXTERNAL_TAKEN" / "EXTERNAL_UNKNOWN" (a registry with no public RDAP server,
+          // or a transient failure — genuinely undetermined, never reported as either).
+          reason: availability.reason,
           registrationPriceUsdCents: price?.registrationPriceUsdCents ?? null,
           renewalPriceUsdCents: price?.renewalPriceUsdCents ?? null,
+          // Only meaningful for registrarKind "MANUAL" — Plexo can't sell this domain
+          // directly, so this is where the UI sends the customer to register it themselves
+          // before coming back to connect it as a Custom Domain.
+          externalRegistrationUrl: kind === "MANUAL" ? externalRegistrationUrl(domain) : null,
         };
       } catch (err) {
         return {
           domain,
           registrarKind: "ROUTE53" as const,
           available: false,
+          reason: undefined as string | undefined,
           registrationPriceUsdCents: null,
           renewalPriceUsdCents: null,
+          externalRegistrationUrl: null as string | null,
           error: err instanceof Error ? err.message : "Lookup failed.",
         };
       }
@@ -89,6 +101,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const takenDomains = new Set(alreadyTaken.flatMap((batch) => batch.data.map((d) => d.domain)));
 
   return NextResponse.json({
-    results: results.map((r) => (takenDomains.has(r.domain) ? { ...r, available: false } : r)),
+    results: results.map((r) => (takenDomains.has(r.domain) ? { ...r, available: false, reason: "ALREADY_ON_PLEXO" } : r)),
   });
 }
