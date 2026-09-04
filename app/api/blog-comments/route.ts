@@ -10,6 +10,7 @@ import { hashRequestIp } from "@/server/ipHash";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildNewBlogCommentEmail } from "@/lib/mail/templates";
 import { resolveNotificationRecipient } from "@/lib/notificationPreferencesDynamo";
+import { logEmailDelivery } from "@/lib/mail/logEmail";
 import { isValidUuid } from "@/server/slugDynamo";
 
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -140,5 +141,19 @@ async function notifySiteOwner(templateId: string, postTitle: string, commenterN
     commentSnippet: rawBody.length > 160 ? `${rawBody.slice(0, 160)}…` : rawBody,
     moderationUrl: `${base}/dashboard/templates/${templateId}/blog/comments`,
   });
-  await sendMaildripEmail({ to, subject: `New comment on "${postTitle}"`, html });
+  const subject = `New comment on "${postTitle}"`;
+  try {
+    await sendMaildripEmail({ to, subject, html });
+    logEmailDelivery({
+      kind: "maildrip", to, subject, status: "sent",
+      context: "blog_comment_notification", organizationId: template.organizationId, templateId,
+    });
+  } catch (err) {
+    logEmailDelivery({
+      kind: "maildrip", to, subject, status: "failed",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      context: "blog_comment_notification", organizationId: template.organizationId, templateId,
+    });
+    throw err;
+  }
 }

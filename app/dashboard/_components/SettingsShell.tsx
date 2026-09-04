@@ -96,12 +96,22 @@ function IconSparkle() {
   );
 }
 
+function IconMail() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="3" />
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+    </svg>
+  );
+}
+
 const ICONS: Record<string, React.ReactNode> = {
   "/dashboard/profile": <IconProfile />,
   "/dashboard/settings/notifications": <IconBell />,
   "/dashboard/settings/subscription": <IconCard />,
   "/dashboard/settings/api-keys": <IconKeySmall />,
   "/dashboard/settings/ai": <IconSparkle />,
+  "/dashboard/settings/email-log": <IconMail />,
   "/dashboard/compile": <IconCompile />,
   "/dashboard/sdk": <IconSdk />,
   "/dashboard/integrations": <IconAiMcp />,
@@ -126,6 +136,7 @@ const SECTIONS: SubNavSection[] = [
       { href: "/dashboard/compile", label: "Compile" },
       { href: "/dashboard/sdk", label: "SDK Client" },
       { href: "/dashboard/integrations", label: "AI & MCP Skills" },
+      { href: "/dashboard/settings/email-log", label: "Email Log" },
     ],
   },
   {

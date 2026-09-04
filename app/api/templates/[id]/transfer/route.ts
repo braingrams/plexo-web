@@ -7,6 +7,7 @@ import { SiteTransferRequest } from "@/lib/db/importEntities";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildSiteTransferEmail } from "@/lib/mail/templates";
 import { getOrgBrandDynamo } from "@/server/orgDynamo";
+import { logEmailDelivery } from "@/lib/mail/logEmail";
 import { Template } from "@/lib/db/contentEntities";
 import { User, Member } from "@/lib/db/coreEntities";
 
@@ -104,10 +105,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const brand = await getOrgBrandDynamo(resolved.organizationId);
+  const transferSubject = `${senderUser?.name ?? "Someone"} wants to transfer "${site.name}" to you on Plexo`;
   try {
     await sendMaildripEmail({
       to: toEmail,
-      subject: `${senderUser?.name ?? "Someone"} wants to transfer "${site.name}" to you on Plexo`,
+      subject: transferSubject,
       html: buildSiteTransferEmail({
         senderName: senderUser?.name ?? "A Plexo user",
         siteName: site.name,
@@ -117,11 +119,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
         brand,
       }),
     });
+    logEmailDelivery({
+      kind: "maildrip", to: toEmail, subject: transferSubject, status: "sent",
+      context: "site_transfer", organizationId: resolved.organizationId, templateId: id,
+    });
   } catch (err) {
     // The request itself is real and can still be found/accepted via the dashboard even
     // if the notification email failed to send — don't roll back a genuine transfer offer
     // over a transient mail-provider error.
     console.error("Failed to send site transfer email:", err);
+    logEmailDelivery({
+      kind: "maildrip", to: toEmail, subject: transferSubject, status: "failed",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      context: "site_transfer", organizationId: resolved.organizationId, templateId: id,
+    });
   }
 
   return NextResponse.json({ request: created, warnings }, { status: 201 });

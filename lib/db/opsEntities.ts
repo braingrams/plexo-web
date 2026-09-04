@@ -244,7 +244,60 @@ export const FormSubmission = new Entity(
   { table, client: docClient },
 );
 
+// Queryable record of every transactional/notification email send attempt — replaces the
+// previous state of scattered, inconsistent console.error/console.info calls with no way
+// to answer "did this email actually send." Covers both send paths: MailDrip (HTTP API)
+// and direct SMTP (nodemailer) — see lib/mail/logEmail.ts, the one writer.
+export const EmailLog = new Entity(
+  {
+    model: { entity: "emailLog", version: "1", service: "plexoOps" },
+    attributes: {
+      id: { type: "string", required: true },
+      // Not every send has an organization — a pre-signup account-security email
+      // (verification, password reset) fires before the user has one.
+      organizationId: { type: "string" },
+      templateId: { type: "string" },
+      kind: { type: ["maildrip", "smtp"] as const, required: true },
+      to: { type: "string", required: true },
+      subject: { type: "string", required: true },
+      status: { type: ["sent", "failed"] as const, required: true },
+      errorMessage: { type: "string" },
+      // Short, stable free-text label identifying the call site (e.g.
+      // "verification_email", "invitation", "commerce_receipt") — see
+      // lib/mail/logEmail.ts's EmailDeliveryContext for the full set.
+      context: { type: "string", required: true },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      // No ttl attribute populated — see file header. A delivery log a support/debugging
+      // investigation might need weeks later shouldn't silently vanish, same discipline as
+      // AdminAuditLog/FormSubmission.
+    },
+    indexes: {
+      // id is the only attribute every row is guaranteed to have (organizationId isn't),
+      // so it's the natural primary key — same "no realistic per-key access pattern to
+      // hang the primary index off of" situation OAuthAuthorizationCode/RateLimit/
+      // StockCache solve by keying on their own single natural id and giving sk no
+      // composite of its own.
+      primary: {
+        pk: { field: "pk", composite: ["id"], template: "EMAILLOG#${id}" },
+        sk: { field: "sk", composite: [], template: "EMAILLOG" },
+      },
+      // "list recent logs for an organization" — the dashboard's actual read pattern.
+      // Reuses GSI1, already provisioned on this table (see cdk/lib/data-stack.ts) and
+      // already shared by AdminAuditLog.byTarget and FormSubmission.byOrg — single-table
+      // design means multiple entities can each define their own GSI1PK/GSI1SK template
+      // on the same physical index without any CDK change. Same shape as
+      // FormSubmission.byOrg exactly (organizationId partition, createdAt+id sort).
+      byOrg: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["organizationId"], template: "ORG#${organizationId}" },
+        sk: { field: "GSI1SK", composite: ["createdAt", "id"], template: "EMAILLOG#${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoOpsService = new Service(
-  { PageView, PageViewDailyStat, RateLimit, StockCache, AdminAuditLog, FormSubmission },
+  { PageView, PageViewDailyStat, RateLimit, StockCache, AdminAuditLog, FormSubmission, EmailLog },
   { table, client: docClient },
 );
