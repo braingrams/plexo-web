@@ -6,6 +6,7 @@ import { resolveNotificationRecipient } from "@/lib/notificationPreferencesDynam
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildFormSubmissionEmail } from "@/lib/mail/templates";
 import { FormSubmission } from "@/lib/db/opsEntities";
+import { logEmailDelivery } from "@/lib/mail/logEmail";
 import { Template } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
 
@@ -22,6 +23,14 @@ import { User } from "@/lib/db/coreEntities";
  * URL from a different site) fails loudly instead of silently filing a submission under the
  * wrong site.
  */
+// Must match plexo-sdk's compiler.ts FORM_HONEYPOT_FIELD_NAME exactly — every compiled
+// form_container carries one extra input under this name, collapsed to nothing via CSS
+// (not type="hidden", which some bots specifically know to skip) so a real visitor never
+// sees or fills it. Hardcoded rather than imported: the SDK version currently pinned in
+// package.json predates this field, so the export doesn't exist yet on this side until
+// that dependency is bumped — see the SDK-repo commit that introduced it.
+const HONEYPOT_FIELD_NAME = "_hp_field";
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
   const { templateId } = await params;
   const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
@@ -62,6 +71,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const redirectParam = url.searchParams.get("redirect") || "/";
   const redirectPath = redirectParam.startsWith("/") ? redirectParam : "/";
 
+  // Honeypot: a real visitor never sees or fills HONEYPOT_FIELD_NAME (it's CSS-collapsed
+  // to nothing in every compiled form_container — see its compiler-side comment), but a
+  // bot that blindly fills every <input> it finds fills this one too. Respond with the
+  // exact same success redirect a real submission gets below — never a 400/403 — so an
+  // automated submitter has no signal to detect and adapt around the check. The
+  // submission itself is silently dropped: no FormSubmission record, no notification
+  // email, just a log line carrying no submitted content.
+  const honeypotValue = formData.get(HONEYPOT_FIELD_NAME);
+  if (typeof honeypotValue === "string" && honeypotValue.trim()) {
+    console.info(`[forms] honeypot catch: templateId=${templateId} at=${new Date().toISOString()}`);
+    return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
+  }
+
   await FormSubmission.create({
     id: crypto.randomUUID(),
     templateId,
@@ -98,5 +120,16 @@ async function notifyFormSubmission(
     fieldsPreview: Object.entries(fields).slice(0, 8) as [string, string][],
     submissionsUrl: `${base}/dashboard/templates/${templateId}/form-submissions`,
   });
-  await sendMaildripEmail({ to, subject: `New ${formName} submission on ${template.name}`, html });
+  const subject = `New ${formName} submission on ${template.name}`;
+  try {
+    await sendMaildripEmail({ to, subject, html });
+    logEmailDelivery({ kind: "maildrip", to, subject, status: "sent", context: "form_submission", organizationId, templateId });
+  } catch (err) {
+    logEmailDelivery({
+      kind: "maildrip", to, subject, status: "failed",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      context: "form_submission", organizationId, templateId,
+    });
+    throw err;
+  }
 }
