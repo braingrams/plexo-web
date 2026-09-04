@@ -82,8 +82,20 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // dashboard's own hostname as tenant content and 404 it via /pub.
   // Exact matches only — "xyz.localhost" must NOT count as known, since that's how a
   // pages subdomain is simulated locally (there's no real DNS to hit in dev).
+  //
+  // A bare *.cloudfront.net domain is ALSO always the dashboard app, never tenant
+  // content — no real customer domain can ever literally be a `<id>.cloudfront.net`
+  // subdomain (that's AWS's own auto-assigned, unclaimable name for the distribution
+  // itself), and a PR preview's own CloudFront domain is exactly this shape. Without
+  // this, every PR preview 404'd on its own root: pr-deploy-aws.yml can't know its
+  // CloudFront domain at BUILD time (cdk deploy, which mints it, runs after the build —
+  // see that workflow's own comment), so NEXT_PUBLIC_APP_URL is never set for a preview
+  // build and baseDomain falls back to "localhost", which the preview's real domain
+  // never matches — isKnownHost was always false for a preview, routing every request
+  // (including "/") into the /pub/[domain] tenant-resolution path, which 404s since no
+  // PublishedDomain row exists for a PR's own throwaway CloudFront domain.
   const isKnownHost =
-    hostname === baseDomain || hostname === "localhost" || hostname === "127.0.0.1";
+    hostname === baseDomain || hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".cloudfront.net");
   const isSubdomainOrCustom = !isKnownHost;
 
   // Platform-level static assets served from this app's own /public directory,
@@ -96,6 +108,22 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // breaking every Commerce block (and anything else depending on that script) on
   // every published tenant domain.
   const PLATFORM_STATIC_ASSETS = new Set(["/commerce.js"]);
+
+  // 0. The wildcard pages domain's own bare apex (e.g. "plexopages.com" with no
+  // subdomain) has no site of its own — nobody publishes a site there, only at
+  // "<subdomain>.plexopages.com" — so it previously 404'd via the generic /pub lookup
+  // below (resolveSite() finding no PublishedDomain row for the bare apex). Redirect it
+  // to the real marketing/app site instead, the same "bare platform domain sends you to
+  // the actual product" convention as e.g. vercel.app -> vercel.com. Exact match only —
+  // "foo.plexopages.com" must fall through to the normal tenant-resolution path below.
+  // Gated on isSubdomainOrCustom (not a bare `hostname === pagesDomain` check) because
+  // staging has no separate wildcard domain configured yet — its own
+  // NEXT_PUBLIC_PAGES_DOMAIN is literally the same value as its NEXT_PUBLIC_APP_URL — so
+  // an ungated check here would redirect the dashboard's own known host to itself,
+  // an infinite loop.
+  if (isSubdomainOrCustom && hostname === pagesDomain) {
+    return NextResponse.redirect(baseAppUrl);
+  }
 
   // 1. If it's a pages subdomain or a custom domain, rewrite internally to /pub/[domain]/[path]
   if (isSubdomainOrCustom && !PLATFORM_STATIC_ASSETS.has(pathname)) {
