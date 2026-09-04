@@ -7,6 +7,7 @@ import { CognitoJwtVerifier } from "aws-jwt-verify";
 
 import { docClient, TABLES } from "@/lib/db/client";
 import { User } from "@/lib/db/coreEntities";
+import { checkCommerceRateLimit } from "@/lib/commerceRateLimitDynamo";
 
 // Verifies Charisol/Cognito-issued ID tokens server-side before trusting any claim in
 // them — checks signature against the shared products User Pool's JWKS *and* that the
@@ -67,6 +68,18 @@ export const dynamoAdapter = DynamoDBAdapter(docClient, {
 // app/auth/login/page.tsx already checks for (same UX as better-auth's own 403 previously).
 export class UnverifiedEmailError extends CredentialsSignin {
   code = "unverified_email";
+}
+
+// Thrown when a single email address has had too many failed/attempted password logins in
+// the current window — closes a real gap (there was previously zero brute-force protection
+// on this provider) without needing IP access, which authorize()'s signature doesn't give
+// us here; per-email is also the more directly useful protection against credential
+// stuffing/guessing a specific account's password, regardless of which IP an attacker uses.
+// Reuses the same fixed-window limiter Commerce/forms/blog-comments already rely on — see
+// lib/commerceRateLimitDynamo.ts's own comment on why this trade-off (not linearizable
+// under extreme concurrency) is fine for abuse-throttling.
+export class TooManyLoginAttemptsError extends CredentialsSignin {
+  code = "too_many_attempts";
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -132,6 +145,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const email = typeof credentials?.email === "string" ? credentials.email.trim().toLowerCase() : "";
         const password = typeof credentials?.password === "string" ? credentials.password : "";
         if (!email || !password) return null;
+
+        // 10 attempts / 15 minutes per email — checked before touching the DB/password
+        // hash at all, so a lockout can't be raced by hammering just under the window.
+        const allowed = await checkCommerceRateLimit(`login:${email}`, 10, 15 * 60_000);
+        if (!allowed) throw new TooManyLoginAttemptsError();
 
         const { data: matches } = await User.query.byEmail({ email }).go();
         const user = matches[0];

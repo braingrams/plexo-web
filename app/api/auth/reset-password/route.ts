@@ -3,6 +3,7 @@ import { hashPassword } from "@better-auth/utils/password";
 
 import { dynamoAdapter } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
+import { checkCommerceRateLimit } from "@/lib/commerceRateLimitDynamo";
 
 /**
  * POST /api/auth/reset-password { token, email, newPassword }
@@ -19,6 +20,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   if (newPassword.length < 8) {
     return NextResponse.json({ error: { message: "Password must be at least 8 characters." } }, { status: 400 });
+  }
+
+  // Tokens are cryptographically random (randomUUID) so brute-forcing one directly isn't
+  // realistic, but this still caps automated retry volume against a single email as
+  // defense-in-depth, same as every other auth route here.
+  const allowed = await checkCommerceRateLimit(`reset-password:${email}`, 10, 15 * 60_000);
+  if (!allowed) {
+    return NextResponse.json({ error: { message: "Too many attempts. Please try again shortly." } }, { status: 429 });
   }
 
   const verification = await dynamoAdapter.useVerificationToken?.({ identifier: `reset-password:${email}`, token });

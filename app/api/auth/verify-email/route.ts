@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { dynamoAdapter } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
+import { checkCommerceRateLimit } from "@/lib/commerceRateLimitDynamo";
 
 /**
  * GET /api/auth/verify-email?token=...&email=...
@@ -21,6 +22,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (!token || !email) {
     loginUrl.searchParams.set("verifyError", "This verification link is missing required information.");
+    return NextResponse.redirect(loginUrl);
+  }
+
+  const allowed = await checkCommerceRateLimit(`verify-email:${email}`, 10, 15 * 60_000);
+  if (!allowed) {
+    loginUrl.searchParams.set("verifyError", "Too many attempts. Please try again shortly.");
     return NextResponse.redirect(loginUrl);
   }
 

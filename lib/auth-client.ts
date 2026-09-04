@@ -40,11 +40,15 @@ export const authClient = {
         // code: "unverified_email"; the default, unauthenticated case is "credentials").
         // Only `code` is useful for branching — mapped to 403 to match the UX every
         // caller already checks for (app/auth/login/page.tsx's `status === 403` branch).
-        const unverified = (result as { code?: string }).code === "unverified_email";
-        const status = unverified ? 403 : 401;
+        const code = (result as { code?: string }).code;
+        const unverified = code === "unverified_email";
+        const tooManyAttempts = code === "too_many_attempts";
+        const status = unverified ? 403 : tooManyAttempts ? 429 : 401;
         const message = unverified
           ? "This account is not verified yet. Check your email for the verification link."
-          : "Invalid credentials.";
+          : tooManyAttempts
+            ? "Too many login attempts for this account. Please wait 15 minutes and try again."
+            : "Invalid credentials.";
         return { error: { status, message } };
       }
       return { data: {} };
