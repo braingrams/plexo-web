@@ -821,3 +821,56 @@ select {
   color: var(--text-faint);
   cursor: not-allowed;
 }
+
+/* Same gap as .field-label/.field-input above — .btn-primary/.btn-secondary were already
+   referenced by className across several dashboard pages (domains, billing, template
+   publish) but never actually defined, so every button using them rendered with no
+   background/border at all (bare browser button, invisible against the dark background) —
+   every real call site worked around this by re-declaring the same gradient/border inline
+   on top of the class instead of the class ever doing anything. Defined here with the
+   theme CSS variables so both classes work correctly in light and dark mode; existing call
+   sites that also set an inline background of their own are unaffected (inline style wins
+   over a class rule), so this only changes elements that were relying on the class alone. */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9px;
+  border: none;
+  background: linear-gradient(135deg, var(--brand), var(--brand-deep));
+  color: #fff;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 4px 14px var(--brand-glow);
+  transition: opacity 0.15s, box-shadow 0.15s;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9px;
+  border: 1px solid var(--surface-border);
+  background: var(--surface);
+  color: var(--text-main);
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

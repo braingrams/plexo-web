@@ -6,7 +6,7 @@ import { requestCustomDomainConnection, removeCloudFrontDomain, getRoutingEndpoi
 import { getDomainLimit } from "@/lib/domainLimit";
 import { resolveUser as resolveUserDynamo } from "@/lib/auth/resolveUser";
 import { requirePermission as requirePermissionDynamo } from "@/server/requirePermissionDynamo";
-import { Template, PublishedDomain } from "@/lib/db/contentEntities";
+import { Template, PublishedDomain, RegisteredDomain } from "@/lib/db/contentEntities";
 import type { EntityItem } from "electrodb";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
@@ -42,6 +42,35 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
     .map((d) => ({ ...d, template: { name: templateById.get(d.templateId)?.name ?? "", kind: templateById.get(d.templateId)?.kind ?? "LANDING_PAGE" } }));
 
+  // Purchased-domain rows (registeredDomainId set — see the Buy-a-Domain plan) carry
+  // registrar/billing state in a separate RegisteredDomain row, joined in here so the
+  // dashboard's per-row settings panel doesn't need a second round-trip. Same primary key
+  // shape as PublishedDomain (pk=templateId), so this is a direct .get() per row, not
+  // another org-wide fan-out.
+  const registeredDomainRows = await Promise.all(
+    domains
+      .filter((d): d is typeof d & { registeredDomainId: string } => !!d.registeredDomainId)
+      .map((d) => RegisteredDomain.get({ templateId: d.templateId, id: d.registeredDomainId }).go()),
+  );
+  const registeredDomainById = new Map(registeredDomainRows.map((r) => r.data).filter((r) => !!r).map((r) => [r!.id, r]));
+  const domainsWithRegistration = domains.map((d) => {
+    const reg = d.registeredDomainId ? registeredDomainById.get(d.registeredDomainId) : undefined;
+    return reg
+      ? {
+          ...d,
+          registration: {
+            status: reg.status,
+            renewalDate: reg.renewalDate,
+            renewalPriceUsdCents: reg.renewalPriceUsdCents,
+            autoRenew: reg.autoRenew,
+            whoisPrivacyEnabled: reg.whoisPrivacyEnabled,
+            transferLocked: reg.transferLocked,
+            paymentMethod: reg.paymentMethod,
+          },
+        }
+      : d;
+  });
+
   const count = domains.filter((d) => d.userId === resolved.userId).length;
 
   // No live CloudFront/ACM calls here on purpose — each domain's own certificateStatus/
@@ -69,7 +98,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   return NextResponse.json({
-    domains,
+    domains: domainsWithRegistration,
     count,
     limit,
     plan: resolved.subscriptionPlan,

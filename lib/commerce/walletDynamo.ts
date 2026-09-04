@@ -94,3 +94,99 @@ export async function creditCommerceWallet(order: OrderItem): Promise<void> {
   }
   throw new Error(`Failed to credit Commerce wallet ${wallet.scopeId} after ${MAX_RETRIES} attempts (concurrent writers).`);
 }
+
+export class InsufficientWalletBalanceError extends Error {}
+
+/**
+ * Debits a wallet to fund a domain purchase/renewal (see the Buy-a-Domain feature) — the
+ * FIRST debit rail this wallet has ever had; every existing ledger entry only ever credits
+ * it from a sale. Same optimistic-concurrency retry loop as creditCommerceWallet, plus a
+ * pre-write sufficiency check (thrown as InsufficientWalletBalanceError so callers can
+ * surface a clean 402-style error instead of a generic 500).
+ *
+ * There is no cross-item DynamoDB transaction tying this debit to the caller's own
+ * subsequent RegisterDomain call (same accepted gap creditMarketplaceSeller's own comment
+ * describes elsewhere) — callers MUST refund via creditCommerceWalletForDomainRefund if
+ * registration fails after this succeeds. See lib/domains/refundDomainPurchase.ts.
+ */
+export async function debitCommerceWalletForDomain(
+  wallet: EntityItem<typeof CommerceWallet>,
+  amountCents: number,
+  registeredDomainId: string,
+  type: "DOMAIN_PURCHASE_DEBIT" | "DOMAIN_RENEWAL_DEBIT",
+  description: string,
+): Promise<void> {
+  const MAX_RETRIES = 5;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const { data: current } = await CommerceWallet.get({ scopeId: wallet.scopeId }).go();
+    if (!current) throw new Error(`CommerceWallet ${wallet.scopeId} vanished during debit`);
+    const currentBalance = current.balanceCents ?? 0;
+    if (currentBalance < amountCents) {
+      throw new InsufficientWalletBalanceError(`Wallet balance (${currentBalance}) is less than the amount requested (${amountCents}).`);
+    }
+    const nextBalance = currentBalance - amountCents;
+
+    try {
+      await CommerceWallet.patch({ scopeId: wallet.scopeId })
+        .set({ balanceCents: nextBalance })
+        .where((attr, op) => op.eq(attr.balanceCents, currentBalance))
+        .go();
+    } catch (err) {
+      if (isConditionalCheckFailure(err)) continue; // balance moved under us — retry against the fresh value (and re-check sufficiency)
+      throw err;
+    }
+
+    await CommerceWalletLedgerEntry.create({
+      id: randomUUID(),
+      walletId: wallet.id,
+      type,
+      netAmountCents: -amountCents,
+      balanceAfterCents: nextBalance,
+      registeredDomainId,
+      description,
+    }).go();
+    return;
+  }
+  throw new Error(`Failed to debit Commerce wallet ${wallet.scopeId} after ${MAX_RETRIES} attempts (concurrent writers).`);
+}
+
+/**
+ * Credits a wallet back after a domain purchase/renewal debit turns out to be unfulfillable
+ * (e.g. RegisterDomain failed after debitCommerceWalletForDomain already succeeded) — the
+ * wallet-funded counterpart to lib/domains/refundDomainPurchase.ts's Stripe refund path.
+ */
+export async function creditCommerceWalletForDomainRefund(
+  wallet: EntityItem<typeof CommerceWallet>,
+  amountCents: number,
+  registeredDomainId: string,
+  description: string,
+): Promise<void> {
+  const MAX_RETRIES = 5;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    const { data: current } = await CommerceWallet.get({ scopeId: wallet.scopeId }).go();
+    if (!current) throw new Error(`CommerceWallet ${wallet.scopeId} vanished during refund`);
+    const nextBalance = (current.balanceCents ?? 0) + amountCents;
+
+    try {
+      await CommerceWallet.patch({ scopeId: wallet.scopeId })
+        .set({ balanceCents: nextBalance })
+        .where((attr, op) => op.eq(attr.balanceCents, current.balanceCents ?? 0))
+        .go();
+    } catch (err) {
+      if (isConditionalCheckFailure(err)) continue;
+      throw err;
+    }
+
+    await CommerceWalletLedgerEntry.create({
+      id: randomUUID(),
+      walletId: wallet.id,
+      type: "DOMAIN_REFUND_CREDIT",
+      netAmountCents: amountCents,
+      balanceAfterCents: nextBalance,
+      registeredDomainId,
+      description,
+    }).go();
+    return;
+  }
+  throw new Error(`Failed to refund Commerce wallet ${wallet.scopeId} after ${MAX_RETRIES} attempts (concurrent writers).`);
+}

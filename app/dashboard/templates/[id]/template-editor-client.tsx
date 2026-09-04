@@ -19,6 +19,7 @@ import {
 import "@charisol/plexo-sdk/dist/plexo-sdk.css";
 import { PagesPanel } from "./PagesPanel";
 import { CommentLayer } from "./comments/CommentLayer";
+import { BuyDomainFlow } from "../../domains/domains-client";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 
@@ -491,7 +492,7 @@ export function TemplateEditorClient({
 	const [saveError, setSaveError] = useState<string | null>(null);
 	const [showPublishModal, setShowPublishModal] = useState(false);
 	const [modalDomainType, setModalDomainType] = useState<
-		"SUBDOMAIN" | "CUSTOM"
+		"SUBDOMAIN" | "CUSTOM" | "BUY"
 	>("SUBDOMAIN");
 	const [modalSubdomainPrefix, setModalSubdomainPrefix] = useState("");
 	const [modalCustomDomain, setModalCustomDomain] = useState("");
@@ -499,6 +500,12 @@ export function TemplateEditorClient({
 	const [modalError, setModalError] = useState<string | null>(null);
 	const [modalSuccess, setModalSuccess] = useState<string | null>(null);
 	const [baseDomain, setBaseDomain] = useState("plexo.charisol.io");
+	// The actual CloudFront routing endpoint a CUSTOM domain's CNAME must target — distinct
+	// from baseDomain (the free-subdomain wildcard base, e.g. "plexopages.com") above. This
+	// modal used to show baseDomain here instead, which pointed customers at the wrong
+	// CNAME target entirely; see handleModalPublish's own comment on the rest of the fix.
+	const [routingEndpoint, setRoutingEndpoint] = useState<string | null>(null);
+	const [modalCertValidation, setModalCertValidation] = useState<{ name: string; value: string } | null>(null);
 	// Deep-linked from a mention/reply notification email (?comment=<id>) — opens the
 	// panel straight to that thread. See lib/mail/templates.ts's buildMentionEmail.
 	const [commentsOpen, setCommentsOpen] = useState(() => searchParams.has("comment"));
@@ -644,6 +651,9 @@ export function TemplateEditorClient({
 						if (checkData.baseDomain) {
 							setBaseDomain(checkData.baseDomain);
 						}
+						if (checkData.routingEndpoint) {
+							setRoutingEndpoint(checkData.routingEndpoint);
+						}
 						setShowPublishModal(true);
 					}
 				} catch (e) {
@@ -659,10 +669,13 @@ export function TemplateEditorClient({
 		}
 	}
 
+	// SUBDOMAIN/CUSTOM only — BUY has its own submission flow entirely (BuyDomainFlow calls
+	// POST /api/v1/domains/purchase directly, not this handler).
 	async function handleModalPublish(e: React.FormEvent) {
 		e.preventDefault();
 		setModalError(null);
 		setModalSuccess(null);
+		setModalCertValidation(null);
 
 		const inputDomain =
 			modalDomainType === "SUBDOMAIN"
@@ -688,7 +701,6 @@ export function TemplateEditorClient({
 			if (!response.ok) {
 				throw new Error(data.error ?? "Failed to publish domain.");
 			}
-			setModalSuccess("Landing page published successfully!");
 
 			// Update local storage key domain mapping config to sync immediately
 			try {
@@ -701,12 +713,25 @@ export function TemplateEditorClient({
 				console.warn(err);
 			}
 
-			setTimeout(() => {
-				setShowPublishModal(false);
-				setModalSuccess(null);
-				setModalSubdomainPrefix("");
-				setModalCustomDomain("");
-			}, 2000);
+			// A CUSTOM domain isn't actually live yet — it needs the cert-validation CNAME
+			// added too (app/api/internal/certificate-attachment finishes the rest
+			// automatically once that record propagates). Surface it here instead of
+			// closing the modal on a false "published!" — this was the modal's own real
+			// gap: it never showed this record at all, so a customer using THIS flow (as
+			// opposed to the fuller Domains dashboard drawer, which always has) had no way
+			// to find out what to add.
+			if (modalDomainType === "CUSTOM" && data.domain?.certificateValidationName && data.domain?.certificateValidationValue) {
+				setModalCertValidation({ name: data.domain.certificateValidationName, value: data.domain.certificateValidationValue });
+				setModalSuccess("Domain added — add the DNS records below, then this finishes automatically.");
+			} else {
+				setModalSuccess("Landing page published successfully!");
+				setTimeout(() => {
+					setShowPublishModal(false);
+					setModalSuccess(null);
+					setModalSubdomainPrefix("");
+					setModalCustomDomain("");
+				}, 2000);
+			}
 		} catch (err) {
 			setModalError(err instanceof Error ? err.message : "Publish failed.");
 		} finally {
@@ -850,7 +875,9 @@ export function TemplateEditorClient({
 							border: "1px solid rgba(255,255,255,0.08)",
 							borderRadius: 16,
 							width: "90%",
-							maxWidth: 460,
+							maxWidth: 480,
+						maxHeight: "85vh",
+						overflowY: "auto",
 							padding: "1.75rem",
 							boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
 						}}
@@ -903,10 +930,7 @@ export function TemplateEditorClient({
 							landing page to a subdomain or custom domain?
 						</p>
 
-						<form
-							onSubmit={handleModalPublish}
-							style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
-						>
+						<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
 							{/* Type Switch */}
 							<div
 								style={{
@@ -965,8 +989,44 @@ export function TemplateEditorClient({
 								>
 									Custom Domain
 								</button>
+								<button
+									type="button"
+									onClick={() => setModalDomainType("BUY")}
+									style={{
+										flex: 1,
+										padding: "0.35rem",
+										fontSize: "0.78rem",
+										fontWeight: 600,
+										border: "none",
+										cursor: "pointer",
+										borderRadius: 6,
+										whiteSpace: "nowrap",
+										background:
+											modalDomainType === "BUY"
+												? "var(--brand)"
+												: "transparent",
+										color:
+											modalDomainType === "BUY"
+												? "#fff"
+												: "rgba(240,242,255,0.55)",
+										transition: "all 0.15s",
+									}}
+								>
+									Buy a Domain
+								</button>
 							</div>
 
+							{modalDomainType === "BUY" ? (
+								<BuyDomainFlow
+									templateId={templateId}
+									resumedPurchase={null}
+									onPurchased={() => setShowPublishModal(false)}
+								/>
+							) : (
+							<form
+								onSubmit={handleModalPublish}
+								style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+							>
 							{/* Inputs */}
 							{modalDomainType === "SUBDOMAIN" ? (
 								<div>
@@ -1055,8 +1115,27 @@ export function TemplateEditorClient({
 										}}
 									>
 										Configure a CNAME record mapping your domain to{" "}
-										<code style={{ color: "var(--brand)" }}>{baseDomain}</code>.
+										<code style={{ color: "var(--brand)" }}>{routingEndpoint ?? "connecting…"}</code>.
 									</div>
+									{modalCertValidation && (
+										<div
+											style={{
+												marginTop: "0.5rem",
+												padding: "0.6rem",
+												background: "rgba(52,211,153,0.05)",
+												border: "1px solid rgba(52,211,153,0.2)",
+												borderRadius: 8,
+												fontSize: "0.72rem",
+												color: "rgba(240,242,255,0.65)",
+												lineHeight: 1.35,
+											}}
+										>
+											Also add this certificate-validation CNAME — it proves you own the domain:
+											<div style={{ fontFamily: "monospace", fontSize: "0.68rem", color: "#6ee7b7", marginTop: "0.3rem", wordBreak: "break-all" }}>
+												{modalCertValidation.name} &rarr; {modalCertValidation.value}
+											</div>
+										</div>
+									)}
 								</div>
 							)}
 
@@ -1107,6 +1186,8 @@ export function TemplateEditorClient({
 								</button>
 							</div>
 						</form>
+						)}
+						</div>
 					</div>
 				</div>
 			)}

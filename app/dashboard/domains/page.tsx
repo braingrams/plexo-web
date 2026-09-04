@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
-import { Template, PublishedDomain } from "@/lib/db/contentEntities";
+import { Template, PublishedDomain, RegisteredDomain } from "@/lib/db/contentEntities";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { DomainsClient } from "./domains-client";
 import { PageContainer } from "../_components/PageContainer";
@@ -52,20 +52,45 @@ export default async function DomainsPage() {
     .flatMap((b) => b.data)
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
-  const domains = publishedDomains.map((d) => ({
-    id: d.id,
-    domain: d.domain,
-    type: d.type,
-    templateId: d.templateId,
-    templateName: templateNameById.get(d.templateId) ?? "",
-    createdAt: d.createdAt ?? new Date().toISOString(),
-    dnsVerified: d.dnsVerified ?? false,
-    dnsVerifiedAt: d.dnsVerifiedAt ?? null,
-    certificateStatus: d.certificateStatus,
-    certificateValidationName: d.certificateValidationName,
-    certificateValidationValue: d.certificateValidationValue,
-    noindex: d.noindex ?? false,
-  }));
+  // Purchased-domain rows (registeredDomainId set — see the Buy-a-Domain feature) carry
+  // registrar/billing state in a separate RegisteredDomain row, joined in here the same way
+  // GET /api/v1/domains does for the client-side refresh path, so the settings panel has
+  // what it needs on first paint without an extra round-trip.
+  const registeredDomainRows = await Promise.all(
+    publishedDomains
+      .filter((d): d is typeof d & { registeredDomainId: string } => !!d.registeredDomainId)
+      .map((d) => RegisteredDomain.get({ templateId: d.templateId, id: d.registeredDomainId }).go()),
+  );
+  const registeredDomainById = new Map(registeredDomainRows.map((r) => r.data).filter((r) => !!r).map((r) => [r!.id, r!]));
+
+  const domains = publishedDomains.map((d) => {
+    const reg = d.registeredDomainId ? registeredDomainById.get(d.registeredDomainId) : undefined;
+    return {
+      id: d.id,
+      domain: d.domain,
+      type: d.type,
+      templateId: d.templateId,
+      templateName: templateNameById.get(d.templateId) ?? "",
+      createdAt: d.createdAt ?? new Date().toISOString(),
+      dnsVerified: d.dnsVerified ?? false,
+      dnsVerifiedAt: d.dnsVerifiedAt ?? null,
+      certificateStatus: d.certificateStatus,
+      certificateValidationName: d.certificateValidationName,
+      certificateValidationValue: d.certificateValidationValue,
+      noindex: d.noindex ?? false,
+      registration: reg
+        ? {
+            status: reg.status,
+            renewalDate: reg.renewalDate,
+            renewalPriceUsdCents: reg.renewalPriceUsdCents,
+            autoRenew: reg.autoRenew,
+            whoisPrivacyEnabled: reg.whoisPrivacyEnabled,
+            transferLocked: reg.transferLocked,
+            paymentMethod: reg.paymentMethod,
+          }
+        : undefined,
+    };
+  });
 
   return (
     <PageContainer>

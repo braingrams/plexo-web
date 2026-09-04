@@ -403,6 +403,26 @@ export class PublishedSitesStack extends cdk.Stack {
     // account's existing traffic dwarf that.
     scheduledRoute("CertAttachment", "/api/internal/certificate-attachment", events.Schedule.rate(cdk.Duration.minutes(5)));
 
+    // Advances a purchased domain (RegisteredDomain, lib/db/contentEntities.ts) through
+    // registration + DNS provisioning — see that route's own doc comment. A tighter
+    // cadence than CertAttachment above on purpose: this is the user-visible "how long
+    // until my new domain is live" latency budget the whole buy-a-domain feature is sold
+    // on, unlike CertAttachment's own "check back occasionally" cert-issuance wait.
+    scheduledRoute("DomainRegistrationPoller", "/api/internal/domain-registration-poller", events.Schedule.rate(cdk.Duration.minutes(2)));
+
+    // Detects when a domain someone asked Plexo to "stop managing" has actually finished
+    // transferring to its new registrar (nameserver drift, see that route's own doc
+    // comment) — daily is plenty, ICANN transfers take days once initiated, not minutes.
+    scheduledRoute("DomainTransferPoller", "/api/internal/domain-transfer-poller", events.Schedule.cron({ minute: "30", hour: "0" }));
+
+    // Charges (wallet or off-session Stripe) for domains nearing/past their renewal date —
+    // see that route's own doc comment on why this, not Route53's own native auto-renew
+    // (deliberately disabled once ACTIVE), is the sole driver of whether a renewal happens.
+    // Daily matches this app's other billing-adjacent crons; a domain has a full year
+    // between renewals, so there's no latency pressure the way domain-registration-poller
+    // has.
+    scheduledRoute("DomainRenewalBilling", "/api/internal/domain-renewal-billing", events.Schedule.cron({ minute: "0", hour: "1" }));
+
     // Re-scans already-published domains for newly-flagged threats — see that route's own
     // doc comment. Daily matches its own stated cadence (a catch-up sweep, not a tight
     // loop) — Vercel Hobby's cron-plan ceiling forced daily originally, but that happens to

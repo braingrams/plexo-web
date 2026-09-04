@@ -142,6 +142,22 @@ export function getRoutingEndpoint(): string {
   return requireEnv("PLEXO_PUBLISHED_SITES_ROUTING_ENDPOINT");
 }
 
+/** The literal CloudFront/connection-group hostname (e.g. "d1ju7wbipoanda.cloudfront.net"),
+ * as opposed to getRoutingEndpoint()'s friendlier branded alias — see
+ * PLEXO_PUBLISHED_SITES_ROUTING_ENDPOINT_RAW's own comment in lib/ssmEnv.ts. This is the
+ * value lib/domains/domainDns.ts needs for a Route53 ALIAS record's AliasTarget.DNSName —
+ * confirmed live (real `aws route53 change-resource-record-sets` calls against this exact
+ * production distribution, cleaned up after) that Route53 flatly REJECTS a plain CNAME at a
+ * hosted zone's apex ("RRSet of type CNAME ... is not permitted at apex"), which a bought-
+ * and-registered domain commonly needs (e.g. bare "acmestudio.co", not "www.acmestudio.co")
+ * — an ALIAS "A"/"AAAA" record targeting this raw hostname (HostedZoneId
+ * "Z2FDTNDATAQYW2", CloudFront's own fixed alias-target zone id, the same for every
+ * CloudFront distribution in any account) is required instead, and works at any depth
+ * including the apex — confirmed the same way. */
+export function getRoutingEndpointRaw(): string {
+  return requireEnv("PLEXO_PUBLISHED_SITES_ROUTING_ENDPOINT_RAW");
+}
+
 /** Disconnects a customer's custom domain — deletes the distribution tenant (if one was
  * ever created; a domain whose certificate never reached "issued" has none yet) and its
  * ACM certificate. The PublishedDomain row itself is the caller's separate

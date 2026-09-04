@@ -337,6 +337,47 @@ export class ComputeStack extends cdk.Stack {
         resources: ["*"],
       }),
     );
+    // lib/domains/route53DomainsProvider.ts's own runtime calls — Route53 Domains is a
+    // GLOBAL, account-level API with no per-domain resource ARN to scope against (same
+    // "*" reasoning as the ACM/CloudFront-tenant grants just above: RegisterDomain mints a
+    // domain this Lambda has no way to pre-know, and every other call here targets
+    // whatever domain a customer searched for/already owns). Read-mostly plus the specific
+    // write actions the domain-purchase flow needs — not route53domains:*, which would
+    // also grant destructive/ownership-transfer actions (DeleteDomain,
+    // TransferDomainToAnotherAwsAccount, PushDomain) this app never calls.
+    serverFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "route53domains:CheckDomainAvailability",
+          "route53domains:GetDomainSuggestions",
+          "route53domains:ListPrices",
+          "route53domains:RegisterDomain",
+          "route53domains:GetOperationDetail",
+          "route53domains:GetDomainDetail",
+          "route53domains:DisableDomainTransferLock",
+          "route53domains:EnableDomainTransferLock",
+          "route53domains:RetrieveDomainAuthCode",
+          "route53domains:RenewDomain",
+          "route53domains:EnableDomainAutoRenew",
+          "route53domains:DisableDomainAutoRenew",
+        ],
+        resources: ["*"],
+      }),
+    );
+    // lib/domains/domainDns.ts's own runtime calls — writes the routing + ACM-validation
+    // CNAME records into the hosted zone Route53 Domains auto-creates for each purchased
+    // domain. "*" for the same reason as every other dynamically-provisioned-resource
+    // grant above: a hosted zone id doesn't exist until RegisterDomain has already run, so
+    // it can't be pre-scoped to a fixed ARN the way a static zone could be. Unrelated to
+    // (and no wider than) dns-stack.ts's own hosted zone, which this Lambda never touches
+    // — that zone is only ever modified at CDK-deploy-time, through CDK's own deployment
+    // role, not by this app at runtime.
+    serverFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["route53:ListHostedZonesByName", "route53:GetHostedZone", "route53:ChangeResourceRecordSets"],
+        resources: ["*"],
+      }),
+    );
     // The six business-data tables (lib/db/client.ts's TABLES) — same cross-stack
     // situation as the S3 bucket above: provisioned by data-stack.ts, not this stack, so
     // scoped by tableEnv's own resolved names (already environment-correct via nameFor())

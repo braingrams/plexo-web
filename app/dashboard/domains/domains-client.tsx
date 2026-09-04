@@ -1586,7 +1586,11 @@ function DrawerHeader({ title, subtitle, onClose }: { title: string; subtitle: s
   );
 }
 
-function BuyDomainFlow({
+// Exported so app/dashboard/templates/[id]/template-editor-client.tsx's own "Publish
+// Landing Page" modal can reuse this exact same search/contact/payment/progress flow for
+// its own Buy-a-Domain tab, instead of duplicating it — that modal already knows its
+// templateId directly (no landing-page picker needed there at all).
+export function BuyDomainFlow({
   templateId,
   resumedPurchase,
   onPurchased,
