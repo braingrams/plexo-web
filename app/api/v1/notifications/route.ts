@@ -38,6 +38,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       createdAt: n.createdAt,
     })),
     unreadCount,
+    // Lets the client subscribe to its own realtime channel (lib/realtime/pusherClient.ts's
+    // userChannelName) without needing a userId prop threaded through both dashboard shells
+    // — this route already resolves it server-side for the query above.
+    userId: resolved.userId,
   });
 }
 

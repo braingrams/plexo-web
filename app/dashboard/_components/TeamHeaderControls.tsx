@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { authClient } from "@/lib/auth-client";
+import { getPusherClient, userChannelName } from "@/lib/realtime/pusherClient";
 
 /** Visual chrome shared by every header dropdown — positioning is applied separately
  * (see useAnchoredDropdown) since these are portaled to <body>, not absolutely
@@ -231,6 +232,7 @@ export function NotificationBell({ anchor = "right" }: { anchor?: "left" | "righ
   const router = useRouter();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
   const { open, setOpen, triggerRef, popoverRef, coords } = useAnchoredDropdown(anchor);
 
   async function load() {
@@ -238,14 +240,39 @@ export function NotificationBell({ anchor = "right" }: { anchor?: "left" | "righ
     if (res) {
       setItems(res.notifications ?? []);
       setUnreadCount(res.unreadCount ?? 0);
+      if (res.userId) setUserId(res.userId);
     }
   }
 
   useEffect(() => {
     load();
+  }, []);
+
+  // Realtime instead of blind polling: app/api/v1/comments/route.ts already fires
+  // "notification:new" on this exact per-user channel the moment a Notification row is
+  // created (mention/reply/resolve/invite) — this just had no client-side subscriber
+  // before, so the bell only ever found out via its own 30s poll regardless of whether
+  // anything had actually changed. getPusherClient() returns null when Pusher isn't
+  // configured for this environment (see .env.example) — falls back to the original
+  // polling in that case, just much sparser (10min, not 30s) since it's now purely a
+  // safety net for a missed/dropped push, not the primary update mechanism.
+  useEffect(() => {
+    const pusher = getPusherClient();
+    if (userId && pusher) {
+      const channelName = userChannelName(userId);
+      const channel = pusher.subscribe(channelName);
+      channel.bind("notification:new", load);
+      const fallback = setInterval(load, 10 * 60_000);
+      return () => {
+        channel.unbind("notification:new", load);
+        pusher.unsubscribe(channelName);
+        clearInterval(fallback);
+      };
+    }
     const interval = setInterval(load, 30_000);
     return () => clearInterval(interval);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   async function handleOpen(item: NotificationItem) {
     setOpen(false);

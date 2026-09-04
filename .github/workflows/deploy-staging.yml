@@ -182,6 +182,12 @@ jobs:
           # deploy-production.yml's matching comment for the full reasoning. Test-mode key
           # (same Stripe account as production's live key).
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_51Kt77BDdgt0vAbTGFMtXDg2HBYLQkLIHsDklJ4kIoHHlkSL2b9w2UN6AcK6fHRMEfnsDDbcyv1Cf3qpfWhyrDcnz00Fw8EyrPN
+          # See deploy-production.yml's matching comment — Pusher's "key" is the public one
+          # by design, safe to bake in client-side the same way the Stripe publishable key
+          # above is. Was never wired here before, so getPusherClient() always returned
+          # null in every real deployment.
+          NEXT_PUBLIC_PUSHER_KEY: ${{ secrets.PUSHER_KEY }}
+          NEXT_PUBLIC_PUSHER_CLUSTER: ${{ secrets.PUSHER_CLUSTER }}
           # lib/db/client.ts now throws if these are missing (outside next build) — but
           # `next build` itself DOES touch DynamoDB for a handful of statically-generated
           # routes (/sitemap.xml, /robots.txt, the blog sitemap/feed routes), so the build

@@ -187,6 +187,16 @@ jobs:
           # (that one powers Commerce storefronts using Plexo-hosted Stripe — same Stripe
           # account, but read server-side at runtime instead of baked in here).
           NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_live_51Kt77BDdgt0vAbTGxu4JeN6sEKVHpqLOtu1AfArhSSzKbIloDG5styjahzWm8SxfjU4eUBgRhElPoJIipM1vC0wC00k71SetKb
+          # Pusher's "key" (unlike "secret") is the public one, meant to be embedded
+          # client-side — same trust model as the Stripe publishable key just above, not a
+          # secret despite living in the same GitHub secret store as PUSHER_SECRET.
+          # Baked in at build time (NEXT_PUBLIC_) for lib/realtime/pusherClient.ts's
+          # getPusherClient() — was never wired here before, so it always silently returned
+          # null in every real deployment (comments AND notifications both fell back to
+          # polling/no-realtime, regardless of the server-side PUSHER_* secrets already
+          # being configured and firing events nobody was subscribed to receive).
+          NEXT_PUBLIC_PUSHER_KEY: ${{ secrets.PUSHER_KEY }}
+          NEXT_PUBLIC_PUSHER_CLUSTER: ${{ secrets.PUSHER_CLUSTER }}
           # lib/db/client.ts now throws if these are missing (outside next build) — but
           # `next build` itself DOES touch DynamoDB for a handful of statically-generated
           # routes (/sitemap.xml, /robots.txt, the blog sitemap/feed routes), so the build
