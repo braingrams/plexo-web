@@ -325,24 +325,15 @@ function BrandingSection({ subscriptionPlan, initialHideBranding }: { subscripti
   const [upgradeRedirecting, setUpgradeRedirecting] = useState(false);
 
   // FREE users clicking this get a seamless upgrade path instead of an inert control —
-  // same /api/billing/checkout pattern as billing-section.tsx.
+  // hands off to the Subscription settings page (?upgrade=PRO triggers its own
+  // startCheckout flow automatically on arrival) rather than starting embedded Checkout
+  // here directly. This used to POST /api/billing/checkout itself and expect a `url` back
+  // (the older hosted-Checkout response shape); that route now always creates an
+  // embedded-mode session and only returns `clientSecret`, so this unconditionally failed.
   async function onToggleClick(): Promise<void> {
     if (!isProOrAbove) {
       setUpgradeRedirecting(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/billing/checkout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ kind: "subscription", plan: "PRO" }),
-        });
-        const data = (await res.json()) as { url?: string; error?: string };
-        if (!res.ok || !data.url) throw new Error(data.error ?? "Could not start checkout.");
-        window.location.href = data.url;
-      } catch (err) {
-        setUpgradeRedirecting(false);
-        setError(err instanceof Error ? err.message : "Could not start checkout.");
-      }
+      window.location.href = "/dashboard/settings/subscription?upgrade=PRO";
       return;
     }
 

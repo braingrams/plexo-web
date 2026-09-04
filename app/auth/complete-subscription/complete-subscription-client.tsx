@@ -14,22 +14,15 @@ export function CompleteSubscriptionClient({ plan }: Props) {
   const [loading, setLoading] = useState<"pay" | "free" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function continueToPayment(): Promise<void> {
+  // Hands off to the Subscription settings page (?upgrade=PRO|ULTRA triggers the same
+  // startCheckout flow there automatically on arrival) rather than starting embedded
+  // Checkout here directly — this used to POST /api/billing/checkout itself and expect a
+  // `url` back to redirect to (the older hosted-Checkout response shape); that route now
+  // always creates an embedded-mode session and only ever returns `clientSecret`, so this
+  // unconditionally failed with "Could not start checkout."
+  function continueToPayment(): void {
     setLoading("pay");
-    setError(null);
-    try {
-      const res = await fetch("/api/billing/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "subscription", plan }),
-      });
-      const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !data.url) throw new Error(data.error ?? "Could not start checkout.");
-      window.location.href = data.url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start checkout.");
-      setLoading(null);
-    }
+    router.push(`/dashboard/settings/subscription?upgrade=${plan}`);
   }
 
   async function continueOnFree(): Promise<void> {

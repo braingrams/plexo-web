@@ -176,6 +176,20 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A Pro/Ultra-gated feature elsewhere in the dashboard (e.g. Domains' custom-domain
+  // upsell) navigates here with ?upgrade=PRO|ULTRA instead of trying to start embedded
+  // checkout itself — this is the one place that already knows how (EmbeddedCheckoutProvider
+  // below, startCheckout's own working clientSecret flow), so every upsell entry point
+  // reuses it rather than re-implementing it. Auto-fires the same checkout a clicking the
+  // matching plan button would, once, on arrival.
+  useEffect(() => {
+    const upgrade = searchParams.get("upgrade");
+    if (upgrade !== "PRO" && upgrade !== "ULTRA") return;
+    router.replace(pathname);
+    void startCheckout({ kind: "subscription", plan: upgrade }, `sub-${upgrade}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function startCheckout(body: CheckoutBody, actionKey: string): Promise<void> {
     setBusyAction(actionKey);
     setError(null);
