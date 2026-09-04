@@ -109,6 +109,7 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           PLATFORM_COMMERCE_STRIPE_SECRET_KEY: ${{ secrets.PLATFORM_COMMERCE_STRIPE_SECRET_KEY }}
+          PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY }}
           PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET: ${{ secrets.PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET }}
           STRIPE_PRICE_PRO: ${{ secrets.STRIPE_PRICE_PRO }}
           STRIPE_PRICE_ULTRA: ${{ secrets.STRIPE_PRICE_ULTRA }}
@@ -134,7 +135,7 @@ jobs:
             AI_KEY_ENCRYPTION_SECRET PAYSTACK_KEY_ENCRYPTION_SECRET COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET \
             BANK_DETAILS_ENCRYPTION_SECRET \
             MAILDRIP_KEY_ENCRYPTION_SECRET MAILDRIP_API_URL MAILDRIP_API_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
-            PLATFORM_COMMERCE_STRIPE_SECRET_KEY PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET \
+            PLATFORM_COMMERCE_STRIPE_SECRET_KEY PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET \
             STRIPE_PRICE_PRO STRIPE_PRICE_ULTRA STRIPE_PRICE_TOPUP_SMALL STRIPE_PRICE_TOPUP_MEDIUM STRIPE_PRICE_TOPUP_LARGE \
             SYSTEM_AI_PROVIDER SYSTEM_AI_KEY_ANTHROPIC_CLAUDE SYSTEM_AI_KEY_OPENAI SYSTEM_AI_KEY_GOOGLE_GEMINI \
             PUSHER_APP_ID PUSHER_KEY PUSHER_SECRET PUSHER_CLUSTER BROWSERBASE_API_KEY PEXELS_KEY PIXABAY_KEY UNSPLASH_KEY \
@@ -177,6 +178,15 @@ jobs:
           # mechanism (which CHARISOL_USER_POOL_ID below does use) can't reach this one.
           NEXT_PUBLIC_CHARISOL_CLIENT_ID: 2rpia2i7sa1ns9pa1hncs2od3a
           NEXT_PUBLIC_CHARISOL_DOMAIN: auth.charisol.io
+          # Baked into the client bundle at build time (NEXT_PUBLIC_), same reason
+          # NEXT_PUBLIC_CHARISOL_CLIENT_ID above is hardcoded here rather than round-tripped
+          # through SSM — a Stripe publishable key is meant to be public (embedded in every
+          # page's own client-side JS), not a secret; lib/stripeClientPromise.ts reads this
+          # to mount Plexo's own platform billing checkout (plan upgrades/credit top-ups),
+          # a separate integration from PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY above
+          # (that one powers Commerce storefronts using Plexo-hosted Stripe — same Stripe
+          # account, but read server-side at runtime instead of baked in here).
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_live_51Kt77BDdgt0vAbTGxu4JeN6sEKVHpqLOtu1AfArhSSzKbIloDG5styjahzWm8SxfjU4eUBgRhElPoJIipM1vC0wC00k71SetKb
           # lib/db/client.ts now throws if these are missing (outside next build) — but
           # `next build` itself DOES touch DynamoDB for a handful of statically-generated
           # routes (/sitemap.xml, /robots.txt, the blog sitemap/feed routes), so the build

@@ -45,6 +45,14 @@ const APP_SECRET_KEYS = [
   // though the two CAN point at the same underlying Stripe account if that's how it's
   // configured in SSM; the code doesn't assume either way.
   "PLATFORM_COMMERCE_STRIPE_SECRET_KEY",
+  // Not a secret by Stripe's own design (this is the key meant to be public/embeddable) —
+  // still loaded via this same SSM mechanism rather than baked in at build time, because
+  // lib/commerce/stripe.ts reads it SERVER-SIDE at runtime (handed back to the client per
+  // request via an API response, not inlined into the JS bundle) — unlike
+  // NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY (Plexo's own platform billing key), which the
+  // browser needs directly and is baked in at build time instead (see
+  // deploy-production.yml/deploy-staging.yml's "Build the app" step).
+  "PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY",
   "PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET",
   "STRIPE_PRICE_PRO",
   "STRIPE_PRICE_ULTRA",
