@@ -85,6 +85,17 @@ jobs:
         env:
           PLEXO_ENV: staging
           NEXT_PUBLIC_PAGES_DOMAIN: plexo.aws.charisol.io
+          # lib/db/client.ts now throws if these are missing (outside next build) — but
+          # `next build` itself DOES touch DynamoDB for a handful of statically-generated
+          # routes (/sitemap.xml, /robots.txt, the blog sitemap/feed routes). PR previews
+          # share staging's real tables (same TABLE_STACK_ID: staging-plexo the actual CDK
+          # deploy step below already uses), not their own.
+          PLEXO_CORE_TABLE: plexo-core-staging-plexo
+          PLEXO_LEDGER_TABLE: plexo-ledger-staging-plexo
+          PLEXO_COMMERCE_TABLE: plexo-commerce-staging-plexo
+          PLEXO_CONTENT_TABLE: plexo-content-staging-plexo
+          PLEXO_OPS_TABLE: plexo-ops-staging-plexo
+          PLEXO_IMPORT_TABLE: plexo-import-staging-plexo
         run: npx open-next build
 
       - name: Install & build CDK project

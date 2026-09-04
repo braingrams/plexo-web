@@ -177,6 +177,18 @@ jobs:
           # mechanism (which CHARISOL_USER_POOL_ID below does use) can't reach this one.
           NEXT_PUBLIC_CHARISOL_CLIENT_ID: 2rpia2i7sa1ns9pa1hncs2od3a
           NEXT_PUBLIC_CHARISOL_DOMAIN: auth.charisol.io
+          # lib/db/client.ts now throws if these are missing (outside next build) — but
+          # `next build` itself DOES touch DynamoDB for a handful of statically-generated
+          # routes (/sitemap.xml, /robots.txt, the blog sitemap/feed routes), so the build
+          # step needs real values too, not just the deployed Lambda's own runtime env
+          # (compute-stack.ts's tableEnv, injected separately at deploy time). Production's
+          # own bare names — same ones nameFor() resolves to when isProd is true.
+          PLEXO_CORE_TABLE: plexo-core
+          PLEXO_LEDGER_TABLE: plexo-ledger
+          PLEXO_COMMERCE_TABLE: plexo-commerce
+          PLEXO_CONTENT_TABLE: plexo-content
+          PLEXO_OPS_TABLE: plexo-ops
+          PLEXO_IMPORT_TABLE: plexo-import
         run: npx open-next build
 
       - name: Install CDK project
