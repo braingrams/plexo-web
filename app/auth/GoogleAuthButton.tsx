@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CharisolAuth, POST_LOGIN_REDIRECT_KEY } from "@/lib/charisolAuth";
+import { triggerGoogleSignIn } from "@/lib/charisolAuth";
 
 function GoogleIcon() {
   return (
@@ -20,8 +20,7 @@ export function GoogleAuthButton({ callbackURL }: { callbackURL: string }) {
   async function onClick(): Promise<void> {
     setLoading(true);
     try {
-      window.sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, callbackURL);
-      await CharisolAuth.signIn();
+      await triggerGoogleSignIn(callbackURL);
     } catch {
       setLoading(false);
     }

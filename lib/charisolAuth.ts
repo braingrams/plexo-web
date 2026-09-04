@@ -29,7 +29,14 @@ if (typeof window !== "undefined") {
 export { CharisolAuth };
 
 // Cognito's redirect_uri must match what's registered for this app client verbatim, so
-// there's no room to carry a per-attempt post-login destination through it. GoogleAuthButton
-// stashes the caller's intended destination here before redirecting; the callback page
-// reads it back once the sign-in round-trip completes.
+// there's no room to carry a per-attempt post-login destination through it. Callers stash
+// the caller's intended destination here before redirecting; the callback page reads it
+// back once the sign-in round-trip completes.
 export const POST_LOGIN_REDIRECT_KEY = "plexo_post_login_redirect";
+
+// Shared by GoogleAuthButton.tsx and app/auth/login/page.tsx's "this account uses Google
+// sign-in" prompt — one place for the stash-then-redirect sequence so both stay in sync.
+export async function triggerGoogleSignIn(callbackURL: string): Promise<void> {
+  window.sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, callbackURL);
+  await CharisolAuth.signIn();
+}

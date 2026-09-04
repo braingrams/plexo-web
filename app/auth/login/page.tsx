@@ -8,6 +8,7 @@ import { authClient } from "@/lib/auth-client";
 import { Mulish } from "next/font/google";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
+import { triggerGoogleSignIn } from "@/lib/charisolAuth";
 
 const mulish = Mulish({
   subsets: ["latin"],
@@ -23,6 +24,12 @@ function LoginForm() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(() => params.get("error"));
+  // Set instead of `error` when a password attempt matches a real account that's
+  // Google-only (server/authDynamo.ts's GoogleAccountOnlyError) — shows a "continue with
+  // Google" prompt in place of the dead-end generic error, since retrying the password
+  // can never succeed for this account.
+  const [googlePrompt, setGooglePrompt] = useState(false);
+  const [googleRedirecting, setGoogleRedirecting] = useState(false);
 
   // A failed Charisol/Google sign-in routes back here with ?error=... (see
   // app/auth/charisol/callback/page.tsx) rather than showing anything on that page
@@ -38,6 +45,7 @@ function LoginForm() {
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setError(null);
+    setGooglePrompt(false);
 
     if (!email.trim() || !password) {
       setError("Enter your email and password.");
@@ -54,6 +62,11 @@ function LoginForm() {
         password,
         callbackURL: redirectTo,
       });
+
+      if (result?.error?.code === "google_account_only") {
+        setGooglePrompt(true);
+        return;
+      }
 
       const status = result?.error?.status;
       if (status === 403) {
@@ -72,6 +85,15 @@ function LoginForm() {
       setError(message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function onContinueWithGoogle(): Promise<void> {
+    setGoogleRedirecting(true);
+    try {
+      await triggerGoogleSignIn(params.get("redirectTo") ?? "/dashboard");
+    } catch {
+      setGoogleRedirecting(false);
     }
   }
 
@@ -107,6 +129,20 @@ function LoginForm() {
 
       {/* Form */}
       <form onSubmit={onSubmit} className="space-y-5" noValidate>
+        {googlePrompt && (
+          <div className="p-4 rounded-2xl bg-purple-950/60 border border-purple-700 text-purple-200 text-xs font-semibold space-y-3">
+            <p>This account signed up with Google — there&apos;s no password to check against. Continue with Google instead?</p>
+            <button
+              type="button"
+              onClick={() => void onContinueWithGoogle()}
+              disabled={googleRedirecting}
+              className="w-full bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs py-3 rounded-xl shadow-lg transition-all disabled:opacity-50"
+            >
+              {googleRedirecting ? "Redirecting…" : "Continue with Google"}
+            </button>
+          </div>
+        )}
+
         {error && (
           <div className="p-4 rounded-2xl bg-red-950/80 border border-red-800 text-red-300 text-xs font-semibold">
             {error}

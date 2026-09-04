@@ -82,6 +82,17 @@ export class TooManyLoginAttemptsError extends CredentialsSignin {
   code = "too_many_attempts";
 }
 
+// Thrown instead of the generic null when a password-login attempt matches a real,
+// existing account that has no passwordHash set (created via "Continue with Google" and
+// never given a password) — lets the client prompt "this account uses Google sign-in"
+// and trigger CharisolAuth.signIn() directly instead of a dead-end "Invalid credentials."
+// Trade-off, deliberate: this is a narrow account-enumeration signal (distinguishes "no
+// such account" from "account exists, Google-only") that didn't exist before — accepted
+// here because the UX win (no dead end for a real, common case) outweighs it for this app.
+export class GoogleAccountOnlyError extends CredentialsSignin {
+  code = "google_account_only";
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: dynamoAdapter,
   // Required self-hosted (not Vercel, where Auth.js auto-trusts Vercel's own edge) — Auth.js
@@ -153,7 +164,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const { data: matches } = await User.query.byEmail({ email }).go();
         const user = matches[0];
-        if (!user || !user.passwordHash) return null; // Google-only accounts have no passwordHash to check against
+        if (!user) return null; // no account at all — stays generic, no enumeration signal beyond this
+        if (!user.passwordHash) throw new GoogleAccountOnlyError(); // real account, Google-only
 
         const valid = await verifyPassword(user.passwordHash, password);
         if (!valid) return null;

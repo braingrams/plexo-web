@@ -18,7 +18,7 @@ import { CharisolAuth } from "@/lib/charisolAuth";
 // `{error: {status, message}}` shape so existing callers' `result?.error?.status`/
 // `result.error.message` checks keep working unchanged.
 
-type AuthResult<T = Record<string, unknown>> = { data: T; error?: undefined } | { data?: undefined; error: { status: number; message: string } };
+type AuthResult<T = Record<string, unknown>> = { data: T; error?: undefined } | { data?: undefined; error: { status: number; message: string; code?: string } };
 
 async function postJson<T>(url: string, body: unknown): Promise<AuthResult<T>> {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -43,13 +43,16 @@ export const authClient = {
         const code = (result as { code?: string }).code;
         const unverified = code === "unverified_email";
         const tooManyAttempts = code === "too_many_attempts";
-        const status = unverified ? 403 : tooManyAttempts ? 429 : 401;
+        const googleAccountOnly = code === "google_account_only";
+        const status = unverified ? 403 : tooManyAttempts ? 429 : googleAccountOnly ? 409 : 401;
         const message = unverified
           ? "This account is not verified yet. Check your email for the verification link."
           : tooManyAttempts
             ? "Too many login attempts for this account. Please wait 15 minutes and try again."
-            : "Invalid credentials.";
-        return { error: { status, message } };
+            : googleAccountOnly
+              ? "This account uses Google sign-in — there's no password to check."
+              : "Invalid credentials.";
+        return { error: { status, message, code } };
       }
       return { data: {} };
     },
