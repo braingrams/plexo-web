@@ -7,6 +7,7 @@ on:
 permissions:
   id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
   contents: read
+  pull-requests: write # required to post/update the preview-link PR comment below
 
 jobs:
   deploy:
@@ -99,4 +100,29 @@ jobs:
           # is staging's own key, not a per-PR one. See compute-stack.ts's own
           # ledgerKmsKeyArn comment for why this must be the real key/ ARN, not alias/.
           LEDGER_KMS_KEY_ARN: arn:aws:kms:us-east-1:919927637684:key/91672c29-e32c-4524-ad2d-b9b2b2b1ef92
-        run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively
+        # --outputs-file gives the next step DistributionDomainName (compute-stack.ts's own
+        # CfnOutput) without scraping cdk's human-oriented stdout.
+        run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively --outputs-file cdk-outputs.json
+
+      # Sticky comment (found-and-edited by its own marker, never re-posted) so pushing more
+      # commits to the same PR updates one comment in place instead of spamming a new one on
+      # every `synchronize` re-run. This is the actual point of this whole workflow from a
+      # reviewer's perspective — a real, clickable URL to test the PR's own preview
+      # environment before approving the merge that would otherwise be the first real test.
+      - name: Comment the preview link on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DOMAIN=$(node -pe "require('./cdk/cdk-outputs.json')['${STACK_ID}-compute-stack'].DistributionDomainName")
+          PREVIEW_URL="https://${DOMAIN}"
+          MARKER="<!-- pr-preview-link -->"
+          BODY=$(printf '%s\n### 🔗 PR Preview\n\nThis PR'\''s preview environment: **%s**\n\nDeployed from %s. Redeploys automatically on every push to this PR; torn down automatically when it'\''s closed.' "$MARKER" "$PREVIEW_URL" "${{ github.sha }}")
+
+          EXISTING_COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --jq ".[] | select(.body | startswith(\"$MARKER\")) | .id" | head -n1)
+
+          if [ -n "$EXISTING_COMMENT_ID" ]; then
+            gh api "repos/${{ github.repository }}/issues/comments/${EXISTING_COMMENT_ID}" -X PATCH -f body="$BODY"
+          else
+            gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" -X POST -f body="$BODY"
+          fi
