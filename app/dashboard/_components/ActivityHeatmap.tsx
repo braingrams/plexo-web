@@ -32,7 +32,7 @@ export function ActivityHeatmap({ data }: { data: HeatmapPoint[] }) {
 
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "44px repeat(7, 1fr)", gap: 5 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "44px repeat(7, minmax(0, 1fr))", gap: 5 }}>
         <div />
         {DAY_LABELS.map((label) => (
           <div

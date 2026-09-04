@@ -452,7 +452,7 @@ function LayoutModeSection() {
         Choose how your dashboard looks. Your choice is saved to your account and applied the next time you sign in.
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }} className="layout-mode-grid">
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "1rem" }} className="layout-mode-grid">
         {options.map((opt) => {
           const selected = mode === opt.value;
           return (

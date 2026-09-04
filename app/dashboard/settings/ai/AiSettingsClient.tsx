@@ -268,7 +268,7 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                         <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
                           Creativity Tier
                         </p>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.5rem" }}>
                           {TIER_OPTIONS.map((tier) => {
                             const active = draftAiTier === tier.value;
                             const isBtnDisabled = !activeKey.isActive;

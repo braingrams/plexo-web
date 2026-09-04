@@ -616,6 +616,18 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
         className="dash-classic-main"
         style={{
           flex: 1,
+          // Without this, a flex item's default min-width is "auto" (its content's own
+          // intrinsic min width), not 0 — so any unshrinkable descendant anywhere on any
+          // dashboard page (a wide table, an unwrapping row of cards, etc.) silently pushes
+          // this whole div, and everything in it, wider than the viewport. Because
+          // globals.css sets `overflow-x: hidden` on html/body (to kill accidental
+          // horizontal scrollbars elsewhere in the app), that overflow doesn't even show up
+          // as a scrollbar — it just gets clipped, which is exactly the "content cut off,
+          // no scrollbar" symptom reported. minWidth: 0 lets this item actually shrink to
+          // the viewport and forces any real overflow back down onto the specific
+          // descendant that has it, where it belongs (an explicit overflow-x: auto on that
+          // one element, not a page-wide clip).
+          minWidth: 0,
           marginLeft: `calc(${sidebarWidth + contentGutter}px + max(0px, calc((100vw - 1920px) / 2)))`,
           maxWidth: `calc(1920px - ${sidebarWidth + contentGutter}px)`,
           minHeight: "100vh",
