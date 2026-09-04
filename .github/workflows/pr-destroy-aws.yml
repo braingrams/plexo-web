@@ -160,20 +160,21 @@ jobs:
       # Mirrors pr-deploy-aws.yml's own "Point pr-<N>...at this deploy" step — removes the
       # CNAME it created so closed PRs don't leave dangling DNS records pointing at a
       # distribution that no longer exists (harmless dangling-DNS-wise, but real clutter
-      # over time, same reasoning as the orphaned-IAM-role cleanup above).
-      - name: Remove pr-<N>.staging-plexo.charisol.io's DNS record
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # over time, same reasoning as the orphaned-IAM-role cleanup above). Route53's DELETE
+      # action requires the exact current record value (unlike Cloudflare's id-based
+      # delete), so this looks the record up first via list-resource-record-sets rather
+      # than assuming what it points at.
+      - name: Remove pr-<N>.plexo.aws.charisol.io's DNS record
         run: |
-          ZONE_ID="afa1a55d69e72f404000bfdb672ad144"
-          PREVIEW_HOSTNAME="pr-${PR_NUMBER}.staging-plexo.charisol.io"
+          PREVIEW_HOSTNAME="pr-${PR_NUMBER}.plexo.aws.charisol.io"
 
-          EXISTING_RECORD_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=${PREVIEW_HOSTNAME}" \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" | jq -r '.result[0].id // empty')
+          EXISTING_VALUE=$(aws route53 list-resource-record-sets --hosted-zone-id Z08127631OJ16MLNL9RH \
+            --query "ResourceRecordSets[?Name=='${PREVIEW_HOSTNAME}.' && Type=='CNAME'].ResourceRecords[0].Value" \
+            --output text)
 
-          if [ -n "$EXISTING_RECORD_ID" ]; then
-            curl -s -X DELETE "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${EXISTING_RECORD_ID}" \
-              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" > /dev/null
+          if [ -n "$EXISTING_VALUE" ] && [ "$EXISTING_VALUE" != "None" ]; then
+            CHANGE_BATCH=$(node -pe "JSON.stringify({Changes:[{Action:'DELETE',ResourceRecordSet:{Name:process.argv[1],Type:'CNAME',TTL:60,ResourceRecords:[{Value:process.argv[2]}]}}]})" "$PREVIEW_HOSTNAME" "$EXISTING_VALUE")
+            aws route53 change-resource-record-sets --hosted-zone-id Z08127631OJ16MLNL9RH --change-batch "$CHANGE_BATCH" > /dev/null
             echo "✓ Deleted DNS record for ${PREVIEW_HOSTNAME}"
           else
             echo "✓ No DNS record found for ${PREVIEW_HOSTNAME} — nothing to clean up"
