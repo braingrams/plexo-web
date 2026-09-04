@@ -28,6 +28,7 @@ type DomainRecord = {
   certificateStatus?: "PENDING_VALIDATION" | "ISSUED" | "ATTACHED" | "FAILED";
   certificateValidationName?: string;
   certificateValidationValue?: string;
+  noindex?: boolean;
 };
 
 type LandingPage = {
@@ -414,6 +415,28 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
       setCustomAlertInfo({
         title: "Delete Failed",
         message: error instanceof Error ? error.message : "Failed to unpublish domain."
+      });
+    }
+  }
+
+  async function handleToggleNoindex(domainId: string, nextNoindex: boolean) {
+    // Optimistic — this is a cosmetic per-domain toggle, not worth a loading state.
+    setDomains((prev) => prev.map((d) => (d.id === domainId ? { ...d, noindex: nextNoindex } : d)));
+    try {
+      const response = await fetch("/api/v1/domains", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: domainId, noindex: nextNoindex }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error ?? "Failed to update search engine visibility.");
+      }
+    } catch (error) {
+      setDomains((prev) => prev.map((d) => (d.id === domainId ? { ...d, noindex: !nextNoindex } : d)));
+      setCustomAlertInfo({
+        title: "Update Failed",
+        message: error instanceof Error ? error.message : "Failed to update search engine visibility.",
       });
     }
   }
@@ -807,6 +830,20 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                         </td>
                         <td style={{ padding: "1.1rem 1.5rem", textAlign: "right" }}>
                           <button
+                            onClick={() => void handleToggleNoindex(item.id, !item.noindex)}
+                            title={item.noindex ? "Hidden from search engines — click to make indexable" : "Indexable — click to hide from search engines"}
+                            style={{
+                              background: item.noindex ? "rgba(245,158,11,0.08)" : "rgba(255,255,255,0.03)",
+                              border: `1px solid ${item.noindex ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.06)"}`,
+                              cursor: "pointer", borderRadius: 8, padding: "0.4rem 0.6rem",
+                              color: item.noindex ? "#f59e0b" : "rgba(240,242,255,0.4)",
+                              fontSize: "0.72rem", fontWeight: 650, marginRight: "0.5rem",
+                              display: "inline-flex", alignItems: "center", gap: "0.3rem"
+                            }}
+                          >
+                            {item.noindex ? "Noindex" : "Indexed"}
+                          </button>
+                          <button
                             onClick={() => void handleDeleteDomain(item.id, item.domain)}
                             title="Unpublish Domain"
                             style={{
@@ -895,7 +932,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
               {/* Domain Type Selection */}
               <div>
                 <span className="field-label" style={{ display: "block", marginBottom: "0.4rem" }}>Domain Type</span>
-                <div style={{ display: "flex", background: "rgba(255,255,255,0.04)", padding: 3, borderRadius: 8, gap: 2, maxWidth: 300 }}>
+                <div style={{ display: "flex", background: "rgba(255,255,255,0.04)", padding: 3, borderRadius: 8, gap: 2 }}>
                   <button
                     type="button"
                     onClick={() => setDomainType("SUBDOMAIN")}

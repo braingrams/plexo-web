@@ -164,7 +164,7 @@ function injectProductSeo(html: string, product: { name: string; description: st
   const title = escapeHtmlAttr(`${product.name} — Shop Natural Products | Helimax`);
   const description = escapeHtmlAttr(
     (product.description && product.description.trim()) ||
-      `${product.name} — a natural wellness product from Helimax, prepared in Ilorin. Pickup or courier delivery available.`
+      `${product.name} — a natural wellness product from Helimax.`
   );
   let out = html;
   out = out.replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`);
@@ -190,6 +190,102 @@ function injectProductSeo(html: string, product: { name: string; description: st
 
 function escapeHtmlAttr(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// designJson (unlike compiledHtml) is never run through sanitizeCompiledHtml.ts —
+// server/sanitizer.ts's sanitizePlexoPayload only Zod-validates + prototype-pollution-
+// cleans it (see that file's own comment) — so the raw customJs string the author typed
+// into BodyGlobalSettingsTab.tsx is still sitting in cursor.designJson right where the
+// compiler's own <script> tag for it got stripped out of compiledHtml on publish (the
+// sanitizer's exclusiveFilter only lets a <script src="..."> through, for the MailDrip
+// embed — any inline <script> with no src, customJs's included, is always removed).
+// Re-injecting it here at serve time, straight from designJson, is the fix: this is the
+// site owner's own authored code for their own site (the same trust model as the
+// customCss sibling field, which already survives publish untouched), not third-party or
+// visitor-supplied content, so there's no new XSS surface — just restoring a feature the
+// UI already promises but silently drops.
+function injectCustomJs(html: string, customJs: string | null | undefined): string {
+  const script = (customJs ?? "").trim();
+  if (!script) return html;
+  const scriptTag = `<script>\n${script}\n</script>`;
+  const maskedHtml = html.replace(
+    /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
+    (block) => " ".repeat(block.length),
+  );
+  let insertAt = -1;
+  const bodyCloseRe = /<\/body\s*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = bodyCloseRe.exec(maskedHtml)) !== null) {
+    insertAt = match.index;
+  }
+  if (insertAt !== -1) {
+    return html.slice(0, insertAt) + scriptTag + html.slice(insertAt);
+  }
+  return html + scriptTag;
+}
+
+// JSON.stringify alone doesn't escape "</" — a value containing the literal substring
+// "</script>" would otherwise prematurely close the tag this gets embedded in.
+function safeJsonLd(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+// Self-canonical + (optional) noindex + a baseline WebSite JSON-LD schema — the three
+// concrete gaps the migration-readiness doc flagged for non-blog pages (blog posts
+// already get all three from lib/blog/seo.ts's generateMetadata path). Applied at serve
+// time, same insertion point as injectFavicon, so it works for BUILDER and RAW_UPLOAD
+// pages alike without needing a compiler/SDK change.
+function injectSeoTags(html: string, opts: { canonicalUrl: string; noindex: boolean; siteName: string }): string {
+  let tags = `<link rel="canonical" href="${escapeHtmlAttr(opts.canonicalUrl)}">`;
+  if (opts.noindex) {
+    tags += `<meta name="robots" content="noindex,nofollow">`;
+  }
+  tags += `<script type="application/ld+json">${safeJsonLd({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: opts.siteName,
+    url: opts.canonicalUrl,
+  })}</script>`;
+  const headMatch = html.match(/<head[^>]*>/i);
+  if (headMatch && headMatch.index !== undefined) {
+    const idx = headMatch.index + headMatch[0].length;
+    return html.slice(0, idx) + tags + html.slice(idx);
+  }
+  return tags + html;
+}
+
+// Routes <img> tags served from our own uploads bucket (see lib/storage.ts's
+// publicUrlFor — allowlisted in next.config.ts's images.remotePatterns) through Next's
+// /_next/image optimizer (resize + modern-format re-encode), and adds loading="lazy" to
+// every image but the first (left eager so it doesn't regress LCP on the common
+// hero-image-first layout). An externally-hosted image URL (an author's direct link, the
+// Unsplash placeholder) is left as a plain <img> — remotePatterns can't practically
+// allowlist arbitrary third-party hosts, so those only get the lazy-loading attribute.
+function optimizeImages(html: string): string {
+  let seenImage = false;
+  return html.replace(/<img\b([^>]*)>/gi, (fullMatch, attrs: string) => {
+    const isFirst = !seenImage;
+    seenImage = true;
+    const srcMatch = attrs.match(/\bsrc="([^"]*)"/i);
+    const src = srcMatch?.[1];
+    let newAttrs = attrs;
+    if (src) {
+      try {
+        const host = new URL(src).hostname;
+        if (host.endsWith(".amazonaws.com") && !/\/_next\/image\?/.test(src)) {
+          const optimizedSrc = `/_next/image?url=${encodeURIComponent(src)}&w=1600&q=75`;
+          newAttrs = newAttrs.replace(srcMatch![0], `src="${optimizedSrc}"`);
+        }
+      } catch {
+        // Not an absolute URL (relative asset path on a RAW_UPLOAD page, or malformed) —
+        // leave src untouched, still eligible for the lazy-loading attribute below.
+      }
+    }
+    if (!isFirst && !/\bloading=/i.test(newAttrs)) {
+      newAttrs += ` loading="lazy" decoding="async"`;
+    }
+    return `<img${newAttrs}>`;
+  });
 }
 
 /** Prisma's `prisma.template.findFirst({ where: { parentId, slug } })` — Template has no
@@ -312,6 +408,17 @@ export async function GET(
       ? injectBaseHref(cursor.compiledHtml, `/${pageSegments.join("/")}/`)
       : cursor.compiledHtml;
 
+    const canonicalUrl = `https://${rawDomain}/${pageSegments.join("/")}`;
+    html = injectSeoTags(html, {
+      canonicalUrl,
+      noindex: published.noindex ?? false,
+      siteName: published.template.name || rawDomain,
+    });
+    html = optimizeImages(html);
+    if (cursor.sourceType !== "RAW_UPLOAD") {
+      html = injectCustomJs(html, (cursor.designJson as { body?: { style?: { customJs?: string } } } | null)?.body?.style?.customJs);
+    }
+
     // "Hosted with Plexo" bar — BUILDER and RAW_UPLOAD pages alike (see injectBrandingBar's
     // doc comment for how it stays safe against RAW_UPLOAD's arbitrary HTML), shown only
     // when the owning account isn't entitled to (or hasn't turned on) branding removal.
@@ -409,6 +516,12 @@ export async function GET(
             description: product.description ?? null,
             imageUrl: product.imageUrl ?? null,
           });
+          html = injectSeoTags(html, {
+            canonicalUrl: `https://${rawDomain}/${candidateSlug}`,
+            noindex: published.noindex ?? false,
+            siteName: published.template.name || rawDomain,
+          });
+          html = optimizeImages(html);
           html = injectCommerceScript(html);
           if (!resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
             const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

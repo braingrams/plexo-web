@@ -17,6 +17,14 @@ const nextConfig: NextConfig = {
     "/api/internal/site-import/**/*": ["./node_modules/playwright-core/**"],
   },
   transpilePackages: ["@charisol/plexo-sdk"],
+  // Only our own uploads bucket (lib/storage.ts's publicUrlFor — bucket name/region vary per
+  // environment, hence the wildcard) is allowlisted for /_next/image optimization. Published
+  // pages can also embed an arbitrary externally-hosted image URL (an author pasting a direct
+  // link, or the Unsplash placeholder) — those are left as plain <img> tags rather than routed
+  // through the optimizer, since remotePatterns can't practically allowlist "the whole web".
+  images: {
+    remotePatterns: [{ protocol: "https", hostname: "**.amazonaws.com" }],
+  },
 };
 
 export default nextConfig;

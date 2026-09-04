@@ -236,6 +236,39 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   return NextResponse.json({ success: true, domain: created, routingEndpoint });
 }
 
+export async function PATCH(request: NextRequest): Promise<NextResponse> {
+  const resolved = await resolveUserDynamo(request);
+  if (!resolved) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const permissionError = requirePermissionDynamo(resolved.role, { domain: ["manage"] });
+  if (permissionError) return permissionError;
+
+  const body = await request.json().catch(() => ({}));
+  const domainId = typeof body.id === "string" ? body.id : undefined;
+  if (!domainId || typeof body.noindex !== "boolean") {
+    return NextResponse.json({ error: "Missing required fields (id, noindex)." }, { status: 400 });
+  }
+
+  // No id-only index — same org-wide fan-out DELETE already uses to resolve an id to its
+  // (templateId, id) primary key.
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+  const batches = await Promise.all(
+    orgTemplates.filter((t) => !t.parentId).map((t) => PublishedDomain.query.primary({ templateId: t.id }).go()),
+  );
+  const record = batches.flatMap((b) => b.data).find((d) => d.id === domainId) ?? null;
+
+  if (!record || record.organizationId !== resolved.organizationId) {
+    return NextResponse.json({ error: "Published domain not found or unauthorized." }, { status: 404 });
+  }
+
+  await PublishedDomain.patch({ templateId: record.templateId, id: record.id }).set({ noindex: body.noindex }).go();
+  const { data: updated } = await PublishedDomain.get({ templateId: record.templateId, id: record.id }).go();
+
+  return NextResponse.json({ success: true, domain: updated });
+}
+
 export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const resolved = await resolveUserDynamo(request);
   if (!resolved) {
