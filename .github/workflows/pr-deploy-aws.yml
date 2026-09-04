@@ -111,9 +111,52 @@ jobs:
           # is staging's own key, not a per-PR one. See compute-stack.ts's own
           # ledgerKmsKeyArn comment for why this must be the real key/ ARN, not alias/.
           LEDGER_KMS_KEY_ARN: arn:aws:kms:us-east-1:919927637684:key/91672c29-e32c-4524-ad2d-b9b2b2b1ef92
+          # A friendly per-PR hostname instead of the raw *.cloudfront.net domain — see the
+          # DNS step below, which points this at whatever DistributionDomainName this exact
+          # deploy produces. APP_CERT_ARN imports the already-issued wildcard cert for
+          # *.staging-plexo.charisol.io (compute-stack.ts's own appCertArn prop skips
+          # creating+DNS-validating a brand-new per-PR cert when this is set) — safe to
+          # reuse across every PR's own distribution simultaneously, ACM certs aren't
+          # exclusive to one distribution.
+          APP_DOMAIN: pr-${{ github.event.number }}.staging-plexo.charisol.io
+          APP_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/6c17fa15-95ef-4efc-a95f-2d1dad8fcbc8
         # --outputs-file gives the next step DistributionDomainName (compute-stack.ts's own
         # CfnOutput) without scraping cdk's human-oriented stdout.
         run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively --outputs-file cdk-outputs.json
+
+      # Points pr-<N>.staging-plexo.charisol.io at whatever real *.cloudfront.net domain
+      # THIS deploy produced — that domain is only known after cdk deploy finishes (CDK
+      # mints it), and can differ between a PR's first deploy and any later one if the
+      # distribution were ever replaced rather than updated in place, so this runs on every
+      # deploy rather than assuming it's stable. proxied:false is required, not a style
+      # choice — Cloudflare's proxy (orange-cloud) would terminate TLS itself instead of
+      # passing the connection through to CloudFront, breaking the ACM cert match entirely.
+      # Idempotent: updates the existing record if this PR has deployed before, creates one
+      # otherwise. charisol.io's zone id is hardcoded (fetched once via this same token,
+      # confirmed stable — zone ids don't change) rather than resolved via a second API call
+      # every run.
+      - name: Point pr-<N>.staging-plexo.charisol.io at this deploy's real distribution
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          ZONE_ID="afa1a55d69e72f404000bfdb672ad144"
+          PREVIEW_HOSTNAME="pr-${PR_NUMBER}.staging-plexo.charisol.io"
+          DISTRIBUTION_DOMAIN=$(node -pe "require('./cdk/cdk-outputs.json')['${STACK_ID}-compute-stack'].DistributionDomainName")
+
+          EXISTING_RECORD_ID=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records?name=${PREVIEW_HOSTNAME}" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" | jq -r '.result[0].id // empty')
+
+          if [ -n "$EXISTING_RECORD_ID" ]; then
+            curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records/${EXISTING_RECORD_ID}" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" \
+              --data "{\"type\":\"CNAME\",\"name\":\"${PREVIEW_HOSTNAME}\",\"content\":\"${DISTRIBUTION_DOMAIN}\",\"proxied\":false,\"ttl\":60}" > /dev/null
+            echo "Updated existing DNS record: ${PREVIEW_HOSTNAME} -> ${DISTRIBUTION_DOMAIN}"
+          else
+            curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${ZONE_ID}/dns_records" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" \
+              --data "{\"type\":\"CNAME\",\"name\":\"${PREVIEW_HOSTNAME}\",\"content\":\"${DISTRIBUTION_DOMAIN}\",\"proxied\":false,\"ttl\":60}" > /dev/null
+            echo "Created DNS record: ${PREVIEW_HOSTNAME} -> ${DISTRIBUTION_DOMAIN}"
+          fi
 
       # Sticky comment (found-and-edited by its own marker, never re-posted) so pushing more
       # commits to the same PR updates one comment in place instead of spamming a new one on
@@ -124,8 +167,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          DOMAIN=$(node -pe "require('./cdk/cdk-outputs.json')['${STACK_ID}-compute-stack'].DistributionDomainName")
-          PREVIEW_URL="https://${DOMAIN}"
+          PREVIEW_URL="https://pr-${PR_NUMBER}.staging-plexo.charisol.io"
           MARKER="<!-- pr-preview-link -->"
           BODY=$(printf '%s\n### 🔗 PR Preview\n\nThis PR'\''s preview environment: **%s**\n\nDeployed from %s. Redeploys automatically on every push to this PR; torn down automatically when it'\''s closed.' "$MARKER" "$PREVIEW_URL" "${{ github.sha }}")
 
