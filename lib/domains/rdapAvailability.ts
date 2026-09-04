@@ -38,11 +38,22 @@ export async function checkExternalAvailability(domain: string): Promise<Externa
 }
 
 /**
- * Where to send a customer to register a domain Plexo can't buy for them directly —
- * intentionally a generic public domain-search page, not an exclusive partner (Plexo has no
- * relationship with this or any other registrar for this path). Prefilled via the same
- * `?domain=` query param pattern most registrar search pages accept.
+ * Where to send a customer to register a domain Plexo can't buy for them directly. This
+ * used to link straight to one commercial registrar's search page — wrong, confirmed live:
+ * a domain under a ccTLD that registrar doesn't resell at all (e.g. Nigeria's .ng, which
+ * needs a NiRA-accredited registrar) landed the customer on that registrar's own
+ * "Unsupported TLD" page, a dead end.
+ *
+ * There is no single commercial registrar that covers every TLD in existence — plenty of
+ * ccTLDs are only sold through country-specific accredited registrars. IANA's own root zone
+ * database is the one destination that's authoritative and correct for literally every TLD,
+ * gTLD or ccTLD: it names that TLD's actual registry and (for the common case) links onward
+ * to where it's actually sold, rather than guessing at a reseller that may not carry it.
+ * Verified live against real TLDs (including "ng") before shipping this — every one
+ * resolves.
  */
 export function externalRegistrationUrl(domain: string): string {
-  return `https://www.namecheap.com/domains/registration/results/?domain=${encodeURIComponent(domain)}`;
+  const labels = domain.trim().toLowerCase().split(".");
+  const rootTld = labels[labels.length - 1] ?? "";
+  return `https://www.iana.org/domains/root/db/${encodeURIComponent(rootTld)}.html`;
 }
