@@ -70,6 +70,15 @@ function IconInfo() {
   );
 }
 
+function IconCopy() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
 function IconBlog() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -85,12 +94,15 @@ type Props = {
   template: TemplateSummary;
   /** Omit to hide the delete button — e.g. the Overview page's read-mostly gallery. */
   onDelete?: (template: TemplateSummary) => void;
+  /** Omit to hide the duplicate button. */
+  onDuplicate?: (template: TemplateSummary) => void;
+  duplicating?: boolean;
 };
 
 /** Shared template card — thumbnail snapshot, kind badge, name, updated date, page-count
  * pill, Open Editor button. Used by both the Templates page's grid and the Overview page's
  * "front and center" gallery so the two always look identical. */
-export function TemplateCard({ template, onDelete }: Props) {
+export function TemplateCard({ template, onDelete, onDuplicate, duplicating }: Props) {
   const router = useRouter();
   const [imageError, setImageError] = useState(false);
   const isEmail = template.kind === "EMAIL";
@@ -257,6 +269,27 @@ export function TemplateCard({ template, onDelete }: Props) {
               onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(16, 185, 129, 0.1)"; }}
             >
               <IconBlog />
+            </button>
+          )}
+          {onDuplicate && (
+            <button
+              type="button"
+              onClick={() => onDuplicate(template)}
+              disabled={duplicating}
+              title="Duplicate Site"
+              style={{
+                width: "38px", height: "38px",
+                display: "grid", placeItems: "center",
+                borderRadius: 10, border: "1px solid rgba(129, 140, 248, 0.2)", cursor: duplicating ? "not-allowed" : "pointer",
+                background: "rgba(129, 140, 248, 0.1)",
+                color: "#818cf8",
+                opacity: duplicating ? 0.6 : 1,
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => { if (!duplicating) e.currentTarget.style.background = "rgba(129, 140, 248, 0.2)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(129, 140, 248, 0.1)"; }}
+            >
+              <IconCopy />
             </button>
           )}
           {onDelete && (

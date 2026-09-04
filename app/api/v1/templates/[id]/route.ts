@@ -3,11 +3,14 @@ import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
+import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
+import { snapshotTemplateRevision } from "@/lib/templateRevisions";
 import { getDescendantIds } from "@/server/slugDynamo";
 import { deleteObjects } from "@/lib/storage";
 import { removeCloudFrontDomain } from "@/lib/cloudfrontDomains";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
+import { Member } from "@/lib/db/coreEntities";
 
 /**
  * GET /api/v1/templates/:id
@@ -84,6 +87,12 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
   const { id } = await context.params;
 
+  if (resolved.role !== null) {
+    const { data: member } = await Member.get({ organizationId: resolved.organizationId, userId: resolved.userId }).go();
+    const scopeError = requireTemplateScope(member, id);
+    if (scopeError) return scopeError;
+  }
+
   const { data: existing } = await Template.get({ id }).go();
   if (!existing || existing.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });
@@ -129,6 +138,12 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
       { status: 400 }
     );
   }
+
+  // Snapshot the pre-overwrite content before it's gone — never blocks or fails the save
+  // itself if the revision write hiccups (see lib/templateRevisions.ts).
+  void snapshotTemplateRevision(existing).catch((err) =>
+    console.error(`Failed to snapshot revision for template ${existing.id} (non-fatal):`, err),
+  );
 
   await Template.patch({ id: existing.id }).set({ name, designJson, compiledHtml }).go();
   const { data: updated } = await Template.get({ id: existing.id }).go();
@@ -179,6 +194,13 @@ export async function DELETE(
   if (permissionError) return permissionError;
 
   const { id } = await context.params;
+
+  if (resolved.role !== null) {
+    const { data: member } = await Member.get({ organizationId: resolved.organizationId, userId: resolved.userId }).go();
+    const scopeError = requireTemplateScope(member, id);
+    if (scopeError) return scopeError;
+  }
+
   const { data: existing } = await Template.get({ id }).go();
   if (!existing || existing.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });

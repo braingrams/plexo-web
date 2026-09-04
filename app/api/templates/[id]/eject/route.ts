@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
+import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { isValidUuid } from "@/server/slugDynamo";
 import { Template } from "@/lib/db/contentEntities";
+import { Member } from "@/lib/db/coreEntities";
 
 /**
  * POST /api/templates/:id/eject
@@ -31,6 +33,12 @@ export async function POST(
   const { id } = await context.params;
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
+  }
+
+  if (resolved.role !== null) {
+    const { data: member } = await Member.get({ organizationId: resolved.organizationId, userId: resolved.userId }).go();
+    const scopeError = requireTemplateScope(member, id);
+    if (scopeError) return scopeError;
   }
 
   const { data: existing } = await Template.get({ id }).go();

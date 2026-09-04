@@ -37,6 +37,7 @@ export default async function TeamSettingsPage() {
           id: m.userId,
           userId: m.userId,
           role: m.role,
+          scopedTemplateIds: m.scopedTemplateIds,
           name: m.name,
           email: m.email,
         }))}
@@ -44,6 +45,7 @@ export default async function TeamSettingsPage() {
           id: i.id,
           email: i.email,
           role: i.role,
+          scopedTemplateIds: i.scopedTemplateIds,
           createdAt: i.createdAt,
         }))}
       />

@@ -19,6 +19,8 @@ type SiteData = {
 
 type PreviewPage = { id: string; name: string; parentId: string | null; slug: string | null; sourceType: string };
 
+type Revision = { id: string; createdAt: string };
+
 /** Walks a page's parentId chain within the already-fetched tree to assemble its full
  * slug path (e.g. "shop/product-1") — mirrors how a real nested page's URL is built. */
 function buildPagePath(pages: PreviewPage[], id: string): string {
@@ -173,6 +175,67 @@ export function DetailClient({
   const [nameDraft, setNameDraft] = useState(templateName);
   const [savingName, setSavingName] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
+
+  const [duplicating, setDuplicating] = useState(false);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
+
+  async function handleDuplicate() {
+    setDuplicating(true);
+    setDuplicateError(null);
+    try {
+      const res = await fetch(`/api/templates/${templateId}/duplicate-site`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to duplicate site");
+      router.push(`/dashboard/templates/${data.template.id}/detail`);
+    } catch (err) {
+      setDuplicateError(err instanceof Error ? err.message : "Failed to duplicate site");
+      setDuplicating(false);
+    }
+  }
+
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [revisions, setRevisions] = useState<Revision[] | null>(null);
+  const [revisionsLoading, setRevisionsLoading] = useState(false);
+  const [revisionsError, setRevisionsError] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+
+  async function openVersionHistory() {
+    setShowVersionHistory(true);
+    setRestoreError(null);
+    if (revisions !== null) return; // already fetched this session — reopening is instant
+    setRevisionsLoading(true);
+    setRevisionsError(null);
+    try {
+      const res = await fetch(`/api/templates/${templateId}/revisions`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Couldn't load version history.");
+      setRevisions(data.revisions ?? []);
+    } catch (err) {
+      setRevisionsError(err instanceof Error ? err.message : "Couldn't load version history.");
+    } finally {
+      setRevisionsLoading(false);
+    }
+  }
+
+  async function handleRestore(revisionId: string) {
+    setRestoringId(revisionId);
+    setRestoreError(null);
+    try {
+      const res = await fetch(`/api/templates/${templateId}/restore/${revisionId}`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Couldn't restore this version.");
+      setShowVersionHistory(false);
+      // The restore itself created one more revision (the pre-restore snapshot) — drop the
+      // cached list so the next open refetches instead of showing a stale count.
+      setRevisions(null);
+      router.refresh();
+    } catch (err) {
+      setRestoreError(err instanceof Error ? err.message : "Couldn't restore this version.");
+    } finally {
+      setRestoringId(null);
+    }
+  }
 
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
@@ -470,6 +533,16 @@ export function DetailClient({
               <span style={LABEL}>Last compiled</span>
               <span style={VALUE}>{compiledAt ? formatDateTime(compiledAt) : "Never"}</span>
             </div>
+            <div style={{ ...ROW, borderBottom: isBlogLayout ? "none" : undefined }}>
+              <span style={LABEL}>Version History</span>
+              <button
+                type="button"
+                onClick={() => void openVersionHistory()}
+                style={{ padding: "0.3rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "rgba(240,242,255,0.75)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer" }}
+              >
+                View
+              </button>
+            </div>
             {!isBlogLayout && (
               <div style={{ ...ROW, borderBottom: "none" }}>
                 <span style={LABEL}>Kind</span>
@@ -524,11 +597,17 @@ export function DetailClient({
                     <Link href={`/dashboard/templates/${templateId}/blog`} style={LINK_BTN}>Manage</Link>
                   </div>
                 </div>
-                <div style={{ ...ROW, borderBottom: "none" }}>
+                <div style={ROW}>
                   <span style={LABEL}>Commerce</span>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
                     <Chip on={siteData.commerceEnabled} onLabel="On" offLabel="Off" />
                     <Link href={`/dashboard/commerce/${templateId}/settings`} style={LINK_BTN}>Configure</Link>
+                  </div>
+                </div>
+                <div style={{ ...ROW, borderBottom: "none" }}>
+                  <span style={LABEL}>Content Types</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                    <Link href={`/dashboard/templates/${templateId}/content-types`} style={LINK_BTN}>Manage</Link>
                   </div>
                 </div>
               </Card>
@@ -552,6 +631,24 @@ export function DetailClient({
                   <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
                     <span style={VALUE}>{formSubmissionCount}</span>
                     <Link href={`/dashboard/templates/${templateId}/form-submissions`} style={LINK_BTN}>View</Link>
+                  </div>
+                </div>
+                <div style={ROW}>
+                  <span style={LABEL}>Redirects</span>
+                  <Link href={`/dashboard/templates/${templateId}/redirects`} style={LINK_BTN}>Manage</Link>
+                </div>
+                <div style={ROW}>
+                  <span style={LABEL}>Duplicate Site</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                    {duplicateError && <span style={{ fontSize: "0.75rem", color: "#f87171" }}>{duplicateError}</span>}
+                    <button
+                      type="button"
+                      onClick={() => void handleDuplicate()}
+                      disabled={duplicating}
+                      style={{ ...LINK_BTN, background: "transparent", cursor: duplicating ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: duplicating ? 0.6 : 1 }}
+                    >
+                      {duplicating ? "Duplicating…" : "Duplicate"}
+                    </button>
                   </div>
                 </div>
                 <div style={{ ...ROW, borderBottom: "none" }}>
@@ -654,6 +751,66 @@ export function DetailClient({
           </Card>
         </div>
       </div>
+
+      {/* Version History modal */}
+      {showVersionHistory && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(3, 7, 18, 0.85)", zIndex: 100, display: "grid", placeItems: "center", backdropFilter: "blur(8px)" }}>
+          <div style={{ background: "#0d1324", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, width: "90%", maxWidth: 480, maxHeight: "80vh", display: "flex", flexDirection: "column", padding: "1.75rem", boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+              <h2 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#f0f2ff", fontFamily: "var(--font-heading)" }}>
+                Version History
+              </h2>
+              <button onClick={() => setShowVersionHistory(false)} style={{ background: "none", border: "none", color: "rgba(240,242,255,0.4)", cursor: "pointer", display: "flex" }}>
+                <IconClose />
+              </button>
+            </div>
+            <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.6)", lineHeight: 1.5, marginBottom: "1.1rem" }}>
+              Every save is kept here. Restoring an earlier version saves the current one first, so nothing is ever lost for good.
+            </p>
+            {restoreError && (
+              <p style={{ fontSize: "0.78rem", color: "#f87171", margin: "0 0 1rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                <IconWarning /> {restoreError}
+              </p>
+            )}
+            <div style={{ overflowY: "auto", flex: 1 }}>
+              {revisionsLoading && (
+                <div style={{ display: "flex", justifyContent: "center", padding: "1.5rem 0" }}>
+                  <div className="spinner" style={{ width: 24, height: 24, borderWidth: 3 }} />
+                </div>
+              )}
+              {!revisionsLoading && revisionsError && (
+                <p style={{ fontSize: "0.82rem", color: "#f87171" }}>{revisionsError}</p>
+              )}
+              {!revisionsLoading && !revisionsError && revisions !== null && revisions.length === 0 && (
+                <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.5)" }}>
+                  No earlier versions yet — history starts building the next time this is saved.
+                </p>
+              )}
+              {!revisionsLoading &&
+                !revisionsError &&
+                revisions !== null &&
+                revisions.map((rev) => (
+                  <div key={rev.id} style={ROW}>
+                    <span style={VALUE}>{formatDateTime(rev.createdAt)}</span>
+                    <button
+                      type="button"
+                      disabled={restoringId !== null}
+                      onClick={() => void handleRestore(rev.id)}
+                      style={{
+                        padding: "0.35rem 0.8rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)",
+                        background: "transparent", color: "rgba(240,242,255,0.85)", fontSize: "0.75rem", fontWeight: 600,
+                        cursor: restoringId !== null ? "not-allowed" : "pointer",
+                        opacity: restoringId !== null && restoringId !== rev.id ? 0.5 : 1,
+                      }}
+                    >
+                      {restoringId === rev.id ? "Restoring…" : "Restore"}
+                    </button>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Convert modal */}
       {showConvertModal && (
