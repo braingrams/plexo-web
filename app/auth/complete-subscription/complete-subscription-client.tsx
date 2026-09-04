@@ -22,7 +22,7 @@ export function CompleteSubscriptionClient({ plan }: Props) {
   // unconditionally failed with "Could not start checkout."
   function continueToPayment(): void {
     setLoading("pay");
-    router.push(`/dashboard/settings/subscription?upgrade=${plan}`);
+    router.push(`/dashboard/settings/subscription?upgrade=${plan}&returnTo=${encodeURIComponent("/dashboard")}`);
   }
 
   async function continueOnFree(): Promise<void> {

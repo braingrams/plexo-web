@@ -283,7 +283,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   // returns `clientSecret`, never `url`, so this unconditionally failed.
   function startUpgradeCheckout(): void {
     setUpgradeRedirecting(true);
-    window.location.href = "/dashboard/settings/subscription?upgrade=PRO";
+    window.location.href = "/dashboard/settings/subscription?upgrade=PRO&returnTo=" + encodeURIComponent("/dashboard/domains");
   }
 
   const handleCopy = (text: string, field: string) => {

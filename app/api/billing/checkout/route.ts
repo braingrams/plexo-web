@@ -17,6 +17,15 @@ function isValidBody(value: unknown): value is CheckoutRequest {
   return false;
 }
 
+// A same-origin, root-relative path only — this becomes part of a real Stripe-hosted
+// return_url, so an absolute/protocol-relative/scheme-carrying value must never be
+// trusted here (that would turn a completed-payment redirect into an open redirect to
+// wherever a caller likes). Client-side billing-section.tsx applies the identical check
+// before ever sending this; re-checked here since this is the actual trust boundary.
+function isSafeReturnTo(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") && !value.includes("://");
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const session = await auth();
   if (!session?.user) {
@@ -49,7 +58,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // the payment finishes, even though the card-entry form itself now renders in-page
   // instead of on checkout.stripe.com) — session_id lets the page confirm the real status
   // via GET /api/billing/checkout/session rather than trusting the query string alone.
-  const returnUrl = `${appUrl}/dashboard/settings/subscription?session_id={CHECKOUT_SESSION_ID}`;
+  //
+  // returnTo (optional): where an upsell elsewhere in the dashboard wants the user sent
+  // back to once payment is confirmed (e.g. Domains' custom-domain upgrade prompt lands
+  // back on Domains, not stranded on this settings page). Always routes through
+  // /dashboard/settings/subscription first regardless — that's the one page with the
+  // session_id-confirmation logic already built; it forwards on to returnTo itself once
+  // it has confirmed the payment actually completed.
+  const returnTo = (body as { returnTo?: unknown }).returnTo;
+  const returnToSuffix = isSafeReturnTo(returnTo) ? `&returnTo=${encodeURIComponent(returnTo)}` : "";
+  const returnUrl = `${appUrl}/dashboard/settings/subscription?session_id={CHECKOUT_SESSION_ID}${returnToSuffix}`;
 
   try {
     if (body.kind === "subscription") {

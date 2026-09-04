@@ -333,7 +333,7 @@ function BrandingSection({ subscriptionPlan, initialHideBranding }: { subscripti
   async function onToggleClick(): Promise<void> {
     if (!isProOrAbove) {
       setUpgradeRedirecting(true);
-      window.location.href = "/dashboard/settings/subscription?upgrade=PRO";
+      window.location.href = "/dashboard/settings/subscription?upgrade=PRO&returnTo=" + encodeURIComponent("/dashboard/profile");
       return;
     }
 

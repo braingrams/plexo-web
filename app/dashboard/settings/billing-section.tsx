@@ -136,6 +136,14 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
 
   const total = allowanceBalance + topupBalance;
 
+  // A same-origin, root-relative path only — this is threaded to the server and back
+  // into a Stripe-hosted return_url, so it must never be treated as safe to redirect to
+  // without this check (an absolute/protocol-relative/scheme-carrying value could turn a
+  // real completed-payment redirect into an open redirect to an attacker's page).
+  function isSafeReturnTo(value: string | null): value is string {
+    return !!value && value.startsWith("/") && !value.startsWith("//") && !value.includes("://");
+  }
+
   // Picks up the `?session_id=` Stripe's embedded Checkout lands back on after a completed
   // payment (see CheckoutModal's comment) — confirms the real status via our own backend
   // rather than trusting the query string, then strips it from the URL so a refresh doesn't
@@ -145,6 +153,12 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
   useEffect(() => {
     const sessionId = searchParams.get("session_id");
     if (!sessionId) return;
+    // Stripe's own return_url carries this back (see /api/billing/checkout/route.ts) when
+    // the upgrade started from elsewhere in the dashboard — sends the user back to where
+    // they came from once payment is confirmed, instead of stranding them on this settings
+    // page. Absent for a plan change started right here, which keeps today's behavior
+    // (refresh in place).
+    const returnTo = searchParams.get("returnTo");
     let cancelled = false;
     fetch(`/api/billing/checkout/session?session_id=${encodeURIComponent(sessionId)}`)
       .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
@@ -157,7 +171,12 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
         if (data.status === "complete") {
           setCheckoutStatus({ kind: "success", text: "Payment received — your plan is updating now." });
           setTimeout(() => {
-            if (!cancelled) router.refresh();
+            if (cancelled) return;
+            if (isSafeReturnTo(returnTo)) {
+              router.push(returnTo);
+            } else {
+              router.refresh();
+            }
           }, 2000);
         } else {
           setCheckoutStatus({ kind: "processing", text: "Your payment is still processing — check back in a moment." });
@@ -185,19 +204,23 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
   useEffect(() => {
     const upgrade = searchParams.get("upgrade");
     if (upgrade !== "PRO" && upgrade !== "ULTRA") return;
+    // Read and captured as a local before router.replace strips the query string below —
+    // startCheckout's async POST (fired right after, in this same effect) still closes
+    // over this value regardless of what the URL looks like by the time it resolves.
+    const returnTo = searchParams.get("returnTo");
     router.replace(pathname);
-    void startCheckout({ kind: "subscription", plan: upgrade }, `sub-${upgrade}`);
+    void startCheckout({ kind: "subscription", plan: upgrade }, `sub-${upgrade}`, isSafeReturnTo(returnTo) ? returnTo : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function startCheckout(body: CheckoutBody, actionKey: string): Promise<void> {
+  async function startCheckout(body: CheckoutBody, actionKey: string, returnTo: string | null = null): Promise<void> {
     setBusyAction(actionKey);
     setError(null);
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(returnTo ? { ...body, returnTo } : body),
       });
       const data = (await res.json()) as { clientSecret?: string; error?: string };
       if (!res.ok || !data.clientSecret) throw new Error(data.error ?? "Could not start checkout.");
