@@ -224,6 +224,10 @@ jobs:
           # ARN — see compute-stack.ts's own ledgerKmsKeyArn comment for why an alias ARN
           # silently fails to authorize the kms:Decrypt calls DynamoDB actually makes.
           LEDGER_KMS_KEY_ARN: arn:aws:kms:us-east-1:919927637684:key/1b1244bc-13ee-4cd3-837e-2c6002cf8a85
+          # Cache-busting suffix baked into every published storefront's commerce.js
+          # <script src> — see compute-stack.ts's own assetVersion comment. github.sha
+          # changes on every deploy, which is exactly what's needed here.
+          ASSET_VERSION: ${{ github.sha }}
         run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively
 
       - name: Deploy the published-sites stack
@@ -239,6 +243,28 @@ jobs:
           PRIMARY_DISTRIBUTION_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/0c7258c0-532d-45b2-90ae-16458501f83a
           APP_URL: https://plexo.charisol.io
         run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
+
+      # Belt-and-suspenders alongside the shorter origin Cache-Control DeployCommerceJs
+      # now sets (compute-stack.ts) and the ?v=<sha> cache-busting query param
+      # (injectCommerceScript) — this makes the fix take effect at THIS distribution's
+      # edge immediately, instead of waiting up to a minute for the new short max-age to
+      # lapse. Reads the distribution ID from published-sites-stack's own CfnOutput
+      # rather than hardcoding it, since it's a physical ID CloudFormation assigns.
+      # continue-on-error: this role's exact IAM permissions outside of `cdk deploy`
+      # itself (which may chain through a separate CDK bootstrap role) aren't verified —
+      # if describe-stacks/create-invalidation aren't granted directly to it, this step
+      # failing must not fail the whole deploy or skip the smoke test below. The short
+      # Cache-Control on commerce.js (60s) and the ?v=<sha> query param are the real,
+      # load-bearing fix; this step only shaves that 60s window off.
+      - name: Invalidate CloudFront cache for commerce.js
+        working-directory: ./cdk
+        continue-on-error: true
+        run: |
+          DISTRIBUTION_ID=$(aws cloudformation describe-stacks \
+            --stack-name "${STACK_ID}-published-sites-stack" \
+            --query "Stacks[0].Outputs[?OutputKey=='PrimaryDistributionId'].OutputValue" \
+            --output text)
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths "/commerce.js"
 
       - name: Smoke test — dashboard responds
         run: |

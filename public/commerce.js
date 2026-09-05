@@ -1217,6 +1217,12 @@
   // since the delivery method and contact fields live in the OTHER marker's DOM.
   function renderCartSummary(node) {
     var latestSnapshot = null;
+    // Lives at this scope (not inside paint()) deliberately — updateItem/removeItem call
+    // paint() synchronously to show a row disabled mid-request, and paint() rebuilds its
+    // whole subtree (including re-declaring updateItem/removeItem as closures) on every
+    // call. A busyItemId declared inside paint() would reset to null on that very
+    // re-render, erasing the busy state it was just set to show.
+    var busyItemId = null;
 
     function needsDelivery(snapshot) {
       return snapshot.items.some(function (i) {
@@ -1255,17 +1261,88 @@
         return;
       }
 
+      function updateItem(itemId, quantity) {
+        if (busyItemId) return;
+        busyItemId = itemId;
+        paint(latestSnapshot); // re-render immediately so the row disables while in flight
+        api("/api/public/commerce/cart/items/" + encodeURIComponent(itemId), { method: "PATCH", body: JSON.stringify({ quantity: quantity }) })
+          .then(function (updated) {
+            busyItemId = null;
+            broadcastCart(updated);
+          })
+          .catch(function () {
+            busyItemId = null;
+            paint(latestSnapshot);
+          });
+      }
+
+      function removeItem(itemId) {
+        if (busyItemId) return;
+        busyItemId = itemId;
+        paint(latestSnapshot);
+        api("/api/public/commerce/cart/items/" + encodeURIComponent(itemId), { method: "DELETE" })
+          .then(function (updated) {
+            busyItemId = null;
+            broadcastCart(updated);
+          })
+          .catch(function () {
+            busyItemId = null;
+            paint(latestSnapshot);
+          });
+      }
+
       var list = el(
         "div",
         { style: { display: "flex", flexDirection: "column", gap: "14px" } },
         snapshot.items.map(function (item) {
-          return el("div", { style: { display: "flex", alignItems: "center", gap: "12px" } }, [
+          var rowBusy = busyItemId === item.itemId;
+          return el("div", { style: { display: "flex", alignItems: "center", gap: "12px", opacity: rowBusy ? "0.5" : "1" } }, [
             item.imageUrl
               ? el("img", { src: item.imageUrl, alt: item.name, style: { width: "48px", height: "48px", objectFit: "cover", flexShrink: "0" } })
               : el("div", { style: { width: "48px", height: "48px", background: "#F3F1EA", flexShrink: "0" } }),
             el("div", { style: { flex: "1", minWidth: "0" } }, [
               el("div", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, [item.name]),
-              el("div", { class: "pc-mono", style: { fontSize: "11px", color: "#8A93A6", marginTop: "2px" } }, ["Qty " + item.quantity]),
+              el("div", { style: { display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" } }, [
+                el("div", { style: { display: "flex", alignItems: "center", border: "1px solid #E4E1D6" } }, [
+                  el(
+                    "button",
+                    {
+                      type: "button",
+                      disabled: rowBusy ? "disabled" : null,
+                      style: { border: "none", background: "transparent", width: "24px", height: "24px", padding: "0", fontSize: "13px", cursor: "pointer", lineHeight: "1" },
+                      onclick: function () {
+                        updateItem(item.itemId, item.quantity - 1); // quantity<=0 removes it server-side
+                      },
+                    },
+                    ["–"]
+                  ),
+                  el("span", { class: "pc-mono", style: { width: "28px", textAlign: "center", fontSize: "11px" } }, [String(item.quantity)]),
+                  el(
+                    "button",
+                    {
+                      type: "button",
+                      disabled: rowBusy ? "disabled" : null,
+                      style: { border: "none", background: "transparent", width: "24px", height: "24px", padding: "0", fontSize: "13px", cursor: "pointer", lineHeight: "1" },
+                      onclick: function () {
+                        updateItem(item.itemId, item.quantity + 1);
+                      },
+                    },
+                    ["+"]
+                  ),
+                ]),
+                el(
+                  "button",
+                  {
+                    type: "button",
+                    disabled: rowBusy ? "disabled" : null,
+                    style: { border: "none", background: "transparent", padding: "0", fontSize: "11px", color: "#8A93A6", textDecoration: "underline", cursor: "pointer" },
+                    onclick: function () {
+                      removeItem(item.itemId);
+                    },
+                  },
+                  ["Remove"]
+                ),
+              ]),
             ]),
             el("div", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F", whiteSpace: "nowrap" } }, [money(item.lineTotalMinor, snapshot.currency)]),
           ]);
@@ -1352,7 +1429,7 @@
             el("span", {}, [money(total, snapshot.currency)]),
           ]),
           payBtn,
-          el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, ["Secured by Paystack"]),
+          el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, ["Secured by " + (snapshot.paymentGateway === "stripe" ? "Stripe" : "Paystack")]),
         ])
       );
     }

@@ -67,6 +67,11 @@ export type CartSnapshot = {
   }>;
   subtotalMinor: number;
   currency: string;
+  // Which gateway checkout will actually run on for this site — resolved here (not just
+  // in the checkout API) so the storefront's own "Secured by ___" trust badge
+  // (public/commerce.js's renderCartSummary) can say the right name instead of a
+  // hardcoded "Paystack" regardless of what the merchant actually configured.
+  paymentGateway: "stripe" | "paystack";
 };
 
 /** Reads live product data for the price/stock shown — never the stale cart-item snapshot,
@@ -78,15 +83,16 @@ export async function readCartSnapshot(templateId: string, token: string | null)
   // actually in the cart.
   const { data: settings } = await CommerceSettings.get({ templateId }).go();
   const currency = settings?.currency ?? "NGN";
+  const paymentGateway: "stripe" | "paystack" = settings?.paymentProvider === "PLATFORM_STRIPE" || settings?.paymentProvider === "BYO_STRIPE" ? "stripe" : "paystack";
 
   const cart = await findOpenCart(templateId, token);
-  if (!cart) return { cartToken: null, items: [], subtotalMinor: 0, currency };
+  if (!cart) return { cartToken: null, items: [], subtotalMinor: 0, currency, paymentGateway };
 
   const { data: items } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
   items.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
   const products = await Promise.all(items.map((item) => CommerceProduct.get({ templateId, id: item.productId }).go()));
 
-  const snapshot: CartSnapshot = { cartToken: cart.cartToken, items: [], subtotalMinor: 0, currency };
+  const snapshot: CartSnapshot = { cartToken: cart.cartToken, items: [], subtotalMinor: 0, currency, paymentGateway };
   items.forEach((item, i) => {
     const product = products[i].data;
     if (!product || !(product.active ?? true)) return;
