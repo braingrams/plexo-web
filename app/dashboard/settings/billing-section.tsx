@@ -34,7 +34,10 @@ type Props = {
 
 type CheckoutBody =
   | { kind: "subscription"; plan: "PRO" | "ULTRA" }
-  | { kind: "topup"; pack: "SMALL" | "MEDIUM" | "LARGE" };
+  | { kind: "topup"; pack: "SMALL" | "MEDIUM" | "LARGE" }
+  | { kind: "funnel_addon_slot" };
+
+type FunnelSlotsSummary = { total: number; used: number; hasSlotAvailable: boolean };
 
 const TYPE_LABELS: Record<LedgerEntryType, string> = {
   MONTHLY_GRANT: "Monthly grant",
@@ -133,8 +136,24 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
   const [error, setError] = useState<string | null>(null);
   const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<{ kind: "success" | "processing" | "error"; text: string } | null>(null);
+  const [funnelSlots, setFunnelSlots] = useState<FunnelSlotsSummary | null>(null);
+
+  useEffect(() => {
+    fetch("/api/v1/lms/addon-slots")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setFunnelSlots(data))
+      .catch(() => {});
+  }, []);
 
   const total = allowanceBalance + topupBalance;
+
+  // A same-origin, root-relative path only — this is threaded to the server and back
+  // into a Stripe-hosted return_url, so it must never be treated as safe to redirect to
+  // without this check (an absolute/protocol-relative/scheme-carrying value could turn a
+  // real completed-payment redirect into an open redirect to an attacker's page).
+  function isSafeReturnTo(value: string | null): value is string {
+    return !!value && value.startsWith("/") && !value.startsWith("//") && !value.includes("://");
+  }
 
   // Picks up the `?session_id=` Stripe's embedded Checkout lands back on after a completed
   // payment (see CheckoutModal's comment) — confirms the real status via our own backend
@@ -145,6 +164,12 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
   useEffect(() => {
     const sessionId = searchParams.get("session_id");
     if (!sessionId) return;
+    // Stripe's own return_url carries this back (see /api/billing/checkout/route.ts) when
+    // the upgrade started from elsewhere in the dashboard — sends the user back to where
+    // they came from once payment is confirmed, instead of stranding them on this settings
+    // page. Absent for a plan change started right here, which keeps today's behavior
+    // (refresh in place).
+    const returnTo = searchParams.get("returnTo");
     let cancelled = false;
     fetch(`/api/billing/checkout/session?session_id=${encodeURIComponent(sessionId)}`)
       .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
@@ -157,7 +182,12 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
         if (data.status === "complete") {
           setCheckoutStatus({ kind: "success", text: "Payment received — your plan is updating now." });
           setTimeout(() => {
-            if (!cancelled) router.refresh();
+            if (cancelled) return;
+            if (isSafeReturnTo(returnTo)) {
+              router.push(returnTo);
+            } else {
+              router.refresh();
+            }
           }, 2000);
         } else {
           setCheckoutStatus({ kind: "processing", text: "Your payment is still processing — check back in a moment." });
@@ -176,14 +206,42 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function startCheckout(body: CheckoutBody, actionKey: string): Promise<void> {
+  // A Pro/Ultra-gated feature elsewhere in the dashboard (e.g. Domains' custom-domain
+  // upsell) navigates here with ?upgrade=PRO|ULTRA instead of trying to start embedded
+  // checkout itself — this is the one place that already knows how (EmbeddedCheckoutProvider
+  // below, startCheckout's own working clientSecret flow), so every upsell entry point
+  // reuses it rather than re-implementing it. Auto-fires the same checkout a clicking the
+  // matching plan button would, once, on arrival.
+  useEffect(() => {
+    const upgrade = searchParams.get("upgrade");
+    if (upgrade !== "PRO" && upgrade !== "ULTRA") return;
+    // Read and captured as a local before router.replace strips the query string below —
+    // startCheckout's async POST (fired right after, in this same effect) still closes
+    // over this value regardless of what the URL looks like by the time it resolves.
+    const returnTo = searchParams.get("returnTo");
+    router.replace(pathname);
+    void startCheckout({ kind: "subscription", plan: upgrade }, `sub-${upgrade}`, isSafeReturnTo(returnTo) ? returnTo : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Same deep-link principle as ?upgrade= above — hitting the Funnels module's slot limit
+  // navigates here with ?addon=funnel_slot instead of starting its own checkout.
+  useEffect(() => {
+    if (searchParams.get("addon") !== "funnel_slot") return;
+    const returnTo = searchParams.get("returnTo");
+    router.replace(pathname);
+    void startCheckout({ kind: "funnel_addon_slot" }, "addon-funnel-slot", isSafeReturnTo(returnTo) ? returnTo : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function startCheckout(body: CheckoutBody, actionKey: string, returnTo: string | null = null): Promise<void> {
     setBusyAction(actionKey);
     setError(null);
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(returnTo ? { ...body, returnTo } : body),
       });
       const data = (await res.json()) as { clientSecret?: string; error?: string };
       if (!res.ok || !data.clientSecret) throw new Error(data.error ?? "Could not start checkout.");
@@ -338,6 +396,31 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
             </button>
           </div>
         </div>
+
+        {/* Funnel add-on slots */}
+        {funnelSlots && (
+          <div>
+            <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+              Funnel slots
+            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.83rem", color: "rgba(240,242,255,0.6)" }}>
+                {funnelSlots.used} of {funnelSlots.total} in use
+              </span>
+              <button
+                type="button"
+                disabled={busyAction === "addon-funnel-slot"}
+                onClick={() => void startCheckout({ kind: "funnel_addon_slot" }, "addon-funnel-slot")}
+                style={{ ...secondaryButtonStyle, opacity: busyAction === "addon-funnel-slot" ? 0.7 : 1 }}
+              >
+                {busyAction === "addon-funnel-slot" ? "Opening…" : "Buy another funnel slot"}
+              </button>
+            </div>
+            <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)", marginTop: "0.4rem" }}>
+              Billed monthly, per slot. Cancel any time from "Manage subscription" above.
+            </p>
+          </div>
+        )}
 
         {/* Top-up packs */}
         <div>

@@ -45,12 +45,23 @@ const APP_SECRET_KEYS = [
   // though the two CAN point at the same underlying Stripe account if that's how it's
   // configured in SSM; the code doesn't assume either way.
   "PLATFORM_COMMERCE_STRIPE_SECRET_KEY",
+  // Not a secret by Stripe's own design (this is the key meant to be public/embeddable) —
+  // still loaded via this same SSM mechanism rather than baked in at build time, because
+  // lib/commerce/stripe.ts reads it SERVER-SIDE at runtime (handed back to the client per
+  // request via an API response, not inlined into the JS bundle) — unlike
+  // NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY (Plexo's own platform billing key), which the
+  // browser needs directly and is baked in at build time instead (see
+  // deploy-production.yml/deploy-staging.yml's "Build the app" step).
+  "PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY",
   "PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET",
   "STRIPE_PRICE_PRO",
   "STRIPE_PRICE_ULTRA",
   "STRIPE_PRICE_TOPUP_SMALL",
   "STRIPE_PRICE_TOPUP_MEDIUM",
   "STRIPE_PRICE_TOPUP_LARGE",
+  // A recurring per-slot add-on subscription, separate from the plan prices above — see
+  // lib/lms/funnelSlots.ts and app/api/billing/checkout/route.ts's "funnel_addon_slot" kind.
+  "STRIPE_PRICE_LMS_ADDON_SLOT",
   "SYSTEM_AI_KEY_ANTHROPIC_CLAUDE",
   "SYSTEM_AI_KEY_OPENAI",
   "SYSTEM_AI_KEY_GOOGLE_GEMINI",
@@ -90,6 +101,10 @@ const APP_SECRET_KEYS = [
   // see cdk/lib/compute-stack.ts's own comment on originVerifySecret for why the server
   // function's Lambda Function URL is public instead of OAC-protected.
   "PLEXO_ORIGIN_VERIFY_SECRET",
+  // Signs/verifies the Funnel/LMS module's learner session cookie (lib/lms/session.ts) —
+  // a stateless JWT, not a DB-backed session, so this secret alone is what lets a learner
+  // stay signed in across visits.
+  "LMS_SESSION_SECRET",
 ] as const;
 
 // GetParameters caps at 10 names per call.

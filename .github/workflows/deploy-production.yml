@@ -109,6 +109,7 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           PLATFORM_COMMERCE_STRIPE_SECRET_KEY: ${{ secrets.PLATFORM_COMMERCE_STRIPE_SECRET_KEY }}
+          PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY }}
           PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET: ${{ secrets.PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET }}
           STRIPE_PRICE_PRO: ${{ secrets.STRIPE_PRICE_PRO }}
           STRIPE_PRICE_ULTRA: ${{ secrets.STRIPE_PRICE_ULTRA }}
@@ -134,7 +135,7 @@ jobs:
             AI_KEY_ENCRYPTION_SECRET PAYSTACK_KEY_ENCRYPTION_SECRET COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET \
             BANK_DETAILS_ENCRYPTION_SECRET \
             MAILDRIP_KEY_ENCRYPTION_SECRET MAILDRIP_API_URL MAILDRIP_API_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
-            PLATFORM_COMMERCE_STRIPE_SECRET_KEY PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET \
+            PLATFORM_COMMERCE_STRIPE_SECRET_KEY PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET \
             STRIPE_PRICE_PRO STRIPE_PRICE_ULTRA STRIPE_PRICE_TOPUP_SMALL STRIPE_PRICE_TOPUP_MEDIUM STRIPE_PRICE_TOPUP_LARGE \
             SYSTEM_AI_PROVIDER SYSTEM_AI_KEY_ANTHROPIC_CLAUDE SYSTEM_AI_KEY_OPENAI SYSTEM_AI_KEY_GOOGLE_GEMINI \
             PUSHER_APP_ID PUSHER_KEY PUSHER_SECRET PUSHER_CLUSTER BROWSERBASE_API_KEY PEXELS_KEY PIXABAY_KEY UNSPLASH_KEY \
@@ -177,6 +178,37 @@ jobs:
           # mechanism (which CHARISOL_USER_POOL_ID below does use) can't reach this one.
           NEXT_PUBLIC_CHARISOL_CLIENT_ID: 2rpia2i7sa1ns9pa1hncs2od3a
           NEXT_PUBLIC_CHARISOL_DOMAIN: auth.charisol.io
+          # Baked into the client bundle at build time (NEXT_PUBLIC_), same reason
+          # NEXT_PUBLIC_CHARISOL_CLIENT_ID above is hardcoded here rather than round-tripped
+          # through SSM — a Stripe publishable key is meant to be public (embedded in every
+          # page's own client-side JS), not a secret; lib/stripeClientPromise.ts reads this
+          # to mount Plexo's own platform billing checkout (plan upgrades/credit top-ups),
+          # a separate integration from PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY above
+          # (that one powers Commerce storefronts using Plexo-hosted Stripe — same Stripe
+          # account, but read server-side at runtime instead of baked in here).
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_live_51Kt77BDdgt0vAbTGxu4JeN6sEKVHpqLOtu1AfArhSSzKbIloDG5styjahzWm8SxfjU4eUBgRhElPoJIipM1vC0wC00k71SetKb
+          # Pusher's "key" (unlike "secret") is the public one, meant to be embedded
+          # client-side — same trust model as the Stripe publishable key just above, not a
+          # secret despite living in the same GitHub secret store as PUSHER_SECRET.
+          # Baked in at build time (NEXT_PUBLIC_) for lib/realtime/pusherClient.ts's
+          # getPusherClient() — was never wired here before, so it always silently returned
+          # null in every real deployment (comments AND notifications both fell back to
+          # polling/no-realtime, regardless of the server-side PUSHER_* secrets already
+          # being configured and firing events nobody was subscribed to receive).
+          NEXT_PUBLIC_PUSHER_KEY: ${{ secrets.PUSHER_KEY }}
+          NEXT_PUBLIC_PUSHER_CLUSTER: ${{ secrets.PUSHER_CLUSTER }}
+          # lib/db/client.ts now throws if these are missing (outside next build) — but
+          # `next build` itself DOES touch DynamoDB for a handful of statically-generated
+          # routes (/sitemap.xml, /robots.txt, the blog sitemap/feed routes), so the build
+          # step needs real values too, not just the deployed Lambda's own runtime env
+          # (compute-stack.ts's tableEnv, injected separately at deploy time). Production's
+          # own bare names — same ones nameFor() resolves to when isProd is true.
+          PLEXO_CORE_TABLE: plexo-core
+          PLEXO_LEDGER_TABLE: plexo-ledger
+          PLEXO_COMMERCE_TABLE: plexo-commerce
+          PLEXO_CONTENT_TABLE: plexo-content
+          PLEXO_OPS_TABLE: plexo-ops
+          PLEXO_IMPORT_TABLE: plexo-import
         run: npx open-next build
 
       - name: Install CDK project

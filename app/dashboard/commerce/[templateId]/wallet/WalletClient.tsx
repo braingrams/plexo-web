@@ -5,7 +5,7 @@ import { formatMoney } from "@/lib/commerce/formatMoney";
 
 type LedgerEntry = {
   id: string;
-  type: "SALE_CREDIT" | "WITHDRAWAL_DEBIT" | "WITHDRAWAL_REVERSAL";
+  type: "SALE_CREDIT" | "WITHDRAWAL_DEBIT" | "WITHDRAWAL_REVERSAL" | "DOMAIN_PURCHASE_DEBIT" | "DOMAIN_REFUND_CREDIT" | "DOMAIN_RENEWAL_DEBIT";
   grossAmountCents: number | null;
   feeCents: number | null;
   netAmountCents: number;
@@ -55,6 +55,9 @@ const LEDGER_LABEL: Record<LedgerEntry["type"], string> = {
   SALE_CREDIT: "Sale",
   WITHDRAWAL_DEBIT: "Withdrawal",
   WITHDRAWAL_REVERSAL: "Withdrawal reversed",
+  DOMAIN_PURCHASE_DEBIT: "Domain purchase",
+  DOMAIN_REFUND_CREDIT: "Domain refund",
+  DOMAIN_RENEWAL_DEBIT: "Domain renewal",
 };
 
 export function WalletClient({ templateId, initial }: { templateId: string; initial: InitialWallet }) {

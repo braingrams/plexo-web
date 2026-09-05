@@ -61,6 +61,13 @@ export type TierFeatures = {
    * Plexo identity itself with the org's own.
    */
   whiteLabelEnabled: boolean;
+  /**
+   * Number of Funnel/LMS funnels included at this plan for free (see lib/lms/funnelSlots.ts).
+   * Only Ultra ships one included funnel; every plan (including Ultra, beyond its one) can
+   * still buy additional funnels as a recurring per-slot add-on regardless of this number —
+   * this is the free allotment, not a hard cap.
+   */
+  includedFunnelSlots: number;
 };
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
@@ -85,6 +92,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     customDomainEnabled: false,
     brandingRemovalEnabled: false,
     whiteLabelEnabled: false,
+    includedFunnelSlots: 0,
   },
   PRO: {
     maxEmailTemplates: 25,
@@ -100,6 +108,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     customDomainEnabled: true,
     brandingRemovalEnabled: true,
     whiteLabelEnabled: true,
+    includedFunnelSlots: 0,
   },
   ULTRA: {
     maxEmailTemplates: 100,
@@ -115,6 +124,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     customDomainEnabled: true,
     brandingRemovalEnabled: true,
     whiteLabelEnabled: true,
+    includedFunnelSlots: 1,
   },
 };
 

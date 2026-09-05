@@ -58,6 +58,46 @@ export function buildPasswordResetEmail(actionUrl: string): string {
   });
 }
 
+/** The Funnel/LMS module's passwordless learner login — same visual shell as every other
+ * transactional email (verification, password reset) rather than a fourth look, per the
+ * Funnel/LMS plan's visitor-facing flow. Long-lived on purpose (see lib/lms/session.ts):
+ * this link is only ever needed once per device, since a valid session cookie is what
+ * carries a returning visitor straight into the portal after that. */
+export function buildLmsMagicLinkEmail(funnelName: string, actionUrl: string): string {
+  return emailShell({
+    title: `Your link to ${funnelName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">You're in!</h1>
+      <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Click below to enter <strong style="color:#0f172a;">${funnelName}</strong>. No password needed — this link signs you straight in, and you can bookmark the page it opens to come back anytime.
+      </p>
+      ${CTA_BUTTON(actionUrl, "Enter now")}
+      ${FALLBACK_LINK(actionUrl)}
+    `,
+    footerHtml: "If you didn't request this, you can safely ignore this email.<br/>",
+  });
+}
+
+/** Sent by app/api/internal/lms-drip-reminder/route.ts's daily sweep the moment a
+ * time-based unlock condition (lib/lms/rules.ts's TIME_DRIP_RELATIVE/TIME_DRIP_FIXED_DATE)
+ * releases a new page — a notification, not a login link: it points at the funnel's own
+ * /learn/[templateId] URL, which re-authenticates the learner if their session cookie is
+ * still valid, or shows them the "request a new link" screen if it isn't. */
+export function buildLmsDripReadyEmail(funnelName: string, pageTitle: string, portalUrl: string): string {
+  return emailShell({
+    title: `${pageTitle} is ready`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">Your next lesson is ready</h1>
+      <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        <strong style="color:#0f172a;">${pageTitle}</strong> just unlocked in <strong style="color:#0f172a;">${funnelName}</strong>.
+      </p>
+      ${CTA_BUTTON(portalUrl, "Continue")}
+      ${FALLBACK_LINK(portalUrl)}
+    `,
+    footerHtml: "",
+  });
+}
+
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
   admin: "Admin",
@@ -362,3 +402,86 @@ export function buildDigitalAccessGrantedEmail(input: {
 // a different delivery mechanism from every other builder in this file (which render into
 // sendMaildripEmail, for real customers). Keeping the two admin-only senders together with
 // their siblings there, rather than splitting the pattern across two files.
+
+/** Sent once app/api/v1/domains/unlock/route.ts successfully unlocks a Plexo-purchased
+ * domain and retrieves its EPP auth code — the one-time "here's how to take this domain
+ * elsewhere" email the Buy-a-Domain plan's "stop managing" flow promises. transferEligibleAt
+ * is only rendered as a caveat when it's still in the future (ICANN forbids a transfer within
+ * 60 days of initial registration) — a domain past that window gets no such note. */
+export function buildDomainTransferCodeEmail(input: {
+  domain: string;
+  authCode: string;
+  transferEligibleAt?: string | null;
+  brand?: EmailBrand;
+}): string {
+  const accent = input.brand?.color ?? "#8b5cf6";
+  const eligibleNote =
+    input.transferEligibleAt && new Date(input.transferEligibleAt).getTime() > Date.now()
+      ? `<p style="margin:0 0 20px;font-size:14px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 16px;line-height:1.6;text-align:left;">
+           <strong>Heads up:</strong> registries won't transfer this domain until
+           <strong>${new Date(input.transferEligibleAt).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}</strong>
+           — that's the earliest allowed date, 60 days after registration or an ownership change. You can still give this code to your new registrar now; the transfer will simply wait until then.
+         </p>`
+      : "";
+  return emailShell({
+    title: `Your transfer code for ${input.domain}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">${input.domain} is unlocked</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        We've unlocked <strong>${input.domain}</strong> and generated its authorization (EPP) code — give this to the registrar you're moving to, and they'll handle the rest.
+      </p>
+      <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 20px auto;width:100%;max-width:420px;">
+        <tr>
+          <td style="padding:18px 20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;text-align:center;">
+            <span style="font-family:monospace;font-size:18px;font-weight:700;letter-spacing:1px;color:#0f172a;">${input.authCode}</span>
+          </td>
+        </tr>
+      </table>
+      ${eligibleNote}
+      <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6;text-align:center;">
+        Your site keeps working and we'll keep billing and renewing ${input.domain} as normal — nothing changes on our end until the transfer actually completes at your new registrar, which usually takes 5–7 days once you start it there.
+      </p>
+    `,
+    footerHtml: "If you didn't request this, contact support right away — someone with access to your account requested a transfer code.<br/>",
+    brand: input.brand,
+  });
+}
+
+/** Sent by app/api/internal/domain-renewal-billing/route.ts the first time a renewal
+ * charge fails, and again if the domain reaches EXPIRED without being fixed —
+ * `expired` switches the copy from "please update payment" to "this domain has lapsed". */
+export function buildDomainRenewalFailedEmail(input: {
+  domain: string;
+  renewalPriceFormatted: string;
+  graceUntil?: string | null;
+  expired?: boolean;
+  manageUrl: string;
+  brand?: EmailBrand;
+}): string {
+  const accent = input.brand?.color ?? "#8b5cf6";
+  return emailShell({
+    title: input.expired ? `${input.domain} has expired` : `Renewal payment failed for ${input.domain}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">
+        ${input.expired ? "This domain has lapsed" : "We couldn't renew this domain"}
+      </h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        ${
+          input.expired
+            ? `<strong>${input.domain}</strong> reached its expiration date before we could collect the ${input.renewalPriceFormatted} renewal — it's no longer registered to you.`
+            : `We tried to charge <strong>${input.renewalPriceFormatted}</strong> to renew <strong>${input.domain}</strong> and it didn't go through. Your site is still live for now.`
+        }
+      </p>
+      ${
+        !input.expired && input.graceUntil
+          ? `<p style="margin:0 0 20px;font-size:14px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 16px;line-height:1.6;text-align:left;">
+               Update your payment method by <strong>${new Date(input.graceUntil).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" })}</strong> to keep this domain — after that it will expire and can't be recovered through Plexo.
+             </p>`
+          : ""
+      }
+      ${CTA_BUTTON(input.manageUrl, input.expired ? "View domain settings" : "Update payment method", accent)}
+      ${FALLBACK_LINK(input.manageUrl, accent)}
+    `,
+    brand: input.brand,
+  });
+}

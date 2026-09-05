@@ -4,14 +4,16 @@ import type Stripe from "stripe";
 import { TransactWriteCommand, type TransactWriteCommandInput } from "@aws-sdk/lib-dynamodb";
 import type { EntityItem } from "electrodb";
 
-import { grantTopup } from "@/lib/db/ledgerOperations";
+import { grantTopup, grantPlanChangeAllowance } from "@/lib/db/ledgerOperations";
 import { getStripe } from "@/lib/stripe";
 import type { SubscriptionPlan } from "@/lib/subscription";
 import { getMarketplaceOwnerUserId } from "@/lib/marketplaceListing";
 import { docClient } from "@/lib/db/client";
-import { User, PlatformSettings } from "@/lib/db/coreEntities";
+import { User, PlatformSettings, Member } from "@/lib/db/coreEntities";
 import { TemplatePurchase } from "@/lib/db/contentEntities";
 import { SellerLedgerEntry, StripeEvent } from "@/lib/db/ledgerEntities";
+import { handleLmsAddonSlotSubscriptionUpdate, handleLmsAddonSlotSubscriptionDeleted } from "@/lib/lms/activateFunnelAddonSlot";
+import { reconcileFunnelSlotsForOrg } from "@/lib/lms/funnelSlots";
 
 // DynamoDB-stack port of this file — Plexo's own SaaS-billing Stripe webhook (distinct
 // from app/api/webhooks/stripe/commerce/route.ts, which handles Plexo-hosted Commerce
@@ -27,6 +29,16 @@ const MAX_OPTIMISTIC_RETRIES = 5;
 function isConditionalCheckFailure(err: unknown): boolean {
   const anyErr = err as { name?: string; cause?: { name?: string } };
   return anyErr?.name === "ConditionalCheckFailedException" || anyErr?.cause?.name === "ConditionalCheckFailedException";
+}
+
+/** A plan is billed per-User, but funnel slots are counted per-Org (LmsFunnel.organizationId)
+ * — reconcile every org this user OWNS (not just belongs to; a non-owner member's own plan
+ * changing shouldn't touch an org's funnel capacity, same reasoning
+ * getOrganizationOwnerPlanDynamo already applies elsewhere). */
+async function reconcileFunnelSlotsForOwnedOrgs(userId: string): Promise<void> {
+  const { data: memberships } = await Member.query.byUser({ userId }).go({ pages: "all" });
+  const ownedOrgIds = memberships.filter((m) => m.role === "owner").map((m) => m.organizationId);
+  await Promise.all(ownedOrgIds.map((organizationId) => reconcileFunnelSlotsForOrg(organizationId)));
 }
 
 async function claimStripeEvent(eventId: string): Promise<boolean> {
@@ -187,10 +199,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (!(await claimStripeEvent(event.id))) break;
 
       const subscription = event.data.object as Stripe.Subscription;
+
+      if (subscription.metadata?.kind === "lms_addon_slot") {
+        await handleLmsAddonSlotSubscriptionUpdate(subscription);
+        break;
+      }
+
       const plexoUserId = subscription.metadata?.plexoUserId;
       const plan = subscription.metadata?.plan as SubscriptionPlan | undefined;
       if (!plexoUserId || !plan) break;
       if (subscription.status !== "active" && subscription.status !== "trialing") break;
+
+      // Read the plan as it stood BEFORE this update, so an allowance refresh only fires
+      // on a genuine plan change — not on every unrelated "customer.subscription.updated"
+      // (a payment method swap, a metadata edit, etc.) that happens to match this same
+      // event type.
+      const { data: userBeforeUpdate } = await User.get({ id: plexoUserId }).go();
+      const previousPlan = userBeforeUpdate?.subscriptionPlan;
 
       // Clears pendingPlan unconditionally on any confirmed active/trialing subscription,
       // even if it doesn't match what was originally picked at signup (e.g. the user
@@ -200,6 +225,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         .set({ subscriptionPlan: plan, stripeSubscriptionId: subscription.id })
         .remove(["pendingPlan"])
         .go();
+
+      // The subscriptionPlan patch above alone left the AI credit allowance untouched —
+      // ensureCreditPeriod() (lib/db/ledgerOperations.ts) only grants a fresh allowance
+      // once the CURRENT period naturally expires, so an upgrade mid-period kept showing
+      // the OLD (smaller) plan's balance for up to a month. Force it immediately here,
+      // once, only on an actual change.
+      if (previousPlan !== plan) {
+        await grantPlanChangeAllowance(plexoUserId, plan);
+        // A downgrade can drop the plan's included funnel-slot allotment (only Ultra ships
+        // one) — reconcile every org this user owns, same mechanism an addon-slot
+        // cancellation uses. A same-or-higher plan change is a harmless no-op here (nothing
+        // is over budget), so this isn't gated further on which direction the change went.
+        await reconcileFunnelSlotsForOwnedOrgs(plexoUserId);
+      }
       break;
     }
 
@@ -207,6 +246,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (!(await claimStripeEvent(event.id))) break;
 
       const subscription = event.data.object as Stripe.Subscription;
+
+      if (subscription.metadata?.kind === "lms_addon_slot") {
+        await handleLmsAddonSlotSubscriptionDeleted(subscription);
+        break;
+      }
+
       const plexoUserId = subscription.metadata?.plexoUserId;
       if (!plexoUserId) break;
 
@@ -214,6 +259,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         .set({ subscriptionPlan: "FREE" })
         .remove(["stripeSubscriptionId", "pendingPlan"])
         .go();
+      await reconcileFunnelSlotsForOwnedOrgs(plexoUserId);
       break;
     }
 

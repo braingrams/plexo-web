@@ -10,7 +10,8 @@ import {
   CommerceSettings,
 } from "./commerceEntities";
 import { NotificationPreferences } from "./coreEntities";
-import { Template } from "./contentEntities";
+import { Template, LmsFunnel } from "./contentEntities";
+import { activateLmsEnrollmentFromOrder } from "@/lib/lms/enrollment";
 import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
 import { notifyMaildripOfPaidOrder, resolveMaildripApiKey, sendCommerceEmail } from "@/lib/commerce/maildripNotify";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
@@ -187,9 +188,26 @@ async function deliverDigitalProducts(order: OrderItem, settings: SettingsItem):
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const apiKey = resolveMaildripApiKey(settings as any); // same cross-type-system cast as above
 
+  const { data: funnel } = await LmsFunnel.get({ templateId: order.templateId }).go();
+
   for (const item of orderItems) {
     const { data: product } = await CommerceProduct.get({ templateId: order.templateId, id: item.productId }).go();
-    if (!product || !("id" in product) || product.kind !== "DIGITAL" || !product.digitalDeliveryMethod) continue;
+    if (!product || !("id" in product)) continue;
+
+    // A paid funnel's signup enrollment is architecturally a digital-product purchase, but
+    // gating is via LmsEnrollment.status + the learner's session (lib/lms/learnerAuth.ts),
+    // not a one-time download token — skip the generic path entirely for this product. See
+    // the Funnel/LMS plan's billing section 4b.
+    if (funnel?.signupProductId === product.id) {
+      try {
+        await activateLmsEnrollmentFromOrder(order);
+      } catch (err) {
+        console.error("LMS: enrollment activation from order failed", err);
+      }
+      continue;
+    }
+
+    if (product.kind !== "DIGITAL" || !product.digitalDeliveryMethod) continue;
 
     const token = randomBytes(32).toString("hex");
     try {

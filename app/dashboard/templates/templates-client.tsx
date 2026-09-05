@@ -59,7 +59,7 @@ function IconUpload() {
   );
 }
 
-type FilterKind = "ALL" | TemplateKind;
+type FilterKind = "ALL" | TemplateKind | "FUNNEL";
 type ModalStep = "choose" | "blank";
 
 export function TemplatesClient({ initialTemplates }: Props) {
@@ -123,7 +123,8 @@ export function TemplatesClient({ initialTemplates }: Props) {
 
   const filtered = useMemo(() => {
     let list = templates;
-    if (filter !== "ALL") list = list.filter((t) => t.kind === filter);
+    if (filter === "FUNNEL") list = list.filter((t) => t.isLmsFunnel);
+    else if (filter !== "ALL") list = list.filter((t) => t.kind === filter);
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter((t) => t.name.toLowerCase().includes(q));
@@ -226,8 +227,8 @@ export function TemplatesClient({ initialTemplates }: Props) {
           border: "1px solid rgba(255,255,255,0.08)",
           borderRadius: 10, padding: "0.25rem",
         }}>
-          {(["ALL", "EMAIL", "LANDING_PAGE"] as const).map((tab) => {
-            const label = tab === "ALL" ? "All" : tab === "EMAIL" ? "Email" : "Landing Pages";
+          {(["ALL", "EMAIL", "LANDING_PAGE", "FUNNEL"] as const).map((tab) => {
+            const label = tab === "ALL" ? "All" : tab === "EMAIL" ? "Email" : tab === "LANDING_PAGE" ? "Landing Pages" : "Funnels";
             const active = filter === tab;
             return (
               <button

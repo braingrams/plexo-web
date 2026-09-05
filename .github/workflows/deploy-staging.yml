@@ -108,6 +108,7 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           PLATFORM_COMMERCE_STRIPE_SECRET_KEY: ${{ secrets.PLATFORM_COMMERCE_STRIPE_SECRET_KEY }}
+          PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY: ${{ secrets.PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY }}
           PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET: ${{ secrets.PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET }}
           STRIPE_PRICE_PRO: ${{ secrets.STRIPE_PRICE_PRO }}
           STRIPE_PRICE_ULTRA: ${{ secrets.STRIPE_PRICE_ULTRA }}
@@ -133,7 +134,7 @@ jobs:
             AI_KEY_ENCRYPTION_SECRET PAYSTACK_KEY_ENCRYPTION_SECRET COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET \
             BANK_DETAILS_ENCRYPTION_SECRET \
             MAILDRIP_KEY_ENCRYPTION_SECRET MAILDRIP_API_URL MAILDRIP_API_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
-            PLATFORM_COMMERCE_STRIPE_SECRET_KEY PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET \
+            PLATFORM_COMMERCE_STRIPE_SECRET_KEY PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET \
             STRIPE_PRICE_PRO STRIPE_PRICE_ULTRA STRIPE_PRICE_TOPUP_SMALL STRIPE_PRICE_TOPUP_MEDIUM STRIPE_PRICE_TOPUP_LARGE \
             SYSTEM_AI_PROVIDER SYSTEM_AI_KEY_ANTHROPIC_CLAUDE SYSTEM_AI_KEY_OPENAI SYSTEM_AI_KEY_GOOGLE_GEMINI \
             PUSHER_APP_ID PUSHER_KEY PUSHER_SECRET PUSHER_CLUSTER BROWSERBASE_API_KEY PEXELS_KEY PIXABAY_KEY UNSPLASH_KEY \
@@ -177,6 +178,31 @@ jobs:
           NEXT_PUBLIC_PAGES_DOMAIN: staging-plexo.charisol.io
           NEXT_PUBLIC_CHARISOL_CLIENT_ID: 2rpia2i7sa1ns9pa1hncs2od3a
           NEXT_PUBLIC_CHARISOL_DOMAIN: auth.charisol.io
+          # Baked into the client bundle at build time (NEXT_PUBLIC_) — see
+          # deploy-production.yml's matching comment for the full reasoning. Test-mode key
+          # (same Stripe account as production's live key).
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_51Kt77BDdgt0vAbTGFMtXDg2HBYLQkLIHsDklJ4kIoHHlkSL2b9w2UN6AcK6fHRMEfnsDDbcyv1Cf3qpfWhyrDcnz00Fw8EyrPN
+          # See deploy-production.yml's matching comment — Pusher's "key" is the public one
+          # by design, safe to bake in client-side the same way the Stripe publishable key
+          # above is. Was never wired here before, so getPusherClient() always returned
+          # null in every real deployment.
+          NEXT_PUBLIC_PUSHER_KEY: ${{ secrets.PUSHER_KEY }}
+          NEXT_PUBLIC_PUSHER_CLUSTER: ${{ secrets.PUSHER_CLUSTER }}
+          # lib/db/client.ts now throws if these are missing (outside next build) — but
+          # `next build` itself DOES touch DynamoDB for a handful of statically-generated
+          # routes (/sitemap.xml, /robots.txt, the blog sitemap/feed routes), so the build
+          # step needs real values too, not just the deployed Lambda's own runtime env
+          # (compute-stack.ts's tableEnv, injected separately at deploy time). Before this
+          # was added, those build-time queries silently fell back to the bare PRODUCTION
+          # table names — staging's own sitemap generation has been reading prod's
+          # plexo-content table this whole time. Same names cdk/lib/compute-stack.ts's
+          # nameFor() resolves to for STACK_ID=staging-plexo.
+          PLEXO_CORE_TABLE: plexo-core-staging-plexo
+          PLEXO_LEDGER_TABLE: plexo-ledger-staging-plexo
+          PLEXO_COMMERCE_TABLE: plexo-commerce-staging-plexo
+          PLEXO_CONTENT_TABLE: plexo-content-staging-plexo
+          PLEXO_OPS_TABLE: plexo-ops-staging-plexo
+          PLEXO_IMPORT_TABLE: plexo-import-staging-plexo
         run: npx open-next build
 
       - name: Install CDK project

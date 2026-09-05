@@ -24,7 +24,12 @@ export type EmailDeliveryContext =
   | "withdrawal_request_notification"
   | "script_access_request_notification"
   | "commerce_stripe_access_request_notification"
-  | "commerce_withdrawal_request_notification";
+  | "commerce_withdrawal_request_notification"
+  | "domain_transfer_code"
+  | "domain_renewal_failed"
+  | "lms_magic_link"
+  | "lms_enrollment_confirmation"
+  | "lms_drip_ready";
 
 /**
  * Fire-and-forget write to EmailLog — mirrors this codebase's established

@@ -629,13 +629,19 @@ export const CommerceWalletLedgerEntry = new Entity(
     attributes: {
       id: { type: "string", required: true },
       walletId: { type: "string", required: true },
-      type: { type: ["SALE_CREDIT", "WITHDRAWAL_DEBIT", "WITHDRAWAL_REVERSAL"] as const, required: true },
+      type: {
+        type: ["SALE_CREDIT", "WITHDRAWAL_DEBIT", "WITHDRAWAL_REVERSAL", "DOMAIN_PURCHASE_DEBIT", "DOMAIN_REFUND_CREDIT", "DOMAIN_RENEWAL_DEBIT"] as const,
+        required: true,
+      },
       grossAmountCents: { type: "number" },
       feeCents: { type: "number" },
       netAmountCents: { type: "number", required: true },
       balanceAfterCents: { type: "number", required: true },
       orderId: { type: "string" },
       withdrawalRequestId: { type: "string" },
+      // DOMAIN_PURCHASE_DEBIT/DOMAIN_REFUND_CREDIT/DOMAIN_RENEWAL_DEBIT only — see
+      // lib/domains/registrarProvider.ts's own RegisteredDomain state machine.
+      registeredDomainId: { type: "string" },
       description: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
     },

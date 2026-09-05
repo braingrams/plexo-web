@@ -41,6 +41,17 @@ export const Template = new Entity(
       isBlogLayout: { type: "boolean", default: false },
       isSiteLayoutFragment: { type: "boolean", default: false },
       isCommerceLayout: { type: "boolean", default: false },
+      // True once this site has Funnel/LMS capability attached (an LmsFunnel row exists —
+      // see app/api/v1/lms/funnels/route.ts's POST). Unlike isCommerceLayout/isBlogLayout,
+      // this does NOT exclude the template from /dashboard/templates or /dashboard/pages —
+      // a funnel is still a normal site there, just also filterable/labeled as a Funnel.
+      isLmsFunnel: { type: "boolean", default: false },
+      // A hidden per-lesson design Template (LmsPage.designTemplateId, "full page builder"
+      // content mode) — a real Template, edited via the ordinary PlexoBuilder editor, but
+      // never a standalone site of its own. Excluded from /dashboard/templates and the
+      // Domains connect-a-domain picker (same reason isCommerceLayout/isBlogLayout are),
+      // unlike isLmsFunnel: this one genuinely shouldn't be browsable as "a site."
+      isLmsPageDesign: { type: "boolean", default: false },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },
@@ -183,6 +194,11 @@ export const PublishedDomain = new Entity(
       certificateValidationName: { type: "string" },
       certificateValidationValue: { type: "string" },
       tenantId: { type: "string" },
+      // Set only for domains bought through Plexo (RegisteredDomain below) — every
+      // manually-connected CUSTOM/SUBDOMAIN row simply omits it. This is the hand-off point
+      // the domain-registration reconciliation poller uses to flip the linked
+      // RegisteredDomain to ACTIVE once certificateStatus here reaches ATTACHED.
+      registeredDomainId: { type: "string" },
     },
     indexes: {
       primary: {
@@ -195,6 +211,126 @@ export const PublishedDomain = new Entity(
         index: "GSI1",
         pk: { field: "GSI1PK", composite: ["domain"], template: "DOMAIN#${domain}" },
         sk: { field: "GSI1SK", composite: ["id"], template: "DOMAIN#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Tracks the REGISTRAR/BILLING lifecycle of a domain bought through Plexo — separate from
+// PublishedDomain, which tracks DNS/cert/tenant serving state for any domain (bought here or
+// manually connected). Kept as two entities rather than one because they're genuinely two
+// independent lifecycles: PublishedDomain.registeredDomainId links a row here to the
+// PublishedDomain row created once DNS provisioning starts (see lib/domains/domainDns.ts),
+// and this row's own publishedDomainId mirrors that back once it exists — see
+// lib/domains/registrarProvider.ts's own comment for the full state machine this attribute
+// walks through, end to end.
+export const RegisteredDomain = new Entity(
+  {
+    model: { entity: "registeredDomain", version: "1", service: "plexoContent" },
+    attributes: {
+      id: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      templateId: { type: "string", required: true },
+      domain: { type: "string", required: true },
+      publishedDomainId: { type: "string" },
+
+      registrarProvider: { type: ["ROUTE53", "MANUAL"] as const, required: true },
+      registrarOperationId: { type: "string" },
+      hostedZoneId: { type: "string" },
+
+      // JSON-encoded DomainContact (lib/domains/registrarProvider.ts) collected at purchase
+      // time — RegisterDomain needs a registrant/admin/tech contact and there's nowhere
+      // else in this app that already stores a mailing address to reuse (confirmed: no
+      // existing User/Organization billing-address field). Kept as one JSON blob rather
+      // than a pile of top-level attributes since it's write-once (at PENDING_PAYMENT) and
+      // read-once (by the registration poller when it calls provider.register()).
+      registrantContactJson: { type: "string" },
+
+      status: {
+        type: [
+          "SEARCHING",
+          "PRICED",
+          "PENDING_PAYMENT",
+          "PAYMENT_FAILED",
+          "REGISTERING",
+          "REGISTRATION_FAILED",
+          "DNS_PROVISIONING",
+          "CERT_PENDING",
+          "CERT_ISSUED",
+          "TENANT_ATTACHING",
+          "ACTIVE",
+          "UNLOCK_REQUESTED",
+          "AUTH_CODE_EMAILED",
+          "TRANSFER_PENDING",
+          "TRANSFERRED_OUT",
+          "MANUAL_PENDING",
+          "MANUAL_FULFILLED",
+          "SUSPENDED_NONPAYMENT",
+          "EXPIRED",
+        ] as const,
+        required: true,
+        default: "SEARCHING",
+      },
+      statusReason: { type: "string" },
+      lastPolledAt: { type: "string" },
+
+      // Captured at purchase time, always USD cents (Route53 Domains prices in USD only —
+      // see the Buy-a-Domain plan's own note on why wallet payment is USD-wallet-only for
+      // now rather than converting).
+      purchasePriceUsdCents: { type: "number" },
+      renewalPriceUsdCents: { type: "number" },
+      paymentMethod: { type: ["WALLET", "STRIPE"] as const },
+      paymentReference: { type: "string" },
+      // Captured off the purchase Checkout Session's PaymentIntent (`setup_future_usage:
+      // "off_session"` — see app/api/v1/domains/purchase/route.ts) so
+      // app/api/internal/domain-renewal-billing/route.ts can charge a Stripe-funded renewal
+      // without the customer re-entering a card. Unset for WALLET-funded domains.
+      stripePaymentMethodId: { type: "string" },
+
+      autoRenew: { type: "boolean", default: true },
+      renewalDate: { type: "string" },
+      transferLocked: { type: "boolean", default: true },
+      whoisPrivacyEnabled: { type: "boolean", default: true },
+      eppAuthCodeSentAt: { type: "string" },
+      unlockRequestedAt: { type: "string" },
+      unlockRequestedByUserId: { type: "string" },
+      transferOutDetectedAt: { type: "string" },
+
+      // Renewal-billing bookkeeping (app/api/internal/domain-renewal-billing/route.ts) — a
+      // charge attempt failing once isn't fatal, so these track the grace window before a
+      // domain actually lapses, matching this app's other "retry, warn, then act" patterns
+      // (see e.g. Commerce's expire-stale-holds cron).
+      renewalAttemptCount: { type: "number", default: 0 },
+      renewalGraceUntil: { type: "string" },
+      lastRenewalFailureReason: { type: "string" },
+
+      manualFulfillment: { type: "boolean", default: false },
+      manualAssignedAdminId: { type: "string" },
+      manualNotes: { type: "string" },
+
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["id"], template: "REGISTEREDDOMAIN#${id}" },
+      },
+      // Settings-page/poller lookup by hostname, same shape as PublishedDomain's own hot path.
+      byDomain: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["domain"], template: "DOMAIN#${domain}" },
+        sk: { field: "GSI1SK", composite: ["id"], template: "REGISTEREDDOMAIN#${id}" },
+      },
+      // Poller scan-narrowing — unlike PublishedDomain's plain-scan-is-fine certificate-
+      // attachment cron, the registration/transfer/renewal pollers here run on tighter
+      // cadences against a table expected to scale past low-hundreds of rows.
+      byStatus: {
+        index: "GSI2",
+        pk: { field: "GSI2PK", composite: ["status"], template: "REGISTEREDDOMAINSTATUS#${status}" },
+        sk: { field: "GSI2SK", composite: ["updatedAt", "id"], template: "REGISTEREDDOMAIN#${updatedAt}#${id}" },
       },
     },
   },
@@ -616,6 +752,40 @@ export const Feedback = new Entity(
   { table, client: docClient },
 );
 
+// Generic "coming soon" interest capture — first user: the LMS/Funnel page builder's
+// "Upload video" option, which is wired to show a coming-soon state + a "Notify me" click
+// rather than a real upload flow (raw video hosting/transcoding cost needs deliberate
+// design first, see the Funnel/LMS plan's own cost-implications section). Keyed by an
+// arbitrary `feature` string rather than a one-off "VideoUploadInterest" entity so any
+// future coming-soon flag can reuse this same capture + plexo-admin review shape.
+export const FeatureWaitlist = new Entity(
+  {
+    model: { entity: "featureWaitlist", version: "1", service: "plexoContent" },
+    attributes: {
+      id: { type: "string", required: true },
+      feature: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      userEmail: { type: "string", required: true },
+      userName: { type: "string" },
+      organizationId: { type: "string" },
+      // Optional context — e.g. which funnel they were editing when they clicked "Notify
+      // me" for video upload. Not required: some future feature may not have one.
+      templateId: { type: "string" },
+      note: { type: "string" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+    },
+    indexes: {
+      // One signup per user per feature (userId as SK) — clicking "Notify me" twice is a
+      // no-op, not a duplicate row, via .create()'s attribute_not_exists.
+      primary: {
+        pk: { field: "pk", composite: ["feature"], template: "FEATUREWAITLIST#${feature}" },
+        sk: { field: "sk", composite: ["userId"], template: "WAITLIST#${userId}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 // The Figma-style anchored canvas comments on a template (PlexoBuilder editor) — distinct
 // from BlogComment (public blog post comments) above. Scoped by templateId, not postId:
 // "list this template's whole comment thread" is the real access pattern (grepped every
@@ -685,6 +855,235 @@ export const CommentMention = new Entity(
   { table, client: docClient },
 );
 
+// Funnel/LMS module: a "funnel" is a capability bolted onto an existing Template row, the
+// same way BlogSite/SiteLayout are — not a new Template.kind. This keeps a funnel's
+// domain-publishing, ownership, and template-picker eligibility all free. LmsPage,
+// LmsEnrollment, and LmsPageProgress are co-located under TEMPLATE#${templateId} so
+// "everything about this funnel" is a single query; LmsFunnelAddonSlot lives under the
+// org instead since it tracks a billing relationship (Plexo user -> Plexo), not funnel
+// content.
+export const LmsFunnel = new Entity(
+  {
+    model: { entity: "lmsFunnel", version: "1", service: "plexoContent" },
+    attributes: {
+      id: { type: "string", required: true },
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      // Flips false when the funnel's plan slot or addon-slot subscription is deactivated
+      // (see lib/lms/funnelSlots.ts) — the row and its pages/enrollments are never deleted,
+      // just hidden from visitors, so reactivating a lapsed slot restores everything as-is.
+      enabled: { type: "boolean", default: true },
+      signupMode: { type: ["FREE", "PAID"] as const, default: "FREE" },
+      // Set only when signupMode is PAID — points at a CommerceProduct (kind: DIGITAL) the
+      // admin creates through the existing Commerce product UI. A paid enrollment is
+      // architecturally a digital-product purchase; see lib/lms/enrollment.ts.
+      signupProductId: { type: "string" },
+      requireName: { type: "boolean", default: true },
+      collectPhone: { type: "boolean", default: false },
+      welcomeRedirectPath: { type: "string" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      // One per template (like BlogSite/SiteLayout) — co-located with the site.
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: [], template: "LMSFUNNEL" },
+      },
+      // Slot-gating check: "how many funnels does this org have" (lib/lms/funnelSlots.ts).
+      byOrg: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["organizationId"], template: "ORG#${organizationId}" },
+        sk: { field: "GSI1SK", composite: ["createdAt", "id"], template: "LMSFUNNEL#${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+export const LmsPage = new Entity(
+  {
+    model: { entity: "lmsPage", version: "1", service: "plexoContent" },
+    attributes: {
+      id: { type: "string", required: true },
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      order: { type: "number", required: true },
+      kind: { type: ["WELCOME", "VIDEO", "DOCUMENT", "IMAGE"] as const, required: true },
+      title: { type: "string", required: true },
+      // How a WELCOME page's own content was authored — only meaningful for that kind.
+      // SIMPLE/RAW_HTML both store into bodyHtml (the difference is purely which editor UI
+      // wrote it — a WYSIWYG toolbar vs. a plain textarea of hand-typed HTML); both are
+      // sanitized the same way at render time (sanitizeBlogHtml), since this renders inside
+      // /learn/[templateId] on Plexo's own domain, alongside a real learner session cookie —
+      // unlike a RAW_UPLOAD Template (safe only because it's isolated on its own domain
+      // with no ambient session), unsanitized HTML here would be a real stored-XSS surface
+      // against other visitors' sessions. ADVANCED points at designTemplateId instead — a
+      // real Template edited via the normal PlexoBuilder visual editor and embedded via
+      // iframe, already sanitized by that pipeline's own existing save-time sanitizer.
+      contentMode: { type: ["SIMPLE", "RAW_HTML", "ADVANCED"] as const, default: "SIMPLE" },
+      bodyHtml: { type: "string" },
+      // Set once an admin switches a page to ADVANCED (full page builder) mode — see
+      // app/api/v1/lms/funnels/[templateId]/pages/[pageId]/design/route.ts. Kept even after
+      // switching back to SIMPLE/RAW_HTML so re-enabling ADVANCED never loses prior work.
+      designTemplateId: { type: "string" },
+      youtubeVideoId: { type: "string" },
+      assetUrl: { type: "string" },
+      assetFileName: { type: "string" },
+      assetMimeType: { type: "string" },
+      assetSizeBytes: { type: "number" },
+      // Opaque JSON (lib/lms/rules.ts's LmsPageUnlockRules), not a typed ElectroDB shape —
+      // this is exactly what lets a future condition type (e.g. QUIZ_PASS's authoring UI)
+      // ship with zero migration: the DynamoDB attribute never changes shape either way.
+      unlockRules: { type: "any" },
+      visible: { type: "boolean", default: true },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      // Direct get-by-id — learner content fetch, admin edit.
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["id"], template: "PAGE#${id}" },
+      },
+      // Ordered listing + reorder — the builder's and the learner portal's real access
+      // pattern, same split as Template's own primary-by-id + byParent-GSI-for-order.
+      byOrder: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["templateId"], template: "TEMPLATEPAGES#${templateId}" },
+        sk: { field: "GSI1SK", composite: ["order", "id"], template: "PAGE#${order}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+export const LmsEnrollment = new Entity(
+  {
+    model: { entity: "lmsEnrollment", version: "1", service: "plexoContent" },
+    attributes: {
+      id: { type: "string", required: true },
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      // Lowercased — the SK itself. Enforces one enrollment per email per funnel via
+      // .create()'s attribute_not_exists, same trick TemplateAsset/BlogPost/BlogRedirect
+      // use for their own unique constraints.
+      email: { type: "string", required: true },
+      name: { type: "string" },
+      phone: { type: "string" },
+      status: { type: ["ACTIVE", "REVOKED"] as const, default: "ACTIVE" },
+      paymentStatus: { type: ["FREE", "PAID", "REFUNDED"] as const, default: "FREE" },
+      commerceOrderId: { type: "string" },
+      enrolledAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      lastActiveAt: { type: "string" },
+      // Denormalized so the admin enrollment-list view never fans out into an
+      // LmsPageProgress query per row just to render "3/7 pages".
+      completedPageCount: { type: "number", default: 0 },
+      lastCompletedAt: { type: "string" },
+      completedAt: { type: "string" },
+      revokedAt: { type: "string" },
+      revokedByUserId: { type: "string" },
+      // Resend rate-limiting for the "reach out" / resend-magic-link admin action.
+      magicLinkLastSentAt: { type: "string" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["email"], template: "ENROLLMENT#${email}" },
+      },
+      // Admin's recent-signups list — the ordering the primary SK (alphabetical by email)
+      // can't give. No org-wide GSI: only a per-funnel admin view is a real requirement
+      // today: a cross-funnel CRM view is a documented gap, same discipline as
+      // RegisteredDomain/PublishedDomain's own gaps, not built speculatively.
+      byEnrolledAt: {
+        index: "GSI2",
+        pk: { field: "GSI2PK", composite: ["templateId"], template: "TEMPLATEENROLL#${templateId}" },
+        sk: { field: "GSI2SK", composite: ["enrolledAt", "email"], template: "ENROLLMENT#${enrolledAt}#${email}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+export const LmsPageProgress = new Entity(
+  {
+    model: { entity: "lmsPageProgress", version: "1", service: "plexoContent" },
+    attributes: {
+      templateId: { type: "string", required: true },
+      email: { type: "string", required: true },
+      pageId: { type: "string", required: true },
+      firstViewedAt: { type: "string" },
+      completedAt: { type: "string" },
+      adminApprovedAt: { type: "string" },
+      adminApprovedByUserId: { type: "string" },
+      // Set by app/api/internal/lms-drip-reminder/route.ts the one time it emails a learner
+      // that this page just unlocked — dedup marker so the daily sweep never re-notifies for
+      // the same unlock. Not otherwise read by the rule engine (lib/lms/rules.ts).
+      dripReminderSentAt: { type: "string" },
+    },
+    indexes: {
+      // begins_with on PROGRESS#${email}# returns one learner's whole progress in a single
+      // query — both the unlock evaluator and the admin drill-in need exactly this, and
+      // neither needs a GSI. A row is written only on a real event (first view, completion,
+      // admin approval) — never pre-allocated one-row-per-page-per-learner up front.
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["email", "pageId"], template: "PROGRESS#${email}#${pageId}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Tracks the RECURRING billing lifecycle of one extra, paid funnel slot (Plexo user ->
+// Plexo) — deliberately one Stripe Subscription object per slot, not shared line items, so
+// a payment failure on one slot's subscription can be handled independently of every other
+// slot/plan subscription on the org. A slot is NOT bound to a specific funnel at purchase
+// time — it just adds +1 to the org's available-funnel-slot count (lib/lms/funnelSlots.ts's
+// getAvailableFunnelSlots); which funnel(s) actually benefit is simply "however many are
+// enabled" up to that count. This is deliberately simpler than pre-binding a slot to a
+// funnel that may not exist yet: losing a slot (cancellation/payment failure) just re-runs
+// the same capacity-vs-enabled-count reconciliation a plan downgrade already needs
+// (lib/lms/funnelSlots.ts's reconcileFunnelSlotsForOrg), disabling the oldest enabled
+// funnel(s) over budget — one shared mechanism for both cases instead of two.
+export const LmsFunnelAddonSlot = new Entity(
+  {
+    model: { entity: "lmsFunnelAddonSlot", version: "1", service: "plexoContent" },
+    attributes: {
+      id: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      // Purely informational — which funnel the admin happened to be trying to create/save
+      // when they bought this slot, if any. Never read by the gating/reconciliation logic.
+      templateId: { type: "string" },
+      status: {
+        type: ["PENDING_PAYMENT", "ACTIVE", "PAST_DUE", "CANCELLED", "PAYMENT_FAILED"] as const,
+        required: true,
+        default: "PENDING_PAYMENT",
+      },
+      stripeSubscriptionId: { type: "string" },
+      stripePriceId: { type: "string" },
+      activatedAt: { type: "string" },
+      pastDueAt: { type: "string" },
+      cancelledAt: { type: "string" },
+      lastPaymentFailureReason: { type: "string" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      // "This org's addon slots" is the primary key itself — no GSI needed, same as
+      // CommerceDeliveryMethod's own comment about not needing one when a plain SK-prefix
+      // scan already answers the only real question.
+      primary: {
+        pk: { field: "pk", composite: ["organizationId"], template: "ORG#${organizationId}" },
+        sk: { field: "sk", composite: ["id"], template: "SLOT#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoContentService = new Service(
   {
     Template,
@@ -692,6 +1091,7 @@ export const plexoContentService = new Service(
     TemplateAsset,
     TemplatePurchase,
     PublishedDomain,
+    RegisteredDomain,
     BlogSite,
     SiteLayout,
     BlogAuthor,
@@ -706,8 +1106,14 @@ export const plexoContentService = new Service(
     TemplateGenerationJob,
     ScriptAccessRequest,
     Feedback,
+    FeatureWaitlist,
     Comment,
     CommentMention,
+    LmsFunnel,
+    LmsPage,
+    LmsEnrollment,
+    LmsPageProgress,
+    LmsFunnelAddonSlot,
   },
   { table, client: docClient },
 );

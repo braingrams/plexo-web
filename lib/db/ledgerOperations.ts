@@ -3,7 +3,7 @@ import { EntityItem } from "electrodb";
 import { docClient } from "./client";
 import { User } from "./coreEntities";
 import { CreditLedgerEntry, StripeEvent } from "./ledgerEntities";
-import { PLAN_MONTHLY_CREDITS } from "@/lib/subscription";
+import { PLAN_MONTHLY_CREDITS, type SubscriptionPlan } from "@/lib/subscription";
 import { computeCostUsd, creditsForUsd } from "@/lib/credits/pricing";
 import { MAX_TOKENS } from "@/lib/ai/generate";
 import type { AiActionMode, AiProvider, ConcreteTier, GenerateOutcome } from "@/lib/ai/types";
@@ -259,6 +259,53 @@ export async function ensureCreditPeriod(userId: string): Promise<CreditBalance>
     const freshTopup = freshUser.topupBalance ?? 0;
     const freshResetAt = freshUser.allowanceResetAt ?? nextResetAt;
     return { allowanceBalance: freshAllowance, topupBalance: freshTopup, total: freshAllowance + freshTopup, allowanceResetAt: freshResetAt };
+  }
+}
+
+/**
+ * Forces an immediate allowance refresh to the new plan's monthly amount, bypassing
+ * ensureCreditPeriod's own lazy gate (it only grants once the CURRENT period naturally
+ * expires, up to ALLOWANCE_PERIOD_MS away). Called from the Stripe subscription webhook
+ * right when a plan change is confirmed — without this, upgrading (or downgrading)
+ * mid-period left the OLD plan's allowance untouched until its existing reset date
+ * eventually rolled around, which read as "I just paid for Pro and still have Free
+ * credits." Same replace-not-add semantics as ensureCreditPeriod's own rollover (this is
+ * the existing model applied immediately, not a new policy), and the same
+ * optimistic-lock-then-reread-on-race shape as the rest of this file.
+ */
+export async function grantPlanChangeAllowance(userId: string, newPlan: SubscriptionPlan): Promise<void> {
+  const { data } = await User.get({ id: userId }).go();
+  if (!data) return;
+  const user = data as UserItem;
+  const topupBalance = user.topupBalance ?? 0;
+  const previousAllowanceResetAt = user.allowanceResetAt ?? new Date(0).toISOString();
+
+  const grant = PLAN_MONTHLY_CREDITS[newPlan];
+  const nextResetAt = new Date(Date.now() + ALLOWANCE_PERIOD_MS).toISOString();
+
+  const updateUser = User.patch({ id: userId })
+    .set({ allowanceBalance: grant, allowanceResetAt: nextResetAt })
+    .where((attr, op) => op.eq(attr.allowanceResetAt, previousAllowanceResetAt))
+    .params();
+
+  const createEntry = CreditLedgerEntry.create({
+    id: crypto.randomUUID(),
+    userId,
+    type: "MONTHLY_GRANT",
+    amount: grant,
+    balanceAfter: grant + topupBalance,
+    description: `Plan changed to ${newPlan} — allowance refreshed`,
+  }).params();
+
+  try {
+    await docClient.send(buildTransactWrite(updateUser, createEntry));
+  } catch (err) {
+    if (!isConditionalCheckFailure(err)) throw err;
+    // Someone else (most likely ensureCreditPeriod itself, from a concurrent AI request)
+    // already moved allowanceResetAt between our read and write — the balance is already
+    // in a valid, current state, just not necessarily this exact grant if that race was
+    // itself a natural period rollover. Not worth a retry loop for a webhook-driven,
+    // one-off credit; the next real usage still goes through ensureCreditPeriod normally.
   }
 }
 

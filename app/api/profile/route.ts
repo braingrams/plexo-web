@@ -17,6 +17,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     manageLandingPagePublishing?: boolean;
     hideBranding?: boolean;
     pendingPlan?: null;
+    funnelBuilderLevel?: string;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -29,6 +30,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     layoutMode?: "CLASSIC" | "MODERN";
     manageLandingPagePublishing?: boolean;
     hideBranding?: boolean;
+    funnelBuilderLevel?: "BEGINNER" | "INTERMEDIATE" | "PROFESSIONAL";
   } = {};
   let clearPendingPlan = false;
 
@@ -79,6 +81,13 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       }
     }
     data.hideBranding = body.hideBranding;
+  }
+
+  if (body.funnelBuilderLevel !== undefined) {
+    if (body.funnelBuilderLevel !== "BEGINNER" && body.funnelBuilderLevel !== "INTERMEDIATE" && body.funnelBuilderLevel !== "PROFESSIONAL") {
+      return NextResponse.json({ error: "Invalid value for funnelBuilderLevel." }, { status: 400 });
+    }
+    data.funnelBuilderLevel = body.funnelBuilderLevel;
   }
 
   if (body.pendingPlan !== undefined) {

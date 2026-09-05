@@ -85,13 +85,34 @@ jobs:
         env:
           PLEXO_ENV: staging
           NEXT_PUBLIC_PAGES_DOMAIN: plexo.aws.charisol.io
+          # lib/db/client.ts now throws if these are missing (outside next build) — but
+          # `next build` itself DOES touch DynamoDB for a handful of statically-generated
+          # routes (/sitemap.xml, /robots.txt, the blog sitemap/feed routes). PR previews
+          # share staging's real tables (same TABLE_STACK_ID: staging-plexo the actual CDK
+          # deploy step below already uses), not their own.
+          PLEXO_CORE_TABLE: plexo-core-staging-plexo
+          PLEXO_LEDGER_TABLE: plexo-ledger-staging-plexo
+          PLEXO_COMMERCE_TABLE: plexo-commerce-staging-plexo
+          PLEXO_CONTENT_TABLE: plexo-content-staging-plexo
+          PLEXO_OPS_TABLE: plexo-ops-staging-plexo
+          PLEXO_IMPORT_TABLE: plexo-import-staging-plexo
         run: npx open-next build
 
       - name: Install & build CDK project
         working-directory: ./cdk
         run: npm install
 
-      - name: Deploy the PR's compute stack only — never --all, never the data stack
+      # CloudFront refuses to accept a NEW alias unless that hostname's DNS ALREADY
+      # resolves correctly (confirmed by a real deploy failure: "includes an incorrectly
+      # configured DNS record that points to another CloudFront distribution" — CloudFront
+      # returns that same message whether the record points elsewhere OR doesn't exist at
+      # all yet). A brand new PR's distribution domain is only known AFTER a deploy
+      # succeeds, so the very first time this alias is attached is a real chicken-and-egg
+      # problem. Deploying WITHOUT the custom domain first, then pointing DNS at whatever
+      # bare *.cloudfront.net domain that produces, then deploying AGAIN with the domain
+      # now that DNS resolves correctly, breaks the cycle — the second deploy is a fast
+      # no-op update once DNS/alias are already correct (every push after the first).
+      - name: Deploy the PR's compute stack (bare domain first)
         working-directory: ./cdk
         env:
           TABLE_STACK_ID: staging-plexo
@@ -104,6 +125,42 @@ jobs:
         # CfnOutput) without scraping cdk's human-oriented stdout.
         run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively --outputs-file cdk-outputs.json
 
+      # Points pr-<N>.plexo.aws.charisol.io at whatever real *.cloudfront.net domain the
+      # bare deploy above produced. plexo.aws.charisol.io is a Route53 zone already owned
+      # by this same AWS account (Z08127631OJ16MLNL9RH) — using it instead of Cloudflare
+      # means this needs no separate DNS credential at all, just the same OIDC role already
+      # assumed for the CDK deploy above. UPSERT is create-or-update in one call (no need
+      # to look up an existing record first, unlike Cloudflare's API).
+      - name: Point pr-<N>.plexo.aws.charisol.io at that bare distribution
+        run: |
+          PREVIEW_HOSTNAME="pr-${PR_NUMBER}.plexo.aws.charisol.io"
+          DISTRIBUTION_DOMAIN=$(node -pe "require('./cdk/cdk-outputs.json')['${STACK_ID}-compute-stack'].DistributionDomainName")
+
+          CHANGE_BATCH=$(node -pe "JSON.stringify({Changes:[{Action:'UPSERT',ResourceRecordSet:{Name:process.argv[1],Type:'CNAME',TTL:60,ResourceRecords:[{Value:process.argv[2]}]}}]})" "$PREVIEW_HOSTNAME" "$DISTRIBUTION_DOMAIN")
+          aws route53 change-resource-record-sets --hosted-zone-id Z08127631OJ16MLNL9RH --change-batch "$CHANGE_BATCH"
+          echo "Pointed ${PREVIEW_HOSTNAME} -> ${DISTRIBUTION_DOMAIN}"
+
+          # CloudFront's own alias-acceptance check isn't instant even against Route53 —
+          # give it a moment before retrying with the alias attached, rather than racing it
+          # and hitting the exact same failure this whole bare-domain-first dance exists to
+          # avoid.
+          sleep 30
+
+      - name: Deploy the PR's compute stack again (now with the custom domain)
+        working-directory: ./cdk
+        env:
+          TABLE_STACK_ID: staging-plexo
+          LEDGER_KMS_KEY_ARN: arn:aws:kms:us-east-1:919927637684:key/91672c29-e32c-4524-ad2d-b9b2b2b1ef92
+          # APP_CERT_ARN imports the already-issued wildcard cert for
+          # *.plexo.aws.charisol.io (compute-stack.ts's own appCertArn prop skips
+          # creating+DNS-validating a brand-new per-PR cert when this is set) — safe to
+          # reuse across every PR's own distribution simultaneously, ACM certs aren't
+          # exclusive to one distribution. DNS now resolves (previous step), so CloudFront
+          # accepts the alias this time.
+          APP_DOMAIN: pr-${{ github.event.number }}.plexo.aws.charisol.io
+          APP_CERT_ARN: arn:aws:acm:us-east-1:919927637684:certificate/841223fd-8978-4046-bc57-d58cd402b62d
+        run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively --outputs-file cdk-outputs.json
+
       # Sticky comment (found-and-edited by its own marker, never re-posted) so pushing more
       # commits to the same PR updates one comment in place instead of spamming a new one on
       # every `synchronize` re-run. This is the actual point of this whole workflow from a
@@ -113,8 +170,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          DOMAIN=$(node -pe "require('./cdk/cdk-outputs.json')['${STACK_ID}-compute-stack'].DistributionDomainName")
-          PREVIEW_URL="https://${DOMAIN}"
+          PREVIEW_URL="https://pr-${PR_NUMBER}.plexo.aws.charisol.io"
           MARKER="<!-- pr-preview-link -->"
           BODY=$(printf '%s\n### 🔗 PR Preview\n\nThis PR'\''s preview environment: **%s**\n\nDeployed from %s. Redeploys automatically on every push to this PR; torn down automatically when it'\''s closed.' "$MARKER" "$PREVIEW_URL" "${{ github.sha }}")
 

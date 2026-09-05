@@ -3,7 +3,8 @@ import { isAuthorizedAdmin } from "@/server/adminAuth";
 import { isCronRequest } from "@/lib/cronAuth";
 import { getCertificateStatus } from "@/lib/acmCertificates";
 import { createOrAttachTenant } from "@/lib/cloudfrontDomains";
-import { PublishedDomain } from "@/lib/db/contentEntities";
+import { resolveRegistrarProvider } from "@/lib/domains/registrarProvider";
+import { PublishedDomain, RegisteredDomain } from "@/lib/db/contentEntities";
 
 /**
  * GET /api/internal/certificate-attachment
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const pending: Array<{ templateId: string; id: string; domain: string; certificateArn?: string }> = [];
+  const pending: Array<{ templateId: string; id: string; domain: string; certificateArn?: string; registeredDomainId?: string }> = [];
   let cursor: string | null = null;
   for (;;) {
     const page: { data: typeof pending; cursor: string | null } = await PublishedDomain.scan
@@ -60,6 +61,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           .set({ certificateStatus: "ATTACHED", tenantId })
           .go();
         attached++;
+
+        // Hand-off point for a domain bought through Plexo (see the Buy-a-Domain plan) —
+        // registeredDomainId is only ever set on a PublishedDomain row the domain-
+        // registration poller created (app/api/internal/domain-registration-poller), never
+        // on a manually-connected CUSTOM domain, so this is a no-op for every domain this
+        // route already handled before that feature existed.
+        if (domain.registeredDomainId) {
+          await RegisteredDomain.patch({ templateId: domain.templateId, id: domain.registeredDomainId })
+            .set({ status: "ACTIVE" })
+            .go();
+          // Route53 Domains' own native auto-renew, if left on, would charge THIS AWS
+          // account directly at renewal regardless of whether the customer's own wallet/
+          // card charge (app/api/internal/domain-renewal-billing/route.ts) succeeds —
+          // a real revenue leak. Disabling it here makes Plexo's own renewal poller the
+          // sole driver, matching the Buy-a-Domain plan's explicit recommendation. Best-
+          // effort: never block the domain going ACTIVE over this.
+          const { kind, provider } = await resolveRegistrarProvider(domain.domain);
+          if (kind === "ROUTE53") {
+            await provider.disableAutoRenew(domain.domain).catch((err) =>
+              console.error(`Failed to disable Route53 native auto-renew for ${domain.domain} (Plexo's own renewal billing still applies):`, err),
+            );
+          }
+        }
       } else if (status === "FAILED" || status === "VALIDATION_TIMED_OUT" || status === "REVOKED" || status === "EXPIRED") {
         await PublishedDomain.patch({ templateId: domain.templateId, id: domain.id }).set({ certificateStatus: "FAILED" }).go();
         failed++;
