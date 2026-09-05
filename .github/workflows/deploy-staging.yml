@@ -225,6 +225,10 @@ jobs:
           # ARN — see compute-stack.ts's own ledgerKmsKeyArn comment for why an alias ARN
           # silently fails to authorize the kms:Decrypt calls DynamoDB actually makes.
           LEDGER_KMS_KEY_ARN: arn:aws:kms:us-east-1:919927637684:key/91672c29-e32c-4524-ad2d-b9b2b2b1ef92
+          # Cache-busting suffix baked into every published storefront's commerce.js
+          # <script src> — see compute-stack.ts's own assetVersion comment. github.sha
+          # changes on every deploy, which is exactly what's needed here.
+          ASSET_VERSION: ${{ github.sha }}
         run: npx aws-cdk deploy "${STACK_ID}-compute-stack" --require-approval never --exclusively
 
       - name: Deploy the published-sites stack
@@ -248,6 +252,20 @@ jobs:
           INCLUDE_BARE_WILDCARD_DOMAIN: "false"
           APP_URL: https://d3i92fgfanqz2.cloudfront.net
         run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
+
+      # See deploy-production.yml's matching step for why this exists alongside the
+      # shorter origin Cache-Control and the ?v=<sha> query param, and why it's
+      # continue-on-error (this role's IAM permissions outside `cdk deploy` itself aren't
+      # verified — a permissions gap here must not fail the deploy or skip the smoke test).
+      - name: Invalidate CloudFront cache for commerce.js
+        working-directory: ./cdk
+        continue-on-error: true
+        run: |
+          DISTRIBUTION_ID=$(aws cloudformation describe-stacks \
+            --stack-name "${STACK_ID}-published-sites-stack" \
+            --query "Stacks[0].Outputs[?OutputKey=='PrimaryDistributionId'].OutputValue" \
+            --output text)
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths "/commerce.js"
 
       # Checks staging-plexo.charisol.io directly, NOT the distribution's own
       # *.cloudfront.net domain — now that NEXT_PUBLIC_APP_URL is the custom domain,

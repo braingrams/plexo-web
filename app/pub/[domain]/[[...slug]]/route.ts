@@ -133,7 +133,11 @@ function injectBrandingBar(html: string, ctaHref: string): string {
 // Commerce-disabled site never gets this tag at all, see the call site's CommerceSettings
 // gate.
 function injectCommerceScript(html: string): string {
-  const scriptTag = `<script src="/commerce.js" defer></script>`;
+  // ?v=<deploy sha> busts both CloudFront and any visitor's browser cache on every
+  // deploy — see cdk/lib/compute-stack.ts's assetVersion comment for why the origin's
+  // own shorter Cache-Control on commerce.js isn't enough by itself (a browser that
+  // already cached the pre-fix immutable response never re-requests this exact URL).
+  const scriptTag = `<script src="/commerce.js?v=${process.env.ASSET_VERSION ?? "dev"}" defer></script>`;
   const maskedHtml = html.replace(
     /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
     (block) => " ".repeat(block.length),
