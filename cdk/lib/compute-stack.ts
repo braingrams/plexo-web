@@ -12,6 +12,7 @@ import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 import * as cr from "aws-cdk-lib/custom-resources";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as path from "node:path";
+import * as fs from "node:fs";
 import { buildLogGroup, buildCloudFrontWebAcl, isWafEnabled } from "./conventions";
 
 // Real OpenNext deployment (SSR Lambda + image-optimization Lambda + CloudFront + S3 +
@@ -104,6 +105,17 @@ if (!originVerifySecret) throw new Error("ORIGIN_VERIFY_SECRET is required (see 
 const cronSecret = process.env.CRON_SECRET;
 if (!cronSecret) throw new Error("CRON_SECRET is required (see CRON_SECRET in SSM for this environment — /plexo/<env>/CRON_SECRET).");
 
+// Cache-busting suffix for the unhashed, unversioned public/commerce.js URL that
+// app/pub/[domain]/[[...slug]]/route.ts's injectCommerceScript() embeds into every
+// published storefront — see that file's own comment. The deploy workflows set this to
+// `github.sha`, so every deploy serves commerce.js from a brand-new URL: this is what
+// actually invalidates it for real visitors' BROWSERS, which is a gap DeployCommerceJs's
+// shorter Cache-Control below can't close by itself — a browser that already cached the
+// old immutable response never re-requests the same URL until that year-long max-age
+// elapses, no matter what CloudFront/the origin serve on a later request. Defaults to
+// "dev" locally/in PR previews, where staleness doesn't matter.
+const assetVersion = process.env.ASSET_VERSION ?? "dev";
+
 // Optional real custom domain for the dashboard's own distribution (e.g.
 // "plexo.charisol.io" for production) — omitted for staging/PR previews, which stay on
 // their own bare *.cloudfront.net domain. charisol.io's DNS lives on Cloudflare, not
@@ -154,7 +166,7 @@ export class ComputeStack extends cdk.Stack {
       removalPolicy,
       autoDeleteObjects: !isProd,
     });
-    new s3deploy.BucketDeployment(this, "DeployAssets", {
+    const deployAssets = new s3deploy.BucketDeployment(this, "DeployAssets", {
       sources: [s3deploy.Source.asset(path.join(OPEN_NEXT_DIR, "assets"))],
       destinationBucket: assetsBucket,
       destinationKeyPrefix: "_assets",
@@ -163,6 +175,26 @@ export class ComputeStack extends cdk.Stack {
       cacheControl: [s3deploy.CacheControl.fromString("public,max-age=31536000,immutable")],
       prune: false,
     });
+
+    // commerce.js is the one file under _assets/ that published-sites-stack.ts routes
+    // through CACHING_OPTIMIZED (see that file's "commerce.js" cacheBehavior) that is
+    // NEITHER content-hashed (unlike _next/*) NOR immutable per-upload content (unlike
+    // uploads/*) — it's a single shared, unhashed script the platform ships and can
+    // change on any deploy. DeployAssets above stamps the *entire* assets tree with a
+    // year-long immutable Cache-Control, so it was inheriting that header too: real
+    // storefronts kept serving a pre-fix commerce.js for days after the fix had already
+    // landed and redeployed, because CloudFront never had a reason to re-check the
+    // origin. This second deployment overwrites just that one object with a short,
+    // revalidating Cache-Control — ordered (via addDependency) to run after DeployAssets
+    // so its header is the one left standing on the shared key both deployments write.
+    const deployCommerceJs = new s3deploy.BucketDeployment(this, "DeployCommerceJs", {
+      sources: [s3deploy.Source.data("commerce.js", fs.readFileSync(path.join(OPEN_NEXT_DIR, "assets", "commerce.js"), "utf-8"))],
+      destinationBucket: assetsBucket,
+      destinationKeyPrefix: "_assets",
+      cacheControl: [s3deploy.CacheControl.fromString("public,max-age=60,must-revalidate")],
+      prune: false,
+    });
+    deployCommerceJs.node.addDependency(deployAssets);
 
     // This bucket is ALSO read by published-sites-stack.ts's own separate CloudFront
     // distribution (via s3.Bucket.fromBucketName + an imported-bucket origin there) — but
@@ -247,7 +279,7 @@ export class ComputeStack extends cdk.Stack {
       // populated (via SSM) for ordinary Node-runtime route handlers in the very same
       // Lambda. Setting it directly here is required at `cdk deploy` time anyway
       // (originVerifySecret throws above if unset), so this has no new operational cost.
-      environment: { ...commonEnv, ...tableEnv, PLEXO_ENV: ssmEnv, PLEXO_ORIGIN_VERIFY_SECRET: originVerifySecret!, CRON_SECRET: cronSecret! },
+      environment: { ...commonEnv, ...tableEnv, PLEXO_ENV: ssmEnv, PLEXO_ORIGIN_VERIFY_SECRET: originVerifySecret!, CRON_SECRET: cronSecret!, ASSET_VERSION: assetVersion },
       logGroup: buildLogGroup(this, "ServerFn"),
     });
     assetsBucket.grantReadWrite(serverFn);
