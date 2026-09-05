@@ -32,7 +32,7 @@ export default async function DomainsPage() {
   // PublishedDomain of their own, so listing them here would let someone "link a domain"
   // to a page that can't actually be a site root.
   const landingPages = orgTemplates
-    .filter((t) => t.kind === "LANDING_PAGE" && !t.parentId && !t.isBlogLayout && !t.isCommerceLayout)
+    .filter((t) => t.kind === "LANDING_PAGE" && !t.parentId && !t.isBlogLayout && !t.isCommerceLayout && !t.isLmsPageDesign)
     // Tie-break on createdAt — the org-backfill migration bumped every template's
     // updatedAt to the same instant.
     .sort((a, b) => {

@@ -29,6 +29,9 @@ export const ac = createAccessControl({
   // Commerce: products, categories, availability, orders/refunds, and Commerce settings
   // (Paystack + MailDrip config). Same Owner/Admin/Editor ladder as template/blog.
   commerce: ["create", "update", "delete", "publish"],
+  // Funnel/LMS: funnel settings, pages, and viewing/managing enrollments. Same
+  // Owner/Admin/Editor ladder as template/blog/commerce.
+  lms: ["create", "update", "delete", "publish"],
 } as const);
 
 // Billing stays with whichever member created the organization (the Owner) —
@@ -46,6 +49,7 @@ export const roles = {
     comment: ["create", "resolve"],
     blog: ["create", "update", "delete", "publish"],
     commerce: ["create", "update", "delete", "publish"],
+    lms: ["create", "update", "delete", "publish"],
   }),
   admin: ac.newRole({
     member: ["create", "update", "delete"],
@@ -56,12 +60,14 @@ export const roles = {
     comment: ["create", "resolve"],
     blog: ["create", "update", "delete", "publish"],
     commerce: ["create", "update", "delete", "publish"],
+    lms: ["create", "update", "delete", "publish"],
   }),
   editor: ac.newRole({
     template: ["create", "update", "delete", "publish"],
     comment: ["create", "resolve"],
     blog: ["create", "update", "delete", "publish"],
     commerce: ["create", "update", "delete", "publish"],
+    lms: ["create", "update", "delete", "publish"],
   }),
   // Blog-only staff role: can write/publish blog posts and nothing else — no template
   // (page) access, no commerce, no domain/billing/apiKey. For a team member who should

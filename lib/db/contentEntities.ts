@@ -41,6 +41,17 @@ export const Template = new Entity(
       isBlogLayout: { type: "boolean", default: false },
       isSiteLayoutFragment: { type: "boolean", default: false },
       isCommerceLayout: { type: "boolean", default: false },
+      // True once this site has Funnel/LMS capability attached (an LmsFunnel row exists —
+      // see app/api/v1/lms/funnels/route.ts's POST). Unlike isCommerceLayout/isBlogLayout,
+      // this does NOT exclude the template from /dashboard/templates or /dashboard/pages —
+      // a funnel is still a normal site there, just also filterable/labeled as a Funnel.
+      isLmsFunnel: { type: "boolean", default: false },
+      // A hidden per-lesson design Template (LmsPage.designTemplateId, "full page builder"
+      // content mode) — a real Template, edited via the ordinary PlexoBuilder editor, but
+      // never a standalone site of its own. Excluded from /dashboard/templates and the
+      // Domains connect-a-domain picker (same reason isCommerceLayout/isBlogLayout are),
+      // unlike isLmsFunnel: this one genuinely shouldn't be browsable as "a site."
+      isLmsPageDesign: { type: "boolean", default: false },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },
@@ -901,7 +912,22 @@ export const LmsPage = new Entity(
       order: { type: "number", required: true },
       kind: { type: ["WELCOME", "VIDEO", "DOCUMENT", "IMAGE"] as const, required: true },
       title: { type: "string", required: true },
+      // How a WELCOME page's own content was authored — only meaningful for that kind.
+      // SIMPLE/RAW_HTML both store into bodyHtml (the difference is purely which editor UI
+      // wrote it — a WYSIWYG toolbar vs. a plain textarea of hand-typed HTML); both are
+      // sanitized the same way at render time (sanitizeBlogHtml), since this renders inside
+      // /learn/[templateId] on Plexo's own domain, alongside a real learner session cookie —
+      // unlike a RAW_UPLOAD Template (safe only because it's isolated on its own domain
+      // with no ambient session), unsanitized HTML here would be a real stored-XSS surface
+      // against other visitors' sessions. ADVANCED points at designTemplateId instead — a
+      // real Template edited via the normal PlexoBuilder visual editor and embedded via
+      // iframe, already sanitized by that pipeline's own existing save-time sanitizer.
+      contentMode: { type: ["SIMPLE", "RAW_HTML", "ADVANCED"] as const, default: "SIMPLE" },
       bodyHtml: { type: "string" },
+      // Set once an admin switches a page to ADVANCED (full page builder) mode — see
+      // app/api/v1/lms/funnels/[templateId]/pages/[pageId]/design/route.ts. Kept even after
+      // switching back to SIMPLE/RAW_HTML so re-enabling ADVANCED never loses prior work.
+      designTemplateId: { type: "string" },
       youtubeVideoId: { type: "string" },
       assetUrl: { type: "string" },
       assetFileName: { type: "string" },
@@ -991,6 +1017,10 @@ export const LmsPageProgress = new Entity(
       completedAt: { type: "string" },
       adminApprovedAt: { type: "string" },
       adminApprovedByUserId: { type: "string" },
+      // Set by app/api/internal/lms-drip-reminder/route.ts the one time it emails a learner
+      // that this page just unlocked — dedup marker so the daily sweep never re-notifies for
+      // the same unlock. Not otherwise read by the rule engine (lib/lms/rules.ts).
+      dripReminderSentAt: { type: "string" },
     },
     indexes: {
       // begins_with on PROGRESS#${email}# returns one learner's whole progress in a single
@@ -1007,9 +1037,16 @@ export const LmsPageProgress = new Entity(
 );
 
 // Tracks the RECURRING billing lifecycle of one extra, paid funnel slot (Plexo user ->
-// Plexo) — deliberately one Stripe Subscription object per slot, not shared line items,
-// so a payment failure on one slot deactivates only that slot's templateId while every
-// other funnel/slot on the org is untouched. See lib/lms/activateFunnelAddonSlot.ts.
+// Plexo) — deliberately one Stripe Subscription object per slot, not shared line items, so
+// a payment failure on one slot's subscription can be handled independently of every other
+// slot/plan subscription on the org. A slot is NOT bound to a specific funnel at purchase
+// time — it just adds +1 to the org's available-funnel-slot count (lib/lms/funnelSlots.ts's
+// getAvailableFunnelSlots); which funnel(s) actually benefit is simply "however many are
+// enabled" up to that count. This is deliberately simpler than pre-binding a slot to a
+// funnel that may not exist yet: losing a slot (cancellation/payment failure) just re-runs
+// the same capacity-vs-enabled-count reconciliation a plan downgrade already needs
+// (lib/lms/funnelSlots.ts's reconcileFunnelSlotsForOrg), disabling the oldest enabled
+// funnel(s) over budget — one shared mechanism for both cases instead of two.
 export const LmsFunnelAddonSlot = new Entity(
   {
     model: { entity: "lmsFunnelAddonSlot", version: "1", service: "plexoContent" },
@@ -1017,10 +1054,9 @@ export const LmsFunnelAddonSlot = new Entity(
       id: { type: "string", required: true },
       organizationId: { type: "string", required: true },
       userId: { type: "string", required: true },
-      // Set at creation — either an existing over-quota funnel, or the funnel-to-be-created
-      // (the create-funnel flow buys a slot first, then creates the Template+LmsFunnel only
-      // once the slot activates).
-      templateId: { type: "string", required: true },
+      // Purely informational — which funnel the admin happened to be trying to create/save
+      // when they bought this slot, if any. Never read by the gating/reconciliation logic.
+      templateId: { type: "string" },
       status: {
         type: ["PENDING_PAYMENT", "ACTIVE", "PAST_DUE", "CANCELLED", "PAYMENT_FAILED"] as const,
         required: true,

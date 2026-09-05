@@ -78,6 +78,26 @@ export function buildLmsMagicLinkEmail(funnelName: string, actionUrl: string): s
   });
 }
 
+/** Sent by app/api/internal/lms-drip-reminder/route.ts's daily sweep the moment a
+ * time-based unlock condition (lib/lms/rules.ts's TIME_DRIP_RELATIVE/TIME_DRIP_FIXED_DATE)
+ * releases a new page — a notification, not a login link: it points at the funnel's own
+ * /learn/[templateId] URL, which re-authenticates the learner if their session cookie is
+ * still valid, or shows them the "request a new link" screen if it isn't. */
+export function buildLmsDripReadyEmail(funnelName: string, pageTitle: string, portalUrl: string): string {
+  return emailShell({
+    title: `${pageTitle} is ready`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">Your next lesson is ready</h1>
+      <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        <strong style="color:#0f172a;">${pageTitle}</strong> just unlocked in <strong style="color:#0f172a;">${funnelName}</strong>.
+      </p>
+      ${CTA_BUTTON(portalUrl, "Continue")}
+      ${FALLBACK_LINK(portalUrl)}
+    `,
+    footerHtml: "",
+  });
+}
+
 const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
   admin: "Admin",

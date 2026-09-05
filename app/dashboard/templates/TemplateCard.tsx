@@ -13,6 +13,7 @@ export type TemplateSummary = {
   createdAt: string;
   updatedAt: string;
   pageCount: number;
+  isLmsFunnel: boolean;
 };
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -79,6 +80,14 @@ function IconCopy() {
   );
 }
 
+function IconFunnel() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+    </svg>
+  );
+}
+
 function IconBlog() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -106,6 +115,7 @@ export function TemplateCard({ template, onDelete, onDuplicate, duplicating }: P
   const router = useRouter();
   const [imageError, setImageError] = useState(false);
   const isEmail = template.kind === "EMAIL";
+  const isFunnel = template.isLmsFunnel;
 
   return (
     <article
@@ -181,13 +191,13 @@ export function TemplateCard({ template, onDelete, onDuplicate, duplicating }: P
           fontWeight: 700,
           letterSpacing: "0.06em",
           textTransform: "uppercase",
-          background: isEmail ? "var(--brand)" : "#818cf8",
+          background: isFunnel ? "#c084fc" : isEmail ? "var(--brand)" : "#818cf8",
           color: "#ffffff",
           boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
           zIndex: 2,
         }}>
-          {isEmail ? <IconMail /> : <IconLayout />}
-          {isEmail ? "Email" : "Page"}
+          {isFunnel ? <IconFunnel /> : isEmail ? <IconMail /> : <IconLayout />}
+          {isFunnel ? "Funnel" : isEmail ? "Email" : "Page"}
         </span>
       </div>
 

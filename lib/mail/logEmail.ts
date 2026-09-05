@@ -28,7 +28,8 @@ export type EmailDeliveryContext =
   | "domain_transfer_code"
   | "domain_renewal_failed"
   | "lms_magic_link"
-  | "lms_enrollment_confirmation";
+  | "lms_enrollment_confirmation"
+  | "lms_drip_ready";
 
 /**
  * Fire-and-forget write to EmailLog — mirrors this codebase's established

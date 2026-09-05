@@ -23,6 +23,7 @@ type TemplateSummary = {
   createdAt: string;
   updatedAt: string;
   pageCount: number;
+  isLmsFunnel: boolean;
 };
 
 export default async function TemplatesDashboardPage() {
@@ -43,7 +44,7 @@ export default async function TemplatesDashboardPage() {
   // filter for why.
   const { data: all } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go({ pages: "all" });
   const candidates = all.filter(
-    (t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
+    (t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout && !t.isLmsPageDesign,
   );
 
   // A site whose blog is set as its homepage is conceptually a blog now, not a
@@ -71,6 +72,7 @@ export default async function TemplatesDashboardPage() {
         createdAt: t.createdAt ?? new Date().toISOString(),
         updatedAt: t.updatedAt ?? new Date().toISOString(),
         pageCount: children.length,
+        isLmsFunnel: t.isLmsFunnel ?? false,
       };
     }),
   );

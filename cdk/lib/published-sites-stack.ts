@@ -444,6 +444,12 @@ export class PublishedSitesStack extends cdk.Stack {
     // bound by, not the actually-desired cadence.
     scheduledRoute("CommerceExpireStaleHolds", "/api/internal/commerce/expire-stale-holds", events.Schedule.rate(cdk.Duration.minutes(15)));
 
+    // Optional, non-blocking backstop for the Funnel/LMS module's time-based (drip) page
+    // unlocks — see that route's own doc comment. Unlocking itself never depends on this
+    // (evaluatePageUnlock runs at read time on every portal visit); daily is plenty for a
+    // "did you know your next lesson is ready" nudge.
+    scheduledRoute("LmsDripReminder", "/api/internal/lms-drip-reminder", events.Schedule.cron({ minute: "0", hour: "14" }));
+
     new cdk.CfnOutput(this, "ConnectionGroupRoutingEndpoint", { value: connectionGroup.attrRoutingEndpoint });
     new cdk.CfnOutput(this, "PrimaryDistributionId", { value: primaryDistribution.attrId, exportName: `${this.stackName}-PrimaryDistributionId` });
     new cdk.CfnOutput(this, "ConnectionGroupId", { value: connectionGroup.attrId, exportName: `${this.stackName}-ConnectionGroupId` });

@@ -34,7 +34,10 @@ type Props = {
 
 type CheckoutBody =
   | { kind: "subscription"; plan: "PRO" | "ULTRA" }
-  | { kind: "topup"; pack: "SMALL" | "MEDIUM" | "LARGE" };
+  | { kind: "topup"; pack: "SMALL" | "MEDIUM" | "LARGE" }
+  | { kind: "funnel_addon_slot" };
+
+type FunnelSlotsSummary = { total: number; used: number; hasSlotAvailable: boolean };
 
 const TYPE_LABELS: Record<LedgerEntryType, string> = {
   MONTHLY_GRANT: "Monthly grant",
@@ -133,6 +136,14 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
   const [error, setError] = useState<string | null>(null);
   const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<{ kind: "success" | "processing" | "error"; text: string } | null>(null);
+  const [funnelSlots, setFunnelSlots] = useState<FunnelSlotsSummary | null>(null);
+
+  useEffect(() => {
+    fetch("/api/v1/lms/addon-slots")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setFunnelSlots(data))
+      .catch(() => {});
+  }, []);
 
   const total = allowanceBalance + topupBalance;
 
@@ -210,6 +221,16 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
     const returnTo = searchParams.get("returnTo");
     router.replace(pathname);
     void startCheckout({ kind: "subscription", plan: upgrade }, `sub-${upgrade}`, isSafeReturnTo(returnTo) ? returnTo : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Same deep-link principle as ?upgrade= above — hitting the Funnels module's slot limit
+  // navigates here with ?addon=funnel_slot instead of starting its own checkout.
+  useEffect(() => {
+    if (searchParams.get("addon") !== "funnel_slot") return;
+    const returnTo = searchParams.get("returnTo");
+    router.replace(pathname);
+    void startCheckout({ kind: "funnel_addon_slot" }, "addon-funnel-slot", isSafeReturnTo(returnTo) ? returnTo : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -375,6 +396,31 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
             </button>
           </div>
         </div>
+
+        {/* Funnel add-on slots */}
+        {funnelSlots && (
+          <div>
+            <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+              Funnel slots
+            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.83rem", color: "rgba(240,242,255,0.6)" }}>
+                {funnelSlots.used} of {funnelSlots.total} in use
+              </span>
+              <button
+                type="button"
+                disabled={busyAction === "addon-funnel-slot"}
+                onClick={() => void startCheckout({ kind: "funnel_addon_slot" }, "addon-funnel-slot")}
+                style={{ ...secondaryButtonStyle, opacity: busyAction === "addon-funnel-slot" ? 0.7 : 1 }}
+              >
+                {busyAction === "addon-funnel-slot" ? "Opening…" : "Buy another funnel slot"}
+              </button>
+            </div>
+            <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)", marginTop: "0.4rem" }}>
+              Billed monthly, per slot. Cancel any time from "Manage subscription" above.
+            </p>
+          </div>
+        )}
 
         {/* Top-up packs */}
         <div>

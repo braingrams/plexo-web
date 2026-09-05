@@ -150,6 +150,37 @@ function injectCommerceScript(html: string): string {
   return html + scriptTag;
 }
 
+// The Funnel/LMS module's runtime — same shape as injectCommerceScript above, and the
+// same reason: sanitizeCompiledHtml.ts strips inline <script> tags from the compiled body
+// (BUILDER or RAW_UPLOAD alike), so a marker div alone can never carry its own behavior —
+// this is the one place it can live. Unlike Commerce (gated on a DB flag,
+// CommerceSettings.enabled), this is gated purely on the marker's PRESENCE in the page's
+// own HTML (see LMS_SIGNUP_MARKER_ATTR) — a funnel's signup form isn't tied to "the site's
+// root page" the way Commerce is to its whole site, and a plain content check means a
+// RAW_UPLOAD page (which has no DB-backed page-level settings at all) works identically to
+// a BUILDER page: an admin drops the copyable snippet from Funnel Settings ("Embed your
+// signup form") anywhere in their own HTML — hand-typed into a raw upload, or pasted into
+// an 'html' block on the visual canvas — and it just works, no separate enablement step.
+export const LMS_SIGNUP_MARKER_ATTR = "data-plexo-lms-signup";
+
+function injectLmsSignupScript(html: string): string {
+  const scriptTag = `<script src="/lms-signup.js" defer></script>`;
+  const maskedHtml = html.replace(
+    /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
+    (block) => " ".repeat(block.length),
+  );
+  let insertAt = -1;
+  const bodyCloseRe = /<\/body\s*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = bodyCloseRe.exec(maskedHtml)) !== null) {
+    insertAt = match.index;
+  }
+  if (insertAt !== -1) {
+    return html.slice(0, insertAt) + scriptTag + html.slice(insertAt);
+  }
+  return html + scriptTag;
+}
+
 // The Product Detail layout is ONE physical page shared by every product (see the
 // route's own product-slug branch below) — its baked <title>/meta tags are necessarily
 // generic (CommerceSettings.productDetailTemplateId's own authored SEO fields, whatever
@@ -450,6 +481,9 @@ export async function GET(
     const { data: commerceSettings } = await CommerceSettings.get({ templateId: published.templateId }).go();
     if (commerceSettings?.enabled) {
       html = injectCommerceScript(html);
+    }
+    if (html.includes(LMS_SIGNUP_MARKER_ATTR)) {
+      html = injectLmsSignupScript(html);
     }
 
     // Record analytics view asynchronously (does not block client response)

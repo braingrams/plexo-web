@@ -74,6 +74,11 @@ export const User = new Entity(
       isConfirmed: { type: "boolean", default: false },
       suspendedAt: { type: "string" },
       suspendedReason: { type: "string" },
+      // Self-selected once on first visit to /dashboard/funnels (Funnel/LMS module) —
+      // reshapes both the funnel-creation flow and the ongoing page-builder's guidance
+      // density (see the Funnel/LMS plan's "Experience-level onboarding" section). Null
+      // until chosen; changeable anytime after via Funnel settings, never a one-way door.
+      funnelBuilderLevel: { type: ["BEGINNER", "INTERMEDIATE", "PROFESSIONAL"] as const },
     },
     indexes: {
       primary: {

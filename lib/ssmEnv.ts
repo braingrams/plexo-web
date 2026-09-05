@@ -59,6 +59,9 @@ const APP_SECRET_KEYS = [
   "STRIPE_PRICE_TOPUP_SMALL",
   "STRIPE_PRICE_TOPUP_MEDIUM",
   "STRIPE_PRICE_TOPUP_LARGE",
+  // A recurring per-slot add-on subscription, separate from the plan prices above — see
+  // lib/lms/funnelSlots.ts and app/api/billing/checkout/route.ts's "funnel_addon_slot" kind.
+  "STRIPE_PRICE_LMS_ADDON_SLOT",
   "SYSTEM_AI_KEY_ANTHROPIC_CLAUDE",
   "SYSTEM_AI_KEY_OPENAI",
   "SYSTEM_AI_KEY_GOOGLE_GEMINI",
@@ -98,6 +101,10 @@ const APP_SECRET_KEYS = [
   // see cdk/lib/compute-stack.ts's own comment on originVerifySecret for why the server
   // function's Lambda Function URL is public instead of OAC-protected.
   "PLEXO_ORIGIN_VERIFY_SECRET",
+  // Signs/verifies the Funnel/LMS module's learner session cookie (lib/lms/session.ts) —
+  // a stateless JWT, not a DB-backed session, so this secret alone is what lets a learner
+  // stay signed in across visits.
+  "LMS_SESSION_SECRET",
 ] as const;
 
 // GetParameters caps at 10 names per call.
