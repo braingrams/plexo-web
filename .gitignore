@@ -46,3 +46,5 @@ cdk/lib/lib/
 
 # Ad-hoc one-off scratch scripts, never meant to be committed.
 .tmp-scripts/
+
+*.lock
