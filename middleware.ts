@@ -10,6 +10,15 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // enforced when the secret is actually configured (deployed environments, loaded from SSM
   // at cold start) — local dev has no CloudFront in front of it, so there's nothing to check.
   const expectedOriginSecret = process.env.PLEXO_ORIGIN_VERIFY_SECRET;
+  console.log("MIDDLEWARE DEBUG:", {
+  pathname: request.nextUrl.pathname,
+  host: request.headers.get("host"),
+  forwardedHost: request.headers.get("x-forwarded-host"),
+  appUrl: process.env.NEXT_PUBLIC_APP_URL,
+  pagesDomain: process.env.NEXT_PUBLIC_PAGES_DOMAIN,
+  hasOriginSecret: !!expectedOriginSecret,
+  hasOriginHeader: !!request.headers.get("x-origin-verify"),
+});
   if (expectedOriginSecret && request.headers.get("x-origin-verify") !== expectedOriginSecret) {
     return new NextResponse("Not found.", { status: 404 });
   }
