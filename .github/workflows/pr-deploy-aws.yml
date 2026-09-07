@@ -96,7 +96,7 @@ jobs:
           PLEXO_CONTENT_TABLE: plexo-content-staging-plexo
           PLEXO_OPS_TABLE: plexo-ops-staging-plexo
           PLEXO_IMPORT_TABLE: plexo-import-staging-plexo
-        run: npx open-next build
+        run: npx @opennextjs/aws build
 
       - name: Install & build CDK project
         working-directory: ./cdk
