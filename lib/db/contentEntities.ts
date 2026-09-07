@@ -23,16 +23,33 @@ export const Template = new Entity(
       organizationId: { type: "string", required: true },
       name: { type: "string", required: true },
       kind: { type: ["EMAIL", "LANDING_PAGE"] as const, required: true },
-      sourceType: { type: ["BUILDER", "RAW_UPLOAD"] as const, default: "BUILDER" },
+      sourceType: {
+        type: ["BUILDER", "RAW_UPLOAD"] as const,
+        default: "BUILDER",
+      },
       designJson: { type: "any", required: true },
       compiledHtml: { type: "string", required: true },
+      // Draft/Publish model: designJson/compiledHtml above are always the LIVE, currently-
+      // published content (what app/pub actually serves) — draftJson/draftHtml are the
+      // working-copy state the editor's autosave writes to instead. Null draftJson means
+      // "no unpublished changes" (draft === live). Publishing (lib/templateVersions.ts)
+      // snapshots the draft into an immutable TemplateRevision, copies it into the live
+      // fields, and clears these two back to null.
+      draftJson: { type: "any" },
+      draftHtml: { type: "string" },
+      // The TemplateRevision.id currently live — the "active version pointer" restore/
+      // delete/version-history all key off. Null until this template has been published
+      // at least once.
+      activeVersionId: { type: "string" },
       sdkVersion: { type: "string" },
       compiledAt: { type: "string" },
       parentId: { type: "string" },
       slug: { type: "string" },
       order: { type: "number", default: 0 },
       isOfficial: { type: "boolean", default: false },
-      marketplaceStatus: { type: ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "REJECTED"] as const },
+      marketplaceStatus: {
+        type: ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "REJECTED"] as const,
+      },
       marketplaceCategory: { type: "string" },
       marketplaceDescription: { type: "string" },
       priceCents: { type: "number" },
@@ -52,8 +69,17 @@ export const Template = new Entity(
       // Domains connect-a-domain picker (same reason isCommerceLayout/isBlogLayout are),
       // unlike isLmsFunnel: this one genuinely shouldn't be browsable as "a site."
       isLmsPageDesign: { type: "boolean", default: false },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
     },
     indexes: {
       primary: {
@@ -63,16 +89,32 @@ export const Template = new Entity(
       // The core dashboard need: "my org's templates," newest first.
       byOrg: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["organizationId"], template: "ORG#${organizationId}" },
-        sk: { field: "GSI1SK", composite: ["updatedAt", "id"], template: "TEMPLATE#${updatedAt}#${id}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["organizationId"],
+          template: "ORG#${organizationId}",
+        },
+        sk: {
+          field: "GSI1SK",
+          composite: ["updatedAt", "id"],
+          template: "TEMPLATE#${updatedAt}#${id}",
+        },
       },
       // Multipage: list a page's children in order (prisma: @@index([parentId]), `order`
       // field). Sparse for root templates (parentId null) — they simply don't appear
       // here, which is correct: "list children of no page" isn't a real query.
       byParent: {
         index: "GSI2",
-        pk: { field: "GSI2PK", composite: ["parentId"], template: "PARENT#${parentId}" },
-        sk: { field: "GSI2SK", composite: ["order", "id"], template: "TEMPLATE#${order}#${id}" },
+        pk: {
+          field: "GSI2PK",
+          composite: ["parentId"],
+          template: "PARENT#${parentId}",
+        },
+        sk: {
+          field: "GSI2SK",
+          composite: ["order", "id"],
+          template: "TEMPLATE#${order}#${id}",
+        },
       },
     },
   },
@@ -86,20 +128,42 @@ export const Template = new Entity(
 
 export const TemplateRevision = new Entity(
   {
-    model: { entity: "templateRevision", version: "1", service: "plexoContent" },
+    model: {
+      entity: "templateRevision",
+      version: "1",
+      service: "plexoContent",
+    },
     attributes: {
       id: { type: "string", required: true },
       templateId: { type: "string", required: true },
       designJson: { type: "any", required: true },
       compiledHtml: { type: "string", required: true },
       sdkVersion: { type: "string", required: true },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      // Left optional (not required) rather than backfilled, since pre-existing revision
+      // rows (every auto-snapshot taken before this attribute existed, and anything the
+      // Prisma-cutover migration script wrote) genuinely have no author to report — the
+      // Version History UI falls back to "Unknown" when these are absent.
+      authorId: { type: "string" },
+      authorName: { type: "string" },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
     },
     indexes: {
       // Co-located with the template itself — "get this page + its revision history."
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
-        sk: { field: "sk", composite: ["createdAt", "id"], template: "REVISION#${createdAt}#${id}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
+        sk: {
+          field: "sk",
+          composite: ["createdAt", "id"],
+          template: "REVISION#${createdAt}#${id}",
+        },
       },
     },
   },
@@ -116,12 +180,20 @@ export const TemplateAsset = new Entity(
       blobUrl: { type: "string", required: true },
       contentType: { type: "string", required: true },
       size: { type: "number", required: true },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
     },
     indexes: {
       // path as the SK enforces @@unique([templateId, path]) for free.
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
         sk: { field: "sk", composite: ["path"], template: "ASSET#${path}" },
       },
     },
@@ -131,26 +203,46 @@ export const TemplateAsset = new Entity(
 
 export const TemplatePurchase = new Entity(
   {
-    model: { entity: "templatePurchase", version: "1", service: "plexoContent" },
+    model: {
+      entity: "templatePurchase",
+      version: "1",
+      service: "plexoContent",
+    },
     attributes: {
       id: { type: "string", required: true },
       userId: { type: "string", required: true },
       templateId: { type: "string", required: true },
       priceCentsPaid: { type: "number", required: true },
       stripeSessionId: { type: "string" },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
     },
     indexes: {
       // templateId as SK enforces @@unique([userId, templateId]) for free.
       primary: {
         pk: { field: "pk", composite: ["userId"], template: "USER#${userId}" },
-        sk: { field: "sk", composite: ["templateId"], template: "PURCHASE#${templateId}" },
+        sk: {
+          field: "sk",
+          composite: ["templateId"],
+          template: "PURCHASE#${templateId}",
+        },
       },
       // The seller-side need: "who bought this template" (prisma: @@index([templateId])).
       byTemplate: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
-        sk: { field: "GSI1SK", composite: ["userId"], template: "PURCHASE#${userId}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
+        sk: {
+          field: "GSI1SK",
+          composite: ["userId"],
+          template: "PURCHASE#${userId}",
+        },
       },
     },
   },
@@ -179,8 +271,17 @@ export const PublishedDomain = new Entity(
       // equivalent) — read by app/pub/[domain]/[[...slug]]/route.ts to emit
       // <meta name="robots" content="noindex,nofollow"> on every page this domain serves.
       noindex: { type: "boolean", default: false },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
       // CUSTOM domains only — replaces the earlier CloudFront-managed-certificate approach
       // (ManagedCertificateRequest), which turned out to reproducibly issue a certificate
       // that never actually attaches to its distribution tenant, even on a clean first
@@ -190,7 +291,9 @@ export const PublishedDomain = new Entity(
       // plexopages.com/plexo.charisol.io wildcard certs already use, just per-customer-
       // domain and at runtime instead of CDK-deploy-time.
       certificateArn: { type: "string" },
-      certificateStatus: { type: ["PENDING_VALIDATION", "ISSUED", "ATTACHED", "FAILED"] as const },
+      certificateStatus: {
+        type: ["PENDING_VALIDATION", "ISSUED", "ATTACHED", "FAILED"] as const,
+      },
       certificateValidationName: { type: "string" },
       certificateValidationValue: { type: "string" },
       tenantId: { type: "string" },
@@ -202,14 +305,22 @@ export const PublishedDomain = new Entity(
     },
     indexes: {
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
         sk: { field: "sk", composite: ["id"], template: "DOMAIN#${id}" },
       },
       // THE hot-path lookup: middleware.ts resolves every incoming tenant request by
       // hostname (prisma: domain @unique) — this is the busiest query this entity has.
       byDomain: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["domain"], template: "DOMAIN#${domain}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["domain"],
+          template: "DOMAIN#${domain}",
+        },
         sk: { field: "GSI1SK", composite: ["id"], template: "DOMAIN#${id}" },
       },
     },
@@ -227,7 +338,11 @@ export const PublishedDomain = new Entity(
 // walks through, end to end.
 export const RegisteredDomain = new Entity(
   {
-    model: { entity: "registeredDomain", version: "1", service: "plexoContent" },
+    model: {
+      entity: "registeredDomain",
+      version: "1",
+      service: "plexoContent",
+    },
     attributes: {
       id: { type: "string", required: true },
       userId: { type: "string", required: true },
@@ -236,7 +351,10 @@ export const RegisteredDomain = new Entity(
       domain: { type: "string", required: true },
       publishedDomainId: { type: "string" },
 
-      registrarProvider: { type: ["ROUTE53", "MANUAL"] as const, required: true },
+      registrarProvider: {
+        type: ["ROUTE53", "MANUAL"] as const,
+        required: true,
+      },
       registrarOperationId: { type: "string" },
       hostedZoneId: { type: "string" },
 
@@ -310,27 +428,60 @@ export const RegisteredDomain = new Entity(
       manualAssignedAdminId: { type: "string" },
       manualNotes: { type: "string" },
 
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
     },
     indexes: {
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
-        sk: { field: "sk", composite: ["id"], template: "REGISTEREDDOMAIN#${id}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
+        sk: {
+          field: "sk",
+          composite: ["id"],
+          template: "REGISTEREDDOMAIN#${id}",
+        },
       },
       // Settings-page/poller lookup by hostname, same shape as PublishedDomain's own hot path.
       byDomain: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["domain"], template: "DOMAIN#${domain}" },
-        sk: { field: "GSI1SK", composite: ["id"], template: "REGISTEREDDOMAIN#${id}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["domain"],
+          template: "DOMAIN#${domain}",
+        },
+        sk: {
+          field: "GSI1SK",
+          composite: ["id"],
+          template: "REGISTEREDDOMAIN#${id}",
+        },
       },
       // Poller scan-narrowing — unlike PublishedDomain's plain-scan-is-fine certificate-
       // attachment cron, the registration/transfer/renewal pollers here run on tighter
       // cadences against a table expected to scale past low-hundreds of rows.
       byStatus: {
         index: "GSI2",
-        pk: { field: "GSI2PK", composite: ["status"], template: "REGISTEREDDOMAINSTATUS#${status}" },
-        sk: { field: "GSI2SK", composite: ["updatedAt", "id"], template: "REGISTEREDDOMAIN#${updatedAt}#${id}" },
+        pk: {
+          field: "GSI2PK",
+          composite: ["status"],
+          template: "REGISTEREDDOMAINSTATUS#${status}",
+        },
+        sk: {
+          field: "GSI2SK",
+          composite: ["updatedAt", "id"],
+          template: "REGISTEREDDOMAIN#${updatedAt}#${id}",
+        },
       },
     },
   },
@@ -356,13 +507,26 @@ export const BlogSite = new Entity(
       postLayoutTemplateId: { type: "string" },
       listingLayoutTemplateId: { type: "string" },
       commentsEnabled: { type: "boolean", default: true },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
     },
     indexes: {
       // One per template (prisma: templateId @unique) — co-located with the site.
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
         sk: { field: "sk", composite: [], template: "BLOGSITE" },
       },
     },
@@ -380,12 +544,25 @@ export const SiteLayout = new Entity(
       enabled: { type: "boolean", default: false },
       headerTemplateId: { type: "string" },
       footerTemplateId: { type: "string" },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
     },
     indexes: {
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
         sk: { field: "sk", composite: [], template: "SITELAYOUT" },
       },
     },
@@ -404,19 +581,40 @@ export const BlogAuthor = new Entity(
       slug: { type: "string", required: true },
       avatarUrl: { type: "string" },
       bio: { type: "string" },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
     },
     indexes: {
       // slug as SK enforces @@unique([templateId, slug]) for free.
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
         sk: { field: "sk", composite: ["slug"], template: "AUTHOR#${slug}" },
       },
       byUser: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["userId"], template: "USER#${userId}" },
-        sk: { field: "GSI1SK", composite: ["templateId"], template: "AUTHOR#${templateId}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["userId"],
+          template: "USER#${userId}",
+        },
+        sk: {
+          field: "GSI1SK",
+          composite: ["templateId"],
+          template: "AUTHOR#${templateId}",
+        },
       },
     },
   },
@@ -433,16 +631,28 @@ export const BlogCategory = new Entity(
       slug: { type: "string", required: true },
       description: { type: "string" },
       parentId: { type: "string" },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
     },
     indexes: {
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
         sk: { field: "sk", composite: ["slug"], template: "CATEGORY#${slug}" },
       },
       byParent: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["parentId"], template: "CATPARENT#${parentId}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["parentId"],
+          template: "CATPARENT#${parentId}",
+        },
         sk: { field: "GSI1SK", composite: ["id"], template: "CATEGORY#${id}" },
       },
     },
@@ -458,11 +668,19 @@ export const BlogTag = new Entity(
       templateId: { type: "string", required: true },
       name: { type: "string", required: true },
       slug: { type: "string", required: true },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
     },
     indexes: {
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
         sk: { field: "sk", composite: ["slug"], template: "TAG#${slug}" },
       },
     },
@@ -484,7 +702,10 @@ export const BlogPost = new Entity(
       contentHtml: { type: "string", required: true },
       featuredImageUrl: { type: "string" },
       featuredImageAlt: { type: "string" },
-      status: { type: ["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"] as const, default: "DRAFT" },
+      status: {
+        type: ["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"] as const,
+        default: "DRAFT",
+      },
       publishedAt: { type: "string" },
       scheduledAt: { type: "string" },
       metaTitle: { type: "string" },
@@ -495,21 +716,42 @@ export const BlogPost = new Entity(
       viewCount: { type: "number", default: 0 },
       externalId: { type: "string" },
       commentsEnabled: { type: "boolean", default: true },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
     },
     indexes: {
       // slug as SK enforces @@unique([templateId, slug]) for free.
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
         sk: { field: "sk", composite: ["slug"], template: "POST#${slug}" },
       },
       // The real blog-listing need: this site's posts, filterable by status, sorted by
       // publish date (prisma: @@index([templateId, status, publishedAt])).
       byStatus: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["templateId"], template: "TEMPLATEPOSTS#${templateId}" },
-        sk: { field: "GSI1SK", composite: ["status", "publishedAt", "id"], template: "${status}#${publishedAt}#${id}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["templateId"],
+          template: "TEMPLATEPOSTS#${templateId}",
+        },
+        sk: {
+          field: "GSI1SK",
+          composite: ["status", "publishedAt", "id"],
+          template: "${status}#${publishedAt}#${id}",
+        },
       },
     },
   },
@@ -521,7 +763,11 @@ export const BlogPost = new Entity(
 
 export const BlogPostCategory = new Entity(
   {
-    model: { entity: "blogPostCategory", version: "1", service: "plexoContent" },
+    model: {
+      entity: "blogPostCategory",
+      version: "1",
+      service: "plexoContent",
+    },
     attributes: {
       templateId: { type: "string", required: true }, // denormalized — not in Prisma, added for co-location
       postId: { type: "string", required: true },
@@ -529,13 +775,29 @@ export const BlogPostCategory = new Entity(
     },
     indexes: {
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
-        sk: { field: "sk", composite: ["postId", "categoryId"], template: "POSTCAT#${postId}#${categoryId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
+        sk: {
+          field: "sk",
+          composite: ["postId", "categoryId"],
+          template: "POSTCAT#${postId}#${categoryId}",
+        },
       },
       byCategory: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["categoryId"], template: "CATEGORY#${categoryId}" },
-        sk: { field: "GSI1SK", composite: ["postId"], template: "POST#${postId}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["categoryId"],
+          template: "CATEGORY#${categoryId}",
+        },
+        sk: {
+          field: "GSI1SK",
+          composite: ["postId"],
+          template: "POST#${postId}",
+        },
       },
     },
   },
@@ -552,13 +814,25 @@ export const BlogPostTag = new Entity(
     },
     indexes: {
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
-        sk: { field: "sk", composite: ["postId", "tagId"], template: "POSTTAG#${postId}#${tagId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
+        sk: {
+          field: "sk",
+          composite: ["postId", "tagId"],
+          template: "POSTTAG#${postId}#${tagId}",
+        },
       },
       byTag: {
         index: "GSI1",
         pk: { field: "GSI1PK", composite: ["tagId"], template: "TAG#${tagId}" },
-        sk: { field: "GSI1SK", composite: ["postId"], template: "POST#${postId}" },
+        sk: {
+          field: "GSI1SK",
+          composite: ["postId"],
+          template: "POST#${postId}",
+        },
       },
     },
   },
@@ -575,9 +849,16 @@ export const BlogComment = new Entity(
       authorName: { type: "string", required: true },
       authorEmail: { type: "string", required: true },
       body: { type: "string", required: true },
-      status: { type: ["PENDING", "APPROVED", "SPAM", "REJECTED"] as const, default: "PENDING" },
+      status: {
+        type: ["PENDING", "APPROVED", "SPAM", "REJECTED"] as const,
+        default: "PENDING",
+      },
       ipHash: { type: "string" },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
     },
     indexes: {
       // Scoped by postId, not templateId — the real access pattern is "this post's
@@ -586,7 +867,11 @@ export const BlogComment = new Entity(
       // without a separate GSI.
       primary: {
         pk: { field: "pk", composite: ["postId"], template: "POST#${postId}" },
-        sk: { field: "sk", composite: ["status", "createdAt", "id"], template: "COMMENT#${status}#${createdAt}#${id}" },
+        sk: {
+          field: "sk",
+          composite: ["status", "createdAt", "id"],
+          template: "COMMENT#${status}#${createdAt}#${id}",
+        },
       },
     },
   },
@@ -604,13 +889,25 @@ export const BlogRedirect = new Entity(
       templateId: { type: "string", required: true },
       fromPath: { type: "string", required: true },
       toPath: { type: "string", required: true },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
     },
     indexes: {
       // fromPath as SK enforces @@unique([templateId, fromPath]) for free.
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
-        sk: { field: "sk", composite: ["fromPath"], template: "REDIRECT#${fromPath}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
+        sk: {
+          field: "sk",
+          composite: ["fromPath"],
+          template: "REDIRECT#${fromPath}",
+        },
       },
     },
   },
@@ -628,9 +925,21 @@ export const Testimonial = new Entity(
       company: { type: "string" },
       avatarUrl: { type: "string" },
       rating: { type: "number", default: 5 },
-      status: { type: ["PENDING", "APPROVED", "REJECTED"] as const, default: "PENDING" },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      status: {
+        type: ["PENDING", "APPROVED", "REJECTED"] as const,
+        default: "PENDING",
+      },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
     },
     indexes: {
       // Platform-wide, not site-scoped — no templateId field in the Prisma model at all.
@@ -640,8 +949,16 @@ export const Testimonial = new Entity(
       },
       byStatus: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["status"], template: "TESTIMONIALSTATUS#${status}" },
-        sk: { field: "GSI1SK", composite: ["createdAt", "id"], template: "TESTIMONIAL#${createdAt}#${id}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["status"],
+          template: "TESTIMONIALSTATUS#${status}",
+        },
+        sk: {
+          field: "GSI1SK",
+          composite: ["createdAt", "id"],
+          template: "TESTIMONIAL#${createdAt}#${id}",
+        },
       },
     },
   },
@@ -650,25 +967,48 @@ export const Testimonial = new Entity(
 
 export const TemplateGenerationJob = new Entity(
   {
-    model: { entity: "templateGenerationJob", version: "1", service: "plexoContent" },
+    model: {
+      entity: "templateGenerationJob",
+      version: "1",
+      service: "plexoContent",
+    },
     attributes: {
       id: { type: "string", required: true },
-      status: { type: ["PENDING", "RUNNING", "COMPLETED", "PARTIAL", "FAILED"] as const, default: "PENDING" },
+      status: {
+        type: ["PENDING", "RUNNING", "COMPLETED", "PARTIAL", "FAILED"] as const,
+        default: "PENDING",
+      },
       kind: { type: ["EMAIL", "LANDING_PAGE"] as const, required: true },
       isOptIn: { type: "boolean", default: false },
       category: { type: "string", required: true },
       priceCents: { type: "number", default: 0 },
-      targetStatus: { type: ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "REJECTED"] as const, required: true },
+      targetStatus: {
+        type: ["DRAFT", "PENDING_REVIEW", "PUBLISHED", "REJECTED"] as const,
+        required: true,
+      },
       provider: { type: "string", required: true },
       requestedCount: { type: "number", required: true },
       succeededCount: { type: "number", default: 0 },
       failedCount: { type: "number", default: 0 },
-      createdTemplateIds: { type: "list", items: { type: "string" }, default: () => [] },
+      createdTemplateIds: {
+        type: "list",
+        items: { type: "string" },
+        default: () => [],
+      },
       errors: { type: "any" },
       lockedAt: { type: "string" },
       createdBy: { type: "string" },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
     },
     indexes: {
       // Platform-wide admin batch jobs — not site-scoped.
@@ -678,8 +1018,16 @@ export const TemplateGenerationJob = new Entity(
       },
       byStatus: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["status"], template: "GENJOBSTATUS#${status}" },
-        sk: { field: "GSI1SK", composite: ["createdAt", "id"], template: "GENJOB#${createdAt}#${id}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["status"],
+          template: "GENJOBSTATUS#${status}",
+        },
+        sk: {
+          field: "GSI1SK",
+          composite: ["createdAt", "id"],
+          template: "GENJOB#${createdAt}#${id}",
+        },
       },
     },
   },
@@ -691,14 +1039,25 @@ export const TemplateGenerationJob = new Entity(
 // (script-access-requests, feedback) with no entity anywhere to back them.
 export const ScriptAccessRequest = new Entity(
   {
-    model: { entity: "scriptAccessRequest", version: "1", service: "plexoContent" },
+    model: {
+      entity: "scriptAccessRequest",
+      version: "1",
+      service: "plexoContent",
+    },
     attributes: {
       id: { type: "string", required: true },
       templateId: { type: "string", required: true },
       userId: { type: "string", required: true },
       reason: { type: "string" },
-      status: { type: ["PENDING", "APPROVED", "REJECTED"] as const, default: "PENDING" },
-      requestedAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      status: {
+        type: ["PENDING", "APPROVED", "REJECTED"] as const,
+        default: "PENDING",
+      },
+      requestedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
       processedAt: { type: "string" },
       processedByAdminId: { type: "string" },
       approvedMinutes: { type: "number" },
@@ -707,7 +1066,11 @@ export const ScriptAccessRequest = new Entity(
     },
     indexes: {
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
         sk: { field: "sk", composite: ["id"], template: "SCRIPTACCESS#${id}" },
       },
       // The admin review queue (prisma: @@index([status])) — same precedent as
@@ -715,8 +1078,16 @@ export const ScriptAccessRequest = new Entity(
       // gap, same discipline as elsewhere.
       byStatus: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["status"], template: "SCRIPTACCESSSTATUS#${status}" },
-        sk: { field: "GSI1SK", composite: ["requestedAt", "id"], template: "SCRIPTACCESS#${requestedAt}#${id}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["status"],
+          template: "SCRIPTACCESSSTATUS#${status}",
+        },
+        sk: {
+          field: "GSI1SK",
+          composite: ["requestedAt", "id"],
+          template: "SCRIPTACCESS#${requestedAt}#${id}",
+        },
       },
     },
   },
@@ -733,8 +1104,15 @@ export const Feedback = new Entity(
       userName: { type: "string", required: true },
       message: { type: "string", required: true },
       pageUrl: { type: "string" },
-      status: { type: ["NEW", "REVIEWED", "ARCHIVED"] as const, default: "NEW" },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      status: {
+        type: ["NEW", "REVIEWED", "ARCHIVED"] as const,
+        default: "NEW",
+      },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
     },
     indexes: {
       // Platform-wide, not site-scoped — no templateId in the Prisma model.
@@ -744,8 +1122,16 @@ export const Feedback = new Entity(
       },
       byStatus: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["status"], template: "FEEDBACKSTATUS#${status}" },
-        sk: { field: "GSI1SK", composite: ["createdAt", "id"], template: "FEEDBACK#${createdAt}#${id}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["status"],
+          template: "FEEDBACKSTATUS#${status}",
+        },
+        sk: {
+          field: "GSI1SK",
+          composite: ["createdAt", "id"],
+          template: "FEEDBACK#${createdAt}#${id}",
+        },
       },
     },
   },
@@ -772,14 +1158,26 @@ export const FeatureWaitlist = new Entity(
       // me" for video upload. Not required: some future feature may not have one.
       templateId: { type: "string" },
       note: { type: "string" },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
     },
     indexes: {
       // One signup per user per feature (userId as SK) — clicking "Notify me" twice is a
       // no-op, not a duplicate row, via .create()'s attribute_not_exists.
       primary: {
-        pk: { field: "pk", composite: ["feature"], template: "FEATUREWAITLIST#${feature}" },
-        sk: { field: "sk", composite: ["userId"], template: "WAITLIST#${userId}" },
+        pk: {
+          field: "pk",
+          composite: ["feature"],
+          template: "FEATUREWAITLIST#${feature}",
+        },
+        sk: {
+          field: "sk",
+          composite: ["userId"],
+          template: "WAITLIST#${userId}",
+        },
       },
     },
   },
@@ -814,18 +1212,35 @@ export const Comment = new Entity(
       // app/api/v1/comments/** routes' soft-delete-preserves-thread-integrity behavior
       // depends on it and it was missing from the original port of this entity.
       deletedAt: { type: "string" },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
       // prisma: @updatedAt — distinct from editedAt above (an explicit "the author edited
       // this comment's body" marker); this one is Prisma's own any-column-changed
       // timestamp. Missing from the original port of this entity (found auditing the
       // Postgres->DynamoDB data migration, 2026-09-02) — added the same way every other
       // schemaless attribute in this migration was, no redeploy needed.
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
     },
     indexes: {
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
-        sk: { field: "sk", composite: ["createdAt", "id"], template: "COMMENT#${createdAt}#${id}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
+        sk: {
+          field: "sk",
+          composite: ["createdAt", "id"],
+          template: "COMMENT#${createdAt}#${id}",
+        },
       },
     },
   },
@@ -843,12 +1258,24 @@ export const CommentMention = new Entity(
       id: { type: "string", required: true },
       commentId: { type: "string", required: true },
       userId: { type: "string", required: true },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
     },
     indexes: {
       primary: {
-        pk: { field: "pk", composite: ["commentId"], template: "COMMENT#${commentId}" },
-        sk: { field: "sk", composite: ["userId"], template: "MENTION#${userId}" },
+        pk: {
+          field: "pk",
+          composite: ["commentId"],
+          template: "COMMENT#${commentId}",
+        },
+        sk: {
+          field: "sk",
+          composite: ["userId"],
+          template: "MENTION#${userId}",
+        },
       },
     },
   },
@@ -882,20 +1309,41 @@ export const LmsFunnel = new Entity(
       requireName: { type: "boolean", default: true },
       collectPhone: { type: "boolean", default: false },
       welcomeRedirectPath: { type: "string" },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
     },
     indexes: {
       // One per template (like BlogSite/SiteLayout) — co-located with the site.
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
         sk: { field: "sk", composite: [], template: "LMSFUNNEL" },
       },
       // Slot-gating check: "how many funnels does this org have" (lib/lms/funnelSlots.ts).
       byOrg: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["organizationId"], template: "ORG#${organizationId}" },
-        sk: { field: "GSI1SK", composite: ["createdAt", "id"], template: "LMSFUNNEL#${createdAt}#${id}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["organizationId"],
+          template: "ORG#${organizationId}",
+        },
+        sk: {
+          field: "GSI1SK",
+          composite: ["createdAt", "id"],
+          template: "LMSFUNNEL#${createdAt}#${id}",
+        },
       },
     },
   },
@@ -910,7 +1358,10 @@ export const LmsPage = new Entity(
       templateId: { type: "string", required: true },
       organizationId: { type: "string", required: true },
       order: { type: "number", required: true },
-      kind: { type: ["WELCOME", "VIDEO", "DOCUMENT", "IMAGE"] as const, required: true },
+      kind: {
+        type: ["WELCOME", "VIDEO", "DOCUMENT", "IMAGE"] as const,
+        required: true,
+      },
       title: { type: "string", required: true },
       // How a WELCOME page's own content was authored — only meaningful for that kind.
       // SIMPLE/RAW_HTML both store into bodyHtml (the difference is purely which editor UI
@@ -922,7 +1373,10 @@ export const LmsPage = new Entity(
       // against other visitors' sessions. ADVANCED points at designTemplateId instead — a
       // real Template edited via the normal PlexoBuilder visual editor and embedded via
       // iframe, already sanitized by that pipeline's own existing save-time sanitizer.
-      contentMode: { type: ["SIMPLE", "RAW_HTML", "ADVANCED"] as const, default: "SIMPLE" },
+      contentMode: {
+        type: ["SIMPLE", "RAW_HTML", "ADVANCED"] as const,
+        default: "SIMPLE",
+      },
       bodyHtml: { type: "string" },
       // Set once an admin switches a page to ADVANCED (full page builder) mode — see
       // app/api/v1/lms/funnels/[templateId]/pages/[pageId]/design/route.ts. Kept even after
@@ -938,21 +1392,42 @@ export const LmsPage = new Entity(
       // ship with zero migration: the DynamoDB attribute never changes shape either way.
       unlockRules: { type: "any" },
       visible: { type: "boolean", default: true },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
     },
     indexes: {
       // Direct get-by-id — learner content fetch, admin edit.
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
         sk: { field: "sk", composite: ["id"], template: "PAGE#${id}" },
       },
       // Ordered listing + reorder — the builder's and the learner portal's real access
       // pattern, same split as Template's own primary-by-id + byParent-GSI-for-order.
       byOrder: {
         index: "GSI1",
-        pk: { field: "GSI1PK", composite: ["templateId"], template: "TEMPLATEPAGES#${templateId}" },
-        sk: { field: "GSI1SK", composite: ["order", "id"], template: "PAGE#${order}#${id}" },
+        pk: {
+          field: "GSI1PK",
+          composite: ["templateId"],
+          template: "TEMPLATEPAGES#${templateId}",
+        },
+        sk: {
+          field: "GSI1SK",
+          composite: ["order", "id"],
+          template: "PAGE#${order}#${id}",
+        },
       },
     },
   },
@@ -973,9 +1448,16 @@ export const LmsEnrollment = new Entity(
       name: { type: "string" },
       phone: { type: "string" },
       status: { type: ["ACTIVE", "REVOKED"] as const, default: "ACTIVE" },
-      paymentStatus: { type: ["FREE", "PAID", "REFUNDED"] as const, default: "FREE" },
+      paymentStatus: {
+        type: ["FREE", "PAID", "REFUNDED"] as const,
+        default: "FREE",
+      },
       commerceOrderId: { type: "string" },
-      enrolledAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      enrolledAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
       lastActiveAt: { type: "string" },
       // Denormalized so the admin enrollment-list view never fans out into an
       // LmsPageProgress query per row just to render "3/7 pages".
@@ -989,8 +1471,16 @@ export const LmsEnrollment = new Entity(
     },
     indexes: {
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
-        sk: { field: "sk", composite: ["email"], template: "ENROLLMENT#${email}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
+        sk: {
+          field: "sk",
+          composite: ["email"],
+          template: "ENROLLMENT#${email}",
+        },
       },
       // Admin's recent-signups list — the ordering the primary SK (alphabetical by email)
       // can't give. No org-wide GSI: only a per-funnel admin view is a real requirement
@@ -998,8 +1488,16 @@ export const LmsEnrollment = new Entity(
       // RegisteredDomain/PublishedDomain's own gaps, not built speculatively.
       byEnrolledAt: {
         index: "GSI2",
-        pk: { field: "GSI2PK", composite: ["templateId"], template: "TEMPLATEENROLL#${templateId}" },
-        sk: { field: "GSI2SK", composite: ["enrolledAt", "email"], template: "ENROLLMENT#${enrolledAt}#${email}" },
+        pk: {
+          field: "GSI2PK",
+          composite: ["templateId"],
+          template: "TEMPLATEENROLL#${templateId}",
+        },
+        sk: {
+          field: "GSI2SK",
+          composite: ["enrolledAt", "email"],
+          template: "ENROLLMENT#${enrolledAt}#${email}",
+        },
       },
     },
   },
@@ -1028,8 +1526,16 @@ export const LmsPageProgress = new Entity(
       // neither needs a GSI. A row is written only on a real event (first view, completion,
       // admin approval) — never pre-allocated one-row-per-page-per-learner up front.
       primary: {
-        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
-        sk: { field: "sk", composite: ["email", "pageId"], template: "PROGRESS#${email}#${pageId}" },
+        pk: {
+          field: "pk",
+          composite: ["templateId"],
+          template: "TEMPLATE#${templateId}",
+        },
+        sk: {
+          field: "sk",
+          composite: ["email", "pageId"],
+          template: "PROGRESS#${email}#${pageId}",
+        },
       },
     },
   },
@@ -1049,7 +1555,11 @@ export const LmsPageProgress = new Entity(
 // funnel(s) over budget — one shared mechanism for both cases instead of two.
 export const LmsFunnelAddonSlot = new Entity(
   {
-    model: { entity: "lmsFunnelAddonSlot", version: "1", service: "plexoContent" },
+    model: {
+      entity: "lmsFunnelAddonSlot",
+      version: "1",
+      service: "plexoContent",
+    },
     attributes: {
       id: { type: "string", required: true },
       organizationId: { type: "string", required: true },
@@ -1058,7 +1568,13 @@ export const LmsFunnelAddonSlot = new Entity(
       // when they bought this slot, if any. Never read by the gating/reconciliation logic.
       templateId: { type: "string" },
       status: {
-        type: ["PENDING_PAYMENT", "ACTIVE", "PAST_DUE", "CANCELLED", "PAYMENT_FAILED"] as const,
+        type: [
+          "PENDING_PAYMENT",
+          "ACTIVE",
+          "PAST_DUE",
+          "CANCELLED",
+          "PAYMENT_FAILED",
+        ] as const,
         required: true,
         default: "PENDING_PAYMENT",
       },
@@ -1068,15 +1584,28 @@ export const LmsFunnelAddonSlot = new Entity(
       pastDueAt: { type: "string" },
       cancelledAt: { type: "string" },
       lastPaymentFailureReason: { type: "string" },
-      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      createdAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        readOnly: true,
+      },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
     },
     indexes: {
       // "This org's addon slots" is the primary key itself — no GSI needed, same as
       // CommerceDeliveryMethod's own comment about not needing one when a plain SK-prefix
       // scan already answers the only real question.
       primary: {
-        pk: { field: "pk", composite: ["organizationId"], template: "ORG#${organizationId}" },
+        pk: {
+          field: "pk",
+          composite: ["organizationId"],
+          template: "ORG#${organizationId}",
+        },
         sk: { field: "sk", composite: ["id"], template: "SLOT#${id}" },
       },
     },

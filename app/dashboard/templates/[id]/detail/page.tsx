@@ -4,7 +4,13 @@ import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { findRootTemplateId } from "@/lib/siteLayoutDynamo";
 import { buildLivePreviewHtml } from "@/lib/buildLivePreviewHtml";
-import { Template, TemplateAsset, PublishedDomain, BlogSite, SiteLayout } from "@/lib/db/contentEntities";
+import {
+  Template,
+  TemplateAsset,
+  PublishedDomain,
+  BlogSite,
+  SiteLayout,
+} from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
 import { PageView, FormSubmission } from "@/lib/db/opsEntities";
 
@@ -12,9 +18,9 @@ import { DetailClient } from "./detail-client";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-export default async function TemplateDetailPage(
-  props: { params: Promise<{ id: string }> },
-) {
+export default async function TemplateDetailPage(props: {
+  params: Promise<{ id: string }>;
+}) {
   const params = await props.params;
   const session = await auth();
 
@@ -42,16 +48,25 @@ export default async function TemplateDetailPage(
 
   const template = found;
 
-  const [{ data: assets }, { data: children }, { data: submissions }] = await Promise.all([
-    TemplateAsset.query.primary({ templateId: template.id }).go(),
-    Template.query.byParent({ parentId: template.id }).go(),
-    FormSubmission.query.primary({ templateId: template.id }).go(),
-  ]);
+  const [{ data: assets }, { data: children }, { data: submissions }] =
+    await Promise.all([
+      TemplateAsset.query.primary({ templateId: template.id }).go(),
+      Template.query.byParent({ parentId: template.id }).go(),
+      FormSubmission.query.primary({ templateId: template.id }).go(),
+    ]);
 
-  const previewHtml = await buildLivePreviewHtml(template.compiledHtml, assets.map((a) => ({ path: a.path, blobUrl: a.blobUrl })));
+  const previewHtml = await buildLivePreviewHtml(
+    template.compiledHtml,
+    assets.map((a) => ({ path: a.path, blobUrl: a.blobUrl })),
+  );
 
   let siteData: {
-    domain: { domain: string; type: string; dnsVerified: boolean; active: boolean } | null;
+    domain: {
+      domain: string;
+      type: string;
+      dnsVerified: boolean;
+      active: boolean;
+    } | null;
     pageViews30d: number;
     blogEnabled: boolean;
     siteLayoutEnabled: boolean;
@@ -61,9 +76,18 @@ export default async function TemplateDetailPage(
   if (template.kind === "LANDING_PAGE") {
     const since = new Date(Date.now() - THIRTY_DAYS_MS).toISOString();
     const now = new Date().toISOString();
-    const [{ data: domains }, { data: pageViews }, { data: blogSite }, { data: siteLayout }, { data: commerceSettings }] = await Promise.all([
+    const [
+      { data: domains },
+      { data: pageViews },
+      { data: blogSite },
+      { data: siteLayout },
+      { data: commerceSettings },
+    ] = await Promise.all([
       PublishedDomain.query.primary({ templateId: template.id }).go(),
-      PageView.query.primary({ templateId: template.id }).between({ createdAt: since }, { createdAt: now }).go({ pages: "all" }),
+      PageView.query
+        .primary({ templateId: template.id })
+        .between({ createdAt: since }, { createdAt: now })
+        .go({ pages: "all" }),
       BlogSite.get({ templateId: template.id }).go(),
       SiteLayout.get({ templateId: template.id }).go(),
       CommerceSettings.get({ templateId: template.id }).go(),
@@ -72,7 +96,14 @@ export default async function TemplateDetailPage(
     const domain = domains[0] ?? null;
 
     siteData = {
-      domain: domain ? { domain: domain.domain, type: domain.type, dnsVerified: domain.dnsVerified ?? false, active: domain.active ?? true } : null,
+      domain: domain
+        ? {
+            domain: domain.domain,
+            type: domain.type,
+            dnsVerified: domain.dnsVerified ?? false,
+            active: domain.active ?? true,
+          }
+        : null,
       pageViews30d: pageViews.length,
       blogEnabled: blogSite?.enabled ?? false,
       siteLayoutEnabled: siteLayout?.enabled ?? false,
@@ -92,6 +123,7 @@ export default async function TemplateDetailPage(
       compiledAt={template.compiledAt ?? null}
       designJson={template.designJson}
       compiledHtml={template.compiledHtml}
+      hasUnpublishedChanges={template.draftJson != null}
       previewHtml={previewHtml}
       pageCount={children.length}
       formSubmissionCount={submissions.length}
