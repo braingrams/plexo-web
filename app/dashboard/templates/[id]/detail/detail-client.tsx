@@ -880,7 +880,7 @@ export function DetailClient({
                 {compiledAt ? formatDateTime(compiledAt) : "Never"}
               </span>
             </div>
-            <div style={ROW}>
+            {/* <div style={ROW}>
               <span style={LABEL}>Draft status</span>
               <div
                 style={{
@@ -952,7 +952,7 @@ export function DetailClient({
               >
                 <IconWarning /> {publishError}
               </p>
-            )}
+            )} */}
             <div
               style={{
                 ...ROW,

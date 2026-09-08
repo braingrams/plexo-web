@@ -32,6 +32,10 @@ type Props = {
   // own PublishedDomain and shouldn't trigger the "publish this page" nudge.
   templateParentId: string | null;
   initialDesignJson: TemplateJSON;
+  // The live/published designJson baseline — compared (via JSON.stringify) against the
+  // draft after every save to decide if there are real unpublished changes, instead of
+  // just trusting that a save happened.
+  liveDesignJson: TemplateJSON;
   // Whether this template has draft edits (draftJson) that haven't been Published yet —
   // seeds the header's "Unpublished changes" indicator on load; kept in sync client-side
   // after every save/publish rather than re-fetched.
@@ -464,7 +468,7 @@ function EditorHeaderRight({
         </span>
       )}
 
-      {hasUnpublishedChanges && !publishMessage && (
+      {/* {hasUnpublishedChanges && !publishMessage && (
         <span
           title="Your draft has changes that aren't live yet"
           style={{
@@ -487,7 +491,7 @@ function EditorHeaderRight({
           />
           Unpublished changes
         </span>
-      )}
+      )} */}
 
       <span
         style={{
@@ -598,6 +602,7 @@ export function TemplateEditorClient({
   templateKind,
   templateParentId,
   initialDesignJson,
+  liveDesignJson,
   hasUnpublishedChanges: initialHasUnpublishedChanges,
   subscriptionPlan,
   useAi,
@@ -623,6 +628,10 @@ export function TemplateEditorClient({
   const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(
     initialHasUnpublishedChanges,
   );
+  // Baseline for the "is the draft actually different from what's live" check below —
+  // a plain string compare is far cheaper than deep-diffing the design tree on every
+  // autosave tick. Updated after every successful publish.
+  const liveDesignJsonRef = useRef(JSON.stringify(liveDesignJson));
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -662,8 +671,8 @@ export function TemplateEditorClient({
     currentUserRole === "viewer" || currentUserRole === "commenter";
 
   /** Exports and persists the current canvas without any of the save button's UI side effects — used when switching pages so the outgoing page's edits aren't lost. */
-  async function flushSave(): Promise<void> {
-    if (!builderRef.current) return;
+  async function flushSave(): Promise<{ json: TemplateJSON; html: string }> {
+    if (!builderRef.current) return { json: initialDesignJson, html: "" };
     const mode = isEmail ? "email" : "landing_page";
     const exported = await builderRef.current.exportDesign(mode);
     const response = await fetch(`/api/templates/update/${templateId}`, {
@@ -680,7 +689,10 @@ export function TemplateEditorClient({
       };
       throw new Error(payload.error ?? "Unable to save template.");
     }
-    setHasUnpublishedChanges(true);
+    setHasUnpublishedChanges(
+      JSON.stringify(exported.json) !== liveDesignJsonRef.current,
+    );
+    return exported;
   }
 
   /** Quiet background autosave (PlexoBuilder's own autoSave/autoSaveDuration timer) — persists
@@ -702,7 +714,11 @@ export function TemplateEditorClient({
           throw new Error(payload.error ?? "Unable to save template.");
         }
         setSaveError(null);
-        setHasUnpublishedChanges(true);
+        setHasUnpublishedChanges(
+          JSON.stringify(data.json) !== liveDesignJsonRef.current,
+        );
+        // setSaveMessage("Draft saved.");
+        // setTimeout(() => setSaveMessage(null), 3000);
       })
       .catch((err) => {
         console.warn("Autosave failed:", err);
@@ -832,7 +848,7 @@ export function TemplateEditorClient({
     setPublishMessage(null);
     setIsPublishing(true);
     try {
-      await flushSave();
+      const exported = await flushSave();
       const response = await fetch(`/api/templates/${templateId}/publish`, {
         method: "POST",
       });
@@ -842,6 +858,7 @@ export function TemplateEditorClient({
         };
         throw new Error(payload.error ?? "Unable to publish template.");
       }
+      liveDesignJsonRef.current = JSON.stringify(exported.json);
       setHasUnpublishedChanges(false);
       setPublishMessage("Published — now live.");
       setTimeout(() => setPublishMessage(null), 3000);

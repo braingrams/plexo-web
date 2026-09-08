@@ -95,11 +95,12 @@ export default async function TemplateEditorPage(props: {
     );
   }
 
+  const liveDesignJson = isTemplateJson(template.designJson)
+    ? template.designJson
+    : BLANK_TEMPLATE_SHELL;
   const initialDesignJson = isTemplateJson(template.draftJson)
     ? template.draftJson
-    : isTemplateJson(template.designJson)
-      ? template.designJson
-      : BLANK_TEMPLATE_SHELL;
+    : liveDesignJson;
   const hasUnpublishedChanges = template.draftJson != null;
 
   const unsplashKey = process.env.UNSPLASH_KEY || "";
@@ -113,6 +114,7 @@ export default async function TemplateEditorPage(props: {
       templateKind={template.kind}
       templateParentId={template.parentId ?? null}
       initialDesignJson={initialDesignJson}
+      liveDesignJson={liveDesignJson}
       hasUnpublishedChanges={hasUnpublishedChanges}
       subscriptionPlan={user?.subscriptionPlan ?? "FREE"}
       useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}

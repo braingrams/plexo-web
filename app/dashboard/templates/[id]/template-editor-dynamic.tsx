@@ -18,6 +18,10 @@ export type TemplateEditorProps = {
   templateKind: "EMAIL" | "LANDING_PAGE";
   templateParentId: string | null;
   initialDesignJson: TemplateJSON;
+  // The live/published designJson baseline — compared against the draft client-side to
+  // decide whether there are actually unpublished changes, rather than trusting draftJson's
+  // mere presence.
+  liveDesignJson: TemplateJSON;
   hasUnpublishedChanges: boolean;
   subscriptionPlan: string;
   useAi: boolean;
