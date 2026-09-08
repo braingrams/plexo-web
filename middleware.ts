@@ -114,14 +114,17 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // "<subdomain>.plexopages.com" — so it previously 404'd via the generic /pub lookup
   // below (resolveSite() finding no PublishedDomain row for the bare apex). Redirect it
   // to the real marketing/app site instead, the same "bare platform domain sends you to
-  // the actual product" convention as e.g. vercel.app -> vercel.com. Exact match only —
-  // "foo.plexopages.com" must fall through to the normal tenant-resolution path below.
+  // the actual product" convention as e.g. vercel.app -> vercel.com. Same treatment for
+  // "www.<pagesDomain>" — "www" is in RESERVED_SUBDOMAINS (app/api/v1/publish/route.ts),
+  // so it can never be a real tenant, and it otherwise 404s the same way the bare apex
+  // did. Exact match only — "foo.plexopages.com" must fall through to the normal
+  // tenant-resolution path below.
   // Gated on isSubdomainOrCustom (not a bare `hostname === pagesDomain` check) because
   // staging has no separate wildcard domain configured yet — its own
   // NEXT_PUBLIC_PAGES_DOMAIN is literally the same value as its NEXT_PUBLIC_APP_URL — so
   // an ungated check here would redirect the dashboard's own known host to itself,
   // an infinite loop.
-  if (isSubdomainOrCustom && hostname === pagesDomain) {
+  if (isSubdomainOrCustom && (hostname === pagesDomain || hostname === `www.${pagesDomain}`)) {
     return NextResponse.redirect(baseAppUrl);
   }
 
