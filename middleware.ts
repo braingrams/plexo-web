@@ -95,7 +95,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // (including "/") into the /pub/[domain] tenant-resolution path, which 404s since no
   // PublishedDomain row exists for a PR's own throwaway CloudFront domain.
   const isKnownHost =
-    hostname === baseDomain || hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".cloudfront.net");
+    hostname === baseDomain || hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".cloudfront.net") || /^pr-\d+\.plexo\.aws\.charisol\.io$/.test(hostname); 
   const isSubdomainOrCustom = !isKnownHost;
 
   // Platform-level static assets served from this app's own /public directory,
