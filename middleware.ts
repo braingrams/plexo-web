@@ -122,7 +122,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // catch-all page route resolves as a nonexistent page slug and 404s — silently
   // breaking every Commerce block (and anything else depending on that script) on
   // every published tenant domain.
-  const PLATFORM_STATIC_ASSETS = new Set(["/commerce.js"]);
+  // lms-signup.js and newsletter-popup.js are injected the exact same way (see
+  // injectLmsSignupScript / the newsletter-popup gate in app/pub/[domain]/[[...slug]]/
+  // route.ts) and had/have the identical gap — lms-signup.js was missing from this set
+  // already, silently 404ing on every tenant domain since it was added.
+  const PLATFORM_STATIC_ASSETS = new Set(["/commerce.js", "/lms-signup.js", "/newsletter-popup.js"]);
 
   // 0. The wildcard pages domain's own bare apex (e.g. "plexopages.com" with no
   // subdomain) has no site of its own — nobody publishes a site there, only at

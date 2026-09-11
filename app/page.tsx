@@ -16,7 +16,6 @@ import { V2TestimonialSection } from "./components/v2/v2-testimonial-section";
 import { V2PricingSection } from "./components/v2/v2-pricing-section";
 import { V2FaqSection } from "./components/v2/v2-faq-section";
 import { V2Footer } from "./components/v2/v2-footer";
-import { NewsletterPopup } from "./components/v2/newsletter-popup";
 
 const mulish = Mulish({
   subsets: ["latin"],
@@ -47,7 +46,6 @@ export default function RootHomePage() {
         <V2PricingSection isDark={isDark} />
         <V2FaqSection isDark={isDark} />
         <V2Footer isDark={isDark} />
-        <NewsletterPopup />
       </main>
     </ScrollFxProvider>
   );

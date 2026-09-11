@@ -59,6 +59,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
       maildripApiKeyMasked: settings?.maildripApiKeyEncrypted ? maskSecret(tryDecrypt(() => decryptMaildripKey(settings.maildripApiKeyEncrypted!))) : null,
       maildripPaidGroupId: settings?.maildripPaidGroupId ?? null,
       maildripNewsletterGroupId: settings?.maildripNewsletterGroupId ?? null,
+      newsletterPopupEnabled: settings?.newsletterPopupEnabled ?? false,
       notificationEmail: settings?.notificationEmail ?? null,
       notifyCustomerOnPaid: settings?.notifyCustomerOnPaid ?? true,
       notifyCustomerOnProcessing: settings?.notifyCustomerOnProcessing ?? true,
@@ -101,6 +102,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     maildripApiKey,
     maildripPaidGroupId,
     maildripNewsletterGroupId,
+    newsletterPopupEnabled,
     notificationEmail,
     storefrontSlug,
     notifyCustomerOnPaid,
@@ -246,6 +248,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     if (maildripNewsletterGroupId) data.maildripNewsletterGroupId = maildripNewsletterGroupId;
     else toRemove.push("maildripNewsletterGroupId");
   }
+  if (typeof newsletterPopupEnabled === "boolean") data.newsletterPopupEnabled = newsletterPopupEnabled;
   if (typeof notificationEmail === "string") {
     if (notificationEmail) data.notificationEmail = notificationEmail;
     else toRemove.push("notificationEmail");
@@ -312,6 +315,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
       maildripApiKeyMasked: settings.maildripApiKeyEncrypted ? maskSecret(tryDecrypt(() => decryptMaildripKey(settings.maildripApiKeyEncrypted!))) : null,
       maildripPaidGroupId: settings.maildripPaidGroupId ?? null,
       maildripNewsletterGroupId: settings.maildripNewsletterGroupId ?? null,
+      newsletterPopupEnabled: settings.newsletterPopupEnabled ?? false,
       notificationEmail: settings.notificationEmail ?? null,
       notifyCustomerOnPaid: settings.notifyCustomerOnPaid ?? true,
       notifyCustomerOnProcessing: settings.notifyCustomerOnProcessing ?? true,

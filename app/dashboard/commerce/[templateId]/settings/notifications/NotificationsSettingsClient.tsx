@@ -10,6 +10,7 @@ type InitialNotificationsSettings = {
   maildripConnected: boolean;
   maildripPaidGroupId: string;
   maildripNewsletterGroupId: string;
+  newsletterPopupEnabled: boolean;
   notificationEmail: string;
 };
 
@@ -321,6 +322,7 @@ export function NotificationsSettingsClient({ templateId, initial }: { templateI
   const [groupsError, setGroupsError] = useState<string | null>(null);
   const [maildripPaidGroupId, setMaildripPaidGroupId] = useState(initial.maildripPaidGroupId);
   const [maildripNewsletterGroupId, setMaildripNewsletterGroupId] = useState(initial.maildripNewsletterGroupId);
+  const [newsletterPopupEnabled, setNewsletterPopupEnabled] = useState(initial.newsletterPopupEnabled);
   const [notificationEmail, setNotificationEmail] = useState(initial.notificationEmail);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
@@ -368,7 +370,7 @@ export function NotificationsSettingsClient({ templateId, initial }: { templateI
       const res = await fetch(`/api/v1/commerce/${templateId}/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ maildripPaidGroupId, maildripNewsletterGroupId, notificationEmail }),
+        body: JSON.stringify({ maildripPaidGroupId, maildripNewsletterGroupId, newsletterPopupEnabled, notificationEmail }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save settings.");
@@ -435,7 +437,7 @@ export function NotificationsSettingsClient({ templateId, initial }: { templateI
               <div style={{ flex: "1 1 260px", minWidth: 220 }}>
                 <GroupSelect
                   label="Group for newsletter subscribers"
-                  hint="Powers the site's newsletter signup block — separate from paying customers, since a visitor can subscribe without buying anything."
+                  hint="Powers the site's newsletter signup block and popup — separate from paying customers, since a visitor can subscribe without buying anything."
                   templateId={templateId}
                   groups={groups}
                   groupsError={groupsError}
@@ -445,6 +447,25 @@ export function NotificationsSettingsClient({ templateId, initial }: { templateI
                 />
               </div>
             </div>
+
+            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.6rem", fontSize: "0.82rem", color: "rgba(240,242,255,0.8)", cursor: maildripNewsletterGroupId ? "pointer" : "not-allowed", lineHeight: 1.5 }}>
+              <input
+                type="checkbox"
+                checked={newsletterPopupEnabled}
+                disabled={!maildripNewsletterGroupId}
+                onChange={(e) => setNewsletterPopupEnabled(e.target.checked)}
+                style={{ marginTop: 2, width: 15, height: 15, flexShrink: 0 }}
+              />
+              <span>
+                Show a newsletter signup popup on your site (5-second delay or exit-intent, remembers a visitor&rsquo;s dismissal for 30 days). Works
+                independently of Commerce — no need to sell anything to capture emails.
+                {!maildripNewsletterGroupId && (
+                  <span style={{ display: "block", color: "rgba(240,242,255,0.4)", marginTop: "0.2rem" }}>
+                    Select a newsletter group above first.
+                  </span>
+                )}
+              </span>
+            </label>
           </>
         )}
       </Section>

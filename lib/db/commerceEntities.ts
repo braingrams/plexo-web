@@ -513,6 +513,13 @@ export const CommerceSettings = new Entity(
       maildripApiKeyEncrypted: { type: "string" },
       maildripPaidGroupId: { type: "string" },
       maildripNewsletterGroupId: { type: "string" },
+      // Shows a site-wide newsletter popup (public/newsletter-popup.js) on every published
+      // page, independent of `enabled` (Commerce/payments) — a site doesn't need to sell
+      // anything to want newsletter capture. Only takes effect once
+      // maildripNewsletterGroupId is also set (see app/pub/[domain]/[[...slug]]/route.ts's
+      // injection gate) — a site owner can flip this on before configuring a group, but
+      // nothing shows until there's somewhere to actually send the emails.
+      newsletterPopupEnabled: { type: "boolean", default: false },
       notificationEmail: { type: "string" },
       enabled: { type: "boolean", default: false },
       // Site-wide store currency (ISO 4217) — one per site, not per product. See

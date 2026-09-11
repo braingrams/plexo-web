@@ -218,6 +218,7 @@ export const COMMERCE_MCP_TOOLS = [
         maildripApiKey: { type: "string" },
         maildripPaidGroupId: { type: "string" },
         maildripNewsletterGroupId: { type: "string" },
+        newsletterPopupEnabled: { type: "boolean", description: "Shows a site-wide newsletter signup popup (5s delay/exit-intent, 30-day dismissal). Only takes effect once maildripNewsletterGroupId is also set. Independent of Commerce enabled." },
         notificationEmail: { type: "string" },
         notifyCustomerOnPaid: { type: "boolean", description: "Email the customer an order confirmation once paid. Default true." },
         notifyCustomerOnProcessing: { type: "boolean", description: "Email the customer when fulfillment status changes to PROCESSING. Default true." },
@@ -664,6 +665,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
           maildripApiKeyMasked: settings?.maildripApiKeyEncrypted ? maskSecret(decryptMaildripKey(settings.maildripApiKeyEncrypted)) : null,
           maildripPaidGroupId: settings?.maildripPaidGroupId ?? null,
           maildripNewsletterGroupId: settings?.maildripNewsletterGroupId ?? null,
+          newsletterPopupEnabled: settings?.newsletterPopupEnabled ?? false,
           notificationEmail: settings?.notificationEmail ?? null,
           notifyCustomerOnPaid: settings?.notifyCustomerOnPaid ?? true,
           notifyCustomerOnProcessing: settings?.notifyCustomerOnProcessing ?? true,
@@ -761,6 +763,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         if (args.maildripNewsletterGroupId) data.maildripNewsletterGroupId = args.maildripNewsletterGroupId;
         else toRemove.push("maildripNewsletterGroupId");
       }
+      if (typeof args.newsletterPopupEnabled === "boolean") data.newsletterPopupEnabled = args.newsletterPopupEnabled;
       if (typeof args.notificationEmail === "string") {
         if (args.notificationEmail) data.notificationEmail = args.notificationEmail;
         else toRemove.push("notificationEmail");

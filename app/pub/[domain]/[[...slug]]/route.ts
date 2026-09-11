@@ -191,6 +191,29 @@ function injectLmsSignupScript(html: string): string {
   return html + scriptTag;
 }
 
+// Site-wide newsletter popup (public/newsletter-popup.js) — a site owner's own opt-in
+// feature (CommerceSettings.newsletterPopupEnabled + maildripNewsletterGroupId, see that
+// entity's own comment), deliberately independent of Commerce/payments being enabled:
+// capturing emails isn't a commerce-only need. Same injection shape as
+// injectLmsSignupScript above.
+function injectNewsletterPopupScript(html: string): string {
+  const scriptTag = `<script src="/newsletter-popup.js" defer></script>`;
+  const maskedHtml = html.replace(
+    /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
+    (block) => " ".repeat(block.length),
+  );
+  let insertAt = -1;
+  const bodyCloseRe = /<\/body\s*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = bodyCloseRe.exec(maskedHtml)) !== null) {
+    insertAt = match.index;
+  }
+  if (insertAt !== -1) {
+    return html.slice(0, insertAt) + scriptTag + html.slice(insertAt);
+  }
+  return html + scriptTag;
+}
+
 // The Product Detail layout is ONE physical page shared by every product (see the
 // route's own product-slug branch below) — its baked <title>/meta tags are necessarily
 // generic (CommerceSettings.productDetailTemplateId's own authored SEO fields, whatever
@@ -495,6 +518,12 @@ export async function GET(
     if (html.includes(LMS_SIGNUP_MARKER_ATTR)) {
       html = injectLmsSignupScript(html);
     }
+    // Independent of commerceSettings.enabled — a site doesn't need Commerce/payments on
+    // to want newsletter capture. Reuses the same commerceSettings row fetched above (both
+    // live on the same entity) rather than a second DB read.
+    if (commerceSettings?.newsletterPopupEnabled && commerceSettings?.maildripNewsletterGroupId) {
+      html = injectNewsletterPopupScript(html);
+    }
 
     // Record analytics view asynchronously (does not block client response)
     try {
@@ -567,6 +596,9 @@ export async function GET(
           });
           html = optimizeImages(html);
           html = injectCommerceScript(html, `/${(await getStorefrontSlug(published.templateId)) ?? DEFAULT_STOREFRONT_SLUG}`);
+          if (commerceSettings.newsletterPopupEnabled && commerceSettings.maildripNewsletterGroupId) {
+            html = injectNewsletterPopupScript(html);
+          }
           if (!resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
             const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
             html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
