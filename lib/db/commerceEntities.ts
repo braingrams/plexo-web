@@ -520,6 +520,13 @@ export const CommerceSettings = new Entity(
       // accepts and lib/paystack.ts for where this replaces a hardcoded "NGN" literal.
       currency: { type: "string", default: "NGN" },
       productDetailTemplateId: { type: "string" },
+      // The 4 auto-provisioned storefront pages (lib/commerce/storefrontLayout.ts) — real
+      // page-tree Templates (unlike productDetailTemplateId's parentId-less fragment), so the
+      // slug itself always lives on the Template row, never duplicated here.
+      storefrontTemplateId: { type: "string" },
+      storefrontCheckoutTemplateId: { type: "string" },
+      orderConfirmationTemplateId: { type: "string" },
+      trackOrderTemplateId: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },

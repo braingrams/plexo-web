@@ -4,10 +4,13 @@ import { slugify } from "@/server/slugDynamo";
 import { encryptDigitalAccessSecret, encryptBankDetail, encryptPaystackKey, encryptMaildripKey, encryptStripeKey, decryptPaystackKey, decryptMaildripKey, decryptStripeKey, tryDecrypt } from "@/lib/crypto";
 import { isKnownCurrency, isPaystackCompatibleCurrency } from "@/lib/commerce/currency";
 import { ensureProductDetailLayout } from "@/lib/commerce/productDetailLayout";
+import { ensureStorefrontLayout, getStorefrontSlug, renameStorefrontSlug } from "@/lib/commerce/storefrontLayout";
 import { maskSecret } from "@/lib/commerce/adminAuthDynamo";
 import { resolveCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { resendDigitalDelivery } from "@/lib/commerce/digitalDeliveryDynamo";
 import { sendCommerceStripeAccessRequestNotificationEmail, sendCommerceWithdrawalRequestNotificationEmail } from "@/lib/email";
+import { refundPaystackTransaction, listPaystackCustomers } from "@/lib/paystack";
+import { resolvePaystackKeysForMode, resolveActivePaystackKeys } from "@/lib/commerce/paystack";
 import { Template } from "@/lib/db/contentEntities";
 import { Organization, User } from "@/lib/db/coreEntities";
 import {
@@ -22,6 +25,8 @@ import {
   CommerceWalletLedgerEntry,
   CommerceWithdrawalRequest,
   CommerceStripeAccessRequest,
+  CommerceDeliveryMethod,
+  CommerceDiscountCode,
 } from "@/lib/db/commerceEntities";
 
 type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
@@ -45,6 +50,13 @@ async function resolveCommerceSiteId(resolved: ResolvedUser, templateId: unknown
     throw new Error(`No site found with id "${trimmed}" in this account. templateId must be a site's home page (no parent) — use list_landing_pages to find it.`);
   }
   return site.id;
+}
+
+const FULFILLMENT_STATUSES = new Set(["UNFULFILLED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "COMPLETED"]);
+
+function normalizeStringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((v): v is string => typeof v === "string" && v.trim().length > 0).map((v) => v.trim().toUpperCase());
 }
 
 async function ensureUniqueProductSlug(templateId: string, baseInput: string): Promise<string> {
@@ -174,7 +186,7 @@ export const COMMERCE_MCP_TOOLS = [
   },
   {
     name: "get_commerce_settings",
-    description: "Fetches a site's Commerce settings: enabled state, store currency, payment provider, Paystack/Stripe mode/keys (masked), MailDrip config, and notification email.",
+    description: "Fetches a site's Commerce settings: enabled state, storefront slug/URL, store currency, payment provider, Paystack/Stripe mode/keys (masked), MailDrip config, and notification email.",
     inputSchema: {
       type: "object",
       properties: { templateId: { type: "string", description: "The site's home page template id." } },
@@ -183,12 +195,13 @@ export const COMMERCE_MCP_TOOLS = [
   },
   {
     name: "update_commerce_settings",
-    description: `Updates a site's Commerce settings. Only the fields provided are changed. paymentProvider: BYO_PAYSTACK (default — the site's own Paystack keys below), PLATFORM_PAYSTACK (Plexo's own Paystack account, no keys needed, proceeds credit the Commerce wallet), BYO_STRIPE (the site's own Stripe keys below), or PLATFORM_STRIPE (Plexo's own Stripe account — requires prior approval, see request_commerce_stripe_access/get_commerce_stripe_access_status). currency can't be changed once the site has any orders.`,
+    description: `Updates a site's Commerce settings. Only the fields provided are changed. paymentProvider: BYO_PAYSTACK (default — the site's own Paystack keys below), PLATFORM_PAYSTACK (Plexo's own Paystack account, no keys needed, proceeds credit the Commerce wallet), BYO_STRIPE (the site's own Stripe keys below), or PLATFORM_STRIPE (Plexo's own Stripe account — requires prior approval, see request_commerce_stripe_access/get_commerce_stripe_access_status). currency can't be changed once the site has any orders. Setting enabled:true auto-provisions a working storefront (shop grid, checkout, order confirmation, order tracking) at /store if one doesn't exist yet — rename its URL any time with storefrontSlug.`,
     inputSchema: {
       type: "object",
       properties: {
         templateId: { type: "string", description: "The site's home page template id." },
         enabled: { type: "boolean", description: "Master on/off switch for Commerce on this site." },
+        storefrontSlug: { type: "string", description: "Renames the auto-provisioned storefront page's URL segment (default \"store\", i.e. /store). Commerce must already be enabled. The order-confirmation and track-order pages are never renameable." },
         currency: { type: "string", description: "Site-wide store currency (ISO 4217, e.g. NGN/USD/GBP/EUR/GHS/KES/ZAR). Set this before taking orders — it can't be changed afterward." },
         paymentProvider: { type: "string", enum: ["BYO_PAYSTACK", "PLATFORM_PAYSTACK", "PLATFORM_STRIPE", "BYO_STRIPE"] },
         paystackMode: { type: "string", enum: ["TEST", "LIVE"], description: "Which BYO Paystack key pair is active." },
@@ -297,6 +310,156 @@ export const COMMERCE_MCP_TOOLS = [
         reason: { type: "string", description: "Optional — why Stripe is needed." },
         expectedVolume: { type: "string", description: "Optional — expected monthly volume." },
       },
+    },
+  },
+  {
+    name: "list_commerce_delivery_methods",
+    description: "Lists a site's configured delivery/fulfillment methods (pickup and/or courier options with fees and country/state restrictions), sorted by their display order.",
+    inputSchema: {
+      type: "object",
+      properties: { templateId: { type: "string", description: "The site's home page template id." } },
+      required: ["templateId"],
+    },
+  },
+  {
+    name: "create_commerce_delivery_method",
+    description: "Creates a delivery/fulfillment method a customer can choose at checkout.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        name: { type: "string", description: "Shown to the customer at checkout, e.g. \"Store Pickup\" or \"Lagos Courier\"." },
+        type: { type: "string", enum: ["PICKUP", "COURIER"] },
+        feeMinor: { type: "number", description: "Fee in the smallest currency unit. Defaults to 0." },
+        description: { type: "string" },
+        countries: { type: "array", items: { type: "string" }, description: "ISO-3166-1 alpha-2 codes this method is restricted to. Omit/empty for worldwide." },
+        states: { type: "array", items: { type: "string" }, description: "State/region names this method is restricted to. Omit/empty for unrestricted." },
+        estimatedTimeLabel: { type: "string", description: "e.g. \"2-3 business days\"." },
+        sortOrder: { type: "number" },
+      },
+      required: ["templateId", "name", "type"],
+    },
+  },
+  {
+    name: "update_commerce_delivery_method",
+    description: "Updates a delivery method. Only the fields provided are changed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        deliveryMethodId: { type: "string" },
+        name: { type: "string" },
+        type: { type: "string", enum: ["PICKUP", "COURIER"] },
+        feeMinor: { type: "number" },
+        description: { type: "string", description: "Empty string clears it." },
+        countries: { type: "array", items: { type: "string" }, description: "Empty array clears the restriction (worldwide)." },
+        states: { type: "array", items: { type: "string" }, description: "Empty array clears the restriction." },
+        estimatedTimeLabel: { type: "string" },
+        status: { type: "string", enum: ["ACTIVE", "INACTIVE"] },
+        sortOrder: { type: "number" },
+      },
+      required: ["templateId", "deliveryMethodId"],
+    },
+  },
+  {
+    name: "delete_commerce_delivery_method",
+    description: "Permanently deletes a delivery method.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        deliveryMethodId: { type: "string" },
+      },
+      required: ["templateId", "deliveryMethodId"],
+    },
+  },
+  {
+    name: "update_commerce_order",
+    description: "Updates an order's fulfillment status (UNFULFILLED/PROCESSING/READY_FOR_PICKUP/SHIPPED/COMPLETED). Payment status is never settable here — it only changes via the payment webhook or refund_commerce_order.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        orderId: { type: "string" },
+        fulfillmentStatus: { type: "string", enum: ["UNFULFILLED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "COMPLETED"] },
+      },
+      required: ["templateId", "orderId", "fulfillmentStatus"],
+    },
+  },
+  {
+    name: "refund_commerce_order",
+    description: "Refunds a PAID order through the Paystack account it was actually paid through. Paystack-only today — a PLATFORM_STRIPE-paid order will error, since that refund path doesn't exist yet. Does not restock inventory or free a booking slot; that's a separate deliberate decision.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        orderId: { type: "string" },
+      },
+      required: ["templateId", "orderId"],
+    },
+  },
+  {
+    name: "list_commerce_discounts",
+    description: "Lists a site's discount codes, most recently created first.",
+    inputSchema: {
+      type: "object",
+      properties: { templateId: { type: "string", description: "The site's home page template id." } },
+      required: ["templateId"],
+    },
+  },
+  {
+    name: "create_commerce_discount",
+    description: "Creates a discount code customers can redeem at checkout.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        code: { type: "string", description: "Case-insensitive; stored uppercased. Must be unique on this site." },
+        type: { type: "string", enum: ["PERCENT", "FIXED"] },
+        value: { type: "number", description: "A positive integer. For PERCENT, out of 100 (and can't exceed 100). For FIXED, the smallest currency unit." },
+        expiresAt: { type: "string", description: "Optional ISO 8601 date/time after which the code stops working." },
+        usageLimit: { type: "number", description: "Optional max number of redemptions." },
+      },
+      required: ["templateId", "code", "type", "value"],
+    },
+  },
+  {
+    name: "update_commerce_discount",
+    description: "Updates a discount code's active state, expiry, or usage limit. code/type/value can't be changed once created — delete and recreate instead.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        discountId: { type: "string" },
+        active: { type: "boolean" },
+        expiresAt: { type: "string", description: "Empty string clears the expiry." },
+        usageLimit: { type: "number", description: "0 or omitted-as-empty clears the limit." },
+      },
+      required: ["templateId", "discountId"],
+    },
+  },
+  {
+    name: "delete_commerce_discount",
+    description: "Permanently deletes a discount code.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        discountId: { type: "string" },
+      },
+      required: ["templateId", "discountId"],
+    },
+  },
+  {
+    name: "list_commerce_customers",
+    description: "Lists this site's customers directly from its Paystack account (the merchant account that actually processed their payments) — requires Paystack to be configured on this site.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        page: { type: "number", description: "1-indexed page number." },
+      },
+      required: ["templateId"],
     },
   },
 ];
@@ -474,9 +637,11 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
     case "get_commerce_settings": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
       const { data: settings } = await CommerceSettings.get({ templateId: siteId }).go();
+      const storefrontSlug = await getStorefrontSlug(siteId);
       return {
         settings: {
           enabled: settings?.enabled ?? false,
+          storefrontSlug,
           currency: settings?.currency ?? "NGN",
           paymentProvider: settings?.paymentProvider ?? "BYO_PAYSTACK",
           paystackMode: settings?.paystackMode ?? "TEST",
@@ -599,21 +764,40 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         await CommerceSettings.create({ id: randomUUID(), templateId: siteId, organizationId: resolved.organizationId, ...data }).go();
       }
 
-      // Mirrors the settings PUT route: auto-provision the starter product page the moment
-      // Commerce is (or becomes) enabled, so this MCP path doesn't leave a site enabled with
-      // no working product page just because it didn't go through the dashboard UI.
+      // Mirrors the settings PUT route: auto-provision the starter product page AND the
+      // storefront (shop/checkout/confirmation/tracking pages) the moment Commerce is (or
+      // becomes) enabled, so this MCP path doesn't leave a site enabled with nothing to sell
+      // from just because it didn't go through the dashboard UI.
       const effectiveEnabled = typeof args.enabled === "boolean" ? args.enabled : (existingSettings?.enabled ?? false);
+      let storefrontWarning: string | null = null;
       if (effectiveEnabled) {
         await ensureProductDetailLayout(siteId, resolved.organizationId, resolved.userId);
+        await ensureStorefrontLayout(siteId, resolved.organizationId, resolved.userId);
+      }
+      if (typeof args.storefrontSlug === "string" && args.storefrontSlug.trim()) {
+        if (!effectiveEnabled) throw new Error("Enable Commerce before renaming the storefront.");
+        try {
+          await renameStorefrontSlug(siteId, args.storefrontSlug.trim());
+        } catch (err) {
+          storefrontWarning = err instanceof Error ? err.message : "Failed to rename the storefront.";
+        }
       }
 
       const { data: settings } = await CommerceSettings.get({ templateId: siteId }).go();
       if (!settings) throw new Error(`CommerceSettings for template ${siteId} vanished immediately after being saved`);
+      const resolvedStorefrontSlug = await getStorefrontSlug(siteId);
 
       return {
         success: true,
-        settings: { enabled: settings.enabled, currency: settings.currency ?? "NGN", paymentProvider: settings.paymentProvider, paystackMode: settings.paystackMode, stripeMode: settings.stripeMode ?? "TEST" },
-        ...(currencyWarning ? { warning: currencyWarning } : {}),
+        settings: {
+          enabled: settings.enabled,
+          storefrontSlug: resolvedStorefrontSlug,
+          currency: settings.currency ?? "NGN",
+          paymentProvider: settings.paymentProvider,
+          paystackMode: settings.paystackMode,
+          stripeMode: settings.stripeMode ?? "TEST",
+        },
+        ...(currencyWarning || storefrontWarning ? { warning: [currencyWarning, storefrontWarning].filter(Boolean).join(" ") } : {}),
       };
     }
 
@@ -800,6 +984,225 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       }).catch((err) => console.error("Failed to send Commerce Stripe access admin notification email:", err));
 
       return { success: true, request: { id, status: "PENDING" } };
+    }
+
+    case "list_commerce_delivery_methods": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const { data: methods } = await CommerceDeliveryMethod.query.primary({ templateId: siteId }).go();
+      methods.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+      return { methods };
+    }
+
+    case "create_commerce_delivery_method": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      if (!name) throw new Error("name is required.");
+      if (args.type !== "PICKUP" && args.type !== "COURIER") throw new Error("type must be PICKUP or COURIER.");
+      if (args.feeMinor !== undefined && (!Number.isInteger(args.feeMinor) || args.feeMinor < 0)) throw new Error("feeMinor must be a non-negative integer.");
+
+      const id = randomUUID();
+      await CommerceDeliveryMethod.create({
+        id,
+        templateId: siteId,
+        organizationId: resolved.organizationId,
+        name,
+        type: args.type,
+        feeMinor: typeof args.feeMinor === "number" ? args.feeMinor : 0,
+        description: typeof args.description === "string" && args.description ? args.description : undefined,
+        countries: normalizeStringList(args.countries),
+        states: normalizeStringList(args.states),
+        estimatedTimeLabel: typeof args.estimatedTimeLabel === "string" && args.estimatedTimeLabel ? args.estimatedTimeLabel : undefined,
+        sortOrder: typeof args.sortOrder === "number" ? Math.trunc(args.sortOrder) : undefined,
+      }).go();
+      const { data: method } = await CommerceDeliveryMethod.get({ templateId: siteId, id }).go();
+      return { success: true, method };
+    }
+
+    case "update_commerce_delivery_method": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const deliveryMethodId = typeof args.deliveryMethodId === "string" ? args.deliveryMethodId.trim() : "";
+      if (!deliveryMethodId) throw new Error("deliveryMethodId is required.");
+      const { data: existing } = await CommerceDeliveryMethod.get({ templateId: siteId, id: deliveryMethodId }).go();
+      if (!existing) throw new Error(`Delivery method not found with id "${deliveryMethodId}".`);
+
+      if (args.type !== undefined && args.type !== "PICKUP" && args.type !== "COURIER") throw new Error("type must be PICKUP or COURIER.");
+      if (args.feeMinor !== undefined && (!Number.isInteger(args.feeMinor) || args.feeMinor < 0)) throw new Error("feeMinor must be a non-negative integer.");
+      if (args.status !== undefined && args.status !== "ACTIVE" && args.status !== "INACTIVE") throw new Error("status must be ACTIVE or INACTIVE.");
+
+      const data: Record<string, unknown> = {};
+      const toRemove: string[] = [];
+      if (typeof args.name === "string" && args.name.trim()) data.name = args.name.trim();
+      if (args.type !== undefined) data.type = args.type;
+      if (typeof args.feeMinor === "number") data.feeMinor = args.feeMinor;
+      if (args.description !== undefined) {
+        if (typeof args.description === "string" && args.description) data.description = args.description;
+        else toRemove.push("description");
+      }
+      if (args.countries !== undefined) {
+        const normalized = normalizeStringList(args.countries);
+        if (normalized && normalized.length) data.countries = normalized;
+        else toRemove.push("countries");
+      }
+      if (args.states !== undefined) {
+        const normalized = normalizeStringList(args.states);
+        if (normalized && normalized.length) data.states = normalized;
+        else toRemove.push("states");
+      }
+      if (args.estimatedTimeLabel !== undefined) {
+        if (typeof args.estimatedTimeLabel === "string" && args.estimatedTimeLabel) data.estimatedTimeLabel = args.estimatedTimeLabel;
+        else toRemove.push("estimatedTimeLabel");
+      }
+      if (args.status !== undefined) data.status = args.status;
+      if (typeof args.sortOrder === "number") data.sortOrder = Math.trunc(args.sortOrder);
+
+      let patch = CommerceDeliveryMethod.patch({ templateId: siteId, id: deliveryMethodId }).set(data);
+      if (toRemove.length) patch = patch.remove(toRemove as any);
+      await patch.go();
+      const { data: method } = await CommerceDeliveryMethod.get({ templateId: siteId, id: deliveryMethodId }).go();
+      return { success: true, method };
+    }
+
+    case "delete_commerce_delivery_method": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const deliveryMethodId = typeof args.deliveryMethodId === "string" ? args.deliveryMethodId.trim() : "";
+      if (!deliveryMethodId) throw new Error("deliveryMethodId is required.");
+      const { data: existing } = await CommerceDeliveryMethod.get({ templateId: siteId, id: deliveryMethodId }).go();
+      if (!existing) throw new Error(`Delivery method not found with id "${deliveryMethodId}".`);
+      await CommerceDeliveryMethod.remove({ templateId: siteId, id: deliveryMethodId }).go();
+      return { success: true, deleted: true };
+    }
+
+    case "update_commerce_order": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
+      if (!orderId) throw new Error("orderId is required.");
+      const { data: existing } = await CommerceOrder.get({ templateId: siteId, id: orderId }).go();
+      if (!existing) throw new Error(`Order not found with id "${orderId}".`);
+      if (!FULFILLMENT_STATUSES.has(args.fulfillmentStatus)) {
+        throw new Error("fulfillmentStatus must be one of UNFULFILLED, PROCESSING, READY_FOR_PICKUP, SHIPPED, COMPLETED.");
+      }
+      await CommerceOrder.patch({ templateId: siteId, id: orderId }).set({ fulfillmentStatus: args.fulfillmentStatus }).go();
+      const { data: order } = await CommerceOrder.get({ templateId: siteId, id: orderId }).go();
+      return { success: true, order };
+    }
+
+    case "refund_commerce_order": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
+      if (!orderId) throw new Error("orderId is required.");
+      const { data: order } = await CommerceOrder.get({ templateId: siteId, id: orderId }).go();
+      if (!order) throw new Error(`Order not found with id "${orderId}".`);
+      if (order.status !== "PAID") throw new Error(`Only a PAID order can be refunded (this one is ${order.status}).`);
+      if (!order.paystackMode || !order.paystackReference) {
+        throw new Error("This order wasn't paid via Paystack — refunding it isn't supported yet.");
+      }
+
+      const { data: settings } = await CommerceSettings.get({ templateId: siteId }).go();
+      const orderModeKeys = settings
+        ? resolvePaystackKeysForMode(
+            {
+              paystackTestPublicKey: settings.paystackTestPublicKey ?? null,
+              paystackTestSecretKeyEncrypted: settings.paystackTestSecretKeyEncrypted ?? null,
+              paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
+              paystackLiveSecretKeyEncrypted: settings.paystackLiveSecretKeyEncrypted ?? null,
+            },
+            order.paystackMode,
+          )
+        : null;
+      if (!orderModeKeys?.secretKeyEncrypted) {
+        throw new Error(`This site has no ${order.paystackMode.toLowerCase()}-mode Paystack key configured to refund through.`);
+      }
+
+      await refundPaystackTransaction({ secretKey: decryptPaystackKey(orderModeKeys.secretKeyEncrypted), reference: order.paystackReference });
+      await CommerceOrder.patch({ templateId: siteId, id: orderId }).set({ status: "REFUNDED" }).go();
+      const { data: updated } = await CommerceOrder.get({ templateId: siteId, id: orderId }).go();
+      return { success: true, order: updated };
+    }
+
+    case "list_commerce_discounts": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const { data: discounts } = await CommerceDiscountCode.query.primary({ templateId: siteId }).go();
+      discounts.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+      return { discounts };
+    }
+
+    case "create_commerce_discount": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const normalizedCode = typeof args.code === "string" ? args.code.trim().toUpperCase() : "";
+      if (!normalizedCode) throw new Error("code is required.");
+      if (args.type !== "PERCENT" && args.type !== "FIXED") throw new Error("type must be PERCENT or FIXED.");
+      if (typeof args.value !== "number" || !Number.isInteger(args.value) || args.value <= 0) throw new Error("value must be a positive integer.");
+      if (args.type === "PERCENT" && args.value > 100) throw new Error("A percentage discount can't exceed 100.");
+
+      const { data: byCode } = await CommerceDiscountCode.query.byCode({ templateId: siteId, code: normalizedCode }).go();
+      if (byCode[0]) throw new Error(`"${normalizedCode}" is already in use.`);
+
+      const id = randomUUID();
+      await CommerceDiscountCode.create({
+        id,
+        templateId: siteId,
+        organizationId: resolved.organizationId,
+        code: normalizedCode,
+        type: args.type,
+        value: args.value,
+        expiresAt: typeof args.expiresAt === "string" && args.expiresAt ? new Date(args.expiresAt).toISOString() : undefined,
+        usageLimit: typeof args.usageLimit === "number" && args.usageLimit > 0 ? Math.trunc(args.usageLimit) : undefined,
+      }).go();
+      const { data: discount } = await CommerceDiscountCode.get({ templateId: siteId, id }).go();
+      return { success: true, discount };
+    }
+
+    case "update_commerce_discount": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const discountId = typeof args.discountId === "string" ? args.discountId.trim() : "";
+      if (!discountId) throw new Error("discountId is required.");
+      const { data: existing } = await CommerceDiscountCode.get({ templateId: siteId, id: discountId }).go();
+      if (!existing) throw new Error(`Discount code not found with id "${discountId}".`);
+
+      const data: Record<string, unknown> = {};
+      const toRemove: string[] = [];
+      if (typeof args.active === "boolean") data.active = args.active;
+      if (args.expiresAt !== undefined) {
+        if (args.expiresAt) data.expiresAt = new Date(args.expiresAt).toISOString();
+        else toRemove.push("expiresAt");
+      }
+      if (args.usageLimit !== undefined) {
+        if (typeof args.usageLimit === "number" && args.usageLimit > 0) data.usageLimit = Math.trunc(args.usageLimit);
+        else toRemove.push("usageLimit");
+      }
+
+      let patch = CommerceDiscountCode.patch({ templateId: siteId, id: discountId }).set(data);
+      if (toRemove.length) patch = patch.remove(toRemove as any);
+      await patch.go();
+      const { data: discount } = await CommerceDiscountCode.get({ templateId: siteId, id: discountId }).go();
+      return { success: true, discount };
+    }
+
+    case "delete_commerce_discount": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const discountId = typeof args.discountId === "string" ? args.discountId.trim() : "";
+      if (!discountId) throw new Error("discountId is required.");
+      const { data: existing } = await CommerceDiscountCode.get({ templateId: siteId, id: discountId }).go();
+      if (!existing) throw new Error(`Discount code not found with id "${discountId}".`);
+      await CommerceDiscountCode.remove({ templateId: siteId, id: discountId }).go();
+      return { success: true, deleted: true };
+    }
+
+    case "list_commerce_customers": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const { data: settings } = await CommerceSettings.get({ templateId: siteId }).go();
+      const activeSecretKeyEncrypted = settings
+        ? resolveActivePaystackKeys({
+            paystackMode: settings.paystackMode ?? "TEST",
+            paystackTestPublicKey: settings.paystackTestPublicKey ?? null,
+            paystackTestSecretKeyEncrypted: settings.paystackTestSecretKeyEncrypted ?? null,
+            paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
+            paystackLiveSecretKeyEncrypted: settings.paystackLiveSecretKeyEncrypted ?? null,
+          }).secretKeyEncrypted
+        : null;
+      if (!activeSecretKeyEncrypted) throw new Error("Paystack isn't configured for this site yet.");
+      const page = Number(args.page) || 1;
+      return await listPaystackCustomers({ secretKey: decryptPaystackKey(activeSecretKeyEncrypted), page });
     }
 
     default:
