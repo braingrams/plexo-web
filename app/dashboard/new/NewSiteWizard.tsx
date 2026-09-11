@@ -81,6 +81,20 @@ function IconSparkle() {
   );
 }
 
+function IconWand() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m15 4 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z" />
+      <path d="M5 20 19 6" />
+      <path d="m5 13 .8 1.7L7.5 15.5l-1.7.8L5 18l-.8-1.7L2.5 15.5l1.7-.8L5 13Z" />
+    </svg>
+  );
+}
+
+/** A blank canvas for AI generation to start from — same empty-body shape
+ * create_landing_page_subpage falls back to when no content is given. */
+const BLANK_DESIGN_JSON = { body: { style: { background: "#ffffff", fontFamily: "inherit" }, rows: [] } };
+
 /** Step indicator badge — filled brand while active or done, a checkmark once done,
  * an outlined faint circle while still upcoming. */
 function StepBadge({ n, active, done }: { n: number; active: boolean; done: boolean }) {
@@ -228,11 +242,14 @@ function Dropzone({ file, onFile }: { file: File | null; onFile: (f: File | null
 
 export function NewSiteWizard() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [startTab, setStartTab] = useState<"marketplace" | "upload">("marketplace");
+  const [startTab, setStartTab] = useState<"marketplace" | "ai" | "upload">("marketplace");
 
   const [items, setItems] = useState<MarketplaceItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiGenerating, setAiGenerating] = useState(false);
 
   const [uploadName, setUploadName] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -283,6 +300,62 @@ export function NewSiteWizard() {
       advanceToConnect(data.template);
     } finally {
       setBusyId(null);
+    }
+  }
+
+  /**
+   * Calls the SAME two native, in-process endpoints an MCP client (or any first-party AI
+   * caller) would — /api/v1/ai/generate (mode: generate_layout, the exact bridge
+   * RawAiEditPanel.tsx already uses for in-dashboard AI edits, via the
+   * x-api-key: "workspace-internal" sentinel that resolves the caller's real session
+   * instead of a stored API key) to turn the prompt into a designJson tree, then
+   * /api/v1/publish (the same endpoint plexo-mcp's create_landing_page ultimately calls)
+   * to compile and save it as a real Template. No MCP round-trip, no extra hop — this is
+   * the fastest path plexo-web itself has to a working page from a prompt.
+   */
+  async function handleGenerateWithAi() {
+    if (!aiPrompt.trim()) {
+      setError("Describe the site you want first.");
+      return;
+    }
+    setError(null);
+    setAiGenerating(true);
+    try {
+      const genRes = await fetch("/api/v1/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": "workspace-internal" },
+        body: JSON.stringify({
+          mode: "generate_layout",
+          prompt: aiPrompt.trim(),
+          templateKind: "LANDING_PAGE",
+          context: BLANK_DESIGN_JSON,
+        }),
+      });
+      const genData = await genRes.json().catch(() => ({}));
+      if (!genRes.ok) {
+        // "AI is not enabled for this account" is the one error here a first-time user is
+        // actually likely to hit (AI access is opt-in per account, set up in Settings —
+        // same requirement every other in-dashboard AI feature already has) — point them
+        // at the fix instead of leaving a bare permission error on their very first action.
+        const hint = genRes.status === 403 ? " Enable AI for your account in Settings, then try again." : "";
+        setError((genData.error ?? "Failed to generate your site.") + hint);
+        return;
+      }
+
+      const name = aiPrompt.trim().slice(0, 60);
+      const publishRes = await fetch("/api/v1/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, kind: "LANDING_PAGE", designJson: genData.result }),
+      });
+      const publishData = await publishRes.json().catch(() => ({}));
+      if (!publishRes.ok) {
+        setError(publishData.error ?? "Generated the design, but couldn't save it.");
+        return;
+      }
+      advanceToConnect({ id: publishData.templateId, name: publishData.name });
+    } finally {
+      setAiGenerating(false);
     }
   }
 
@@ -427,6 +500,23 @@ export function NewSiteWizard() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setStartTab("ai")}
+                  style={{
+                    fontSize: "12.5px",
+                    fontWeight: 650,
+                    padding: "7px 14px",
+                    borderRadius: 999,
+                    border: "none",
+                    cursor: "pointer",
+                    background: startTab === "ai" ? "var(--brand)" : "transparent",
+                    color: startTab === "ai" ? "#fff" : "var(--text-muted)",
+                    transition: "background 0.15s, color 0.15s",
+                  }}
+                >
+                  Build with AI
+                </button>
+                <button
+                  type="button"
                   onClick={() => setStartTab("upload")}
                   style={{
                     fontSize: "12.5px",
@@ -496,6 +586,42 @@ export function NewSiteWizard() {
                     })}
                   </div>
                 )
+              ) : startTab === "ai" ? (
+                <div style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 18 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{
+                        width: 36, height: 36, borderRadius: 10, background: "var(--brand-subtle)",
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                      }}
+                    >
+                      <IconWand />
+                    </div>
+                    <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-muted)" }}>
+                      Describe the site you want — Plexo's AI builds a complete, working page from your prompt.
+                    </p>
+                  </div>
+                  <textarea
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder="A modern landing page for a boutique coffee roastery, with a hero section, our story, a product grid, and a newsletter signup."
+                    rows={5}
+                    style={{ ...inputStyle(), resize: "vertical", fontFamily: "inherit" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleGenerateWithAi()}
+                    disabled={aiGenerating || !aiPrompt.trim()}
+                    style={{ ...primaryButtonStyle(!aiGenerating && !!aiPrompt.trim()), alignSelf: "flex-start", cursor: aiGenerating ? "wait" : "pointer" }}
+                  >
+                    {aiGenerating ? "Generating your site…" : "Generate my site"}
+                  </button>
+                  {aiGenerating && (
+                    <p style={{ fontSize: "11.5px", color: "var(--text-faint)", margin: 0 }}>
+                      This can take up to a minute for a full layout.
+                    </p>
+                  )}
+                </div>
               ) : (
                 <form onSubmit={handleUpload} style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 22 }}>
                   <Dropzone file={file} onFile={setFile} />
