@@ -23,6 +23,7 @@ import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMI
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { BLOG_MCP_TOOLS, BLOG_TOOL_NAMES, handleBlogTool } from "./blogTools";
 import { COMMERCE_MCP_TOOLS, COMMERCE_TOOL_NAMES, handleCommerceTool } from "./commerceTools";
+import { LMS_MCP_TOOLS, LMS_TOOL_NAMES, handleLmsTool } from "./lmsTools";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
 
@@ -861,6 +862,7 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   },
   ...BLOG_MCP_TOOLS,
   ...COMMERCE_MCP_TOOLS,
+  ...LMS_MCP_TOOLS,
 ];
 
 export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise<NextResponse> {
@@ -1772,6 +1774,10 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           }
           if (COMMERCE_TOOL_NAMES.has(toolName)) {
             toolResult = await handleCommerceTool(toolName, args, resolved);
+            break;
+          }
+          if (LMS_TOOL_NAMES.has(toolName)) {
+            toolResult = await handleLmsTool(toolName, args, resolved);
             break;
           }
           throw new Error(`Unknown tool: ${toolName}`);
