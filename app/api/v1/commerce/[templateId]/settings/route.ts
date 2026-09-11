@@ -60,6 +60,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
       maildripPaidGroupId: settings?.maildripPaidGroupId ?? null,
       maildripNewsletterGroupId: settings?.maildripNewsletterGroupId ?? null,
       notificationEmail: settings?.notificationEmail ?? null,
+      notifyCustomerOnPaid: settings?.notifyCustomerOnPaid ?? true,
+      notifyCustomerOnProcessing: settings?.notifyCustomerOnProcessing ?? true,
+      notifyCustomerOnReadyForPickup: settings?.notifyCustomerOnReadyForPickup ?? true,
+      notifyCustomerOnShipped: settings?.notifyCustomerOnShipped ?? true,
+      notifyCustomerOnCompleted: settings?.notifyCustomerOnCompleted ?? true,
+      notifyCustomerOnRefunded: settings?.notifyCustomerOnRefunded ?? true,
       webhookUrl: `${request.nextUrl.origin}/api/webhooks/paystack/${templateId}`,
       stripeWebhookUrl: `${request.nextUrl.origin}/api/webhooks/stripe/commerce/${templateId}`,
     },
@@ -97,6 +103,12 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     maildripNewsletterGroupId,
     notificationEmail,
     storefrontSlug,
+    notifyCustomerOnPaid,
+    notifyCustomerOnProcessing,
+    notifyCustomerOnReadyForPickup,
+    notifyCustomerOnShipped,
+    notifyCustomerOnCompleted,
+    notifyCustomerOnRefunded,
   } = body;
 
   if (storefrontSlug !== undefined && typeof storefrontSlug !== "string") {
@@ -238,6 +250,12 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     if (notificationEmail) data.notificationEmail = notificationEmail;
     else toRemove.push("notificationEmail");
   }
+  if (typeof notifyCustomerOnPaid === "boolean") data.notifyCustomerOnPaid = notifyCustomerOnPaid;
+  if (typeof notifyCustomerOnProcessing === "boolean") data.notifyCustomerOnProcessing = notifyCustomerOnProcessing;
+  if (typeof notifyCustomerOnReadyForPickup === "boolean") data.notifyCustomerOnReadyForPickup = notifyCustomerOnReadyForPickup;
+  if (typeof notifyCustomerOnShipped === "boolean") data.notifyCustomerOnShipped = notifyCustomerOnShipped;
+  if (typeof notifyCustomerOnCompleted === "boolean") data.notifyCustomerOnCompleted = notifyCustomerOnCompleted;
+  if (typeof notifyCustomerOnRefunded === "boolean") data.notifyCustomerOnRefunded = notifyCustomerOnRefunded;
 
   const { data: existing } = await CommerceSettings.get({ templateId }).go();
   if (existing) {
@@ -295,6 +313,12 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
       maildripPaidGroupId: settings.maildripPaidGroupId ?? null,
       maildripNewsletterGroupId: settings.maildripNewsletterGroupId ?? null,
       notificationEmail: settings.notificationEmail ?? null,
+      notifyCustomerOnPaid: settings.notifyCustomerOnPaid ?? true,
+      notifyCustomerOnProcessing: settings.notifyCustomerOnProcessing ?? true,
+      notifyCustomerOnReadyForPickup: settings.notifyCustomerOnReadyForPickup ?? true,
+      notifyCustomerOnShipped: settings.notifyCustomerOnShipped ?? true,
+      notifyCustomerOnCompleted: settings.notifyCustomerOnCompleted ?? true,
+      notifyCustomerOnRefunded: settings.notifyCustomerOnRefunded ?? true,
       webhookUrl: `${request.nextUrl.origin}/api/webhooks/paystack/${templateId}`,
       stripeWebhookUrl: `${request.nextUrl.origin}/api/webhooks/stripe/commerce/${templateId}`,
     },

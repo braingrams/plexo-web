@@ -527,6 +527,17 @@ export const CommerceSettings = new Entity(
       storefrontCheckoutTemplateId: { type: "string" },
       orderConfirmationTemplateId: { type: "string" },
       trackOrderTemplateId: { type: "string" },
+      // Per-event customer email toggles (lib/commerce/orderStatusActions.ts) — every
+      // order-processing email a customer gets is on by default ("they should always know
+      // their order's status"), with the site owner able to turn any one off. Only events
+      // with a real trigger in the codebase get a toggle — there's no CANCELLED trigger
+      // today, so no notifyCustomerOnCancelled field either.
+      notifyCustomerOnPaid: { type: "boolean", default: true },
+      notifyCustomerOnProcessing: { type: "boolean", default: true },
+      notifyCustomerOnReadyForPickup: { type: "boolean", default: true },
+      notifyCustomerOnShipped: { type: "boolean", default: true },
+      notifyCustomerOnCompleted: { type: "boolean", default: true },
+      notifyCustomerOnRefunded: { type: "boolean", default: true },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },

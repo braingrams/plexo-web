@@ -9,8 +9,9 @@ import { maskSecret } from "@/lib/commerce/adminAuthDynamo";
 import { resolveCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { resendDigitalDelivery } from "@/lib/commerce/digitalDeliveryDynamo";
 import { sendCommerceStripeAccessRequestNotificationEmail, sendCommerceWithdrawalRequestNotificationEmail } from "@/lib/email";
-import { refundPaystackTransaction, listPaystackCustomers } from "@/lib/paystack";
-import { resolvePaystackKeysForMode, resolveActivePaystackKeys } from "@/lib/commerce/paystack";
+import { listPaystackCustomers } from "@/lib/paystack";
+import { resolveActivePaystackKeys } from "@/lib/commerce/paystack";
+import { updateOrderFulfillmentStatus, refundCommerceOrder } from "@/lib/commerce/orderStatusActions";
 import { Template } from "@/lib/db/contentEntities";
 import { Organization, User } from "@/lib/db/coreEntities";
 import {
@@ -51,8 +52,6 @@ async function resolveCommerceSiteId(resolved: ResolvedUser, templateId: unknown
   }
   return site.id;
 }
-
-const FULFILLMENT_STATUSES = new Set(["UNFULFILLED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "COMPLETED"]);
 
 function normalizeStringList(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -220,6 +219,12 @@ export const COMMERCE_MCP_TOOLS = [
         maildripPaidGroupId: { type: "string" },
         maildripNewsletterGroupId: { type: "string" },
         notificationEmail: { type: "string" },
+        notifyCustomerOnPaid: { type: "boolean", description: "Email the customer an order confirmation once paid. Default true." },
+        notifyCustomerOnProcessing: { type: "boolean", description: "Email the customer when fulfillment status changes to PROCESSING. Default true." },
+        notifyCustomerOnReadyForPickup: { type: "boolean", description: "Email the customer when fulfillment status changes to READY_FOR_PICKUP. Default true." },
+        notifyCustomerOnShipped: { type: "boolean", description: "Email the customer when fulfillment status changes to SHIPPED. Default true." },
+        notifyCustomerOnCompleted: { type: "boolean", description: "Email the customer when fulfillment status changes to COMPLETED. Default true." },
+        notifyCustomerOnRefunded: { type: "boolean", description: "Email the customer when their order is refunded. Default true." },
       },
       required: ["templateId"],
     },
@@ -660,6 +665,12 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
           maildripPaidGroupId: settings?.maildripPaidGroupId ?? null,
           maildripNewsletterGroupId: settings?.maildripNewsletterGroupId ?? null,
           notificationEmail: settings?.notificationEmail ?? null,
+          notifyCustomerOnPaid: settings?.notifyCustomerOnPaid ?? true,
+          notifyCustomerOnProcessing: settings?.notifyCustomerOnProcessing ?? true,
+          notifyCustomerOnReadyForPickup: settings?.notifyCustomerOnReadyForPickup ?? true,
+          notifyCustomerOnShipped: settings?.notifyCustomerOnShipped ?? true,
+          notifyCustomerOnCompleted: settings?.notifyCustomerOnCompleted ?? true,
+          notifyCustomerOnRefunded: settings?.notifyCustomerOnRefunded ?? true,
         },
       };
     }
@@ -754,6 +765,12 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         if (args.notificationEmail) data.notificationEmail = args.notificationEmail;
         else toRemove.push("notificationEmail");
       }
+      if (typeof args.notifyCustomerOnPaid === "boolean") data.notifyCustomerOnPaid = args.notifyCustomerOnPaid;
+      if (typeof args.notifyCustomerOnProcessing === "boolean") data.notifyCustomerOnProcessing = args.notifyCustomerOnProcessing;
+      if (typeof args.notifyCustomerOnReadyForPickup === "boolean") data.notifyCustomerOnReadyForPickup = args.notifyCustomerOnReadyForPickup;
+      if (typeof args.notifyCustomerOnShipped === "boolean") data.notifyCustomerOnShipped = args.notifyCustomerOnShipped;
+      if (typeof args.notifyCustomerOnCompleted === "boolean") data.notifyCustomerOnCompleted = args.notifyCustomerOnCompleted;
+      if (typeof args.notifyCustomerOnRefunded === "boolean") data.notifyCustomerOnRefunded = args.notifyCustomerOnRefunded;
 
       const { data: existingSettings } = await CommerceSettings.get({ templateId: siteId }).go();
       if (existingSettings) {
@@ -796,6 +813,12 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
           paymentProvider: settings.paymentProvider,
           paystackMode: settings.paystackMode,
           stripeMode: settings.stripeMode ?? "TEST",
+          notifyCustomerOnPaid: settings.notifyCustomerOnPaid ?? true,
+          notifyCustomerOnProcessing: settings.notifyCustomerOnProcessing ?? true,
+          notifyCustomerOnReadyForPickup: settings.notifyCustomerOnReadyForPickup ?? true,
+          notifyCustomerOnShipped: settings.notifyCustomerOnShipped ?? true,
+          notifyCustomerOnCompleted: settings.notifyCustomerOnCompleted ?? true,
+          notifyCustomerOnRefunded: settings.notifyCustomerOnRefunded ?? true,
         },
         ...(currencyWarning || storefrontWarning ? { warning: [currencyWarning, storefrontWarning].filter(Boolean).join(" ") } : {}),
       };
@@ -1076,13 +1099,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
       const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
       if (!orderId) throw new Error("orderId is required.");
-      const { data: existing } = await CommerceOrder.get({ templateId: siteId, id: orderId }).go();
-      if (!existing) throw new Error(`Order not found with id "${orderId}".`);
-      if (!FULFILLMENT_STATUSES.has(args.fulfillmentStatus)) {
-        throw new Error("fulfillmentStatus must be one of UNFULFILLED, PROCESSING, READY_FOR_PICKUP, SHIPPED, COMPLETED.");
-      }
-      await CommerceOrder.patch({ templateId: siteId, id: orderId }).set({ fulfillmentStatus: args.fulfillmentStatus }).go();
-      const { data: order } = await CommerceOrder.get({ templateId: siteId, id: orderId }).go();
+      const order = await updateOrderFulfillmentStatus(siteId, resolved.organizationId, orderId, args.fulfillmentStatus);
       return { success: true, order };
     }
 
@@ -1090,33 +1107,8 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
       const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
       if (!orderId) throw new Error("orderId is required.");
-      const { data: order } = await CommerceOrder.get({ templateId: siteId, id: orderId }).go();
-      if (!order) throw new Error(`Order not found with id "${orderId}".`);
-      if (order.status !== "PAID") throw new Error(`Only a PAID order can be refunded (this one is ${order.status}).`);
-      if (!order.paystackMode || !order.paystackReference) {
-        throw new Error("This order wasn't paid via Paystack — refunding it isn't supported yet.");
-      }
-
-      const { data: settings } = await CommerceSettings.get({ templateId: siteId }).go();
-      const orderModeKeys = settings
-        ? resolvePaystackKeysForMode(
-            {
-              paystackTestPublicKey: settings.paystackTestPublicKey ?? null,
-              paystackTestSecretKeyEncrypted: settings.paystackTestSecretKeyEncrypted ?? null,
-              paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
-              paystackLiveSecretKeyEncrypted: settings.paystackLiveSecretKeyEncrypted ?? null,
-            },
-            order.paystackMode,
-          )
-        : null;
-      if (!orderModeKeys?.secretKeyEncrypted) {
-        throw new Error(`This site has no ${order.paystackMode.toLowerCase()}-mode Paystack key configured to refund through.`);
-      }
-
-      await refundPaystackTransaction({ secretKey: decryptPaystackKey(orderModeKeys.secretKeyEncrypted), reference: order.paystackReference });
-      await CommerceOrder.patch({ templateId: siteId, id: orderId }).set({ status: "REFUNDED" }).go();
-      const { data: updated } = await CommerceOrder.get({ templateId: siteId, id: orderId }).go();
-      return { success: true, order: updated };
+      const order = await refundCommerceOrder(siteId, resolved.organizationId, orderId);
+      return { success: true, order };
     }
 
     case "list_commerce_discounts": {
