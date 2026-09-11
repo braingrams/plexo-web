@@ -250,6 +250,12 @@ export function NewSiteWizard() {
 
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiGenerating, setAiGenerating] = useState(false);
+  // AI is a per-ApiKey setting (Settings → AI), not a single account-wide flag — "enabled"
+  // means at least one active key has useAi:true. Checked once, the first time the AI tab
+  // is opened, so a first-time user is asked to turn it on right here instead of hitting a
+  // bare permission error only after they've already written a prompt.
+  const [aiKeyStatus, setAiKeyStatus] = useState<"unchecked" | "checking" | "enabled" | "disabled">("unchecked");
+  const [enablingAi, setEnablingAi] = useState(false);
 
   const [uploadName, setUploadName] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -280,6 +286,61 @@ export function NewSiteWizard() {
       })
       .catch(() => { });
   }, []);
+
+  useEffect(() => {
+    if (startTab !== "ai" || aiKeyStatus !== "unchecked") return;
+    setAiKeyStatus("checking");
+    fetch("/api/settings/api-keys")
+      .then((res) => res.json())
+      .then((data) => {
+        const keys: { isActive: boolean; useAi: boolean }[] = data.apiKeys ?? [];
+        setAiKeyStatus(keys.some((k) => k.isActive && k.useAi) ? "enabled" : "disabled");
+      })
+      .catch(() => setAiKeyStatus("disabled"));
+  }, [startTab, aiKeyStatus]);
+
+  /** Turns AI on right here in the wizard instead of sending the user to Settings — reuses
+   * their most recent active API key if they have one (System AI needs no provider/BYOK
+   * key to work, just useAi:true — see AiSettingsClient.tsx), or creates one first if they
+   * have none yet. */
+  async function handleEnableAi() {
+    setError(null);
+    setEnablingAi(true);
+    try {
+      const listRes = await fetch("/api/settings/api-keys");
+      const listData = await listRes.json().catch(() => ({}));
+      const keys: { id: string; isActive: boolean; createdAt?: string }[] = listData.apiKeys ?? [];
+      let keyId = keys.find((k) => k.isActive)?.id;
+
+      if (!keyId) {
+        const createRes = await fetch("/api/settings/api-keys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Site builder AI" }),
+        });
+        const createData = await createRes.json().catch(() => ({}));
+        if (!createRes.ok) {
+          setError(createData.error ?? "Couldn't create an API key to enable AI with.");
+          return;
+        }
+        keyId = createData.apiKey.id;
+      }
+
+      const patchRes = await fetch(`/api/settings/api-keys/${keyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ useAi: true }),
+      });
+      const patchData = await patchRes.json().catch(() => ({}));
+      if (!patchRes.ok) {
+        setError(patchData.error ?? "Couldn't enable AI.");
+        return;
+      }
+      setAiKeyStatus("enabled");
+    } finally {
+      setEnablingAi(false);
+    }
+  }
 
   function advanceToConnect(created: CreatedTemplate) {
     setTemplate(created);
@@ -601,25 +662,64 @@ export function NewSiteWizard() {
                       Describe the site you want — Plexo's AI builds a complete, working page from your prompt.
                     </p>
                   </div>
-                  <textarea
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    placeholder="A modern landing page for a boutique coffee roastery, with a hero section, our story, a product grid, and a newsletter signup."
-                    rows={5}
-                    style={{ ...inputStyle(), resize: "vertical", fontFamily: "inherit" }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleGenerateWithAi()}
-                    disabled={aiGenerating || !aiPrompt.trim()}
-                    style={{ ...primaryButtonStyle(!aiGenerating && !!aiPrompt.trim()), alignSelf: "flex-start", cursor: aiGenerating ? "wait" : "pointer" }}
-                  >
-                    {aiGenerating ? "Generating your site…" : "Generate my site"}
-                  </button>
-                  {aiGenerating && (
-                    <p style={{ fontSize: "11.5px", color: "var(--text-faint)", margin: 0 }}>
-                      This can take up to a minute for a full layout.
-                    </p>
+
+                  {aiKeyStatus === "checking" || aiKeyStatus === "unchecked" ? (
+                    <p style={{ fontSize: "12.5px", color: "var(--text-faint)" }}>Checking your AI settings…</p>
+                  ) : aiKeyStatus === "disabled" ? (
+                    <div
+                      style={{
+                        borderRadius: 12,
+                        border: `1px solid ${hairline}`,
+                        background: "rgba(255,255,255,0.02)",
+                        padding: "18px 20px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 10,
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <p style={{ margin: 0, fontSize: "13px", fontWeight: 650 }}>Turn on AI to build with a prompt</p>
+                      <p style={{ margin: 0, fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+                        AI generation isn&rsquo;t on for your account yet. Turning it on uses Plexo&rsquo;s system AI by
+                        default (billed from your credit balance) — no setup needed. You can switch to your own API key
+                        any time in{" "}
+                        <Link href="/dashboard/settings/ai" target="_blank" style={{ color: "var(--brand)" }}>
+                          Settings
+                        </Link>
+                        .
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void handleEnableAi()}
+                        disabled={enablingAi}
+                        style={{ ...primaryButtonStyle(!enablingAi), cursor: enablingAi ? "wait" : "pointer" }}
+                      >
+                        {enablingAi ? "Turning on…" : "Turn on AI"}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <textarea
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        placeholder="A modern landing page for a boutique coffee roastery, with a hero section, our story, a product grid, and a newsletter signup."
+                        rows={5}
+                        style={{ ...inputStyle(), resize: "vertical", fontFamily: "inherit" }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleGenerateWithAi()}
+                        disabled={aiGenerating || !aiPrompt.trim()}
+                        style={{ ...primaryButtonStyle(!aiGenerating && !!aiPrompt.trim()), alignSelf: "flex-start", cursor: aiGenerating ? "wait" : "pointer" }}
+                      >
+                        {aiGenerating ? "Generating your site…" : "Generate my site"}
+                      </button>
+                      {aiGenerating && (
+                        <p style={{ fontSize: "11.5px", color: "var(--text-faint)", margin: 0 }}>
+                          This can take up to a minute for a full layout.
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               ) : (
