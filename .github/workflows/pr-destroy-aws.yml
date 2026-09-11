@@ -88,6 +88,11 @@ jobs:
             .open-next/dynamodb-provider; do
             echo "// placeholder — this stack is being destroyed" > "$dir/index.js"
           done
+          # compute-stack.ts's DeployCommerceJs step (see its own comment) reads this exact
+          # file with fs.readFileSync rather than just pointing s3deploy at the assets
+          # directory — a missing directory entry doesn't satisfy that, unlike every
+          # fromAsset()/Source.asset() call above, so it needs its own placeholder here too.
+          echo "// placeholder — this stack is being destroyed" > .open-next/assets/commerce.js
 
       - name: Destroy the PR's compute stack only — never --all, never the data stack
         working-directory: ./cdk
