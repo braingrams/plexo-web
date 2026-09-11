@@ -8,6 +8,7 @@ export type CommerceSiteInfo = {
   name: string;
   domain: string | null;
   enabled: boolean;
+  storefrontSlug: string | null;
 };
 
 // A small, fixed palette so each site gets a stable, distinct avatar color across
@@ -113,7 +114,7 @@ export function CommerceSiteHeader({
   }
 
   const allSites = [currentSite, ...otherSites];
-  const storefrontUrl = currentSite.domain ? `https://${currentSite.domain}` : null;
+  const storefrontUrl = currentSite.domain ? `https://${currentSite.domain}/${currentSite.storefrontSlug ?? "store"}` : null;
 
   return (
     <div

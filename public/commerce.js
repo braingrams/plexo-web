@@ -18,6 +18,11 @@
   "use strict";
 
   var STYLE_ID = "plexo-commerce-style";
+  // The storefront's own URL segment is renameable per-site (default "store") — read from
+  // the inline config the page shell emits just before this script tag (see
+  // injectCommerceScript in app/pub/[domain]/[[...slug]]/route.ts). "/shop" is only a
+  // last-resort fallback for a page that somehow loads this script without that config.
+  var STOREFRONT_PATH = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.storefrontPath) || "/shop";
   var CART_EVENT = "plexo:cart-updated";
   var CHECKOUT_STATE_EVENT = "plexo:checkout-state-changed";
   // Shared between the checkout page's two independent marker blocks — checkout_flow
@@ -526,7 +531,7 @@
             ]);
 
         var breadcrumb = el("div", { class: "pc-mono", style: { fontSize: "11.5px", color: "#8A93A6" } }, [
-          el("a", { href: "/shop", style: { color: "#8A93A6", textDecoration: "none" } }, ["Shop"]),
+          el("a", { href: STOREFRONT_PATH, style: { color: "#8A93A6", textDecoration: "none" } }, ["Shop"]),
           p.category ? " / " + p.category.name + " / " : " / ",
           el("span", { style: { color: "#16233F" } }, [p.name]),
         ]);
@@ -657,7 +662,7 @@
         node.appendChild(
           el("div", { style: { padding: "80px 20px", textAlign: "center", display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" } }, [
             el("span", { class: "pc-serif", style: { fontSize: "18px", color: "#16233F" } }, ["Product not found"]),
-            el("a", { class: "pc-btn-outline pc-btn", href: "/shop", style: { textDecoration: "none" } }, ["Back to shop"]),
+            el("a", { class: "pc-btn-outline pc-btn", href: STOREFRONT_PATH, style: { textDecoration: "none" } }, ["Back to shop"]),
           ])
         );
       });
@@ -1254,7 +1259,7 @@
             heading,
             el("div", { style: { textAlign: "center", padding: "20px 0", display: "flex", flexDirection: "column", gap: "12px", alignItems: "center" } }, [
               el("p", { class: "pc-muted", style: { margin: "0", fontSize: "14px" } }, ["Your cart is empty."]),
-              el("a", { class: "pc-btn-outline pc-btn", href: "/shop", style: { textDecoration: "none" } }, ["Continue shopping"]),
+              el("a", { class: "pc-btn-outline pc-btn", href: STOREFRONT_PATH, style: { textDecoration: "none" } }, ["Continue shopping"]),
             ]),
           ])
         );
