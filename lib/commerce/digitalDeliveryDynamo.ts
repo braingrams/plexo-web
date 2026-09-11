@@ -64,7 +64,7 @@ export async function resendDigitalDelivery(templateId: string, orderId: string,
     });
   }
 
-  await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html, organizationId: order.organizationId, templateId: order.templateId });
+  await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html, context: "commerce_digital_delivery", organizationId: order.organizationId, templateId: order.templateId });
 
   await CommerceDigitalDelivery.patch({ orderId, productId: delivery.productId })
     .add({ resendCount: 1 })

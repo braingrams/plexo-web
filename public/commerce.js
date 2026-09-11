@@ -299,15 +299,106 @@
     });
   }
 
-  function addToCart(productId, quantity) {
-    return api("/api/public/commerce/cart/items", { method: "POST", body: JSON.stringify({ productId: productId, quantity: quantity || 1 }) }).then(function (snapshot) {
+  // Takes the full product (not just its id) so the one shared add-to-cart path can also
+  // trigger the "added to cart" flyout below — every one of the 5 Add-to-Cart buttons
+  // already has the full product object in scope at their call site.
+  function addToCart(product, quantity) {
+    var qty = quantity || 1;
+    return api("/api/public/commerce/cart/items", { method: "POST", body: JSON.stringify({ productId: product.id, quantity: qty }) }).then(function (snapshot) {
       broadcastCart(snapshot);
+      showAddedToCartFlyout(product, qty);
       return snapshot;
     });
   }
 
   function fetchCart() {
     return api("/api/public/commerce/cart");
+  }
+
+  // ---------------------------------------------------------------------
+  // Added-to-cart flyout — appears immediately on a successful add, showing what was
+  // just added plus a direct "View Cart" link into the checkout page. Only one shown at
+  // a time; adding again (even mid-animation) replaces it rather than stacking.
+  // ---------------------------------------------------------------------
+  var activeCartFlyout = null;
+
+  function dismissCartFlyout() {
+    if (!activeCartFlyout) return;
+    var node = activeCartFlyout.node;
+    var timer = activeCartFlyout.timer;
+    activeCartFlyout = null;
+    clearTimeout(timer);
+    node.style.transform = "translateX(120%)";
+    node.style.opacity = "0";
+    setTimeout(function () {
+      if (node.parentNode) node.parentNode.removeChild(node);
+    }, 220);
+  }
+
+  function showAddedToCartFlyout(product, quantity) {
+    injectStyles();
+    dismissCartFlyout();
+
+    var closeBtn = el(
+      "button",
+      {
+        type: "button",
+        "aria-label": "Dismiss",
+        onclick: function () {
+          dismissCartFlyout();
+        },
+        style: {
+          position: "absolute", top: "10px", right: "10px", width: "24px", height: "24px",
+          display: "flex", alignItems: "center", justifyContent: "center", background: "transparent",
+          border: "none", color: "#8A93A6", cursor: "pointer", fontSize: "14px", lineHeight: "1", padding: "0",
+        },
+      },
+      ["✕"]
+    );
+
+    var media = product.imageUrl
+      ? el("img", { src: product.imageUrl, alt: product.name, style: { width: "56px", height: "56px", objectFit: "cover", flexShrink: "0" } })
+      : el("div", { style: { width: "56px", height: "56px", flexShrink: "0", background: "#F3F1EA" } });
+
+    var node = el(
+      "div",
+      {
+        class: "pc-root pc-card",
+        style: {
+          position: "fixed", top: "20px", right: "20px", zIndex: "998", width: "320px", maxWidth: "calc(100vw - 40px)",
+          padding: "18px", boxShadow: "0 10px 30px rgba(22,35,63,0.18)", transition: "transform 0.22s ease, opacity 0.22s ease",
+          transform: "translateX(120%)", opacity: "0",
+        },
+      },
+      [
+        closeBtn,
+        el("div", { class: "pc-mono", style: { fontSize: "11px", color: "#1F5C3C", fontWeight: "600", marginBottom: "12px" } }, ["✓ ADDED TO CART"]),
+        el("div", { style: { display: "flex", gap: "12px", alignItems: "center" } }, [
+          media,
+          el("div", { style: { minWidth: "0", flex: "1" } }, [
+            el("div", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, [product.name]),
+            el("div", { class: "pc-muted", style: { fontSize: "12.5px", marginTop: "2px" } }, [
+              (quantity > 1 ? quantity + " × " : "") + money(product.priceMinor, product.currency),
+            ]),
+          ]),
+        ]),
+        el(
+          "a",
+          { class: "pc-btn", href: STOREFRONT_PATH + "/checkout", style: { textDecoration: "none", width: "100%", marginTop: "14px" } },
+          ["View Cart"]
+        ),
+      ]
+    );
+
+    document.body.appendChild(node);
+    // Force layout before flipping the transform/opacity so the transition actually runs
+    // rather than snapping straight to its end state.
+    void node.offsetWidth;
+    node.style.transform = "translateX(0)";
+    node.style.opacity = "1";
+
+    var timer = setTimeout(dismissCartFlyout, 5000);
+    activeCartFlyout = { node: node, timer: timer };
   }
 
   // ---------------------------------------------------------------------
@@ -394,7 +485,7 @@
                   onclick: function () {
                     addBtn.disabled = true;
                     addBtn.textContent = "Adding…";
-                    addToCart(p.id, qty)
+                    addToCart(p, qty)
                       .then(function () {
                         addBtn.textContent = "Added ✓";
                         addBtn.disabled = false;
@@ -440,7 +531,7 @@
                     onclick: function () {
                       addBtn.disabled = true;
                       addBtn.textContent = "Adding…";
-                      addToCart(p.id, 1)
+                      addToCart(p, 1)
                         .then(function () {
                           addBtn.textContent = "Added ✓";
                           addBtn.disabled = false;
@@ -475,7 +566,7 @@
                       onclick: function () {
                         addBtn.disabled = true;
                         addBtn.textContent = "Adding…";
-                        addToCart(p.id, qty)
+                        addToCart(p, qty)
                           .then(function () {
                             addBtn.textContent = "Added ✓";
                             addBtn.disabled = false;
@@ -580,7 +671,7 @@
                     onclick: function () {
                       addBtn.disabled = true;
                       addBtn.textContent = "Adding…";
-                      addToCart(p.id, qty)
+                      addToCart(p, qty)
                         .then(function () {
                           addBtn.textContent = "Added ✓";
                           addBtn.disabled = false;
@@ -861,7 +952,7 @@
             onclick: function () {
               addBtn.disabled = true;
               addBtn.textContent = "Adding…";
-              addToCart(p.id, 1)
+              addToCart(p, 1)
                 .then(function () {
                   addBtn.textContent = "Added ✓";
                   addBtn.disabled = false;

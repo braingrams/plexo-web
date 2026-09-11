@@ -267,7 +267,7 @@ async function deliverDigitalProducts(order: OrderItem, settings: SettingsItem):
 
     if (apiKey) {
       try {
-        await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html, organizationId: order.organizationId, templateId: order.templateId });
+        await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html, context: "commerce_digital_delivery", organizationId: order.organizationId, templateId: order.templateId });
         await CommerceDigitalDelivery.patch({ orderId: order.id, productId: product.id })
           .set({ deliveredAt: new Date().toISOString() })
           .go();
