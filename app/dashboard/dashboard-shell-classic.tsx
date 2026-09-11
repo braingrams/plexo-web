@@ -8,6 +8,7 @@ import { NAV_ITEMS } from "./nav-items";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls";
 import { FeedbackButton } from "./_components/FeedbackButton";
+import { SolToggleButton } from "./sol/_components/SolToggleButton";
 import type { OrgBranding } from "./dashboard-shell";
 import { darken, toRgba } from "@/lib/color";
 
@@ -300,7 +301,15 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
   // or any /blog subroutes — those are normal PageContainer pages that still need the sidebar.
   const editorRouteMatch = pathname.match(/^\/dashboard\/templates\/([^/]+)$/);
   const isEditorRoute = Boolean(editorRouteMatch && editorRouteMatch[1] !== "upload");
-  const rootClassName = isEditorRoute ? "dash-classic-root dash-classic-editor-route" : "dash-classic-root";
+  // SOL is its own full-viewport surface (own header/sidebar, see app/dashboard/sol/layout.tsx)
+  // — no room for this shell's fixed sidebar alongside it, same reasoning as the template
+  // editor route above.
+  const isSolRoute = /^\/dashboard\/sol(\/.*)?$/.test(pathname);
+  const rootClassName = isEditorRoute
+    ? "dash-classic-root dash-classic-editor-route"
+    : isSolRoute
+      ? "dash-classic-root dash-sol-route"
+      : "dash-classic-root";
 
   const initials = userName
     .split(" ")
@@ -532,6 +541,7 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
             gap: "0.4rem", marginBottom: "0.5rem",
           }}>
             {!collapsed && <OrgSwitcher organizationName={organizationName} anchor="left" />}
+            <SolToggleButton />
             <FeedbackButton />
             <NotificationBell anchor="left" />
           </div>

@@ -1,6 +1,6 @@
 import { compileToHTML } from "@/lib/compiler";
 import { sanitizeHtml } from "@/server/sanitizer";
-import { getEnabledSiteLayoutRows, spliceLayoutRows } from "@/lib/siteLayoutDynamo";
+import { getEnabledSiteLayoutRows, spliceLayoutRows } from "@/lib/siteLayoutCore";
 import { lmsSignupEmbedSnippet } from "./embedSnippet";
 
 /**

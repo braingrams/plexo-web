@@ -38,7 +38,7 @@ export function CustomSelect({
   className,
 }: {
   value: string;
-  options: Array<{ label: string; value: string; disabled?: boolean }>;
+  options: Array<{ label: string; value: string; disabled?: boolean; description?: string }>;
   disabled?: boolean;
   onChange: (val: string) => void;
   /** Shown when value doesn't match any option (e.g. no selection yet) — falls back to the raw value. */
@@ -154,6 +154,7 @@ export function CustomSelect({
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
+                    gap: "0.5rem",
                     padding: "0.625rem 0.875rem",
                     background: isActive ? "var(--brand-subtle)" : "transparent",
                     border: "none",
@@ -167,8 +168,13 @@ export function CustomSelect({
                     transition: "background 0.15s, color 0.15s",
                   }}
                 >
-                  <span>{opt.label}</span>
-                  {isActive && <span style={{ color: "var(--brand)", display: "flex", alignItems: "center" }}><IconCheck /></span>}
+                  <span style={{ display: "flex", flexDirection: "column", gap: "0.1rem", minWidth: 0 }}>
+                    <span>{opt.label}</span>
+                    {opt.description && (
+                      <span style={{ fontSize: "0.72rem", fontWeight: 400, color: "var(--text-faint)" }}>{opt.description}</span>
+                    )}
+                  </span>
+                  {isActive && <span style={{ color: "var(--brand)", display: "flex", alignItems: "center", flexShrink: 0 }}><IconCheck /></span>}
                 </button>
               );
             })}

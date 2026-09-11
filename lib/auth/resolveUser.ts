@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";

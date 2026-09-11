@@ -11,6 +11,7 @@ import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 import * as cr from "aws-cdk-lib/custom-resources";
 import * as iam from "aws-cdk-lib/aws-iam";
+import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { buildLogGroup, buildCloudFrontWebAcl, isWafEnabled } from "./conventions";
@@ -50,6 +51,14 @@ const ssmEnv = isProd ? "production" : "staging";
 // .open-next/ output — `npm run build && npx @opennextjs/aws build` must have been run
 // before `cdk deploy` for this stack kind. Not committed to git (build output).
 const OPEN_NEXT_DIR = path.join(__dirname, "..", "..", ".open-next");
+
+// SolChatFn's handler entry point — NOT an OpenNext output directory (SOL is a plain,
+// standalone Lambda, not part of the Next.js app). Built via NodejsFunction below, which
+// bundles this TypeScript entry with esbuild at synth time (esbuild is a cdk/
+// devDependency specifically so this works locally without falling back to Docker-based
+// bundling) — resolved, no longer the raw-source-zip gap the original TODO(infra) here
+// used to flag.
+const SOL_CHAT_ENTRY = path.join(__dirname, "..", "..", "lambda", "sol-chat", "index.ts");
 
 // Same naming convention as data-stack.ts's own nameFor() — production keeps the bare
 // literal table names ("plexo-core", etc.) it's already deployed with; every other
@@ -105,6 +114,17 @@ if (!originVerifySecret) throw new Error("ORIGIN_VERIFY_SECRET is required (see 
 const cronSecret = process.env.CRON_SECRET;
 if (!cronSecret) throw new Error("CRON_SECRET is required (see CRON_SECRET in SSM for this environment — /plexo/<env>/CRON_SECRET).");
 
+// SolChatFn (below) is a bare, non-Next.js Lambda, so it does NOT get NextAuth's
+// AUTH_SECRET for free the way serverFn does (serverFn's copy comes from the repo's own
+// .env file bundled into the Next.js standalone build at build time — see the giant
+// comment above ORIGIN_VERIFY_SECRET's own gap for why that's a separate, already-flagged
+// problem). SolChatFn has to verify a NextAuth session JWT itself (see
+// lambda/sol-chat/sessionAuth.ts), so it needs the actual signing secret injected as a
+// real env var — baked in the same narrow, direct way as originVerifySecret/cronSecret
+// just above, not through the still-broken loadSecretsFromSsm() runtime path.
+const authSecret = process.env.AUTH_SECRET;
+if (!authSecret) throw new Error("AUTH_SECRET is required for SolChatFn's session verification (see AUTH_SECRET in SSM for this environment).");
+
 // Cache-busting suffix for the unhashed, unversioned public/commerce.js URL that
 // app/pub/[domain]/[[...slug]]/route.ts's injectCommerceScript() embeds into every
 // published storefront — see that file's own comment. The deploy workflows set this to
@@ -149,6 +169,11 @@ const tableEnv = {
   PLEXO_CONTENT_TABLE: nameFor("plexo-content"),
   PLEXO_OPS_TABLE: nameFor("plexo-ops"),
   PLEXO_IMPORT_TABLE: nameFor("plexo-import"),
+  // SOL (AI chat agent) — the table itself is provisioned by a parallel task
+  // (data-stack.ts), not by this stack; named here the same way every other
+  // cross-stack table name is (nameFor(), matching data-stack.ts's own convention
+  // exactly) so SolChatFn resolves to the same physical table data-stack.ts creates.
+  PLEXO_SOL_TABLE: nameFor("plexo-sol"),
 };
 
 export class ComputeStack extends cdk.Stack {
@@ -465,6 +490,134 @@ export class ComputeStack extends cdk.Stack {
     assetsBucket.grantRead(imageFn);
     const imageFnUrl = imageFn.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.AWS_IAM });
 
+    // SOL — the AI chat agent's own dedicated Lambda + Function URL, entirely separate
+    // from serverFn above. A real chat turn is multiple LLM round-trips plus tool calls
+    // (can genuinely take minutes) and needs to stream tokens back as they're generated —
+    // neither fits serverFn's 30s timeout or its buffered (non-streaming) Function URL
+    // invoke mode, so this follows imageFn's "second Lambda + own Function URL + own
+    // CloudFront behavior" precedent above rather than trying to extend serverFn itself.
+    const solChatFn = new NodejsFunction(this, "SolChatFn", {
+      runtime: lambda.Runtime.NODEJS_24_X,
+      entry: SOL_CHAT_ENTRY,
+      handler: "handler",
+      // Response-streaming Lambda handlers wrap the export in the runtime-global
+      // `awslambda.streamifyResponse(...)` (see lambda/sol-chat/index.ts) — esbuild must
+      // not tree-shake that global away, and nothing else in this file's handler needs a
+      // custom bundling tweak beyond the defaults NodejsFunction already applies
+      // (minify off, sourcemaps on, matches this stack's other functions' debuggability).
+      // This handler imports the main app's own modules via the "@/*" path alias (e.g.
+      // "@/lib/db/solEntities") exactly like the rest of the codebase — esbuild can't
+      // resolve that alias without being told about it, so this points bundling at the
+      // repo root's tsconfig.json (the one with the actual "@/*" -> "./*" paths mapping),
+      // not cdk/'s own separate, unrelated tsconfig.
+      bundling: {
+        tsconfig: path.join(__dirname, "..", "..", "tsconfig.json"),
+        minify: false,
+        sourceMap: true,
+        // aws-sdk-v3 clients used by this handler's own imports (Dynamo, Bedrock,
+        // Transcribe) are bundled in rather than externalized — the NODEJS_24_X managed
+        // runtime's built-in AWS SDK is v3 but its exact minor version isn't pinned to
+        // what this app's package.json specifies, and this handler's dependency surface
+        // is small enough that bundling it is simpler than chasing a version mismatch.
+      },
+      memorySize: 1536,
+      timeout: cdk.Duration.minutes(5),
+      environment: {
+        ...tableEnv,
+        PLEXO_ENV: ssmEnv,
+        // NOT setting AWS_REGION explicitly here even though it's listed in this
+        // task's own spec: it's a Lambda-reserved environment variable name — see
+        // serverFn's own identical comment above ("CloudFormation rejects setting it
+        // explicitly"). Lambda injects it into every function's environment
+        // automatically regardless, so the real handler can read
+        // process.env.AWS_REGION with no explicit wiring needed here, exactly like
+        // lib/db/client.ts's own fallback already assumes for serverFn.
+        // Baked in the same way as serverFn's own copy above (see originVerifySecret's
+        // comment) — this Function URL is also AuthType.NONE/public, so the real
+        // handler needs this to reject direct *.lambda-url.on.aws invokes that bypass
+        // CloudFront, the same way middleware.ts does for serverFn. Not yet enforced by
+        // the placeholder handler itself — see lambda/sol-chat/index.ts's own TODO.
+        PLEXO_ORIGIN_VERIFY_SECRET: originVerifySecret!,
+        // See authSecret's own comment above — required for lambda/sol-chat/sessionAuth.ts
+        // to verify a NextAuth session JWT outside of Next.js's own request context.
+        AUTH_SECRET: authSecret!,
+      },
+      logGroup: buildLogGroup(this, "SolChatFn"),
+    });
+    // Same six-plus-one business-data-table grant serverFn gets above (see that grant's
+    // own comment for why this is a raw PolicyStatement rather than a real CDK
+    // table.grantReadWriteData() — these tables are provisioned by data-stack.ts, a
+    // separate `cdk deploy` invocation, so there's no live CDK Table object to grant
+    // from here). tableEnv already includes PLEXO_SOL_TABLE, so this covers SOL's own
+    // conversation-history table too, even though data-stack.ts's physical table isn't
+    // provisioned by this task's own edits.
+    solChatFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem",
+          "dynamodb:TransactGetItems",
+          "dynamodb:TransactWriteItems",
+        ],
+        resources: Object.values(tableEnv).flatMap((tableName) => [
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${tableName}`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${tableName}/index/*`,
+        ]),
+      }),
+    );
+    // Bedrock — tightened to the exact three models SOL actually uses (see
+    // lib/ai/modelRegistry.ts's bedrock_claude row: Claude Haiku 4.5 / Sonnet 5 / Opus 5),
+    // verified against AWS's own Bedrock model-card docs for a us-east-2 deploy. None of
+    // these three models supports direct in-Region invocation — only Geo/Global
+    // cross-region inference profiles — so a caller needs IAM permission on BOTH the
+    // inference-profile ARN (what's actually passed as `modelId`) AND the underlying
+    // foundation-model ARN(s) it fans out to in every Region the profile might route a
+    // request to (AWS's own documented requirement for cross-region inference). us-east-2
+    // sits in the "US" geo group, which (confirmed for Haiku 4.5's docs; assumed identical
+    // for Sonnet 5/Opus 5 pending direct confirmation, since AWS didn't publish their exact
+    // per-model geo fan-out tables at the time this was written) routes across
+    // us-east-1/us-east-2/us-west-2 — granted across all three accordingly.
+    solChatFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:GetInferenceProfile", "bedrock:ListInferenceProfiles"],
+        resources: [
+          ...["us-east-1", "us-east-2", "us-west-2"].map(
+            (region) => `arn:aws:bedrock:${region}::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0`,
+          ),
+          ...["us-east-1", "us-east-2", "us-west-2"].map((region) => `arn:aws:bedrock:${region}::foundation-model/anthropic.claude-sonnet-5`),
+          ...["us-east-1", "us-east-2", "us-west-2"].map((region) => `arn:aws:bedrock:${region}::foundation-model/anthropic.claude-opus-5`),
+          `arn:aws:bedrock:us-east-2:${this.account}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`,
+          `arn:aws:bedrock:us-east-2:${this.account}:inference-profile/us.anthropic.claude-sonnet-5`,
+          `arn:aws:bedrock:us-east-2:${this.account}:inference-profile/us.anthropic.claude-opus-5`,
+        ],
+      }),
+    );
+    // RESPONSE_STREAM is the entire reason this is a second Lambda rather than a change
+    // to serverFn: it's what lets the handler flush tokens to the client as they're
+    // generated instead of buffering the whole response first. AuthType.NONE (like
+    // serverFn, not imageFn's AWS_IAM+OAC) because CloudFront OAC's Lambda-Function-URL
+    // signing can't reliably sign streamed/POST-with-body invokes either (see
+    // originVerifySecret's own comment above for the confirmed-live POST/OAC failure on
+    // serverFn's identical shape) — same custom-header-secret scheme applied on the
+    // CloudFront origin below protects this Function URL the same way.
+    const solChatFnUrl = solChatFn.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
+    });
+    // Same explicit public-invoke grant serverFn needed above — AuthType.NONE never
+    // gets this automatically added by CDK.
+    solChatFn.addPermission("AllowPublicInvokeSolChatFnUrl", {
+      principal: new iam.AnyPrincipal(),
+      action: "lambda:InvokeFunctionUrl",
+      functionUrlAuthType: lambda.FunctionUrlAuthType.NONE,
+    });
+
     const revalidationFn = new lambda.Function(this, "RevalidationFn", {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: "index.handler",
@@ -597,6 +750,34 @@ export class ComputeStack extends cdk.Stack {
         responseHeadersPolicy: securityHeadersPolicy,
       },
       additionalBehaviors: {
+        // SOL's own streaming chat-turn endpoint — same CACHING_DISABLED/ALLOW_ALL/
+        // ALL_VIEWER_EXCEPT_HOST_HEADER/forwardHostFn shape as the default (serverFn)
+        // behavior above, reused rather than invented fresh: this is already the correct
+        // "never cache, forward everything a real API needs" configuration for a
+        // POST-driven, per-request API response, which a streamed chat response
+        // certainly is too. Own dedicated origin (solChatFnUrl, not serverFnUrl) so
+        // CloudFront actually invokes the RESPONSE_STREAM-mode Function URL for this
+        // path instead of serverFn's buffered one.
+        //
+        // Scoped to "api/v1/sol/chat/*" specifically, NOT the broader "api/v1/sol/*":
+        // the ordinary CRUD routes under api/v1/sol/** (conversation list, transcript
+        // GET, memories, preferences, upload, export, etc.) are plain Next.js route
+        // handlers served by serverFn, and CloudFront behaviors route by path only, not
+        // HTTP method — a POST turn and a GET on the very same conversations/{id}/messages
+        // path can't be split across two origins by path alone. SolChatFn's own routes
+        // therefore live under their own api/v1/sol/chat/* prefix (see
+        // lambda/sol-chat/index.ts's MESSAGES_RE/CONFIRM_RE), so this behavior only ever
+        // claims that subtree and everything else under api/v1/sol/* correctly falls
+        // through to the default (serverFn) behavior above.
+        "api/v1/sol/chat/*": {
+          origin: new origins.FunctionUrlOrigin(solChatFnUrl, { customHeaders: { "x-origin-verify": originVerifySecret! } }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+          responseHeadersPolicy: securityHeadersPolicy,
+        },
         "api/v1/mcp*": {
           origin: new origins.FunctionUrlOrigin(serverFnUrl, { customHeaders: { "x-origin-verify": originVerifySecret! } }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
