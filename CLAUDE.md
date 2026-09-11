@@ -1,8 +1,12 @@
 # Plexo engineering principles
 
+## Plexo's whole value proposition is being the simple, user-friendly web builder
+
+Plexo competes with other website builders by being simpler and easier to use, not by having more raw capability. That means the end-to-end flow — every step a real site owner (or an AI acting on their behalf) actually walks through — is the product, not any single feature in isolation. A feature that works but adds a confusing step, an extra manual configuration, or a dead end partway through the flow undermines the actual reason Plexo exists.
+
 ## User-friendliness is part of "done"
 
-Every implementation or fix must be user-friendly for the site owner (and their visitors), not just technically correct. A change that resolves the underlying bug but leaves a confusing, manual, or expert-only experience is not finished.
+Every implementation or fix must be user-friendly for the site owner (and their visitors), not just technically correct. A change that resolves the underlying bug but leaves a confusing, manual, or expert-only experience is not finished. When reviewing a change, trace the WHOLE flow it sits inside, start to finish — not just the one step that was touched — since a broken or confusing link anywhere in that flow defeats the point just as much as the original bug did.
 
 Concrete example from this codebase: enabling Commerce used to leave "Visit storefront" pointing at a domain with nothing published — no `/store` page, no working checkout, no order confirmation. The technically-correct fix would have been "tell the user to build a storefront page." The user-friendly fix (`lib/commerce/storefrontLayout.ts`) auto-provisions a complete, working storefront (grid, checkout, confirmation, tracking) the moment Commerce is enabled, with a sane renameable default — mirroring the existing `ensureProductDetailLayout` pattern of "the owner should never have to make a design decision before the feature works."
 
