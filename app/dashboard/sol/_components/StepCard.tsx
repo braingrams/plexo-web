@@ -7,7 +7,7 @@ export type StepStatus = "pending" | "running" | "success" | "error" | "cancelle
 
 const STATUS_META: Record<StepStatus, { color: string; bg: string; border: string; label: string }> = {
   pending: { color: "rgba(240,242,255,0.45)", bg: "rgba(255,255,255,0.03)", border: "rgba(255,255,255,0.08)", label: "Queued" },
-  running: { color: "#c4b5fd", bg: "rgba(139,92,246,0.08)", border: "rgba(139,92,246,0.25)", label: "Running" },
+  running: { color: "#c4b5fd", bg: "rgba(var(--brand-rgb),0.08)", border: "rgba(var(--brand-rgb),0.25)", label: "Running" },
   success: { color: "#34d399", bg: "rgba(52,211,153,0.07)", border: "rgba(52,211,153,0.2)", label: "Done" },
   error: { color: "#f87171", bg: "rgba(248,113,113,0.07)", border: "rgba(248,113,113,0.2)", label: "Failed" },
   cancelled: { color: "rgba(240,242,255,0.4)", bg: "rgba(255,255,255,0.02)", border: "rgba(255,255,255,0.07)", label: "Cancelled" },

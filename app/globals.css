@@ -104,6 +104,11 @@ select {
 :root.dark {
   --brand: #8b5cf6;
   --brand-deep: #7c3aed;
+  --brand-deeper: #6d28d9;
+  --brand-light: #c084fc;
+  --brand-rgb: 139, 92, 246;
+  --brand-deep-rgb: 124, 58, 237;
+  --brand-light-rgb: 196, 132, 252;
   --brand-glow: rgba(139, 92, 246, 0.35);
   --brand-subtle: rgba(139, 92, 246, 0.1);
 
@@ -125,6 +130,11 @@ select {
 :root.light {
   --brand: #7c3aed;
   --brand-deep: #6d28d9;
+  --brand-deeper: #5b21b6;
+  --brand-light: #a855f7;
+  --brand-rgb: 124, 58, 237;
+  --brand-deep-rgb: 109, 40, 217;
+  --brand-light-rgb: 168, 85, 247;
   --brand-glow: rgba(124, 58, 237, 0.18);
   --brand-subtle: rgba(124, 58, 237, 0.08);
 

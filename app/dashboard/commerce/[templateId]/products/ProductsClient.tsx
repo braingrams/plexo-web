@@ -416,7 +416,7 @@ export function ProductsClient({ templateId, initialProducts, currency }: { temp
                 style={{
                   width: 32, height: 28, borderRadius: 6, border: "none", cursor: "pointer",
                   display: "grid", placeItems: "center",
-                  background: view === "grid" ? "rgba(139,92,246,0.18)" : "transparent",
+                  background: view === "grid" ? "rgba(var(--brand-rgb),0.18)" : "transparent",
                   color: view === "grid" ? "var(--brand)" : "rgba(240,242,255,0.4)",
                 }}
               >
@@ -429,7 +429,7 @@ export function ProductsClient({ templateId, initialProducts, currency }: { temp
                 style={{
                   width: 32, height: 28, borderRadius: 6, border: "none", cursor: "pointer",
                   display: "grid", placeItems: "center",
-                  background: view === "list" ? "rgba(139,92,246,0.18)" : "transparent",
+                  background: view === "list" ? "rgba(var(--brand-rgb),0.18)" : "transparent",
                   color: view === "list" ? "var(--brand)" : "rgba(240,242,255,0.4)",
                 }}
               >
@@ -468,7 +468,7 @@ export function ProductsClient({ templateId, initialProducts, currency }: { temp
               {pagedProducts.map((product) => (
                 <div key={product.id} style={{
                   position: "relative",
-                  border: selectedIds.has(product.id) ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                  border: selectedIds.has(product.id) ? "1px solid rgba(var(--brand-rgb),0.5)" : "1px solid rgba(255,255,255,0.08)",
                   borderRadius: 14,
                   background: "rgba(255,255,255,0.02)", overflow: "hidden",
                   opacity: product.active ? 1 : 0.55,
@@ -477,7 +477,7 @@ export function ProductsClient({ templateId, initialProducts, currency }: { temp
                     <input type="checkbox" checked={selectedIds.has(product.id)} onChange={() => toggleSelected(product.id)} />
                   </label>
                   <div style={{
-                    height: 140, background: product.imageUrl ? `url(${product.imageUrl}) center/cover` : "rgba(139,92,246,0.08)",
+                    height: 140, background: product.imageUrl ? `url(${product.imageUrl}) center/cover` : "rgba(var(--brand-rgb),0.08)",
                     display: "grid", placeItems: "center",
                   }}>
                     {!product.imageUrl && <span style={{ color: "rgba(240,242,255,0.25)", fontSize: "0.75rem" }}>No image</span>}
@@ -531,7 +531,7 @@ export function ProductsClient({ templateId, initialProducts, currency }: { temp
                   key={product.id}
                   style={{
                     display: "flex", alignItems: "center", gap: "0.9rem", padding: "0.7rem 1rem",
-                    background: selectedIds.has(product.id) ? "rgba(139,92,246,0.06)" : "rgba(255,255,255,0.015)",
+                    background: selectedIds.has(product.id) ? "rgba(var(--brand-rgb),0.06)" : "rgba(255,255,255,0.015)",
                     borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)",
                     opacity: product.active ? 1 : 0.55,
                   }}
@@ -539,7 +539,7 @@ export function ProductsClient({ templateId, initialProducts, currency }: { temp
                   <input type="checkbox" checked={selectedIds.has(product.id)} onChange={() => toggleSelected(product.id)} style={{ flexShrink: 0 }} />
                   <div style={{
                     width: 40, height: 40, borderRadius: 8, flexShrink: 0,
-                    background: product.imageUrl ? `url(${product.imageUrl}) center/cover` : "rgba(139,92,246,0.08)",
+                    background: product.imageUrl ? `url(${product.imageUrl}) center/cover` : "rgba(var(--brand-rgb),0.08)",
                   }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -765,12 +765,12 @@ export function ProductsClient({ templateId, initialProducts, currency }: { temp
                     disabled={uploading}
                     style={{
                       width: 120, height: 120, borderRadius: 12, cursor: uploading ? "wait" : "pointer",
-                      border: "1.5px dashed rgba(139,92,246,0.35)", background: "rgba(139,92,246,0.05)",
+                      border: "1.5px dashed rgba(var(--brand-rgb),0.35)", background: "rgba(var(--brand-rgb),0.05)",
                       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "0.4rem",
                       color: "var(--brand)", fontFamily: "inherit", transition: "background 0.15s, border-color 0.15s",
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.1)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.6)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.05)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.35)"; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(var(--brand-rgb),0.1)"; e.currentTarget.style.borderColor = "rgba(var(--brand-rgb),0.6)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(var(--brand-rgb),0.05)"; e.currentTarget.style.borderColor = "rgba(var(--brand-rgb),0.35)"; }}
                   >
                     <IconUploadImage />
                     <span style={{ fontSize: "0.72rem", fontWeight: 600 }}>{uploading ? "Uploading…" : "Click to upload"}</span>
@@ -799,12 +799,12 @@ export function ProductsClient({ templateId, initialProducts, currency }: { temp
                     disabled={uploading}
                     style={{
                       width: 72, height: 72, borderRadius: 10, cursor: uploading ? "wait" : "pointer",
-                      border: "1.5px dashed rgba(139,92,246,0.35)", background: "rgba(139,92,246,0.05)",
+                      border: "1.5px dashed rgba(var(--brand-rgb),0.35)", background: "rgba(var(--brand-rgb),0.05)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       color: "var(--brand)", fontFamily: "inherit", transition: "background 0.15s, border-color 0.15s",
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.1)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.6)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.05)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.35)"; }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(var(--brand-rgb),0.1)"; e.currentTarget.style.borderColor = "rgba(var(--brand-rgb),0.6)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(var(--brand-rgb),0.05)"; e.currentTarget.style.borderColor = "rgba(var(--brand-rgb),0.35)"; }}
                   >
                     <IconPlusSmall />
                   </button>
@@ -1024,7 +1024,7 @@ function DigitalDeliveryFields({
               disabled={uploading}
               style={{
                 width: "100%", padding: "0.6rem 0.8rem", borderRadius: 9, cursor: uploading ? "wait" : "pointer",
-                border: "1.5px dashed rgba(139,92,246,0.35)", background: "rgba(139,92,246,0.05)",
+                border: "1.5px dashed rgba(var(--brand-rgb),0.35)", background: "rgba(var(--brand-rgb),0.05)",
                 color: "var(--brand)", fontFamily: "inherit", fontSize: "0.82rem", fontWeight: 600,
                 textAlign: "left",
               }}

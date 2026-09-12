@@ -221,7 +221,7 @@ export function SolEntranceOverlay({ onDone }: { onDone: () => void }) {
           transform: "translate(-50%, -50%)",
           borderRadius: "50%",
           background:
-            "radial-gradient(circle, rgba(168,85,247,0.55) 0%, rgba(139,92,246,0.32) 22%, rgba(76,29,149,0.14) 42%, rgba(8,4,15,0) 68%)",
+            "radial-gradient(circle, rgba(var(--brand-rgb),0.55) 0%, rgba(var(--brand-rgb),0.32) 22%, rgba(76,29,149,0.14) 42%, rgba(8,4,15,0) 68%)",
           willChange: "transform, opacity",
         }}
       />

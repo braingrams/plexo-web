@@ -148,6 +148,11 @@ export const Organization = new Entity(
       slug: { type: "string", required: true },
       logo: { type: "string" },
       brandColor: { type: "string" },
+      // What the brand mark actually shows wherever it's rendered (dashboard chrome,
+      // invite emails) — an org with both a logo and a name set can still choose to show
+      // just one instead of always both. Defaults to BOTH, matching every existing org's
+      // actual current behavior before this field existed.
+      brandDisplayMode: { type: ["LOGO_ONLY", "NAME_ONLY", "BOTH"] as const, default: "BOTH" },
       whiteLabelEnabled: { type: "boolean", default: false },
       commerceWalletPooled: { type: "boolean", default: false },
       metadata: { type: "string" },

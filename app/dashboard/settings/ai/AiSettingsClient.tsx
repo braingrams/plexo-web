@@ -216,8 +216,8 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                                 }}
                                 style={{
                                   padding: "0.65rem 0.75rem", borderRadius: 9,
-                                  border: active ? "1.5px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.08)",
-                                  background: active ? "rgba(139,92,246,0.1)" : "rgba(255,255,255,0.03)",
+                                  border: active ? "1.5px solid rgba(var(--brand-rgb),0.4)" : "1px solid rgba(255,255,255,0.08)",
+                                  background: active ? "rgba(var(--brand-rgb),0.1)" : "rgba(255,255,255,0.03)",
                                   color: active ? "#c4b5fd" : "rgba(240,242,255,0.55)",
                                   cursor: isBtnDisabled ? "not-allowed" : "pointer",
                                   fontFamily: "inherit", textAlign: "left", transition: "all 0.15s",
@@ -300,8 +300,8 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                                 }}
                                 style={{
                                   padding: "0.65rem 0.75rem", borderRadius: 9,
-                                  border: active ? "1.5px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.08)",
-                                  background: active ? "rgba(139,92,246,0.1)" : "rgba(255,255,255,0.03)",
+                                  border: active ? "1.5px solid rgba(var(--brand-rgb),0.4)" : "1px solid rgba(255,255,255,0.08)",
+                                  background: active ? "rgba(var(--brand-rgb),0.1)" : "rgba(255,255,255,0.03)",
                                   color: active ? "#c4b5fd" : "rgba(240,242,255,0.55)",
                                   cursor: isBtnDisabled ? "not-allowed" : "pointer",
                                   fontFamily: "inherit", textAlign: "left", transition: "all 0.15s",

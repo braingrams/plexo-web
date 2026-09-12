@@ -10,7 +10,7 @@ import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls"
 import { FeedbackButton } from "./_components/FeedbackButton";
 import { SolModeSwitch } from "./sol/_components/SolModeSwitch";
 import type { OrgBranding } from "./dashboard-shell";
-import { darken, toRgba } from "@/lib/color";
+import { darken, lighten, toRgba, toRgbTriplet } from "@/lib/color";
 
 /* ─── Icons ─────────────────────────────────── */
 function IconTemplates() {
@@ -236,7 +236,7 @@ function NavLink({ item, pathname, collapsed }: { item: { href: string; label: s
           fontWeight: isActive ? 600 : 500,
           color: isActive ? "#fff" : "rgba(240,242,255,0.55)",
           textDecoration: "none",
-          background: isActive ? "rgba(139,92,246,0.12)" : "transparent",
+          background: isActive ? "rgba(var(--brand-rgb),0.12)" : "transparent",
           transition: "background 0.15s ease, color 0.15s ease",
           whiteSpace: "nowrap",
           overflow: "hidden",
@@ -255,8 +255,8 @@ function NavLink({ item, pathname, collapsed }: { item: { href: string; label: s
             fontSize: "9.5px",
             fontWeight: 700,
             letterSpacing: "0.04em",
-            color: "#c084fc",
-            background: "rgba(196,132,252,0.16)",
+            color: "var(--brand-light)",
+            background: "rgba(var(--brand-light-rgb),0.16)",
             padding: "2px 6px",
             borderRadius: 100,
           }}>
@@ -278,11 +278,28 @@ type Props = {
 
 export function DashboardShellClassic({ children, userName, userEmail, organizationName, orgBranding }: Props) {
   const brandName = orgBranding?.name ?? "Plexo";
+  // Applied only to the expanded sidebar header below — the collapsed rail and the mobile
+  // topbar each only have room for one element (an icon, or a name) regardless of this
+  // preference, so there's nothing meaningful to toggle there.
+  const showBrandLogo = orgBranding?.displayMode !== "NAME_ONLY";
+  const showBrandName = orgBranding?.displayMode !== "LOGO_ONLY";
+  // The full token set var(--brand*) consumers across the dashboard actually rely on — see
+  // lib/theme.ts's own doc comment on this being the intended single source of truth, kept
+  // in sync with globals.css's :root defaults. Previously only --brand/--brand-deep/
+  // --brand-glow were overridden here, silently leaving --brand-light and --brand-rgb (and
+  // therefore every var(--brand-rgb) translucent tint) on the default Plexo purple even for
+  // a fully white-labeled org.
   const brandVars: React.CSSProperties = orgBranding?.color
     ? ({
       "--brand": orgBranding.color,
       "--brand-deep": darken(orgBranding.color, 0.12),
+      "--brand-deeper": darken(orgBranding.color, 0.22),
+      "--brand-light": lighten(orgBranding.color, 0.2),
+      "--brand-rgb": toRgbTriplet(orgBranding.color),
+      "--brand-deep-rgb": toRgbTriplet(darken(orgBranding.color, 0.12)),
+      "--brand-light-rgb": toRgbTriplet(lighten(orgBranding.color, 0.2)),
       "--brand-glow": toRgba(orgBranding.color, 0.35),
+      "--brand-subtle": toRgba(orgBranding.color, 0.1),
     } as React.CSSProperties)
     : {};
   const pathname = usePathname();
@@ -412,7 +429,7 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
         }}>
           {!collapsed && (
             <Link href="/" style={{ display: "flex", alignItems: "center", gap: "0.55rem", textDecoration: "none" }}>
-              {orgBranding?.logoUrl ? (
+              {showBrandLogo && (orgBranding?.logoUrl ? (
                 <img
                   src={orgBranding.logoUrl}
                   alt={brandName}
@@ -432,15 +449,17 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
                     <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </div>
+              ))}
+              {showBrandName && (
+                <span style={{
+                  fontFamily: "var(--font-heading), sans-serif",
+                  fontWeight: 700, fontSize: "1rem",
+                  color: "#f0f2ff", letterSpacing: "-0.02em",
+                  whiteSpace: "nowrap",
+                }}>
+                  {brandName}
+                </span>
               )}
-              <span style={{
-                fontFamily: "var(--font-heading), sans-serif",
-                fontWeight: 700, fontSize: "1rem",
-                color: "#f0f2ff", letterSpacing: "-0.02em",
-                whiteSpace: "nowrap",
-              }}>
-                {brandName}
-              </span>
             </Link>
           )}
           {collapsed && (

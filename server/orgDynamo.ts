@@ -41,12 +41,14 @@ export async function getOrganizationOwnerPlanDynamo(organizationId: string): Pr
   return ownerUser?.subscriptionPlan ?? "FREE";
 }
 
-export async function getOrgBrandDynamo(organizationId: string): Promise<{ name: string; logoUrl?: string; color?: string } | undefined> {
+export async function getOrgBrandDynamo(
+  organizationId: string,
+): Promise<{ name: string; logoUrl?: string; color?: string; displayMode: "LOGO_ONLY" | "NAME_ONLY" | "BOTH" } | undefined> {
   const { data: org } = await Organization.get({ id: organizationId }).go();
   if (!org) return undefined;
   const plan = await getOrganizationOwnerPlanDynamo(organizationId);
   if (!canWhiteLabel(plan) || !org.whiteLabelEnabled) return undefined;
-  return { name: org.name, logoUrl: org.logo, color: org.brandColor };
+  return { name: org.name, logoUrl: org.logo, color: org.brandColor, displayMode: org.brandDisplayMode ?? "BOTH" };
 }
 
 // DynamoDB-stack replacement for server/org.ts + everything better-auth's `organization`

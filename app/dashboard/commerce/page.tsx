@@ -36,7 +36,7 @@ export default async function CommerceRootPage() {
       }}>
         <span style={{
           display: "grid", placeItems: "center", width: 52, height: 52, borderRadius: 14,
-          background: "rgba(139,92,246,0.12)", color: "#c084fc",
+          background: "rgba(var(--brand-rgb),0.12)", color: "var(--brand-light)",
         }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 9l2-5h14l2 5" /><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z" /><path d="M9 13a3 3 0 0 0 6 0" /></svg>
         </span>
@@ -51,7 +51,7 @@ export default async function CommerceRootPage() {
           style={{
             marginTop: "0.5rem", display: "inline-flex", alignItems: "center", gap: "0.5rem",
             padding: "0.6rem 1.1rem", borderRadius: 10, fontSize: "0.85rem", fontWeight: 700,
-            background: "rgba(139,92,246,0.15)", color: "var(--brand)", textDecoration: "none",
+            background: "rgba(var(--brand-rgb),0.15)", color: "var(--brand)", textDecoration: "none",
           }}
         >
           Go to Templates

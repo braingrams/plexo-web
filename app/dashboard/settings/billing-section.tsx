@@ -308,7 +308,7 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
             textTransform: "uppercase",
             background: "var(--brand-subtle)",
             color: "var(--brand)",
-            border: "1px solid rgba(139,92,246,0.25)",
+            border: "1px solid rgba(var(--brand-rgb),0.25)",
           }}
         >
           {plan} plan

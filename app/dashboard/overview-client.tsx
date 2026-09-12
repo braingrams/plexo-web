@@ -98,7 +98,7 @@ function IconSdk() {
 
 function IconChartLine() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 3v16a2 2 0 0 0 2 2h16" />
       <path d="m19 9-5 5-4-4-4 4" />
     </svg>
@@ -256,8 +256,8 @@ function TrafficChart({ chartData }: { chartData: TimelineDay[] }) {
       >
         <defs>
           <linearGradient id="overviewChartFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="var(--brand)" stopOpacity="0" />
           </linearGradient>
         </defs>
         {gridLines.map((y) => (
@@ -266,18 +266,18 @@ function TrafficChart({ chartData }: { chartData: TimelineDay[] }) {
         <line x1="0" y1={baseline} x2={width} y2={baseline} stroke={hairline} strokeWidth="1" />
         {areaD && <path d={areaD} fill="url(#overviewChartFill)" />}
         {pathD && (
-          <path d={pathD} fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={pathD} fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         )}
         {active && hoverIndex !== null && (
-          <line x1={active.x} y1={top} x2={active.x} y2={baseline} stroke="rgba(139,92,246,0.35)" strokeWidth="1" strokeDasharray="3 3" />
+          <line x1={active.x} y1={top} x2={active.x} y2={baseline} stroke="rgba(var(--brand-rgb),0.35)" strokeWidth="1" strokeDasharray="3 3" />
         )}
         {active && (
           <circle
             cx={active.x}
             cy={active.y}
             r={hoverIndex === null ? 3 : 4.5}
-            fill={hoverIndex === null ? "#8b5cf6" : "#0d0f1a"}
-            stroke="#8b5cf6"
+            fill={hoverIndex === null ? "var(--brand)" : "#0d0f1a"}
+            stroke="var(--brand)"
             strokeWidth={hoverIndex === null ? 0 : 2}
           />
         )}

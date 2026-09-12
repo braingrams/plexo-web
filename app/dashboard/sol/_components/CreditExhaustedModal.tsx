@@ -74,7 +74,7 @@ export function CreditExhaustedModal({
           overflow: "auto",
           borderRadius: 18,
           background: checkoutSecret ? "#fff" : "linear-gradient(165deg, #17101f, #0b0710)",
-          border: checkoutSecret ? "none" : "1px solid rgba(168,85,247,0.25)",
+          border: checkoutSecret ? "none" : "1px solid rgba(var(--brand-rgb),0.25)",
           boxShadow: "0 30px 80px -20px rgba(0,0,0,0.6)",
           position: "relative",
         }}
@@ -153,7 +153,7 @@ export function CreditExhaustedModal({
                       fontSize: "0.76rem",
                       fontWeight: 700,
                       color: "#fff",
-                      background: "linear-gradient(135deg,#a855f7,#7c3aed)",
+                      background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
                       padding: "0.4rem 0.8rem",
                       borderRadius: 8,
                     }}

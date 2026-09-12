@@ -40,6 +40,7 @@ export default async function BrandingSettingsPage() {
         initialName={org.name}
         initialLogo={org.logo ?? null}
         initialBrandColor={org.brandColor ?? null}
+        initialBrandDisplayMode={org.brandDisplayMode ?? "BOTH"}
       />
     </SettingsShell>
   );

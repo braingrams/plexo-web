@@ -403,7 +403,7 @@ export function SiteImportPanel({
       )}
 
       {aupPending && (
-        <div style={{ padding: "0.8rem 0.9rem", borderRadius: 8, background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.3)" }}>
+        <div style={{ padding: "0.8rem 0.9rem", borderRadius: 8, background: "rgba(var(--brand-rgb),0.08)", border: "1px solid rgba(var(--brand-rgb),0.3)" }}>
           <p style={{ fontSize: "0.8rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.4rem" }}>Accept the Acceptable Use Policy</p>
           <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.6)", marginBottom: "0.75rem", lineHeight: 1.4 }}>
             Imported pages are published exactly as fetched, with no content sanitization. Required once per account.{" "}

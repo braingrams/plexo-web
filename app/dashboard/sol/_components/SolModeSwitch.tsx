@@ -138,9 +138,9 @@ export function SolModeSwitch({
             padding: "0.65rem 0.75rem",
             borderRadius: 12,
             marginBottom: "0.9rem",
-            border: "1px solid rgba(168,85,247,0.35)",
-            background: "linear-gradient(135deg, rgba(168,85,247,0.22), rgba(124,58,237,0.14))",
-            boxShadow: "0 0 24px -10px rgba(168,85,247,0.55)",
+            border: "1px solid rgba(var(--brand-rgb),0.35)",
+            background: "linear-gradient(135deg, rgba(var(--brand-rgb),0.22), rgba(var(--brand-deep-rgb),0.14))",
+            boxShadow: "0 0 24px -10px rgba(var(--brand-rgb),0.55)",
             cursor: switching ? "not-allowed" : "pointer",
             fontFamily: "inherit",
             textAlign: "left",
@@ -154,7 +154,7 @@ export function SolModeSwitch({
               width: 28,
               height: 28,
               borderRadius: 8,
-              background: "linear-gradient(135deg, #c084fc, #7c3aed)",
+              background: "linear-gradient(135deg, var(--brand-light), var(--brand-deep))",
               color: "#fff",
               flexShrink: 0,
             }}
@@ -214,8 +214,8 @@ export function SolModeSwitch({
           width: 32,
           height: 32,
           borderRadius: 9,
-          border: active === "sol" ? "1px solid rgba(168,85,247,0.28)" : "1px solid rgba(255,255,255,0.08)",
-          background: active === "sol" ? "linear-gradient(135deg, rgba(168,85,247,0.18), rgba(124,58,237,0.1))" : "rgba(255,255,255,0.04)",
+          border: active === "sol" ? "1px solid rgba(var(--brand-rgb),0.28)" : "1px solid rgba(255,255,255,0.08)",
+          background: active === "sol" ? "linear-gradient(135deg, rgba(var(--brand-rgb),0.18), rgba(var(--brand-deep-rgb),0.1))" : "rgba(255,255,255,0.04)",
           color: active === "sol" ? "#e9d5ff" : "rgba(240,242,255,0.6)",
           cursor: "pointer",
           flexShrink: 0,
@@ -300,9 +300,9 @@ export function SolModeSwitch({
           title="SOL — your AI agent"
           style={{
             ...segmentBase,
-            background: active === "sol" ? "linear-gradient(135deg, rgba(168,85,247,0.32), rgba(124,58,237,0.22))" : "transparent",
+            background: active === "sol" ? "linear-gradient(135deg, rgba(var(--brand-rgb),0.32), rgba(var(--brand-deep-rgb),0.22))" : "transparent",
             color: active === "sol" ? "#f3e8ff" : "rgba(240,242,255,0.45)",
-            boxShadow: active === "sol" ? "0 0 12px rgba(168,85,247,0.25)" : "none",
+            boxShadow: active === "sol" ? "0 0 12px rgba(var(--brand-rgb),0.25)" : "none",
           }}
         >
           <SolIcon size={13} />

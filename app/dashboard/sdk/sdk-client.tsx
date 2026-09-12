@@ -338,8 +338,8 @@ const text = compileToPlainText(template.designJson);
 
         {/* Documentation links */}
         <div style={{
-          background: "linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(100,50,255,0.06) 100%)",
-          border: "1px solid rgba(139,92,246,0.15)", borderRadius: 16, padding: "1.5rem",
+          background: "linear-gradient(135deg, rgba(var(--brand-rgb),0.08) 0%, rgba(100,50,255,0.06) 100%)",
+          border: "1px solid rgba(var(--brand-rgb),0.15)", borderRadius: 16, padding: "1.5rem",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap",
         }}>
           <div>

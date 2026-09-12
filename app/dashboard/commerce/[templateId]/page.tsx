@@ -66,7 +66,7 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
           href={`/dashboard/commerce/${templateId}/settings`}
           style={{
             display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem",
-            background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.3)",
+            background: "rgba(var(--brand-rgb),0.1)", border: "1px solid rgba(var(--brand-rgb),0.3)",
             borderRadius: 12, padding: "0.8rem 1.1rem", marginBottom: "1.25rem",
             fontSize: "0.83rem", color: "#c4b5fd", textDecoration: "none",
           }}
@@ -97,8 +97,8 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
         <StatTile
           label="Products"
           value={String(activeProducts.length)}
-          tint="rgba(139,92,246,0.16)"
-          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c084fc" strokeWidth="1.8"><path d="M3 9l2-5h14l2 5" /><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z" /></svg>}
+          tint="rgba(var(--brand-rgb),0.16)"
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-light)" strokeWidth="1.8"><path d="M3 9l2-5h14l2 5" /><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z" /></svg>}
         />
         <StatTile
           label="Orders"

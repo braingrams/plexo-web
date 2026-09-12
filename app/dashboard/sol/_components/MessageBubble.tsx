@@ -75,8 +75,8 @@ export function MessageBubble({
           flexShrink: 0,
           display: "grid",
           placeItems: "center",
-          background: isUser ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg,#a855f7,#6d28d9)",
-          boxShadow: isUser ? "none" : "0 0 16px rgba(168,85,247,0.35)",
+          background: isUser ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg,var(--brand),var(--brand-deeper))",
+          boxShadow: isUser ? "none" : "0 0 16px rgba(var(--brand-rgb),0.35)",
         }}
       >
         {isUser ? <UserIcon size={14} color="rgba(240,242,255,0.6)" /> : <div style={{ color: "#fff" }}><SolIcon size={14} /></div>}
@@ -90,8 +90,8 @@ export function MessageBubble({
               <div
                 key={i}
                 style={{
-                  background: "linear-gradient(135deg, rgba(139,92,246,0.18), rgba(109,40,217,0.14))",
-                  border: "1px solid rgba(168,85,247,0.25)",
+                  background: "linear-gradient(135deg, rgba(var(--brand-rgb),0.18), rgba(109,40,217,0.14))",
+                  border: "1px solid rgba(var(--brand-rgb),0.25)",
                   borderRadius: "16px 16px 4px 16px",
                   padding: "0.65rem 0.95rem",
                   color: "#f0f2ff",

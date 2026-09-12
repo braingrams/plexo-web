@@ -25,7 +25,7 @@ function SourceBadge({ source }: { source: SolMemorySource }) {
         borderRadius: 6,
         flexShrink: 0,
         color: isUser ? "#e9d5ff" : "rgba(240,242,255,0.5)",
-        background: isUser ? "rgba(168,85,247,0.16)" : "rgba(255,255,255,0.06)",
+        background: isUser ? "rgba(var(--brand-rgb),0.16)" : "rgba(255,255,255,0.06)",
       }}
     >
       {isUser ? "Added by you" : "Learned by Sol"}
@@ -175,7 +175,7 @@ export function SolMemoryPageClient({ initialMemories }: { initialMemories: SolM
                 padding: "0.7rem 1.1rem",
                 borderRadius: 10,
                 border: "none",
-                background: !newText.trim() || adding ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg,#a855f7,#7c3aed)",
+                background: !newText.trim() || adding ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg,var(--brand),var(--brand-deep))",
                 color: !newText.trim() || adding ? "rgba(240,242,255,0.3)" : "#fff",
                 fontSize: "0.83rem",
                 fontWeight: 700,
@@ -258,7 +258,7 @@ export function SolMemoryPageClient({ initialMemories }: { initialMemories: SolM
                   </div>
                 ))}
               </div>
-              <style>{`.sol-memory-card:hover { border-color: rgba(168,85,247,0.25); }`}</style>
+              <style>{`.sol-memory-card:hover { border-color: rgba(var(--brand-rgb),0.25); }`}</style>
 
               <button
                 type="button"

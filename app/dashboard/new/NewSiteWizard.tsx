@@ -30,7 +30,7 @@ const hairline = "rgba(255,255,255,0.09)";
 const hairlineSoft = "rgba(255,255,255,0.055)";
 
 const SWATCHES = [
-  "linear-gradient(150deg,#312e81,#7c3aed 60%,#c084fc)",
+  "linear-gradient(150deg,#312e81,var(--brand-deep) 60%,var(--brand-light))",
   "linear-gradient(150deg,#0f172a,#0ea5e9 65%,#67e8f9)",
   "linear-gradient(150deg,#134e4a,#10b981 65%,#6ee7b7)",
   "linear-gradient(150deg,#450a0a,#f43f5e 65%,#fda4af)",

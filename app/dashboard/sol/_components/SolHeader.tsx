@@ -124,7 +124,7 @@ export function SolHeader({
               }}
               style={{
                 background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(168,85,247,0.35)",
+                border: "1px solid rgba(var(--brand-rgb),0.35)",
                 borderRadius: 8,
                 padding: "0.3rem 0.6rem",
                 color: "#f0f2ff",
@@ -191,8 +191,8 @@ export function SolHeader({
               gap: "0.3rem",
               padding: "0.3rem 0.65rem",
               borderRadius: 999,
-              background: "rgba(168,85,247,0.1)",
-              border: "1px solid rgba(168,85,247,0.25)",
+              background: "rgba(var(--brand-rgb),0.1)",
+              border: "1px solid rgba(var(--brand-rgb),0.25)",
               color: "#e9d5ff",
               fontSize: "0.74rem",
               fontWeight: 700,

@@ -32,8 +32,8 @@ function SegmentedChoice<T extends string>({ options, value, onChange }: { optio
             onClick={() => onChange(opt.value)}
             style={{
               padding: "0.55rem 1.1rem", borderRadius: 9, fontSize: "0.82rem", fontWeight: 600, cursor: "pointer",
-              background: selected ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.03)",
-              border: `1px solid ${selected ? "var(--brand, #8b5cf6)" : "rgba(255,255,255,0.09)"}`,
+              background: selected ? "rgba(var(--brand-rgb),0.18)" : "rgba(255,255,255,0.03)",
+              border: `1px solid ${selected ? "var(--brand, var(--brand))" : "rgba(255,255,255,0.09)"}`,
               color: selected ? "#c4b5fd" : "rgba(240,242,255,0.6)",
             }}
           >
@@ -54,7 +54,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       onClick={() => onChange(!checked)}
       style={{
         width: 42, height: 24, borderRadius: 999, border: "none", cursor: "pointer", position: "relative", flexShrink: 0,
-        background: checked ? "var(--brand, #8b5cf6)" : "rgba(255,255,255,0.15)", transition: "background 0.15s",
+        background: checked ? "var(--brand, var(--brand))" : "rgba(255,255,255,0.15)", transition: "background 0.15s",
       }}
     >
       <span style={{
@@ -197,7 +197,7 @@ function EmbedSnippetBox({ snippet }: { snippet: string }) {
             setTimeout(() => setCopied(false), 2000);
           }, () => {});
         }}
-        style={{ marginTop: "0.6rem", padding: "0.5rem 0.9rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700, background: "var(--brand, #8b5cf6)", color: "#fff", border: "none", cursor: "pointer" }}
+        style={{ marginTop: "0.6rem", padding: "0.5rem 0.9rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700, background: "var(--brand, var(--brand))", color: "#fff", border: "none", cursor: "pointer" }}
       >
         {copied ? "Copied!" : "Copy snippet"}
       </button>
@@ -219,8 +219,8 @@ function CurrencyGrid({ value, onChange, disabled }: { value: string; onChange: 
             style={{
               position: "relative", borderRadius: 10, padding: "0.55rem", textAlign: "center", fontFamily: "inherit",
               cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.6 : 1,
-              border: selected ? "1.5px solid var(--brand, #8b5cf6)" : "1px solid rgba(255,255,255,0.1)",
-              background: selected ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)",
+              border: selected ? "1.5px solid var(--brand, var(--brand))" : "1px solid rgba(255,255,255,0.1)",
+              background: selected ? "rgba(var(--brand-rgb),0.15)" : "rgba(255,255,255,0.03)",
             }}
           >
             <div style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff" }}>{c.symbol}</div>
@@ -333,7 +333,7 @@ function PaidSignupPicker({
           type="button"
           onClick={createAndLink}
           disabled={busy}
-          style={{ padding: "0.5rem 0.9rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700, background: "var(--brand, #8b5cf6)", color: "#fff", border: "none", cursor: "pointer", opacity: busy ? 0.6 : 1 }}
+          style={{ padding: "0.5rem 0.9rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700, background: "var(--brand, var(--brand))", color: "#fff", border: "none", cursor: "pointer", opacity: busy ? 0.6 : 1 }}
         >
           {busy ? "Creating…" : "Create & use for signup"}
         </button>

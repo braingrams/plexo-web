@@ -203,7 +203,7 @@ function PageRow({
         <span style={{ cursor: "grab", color: "rgba(240,242,255,0.3)", fontSize: "0.9rem" }}>⠿</span>
         <span style={{
           width: 26, height: 26, borderRadius: 8, display: "grid", placeItems: "center", flexShrink: 0,
-          background: "rgba(139,92,246,0.14)", fontSize: "0.85rem",
+          background: "rgba(var(--brand-rgb),0.14)", fontSize: "0.85rem",
         }}>
           {meta.icon}
         </span>
@@ -231,8 +231,8 @@ function PageRow({
                 onClick={() => onPatch({ kind })}
                 style={{
                   flex: 1, padding: "0.5rem", borderRadius: 9, fontSize: "0.78rem", fontWeight: 600, cursor: "pointer",
-                  background: page.kind === kind ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.03)",
-                  border: `1px solid ${page.kind === kind ? "var(--brand, #8b5cf6)" : "rgba(255,255,255,0.09)"}`,
+                  background: page.kind === kind ? "rgba(var(--brand-rgb),0.18)" : "rgba(255,255,255,0.03)",
+                  border: `1px solid ${page.kind === kind ? "var(--brand, var(--brand))" : "rgba(255,255,255,0.09)"}`,
                   color: page.kind === kind ? "#c4b5fd" : "rgba(240,242,255,0.6)",
                 }}
               >
@@ -315,8 +315,8 @@ function WelcomeContentEditor({ page, templateId, onPatch }: { page: FunnelPage;
             disabled={creatingDesign}
             style={{
               flex: 1, padding: "0.45rem", borderRadius: 8, fontSize: "0.76rem", fontWeight: 600, cursor: creatingDesign ? "wait" : "pointer",
-              background: mode === m ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.03)",
-              border: `1px solid ${mode === m ? "var(--brand, #8b5cf6)" : "rgba(255,255,255,0.09)"}`,
+              background: mode === m ? "rgba(var(--brand-rgb),0.18)" : "rgba(255,255,255,0.03)",
+              border: `1px solid ${mode === m ? "var(--brand, var(--brand))" : "rgba(255,255,255,0.09)"}`,
               color: mode === m ? "#c4b5fd" : "rgba(240,242,255,0.6)",
             }}
           >
@@ -353,7 +353,7 @@ function WelcomeContentEditor({ page, templateId, onPatch }: { page: FunnelPage;
             href={`/dashboard/templates/${page.designTemplateId}`}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0.9rem", borderRadius: 8, background: "var(--brand, #8b5cf6)", color: "#fff", textDecoration: "none", fontSize: "0.8rem", fontWeight: 700 }}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.5rem 0.9rem", borderRadius: 8, background: "var(--brand, var(--brand))", color: "#fff", textDecoration: "none", fontSize: "0.8rem", fontWeight: 700 }}
           >
             Open design editor
           </a>
@@ -419,7 +419,7 @@ function PageContentEditor({ page, templateId, onPatch }: { page: FunnelPage; te
                 }}
                 style={{
                   padding: "0.45rem 0.8rem", borderRadius: 8, fontSize: "0.78rem", fontWeight: 700,
-                  background: "var(--brand, #8b5cf6)", color: "#fff", border: "none", cursor: "pointer",
+                  background: "var(--brand, var(--brand))", color: "#fff", border: "none", cursor: "pointer",
                 }}
               >
                 Notify me when available

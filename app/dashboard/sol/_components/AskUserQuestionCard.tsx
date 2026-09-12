@@ -33,8 +33,8 @@ export function AskUserQuestionRecap({ block }: { block: ToolUseBlock }) {
         flexDirection: "column",
         gap: expanded ? "0.4rem" : 0,
         borderRadius: 10,
-        border: "1px solid rgba(139,92,246,0.18)",
-        background: "rgba(139,92,246,0.04)",
+        border: "1px solid rgba(var(--brand-rgb),0.18)",
+        background: "rgba(var(--brand-rgb),0.04)",
         padding: "0.5rem 0.85rem",
         maxWidth: 460,
       }}
@@ -215,7 +215,7 @@ export function AskUserQuestionOverlay({
         display: "flex",
         flexDirection: "column",
         borderRadius: 16,
-        border: "1px solid rgba(139,92,246,0.25)",
+        border: "1px solid rgba(var(--brand-rgb),0.25)",
         background: "#120a1c",
         boxShadow: "0 24px 60px -12px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03)",
         outline: "none",
@@ -223,7 +223,7 @@ export function AskUserQuestionOverlay({
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", padding: "0.9rem 1.1rem 0" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-          <span style={{ width: 22, height: 22, borderRadius: 7, background: "rgba(139,92,246,0.14)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+          <span style={{ width: 22, height: 22, borderRadius: 7, background: "rgba(var(--brand-rgb),0.14)", display: "grid", placeItems: "center", flexShrink: 0 }}>
             <HelpCircle size={12} color="#c4b5fd" />
           </span>
           <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#f0f2ff" }}>SOL has a question</span>
@@ -265,8 +265,8 @@ export function AskUserQuestionOverlay({
               letterSpacing: "0.05em",
               textTransform: "uppercase",
               color: "#c4b5fd",
-              background: "rgba(139,92,246,0.12)",
-              border: "1px solid rgba(139,92,246,0.25)",
+              background: "rgba(var(--brand-rgb),0.12)",
+              border: "1px solid rgba(var(--brand-rgb),0.25)",
               borderRadius: 999,
               padding: "0.15rem 0.55rem",
               marginBottom: "0.5rem",
@@ -322,8 +322,8 @@ export function AskUserQuestionOverlay({
                     ? selected
                       ? "none"
                       : "1.5px solid rgba(240,242,255,0.3)"
-                    : `1.5px solid ${selected ? "#a855f7" : "rgba(240,242,255,0.3)"}`,
-                  background: current.multiSelect && selected ? "linear-gradient(135deg,#a855f7,#6d28d9)" : "transparent",
+                    : `1.5px solid ${selected ? "var(--brand)" : "rgba(240,242,255,0.3)"}`,
+                  background: current.multiSelect && selected ? "linear-gradient(135deg,var(--brand),var(--brand-deeper))" : "transparent",
                   display: "grid",
                   placeItems: "center",
                   flexShrink: 0,
@@ -335,7 +335,7 @@ export function AskUserQuestionOverlay({
                   </svg>
                 )}
                 {selected && !current.multiSelect && (
-                  <span style={{ width: 8, height: 8, borderRadius: 999, background: "linear-gradient(135deg,#a855f7,#6d28d9)" }} />
+                  <span style={{ width: 8, height: 8, borderRadius: 999, background: "linear-gradient(135deg,var(--brand),var(--brand-deeper))" }} />
                 )}
               </span>
               <span style={{ display: "flex", flexDirection: "column", gap: "0.1rem", minWidth: 0 }}>
@@ -358,7 +358,7 @@ export function AskUserQuestionOverlay({
               margin: "0.15rem 0.5rem",
               padding: "0.5rem 0.6rem",
               borderRadius: 8,
-              border: "1px solid rgba(168,85,247,0.4)",
+              border: "1px solid rgba(var(--brand-rgb),0.4)",
               background: "rgba(255,255,255,0.03)",
               color: "#f0f2ff",
               fontSize: "0.83rem",
@@ -409,7 +409,7 @@ export function AskUserQuestionOverlay({
             height: 32,
             borderRadius: 999,
             border: "none",
-            background: hasAnswer ? "linear-gradient(135deg,#a855f7,#6d28d9)" : "rgba(255,255,255,0.06)",
+            background: hasAnswer ? "linear-gradient(135deg,var(--brand),var(--brand-deeper))" : "rgba(255,255,255,0.06)",
             color: hasAnswer ? "#fff" : "rgba(240,242,255,0.3)",
             cursor: !hasAnswer || busyNow ? "not-allowed" : "pointer",
             opacity: busyNow ? 0.7 : 1,

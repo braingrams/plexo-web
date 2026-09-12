@@ -27,6 +27,25 @@ export function toRgba(hex: string, alpha: number): string {
   return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
 }
 
+/** Mixes a hex color toward white by `amount` (0-1) — used to derive a "light" gradient
+ * stop/highlight (the counterpart to darken() above), e.g. the light purple lots of
+ * gradients/badges use alongside the base brand color. */
+export function lighten(hex: string, amount: number): string {
+  const rgb = parseHex(hex);
+  if (!rgb) return hex;
+  const [r, g, b] = rgb.map((c) => Math.round(c + (255 - c) * amount));
+  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Renders a hex color as a bare "r, g, b" triplet (no rgba() wrapper) — for CSS custom
+ * properties meant to be composed into an arbitrary-alpha rgba(var(--x-rgb), N) at the call
+ * site, instead of needing one fixed-alpha variable per shade actually used somewhere. */
+export function toRgbTriplet(hex: string): string {
+  const rgb = parseHex(hex);
+  if (!rgb) return hex;
+  return `${rgb[0]}, ${rgb[1]}, ${rgb[2]}`;
+}
+
 /** True if the string is a plausible 6-digit hex color (with or without leading #). */
 export function isValidHexColor(hex: string): boolean {
   return parseHex(hex) !== null;

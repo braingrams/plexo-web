@@ -351,7 +351,7 @@ export function NotificationBell({ anchor = "right" }: { anchor?: "left" | "righ
               style={{
                 display: "block", width: "100%", textAlign: "left",
                 padding: "0.6rem", borderRadius: 10, border: "none", marginBottom: 2,
-                background: item.readAt ? "transparent" : "rgba(139,92,246,0.08)",
+                background: item.readAt ? "transparent" : "rgba(var(--brand-rgb),0.08)",
                 color: "#f0f2ff", fontSize: "0.8rem", cursor: "pointer",
               }}
             >

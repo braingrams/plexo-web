@@ -90,9 +90,9 @@ function SegmentedChoice<T extends string>({ options, value, onChange }: { optio
               fontWeight: 700,
               cursor: "pointer",
               whiteSpace: "nowrap",
-              background: active ? "linear-gradient(135deg,#a855f7,#7c3aed)" : "transparent",
+              background: active ? "linear-gradient(135deg,var(--brand),var(--brand-deep))" : "transparent",
               color: active ? "#fff" : "rgba(240,242,255,0.5)",
-              boxShadow: active ? "0 4px 14px -4px rgba(168,85,247,0.6)" : "none",
+              boxShadow: active ? "0 4px 14px -4px rgba(var(--brand-rgb),0.6)" : "none",
               transition: "background 0.15s, color 0.15s, box-shadow 0.15s",
             }}
           >
@@ -255,8 +255,8 @@ export function SolSettingsPageClient({ initialPreferences }: { initialPreferenc
                     gap: "0.4rem",
                     padding: "0.6rem 1.1rem",
                     borderRadius: 999,
-                    background: "rgba(168,85,247,0.14)",
-                    border: "1px solid rgba(168,85,247,0.3)",
+                    background: "rgba(var(--brand-rgb),0.14)",
+                    border: "1px solid rgba(var(--brand-rgb),0.3)",
                     fontSize: "0.83rem",
                     fontWeight: 700,
                     color: "#e9d5ff",

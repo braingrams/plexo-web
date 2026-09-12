@@ -195,7 +195,7 @@ export function MessageList({
             padding: "0.4rem 0.85rem",
             borderRadius: 999,
             background: "rgba(20,10,32,0.92)",
-            border: "1px solid rgba(168,85,247,0.35)",
+            border: "1px solid rgba(var(--brand-rgb),0.35)",
             color: "#e9d5ff",
             fontSize: "0.75rem",
             fontWeight: 600,

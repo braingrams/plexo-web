@@ -238,7 +238,7 @@ export function BlogOverviewClient({ blogs, eligibleTemplates }: { blogs: BlogSu
                   display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
                   padding: "0.6rem 1rem", borderRadius: 10, border: "none", cursor: "pointer",
                   fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit",
-                  background: "rgba(139,92,246,0.15)", color: "var(--brand)",
+                  background: "rgba(var(--brand-rgb),0.15)", color: "var(--brand)",
                 }}
               >
                 Manage Blog

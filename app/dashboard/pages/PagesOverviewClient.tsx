@@ -154,11 +154,11 @@ function PublishedPageCard({ page }: { page: PublishedPageSummary }) {
             style={{
               flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
               padding: "0.6rem 1rem", borderRadius: 10, border: "none", cursor: "pointer",
-              fontSize: "0.85rem", fontWeight: 700, background: "rgba(139,92,246,0.15)", color: "var(--brand)",
+              fontSize: "0.85rem", fontWeight: 700, background: "rgba(var(--brand-rgb),0.15)", color: "var(--brand)",
               transition: "all 0.2s", fontFamily: "inherit",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.25)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139,92,246,0.15)"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(var(--brand-rgb),0.25)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(var(--brand-rgb),0.15)"; }}
           >
             View
             <IconArrow />
@@ -302,7 +302,7 @@ export function PagesOverviewClient({ pages, isUltra }: { pages: PublishedPageSu
             style={{
               marginTop: "0.5rem", display: "inline-flex", alignItems: "center", gap: "0.5rem",
               padding: "0.6rem 1.1rem", borderRadius: 10, fontSize: "0.85rem", fontWeight: 700,
-              background: "rgba(139,92,246,0.15)", color: "var(--brand)", textDecoration: "none",
+              background: "rgba(var(--brand-rgb),0.15)", color: "var(--brand)", textDecoration: "none",
             }}
           >
             Go to Templates
