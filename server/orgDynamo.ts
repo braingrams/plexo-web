@@ -1,7 +1,9 @@
 import { cookies } from "next/headers";
 import { randomUUID } from "node:crypto";
+import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 
 import type { EntityItem } from "electrodb";
+import { docClient } from "@/lib/db/client";
 import { Organization, Member, Invitation, User } from "@/lib/db/coreEntities";
 import type { OrgRole } from "@/server/accessControl";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
@@ -9,6 +11,13 @@ import { buildInviteEmail } from "@/lib/mail/templates";
 import { canWhiteLabel } from "@/lib/subscription";
 import { logEmailDelivery } from "@/lib/mail/logEmail";
 import { membershipsForUser, ensurePersonalWorkspace, ACTIVE_ORG_COOKIE } from "@/server/orgMemberships";
+
+// Same small helper orgMemberships.ts and commerceOperations.ts each already keep their own
+// copy of, rather than exporting one shared utility for a four-line check.
+function isConditionalCheckFailure(err: unknown): boolean {
+  const anyErr = err as { name?: string; cause?: { name?: string } };
+  return anyErr?.name === "ConditionalCheckFailedException" || anyErr?.cause?.name === "ConditionalCheckFailedException";
+}
 
 // membershipsForUser, ensurePersonalWorkspace, and ACTIVE_ORG_COOKIE now live in
 // server/orgMemberships.ts (no `next/headers` import there) so lambda/sol-chat/
@@ -155,7 +164,33 @@ export async function updateMemberRole(
   scopedTemplateIds?: string[],
 ): Promise<void> {
   const nextScopedTemplateIds = role === "editor" ? (scopedTemplateIds ?? []) : [];
-  await Member.patch({ organizationId, userId }).set({ role, scopedTemplateIds: nextScopedTemplateIds }).go();
+
+  if (role !== "owner") {
+    await Member.patch({ organizationId, userId }).set({ role, scopedTemplateIds: nextScopedTemplateIds }).go();
+    return;
+  }
+
+  // Ownership transfer only (rare — a handful of these per org, ever): exactly one Member
+  // per org should hold role "owner", but DynamoDB has no "at most one row matching X"
+  // constraint the way a SQL unique-partial-index would give us. Without this, promoting a
+  // second member to owner left two owner-role rows behind, and plexo-admin's owner badge
+  // (organizations/page.tsx, organizations/[id]/page.tsx) picked one of them via .find() —
+  // effectively at random. Demoting every existing owner in the SAME transaction that
+  // promotes the new one closes that: either the whole swap lands, or none of it does.
+  const { data: currentOwners } = await Member.query.primary({ organizationId }).where((attr, op) => op.eq(attr.role, "owner")).go();
+  const toDemote = currentOwners.filter((m) => m.userId !== userId);
+
+  const updates = [
+    Member.patch({ organizationId, userId }).set({ role: "owner", scopedTemplateIds: [] }).params(),
+    ...toDemote.map((m) => Member.patch({ organizationId, userId: m.userId }).set({ role: "admin", scopedTemplateIds: [] }).params()),
+  ];
+
+  await docClient.send(
+    new TransactWriteCommand({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      TransactItems: updates.map((params) => ({ Update: params as any })),
+    }),
+  );
 }
 
 export type InvitationView = {
@@ -256,13 +291,20 @@ export async function acceptInvitation(id: string, userId: string): Promise<{ or
   if (!inv || inv.status !== "pending") return null;
   if (new Date(inv.expiresAt).getTime() < Date.now()) return null;
 
-  await Member.create({
-    id: randomUUID(),
-    organizationId: inv.organizationId,
-    userId,
-    role: inv.role,
-    scopedTemplateIds: inv.scopedTemplateIds ?? [],
-  }).go();
+  try {
+    await Member.create({
+      id: randomUUID(),
+      organizationId: inv.organizationId,
+      userId,
+      role: inv.role,
+      scopedTemplateIds: inv.scopedTemplateIds ?? [],
+    }).go();
+  } catch (err) {
+    // Already a member of this org (e.g. the same invite accepted twice concurrently, or
+    // re-opened after already accepting) — same DynamoDB-key guard as ensurePersonalWorkspace
+    // above. Not an error from the caller's point of view: they end up a member either way.
+    if (!isConditionalCheckFailure(err)) throw err;
+  }
   await Invitation.patch({ id }).set({ status: "accepted" }).go();
   return { organizationId: inv.organizationId };
 }

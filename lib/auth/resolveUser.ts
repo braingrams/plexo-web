@@ -1,11 +1,35 @@
 import { createHash } from "node:crypto";
-import type { NextRequest } from "next/server";
+import { type NextRequest, after } from "next/server";
 
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { ApiKey, User } from "@/lib/db/coreEntities";
 import { resolveManageLandingPagePublishing } from "@/lib/subscription";
+import { describeActivity } from "@/lib/activity";
 import type { OrgRole } from "@/server/accessControl";
+import type { EntityItem } from "electrodb";
+
+// "Last activity" for the admin console — see User.lastActiveAt's doc comment in
+// lib/db/coreEntities.ts for why this is throttled rather than written on every request:
+// resolveUser() is the one chokepoint both the dashboard and the public v1 API already run
+// through on every authenticated call, so it's the natural place to derive this, but
+// writing here unconditionally would mean one DynamoDB write per request across the whole
+// API surface. Skipping the write entirely whenever the stored value is still fresh (using
+// the User row already fetched below — no extra read) caps this at roughly one tiny write
+// per active user per hour, regardless of how many requests they actually make.
+const ACTIVITY_THROTTLE_MS = 60 * 60 * 1000;
+
+function touchUserActivity(user: EntityItem<typeof User>, pathname: string): void {
+  const isStale = !user.lastActiveAt || Date.now() - new Date(user.lastActiveAt).getTime() > ACTIVITY_THROTTLE_MS;
+  if (!isStale) return;
+  const lastActiveContext = describeActivity(pathname);
+  after(() =>
+    User.patch({ id: user.id })
+      .set({ lastActiveAt: new Date().toISOString(), lastActiveContext })
+      .go()
+      .catch((err) => console.error("Failed to record user activity:", err)),
+  );
+}
 
 // DynamoDB-native replacement for app/api/v1/domains/route.ts's resolveUser — moved to a
 // proper shared home since it's imported by 29 files across the public API surface, not
@@ -52,6 +76,8 @@ export async function resolveUser(
       const orgResolution = await ensureActiveOrganization(session.user.id);
       if (orgResolution.status === "needs-choice") return null;
 
+      touchUserActivity(user, request.nextUrl.pathname);
+
       return {
         userId: user.id,
         organizationId: orgResolution.organizationId,
@@ -86,6 +112,8 @@ export async function resolveUser(
 
   const { data: user } = await User.get({ id: apiKey.userId }).go();
   if (!user) return null;
+
+  touchUserActivity(user, request.nextUrl.pathname);
 
   return {
     userId: apiKey.userId,
