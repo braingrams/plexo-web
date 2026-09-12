@@ -45,6 +45,9 @@ export const User = new Entity(
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       // Dashboard shell UI preference — server/orgDynamo.ts's cutover of app/dashboard/layout.tsx.
       layoutMode: { type: ["CLASSIC", "MODERN"] as const, default: "CLASSIC" },
+      // Default landing surface after login — the normal dashboard, or the full-screen
+      // SOL (AI agent chat) view. See lib/db/solEntities.ts for SOL's own data.
+      preferredSurface: { type: ["DASHBOARD", "SOL"] as const, default: "DASHBOARD" },
       // Plan-gated preferences (resolveHideBranding/resolveManageLandingPagePublishing in
       // lib/subscription.ts do the actual entitlement collapse — these store the raw
       // stated preference, same as Prisma did).

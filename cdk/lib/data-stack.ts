@@ -50,6 +50,10 @@ const TABLES: TableSpec[] = [
   { id: "Content", tableName: "plexo-content", secondGsi: true, pointInTimeRecovery: true },
   { id: "Ops", tableName: "plexo-ops", ttlAttribute: "ttl" },
   { id: "Import", tableName: "plexo-import", ttlAttribute: "ttl" },
+  // SOL (the AI agent chat feature) stores real user-authored content — conversation
+  // transcripts, user-curated memory facts — the same retention bar as Core/Commerce/
+  // Content above, not the TTL-only bar Ops/Import get for disposable data.
+  { id: "Sol", tableName: "plexo-sol", pointInTimeRecovery: true },
 ];
 
 export class DataStack extends cdk.Stack {

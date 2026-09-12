@@ -5,6 +5,7 @@ import { ElementJSONSchema, TemplateJSONSchema, hydrateStructuralDefaults } from
 import { classifyPromptComplexity } from "./complexity";
 import { resolveModel } from "./modelRegistry";
 import * as anthropicProvider from "./providers/anthropic";
+import * as bedrockProvider from "./providers/bedrockClaude";
 import * as geminiProvider from "./providers/gemini";
 import * as openaiProvider from "./providers/openai";
 import type { ProviderCallResult } from "./providers/shared";
@@ -24,6 +25,14 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   // a builder layout's nested JSON per token, so a smaller ceiling than edit_layout/
   // generate_layout is enough for a genuinely long post.
   generate_blog_post: 6000,
+  // SOL (lib/ai/solAgent.ts) — one turn of the agent loop: some conversational text plus,
+  // often, a tool_use block whose "input" can itself be a full designJson/htmlContent
+  // payload (e.g. calling publish_landing_page or create_raw_landing_page) — the same
+  // shape of output edit_raw_html/generate_layout produce in one shot. Set to the highest
+  // existing ceiling (edit_raw_html's 32000) rather than a smaller one: an agent turn that
+  // gets cut off mid tool-call JSON is worse than a plain generation mode being cut off,
+  // since dispatchMcpTool would then receive unparseable/truncated tool input.
+  agent_chat: 32000,
 };
 
 /** Ceiling for the one-time adaptive retry when a response comes back truncated (see
@@ -158,6 +167,8 @@ async function callProvider(
       return openaiProvider.generate(params);
     case "google_gemini":
       return geminiProvider.generate(params);
+    case "bedrock_claude":
+      return bedrockProvider.generate(params);
     default:
       throw new Error(`Unsupported AI provider: ${provider satisfies never}`);
   }

@@ -37,6 +37,13 @@ export default async function OverviewPage() {
     redirect("/auth/complete-subscription");
   }
 
+  // A user who's picked SOL (the AI agent chat) as their landing surface skips the normal
+  // dashboard overview entirely — app/dashboard/sol/page.tsx takes it from here (most
+  // recent conversation, or a fresh empty-chat state).
+  if (user.preferredSurface === "SOL") {
+    redirect("/dashboard/sol");
+  }
+
   const { data: allTemplates } = await Template.query.byOrg({ organizationId }).go({ pages: "all" });
   const rootTemplates = allTemplates.filter(
     (t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,

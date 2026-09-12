@@ -15,6 +15,7 @@ export default async function CommerceNotificationsSettingsPage({ params }: { pa
         maildripConnected: Boolean(settings?.maildripApiKeyEncrypted),
         maildripPaidGroupId: settings?.maildripPaidGroupId ?? "",
         maildripNewsletterGroupId: settings?.maildripNewsletterGroupId ?? "",
+        newsletterPopupEnabled: settings?.newsletterPopupEnabled ?? false,
         notificationEmail: settings?.notificationEmail ?? "",
       }}
     />

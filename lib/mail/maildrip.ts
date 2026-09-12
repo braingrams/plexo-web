@@ -1,4 +1,6 @@
 import { darken } from "@/lib/color";
+import { decryptMaildripKey } from "@/lib/crypto";
+import { logEmailDelivery, type EmailDeliveryContext } from "./logEmail";
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL?.startsWith("http")
   ? process.env.NEXT_PUBLIC_APP_URL
@@ -41,6 +43,54 @@ export async function sendMaildripEmail(input: {
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`Maildrip API error (${response.status}): ${body}`);
+  }
+}
+
+// ── Per-site (BYO) MailDrip sending — distinct from sendMaildripEmail above, which always
+// uses Plexo's own shared platform key. Lives here (not lib/commerce/maildripNotify.ts,
+// which imports FROM this file) specifically so lib/commerce/orderStatusActions.ts can
+// import these without creating a cycle back through maildripNotify.ts's own
+// notifyMaildripOfPaidOrder, which now calls into orderStatusActions.ts.
+
+/** Site's own MailDrip key when configured, falling back to Plexo's shared platform key —
+ * lets every Commerce sender (order-status emails, digital delivery) resolve the same key
+ * without duplicating the fallback logic. Structurally typed rather than importing
+ * CommerceSettings's real entity type, to keep this generic mail module decoupled from
+ * lib/db/commerceEntities. */
+export function resolveMaildripApiKey(settings: { maildripApiKeyEncrypted?: string | null }): string | null {
+  return settings.maildripApiKeyEncrypted ? decryptMaildripKey(settings.maildripApiKeyEncrypted) : (maildripApiKey ?? null);
+}
+
+/** Sends a transactional email through a SPECIFIC MailDrip key (e.g. resolveMaildripApiKey's
+ * result) — unlike sendMaildripEmail above, which always uses Plexo's shared platform key,
+ * this lets a Commerce email go out under the site's own connected MailDrip account when it
+ * has one (that account's own verified sending domain/identity applies automatically — no
+ * separate "from" field to set here). organizationId/templateId are optional and only used
+ * for EmailLog attribution; context is required so every call site records what kind of
+ * commerce email this actually was (order status vs. digital delivery, etc.) instead of a
+ * single hardcoded label covering sends that aren't really the same thing. */
+export async function sendCommerceEmail(
+  apiKey: string,
+  input: { to: string; subject: string; html: string; context: EmailDeliveryContext; organizationId?: string; templateId?: string },
+): Promise<void> {
+  const { organizationId, templateId, context, ...body } = input;
+  try {
+    const response = await fetch(maildripApiUrl, {
+      method: "POST",
+      headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error(`MailDrip send failed (${response.status}): ${await response.text()}`);
+    }
+    logEmailDelivery({ kind: "maildrip", to: input.to, subject: input.subject, status: "sent", context, organizationId, templateId });
+  } catch (err) {
+    logEmailDelivery({
+      kind: "maildrip", to: input.to, subject: input.subject, status: "failed",
+      errorMessage: err instanceof Error ? err.message : String(err),
+      context, organizationId, templateId,
+    });
+    throw err;
   }
 }
 
