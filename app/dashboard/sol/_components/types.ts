@@ -102,3 +102,13 @@ export function classifyAttachmentType(contentType: string): "image" | "pdf" | "
 }
 
 export type CreditInfo = { requiredCredits: number; availableCredits: number };
+
+/** A session cookie (no Max-Age/Expires — cleared when the browser itself closes, not just
+ * the tab) naming the last SOL conversation this browser session actually visited.
+ * app/dashboard/sol/page.tsx reads it to decide whether landing on bare /dashboard/sol
+ * should resume that conversation or start a fresh one — set client-side by SolChatView
+ * whenever a real conversation becomes active, since a Server Component page render can't
+ * write cookies itself (only Server Actions/Route Handlers can). Read/write both live here
+ * (a plain, "no 'use client'" module) rather than in SolChatView.tsx so the server-side page
+ * doesn't have to import anything from a client-only file to get the name right. */
+export const SOL_LAST_CONVERSATION_COOKIE = "sol_last_conversation";

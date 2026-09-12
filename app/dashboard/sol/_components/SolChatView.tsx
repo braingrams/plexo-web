@@ -13,6 +13,7 @@ import { useSolSidebar } from "./SolSidebarContext";
 import { registerSolReadinessTask, resolveSolReadinessTask } from "./solReadinessGate";
 import {
   ASK_USER_QUESTION_TOOL_NAME,
+  SOL_LAST_CONVERSATION_COOKIE,
   type AskUserAnswer,
   type ChatAttachment,
   type ContentBlock,
@@ -148,6 +149,22 @@ export function SolChatView({
   // another message get sent and produce the exact "tool_use without a tool_result"
   // history corruption the pending-detection code exists to prevent.
   const knownConversationIdRef = useRef<string | null>("__sol_uninitialized__");
+
+  useEffect(() => {
+    // Remembers "the last SOL conversation THIS BROWSER SESSION actually visited" — a
+    // session cookie (no Max-Age, cleared when the browser closes) rather than a durable
+    // one, since /dashboard/sol's own resume logic is explicitly session-scoped: come back
+    // within the same session and it picks up where you left off, come back in a genuinely
+    // new session and it starts fresh instead of always resurfacing however-old a
+    // conversation (see app/dashboard/sol/page.tsx's own comment). Written here (not
+    // server-side) because a Server Component page render can't set cookies itself.
+    if (!conversation?.id) return;
+    try {
+      document.cookie = `${SOL_LAST_CONVERSATION_COOKIE}=${conversation.id}; path=/; SameSite=Lax`;
+    } catch {
+      // Best-effort — worst case this session just doesn't resume next time it opens SOL.
+    }
+  }, [conversation?.id]);
 
   useEffect(() => {
     // Marks "the actual SOL page has mounted" for the entrance overlay's readiness gate
