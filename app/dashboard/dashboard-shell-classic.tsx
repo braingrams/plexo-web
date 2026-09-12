@@ -667,16 +667,6 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
           background: "var(--bg)",
         }}
       >
-        {/* Sits at the true top-center of the content column, on its own, sticky strip —
-            deliberately not folded into the sidebar's OrgSwitcher/Feedback/Notification
-            row (Classic has no shared horizontal topbar the way Modern does), so it never
-            has to compete with those for space. */}
-        <div className="dash-classic-sol-switch" style={{ position: "sticky", top: 0, zIndex: 30, display: "flex", justifyContent: "center", padding: "0.75rem 0 0", pointerEvents: "none" }}>
-          <div style={{ pointerEvents: "auto" }}>
-            <SolModeSwitch active="plexo" />
-          </div>
-        </div>
-
         <div className="dash-classic-banner" style={{ padding: "2rem 8px 0", maxWidth: 1920, margin: "0 auto" }}>
           <LayoutSwitchBanner />
         </div>
