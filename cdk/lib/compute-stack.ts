@@ -125,6 +125,20 @@ if (!cronSecret) throw new Error("CRON_SECRET is required (see CRON_SECRET in SS
 const authSecret = process.env.AUTH_SECRET;
 if (!authSecret) throw new Error("AUTH_SECRET is required for SolChatFn's session verification (see AUTH_SECRET in SSM for this environment).");
 
+// System AI (the page-builder AI proxy's account-without-a-BYOK-key path,
+// lib/ai/systemProvider.ts's resolveSystemProvider()) needs these baked into ServerFn the
+// same direct way as PLEXO_ORIGIN_VERIFY_SECRET/CRON_SECRET above, for the identical
+// reason: the loadSecretsFromSsm() runtime path never actually runs (see that gap's own
+// giant comment above). Deliberately OPTIONAL, unlike every secret above — an environment
+// with System AI not yet configured should just make that one feature unavailable
+// (resolveSystemProvider() already throws a clean, caught "not configured" error at
+// request time), not fail the whole deploy the way a missing auth/security secret would.
+const systemAiEnv: Record<string, string> = {};
+for (const key of ["SYSTEM_AI_PROVIDER", "SYSTEM_AI_KEY_ANTHROPIC_CLAUDE", "SYSTEM_AI_KEY_OPENAI", "SYSTEM_AI_KEY_GOOGLE_GEMINI"]) {
+  const value = process.env[key];
+  if (value) systemAiEnv[key] = value;
+}
+
 // Cache-busting suffix for the unhashed, unversioned public/commerce.js URL that
 // app/pub/[domain]/[[...slug]]/route.ts's injectCommerceScript() embeds into every
 // published storefront — see that file's own comment. The deploy workflows set this to
@@ -304,7 +318,7 @@ export class ComputeStack extends cdk.Stack {
       // populated (via SSM) for ordinary Node-runtime route handlers in the very same
       // Lambda. Setting it directly here is required at `cdk deploy` time anyway
       // (originVerifySecret throws above if unset), so this has no new operational cost.
-      environment: { ...commonEnv, ...tableEnv, PLEXO_ENV: ssmEnv, PLEXO_ORIGIN_VERIFY_SECRET: originVerifySecret!, CRON_SECRET: cronSecret!, ASSET_VERSION: assetVersion },
+      environment: { ...commonEnv, ...tableEnv, ...systemAiEnv, PLEXO_ENV: ssmEnv, PLEXO_ORIGIN_VERIFY_SECRET: originVerifySecret!, CRON_SECRET: cronSecret!, ASSET_VERSION: assetVersion },
       logGroup: buildLogGroup(this, "ServerFn"),
     });
     assetsBucket.grantReadWrite(serverFn);
