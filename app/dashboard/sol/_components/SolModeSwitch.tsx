@@ -8,6 +8,29 @@ import { setSolLaunchOrigin, markSolTransitionHandled, SolEntranceOverlay } from
 import { SolIcon } from "./SolIcon";
 
 /**
+ * Saves the "leave SOL" preference, then navigates — the one correct way to exit SOL back
+ * to the ordinary dashboard. /dashboard's own server-side redirect (app/dashboard/page.tsx)
+ * sends anyone with preferredSurface==="SOL" straight back into SOL, so a plain
+ * `<Link href="/dashboard">` out of SOL — without first PATCHing this preference — lands on
+ * /dashboard just long enough to get bounced right back into /dashboard/sol. Every "leave
+ * SOL" entry point (this switch's own Plexo segment below, and ThreadSidebar's Plexo logo)
+ * must go through this, not a plain Link, for exactly that reason.
+ */
+export async function exitSolToPlexo(router: ReturnType<typeof useRouter>): Promise<void> {
+  try {
+    await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preferredSurface: "DASHBOARD" }),
+    });
+  } catch {
+    // Best-effort — still navigate even if the save failed, rather than trap the user
+    // inside SOL; worst case the redirect bounces them back and they can retry.
+  }
+  router.push("/dashboard");
+}
+
+/**
  * The one control for moving between the ordinary Plexo dashboard and SOL — a segmented
  * switch (not a plain nav button) so which side you're on is always visually obvious, used
  * in both dashboard shells' top bars (active: "plexo") and inside SolHeader (active: "sol").
@@ -96,17 +119,7 @@ export function SolModeSwitch({
   async function exitToPlexo() {
     if (active === "plexo" || switching) return;
     setSwitching(true);
-    try {
-      await fetch("/api/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preferredSurface: "DASHBOARD" }),
-      });
-    } catch {
-      // Best-effort — still navigate even if the save failed, rather than trap the user
-      // inside SOL; worst case the redirect bounces them back and they can retry.
-    }
-    router.push("/dashboard");
+    await exitSolToPlexo(router);
   }
 
   if (sidebarCard) {

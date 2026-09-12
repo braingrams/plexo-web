@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Brain, Check, MessageSquarePlus, Pencil, Search, Settings, Trash2, X } from "lucide-react";
 import { SolAccountFooter } from "./SolAccountFooter";
+import { exitSolToPlexo } from "./SolModeSwitch";
 import { registerSolReadinessTask, resolveSolReadinessTask } from "./solReadinessGate";
 import type { ConversationSummary } from "./types";
 
@@ -167,17 +168,29 @@ export function ThreadSidebar({
           isn't enough since the two rows' content isn't the same intrinsic size) so the two
           read as one continuous top bar across the sidebar and the header, not two
           separately-sized pieces of chrome bolted together. */}
-      <Link
-        href="/dashboard"
+      {/* A plain <Link> here would land on /dashboard just long enough to get bounced
+          straight back into /dashboard/sol — see exitSolToPlexo's own comment for why
+          leaving SOL always has to save preferredSurface="DASHBOARD" first. */}
+      <button
+        type="button"
+        onClick={() => void exitSolToPlexo(router)}
         style={{
           display: "flex",
           alignItems: "center",
           gap: "0.55rem",
           height: 61,
+          width: "100%",
           boxSizing: "border-box",
           padding: "0 1rem",
+          borderTop: "none",
+          borderLeft: "none",
+          borderRight: "none",
           borderBottom: "1px solid rgba(255,255,255,0.07)",
+          background: "none",
           textDecoration: "none",
+          cursor: "pointer",
+          fontFamily: "inherit",
+          textAlign: "left",
         }}
       >
         <div
@@ -196,7 +209,7 @@ export function ThreadSidebar({
           </svg>
         </div>
         <span style={{ fontFamily: "var(--font-heading), sans-serif", fontWeight: 700, fontSize: "0.92rem", color: "#f0f2ff", letterSpacing: "-0.01em" }}>Plexo</span>
-      </Link>
+      </button>
 
       <div style={{ padding: "0.3rem 0.6rem 0.6rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>
         <button type="button" onClick={handleNewChat} style={navItemStyle} className="sol-nav-item">
