@@ -102,6 +102,28 @@ export function Composer({
     }
   }
 
+  /** Lets a screenshot/copied image go straight into the composer as an attachment via
+   * Cmd/Ctrl+V, the same way clicking the attach button + picking a file does — reuses
+   * handleFilesPicked's exact upload pipeline (presign → upload → AttachmentChip) instead
+   * of a separate path, so paste and pick behave identically. Only intercepts the paste
+   * when it actually contains image data; a normal text paste falls through untouched. */
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageFiles: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) imageFiles.push(file);
+      }
+    }
+    if (imageFiles.length === 0) return;
+    e.preventDefault();
+    const dataTransfer = new DataTransfer();
+    for (const file of imageFiles) dataTransfer.items.add(file);
+    void handleFilesPicked(dataTransfer.files);
+  }
+
   function removeAttachment(clientId: string) {
     setAttachments((prev) => prev.filter((a) => a.clientId !== clientId));
   }
@@ -193,6 +215,7 @@ export function Composer({
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={PLACEHOLDER}
           rows={1}
           disabled={disabled}
