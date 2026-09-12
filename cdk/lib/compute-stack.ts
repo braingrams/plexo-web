@@ -612,21 +612,28 @@ export class ComputeStack extends cdk.Stack {
     // pending direct confirmation, since AWS didn't publish their exact per-model geo
     // fan-out tables at the time this was written) routes across
     // us-east-1/us-east-2/us-west-2 — granted across all three accordingly.
-    solChatFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:GetInferenceProfile", "bedrock:ListInferenceProfiles"],
-        resources: [
-          ...["us-east-1", "us-east-2", "us-west-2"].map(
-            (region) => `arn:aws:bedrock:${region}::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0`,
-          ),
-          ...["us-east-1", "us-east-2", "us-west-2"].map((region) => `arn:aws:bedrock:${region}::foundation-model/anthropic.claude-sonnet-5`),
-          ...["us-east-1", "us-east-2", "us-west-2"].map((region) => `arn:aws:bedrock:${region}::foundation-model/anthropic.claude-opus-5`),
-          `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`,
-          `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-sonnet-5`,
-          `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-opus-5`,
-        ],
-      }),
-    );
+    const bedrockInvokePolicy = new iam.PolicyStatement({
+      actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:GetInferenceProfile", "bedrock:ListInferenceProfiles"],
+      resources: [
+        ...["us-east-1", "us-east-2", "us-west-2"].map(
+          (region) => `arn:aws:bedrock:${region}::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0`,
+        ),
+        ...["us-east-1", "us-east-2", "us-west-2"].map((region) => `arn:aws:bedrock:${region}::foundation-model/anthropic.claude-sonnet-5`),
+        ...["us-east-1", "us-east-2", "us-west-2"].map((region) => `arn:aws:bedrock:${region}::foundation-model/anthropic.claude-opus-5`),
+        `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`,
+        `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-sonnet-5`,
+        `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-opus-5`,
+      ],
+    });
+    solChatFn.addToRolePolicy(bedrockInvokePolicy);
+    // serverFn needs this too: lib/ai/providers/bedrockClaude.ts's plain (non-agentic)
+    // generate() — the page-builder AI proxy's System AI path, via
+    // lib/ai/systemProvider.ts's resolveSystemProvider() — authenticates to Bedrock via
+    // this same IAM role, not an API key, exactly like SOL's own agent loop does. Missing
+    // here even after SYSTEM_AI_PROVIDER itself started reaching serverFn correctly (see
+    // that fix's own commit) — confirmed by a real 403 AccessDenied on bedrock:InvokeModel
+    // once SYSTEM_AI_PROVIDER=bedrock_claude actually started being used.
+    serverFn.addToRolePolicy(bedrockInvokePolicy);
     // RESPONSE_STREAM is the entire reason this is a second Lambda rather than a change
     // to serverFn: it's what lets the handler flush tokens to the client as they're
     // generated instead of buffering the whole response first. AuthType.NONE (like
