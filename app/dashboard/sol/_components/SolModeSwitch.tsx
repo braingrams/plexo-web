@@ -65,7 +65,7 @@ export function SolModeSwitch({
 }: {
   active: "plexo" | "sol";
   compact?: boolean;
-  /** Renders as a full-width, prominent nav-style card (icon + "SOL AI Agent" + an "AI"
+  /** Renders as a full-width, prominent nav-style card (icon + "Ask SOL" + an "AI"
    * badge) instead of the segmented Plexo/SOL pill — for Classic's fixed sidebar, sitting
    * above its ordinary nav list, where the topbar's own switch turned out not to be
    * discoverable enough. Only meaningful for `active="plexo"` (there's no reason to show
@@ -139,7 +139,14 @@ export function SolModeSwitch({
             borderRadius: 12,
             marginBottom: "0.9rem",
             border: "1px solid rgba(var(--brand-rgb),0.35)",
-            background: "linear-gradient(135deg, rgba(var(--brand-rgb),0.22), rgba(var(--brand-deep-rgb),0.14))",
+            // A subtle diagonal hairline texture layered on top of the brand gradient (a
+            // second background layer, not a separate element/asset) — the actual color
+            // still comes entirely from --brand-rgb/--brand-deep-rgb, so a white-labeled
+            // org's own accent color still fully drives it, just with more depth than a
+            // flat gradient alone.
+            background:
+              "repeating-linear-gradient(135deg, rgba(255,255,255,0.035) 0px, rgba(255,255,255,0.035) 1px, transparent 1px, transparent 7px), " +
+              "linear-gradient(135deg, rgba(var(--brand-rgb),0.22), rgba(var(--brand-deep-rgb),0.14))",
             boxShadow: "0 0 24px -10px rgba(var(--brand-rgb),0.55)",
             cursor: switching ? "not-allowed" : "pointer",
             fontFamily: "inherit",
@@ -173,7 +180,7 @@ export function SolModeSwitch({
               textOverflow: "ellipsis",
             }}
           >
-            SOL AI Agent
+            Ask SOL
           </span>
           <span
             style={{
@@ -291,7 +298,10 @@ export function SolModeSwitch({
           }}
         >
           <LayoutGrid size={12} />
-          Plexo
+          {/* Naming where you already are ("Plexo") only makes sense from the dashboard
+              side — from inside SOL, this same segment IS the exit action, so it reads as
+              one instead ("Back to Dashboard"). */}
+          {active === "sol" ? "Back to Dashboard" : "Plexo"}
         </button>
         <button
           type="button"

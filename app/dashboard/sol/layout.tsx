@@ -1,5 +1,5 @@
 import { auth } from "@/server/authDynamo";
-import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { ensureActiveOrganization, getOrgBrandDynamo } from "@/server/orgDynamo";
 import { SolShell } from "./_components/SolShell";
 
 /**
@@ -20,6 +20,15 @@ export default async function SolLayout({ children }: { children: React.ReactNod
   const session = await auth();
   const orgResolution = session?.user ? await ensureActiveOrganization(session.user.id) : null;
   const organizationName = orgResolution?.status === "resolved" ? orgResolution.organizationName : "Workspace";
+  // SOL fully replaces the normal dashboard chrome (see this file's own top comment), so
+  // its own Plexo wordmark/icon needs the org's white-label branding threaded down
+  // explicitly too — it was never wired here at all before, unlike the ordinary dashboard
+  // shells, so a whitelabeled org's SOL sidebar always showed the literal Plexo mark.
+  const orgBranding = orgResolution?.status === "resolved" ? await getOrgBrandDynamo(orgResolution.organizationId) : undefined;
 
-  return <SolShell organizationName={organizationName}>{children}</SolShell>;
+  return (
+    <SolShell organizationName={organizationName} orgBranding={orgBranding}>
+      {children}
+    </SolShell>
+  );
 }

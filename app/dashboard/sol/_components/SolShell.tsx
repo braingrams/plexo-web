@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { ThreadSidebar } from "./ThreadSidebar";
 import { SolEntranceOverlay, wasSolTransitionHandledRecently } from "./SolEntranceOverlay";
 import { SolSidebarProvider, useSolSidebar } from "./SolSidebarContext";
+import type { OrgBranding } from "../../dashboard-shell";
 
 /**
  * Chrome shared by every route under /dashboard/sol — the conversation sidebar and the
@@ -16,15 +17,33 @@ import { SolSidebarProvider, useSolSidebar } from "./SolSidebarContext";
  * this — the sidebar doesn't flicker/refetch-from-scratch, and the entrance animation only
  * ever plays once per real "arrival" at the SOL surface, not on every thread switch.
  */
-export function SolShell({ children, organizationName }: { children: React.ReactNode; organizationName: string }) {
+export function SolShell({
+  children,
+  organizationName,
+  orgBranding,
+}: {
+  children: React.ReactNode;
+  organizationName: string;
+  orgBranding?: OrgBranding;
+}) {
   return (
     <SolSidebarProvider>
-      <SolShellInner organizationName={organizationName}>{children}</SolShellInner>
+      <SolShellInner organizationName={organizationName} orgBranding={orgBranding}>
+        {children}
+      </SolShellInner>
     </SolSidebarProvider>
   );
 }
 
-function SolShellInner({ children, organizationName }: { children: React.ReactNode; organizationName: string }) {
+function SolShellInner({
+  children,
+  organizationName,
+  orgBranding,
+}: {
+  children: React.ReactNode;
+  organizationName: string;
+  orgBranding?: OrgBranding;
+}) {
   const pathname = usePathname();
   // "settings"/"memory" are SOL's own reserved subroutes (app/dashboard/sol/settings,
   // app/dashboard/sol/memory), not a conversation id — excluded so ThreadSidebar never
@@ -78,13 +97,13 @@ function SolShellInner({ children, organizationName }: { children: React.ReactNo
       {showContent && (
         <>
           <div className="sol-sidebar-desktop" style={{ height: "100%", flexShrink: 0 }}>
-            <ThreadSidebar activeConversationId={activeConversationId} refreshSignal={refreshSignal} organizationName={organizationName} />
+            <ThreadSidebar activeConversationId={activeConversationId} refreshSignal={refreshSignal} organizationName={organizationName} orgBranding={orgBranding} />
           </div>
 
           {mobileSidebarOpen && (
             <div style={{ position: "fixed", inset: 0, zIndex: 400, display: "flex" }}>
               <div style={{ height: "100%", position: "relative" }}>
-                <ThreadSidebar activeConversationId={activeConversationId} refreshSignal={refreshSignal} organizationName={organizationName} />
+                <ThreadSidebar activeConversationId={activeConversationId} refreshSignal={refreshSignal} organizationName={organizationName} orgBranding={orgBranding} />
                 <button
                   type="button"
                   onClick={closeMobileSidebar}

@@ -8,6 +8,7 @@ import { SolAccountFooter } from "./SolAccountFooter";
 import { exitSolToPlexo } from "./SolModeSwitch";
 import { registerSolReadinessTask, resolveSolReadinessTask } from "./solReadinessGate";
 import { clearSolLastConversationCookie, type ConversationSummary } from "./types";
+import type { OrgBranding } from "../../dashboard-shell";
 
 // A hard browser reload fully remounts this component (unlike navigating between SOL's own
 // routes, which keeps the layout — and this sidebar — mounted), so it always started from
@@ -54,10 +55,12 @@ export function ThreadSidebar({
   activeConversationId,
   refreshSignal,
   organizationName,
+  orgBranding,
 }: {
   activeConversationId: string | null;
   refreshSignal?: number;
   organizationName: string;
+  orgBranding?: OrgBranding;
 }) {
   const router = useRouter();
   const [conversations, setConversations] = useState<ConversationSummary[]>(() => readCachedConversations() ?? []);
@@ -199,22 +202,37 @@ export function ThreadSidebar({
           textAlign: "left",
         }}
       >
-        <div
-          style={{
-            width: 24,
-            height: 24,
-            borderRadius: 7,
-            background: "linear-gradient(135deg,var(--brand),var(--brand-deeper))",
-            display: "grid",
-            placeItems: "center",
-            flexShrink: 0,
-          }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
-          </svg>
-        </div>
-        <span style={{ fontFamily: "var(--font-heading), sans-serif", fontWeight: 700, fontSize: "0.92rem", color: "#f0f2ff", letterSpacing: "-0.01em" }}>Plexo</span>
+        {orgBranding?.displayMode !== "NAME_ONLY" &&
+          (orgBranding?.logoUrl ? (
+            <img
+              src={orgBranding.logoUrl}
+              alt={orgBranding.name}
+              width={24}
+              height={24}
+              style={{ borderRadius: 7, objectFit: "cover", flexShrink: 0 }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 24,
+                height: 24,
+                borderRadius: 7,
+                background: "linear-gradient(135deg,var(--brand),var(--brand-deeper))",
+                display: "grid",
+                placeItems: "center",
+                flexShrink: 0,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
+              </svg>
+            </div>
+          ))}
+        {orgBranding?.displayMode !== "LOGO_ONLY" && (
+          <span style={{ fontFamily: "var(--font-heading), sans-serif", fontWeight: 700, fontSize: "0.92rem", color: "#f0f2ff", letterSpacing: "-0.01em" }}>
+            {orgBranding?.name ?? "Plexo"}
+          </span>
+        )}
       </button>
 
       <div style={{ padding: "0.3rem 0.6rem 0.6rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>

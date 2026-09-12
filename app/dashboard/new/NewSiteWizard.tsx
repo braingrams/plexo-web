@@ -271,7 +271,7 @@ export function NewSiteWizard() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [aiPrompt, setAiPrompt] = useState("");
-  const [aiTier, setAiTier] = useState<"AUTO" | "BASIC" | "MEDIUM" | "HIGH">("AUTO");
+  const [aiTier, setAiTier] = useState<"AUTO" | "BASIC" | "MEDIUM" | "HIGH">("BASIC");
   // Pretty HTML is the recommended default — see PAGE_TYPE_OPTIONS below for why (matches
   // the same framing SOL's own ask_user_question uses for this exact choice).
   const [pageType, setPageType] = useState<"html" | "builder">("html");
