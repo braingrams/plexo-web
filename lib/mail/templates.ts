@@ -311,6 +311,68 @@ export function buildPaymentReceivedEmail(input: {
   });
 }
 
+// ── Order status emails — the customer-facing receipt/status-update family
+// (lib/commerce/orderStatusActions.ts), gated per-event by CommerceSettings'
+// notifyCustomerOn* toggles. One builder covers every event since they all share the
+// same itemized-order layout; only the headline/message and subject change per event.
+
+export type OrderStatusEvent = "PAID" | "PROCESSING" | "READY_FOR_PICKUP" | "SHIPPED" | "COMPLETED" | "REFUNDED";
+
+const ORDER_STATUS_COPY: Record<OrderStatusEvent, { subject: string; heading: string; message: string }> = {
+  PAID: { subject: "Order confirmed", heading: "Order confirmed", message: "Thanks for your order — it's confirmed and being prepared." },
+  PROCESSING: { subject: "Order update: processing", heading: "Your order is being processed", message: "We're getting your order ready." },
+  READY_FOR_PICKUP: { subject: "Order update: ready for pickup", heading: "Ready for pickup", message: "Your order is ready to be picked up." },
+  SHIPPED: { subject: "Order update: shipped", heading: "Your order has shipped", message: "Your order is on its way." },
+  COMPLETED: { subject: "Order update: completed", heading: "Order completed", message: "Your order has been completed. Thanks for shopping with us!" },
+  REFUNDED: { subject: "Order refunded", heading: "Order refunded", message: "Your order has been refunded." },
+};
+
+export function buildOrderStatusEmail(input: {
+  event: OrderStatusEvent;
+  siteName: string;
+  orderNumber: string;
+  amountFormatted: string;
+  items: { nameSnapshot: string; quantity: number; unitPriceMinor: number }[];
+  currency: string;
+  orderUrl: string;
+  brand?: EmailBrand;
+}): { subject: string; html: string } {
+  const copy = ORDER_STATUS_COPY[input.event];
+  const accent = input.brand?.color ?? "#8b5cf6";
+  const formatMinor = (minor: number) =>
+    new Intl.NumberFormat(undefined, { style: "currency", currency: input.currency }).format((minor || 0) / 100);
+
+  const itemRows = input.items
+    .map(
+      (item) => `
+      <tr>
+        <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;text-align:left;font-size:13.5px;color:#334155;">${item.nameSnapshot} &times; ${item.quantity}</td>
+        <td style="padding:10px 0;border-bottom:1px solid #e2e8f0;text-align:right;font-size:13.5px;color:#334155;white-space:nowrap;">${formatMinor(item.unitPriceMinor * item.quantity)}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const itemsTable = input.items.length
+    ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;text-align:left;">${itemRows}</table>`
+    : "";
+
+  const html = emailShell({
+    title: `${copy.subject} — ${input.siteName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">${copy.heading}</h1>
+      <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">${copy.message}</p>
+      <p style="margin:0 0 4px;font-size:13px;color:#64748b;text-align:center;">Order <strong>${input.orderNumber}</strong> from <strong>${input.siteName}</strong></p>
+      <p style="margin:0 0 24px;font-size:20px;font-weight:700;color:#0f172a;text-align:center;">${input.amountFormatted}</p>
+      ${itemsTable}
+      ${CTA_BUTTON(input.orderUrl, "View Order", accent)}
+      ${FALLBACK_LINK(input.orderUrl, accent)}
+    `,
+    brand: input.brand,
+  });
+
+  return { subject: `${copy.subject} — ${input.siteName}`, html };
+}
+
 // ── Digital product delivery — the first real customer-facing post-payment emails in
 // Commerce (every other Commerce email today only ever notifies the site owner). One
 // builder per CommerceDigitalDeliveryMethod, all sharing the same CTA_BUTTON/FALLBACK_LINK

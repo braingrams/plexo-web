@@ -513,6 +513,13 @@ export const CommerceSettings = new Entity(
       maildripApiKeyEncrypted: { type: "string" },
       maildripPaidGroupId: { type: "string" },
       maildripNewsletterGroupId: { type: "string" },
+      // Shows a site-wide newsletter popup (public/newsletter-popup.js) on every published
+      // page, independent of `enabled` (Commerce/payments) — a site doesn't need to sell
+      // anything to want newsletter capture. Only takes effect once
+      // maildripNewsletterGroupId is also set (see app/pub/[domain]/[[...slug]]/route.ts's
+      // injection gate) — a site owner can flip this on before configuring a group, but
+      // nothing shows until there's somewhere to actually send the emails.
+      newsletterPopupEnabled: { type: "boolean", default: false },
       notificationEmail: { type: "string" },
       enabled: { type: "boolean", default: false },
       // Site-wide store currency (ISO 4217) — one per site, not per product. See
@@ -527,6 +534,17 @@ export const CommerceSettings = new Entity(
       storefrontCheckoutTemplateId: { type: "string" },
       orderConfirmationTemplateId: { type: "string" },
       trackOrderTemplateId: { type: "string" },
+      // Per-event customer email toggles (lib/commerce/orderStatusActions.ts) — every
+      // order-processing email a customer gets is on by default ("they should always know
+      // their order's status"), with the site owner able to turn any one off. Only events
+      // with a real trigger in the codebase get a toggle — there's no CANCELLED trigger
+      // today, so no notifyCustomerOnCancelled field either.
+      notifyCustomerOnPaid: { type: "boolean", default: true },
+      notifyCustomerOnProcessing: { type: "boolean", default: true },
+      notifyCustomerOnReadyForPickup: { type: "boolean", default: true },
+      notifyCustomerOnShipped: { type: "boolean", default: true },
+      notifyCustomerOnCompleted: { type: "boolean", default: true },
+      notifyCustomerOnRefunded: { type: "boolean", default: true },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },
