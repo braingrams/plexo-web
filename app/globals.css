@@ -862,15 +862,6 @@ select {
   max-width: 100% !important;
 }
 
-/* SOL's own header already has its own Plexo/SOL switch — this top-center one (Classic
-   layout only; Modern's copy lives inside .dash-topbar, already hidden above) would
-   otherwise render directly above SOL's full-screen view too, since that view is just
-   {children} inside the same .dash-classic-main column, not something the chrome-hiding
-   rules above naturally reach. */
-.dash-sol-route .dash-classic-sol-switch {
-  display: none !important;
-}
-
 /* SOL's own chrome (SolHeader/ThreadSidebar) */
 .sol-mobile-sidebar-toggle {
   display: none;

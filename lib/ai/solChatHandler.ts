@@ -4,7 +4,9 @@ import { estimateWorstCaseAgentTurnCost } from "@/lib/credits/agentTurnEstimate"
 import { SolConversation, SolMessage, SolMemoryFact, SolPreferences } from "@/lib/db/solEntities";
 import { bumpConversationActivity } from "@/lib/db/solConversationActivity";
 import { isDestructiveTool } from "@/lib/mcp/toolRiskClassification";
-import type { ConcreteTier } from "./types";
+import { resolveActiveApiKeyForUser } from "@/lib/ai/resolveUserAiKey";
+import { decryptSecret } from "@/lib/crypto";
+import type { AiProvider, ConcreteTier } from "./types";
 import {
   runAgentTurn,
   resumeAgentTurn,
@@ -91,6 +93,42 @@ async function loadMemoryContext(userId: string): Promise<{ memoryEnabled: boole
   if (!memoryEnabled) return { memoryEnabled: false, facts: [] };
   const { data: facts } = await SolMemoryFact.query.primary({ userId }).go({ pages: "all" });
   return { memoryEnabled: true, facts: facts.map((f) => f.text) };
+}
+
+interface SolAiRouting {
+  provider: AiProvider;
+  apiKey?: string;
+  /** True when this turn is billed to the account's own provider key, not Plexo's credit
+   * ledger — settleTurn uses this to skip chargeUsage entirely. */
+  isByok: boolean;
+}
+
+/** Resolves which provider/key actually serves this user's SOL turns, honoring their AI
+ * Access Mode exactly the way the pre-existing page-builder AI feature already does (see
+ * app/api/v1/ai/generate/route.ts): a BYOK account's own configured provider/key is used
+ * and billed directly, never touching Plexo's credit ledger. Every other case — System AI,
+ * Host-Managed (which has no real meaning for a native, session-authenticated SOL
+ * conversation the way it does for a third-party app's own end users, since there is no
+ * "host" here — the account IS the host), or no active key at all — falls back to Plexo's
+ * system Bedrock Claude, credit-metered exactly as before this existed. Reuses the same
+ * "most-recently-created active key" resolution as the page-builder feature (see
+ * lib/ai/resolveUserAiKey.ts) rather than adding a second, SOL-specific notion of "the
+ * user's key".
+ */
+async function resolveSolAiRouting(userId: string): Promise<SolAiRouting> {
+  const key = await resolveActiveApiKeyForUser(userId);
+  if (key?.aiAccessMode === "BYOK" && key.aiApiKey) {
+    try {
+      return { provider: key.aiProvider as AiProvider, apiKey: decryptSecret(key.aiApiKey), isByok: true };
+    } catch (err) {
+      // Stored key can't be decrypted (e.g. AI_KEY_ENCRYPTION_SECRET was rotated) — fall
+      // back to System AI rather than failing the whole turn; re-entering the key in
+      // Settings is what the AI settings page already tells the user to do for this exact
+      // failure mode on the page-builder feature.
+      console.error(`resolveSolAiRouting: failed to decrypt BYOK key for user ${userId}, falling back to System AI:`, err);
+    }
+  }
+  return { provider: "bedrock_claude", isByok: false };
 }
 
 /** Finds the most recent user-authored message strictly before `beforeCreatedAt` in an
@@ -204,6 +242,12 @@ async function settleTurn(
     organizationId: string;
     conversationId: string;
     modelTier: ModelTier;
+    /** Which provider actually served this turn — used for the ledger entry (when charged)
+     * and the analytics row, instead of the previously-hardcoded "bedrock_claude". */
+    provider: AiProvider;
+    /** True when this turn is billed to the account's own BYOK key — chargeUsage is
+     * skipped entirely in that case, credits are never touched. */
+    isByok: boolean;
     turnStartedAt: string;
     approxInputChars: number;
     prompt?: string;
@@ -267,12 +311,18 @@ async function settleTurn(
       return;
     }
 
-    const { creditsCharged } = await chargeUsage(ctx.userId, {
-      provider: "bedrock_claude",
-      tier: ctx.modelTier,
-      mode: "agent_chat",
-      usage: result.usage,
-    });
+    // BYOK turns are billed to the account's own provider key directly — never touch
+    // Plexo's credit ledger for them, same as the page-builder AI feature's own BYOK path.
+    const creditsCharged = ctx.isByok
+      ? 0
+      : (
+          await chargeUsage(ctx.userId, {
+            provider: ctx.provider,
+            tier: ctx.modelTier,
+            mode: "agent_chat",
+            usage: result.usage,
+          })
+        ).creditsCharged;
 
     await bumpConversationActivity(ctx.userId, ctx.conversationId);
 
@@ -303,7 +353,7 @@ async function settleTurn(
       userId: ctx.userId,
       organizationId: ctx.organizationId,
       conversationId: ctx.conversationId,
-      provider: "bedrock_claude",
+      provider: ctx.provider,
       tier: ctx.modelTier,
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
@@ -322,7 +372,7 @@ async function settleTurn(
       let creditsCharged = 0;
       if (partialUsage.inputTokens > 0 || partialUsage.outputTokens > 0) {
         const charged = await chargeUsage(ctx.userId, {
-          provider: "bedrock_claude",
+          provider: ctx.provider,
           tier: ctx.modelTier,
           mode: "agent_chat",
           usage: partialUsage,
@@ -334,7 +384,7 @@ async function settleTurn(
       }
       await bumpConversationActivity(ctx.userId, ctx.conversationId).catch(() => {});
 
-      const requiredCredits = estimateWorstCaseCost("bedrock_claude", ctx.modelTier, "agent_chat", ctx.approxInputChars);
+      const requiredCredits = estimateWorstCaseCost(ctx.provider, ctx.modelTier, "agent_chat", ctx.approxInputChars);
       const balance = await ensureCreditPeriod(ctx.userId);
       emitter.emit({ type: "credit_exhausted", requiredCredits, availableCredits: balance.total });
       await finish();
@@ -343,7 +393,7 @@ async function settleTurn(
         userId: ctx.userId,
         organizationId: ctx.organizationId,
         conversationId: ctx.conversationId,
-        provider: "bedrock_claude",
+        provider: ctx.provider,
         tier: ctx.modelTier,
         inputTokens: partialUsage.inputTokens,
         outputTokens: partialUsage.outputTokens,
@@ -372,7 +422,7 @@ async function settleTurn(
       userId: ctx.userId,
       organizationId: ctx.organizationId,
       conversationId: ctx.conversationId,
-      provider: "bedrock_claude",
+      provider: ctx.provider,
       tier: ctx.modelTier,
       inputTokens: 0,
       outputTokens: 0,
@@ -415,10 +465,17 @@ export async function prepareMessagesTurn(
     return { ok: false, status: 404, body: { error: "Conversation not found." } };
   }
 
-  const requiredCredits = estimateWorstCaseAgentTurnCost(modelTier, text.length);
-  const preflightBalance = await ensureCreditPeriod(resolved.userId);
-  if (preflightBalance.total < requiredCredits) {
-    return { ok: false, status: 402, body: { error: "insufficient_credits", requiredCredits, availableCredits: preflightBalance.total } };
+  const routing = await resolveSolAiRouting(resolved.userId);
+
+  // BYOK turns are billed to the account's own provider key directly — Plexo's credit
+  // balance is never consulted for them, so this pre-flight check (and the mid-loop
+  // budgetGuard below) only applies to System AI turns.
+  if (!routing.isByok) {
+    const requiredCredits = estimateWorstCaseAgentTurnCost(modelTier, text.length);
+    const preflightBalance = await ensureCreditPeriod(resolved.userId);
+    if (preflightBalance.total < requiredCredits) {
+      return { ok: false, status: 402, body: { error: "insufficient_credits", requiredCredits, availableCredits: preflightBalance.total } };
+    }
   }
 
   const { memoryEnabled, facts: memoryFacts } = await loadMemoryContext(resolved.userId);
@@ -443,17 +500,22 @@ export async function prepareMessagesTurn(
         conversationId,
         resolvedUser: resolved,
         modelTier,
+        provider: routing.provider,
+        apiKey: routing.apiKey,
         userMessageContent: buildUserMessageContent(text, parsed.attachments),
         memoryFacts,
         ...callbacks,
         // Re-checked before EVERY loop iteration, not just once up front — a long
         // tool-using turn can, in principle, exhaust credits the generous up-front
-        // worst-case estimate still passed.
-        budgetGuard: async () => {
-          const balance = await ensureCreditPeriod(resolved.userId);
-          const perCallEstimate = estimateWorstCaseCost("bedrock_claude", modelTier, "agent_chat", text.length);
-          return balance.total >= perCallEstimate;
-        },
+        // worst-case estimate still passed. Always true for BYOK — see the pre-flight
+        // check above.
+        budgetGuard: routing.isByok
+          ? async () => true
+          : async () => {
+              const balance = await ensureCreditPeriod(resolved.userId);
+              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", text.length);
+              return balance.total >= perCallEstimate;
+            },
       };
 
       await settleTurn(emitter, runAgentTurn(deps), {
@@ -461,6 +523,8 @@ export async function prepareMessagesTurn(
         organizationId: resolved.organizationId,
         conversationId,
         modelTier,
+        provider: routing.provider,
+        isByok: routing.isByok,
         turnStartedAt,
         approxInputChars: text.length,
         prompt: text,
@@ -529,6 +593,7 @@ export async function prepareConfirmTurn(
   }
 
   const modelTier = (conversation.modelTier as ModelTier) ?? "BASIC";
+  const routing = await resolveSolAiRouting(resolved.userId);
   await ensureCreditPeriod(resolved.userId);
   const { memoryEnabled, facts: memoryFacts } = await loadMemoryContext(resolved.userId);
   const userTextForMemory = findPrecedingUserText(messages, pendingMessage.createdAt);
@@ -555,20 +620,26 @@ export async function prepareConfirmTurn(
         conversationId,
         resolvedUser: resolved,
         modelTier,
+        provider: routing.provider,
+        apiKey: routing.apiKey,
         toolCallId,
         decision,
         answers,
         memoryFacts,
         ...callbacks,
-        budgetGuard: async () => {
-          const balance = await ensureCreditPeriod(resolved.userId);
-          const perCallEstimate = estimateWorstCaseCost("bedrock_claude", modelTier, "agent_chat", approxInputChars);
-          return balance.total >= perCallEstimate;
-        },
+        budgetGuard: routing.isByok
+          ? async () => true
+          : async () => {
+              const balance = await ensureCreditPeriod(resolved.userId);
+              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", approxInputChars);
+              return balance.total >= perCallEstimate;
+            },
       };
 
       await settleTurn(emitter, resumeAgentTurn(deps), {
         userId: resolved.userId,
+        provider: routing.provider,
+        isByok: routing.isByok,
         organizationId: resolved.organizationId,
         conversationId,
         modelTier,

@@ -1,5 +1,5 @@
 import { AnthropicBedrock } from "@anthropic-ai/bedrock-sdk";
-import type { ProviderCallParams, ProviderCallResult } from "./shared";
+import type { ProviderCallParams, ProviderCallResult, GenerateWithToolsParams, GenerateWithToolsResult } from "./shared";
 
 // Amazon Bedrock's Anthropic Messages API is wire-compatible with the direct
 // Anthropic API — `AnthropicBedrock` (from `@anthropic-ai/bedrock-sdk`) extends the
@@ -48,35 +48,13 @@ export async function generate({ model, systemPrompt, userPrompt, maxTokens }: P
   };
 }
 
-export interface BedrockToolDef {
-  name: string;
-  description: string;
-  input_schema: any;
-}
-
-export interface BedrockGenerateWithToolsParams {
-  model: string;
-  systemPrompt: string;
-  conversationHistory: Array<{ role: "user" | "assistant"; content: any }>;
-  tools?: BedrockToolDef[];
-  maxTokens: number;
-  onTextDelta?: (delta: string) => void;
-}
-
-export interface BedrockGenerateWithToolsResult {
-  /** Raw Anthropic-shaped content blocks (may include `tool_use` blocks). */
-  content: any[];
-  stopReason: string;
-  usage: {
-    inputTokens: number;
-    outputTokens: number;
-  };
-}
-
 /**
  * Multi-turn generation with tool use + streaming, for SOL's agent loop. Streams the
  * response, forwarding incremental assistant text to `onTextDelta` as it arrives, and
  * returns the fully-assembled message (text + any `tool_use` blocks) once the stream ends.
+ * `apiKey` is accepted for call-signature parity with the other providers'
+ * `generateWithTools` (solAgent.ts dispatches to whichever one applies with the same
+ * params object) but is unused here — see the auth note above.
  */
 export async function generateWithTools({
   model,
@@ -85,7 +63,7 @@ export async function generateWithTools({
   tools,
   maxTokens,
   onTextDelta,
-}: BedrockGenerateWithToolsParams): Promise<BedrockGenerateWithToolsResult> {
+}: GenerateWithToolsParams): Promise<GenerateWithToolsResult> {
   const client = buildClient();
 
   // Prompt caching: SOL's tool catalog (60+ MCP tools' names/descriptions/JSON schemas)

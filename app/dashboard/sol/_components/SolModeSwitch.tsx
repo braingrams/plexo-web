@@ -35,7 +35,21 @@ import { SolIcon } from "./SolIcon";
  */
 const TRIED_KEY = "sol:tried";
 
-export function SolModeSwitch({ active, compact = false }: { active: "plexo" | "sol"; compact?: boolean }) {
+export function SolModeSwitch({
+  active,
+  compact = false,
+  sidebarCard = false,
+}: {
+  active: "plexo" | "sol";
+  compact?: boolean;
+  /** Renders as a full-width, prominent nav-style card (icon + "SOL AI Agent" + an "AI"
+   * badge) instead of the segmented Plexo/SOL pill — for Classic's fixed sidebar, sitting
+   * above its ordinary nav list, where the topbar's own switch turned out not to be
+   * discoverable enough. Only meaningful for `active="plexo"` (there's no reason to show
+   * "enter SOL" while already in SOL); reuses the exact same enterSol/transition-overlay
+   * logic as every other variant here rather than duplicating it. */
+  sidebarCard?: boolean;
+}) {
   const router = useRouter();
   const [switching, setSwitching] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
@@ -93,6 +107,80 @@ export function SolModeSwitch({ active, compact = false }: { active: "plexo" | "
       // inside SOL; worst case the redirect bounces them back and they can retry.
     }
     router.push("/dashboard");
+  }
+
+  if (sidebarCard) {
+    if (active !== "plexo") return null;
+    return (
+      <>
+        <button
+          type="button"
+          onClick={enterSol}
+          disabled={switching}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.65rem",
+            width: "100%",
+            padding: "0.65rem 0.75rem",
+            borderRadius: 12,
+            marginBottom: "0.9rem",
+            border: "1px solid rgba(168,85,247,0.35)",
+            background: "linear-gradient(135deg, rgba(168,85,247,0.22), rgba(124,58,237,0.14))",
+            boxShadow: "0 0 24px -10px rgba(168,85,247,0.55)",
+            cursor: switching ? "not-allowed" : "pointer",
+            fontFamily: "inherit",
+            textAlign: "left",
+            opacity: switching ? 0.6 : 1,
+          }}
+        >
+          <span
+            style={{
+              display: "grid",
+              placeItems: "center",
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              background: "linear-gradient(135deg, #c084fc, #7c3aed)",
+              color: "#fff",
+              flexShrink: 0,
+            }}
+          >
+            <SolIcon size={16} />
+          </span>
+          <span
+            style={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              color: "#f3e8ff",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            SOL AI Agent
+          </span>
+          <span
+            style={{
+              fontSize: "0.62rem",
+              fontWeight: 700,
+              padding: "0.15rem 0.45rem",
+              borderRadius: 999,
+              background: "rgba(255,255,255,0.18)",
+              color: "#f3e8ff",
+              flexShrink: 0,
+            }}
+          >
+            AI
+          </span>
+        </button>
+        {transitioning && typeof document !== "undefined"
+          ? createPortal(<SolEntranceOverlay onDone={() => setTransitioning(false)} />, document.body)
+          : null}
+      </>
+    );
   }
 
   if (compact) {

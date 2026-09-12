@@ -7,6 +7,7 @@ import { Composer } from "./Composer";
 import { Greeting } from "./Greeting";
 import { CreditExhaustedModal } from "./CreditExhaustedModal";
 import { AskUserQuestionOverlay } from "./AskUserQuestionCard";
+import { ArtifactCanvas, type ActiveArtifact } from "./ArtifactCanvas";
 import { useSolStream } from "./useSolStream";
 import { useSolSidebar } from "./SolSidebarContext";
 import { registerSolReadinessTask, resolveSolReadinessTask } from "./solReadinessGate";
@@ -25,6 +26,64 @@ import {
 
 function isToolUseBlock(block: ContentBlock): block is ToolUseBlock {
   return (block as { type?: string }).type === "tool_use";
+}
+
+// Tool calls whose successful result is "a page now exists" — SOL's canvas auto-opens to
+// show what was just built, the same moment the tool call itself finishes. The result
+// shape these all share ({templateId, name, publishedUrl?}) is traced from
+// lib/mcp/dispatchMcpTool.ts's own return values for each of these cases.
+const CANVAS_TOOL_NAMES = new Set([
+  "create_landing_page",
+  "publish_landing_page",
+  "create_raw_landing_page",
+  "publish_raw_landing_page",
+  "update_template",
+  "update_raw_landing_page",
+]);
+
+function artifactFromResult(name: string, result: { templateId?: string; name?: string; publishedUrl?: string | null } | undefined): ActiveArtifact | null {
+  if (!CANVAS_TOOL_NAMES.has(name) || !result?.templateId) return null;
+  return { templateId: result.templateId, name: result.name ?? "Untitled page", publishedUrl: result.publishedUrl ?? null };
+}
+
+/** Live path: a completed `ToolUseBlock` in useSolStream's in-flight `blocks` array already
+ * carries `status`/`result` (merged in client-side as the tool_call_result frame arrives —
+ * see useSolStream.ts), so a canvas-worthy result can be read directly off the block. */
+function extractArtifact(block: ToolUseBlock): ActiveArtifact | null {
+  if (block.status !== "success") return null;
+  return artifactFromResult(block.name, block.result as { templateId?: string; name?: string; publishedUrl?: string | null } | undefined);
+}
+
+/** History path: a PERSISTED `tool_use` block never carries `status`/`result` (those are a
+ * client-only streaming concept) — the real result lives in the very next message's
+ * `tool_result` block, matched by `tool_use_id` (see solAgent.ts's continueLoop: one
+ * assistant message with tool_use blocks is always immediately followed by one "tool" role
+ * message with all of their results). Scans oldest-to-newest messages so the LAST
+ * successful page-building call wins, restoring the canvas when a conversation with an
+ * earlier page-building turn is reopened, not just when one is built live. */
+function findLatestArtifactInMessages(messages: SolMessage[]): ActiveArtifact | null {
+  let latest: ActiveArtifact | null = null;
+  for (let i = 0; i < messages.length - 1; i++) {
+    const blocks = messages[i].content;
+    const nextBlocks = messages[i + 1].content;
+    if (!Array.isArray(blocks) || !Array.isArray(nextBlocks)) continue;
+    for (const block of blocks) {
+      if (!isToolUseBlock(block) || !CANVAS_TOOL_NAMES.has(block.name)) continue;
+      const resultBlock = nextBlocks.find(
+        (b): b is { type: "tool_result"; tool_use_id: string; content: unknown; is_error?: boolean } =>
+          (b as { type?: string })?.type === "tool_result" && (b as { tool_use_id?: string }).tool_use_id === block.id,
+      );
+      if (!resultBlock || resultBlock.is_error) continue;
+      try {
+        const parsed = typeof resultBlock.content === "string" ? JSON.parse(resultBlock.content) : resultBlock.content;
+        const artifact = artifactFromResult(block.name, parsed as { templateId?: string; name?: string; publishedUrl?: string | null });
+        if (artifact) latest = artifact;
+      } catch {
+        // Not JSON (or malformed) — not a canvas-worthy result, skip.
+      }
+    }
+  }
+  return latest;
 }
 
 function randomId(): string {
@@ -61,6 +120,7 @@ export function SolChatView({
   // rename, a reload — either was the user's own action or happens before they're looking
   // at this specific text at all).
   const [titleJustGenerated, setTitleJustGenerated] = useState(false);
+  const [activeArtifact, setActiveArtifact] = useState<ActiveArtifact | null>(() => findLatestArtifactInMessages(initialMessages));
 
   const stream = useSolStream();
   const optimisticUserMessageIdRef = useRef<string | null>(null);
@@ -115,6 +175,7 @@ export function SolChatView({
     setMessages(initialMessages);
     setModelTier(initialConversation?.modelTier ?? "BASIC");
     setTitleJustGenerated(false);
+    setActiveArtifact(findLatestArtifactInMessages(initialMessages));
     stream.reset();
     // A conversation can arrive here with an already-unresolved pause baked into its
     // history — the user left mid-confirmation/mid-question and came back (reload, a
@@ -163,6 +224,21 @@ export function SolChatView({
     bumpRefresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream.finalMessageId, stream.blocks, stream.usage]);
+
+  useEffect(() => {
+    // Auto-opens/updates the canvas the moment a page-building tool call in the LIVE
+    // stream succeeds — re-runs on every block mutation (a new tool call starting, an
+    // existing one's status flipping to success), picking the most recent match each time.
+    const toolBlocks = stream.blocks.filter(isToolUseBlock);
+    for (let i = toolBlocks.length - 1; i >= 0; i--) {
+      const artifact = extractArtifact(toolBlocks[i]);
+      if (artifact) {
+        setActiveArtifact(artifact);
+        break;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream.blocks]);
 
   useEffect(() => {
     if (!stream.generatedTitle) return;
@@ -381,25 +457,43 @@ export function SolChatView({
           <div style={{ width: "100%", maxWidth: 680 }}>{composer}</div>
         </div>
       ) : (
-        <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-          <MessageList
-            messages={messages}
-            conversationId={conversation?.id ?? "pending"}
-            pendingBlocks={stream.outcome === "idle" ? null : stream.blocks}
-            streaming={streaming}
-            onConfirmToolCall={handleConfirmToolCall}
-            confirmBusy={streaming && pendingConfirmMessageId !== null}
-          />
-          <div style={{ padding: "0 1.25rem 1.25rem" }}>
-            <div style={{ maxWidth: 760, margin: "0 auto" }}>{composer}</div>
-          </div>
-          {pendingQuestionBlock && (
-            <AskUserQuestionOverlay
-              block={pendingQuestionBlock}
-              onSubmit={handleSubmitAnswers}
-              busy={streaming && pendingConfirmMessageId !== null}
+        <div className="sol-split-row" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "row" }}>
+          <div className="sol-split-chat" style={{ position: "relative", flex: activeArtifact ? "1 1 50%" : "1 1 100%", minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
+            <MessageList
+              messages={messages}
+              conversationId={conversation?.id ?? "pending"}
+              pendingBlocks={stream.outcome === "idle" ? null : stream.blocks}
+              streaming={streaming}
+              onConfirmToolCall={handleConfirmToolCall}
+              confirmBusy={streaming && pendingConfirmMessageId !== null}
             />
+            <div style={{ padding: "0 1.25rem 1.25rem" }}>
+              <div style={{ maxWidth: 760, margin: "0 auto" }}>{composer}</div>
+            </div>
+            {pendingQuestionBlock && (
+              <AskUserQuestionOverlay
+                block={pendingQuestionBlock}
+                onSubmit={handleSubmitAnswers}
+                busy={streaming && pendingConfirmMessageId !== null}
+              />
+            )}
+          </div>
+          {activeArtifact && (
+            <div className="sol-split-canvas" style={{ flex: "1 1 50%", minWidth: 0, minHeight: 0 }}>
+              <ArtifactCanvas artifact={activeArtifact} onClose={() => setActiveArtifact(null)} />
+            </div>
           )}
+          <style>{`
+            /* Below this width, a 50/50 side-by-side split leaves neither the chat nor the
+               canvas usable — stack the canvas below the chat instead, each getting a full-
+               width half-height pane, matching the app's existing 767px mobile breakpoint
+               (see globals.css's .dash-pill-nav rule) but a little wider since a chat
+               column needs more room than a nav bar before it gets cramped. */
+            @media (max-width: 900px) {
+              .sol-split-row { flex-direction: column !important; }
+              .sol-split-chat, .sol-split-canvas { flex: 1 1 50% !important; }
+            }
+          `}</style>
         </div>
       )}
 
