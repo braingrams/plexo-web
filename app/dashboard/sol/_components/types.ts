@@ -12,6 +12,20 @@ export const MODEL_TIER_OPTIONS: Array<{ value: ModelTier; label: string; descri
 
 export type ToolCallStatus = "running" | "awaiting_confirmation" | "success" | "error" | "cancelled";
 
+// Must match lib/ai/solToolSchema.ts's ASK_USER_QUESTION_TOOL_NAME exactly — kept as a
+// plain string literal here rather than a shared import since that file pulls in
+// server-only dependencies (dispatchMcpTool) that have no business in the client bundle.
+export const ASK_USER_QUESTION_TOOL_NAME = "ask_user_question";
+
+export type AskUserQuestionOption = { label: string; description?: string };
+export type AskUserQuestionSpec = {
+  question: string;
+  header: string;
+  options: AskUserQuestionOption[];
+  multiSelect?: boolean;
+};
+export type AskUserAnswer = { question: string; answer: string };
+
 export type TextBlock = { type: "text"; text: string };
 export type ToolUseBlock = {
   type: "tool_use";

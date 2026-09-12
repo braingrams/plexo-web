@@ -9,7 +9,7 @@ import { Avatar } from "./_components/Avatar";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { NotificationBell, OrgSwitcher } from "./_components/TeamHeaderControls";
 import { FeedbackButton } from "./_components/FeedbackButton";
-import { SolToggleButton } from "./sol/_components/SolToggleButton";
+import { SolModeSwitch } from "./sol/_components/SolModeSwitch";
 import type { OrgBranding } from "./dashboard-shell";
 import { darken, toRgba } from "@/lib/color";
 
@@ -98,9 +98,10 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
   // or any /blog subroutes — those are normal PageContainer pages that still need the topbar.
   const editorRouteMatch = pathname.match(/^\/dashboard\/templates\/([^/]+)$/);
   const isEditorRoute = Boolean(editorRouteMatch && editorRouteMatch[1] !== "upload");
-  // SOL is its own full-viewport surface (own header/sidebar, see app/dashboard/sol/layout.tsx)
-  // — no room for this shell's floating topbar alongside it, same reasoning as the template
-  // editor route above.
+  // SOL is its own full-viewport surface (own header/sidebar, see app/dashboard/sol/layout.tsx,
+  // and its own Settings/Memory subpages under that same /dashboard/sol/ tree) — no room
+  // for this shell's floating topbar alongside it, same reasoning as the template editor
+  // route above.
   const isSolRoute = /^\/dashboard\/sol(\/.*)?$/.test(pathname);
   const rootClassName = isEditorRoute ? "dash-modern-editor-route" : isSolRoute ? "dash-sol-route" : undefined;
 
@@ -175,6 +176,10 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
             {brandName}
           </span>
         </Link>
+
+        <div className="dash-sol-switch-center">
+          <SolModeSwitch active="plexo" />
+        </div>
 
         <nav className="dash-pill-nav" style={{ overflowX: "auto" }} aria-label="Dashboard navigation">
           {NAV_ITEMS.map((item) => {
@@ -267,7 +272,6 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
 
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
           <OrgSwitcher organizationName={organizationName} />
-          <SolToggleButton />
           <FeedbackButton />
           <NotificationBell />
         </div>

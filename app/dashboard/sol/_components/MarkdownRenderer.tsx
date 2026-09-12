@@ -14,7 +14,21 @@ import "highlight.js/styles/github-dark.css";
 export function MarkdownRenderer({ text }: { text: string }) {
   return (
     <div className="sol-markdown">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeHighlight]}
+        components={{
+          // Every link SOL produces — a published site's domain, a doc reference, anything
+          // else — opens in a new tab rather than navigating the dashboard itself away.
+          // `noopener noreferrer` is required alongside `target="_blank"` here since the
+          // href is model-generated content, not something this codebase controls.
+          a: ({ href, children, ...props }) => (
+            <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+              {children}
+            </a>
+          ),
+        }}
+      >
         {text}
       </ReactMarkdown>
     </div>

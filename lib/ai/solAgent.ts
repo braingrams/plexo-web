@@ -4,7 +4,7 @@ import type { EntityItem } from "electrodb";
 import { dispatchMcpTool, type ResolvedUser } from "@/lib/mcp/dispatchMcpTool";
 import { isDestructiveTool } from "@/lib/mcp/toolRiskClassification";
 import { generateWithTools } from "@/lib/ai/providers/bedrockClaude";
-import { getAllSolTools, type BedrockToolDef } from "@/lib/ai/solToolSchema";
+import { getAllSolTools, ASK_USER_QUESTION_TOOL_NAME, type BedrockToolDef } from "@/lib/ai/solToolSchema";
 import { resolveModel } from "@/lib/ai/modelRegistry";
 import { MAX_TOKENS } from "@/lib/ai/generate";
 import { MAX_TOOL_ITERATIONS } from "@/lib/credits/agentTurnEstimate";
@@ -56,7 +56,12 @@ export interface AgentTurnDeps {
   memoryFacts: string[];
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
-  onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any }) => Promise<void>;
+  /** `messageId` is the PENDING SolMessage row's own id — the client needs it (not just the
+   * Anthropic tool_use id) to actually resume the turn (see the confirm/answer routes),
+   * and sending it in this same callback/frame is what lets the client act on a pause the
+   * instant it arrives, with no separate follow-up fetch (and the race that came with
+   * one — see SolChatView's own comment on why that follow-up fetch was removed). */
+  onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   /** Re-checks credit balance before each model call; false stops the loop. */
   budgetGuard: () => Promise<boolean>;
@@ -68,17 +73,32 @@ export interface RunAgentTurnResult {
   pendingConfirmation?: { messageId: string; toolCallId: string; name: string; args: any };
 }
 
+/** One question's resolved answer, as the client submits it — `answer` is either the
+ * option label(s) the user picked (joined with "; " for a multiSelect question) or their
+ * own free-typed text, already flattened to a single string. The model never sees the
+ * distinction between "picked an option" and "typed something" — both read the same way,
+ * exactly like the destructive-confirmation gate doesn't care whether "confirmed" came
+ * from a click or (hypothetically) any other input method. */
+export interface AskUserAnswer {
+  question: string;
+  answer: string;
+}
+
 export interface ResumeAgentTurnDeps {
   conversationId: string;
   resolvedUser: ResolvedUser;
   modelTier: ConcreteTier;
   /** The tool_use id (from the earlier pendingConfirmation) the user is responding to. */
   toolCallId: string;
-  decision: "confirmed" | "declined";
+  /** Required unless the pending tool call is ask_user_question, in which case `answers`
+   * is required instead — see the loop below. */
+  decision?: "confirmed" | "declined";
+  /** Required only when resuming an ask_user_question pause. */
+  answers?: AskUserAnswer[];
   memoryFacts: string[];
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
-  onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any }) => Promise<void>;
+  onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   budgetGuard: () => Promise<boolean>;
 }
@@ -113,6 +133,13 @@ function buildToolResultBlock(toolUseId: string, output: unknown, isError: boole
   };
 }
 
+/** Renders the user's answers back as plain text for the model — the same "replay
+ * verbatim, keep it human-readable" spirit as every other tool_result in this file. */
+function formatAnswersForModel(answers: AskUserAnswer[]): string {
+  if (answers.length === 0) return "The user didn't provide any answers.";
+  return answers.map((a) => `Q: ${a.question}\nA: ${a.answer}`).join("\n\n");
+}
+
 /**
  * A clear, well-scoped identity/behavior prompt for SOL. The runtime enforcement of "never
  * silently perform a destructive action" is the confirmation gate in continueLoop below,
@@ -133,7 +160,17 @@ Be direct, warm, and conversational — like a sharp, helpful teammate, never a 
 
 When what the user wants implies a concrete action Plexo can actually do, take it with the available tools instead of just explaining how they could do it manually — e.g. "I want to sell a course" means create the Funnel and its pages, not a description of the Funnel feature. Ask a clarifying question first only when the request is genuinely ambiguous (which site, which product, what should it say) — don't ask when a reasonable default is obvious.
 
+Whenever a clarifying question has concrete, enumerable answers — even just one question with a short list of options — use the ask_user_question tool instead of writing it out as plain text with a bulleted list of choices. This applies every time, not just the first time you ask something in a conversation: a second or third round of follow-up questions deserves the exact same interactive treatment as the first, never a reversion to plain-text bullets just because the conversation is already underway. It renders as an interactive prompt the user can click through instead of having to type a paragraph back, and the interface already adds a "type your own answer" option to every question, so never invent an "Other"/"something else" option yourself, and never end a plain-text question with something like "Something else?" as if it were one more bullet — that's a sign the question belonged in the tool. Reserve actual plain-text questions for something genuinely open-ended with no natural set of options at all (e.g. "what should the page's headline say?").
+
+Only bundle multiple questions into ONE ask_user_question call when they're genuinely independent — each one makes sense and stays relevant no matter how the others get answered. The moment a later question's relevance, phrasing, or options actually depend on how an earlier one is answered (e.g. you'd ask something different about a physical-products store than a course/membership site), don't pre-plan the whole sequence up front — ask the one question you actually need right now, wait for the real answer, and only then decide the next question (in a follow-up ask_user_question call, informed by what they just told you). A batch of pre-templated questions that ignores the answer to question 1 when writing questions 2 and 3 is worse than asking one at a time.
+
 Some actions are irreversible or affect the user's own customers directly — deleting content, issuing a refund, revoking someone's paid access, moving money out of their store's wallet. You will never be allowed to perform one of those silently: the system pauses and asks the person to explicitly confirm before it actually runs, no matter what you decide to call. Write your responses with that in mind — when you're about to propose one of these, say plainly what you're about to do and why, so the confirmation prompt reads naturally rather than as a surprise.
+
+Whenever you mention a domain or URL — a site you just published, an existing page, anything the user could actually visit — always write it as a real markdown link with an explicit https:// scheme, e.g. [kalycare.plexopages.com](https://kalycare.plexopages.com), never as bare/bolded text like **kalycare.plexopages.com**. The chat only turns actual markdown links into clickable ones; plain text next to a domain-shaped word is not automatically linkified.
+
+Plexo can build a brand-new landing page two genuinely different ways, and neither is the "default" — ask which one the user wants (via ask_user_question) before creating it, unless they've already made this obvious themselves (e.g. they said "use your drag-and-drop builder", or they pasted/attached their own HTML to use as-is). Phrase the question and options in plain terms the user actually cares about, never the internal tool/field names below:
+- A drag-and-drop BUILDER page (create_landing_page/publish_landing_page, designJson) — editable afterward with Plexo's own visual, drag-and-drop editor. Frame this as the easy, flexible choice for a page they'll want to keep tweaking themselves later.
+- A page built from real, hand-crafted HTML/CSS you write directly (create_raw_landing_page/publish_raw_landing_page, htmlContent) — served byte-for-byte exactly as written, not editable in the visual builder afterward. Frame this as the premium, fully custom option: it's what unlocks the most design freedom and the most polished, professional-grade finish, since nothing is constrained to the builder's block system — better for someone who wants their site to feel bespoke rather than editable.
 
 If a tool call fails, explain what went wrong in plain terms and suggest a next step — don't just retry blindly.${memoryBlock}`;
 }
@@ -146,7 +183,7 @@ interface LoopContext {
   history: HistoryEntry[];
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
-  onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any }) => Promise<void>;
+  onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   budgetGuard: () => Promise<boolean>;
 }
@@ -200,12 +237,14 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
     // Anthropic requires every tool_use block in an assistant message to be answered by a
     // matching tool_result in the SAME follow-up message before the conversation can
     // continue — there's no way to submit results for only some of them and defer the
-    // rest. So if ANY block in this turn is destructive, none of them (including any
-    // non-destructive ones alongside it) can execute yet: the whole turn pauses on
-    // confirmation, and resumeAgentTurn is what actually runs all of them once the user
-    // has responded (see its own handling of "sibling" blocks below).
-    const destructiveBlock = toolUseBlocks.find((block) => isDestructiveTool(block.name));
-    if (destructiveBlock) {
+    // rest. So if ANY block in this turn needs a human in the loop before it can proceed —
+    // a destructive action awaiting confirm/decline, or SOL's own ask_user_question
+    // meta-tool awaiting answers — none of them (including any ordinary ones alongside it)
+    // can execute yet: the whole turn pauses, and resumeAgentTurn is what actually
+    // resolves all of them once the user has responded (see its own handling of "sibling"
+    // blocks below).
+    const pausingBlock = toolUseBlocks.find((block) => isDestructiveTool(block.name) || block.name === ASK_USER_QUESTION_TOOL_NAME);
+    if (pausingBlock) {
       const pendingId = randomUUID();
       await SolMessage.create({
         id: pendingId,
@@ -218,9 +257,10 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       }).go();
 
       await ctx.onToolCallAwaitingConfirmation({
-        id: destructiveBlock.id,
-        name: destructiveBlock.name,
-        args: destructiveBlock.input,
+        id: pausingBlock.id,
+        name: pausingBlock.name,
+        args: pausingBlock.input,
+        messageId: pendingId,
       });
 
       return {
@@ -228,9 +268,9 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
         usage: totals,
         pendingConfirmation: {
           messageId: pendingId,
-          toolCallId: destructiveBlock.id,
-          name: destructiveBlock.name,
-          args: destructiveBlock.input,
+          toolCallId: pausingBlock.id,
+          name: pausingBlock.name,
+          args: pausingBlock.input,
         },
       };
     }
@@ -329,17 +369,38 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     throw new Error(`No pending confirmation found for tool call "${deps.toolCallId}" in conversation "${deps.conversationId}".`);
   }
 
+  const isAnswerResume = (pendingMessage.content as any[]).some(
+    (block) => block?.type === "tool_use" && block.id === deps.toolCallId && block.name === ASK_USER_QUESTION_TOOL_NAME,
+  );
+  if (isAnswerResume && (!deps.answers || deps.answers.length === 0)) {
+    throw new Error("resumeAgentTurn: `answers` is required to resume an ask_user_question pause.");
+  }
+  if (!isAnswerResume && !deps.decision) {
+    throw new Error("resumeAgentTurn: `decision` is required to resume a destructive-action confirmation.");
+  }
+
   await SolMessage.patch({ conversationId: deps.conversationId, createdAt: pendingMessage.createdAt, id: pendingMessage.id })
-    .set({ confirmationState: deps.decision === "confirmed" ? "CONFIRMED" : "DECLINED" })
+    .set({ confirmationState: isAnswerResume || deps.decision === "confirmed" ? "CONFIRMED" : "DECLINED" })
     .go();
 
   // The pending message is already part of `recent`, so it's already included below —
   // no separate push needed for it, only for the tool_results message we're about to add.
   const history = recent.map(toHistoryEntry);
+  const pendingIndex = recent.findIndex((m) => m.id === pendingMessage.id && m.createdAt === pendingMessage.createdAt);
 
   const toolUseBlocks = (pendingMessage.content as any[]).filter((block) => block?.type === "tool_use");
   const resultBlocks: any[] = [];
   for (const block of toolUseBlocks) {
+    if (block.name === ASK_USER_QUESTION_TOOL_NAME) {
+      // Never a real MCP action — dispatchMcpTool is never called for this tool (see
+      // solToolSchema.ts's own comment on why). Its "result" is simply the user's answers,
+      // handed back to the model as plain text.
+      const answers = deps.answers ?? [];
+      deps.onToolCallResult({ id: block.id, name: block.name, status: "success", result: answers });
+      resultBlocks.push(buildToolResultBlock(block.id, formatAnswersForModel(answers), false));
+      continue;
+    }
+
     const runsNow = !isDestructiveTool(block.name) || deps.decision === "confirmed";
     if (runsNow) {
       deps.onToolCallStart({ id: block.id, name: block.name, args: block.input });
@@ -365,7 +426,30 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     role: "tool",
     content: resultBlocks,
   }).go();
-  history.push({ role: "user", content: resultBlocks });
+
+  // Anthropic requires the tool_result to be in the message IMMEDIATELY after the
+  // assistant's tool_use — normally that's already true (the pending message is the most
+  // recent one, so appending to the end of `history` and inserting it right here are the
+  // same thing). But if something managed to persist another message in between (e.g. the
+  // composer wasn't disabled for a pause it didn't know about, and the user sent another
+  // message before resolving this one — a real gap that existed before this file's own
+  // pendingConfirmMessageId history-detection fix), appending at the end would leave the
+  // tool_use..tool_result pair with unrelated turns wedged between them, which the
+  // Messages API hard-rejects with a 400. Splicing the result in right after the pending
+  // message (merging into whatever already-next message if it's also role "user", since
+  // Anthropic expects strict user/assistant alternation) keeps this correct regardless.
+  const resultEntry: HistoryEntry = { role: "user", content: resultBlocks };
+  const nextIndex = pendingIndex + 1;
+  if (pendingIndex === -1 || nextIndex >= history.length) {
+    history.push(resultEntry);
+  } else if (history[nextIndex].role === "user") {
+    const mergedContent = Array.isArray(history[nextIndex].content)
+      ? [...resultBlocks, ...(history[nextIndex].content as any[])]
+      : [...resultBlocks, history[nextIndex].content];
+    history.splice(nextIndex, 1, { role: "user", content: mergedContent });
+  } else {
+    history.splice(nextIndex, 0, resultEntry);
+  }
 
   return continueLoop({
     conversationId: deps.conversationId,

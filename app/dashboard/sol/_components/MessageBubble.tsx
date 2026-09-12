@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Sparkles, User as UserIcon } from "lucide-react";
+import { Check, Copy, User as UserIcon } from "lucide-react";
+import { SolIcon } from "./SolIcon";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ToolCallCard } from "./ToolCallCard";
+import { AskUserQuestionRecap } from "./AskUserQuestionCard";
 import { FileReadCard } from "./FileReadCard";
 import { FeedbackControls } from "./FeedbackControls";
 import { ExportMenu } from "./ExportMenu";
-import type { ContentBlock, SolMessage, ToolUseBlock } from "./types";
+import { ASK_USER_QUESTION_TOOL_NAME, type ContentBlock, type SolMessage, type ToolUseBlock } from "./types";
 
 function isText(block: ContentBlock): block is { type: "text"; text: string } {
   return (block as { type?: string }).type === "text" && typeof (block as { text?: unknown }).text === "string";
@@ -77,10 +79,10 @@ export function MessageBubble({
           boxShadow: isUser ? "none" : "0 0 16px rgba(168,85,247,0.35)",
         }}
       >
-        {isUser ? <UserIcon size={14} color="rgba(240,242,255,0.6)" /> : <Sparkles size={14} color="#fff" />}
+        {isUser ? <UserIcon size={14} color="rgba(240,242,255,0.6)" /> : <div style={{ color: "#fff" }}><SolIcon size={14} /></div>}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: "min(720px, 78%)", alignItems: isUser ? "flex-end" : "flex-start" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: isUser ? "min(640px, 82%)" : "100%", minWidth: 0, flex: isUser ? "0 1 auto" : "1 1 auto", alignItems: isUser ? "flex-end" : "flex-start" }}>
         {message.content.map((block, i) => {
           if (isText(block)) {
             if (!block.text) return null;
@@ -102,22 +104,27 @@ export function MessageBubble({
                 {block.text}
               </div>
             ) : (
-              <div
-                key={i}
-                style={{
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.06)",
-                  borderRadius: "4px 16px 16px 16px",
-                  padding: "0.75rem 1rem",
-                  width: "100%",
-                }}
-              >
+              // Deliberately no card/border/background here — Claude.ai's own convention:
+              // the assistant's response reads as plain flowing text on the page, not
+              // boxed content, which feels more open for longer answers. The user's own
+              // message keeps its bubble (both ChatGPT and Claude.ai do this) so the two
+              // roles stay visually distinct without needing a card around every response.
+              <div key={i} style={{ padding: "0.15rem 0", width: "100%" }}>
                 <MarkdownRenderer text={block.text} />
               </div>
             );
           }
           if (isToolUse(block)) {
             const isLastAwaiting = block.status === "awaiting_confirmation";
+            if (block.name === ASK_USER_QUESTION_TOOL_NAME) {
+              // The interactive form itself only ever exists as a floating overlay
+              // (SolChatView renders AskUserQuestionOverlay separately, keyed off
+              // pendingConfirmMessageId) — while it's still awaiting an answer, nothing
+              // renders inline here at all, so the message flow doesn't show a second,
+              // dead copy of the same question underneath the live overlay. Once
+              // answered, this renders the compact read-only recap instead.
+              return isLastAwaiting ? null : <AskUserQuestionRecap key={block.id || i} block={block} />;
+            }
             return (
               <ToolCallCard
                 key={block.id || i}

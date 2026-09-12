@@ -8,7 +8,7 @@ import { NAV_ITEMS } from "./nav-items";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls";
 import { FeedbackButton } from "./_components/FeedbackButton";
-import { SolToggleButton } from "./sol/_components/SolToggleButton";
+import { SolModeSwitch } from "./sol/_components/SolModeSwitch";
 import type { OrgBranding } from "./dashboard-shell";
 import { darken, toRgba } from "@/lib/color";
 
@@ -301,9 +301,10 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
   // or any /blog subroutes — those are normal PageContainer pages that still need the sidebar.
   const editorRouteMatch = pathname.match(/^\/dashboard\/templates\/([^/]+)$/);
   const isEditorRoute = Boolean(editorRouteMatch && editorRouteMatch[1] !== "upload");
-  // SOL is its own full-viewport surface (own header/sidebar, see app/dashboard/sol/layout.tsx)
-  // — no room for this shell's fixed sidebar alongside it, same reasoning as the template
-  // editor route above.
+  // SOL is its own full-viewport surface (own header/sidebar, see app/dashboard/sol/layout.tsx,
+  // and its own Settings/Memory subpages under that same /dashboard/sol/ tree) — no room
+  // for this shell's fixed sidebar alongside it, same reasoning as the template editor
+  // route above.
   const isSolRoute = /^\/dashboard\/sol(\/.*)?$/.test(pathname);
   const rootClassName = isEditorRoute
     ? "dash-classic-root dash-classic-editor-route"
@@ -541,7 +542,6 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
             gap: "0.4rem", marginBottom: "0.5rem",
           }}>
             {!collapsed && <OrgSwitcher organizationName={organizationName} anchor="left" />}
-            <SolToggleButton />
             <FeedbackButton />
             <NotificationBell anchor="left" />
           </div>
@@ -654,6 +654,16 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
           background: "var(--bg)",
         }}
       >
+        {/* Sits at the true top-center of the content column, on its own, sticky strip —
+            deliberately not folded into the sidebar's OrgSwitcher/Feedback/Notification
+            row (Classic has no shared horizontal topbar the way Modern does), so it never
+            has to compete with those for space. */}
+        <div className="dash-classic-sol-switch" style={{ position: "sticky", top: 0, zIndex: 30, display: "flex", justifyContent: "center", padding: "0.75rem 0 0", pointerEvents: "none" }}>
+          <div style={{ pointerEvents: "auto" }}>
+            <SolModeSwitch active="plexo" />
+          </div>
+        </div>
+
         <div className="dash-classic-banner" style={{ padding: "2rem 8px 0", maxWidth: 1920, margin: "0 auto" }}>
           <LayoutSwitchBanner />
         </div>

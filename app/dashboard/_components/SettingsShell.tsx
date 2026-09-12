@@ -105,23 +105,12 @@ function IconMail() {
   );
 }
 
-function IconSolAgent() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 11.5a8.5 8.5 0 0 1-12.35 7.6L3 20l1.05-4.5A8.5 8.5 0 1 1 21 11.5z" />
-      <circle cx="9" cy="11.5" r="0.75" fill="currentColor" stroke="none" />
-      <circle cx="13.5" cy="11.5" r="0.75" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
 const ICONS: Record<string, React.ReactNode> = {
   "/dashboard/profile": <IconProfile />,
   "/dashboard/settings/notifications": <IconBell />,
   "/dashboard/settings/subscription": <IconCard />,
   "/dashboard/settings/api-keys": <IconKeySmall />,
   "/dashboard/settings/ai": <IconSparkle />,
-  "/dashboard/settings/sol": <IconSolAgent />,
   "/dashboard/settings/email-log": <IconMail />,
   "/dashboard/compile": <IconCompile />,
   "/dashboard/sdk": <IconSdk />,
@@ -136,7 +125,6 @@ const SECTIONS: SubNavSection[] = [
       { href: "/dashboard/profile", label: "Profile" },
       { href: "/dashboard/settings/notifications", label: "Notifications" },
       { href: "/dashboard/settings/subscription", label: "Subscription" },
-      { href: "/dashboard/settings/sol", label: "Sol Agent" },
       { href: "/dashboard/transfers", label: "Transfers" },
     ],
   },

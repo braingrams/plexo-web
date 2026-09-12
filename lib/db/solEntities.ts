@@ -58,7 +58,11 @@ export const SolMessage = new Entity(
       // by the agent loop itself. Rolling this up into admin-analytics is a separate task;
       // this is just the persistence side.
       feedback: { type: ["UP", "DOWN"] as const },
-      feedbackComment: { type: "string", validate: (value: string) => value.length <= 2000 },
+      // ElectroDB runs `validate` even when the attribute is simply absent from the item
+      // being created (every message does this, since feedback is only ever added later,
+      // via a separate PATCH) — without the undefined guard this throws on every single
+      // create() call and silently kills the entire agent turn.
+      feedbackComment: { type: "string", validate: (value?: string) => value === undefined || value.length <= 2000 },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
     },
     indexes: {
@@ -110,7 +114,9 @@ export const SolPreferences = new Entity(
     attributes: {
       userId: { type: "string", required: true }, // this IS the row's identity, one per user
       tonePreset: { type: ["PROFESSIONAL", "FRIENDLY", "CONCISE", "DETAILED"] as const },
-      customInstructions: { type: "string", validate: (value: string) => value.length <= 2000 },
+      // Same undefined guard as SolMessage.feedbackComment above — this is optional, and
+      // ElectroDB runs `validate` even when a create()/patch() simply doesn't touch it.
+      customInstructions: { type: "string", validate: (value?: string) => value === undefined || value.length <= 2000 },
       defaultModelTier: { type: ["BASIC", "MEDIUM", "HIGH"] as const, default: "BASIC" },
       memoryEnabled: { type: "boolean", default: true },
       responseLength: { type: ["CONCISE", "BALANCED", "THOROUGH"] as const, default: "BALANCED" },

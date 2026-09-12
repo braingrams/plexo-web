@@ -1,16 +1,17 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type { ChatAttachment, ContentBlock, CreditInfo, ModelTier, ToolUseBlock } from "./types";
+import type { AskUserAnswer, ChatAttachment, ContentBlock, CreditInfo, ModelTier, ToolUseBlock } from "./types";
 
 // The exact newline-delimited frame vocabulary lambda/sol-chat/index.ts's StreamFrame
 // union streams — field names/casing copied verbatim from that file, not re-derived.
 type StreamFrame =
   | { type: "tool_call_start"; id: string; name: string; label: string; args: unknown }
-  | { type: "tool_call_awaiting_confirmation"; id: string; name: string; args: unknown }
+  | { type: "tool_call_awaiting_confirmation"; id: string; name: string; args: unknown; messageId: string }
   | { type: "tool_call_result"; id: string; name: string; status: "success" | "error" | "cancelled"; result?: unknown }
   | { type: "token"; text: string }
   | { type: "message_done"; messageId: string | null; usage: { inputTokens: number; outputTokens: number } }
+  | { type: "title_generated"; title: string }
   | { type: "credit_exhausted"; requiredCredits: number; availableCredits: number }
   | { type: "error"; message: string };
 
@@ -35,6 +36,18 @@ export function useSolStream() {
   const [creditInfo, setCreditInfo] = useState<CreditInfo | null>(null);
   const [usage, setUsage] = useState<{ inputTokens: number; outputTokens: number } | null>(null);
   const [finalMessageId, setFinalMessageId] = useState<string | null>(null);
+  // The PENDING SolMessage's own id, carried directly in the tool_call_awaiting_confirmation
+  // frame — this is what lets the confirm/answer UI actually resume the turn the instant it
+  // renders, with no separate follow-up fetch to go learn "which message is pending" (that
+  // fetch used to be the only way to find this, and the async gap before it resolved was
+  // a real race: a fast click on Confirm/Submit would silently no-op if it landed before
+  // the fetch did — see SolChatView's own comment on the fix this replaced).
+  const [awaitingMessageId, setAwaitingMessageId] = useState<string | null>(null);
+  // Only ever set once per conversation (the very first turn — see solChatHandler.ts's
+  // `needsTitle` gate), arriving in its own frame right before the stream closes. The
+  // caller (SolChatView) is what actually applies it to the conversation's title and
+  // triggers whatever reveal treatment it wants; this hook just surfaces the raw value.
+  const [generatedTitle, setGeneratedTitle] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const outcomeRef = useRef<StreamOutcome>("idle");
 
@@ -50,6 +63,8 @@ export function useSolStream() {
     setCreditInfo(null);
     setUsage(null);
     setFinalMessageId(null);
+    setAwaitingMessageId(null);
+    setGeneratedTitle(null);
   }, [setOutcomeBoth]);
 
   const handleFrame = useCallback(
@@ -70,6 +85,7 @@ export function useSolStream() {
             }
             return prev.map((b) => (isToolUseBlock(b) && b.id === frame.id ? { ...b, status: "awaiting_confirmation" } : b));
           });
+          setAwaitingMessageId(frame.messageId);
           break;
         }
         case "tool_call_result": {
@@ -93,6 +109,10 @@ export function useSolStream() {
           setUsage(frame.usage);
           setFinalMessageId(frame.messageId);
           setOutcomeBoth("done");
+          break;
+        }
+        case "title_generated": {
+          setGeneratedTitle(frame.title);
           break;
         }
         case "credit_exhausted": {
@@ -223,9 +243,20 @@ export function useSolStream() {
     [runStream],
   );
 
+  const submitAnswers = useCallback(
+    (conversationId: string, messageId: string, answers: AskUserAnswer[]) => {
+      // Same endpoint as confirmToolCall (solChatHandler.ts's prepareConfirmTurn branches
+      // on which tool is actually pending) — an ask_user_question pause resumes with
+      // `answers` instead of a `decision`. Also deliberately no reset(): continues the
+      // same in-flight bubble.
+      return runStream(`/api/v1/sol/chat/conversations/${conversationId}/messages/${messageId}/confirm`, { answers });
+    },
+    [runStream],
+  );
+
   const stop = useCallback(() => {
     abortRef.current?.abort();
   }, []);
 
-  return { blocks, outcome, errorMessage, creditInfo, usage, finalMessageId, sendMessage, confirmToolCall, stop, reset };
+  return { blocks, outcome, errorMessage, creditInfo, usage, finalMessageId, awaitingMessageId, generatedTitle, sendMessage, confirmToolCall, submitAnswers, stop, reset };
 }

@@ -54,5 +54,6 @@ export default async function SolConversationPage({ params }: { params: Promise<
       createdAt: m.createdAt,
     }));
 
-  return <SolChatView conversation={conversation} initialMessages={initialMessages} />;
+  const userName = session.user.name ?? session.user.email?.split("@")[0] ?? null;
+  return <SolChatView conversation={conversation} initialMessages={initialMessages} userName={userName} />;
 }

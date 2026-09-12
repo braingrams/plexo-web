@@ -758,8 +758,37 @@ select {
   display: none;
 }
 
+/* The Plexo/SOL switch floats at the true horizontal center of the topbar pill via
+   absolute positioning (dash-topbar is already `position: sticky`, which — like any
+   non-static position — establishes the containing block this needs) rather than sitting
+   in the trailing icon cluster with OrgSwitcher/FeedbackButton/NotificationBell, where it
+   would otherwise be fighting those for space and reading as just another cluttered icon
+   instead of a deliberate, prominent piece of navigation. */
+.dash-sol-switch-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  pointer-events: none;
+}
+.dash-sol-switch-center > * {
+  pointer-events: auto;
+}
+
 .dash-main-modern {
   padding: 1.5rem 2rem 4rem;
+}
+
+/* LayoutSwitchBanner renders null once dismissed/hidden — leaving its wrapper div with zero
+   children, but the wrapper's own inline padding (dash-classic-banner's 2rem top padding)
+   still reserved that space regardless, since padding lives on the wrapper, not the content
+   it wraps. :empty targets exactly that "no children at all" case, collapsing the reserved
+   gap the instant there's nothing left inside it — no component-level plumbing needed. */
+.dash-classic-banner:empty,
+.dash-modern-banner:empty {
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 @media (max-width: 767px) {
@@ -771,6 +800,14 @@ select {
 
   .dash-pill-nav {
     display: none !important;
+  }
+
+  /* At this width the pill-nav is gone and the mobile hamburger toggle sits roughly
+     center-left — an absolutely-centered switch would overlap it. SOL is still reachable
+     from inside SOL's own header switch either way, so this is a clean drop, not a lost
+     feature. */
+  .dash-sol-switch-center {
+    display: none;
   }
 
   .dash-mobile-nav-toggle {
@@ -823,6 +860,15 @@ select {
 .dash-sol-route .dash-classic-main {
   margin-left: 0 !important;
   max-width: 100% !important;
+}
+
+/* SOL's own header already has its own Plexo/SOL switch — this top-center one (Classic
+   layout only; Modern's copy lives inside .dash-topbar, already hidden above) would
+   otherwise render directly above SOL's full-screen view too, since that view is just
+   {children} inside the same .dash-classic-main column, not something the chrome-hiding
+   rules above naturally reach. */
+.dash-sol-route .dash-classic-sol-switch {
+  display: none !important;
 }
 
 /* SOL's own chrome (SolHeader/ThreadSidebar) */

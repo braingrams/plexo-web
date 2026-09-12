@@ -88,3 +88,55 @@ export async function bumpConversationActivity(userId: string, conversationId: s
     // Lost a genuine concurrent race — see comment above. Not re-thrown.
   }
 }
+
+/**
+ * Fills in a conversation's title exactly once, in the background, after
+ * lib/ai/titleGeneration.ts has produced one — never overwrites a title that's already
+ * set, whether that's a real user rename or (a race) an earlier call of this same function
+ * that already won. Deliberately does NOT bump `updatedAt`/reorder the conversation in the
+ * "most recent" list the way the user-initiated PATCH rename route does: this is a silent
+ * enrichment of a turn that already just moved the conversation to the top via
+ * bumpConversationActivity above, not a new user-visible edit in its own right.
+ */
+export async function setConversationTitleIfUnset(userId: string, conversationId: string, title: string): Promise<void> {
+  const { data: conversations } = await SolConversation.query.primary({ userId }).go({ pages: "all" });
+  const existing = conversations.find((c) => c.id === conversationId);
+  if (!existing || existing.title) return;
+
+  const deleteParams = SolConversation.remove({ userId: existing.userId, updatedAt: existing.updatedAt, id: existing.id })
+    .where((attr, op) => op.eq(attr.updatedAt, existing.updatedAt))
+    .params();
+  const putParams = SolConversation.create({
+    id: existing.id,
+    userId: existing.userId,
+    organizationId: existing.organizationId,
+    title,
+    modelTier: existing.modelTier,
+    status: existing.status,
+    lastMessageAt: existing.lastMessageAt,
+    messageCount: existing.messageCount,
+    createdAt: existing.createdAt,
+    updatedAt: existing.updatedAt,
+  }).params();
+
+  try {
+    await docClient.send(
+      new TransactWriteCommand({
+        TransactItems: [
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          { Delete: deleteParams as any },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          { Put: putParams as any },
+        ],
+      }),
+    );
+  } catch (err) {
+    const anyErr = err as { name?: string; cause?: { name?: string } };
+    const isConditionFailure =
+      anyErr?.name === "ConditionalCheckFailedException" ||
+      anyErr?.name === "TransactionCanceledException" ||
+      anyErr?.cause?.name === "ConditionalCheckFailedException";
+    if (!isConditionFailure) throw err;
+    // Someone else set the title first (another bump, a manual rename) — fine, don't clobber it.
+  }
+}

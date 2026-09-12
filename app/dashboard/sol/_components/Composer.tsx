@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Paperclip, Square } from "lucide-react";
+import { ArrowUp, Plus, Square } from "lucide-react";
 import { AttachmentChip } from "./AttachmentChip";
 import { VoiceRecorderButton } from "./VoiceRecorderButton";
 import { ModelTierSelector } from "./ModelTierSelector";
 import { uploadAndTranscribe } from "./transcribeUpload";
 import { classifyAttachmentType, type ChatAttachment, type ModelTier, type PendingAttachment } from "./types";
+
+const PLACEHOLDER = "Ask SOL to publish a page…";
 
 const ACCEPTED_FILE_TYPES =
   "image/jpeg,image/png,image/gif,image/webp,image/avif,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv,text/markdown,audio/*";
@@ -136,17 +138,17 @@ export function Composer({
         display: "flex",
         flexDirection: "column",
         gap: "0.6rem",
-        borderRadius: 20,
+        borderRadius: 24,
         border: "1px solid rgba(255,255,255,0.09)",
         background: "rgba(18,14,28,0.7)",
         backdropFilter: "blur(20px)",
         WebkitBackdropFilter: "blur(20px)",
-        padding: "0.85rem 0.95rem 0.7rem",
+        padding: "0.6rem 0.7rem",
         boxShadow: "0 20px 50px -20px rgba(0,0,0,0.55)",
       }}
     >
       {(attachments.length > 0 || transcribingFile) && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", padding: "0.3rem 0.3rem 0" }}>
           {attachments.map((a) => (
             <AttachmentChip key={a.clientId} attachment={a} onRemove={() => removeAttachment(a.clientId)} />
           ))}
@@ -158,40 +160,69 @@ export function Composer({
         </div>
       )}
 
-      <textarea
-        ref={textareaRef}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Message SOL…"
-        rows={1}
-        disabled={disabled}
-        style={{
-          width: "100%",
-          resize: "none",
-          background: "transparent",
-          border: "none",
-          outline: "none",
-          color: "#f3f0fa",
-          fontSize: "0.92rem",
-          lineHeight: 1.5,
-          fontFamily: "inherit",
-          maxHeight: 220,
-        }}
-      />
+      {/* One row: attach (+), the growing input, the model-tier switcher, voice, then send —
+          a single compact toolbar rather than a text area with a separate icon row
+          underneath, matching a tighter, more "AI native" composer feel. `alignItems:
+          flex-end` keeps every icon pinned to the input's baseline as it grows to multiple
+          lines, instead of drifting to the vertical center of a tall textarea. */}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: "0.35rem" }}>
+        <input ref={fileInputRef} type="file" multiple accept={ACCEPTED_FILE_TYPES} style={{ display: "none" }} onChange={(e) => { void handleFilesPicked(e.target.files); e.target.value = ""; }} />
+        <button
+          type="button"
+          aria-label="Attach a file"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 999,
+            border: "1px solid rgba(255,255,255,0.1)",
+            background: "rgba(255,255,255,0.04)",
+            color: "rgba(240,242,255,0.65)",
+            display: "grid",
+            placeItems: "center",
+            cursor: disabled ? "not-allowed" : "pointer",
+            flexShrink: 0,
+          }}
+        >
+          <Plus size={17} />
+        </button>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.6rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.2rem" }}>
-          <input ref={fileInputRef} type="file" multiple accept={ACCEPTED_FILE_TYPES} style={{ display: "none" }} onChange={(e) => { void handleFilesPicked(e.target.files); e.target.value = ""; }} />
-          <button
-            type="button"
-            aria-label="Attach a file"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={disabled}
-            style={{ width: 34, height: 34, borderRadius: 9, border: "none", background: "transparent", color: "rgba(240,242,255,0.55)", display: "grid", placeItems: "center", cursor: disabled ? "not-allowed" : "pointer" }}
-          >
-            <Paperclip size={16} />
-          </button>
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={PLACEHOLDER}
+          rows={1}
+          disabled={disabled}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            resize: "none",
+            background: "transparent",
+            border: "none",
+            outline: "none",
+            color: "#f3f0fa",
+            fontSize: "0.92rem",
+            lineHeight: 1.5,
+            fontFamily: "inherit",
+            maxHeight: 220,
+            padding: "0.5rem 0.2rem",
+          }}
+        />
+
+        <div style={{ flexShrink: 0 }}>
+          <ModelTierSelector
+            value={modelTier}
+            onChange={onModelTierChange}
+            disabled={disabled || streaming}
+            className="sol-composer-tier-select"
+            menuWidth={260}
+          />
+        </div>
+
+        <div style={{ marginBottom: "0.1rem", flexShrink: 0 }}>
           <VoiceRecorderButton
             disabled={disabled}
             onTranscribed={(transcript) => {
@@ -200,9 +231,6 @@ export function Composer({
               textareaRef.current?.focus();
             }}
           />
-          <div style={{ width: 148 }}>
-            <ModelTierSelector value={modelTier} onChange={onModelTierChange} disabled={disabled || streaming} />
-          </div>
         </div>
 
         {streaming ? (
@@ -210,12 +238,13 @@ export function Composer({
             type="button"
             onClick={onStop}
             aria-label="Stop generating"
+            className="sol-send-btn"
             style={{
-              width: 38,
-              height: 38,
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.14)",
-              background: "rgba(255,255,255,0.06)",
+              width: 36,
+              height: 36,
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background: "rgba(255,255,255,0.08)",
               color: "#f0f2ff",
               display: "grid",
               placeItems: "center",
@@ -223,7 +252,7 @@ export function Composer({
               flexShrink: 0,
             }}
           >
-            <Square size={14} fill="currentColor" />
+            <Square size={13} fill="currentColor" />
           </button>
         ) : (
           <button
@@ -231,25 +260,46 @@ export function Composer({
             onClick={handleSend}
             disabled={!canSend}
             aria-label="Send message"
+            className="sol-send-btn"
             style={{
-              width: 38,
-              height: 38,
-              borderRadius: 12,
+              width: 36,
+              height: 36,
+              borderRadius: 999,
               border: "none",
-              background: canSend ? "linear-gradient(135deg,#a855f7,#7c3aed)" : "rgba(255,255,255,0.06)",
+              background: canSend ? "linear-gradient(135deg,#c084fc,#7c3aed)" : "rgba(255,255,255,0.06)",
               color: canSend ? "#fff" : "rgba(240,242,255,0.3)",
               display: "grid",
               placeItems: "center",
               cursor: canSend ? "pointer" : "not-allowed",
-              boxShadow: canSend ? "0 8px 24px -6px rgba(168,85,247,0.6)" : "none",
-              transition: "background 0.15s, box-shadow 0.15s",
+              boxShadow: canSend ? "0 6px 20px -4px rgba(168,85,247,0.7)" : "none",
+              transition: "transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease",
               flexShrink: 0,
             }}
           >
-            <ArrowUp size={16} />
+            <ArrowUp size={16} strokeWidth={2.5} />
           </button>
         )}
       </div>
+
+      <style>{`
+        .sol-send-btn:hover:not(:disabled) { transform: scale(1.06); }
+        .sol-send-btn:active:not(:disabled) { transform: scale(0.94); }
+        /* Plain, borderless model-tier switcher inside the composer row — CustomSelect's
+           own default trigger has a border/background meant for a standalone dropdown
+           sitting on its own; here it's one control among several in a single toolbar row,
+           so it should read as flush with the row, not as its own boxed element. */
+        .sol-composer-tier-select {
+          width: auto !important;
+          border: none !important;
+          background: transparent !important;
+          box-shadow: none !important;
+          padding: 0.4rem 0.5rem !important;
+          gap: 0.3rem !important;
+          color: rgba(240,242,255,0.6) !important;
+          font-size: 0.78rem !important;
+        }
+        .sol-composer-tier-select:hover { background: rgba(255,255,255,0.05) !important; }
+      `}</style>
     </div>
   );
 }

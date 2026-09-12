@@ -29,7 +29,7 @@ interface ModelRate {
  *   so this a real, Anthropic/Marketplace-specific gap, not a query mistake). The
  *   Bedrock console's own Model catalog page shows the live per-model price and isn't
  *   scrapable from this environment — **before this earns real revenue, open the
- *   Bedrock console for Claude Haiku 4.5 / Sonnet 5 / Opus 5 in us-east-2 and confirm
+ *   Bedrock console for Claude Haiku 4.5 / Sonnet 5 / Opus 5 in us-east-1 and confirm
  *   these three rates against what's actually shown there**, then update this row —
  *   nothing else needs to change, `computeCostUsd`/`chargeUsage` already read from here.
  */

@@ -88,12 +88,28 @@ export async function generateWithTools({
 }: BedrockGenerateWithToolsParams): Promise<BedrockGenerateWithToolsResult> {
   const client = buildClient();
 
+  // Prompt caching: SOL's tool catalog (60+ MCP tools' names/descriptions/JSON schemas)
+  // plus the system prompt together dwarf a typical turn's actual conversation content —
+  // and both are IDENTICAL across every iteration of the agent loop within a turn, and
+  // across every turn in a conversation (neither ever changes mid-session). Without a
+  // cache breakpoint, every single model call reprocessed that entire prefix from
+  // scratch at full price and full latency; Anthropic/Bedrock's prompt caching reads a
+  // cached prefix at a fraction of the cost and meaningfully faster. A cache breakpoint
+  // caches everything up to and including the marked block, so marking the system
+  // prompt and the LAST tool definition is enough to cover the whole shared prefix —
+  // the actual conversation history (which does change every turn) is deliberately left
+  // uncached, since caching a moving target buys nothing.
+  const cachedTools =
+    tools && tools.length > 0
+      ? tools.map((tool, i) => (i === tools.length - 1 ? { ...tool, cache_control: { type: "ephemeral" as const } } : tool))
+      : undefined;
+
   const stream = client.messages.stream({
     model,
     max_tokens: maxTokens,
-    system: systemPrompt,
+    system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
     messages: conversationHistory,
-    ...(tools && tools.length > 0 ? { tools } : {}),
+    ...(cachedTools ? { tools: cachedTools } : {}),
   });
 
   if (onTextDelta) {

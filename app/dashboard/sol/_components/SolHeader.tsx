@@ -1,26 +1,29 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, Menu, Pencil, X, Zap } from "lucide-react";
-import { ModelTierSelector } from "./ModelTierSelector";
-import { ExportMenu } from "./ExportMenu";
+import { Check, Menu, Pencil, X, Zap } from "lucide-react";
+import { SolModeSwitch } from "./SolModeSwitch";
 import { useSolSidebar } from "./SolSidebarContext";
-import type { ConversationSummary, ModelTier } from "./types";
+import type { ConversationSummary } from "./types";
 
 export function SolHeader({
   conversation,
   onRename,
-  onModelTierChange,
   creditsRefreshKey,
+  titleJustGenerated,
+  onTitleRevealDone,
 }: {
   conversation: ConversationSummary | null;
   onRename: (title: string) => void;
-  onModelTierChange: (tier: ModelTier) => void;
   creditsRefreshKey?: number;
+  /** True for exactly the render where `conversation.title` just arrived live from SOL's
+   * background auto-titling (see SolChatView) — plays a one-shot typewriter reveal instead
+   * of the title just silently appearing, since the user is actually looking at this exact
+   * spot when it happens (a page load or a manual rename don't get this treatment). */
+  titleJustGenerated?: boolean;
+  onTitleRevealDone?: () => void;
 }) {
   const { openMobileSidebar } = useSolSidebar();
-  const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(conversation?.title ?? "");
   const [credits, setCredits] = useState<number | null>(null);
@@ -29,6 +32,28 @@ export function SolHeader({
   useEffect(() => {
     setDraftTitle(conversation?.title ?? "");
   }, [conversation?.id, conversation?.title]);
+
+  const fullTitle = conversation?.title ?? "";
+  const [typedLength, setTypedLength] = useState(titleJustGenerated ? 0 : fullTitle.length);
+  useEffect(() => {
+    if (!titleJustGenerated || !fullTitle) return;
+    setTypedLength(0);
+    let i = 0;
+    // ~28ms/char reads as a deliberate, quick type-in for a short title (typically
+    // 3-6 words) — fast enough to never feel like it's dawdling, slow enough to actually
+    // register as an animation rather than a flicker.
+    const timer = window.setInterval(() => {
+      i += 1;
+      setTypedLength(i);
+      if (i >= fullTitle.length) {
+        window.clearInterval(timer);
+        onTitleRevealDone?.();
+      }
+    }, 28);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [titleJustGenerated, fullTitle]);
+  const displayedTitle = titleJustGenerated ? fullTitle.slice(0, typedLength) : fullTitle;
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
@@ -62,7 +87,9 @@ export function SolHeader({
         display: "flex",
         alignItems: "center",
         gap: "0.75rem",
-        padding: "0.85rem 1.25rem",
+        height: 61,
+        boxSizing: "border-box",
+        padding: "0 1.25rem",
         borderBottom: "1px solid rgba(255,255,255,0.07)",
         background: "rgba(10,7,16,0.55)",
         backdropFilter: "blur(20px)",
@@ -79,30 +106,7 @@ export function SolHeader({
         <Menu size={16} />
       </button>
 
-      <button
-        type="button"
-        onClick={() => router.push("/dashboard")}
-        aria-label="Back to dashboard"
-        title="Back to dashboard"
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "0.35rem",
-          background: "rgba(255,255,255,0.05)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: 9,
-          padding: "0.4rem 0.65rem",
-          color: "rgba(240,242,255,0.7)",
-          fontSize: "0.78rem",
-          fontWeight: 600,
-          cursor: "pointer",
-          fontFamily: "inherit",
-          flexShrink: 0,
-        }}
-      >
-        <ArrowLeft size={14} />
-        Dashboard
-      </button>
+      <SolModeSwitch active="sol" />
 
       <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", minWidth: 0, flex: 1 }}>
         {editing ? (
@@ -168,7 +172,10 @@ export function SolHeader({
               padding: "0.2rem 0",
             }}
           >
-            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{conversation?.title || "New conversation"}</span>
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {displayedTitle || "New conversation"}
+              {titleJustGenerated && typedLength < fullTitle.length && <span className="sol-title-caret" />}
+            </span>
             {conversation && <Pencil size={12} color="rgba(240,242,255,0.35)" style={{ flexShrink: 0 }} />}
           </button>
         )}
@@ -197,14 +204,11 @@ export function SolHeader({
           </span>
         )}
 
-        {conversation && (
-          <div style={{ width: 150 }} className="sol-header-model-selector">
-            <ModelTierSelector value={conversation.modelTier} onChange={onModelTierChange} />
-          </div>
-        )}
-
-        {conversation && <ExportMenu conversationId={conversation.id} label="Export conversation" />}
       </div>
+      <style>{`
+        .sol-title-caret { display: inline-block; width: 1px; height: 0.9em; margin-left: 1px; vertical-align: -0.1em; background: currentColor; animation: sol-title-caret-blink 0.8s step-end infinite; }
+        @keyframes sol-title-caret-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+      `}</style>
     </div>
   );
 }

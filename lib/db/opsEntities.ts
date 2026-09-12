@@ -380,11 +380,18 @@ export const SolUsageEventContent = new Entity(
       ttl: { type: "number", default: () => days(30) },
     },
     indexes: {
-      // Mirrors SolUsageEvent's own primary key exactly, so a given turn's content row is
-      // a direct .get() away from its metadata row.
+      // Same pk, and the same {createdAt, id} composite, as SolUsageEvent's own primary
+      // key — so a given turn's content row is a direct .get() away from its metadata row
+      // with no extra lookup. The sk's literal prefix ("TURNCONTENT" vs SolUsageEvent's
+      // "TURN") deliberately differs, though: both entities live in the same physical
+      // table under this same service, and an identical template would make them compute
+      // to the literal same DynamoDB item — their two .create() calls (run concurrently
+      // via Promise.all in lib/solAnalytics.ts) would then race for one physical row,
+      // guaranteeing a ConditionalCheckFailedException on whichever loses. Caught in local
+      // testing: this was firing on every single completed turn.
       primary: {
         pk: { field: "pk", composite: ["conversationId"], template: "CONVO#${conversationId}" },
-        sk: { field: "sk", composite: ["createdAt", "id"], template: "TURN#${createdAt}#${id}" },
+        sk: { field: "sk", composite: ["createdAt", "id"], template: "TURNCONTENT#${createdAt}#${id}" },
       },
     },
   },

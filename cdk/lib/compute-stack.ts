@@ -573,15 +573,19 @@ export class ComputeStack extends cdk.Stack {
     );
     // Bedrock — tightened to the exact three models SOL actually uses (see
     // lib/ai/modelRegistry.ts's bedrock_claude row: Claude Haiku 4.5 / Sonnet 5 / Opus 5),
-    // verified against AWS's own Bedrock model-card docs for a us-east-2 deploy. None of
-    // these three models supports direct in-Region invocation — only Geo/Global
-    // cross-region inference profiles — so a caller needs IAM permission on BOTH the
-    // inference-profile ARN (what's actually passed as `modelId`) AND the underlying
-    // foundation-model ARN(s) it fans out to in every Region the profile might route a
-    // request to (AWS's own documented requirement for cross-region inference). us-east-2
-    // sits in the "US" geo group, which (confirmed for Haiku 4.5's docs; assumed identical
-    // for Sonnet 5/Opus 5 pending direct confirmation, since AWS didn't publish their exact
-    // per-model geo fan-out tables at the time this was written) routes across
+    // verified against both AWS's own Bedrock model-card docs AND the real Plexo AWS
+    // account (`aws bedrock get-foundation-model-availability`/`list-inference-profiles`)
+    // for a **us-east-1** deploy — confirmed the actual region every other table/resource
+    // in this app already lives in (data-stack.ts's tables), not the us-east-2 this file
+    // originally assumed before that mismatch was caught and corrected. None of these
+    // three models supports direct in-Region invocation — only Geo/Global cross-region
+    // inference profiles — so a caller needs IAM permission on BOTH the inference-profile
+    // ARN (what's actually passed as `modelId`) AND the underlying foundation-model ARN(s)
+    // it fans out to in every Region the profile might route a request to (AWS's own
+    // documented requirement for cross-region inference). us-east-1 sits in the "US" geo
+    // group, which (confirmed for Haiku 4.5's docs; assumed identical for Sonnet 5/Opus 5
+    // pending direct confirmation, since AWS didn't publish their exact per-model geo
+    // fan-out tables at the time this was written) routes across
     // us-east-1/us-east-2/us-west-2 — granted across all three accordingly.
     solChatFn.addToRolePolicy(
       new iam.PolicyStatement({
@@ -592,9 +596,9 @@ export class ComputeStack extends cdk.Stack {
           ),
           ...["us-east-1", "us-east-2", "us-west-2"].map((region) => `arn:aws:bedrock:${region}::foundation-model/anthropic.claude-sonnet-5`),
           ...["us-east-1", "us-east-2", "us-west-2"].map((region) => `arn:aws:bedrock:${region}::foundation-model/anthropic.claude-opus-5`),
-          `arn:aws:bedrock:us-east-2:${this.account}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`,
-          `arn:aws:bedrock:us-east-2:${this.account}:inference-profile/us.anthropic.claude-sonnet-5`,
-          `arn:aws:bedrock:us-east-2:${this.account}:inference-profile/us.anthropic.claude-opus-5`,
+          `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`,
+          `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-sonnet-5`,
+          `arn:aws:bedrock:us-east-1:${this.account}:inference-profile/us.anthropic.claude-opus-5`,
         ],
       }),
     );

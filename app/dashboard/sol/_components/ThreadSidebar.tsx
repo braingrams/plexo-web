@@ -1,9 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, MessageSquarePlus, Pencil, Trash2, X } from "lucide-react";
+import Link from "next/link";
+import { Brain, Check, MessageSquarePlus, Pencil, Search, Settings, Trash2, X } from "lucide-react";
+import { SolAccountFooter } from "./SolAccountFooter";
+import { registerSolReadinessTask, resolveSolReadinessTask } from "./solReadinessGate";
 import type { ConversationSummary } from "./types";
+
+// A hard browser reload fully remounts this component (unlike navigating between SOL's own
+// routes, which keeps the layout — and this sidebar — mounted), so it always started from
+// an empty list and a "Loading…" row while it re-fetched. Caching the last-known list in
+// sessionStorage (survives a reload, cleared only when the tab actually closes) lets it
+// render the same Recents list immediately instead of a blank moment first — the real fetch
+// still runs the same as before and silently corrects anything stale once it resolves.
+const RECENTS_CACHE_KEY = "sol:recentsCache";
+
+function readCachedConversations(): ConversationSummary[] | null {
+  try {
+    const raw = sessionStorage.getItem(RECENTS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedConversations(conversations: ConversationSummary[]): void {
+  try {
+    sessionStorage.setItem(RECENTS_CACHE_KEY, JSON.stringify(conversations));
+  } catch {
+    // Locked-down storage (private mode, etc.) — just means the next reload starts from
+    // the loading state again, never worth failing over.
+  }
+}
 
 function relativeTime(iso: string | null): string {
   if (!iso) return "";
@@ -21,17 +52,37 @@ function relativeTime(iso: string | null): string {
 export function ThreadSidebar({
   activeConversationId,
   refreshSignal,
+  organizationName,
 }: {
   activeConversationId: string | null;
   refreshSignal?: number;
+  organizationName: string;
 }) {
   const router = useRouter();
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const [conversations, setConversations] = useState<ConversationSummary[]>(() => readCachedConversations() ?? []);
+  const [loading, setLoading] = useState(() => readCachedConversations() === null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const visibleConversations = useMemo(() => {
+    // Used to also hide any conversation with `messageCount === 0` here, to keep a stray
+    // empty row (from the old eager-create-on-"New chat" behavior) out of Recents. Removed
+    // deliberately: messageCount is a derived, cached counter (recomputed by
+    // bumpConversationActivity after a turn settles, not the actual source of truth), and a
+    // real bug in exactly when that recompute ran left a genuine 5-message conversation
+    // stuck at messageCount 0 — permanently invisible in Recents, with no way back to it
+    // short of knowing its raw URL. History should never silently disappear because of a
+    // bookkeeping counter drifting out of sync with reality, and conversations are only
+    // ever created lazily on an actual first send now (see SolChatView's ensureConversation)
+    // — a truly message-less row reaching here at all is already a rare edge case, not the
+    // common one this filter was originally guarding against.
+    if (!searchOpen || !searchQuery.trim()) return conversations;
+    const q = searchQuery.trim().toLowerCase();
+    return conversations.filter((c) => (c.title || "New conversation").toLowerCase().includes(q));
+  }, [conversations, searchOpen, searchQuery]);
 
   async function loadConversations() {
     try {
@@ -39,26 +90,31 @@ export function ThreadSidebar({
       if (!res.ok) return;
       const data = (await res.json()) as { conversations: ConversationSummary[] };
       setConversations(data.conversations);
+      writeCachedConversations(data.conversations);
     } finally {
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    void loadConversations();
+    // Tells the entrance overlay (see solReadinessGate.ts) "the Recents list is a real
+    // dependency, don't reveal the page until this has settled" — registered before the
+    // fetch starts, resolved once it settles either way, so a failed fetch can't hang the
+    // overlay open forever.
+    registerSolReadinessTask("sidebar");
+    void loadConversations().finally(() => resolveSolReadinessTask("sidebar"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSignal]);
 
-  async function handleNewChat() {
-    setCreating(true);
-    try {
-      const res = await fetch("/api/v1/sol/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-      if (!res.ok) return;
-      const data = (await res.json()) as { conversation: ConversationSummary };
-      router.push(`/dashboard/sol/${data.conversation.id}`);
-    } finally {
-      setCreating(false);
-    }
+  function handleNewChat() {
+    // Deliberately does NOT create a SolConversation row here — a conversation is only
+    // ever created lazily, on the first actual message sent (see SolChatView's
+    // ensureConversation), the same way ChatGPT/Claude.ai's own "New chat" never creates
+    // a thread just from clicking it. `?new=1` tells /dashboard/sol's index page to render
+    // the blank composer unconditionally instead of its normal "resume the most recent
+    // conversation" landing behavior — otherwise, once any real conversation exists, this
+    // would just bounce straight back into it instead of ever showing a blank composer.
+    router.push("/dashboard/sol?new=1");
   }
 
   async function commitRename(id: string) {
@@ -85,40 +141,119 @@ export function ThreadSidebar({
     }
   }
 
+  const navItemStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.6rem",
+    width: "100%",
+    padding: "0.5rem 0.6rem",
+    borderRadius: 9,
+    border: "none",
+    background: "none",
+    color: "rgba(240,242,255,0.72)",
+    fontSize: "0.83rem",
+    fontWeight: 600,
+    fontFamily: "inherit",
+    cursor: "pointer",
+    textDecoration: "none",
+    textAlign: "left",
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", width: 260, borderRight: "1px solid rgba(255,255,255,0.06)", background: "rgba(8,5,13,0.6)" }}>
-      <div style={{ padding: "0.85rem" }}>
-        <button
-          type="button"
-          onClick={() => void handleNewChat()}
-          disabled={creating}
+      {/* Plexo brand mark — SOL still lives inside Plexo, so its own sidebar keeps that
+          identity up top rather than only branding itself as "SOL". Padding/border match
+          SolHeader's own strip exactly (a fixed, identical height — matching padding alone
+          isn't enough since the two rows' content isn't the same intrinsic size) so the two
+          read as one continuous top bar across the sidebar and the header, not two
+          separately-sized pieces of chrome bolted together. */}
+      <Link
+        href="/dashboard"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.55rem",
+          height: 61,
+          boxSizing: "border-box",
+          padding: "0 1rem",
+          borderBottom: "1px solid rgba(255,255,255,0.07)",
+          textDecoration: "none",
+        }}
+      >
+        <div
           style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "0.45rem",
-            padding: "0.6rem 0.8rem",
-            borderRadius: 11,
-            border: "1px solid rgba(168,85,247,0.3)",
-            background: "linear-gradient(135deg, rgba(168,85,247,0.16), rgba(124,58,237,0.1))",
-            color: "#f3e8ff",
-            fontSize: "0.83rem",
-            fontWeight: 700,
-            cursor: creating ? "not-allowed" : "pointer",
-            fontFamily: "inherit",
+            width: 24,
+            height: 24,
+            borderRadius: 7,
+            background: "linear-gradient(135deg,#a855f7,#6d28d9)",
+            display: "grid",
+            placeItems: "center",
+            flexShrink: 0,
           }}
         >
-          <MessageSquarePlus size={15} />
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
+          </svg>
+        </div>
+        <span style={{ fontFamily: "var(--font-heading), sans-serif", fontWeight: 700, fontSize: "0.92rem", color: "#f0f2ff", letterSpacing: "-0.01em" }}>Plexo</span>
+      </Link>
+
+      <div style={{ padding: "0.3rem 0.6rem 0.6rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>
+        <button type="button" onClick={handleNewChat} style={navItemStyle} className="sol-nav-item">
+          <MessageSquarePlus size={16} />
           New chat
         </button>
+
+        <button type="button" onClick={() => setSearchOpen((v) => !v)} style={navItemStyle} className="sol-nav-item">
+          <Search size={16} />
+          Search chats
+        </button>
+
+        {searchOpen && (
+          <input
+            autoFocus
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search your chats…"
+            style={{
+              margin: "0.1rem 0.1rem 0.3rem",
+              padding: "0.4rem 0.6rem",
+              borderRadius: 8,
+              border: "1px solid rgba(168,85,247,0.3)",
+              background: "rgba(255,255,255,0.05)",
+              color: "#f0f2ff",
+              fontSize: "0.8rem",
+              fontFamily: "inherit",
+              outline: "none",
+            }}
+          />
+        )}
+
+        <Link href="/dashboard/sol/memory" style={navItemStyle} className="sol-nav-item">
+          <Brain size={16} />
+          Memory
+        </Link>
+
+        <Link href="/dashboard/sol/settings" style={navItemStyle} className="sol-nav-item">
+          <Settings size={16} />
+          Sol settings
+        </Link>
+      </div>
+
+      <div style={{ padding: "0.4rem 0.85rem 0.35rem", fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "rgba(240,242,255,0.3)" }}>
+        Recents
       </div>
 
       <div style={{ flex: 1, overflowY: "auto", padding: "0 0.6rem 0.85rem", display: "flex", flexDirection: "column", gap: "0.15rem" }}>
         {loading && <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)", padding: "0.5rem 0.6rem" }}>Loading…</p>}
-        {!loading && conversations.length === 0 && <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)", padding: "0.5rem 0.6rem" }}>No conversations yet.</p>}
+        {!loading && visibleConversations.length === 0 && (!searchOpen || !searchQuery.trim()) && (
+          <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)", padding: "0.5rem 0.6rem" }}>No conversations yet.</p>
+        )}
+        {!loading && searchOpen && searchQuery.trim() && visibleConversations.length === 0 && (
+          <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)", padding: "0.5rem 0.6rem" }}>No chats match &ldquo;{searchQuery}&rdquo;.</p>
+        )}
 
-        {conversations.map((conv) => {
+        {visibleConversations.map((conv) => {
           const isActive = conv.id === activeConversationId;
           const isRenaming = renamingId === conv.id;
           const isConfirmingDelete = confirmingDeleteId === conv.id;
@@ -243,6 +378,12 @@ export function ThreadSidebar({
           );
         })}
       </div>
+
+      <SolAccountFooter organizationName={organizationName} />
+
+      <style>{`
+        .sol-nav-item:hover { background: rgba(255,255,255,0.05); color: #f0f2ff; }
+      `}</style>
     </div>
   );
 }
