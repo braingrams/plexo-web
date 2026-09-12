@@ -3,6 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, FormEvent } from "react";
 import Link from "next/link";
+import { CustomSelect } from "../../_components/CustomSelect";
+
+// Same four tiers/labels as Settings → AI's own Creativity Tier picker (AiSettingsClient.tsx)
+// — kept here as its own small copy rather than a shared import since that file's TIER_OPTIONS
+// isn't exported and this is the only other place in the app letting someone choose a tier
+// for a single one-off AI action rather than a stored per-key default.
+const AI_TIER_OPTIONS: Array<{ label: string; value: "AUTO" | "BASIC" | "MEDIUM" | "HIGH"; description: string }> = [
+  { label: "Auto", value: "AUTO", description: "Let Plexo pick based on the prompt" },
+  { label: "Standard", value: "BASIC", description: "Fast and efficient" },
+  { label: "Advanced", value: "MEDIUM", description: "Stronger reasoning" },
+  { label: "Most Capable", value: "HIGH", description: "Most creative & thorough" },
+];
 
 type MarketplaceItem = {
   id: string;
@@ -249,6 +261,7 @@ export function NewSiteWizard() {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [aiPrompt, setAiPrompt] = useState("");
+  const [aiTier, setAiTier] = useState<"AUTO" | "BASIC" | "MEDIUM" | "HIGH">("AUTO");
   const [aiGenerating, setAiGenerating] = useState(false);
   // AI is a per-ApiKey setting (Settings → AI), not a single account-wide flag — "enabled"
   // means at least one active key has useAi:true. Checked once, the first time the AI tab
@@ -390,6 +403,7 @@ export function NewSiteWizard() {
           prompt: aiPrompt.trim(),
           templateKind: "LANDING_PAGE",
           context: BLANK_DESIGN_JSON,
+          tier: aiTier,
         }),
       });
       const genData = await genRes.json().catch(() => ({}));
@@ -699,6 +713,16 @@ export function NewSiteWizard() {
                     </div>
                   ) : (
                     <>
+                      <div>
+                        <span style={{ display: "block", fontSize: "11px", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-faint)", marginBottom: "0.35rem" }}>
+                          Creativity Tier
+                        </span>
+                        <CustomSelect
+                          value={aiTier}
+                          options={AI_TIER_OPTIONS}
+                          onChange={(v) => setAiTier(v as typeof aiTier)}
+                        />
+                      </div>
                       <textarea
                         value={aiPrompt}
                         onChange={(e) => setAiPrompt(e.target.value)}
