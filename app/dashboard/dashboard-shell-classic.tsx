@@ -514,6 +514,19 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
 
         {/* Nav items */}
         <nav style={{ flex: 1, padding: "0.75rem 0.625rem", overflow: "hidden" }}>
+          {/* Entry point into SOL — the topbar's own segmented switch (below, in the header
+              row) turned out not to be discoverable enough; this sits right at the top of
+              the sidebar, above the ordinary nav list, so it reads as a real destination
+              rather than a secondary toggle. Collapses to the same icon-only button the
+              topbar switch already uses in cramped layouts, rather than inventing a second
+              collapsed treatment. */}
+          {collapsed ? (
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: "0.75rem" }}>
+              <SolModeSwitch active="plexo" compact />
+            </div>
+          ) : (
+            <SolModeSwitch active="plexo" sidebarCard />
+          )}
           {!collapsed && (
             <p style={{
               fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.1em",
