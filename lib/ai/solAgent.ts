@@ -3,13 +3,31 @@ import type { EntityItem } from "electrodb";
 
 import { dispatchMcpTool, type ResolvedUser } from "@/lib/mcp/dispatchMcpTool";
 import { isDestructiveTool } from "@/lib/mcp/toolRiskClassification";
-import { generateWithTools } from "@/lib/ai/providers/bedrockClaude";
+import { generateWithTools as bedrockGenerateWithTools } from "@/lib/ai/providers/bedrockClaude";
+import { generateWithTools as anthropicGenerateWithTools } from "@/lib/ai/providers/anthropic";
+import { generateWithTools as openaiGenerateWithTools } from "@/lib/ai/providers/openai";
+import { generateWithTools as geminiGenerateWithTools } from "@/lib/ai/providers/gemini";
+import type { GenerateWithToolsParams, GenerateWithToolsResult } from "@/lib/ai/providers/shared";
 import { getAllSolTools, ASK_USER_QUESTION_TOOL_NAME, type BedrockToolDef } from "@/lib/ai/solToolSchema";
 import { resolveModel } from "@/lib/ai/modelRegistry";
 import { MAX_TOKENS } from "@/lib/ai/generate";
 import { MAX_TOOL_ITERATIONS } from "@/lib/credits/agentTurnEstimate";
-import type { ConcreteTier } from "@/lib/ai/types";
+import type { AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { SolMessage } from "@/lib/db/solEntities";
+
+// Which provider actually serves a turn's model calls — resolved once per turn by the
+// caller (solChatHandler.ts) from the account's AI Access Mode: BYOK accounts route to
+// their own configured provider/key (billed to that provider directly, no Plexo credits
+// touched); everyone else routes to Plexo's system Bedrock Claude, credit-metered as
+// before. Every provider's `generateWithTools` shares the same Anthropic-shaped in/out
+// contract (see providers/shared.ts), so this dispatch table is the only place that needs
+// to know there's more than one.
+const TOOL_CAPABLE_PROVIDERS: Record<AiProvider, (params: GenerateWithToolsParams) => Promise<GenerateWithToolsResult>> = {
+  bedrock_claude: bedrockGenerateWithTools,
+  anthropic_claude: anthropicGenerateWithTools,
+  openai: openaiGenerateWithTools,
+  google_gemini: geminiGenerateWithTools,
+};
 
 // SOL's agent orchestration loop: the one place that actually drives a multi-turn,
 // tool-using conversation with the model, persists the transcript, and enforces the
@@ -51,6 +69,11 @@ export interface AgentTurnDeps {
   conversationId: string;
   resolvedUser: ResolvedUser;
   modelTier: ConcreteTier;
+  /** Which provider actually serves this turn's model calls — resolved by the caller from
+   * the account's AI Access Mode (see solChatHandler.ts). */
+  provider: AiProvider;
+  /** BYOK accounts' own decrypted provider key; absent/ignored for `bedrock_claude`. */
+  apiKey?: string;
   /** Bedrock/Anthropic content blocks (text, image, document refs) for the new user message. */
   userMessageContent: any[];
   memoryFacts: string[];
@@ -88,6 +111,11 @@ export interface ResumeAgentTurnDeps {
   conversationId: string;
   resolvedUser: ResolvedUser;
   modelTier: ConcreteTier;
+  /** Same meaning as AgentTurnDeps — re-resolved by the caller for each resume, since a
+   * BYOK account's key/provider could in principle have changed between the original pause
+   * and the resume. */
+  provider: AiProvider;
+  apiKey?: string;
   /** The tool_use id (from the earlier pendingConfirmation) the user is responding to. */
   toolCallId: string;
   /** Required unless the pending tool call is ask_user_question, in which case `answers`
@@ -179,6 +207,8 @@ interface LoopContext {
   conversationId: string;
   resolvedUser: ResolvedUser;
   modelTier: ConcreteTier;
+  provider: AiProvider;
+  apiKey?: string;
   memoryFacts: string[];
   history: HistoryEntry[];
   onTextDelta: (delta: string) => void;
@@ -197,7 +227,8 @@ interface LoopContext {
  */
 async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
   const tools: BedrockToolDef[] = getAllSolTools();
-  const model = resolveModel("bedrock_claude", ctx.modelTier);
+  const model = resolveModel(ctx.provider, ctx.modelTier);
+  const generateWithTools = TOOL_CAPABLE_PROVIDERS[ctx.provider];
   const systemPrompt = buildSolSystemPrompt(ctx.memoryFacts);
 
   const totals = { inputTokens: 0, outputTokens: 0 };
@@ -209,6 +240,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
 
     const result = await generateWithTools({
       model,
+      apiKey: ctx.apiKey,
       systemPrompt,
       conversationHistory: ctx.history,
       tools,
@@ -332,6 +364,8 @@ export async function runAgentTurn(deps: AgentTurnDeps): Promise<RunAgentTurnRes
     conversationId: deps.conversationId,
     resolvedUser: deps.resolvedUser,
     modelTier: deps.modelTier,
+    provider: deps.provider,
+    apiKey: deps.apiKey,
     memoryFacts: deps.memoryFacts,
     history,
     onTextDelta: deps.onTextDelta,
@@ -455,6 +489,8 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     conversationId: deps.conversationId,
     resolvedUser: deps.resolvedUser,
     modelTier: deps.modelTier,
+    provider: deps.provider,
+    apiKey: deps.apiKey,
     memoryFacts: deps.memoryFacts,
     history,
     onTextDelta: deps.onTextDelta,

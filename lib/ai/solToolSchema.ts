@@ -81,3 +81,30 @@ export function getAllSolTools(): BedrockToolDef[] {
     askUserQuestionTool,
   ];
 }
+
+/** OpenAI's function-calling tool shape — a near-identity mapping of the same
+ * name/description/JSON-Schema triple Anthropic-shaped tools already carry, just
+ * wrapped in OpenAI's `{type:"function", function:{...}}` envelope with the schema under
+ * `parameters` instead of `input_schema`. Used by providers/openai.ts's `generateWithTools`
+ * for BYOK accounts whose configured provider is OpenAI. */
+export function toOpenAiTools(tools: BedrockToolDef[]): Array<{ type: "function"; function: { name: string; description: string; parameters: any } }> {
+  return tools.map((tool) => ({
+    type: "function" as const,
+    function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
+  }));
+}
+
+/** Gemini's Interactions API tool shape — verified directly against the installed
+ * `@google/genai` SDK's own type definitions (`FunctionT`, one of the `Tool_2` union
+ * members): a FLAT `{type:"function", name, description, parameters}` entry per tool, one
+ * per array element — NOT the older Generative Language API's `{functionDeclarations:[...]}`
+ * grouping (a different, older surface this SDK also happens to expose elsewhere). Used by
+ * providers/gemini.ts's `generateWithTools` for BYOK accounts on Google Gemini. */
+export function toGeminiTools(tools: BedrockToolDef[]): Array<{ type: "function"; name: string; description: string; parameters: any }> {
+  return tools.map((tool) => ({
+    type: "function" as const,
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.input_schema,
+  }));
+}

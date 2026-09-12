@@ -9,6 +9,7 @@ import { authorizeHostManagedAction, newRequestId, settleHostManagedAction } fro
 import { resolveSystemProvider } from "@/lib/ai/systemProvider";
 import type { AiActionMode, AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { chargeUsage, ensureCreditPeriod, estimateWorstCaseCost } from "@/lib/db/ledgerOperations";
+import { resolveActiveApiKeyForUser } from "@/lib/ai/resolveUserAiKey";
 import { canUseHostManagedAi } from "@/lib/subscription";
 import { auth } from "@/server/authDynamo";
 import { ApiKey, User } from "@/lib/db/coreEntities";
@@ -83,14 +84,7 @@ async function resolveAiKey(request: NextRequest): Promise<ResolveResult> {
       return { error: "Unauthorized", status: 401 };
     }
 
-    // ApiKey has no createdAt-sorted index for "this user's keys" (byUser's SK is `id`,
-    // not createdAt) — a user typically has only a handful of API keys, so sorting the
-    // small result set in memory to find the most-recently-created active one is fine,
-    // matching prisma's orderBy: { createdAt: "desc" } take-first semantics.
-    const { data: keys } = await ApiKey.query.byUser({ userId: session.user.id }).go();
-    const activeKey = keys
-      .filter((k) => k.isActive)
-      .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0];
+    const activeKey = await resolveActiveApiKeyForUser(session.user.id);
 
     if (!activeKey) {
       return { error: "No active API key configured for this account.", status: 400 };
