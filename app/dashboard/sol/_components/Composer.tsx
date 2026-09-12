@@ -187,7 +187,7 @@ export function Composer({
           underneath, matching a tighter, more "AI native" composer feel. `alignItems:
           flex-end` keeps every icon pinned to the input's baseline as it grows to multiple
           lines, instead of drifting to the vertical center of a tall textarea. */}
-      <div style={{ display: "flex", alignItems: "flex-end", gap: "0.35rem" }}>
+      <div className="sol-composer-row" style={{ display: "flex", alignItems: "flex-end", gap: "0.35rem" }}>
         <input ref={fileInputRef} type="file" multiple accept={ACCEPTED_FILE_TYPES} style={{ display: "none" }} onChange={(e) => { void handleFilesPicked(e.target.files); e.target.value = ""; }} />
         <button
           type="button"
@@ -212,6 +212,7 @@ export function Composer({
 
         <textarea
           ref={textareaRef}
+          className="sol-composer-input"
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -322,6 +323,15 @@ export function Composer({
           font-size: 0.78rem !important;
         }
         .sol-composer-tier-select:hover { background: rgba(255,255,255,0.05) !important; }
+        /* At ~375px, attach+textarea+tier-selector+voice+send in one row squeezes the
+           textarea down to ~30-60px wide — not clipped (flex:1/minWidth:0 shrinks safely),
+           but close to unusable for actually typing (found by a mobile audit). Wrapping
+           the input onto its own full-width line, with the icon controls on the line below,
+           fixes that at the cost of one extra line of height. */
+        @media (max-width: 480px) {
+          .sol-composer-row { flex-wrap: wrap; }
+          .sol-composer-input { flex-basis: 100%; order: -1; margin-bottom: 0.3rem; }
+        }
       `}</style>
     </div>
   );

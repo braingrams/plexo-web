@@ -94,7 +94,11 @@ export function ArtifactCanvas({ artifact, onClose }: { artifact: ActiveArtifact
         borderLeft: "1px solid rgba(255,255,255,0.08)",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.75rem 0.9rem", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+      {/* flexWrap so a narrow (e.g. split-canvas-on-mobile) width doesn't clip the trailing
+          controls — title + tabs + Visit + "Open in editor" + close is a lot of
+          non-shrinking content for one row on a ~375px screen (found by a mobile audit);
+          wrapping to a second line costs a little height, not correctness. */}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.6rem", rowGap: "0.5rem", padding: "0.75rem 0.9rem", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {page?.name ?? artifact.name}

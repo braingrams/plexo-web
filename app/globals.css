@@ -808,7 +808,13 @@ select {
     gap: 0.5rem;
   }
 
-  .dash-pill-nav {
+  /* Scoped to the topbar's OWN pill nav specifically, not the bare .dash-pill-nav class —
+     that class is also reused by Commerce/Settings' pill sub-navs (SettingsPillNav.tsx,
+     SettingsShell.tsx) and SOL's ArtifactCanvas Preview/Code tabs, none of which have a
+     hamburger-menu replacement the way this topbar nav does below. A bare `.dash-pill-nav`
+     selector here was silently deleting all of those too — real bug, found by a mobile
+     audit, not a deliberate shared behavior. */
+  .dash-topbar .dash-pill-nav {
     display: none !important;
   }
 

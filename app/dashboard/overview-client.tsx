@@ -389,23 +389,23 @@ export function OverviewClient(props: Props) {
 
       {/* Stat strip */}
       <div style={{ height: 1, background: hairline }} />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", padding: "26px 0" }}>
-        <div style={{ paddingRight: 32 }}>
+      <div className="overview-stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", padding: "26px 0" }}>
+        <div className="overview-stat-cell" style={{ paddingRight: 32 }}>
           <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
             Templates
           </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          <div className="overview-stat-value" style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
             {templatesCount}
           </div>
           <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
             <span style={{ color: "var(--success)", fontWeight: 650 }}>{liveTemplatesCount}</span> live
           </div>
         </div>
-        <div style={{ padding: "0 32px", borderLeft: `1px solid ${hairlineSoft}` }}>
+        <div className="overview-stat-cell" style={{ padding: "0 32px", borderLeft: `1px solid ${hairlineSoft}` }}>
           <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
             Live domains
           </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          <div className="overview-stat-value" style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
             {domainsCount}
           </div>
           <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
@@ -418,11 +418,11 @@ export function OverviewClient(props: Props) {
             )}
           </div>
         </div>
-        <div style={{ padding: "0 32px", borderLeft: `1px solid ${hairlineSoft}` }}>
+        <div className="overview-stat-cell" style={{ padding: "0 32px", borderLeft: `1px solid ${hairlineSoft}` }}>
           <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
             Views &middot; 7d
           </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          <div className="overview-stat-value" style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
             {loadingViews ? "—" : (totalViews ?? 0).toLocaleString()}
           </div>
           <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
@@ -447,11 +447,11 @@ export function OverviewClient(props: Props) {
             )}
           </div>
         </div>
-        <div style={{ paddingLeft: 32, borderLeft: `1px solid ${hairlineSoft}` }}>
+        <div className="overview-stat-cell" style={{ paddingLeft: 32, borderLeft: `1px solid ${hairlineSoft}` }}>
           <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
             API keys
           </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          <div className="overview-stat-value" style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
             {apiKeysCount}
           </div>
           <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
@@ -461,6 +461,57 @@ export function OverviewClient(props: Props) {
           </div>
         </div>
       </div>
+      <style>{`
+        /* This grid has no mobile fallback at all otherwise — 4 fixed-padding columns of
+           38px monospace numbers genuinely overflow/clip on a ~375px phone (found by a
+           mobile-responsiveness audit, not a spacing preference). Two columns, normalized
+           padding (the four cells' padding/border values differ from each other, hence
+           !important here rather than restructuring each cell), and a smaller number size
+           give each stat real room again. */
+        @media (max-width: 680px) {
+          .overview-stat-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            row-gap: 22px;
+          }
+          .overview-stat-cell {
+            padding: 0 14px !important;
+            border-left: none !important;
+          }
+          .overview-stat-value {
+            font-size: 28px !important;
+          }
+        }
+
+        /* Recent templates + Activity: fixed 65%/35% split plus a 250px-wide fixed table
+           header (Type/Pages/Updated columns) leaves negative room for "Name" once the
+           left column is squeezed to 65% of a ~375px phone screen — genuine overflow, not
+           just cramped. Stacks to one full-width column at a time; the divider between
+           them only makes sense side-by-side, so it's dropped rather than rendered as a
+           stray horizontal rule. Below 480px the two least-essential columns (Type,
+           Updated) are dropped too, so Name/Pages — the two things actually worth glancing
+           at — get real room instead of three-way-splitting an already-narrow row. */
+        @media (max-width: 768px) {
+          .overview-split-row {
+            flex-direction: column !important;
+          }
+          .overview-split-col {
+            flex: 1 1 auto !important;
+            padding: 0 !important;
+          }
+          .overview-split-col-templates {
+            margin-bottom: 28px;
+          }
+          .overview-split-divider {
+            display: none !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .overview-col-type,
+          .overview-col-updated {
+            display: none !important;
+          }
+        }
+      `}</style>
       <div style={{ height: 1, background: hairline }} />
 
       {/* Needs attention — a full-width strip, only rendered when there's actually
@@ -543,8 +594,8 @@ export function OverviewClient(props: Props) {
       </div>
 
       {/* Recent templates + Activity */}
-      <div style={{ display: "flex", alignItems: "stretch", padding: "0 0 32px" }}>
-        <div style={{ flex: "0 0 65%", paddingRight: 40 }}>
+      <div className="overview-split-row" style={{ display: "flex", alignItems: "stretch", padding: "0 0 32px" }}>
+        <div className="overview-split-col overview-split-col-templates" style={{ flex: "0 0 65%", paddingRight: 40 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 18 }}>
             <span style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
               Recent templates
@@ -565,9 +616,9 @@ export function OverviewClient(props: Props) {
             <>
               <div style={{ display: "flex", paddingBottom: 10, borderBottom: `1px solid ${hairline}` }}>
                 <span style={{ flex: 1, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)" }}>Name</span>
-                <span style={{ width: 100, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)" }}>Type</span>
+                <span className="overview-col-type" style={{ width: 100, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)" }}>Type</span>
                 <span style={{ width: 60, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)", textAlign: "right" }}>Pages</span>
-                <span style={{ width: 90, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)", textAlign: "right" }}>Updated</span>
+                <span className="overview-col-updated" style={{ width: 90, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)", textAlign: "right" }}>Updated</span>
               </div>
               {recentTemplates.map((t, i) => (
                 <Link
@@ -586,20 +637,20 @@ export function OverviewClient(props: Props) {
                     <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.isLive ? "var(--success)" : "var(--text-faint)", flexShrink: 0 }} />
                     {t.name}
                   </span>
-                  <span style={{ width: 100, fontSize: "12.5px", color: "var(--text-muted)" }}>{kindLabel(t.kind)}</span>
+                  <span className="overview-col-type" style={{ width: 100, fontSize: "12.5px", color: "var(--text-muted)" }}>{kindLabel(t.kind)}</span>
                   <span style={{ width: 60, fontSize: "12.5px", color: "var(--text-muted)", textAlign: "right", fontFamily: "var(--font-mono)" }}>
                     {t.kind === "LANDING_PAGE" ? t.pageCount + 1 : "—"}
                   </span>
-                  <span style={{ width: 90, fontSize: "12.5px", color: "var(--text-faint)", textAlign: "right" }}>{timeAgo(t.updatedAt)}</span>
+                  <span className="overview-col-updated" style={{ width: 90, fontSize: "12.5px", color: "var(--text-faint)", textAlign: "right" }}>{timeAgo(t.updatedAt)}</span>
                 </Link>
               ))}
             </>
           )}
         </div>
 
-        <div style={{ width: 1, background: hairline, alignSelf: "stretch" }} />
+        <div className="overview-split-divider" style={{ width: 1, background: hairline, alignSelf: "stretch" }} />
 
-        <div style={{ flex: 1, paddingLeft: 40 }}>
+        <div className="overview-split-col" style={{ flex: 1, paddingLeft: 40 }}>
           <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 18 }}>
             Activity
           </div>
