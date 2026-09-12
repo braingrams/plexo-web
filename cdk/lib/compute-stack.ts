@@ -350,12 +350,11 @@ export class ComputeStack extends cdk.Stack {
     // `cdk deploy` invocations (no automatic cross-stack IAM relationship), so this has
     // to be granted explicitly here — see ledgerKmsKeyArn's own comment above for why
     // this must be the real key ARN, not an alias/nameFor() one.
-    serverFn.addToRolePolicy(
-      new iam.PolicyStatement({
-        actions: ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"],
-        resources: [ledgerKmsKeyArn!],
-      }),
-    );
+    const ledgerKmsPolicy = new iam.PolicyStatement({
+      actions: ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"],
+      resources: [ledgerKmsKeyArn!],
+    });
+    serverFn.addToRolePolicy(ledgerKmsPolicy);
     // lib/storage.ts (Vercel Blob replacement) — the bucket itself lives in the data
     // stack (cdk/lib/data-stack.ts), a separate `cdk deploy` invocation, so this can't
     // reference it as a real CDK cross-stack object; scoped by the "plexo-user-content*"
@@ -596,6 +595,15 @@ export class ComputeStack extends cdk.Stack {
         ]),
       }),
     );
+    // plexo-ledger's customer-managed KMS key — the DynamoDB table grant just above is
+    // only sufficient for the other, AWS-owned-encryption tables (see ledgerKmsPolicy's own
+    // comment above, next to serverFn's identical grant): a customer-managed key's IAM
+    // policy is separate from the table-level grant. SOL charges every completed turn
+    // against this exact table (lib/db/ledgerOperations.ts's chargeUsage/
+    // ensureCreditPeriod, called from lib/ai/solChatHandler.ts) — confirmed live on
+    // staging: "AWSKMSException: ... SolChatFnServiceRole ... is not authorized to
+    // perform: kms:Decrypt" the moment a real SOL turn tried to charge usage.
+    solChatFn.addToRolePolicy(ledgerKmsPolicy);
     // Bedrock — tightened to the exact three models SOL actually uses (see
     // lib/ai/modelRegistry.ts's bedrock_claude row: Claude Haiku 4.5 / Sonnet 5 / Opus 5),
     // verified against both AWS's own Bedrock model-card docs AND the real Plexo AWS
