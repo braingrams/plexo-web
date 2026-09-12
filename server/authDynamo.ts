@@ -7,6 +7,7 @@ import { CognitoJwtVerifier } from "aws-jwt-verify";
 
 import { docClient, TABLES } from "@/lib/db/client";
 import { User } from "@/lib/db/coreEntities";
+import { createUserWithEmailLock, EmailAlreadyInUseError } from "@/lib/db/coreOperations";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 
 // Verifies Charisol/Cognito-issued ID tokens server-side before trusting any claim in
@@ -155,7 +156,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Google-verified email via Cognito — same trust level the old Google provider
         // implicitly granted, so this account doesn't need Plexo's own email-verification
         // step (isConfirmed gate only applies to the Credentials/password provider above).
-        await User.create({ id, email, name, image, isConfirmed: true }).go();
+        try {
+          await createUserWithEmailLock({ id, email, name, image, isConfirmed: true });
+        } catch (err) {
+          if (!(err instanceof EmailAlreadyInUseError)) throw err;
+          // Lost the race the pre-check above couldn't catch (this same email registered
+          // or signed in concurrently) — unlike the password-registration route, this isn't
+          // a user-facing error: whichever row won is an equally valid identity for this
+          // verified email, so just sign in as that one instead of failing the login.
+          const { data: winner } = await User.query.byEmail({ email }).go();
+          const won = winner[0];
+          if (!won) throw err;
+          return { id: won.id, email: won.email, name: won.name, image: won.image ?? null };
+        }
         return { id, email, name, image: image ?? null };
       },
     }),

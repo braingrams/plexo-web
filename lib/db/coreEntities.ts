@@ -82,6 +82,19 @@ export const User = new Entity(
       // density (see the Funnel/LMS plan's "Experience-level onboarding" section). Null
       // until chosen; changeable anytime after via Funnel settings, never a one-way door.
       funnelBuilderLevel: { type: ["BEGINNER", "INTERMEDIATE", "PROFESSIONAL"] as const },
+      // "Is this person actually using Plexo" for the admin console (plexo-admin's Users
+      // list/detail) — one unified signal rather than separate login/API-usage tracking,
+      // since sessions here are JWT-only (no Session row to hang a "last login" off) and a
+      // per-request write on every dashboard load or API call would be real, avoidable
+      // DynamoDB cost for a signal nobody needs to the minute. Written by
+      // lib/auth/resolveUser.ts — the one chokepoint already shared by both the dashboard
+      // (session-authenticated) and the public v1 API (key-authenticated) — throttled to
+      // at most once per hour per user (see resolveUser.ts's ACTIVITY_THROTTLE_MS), so even
+      // a heavy user costs ~24 tiny writes/day, not one per request. lastActiveContext is a
+      // short human label (lib/activity.ts's describeActivity) for what that last call
+      // actually was, so admin doesn't just see a timestamp with no idea what it means.
+      lastActiveAt: { type: "string" },
+      lastActiveContext: { type: "string" },
     },
     indexes: {
       primary: {
@@ -93,6 +106,33 @@ export const User = new Entity(
         index: "GSI1",
         pk: { field: "GSI1PK", composite: ["email"], template: "EMAIL#${email}" },
         sk: { field: "GSI1SK", composite: ["id"], template: "USER#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Closes a real race: User.id is a fresh UUID, not the email, so `byEmail` (a GSI query,
+// not a DB constraint) can't stop two concurrent requests for the same address — a
+// double-submitted signup, or a race between password registration and Google/Charisol
+// sign-in — from both passing a "does this email exist" check and both calling
+// User.create(). Two User rows then independently join/own orgs, which is what surfaces
+// in plexo-admin as "the same person shows up twice" under one organization. This item's
+// key IS the uniqueness constraint: created in the same transaction as the User row
+// (server/authDynamo.ts, app/api/auth/register/route.ts), conditioned on not already
+// existing, so only one of two racing signups for one email can ever win.
+export const UserEmailLock = new Entity(
+  {
+    model: { entity: "userEmailLock", version: "1", service: "plexoCore" },
+    attributes: {
+      email: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["email"], template: "EMAILLOCK#${email}" },
+        sk: { field: "sk", composite: [], template: "EMAILLOCK#METADATA" },
       },
     },
   },
@@ -403,6 +443,7 @@ export const Invitation = new Entity(
 export const plexoCoreService = new Service(
   {
     User,
+    UserEmailLock,
     Organization,
     Member,
     ApiKey,
