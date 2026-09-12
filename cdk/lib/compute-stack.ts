@@ -295,7 +295,15 @@ export class ComputeStack extends cdk.Stack {
       handler: "index.handler",
       code: lambda.Code.fromAsset(path.join(OPEN_NEXT_DIR, "server-functions", "default")),
       memorySize: 1024,
-      timeout: cdk.Duration.seconds(30),
+      // Was 30s (API Gateway/CloudFront's own historical default) — raised to 60s because
+      // /api/v1/ai/generate's full-site generation (NewSiteWizard's "Build with AI", mode:
+      // generate_layout — a much bigger single non-streaming completion than a single
+      // edit_element/edit_layout action) was hitting this ceiling and returning a bare
+      // CloudFront 504, confirmed live on staging once Bedrock's own IAM/Marketplace gates
+      // were cleared and this became the next real bottleneck. Paired with the matching
+      // `readTimeout` bump on serverFn's two CloudFront origins below — raising just one
+      // side leaves the other as the effective (lower) ceiling.
+      timeout: cdk.Duration.seconds(60),
       // PLEXO_ENV is the only other app-secret-adjacent thing set here — it's what
       // lib/ssmEnv.ts reads to build the /plexo/<env>/<KEY> path it fetches from at cold
       // start (via instrumentation.ts). Not sensitive itself, just "staging" or
@@ -800,7 +808,13 @@ export class ComputeStack extends cdk.Stack {
       certificate: appCert,
       webAclId: webAcl?.attrArn,
       defaultBehavior: {
-        origin: new origins.FunctionUrlOrigin(serverFnUrl, { customHeaders: { "x-origin-verify": originVerifySecret! } }),
+        // readTimeout matches serverFn's own Lambda timeout bump above — CloudFront's
+        // default (30s) would otherwise still cut the response off as its own bare 504
+        // even after the Lambda itself was given more time to finish.
+        origin: new origins.FunctionUrlOrigin(serverFnUrl, {
+          customHeaders: { "x-origin-verify": originVerifySecret! },
+          readTimeout: cdk.Duration.seconds(60),
+        }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
         allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
@@ -838,7 +852,13 @@ export class ComputeStack extends cdk.Stack {
           responseHeadersPolicy: securityHeadersPolicy,
         },
         "api/v1/mcp*": {
-          origin: new origins.FunctionUrlOrigin(serverFnUrl, { customHeaders: { "x-origin-verify": originVerifySecret! } }),
+          // Same readTimeout bump as the default behavior above — an MCP tool call can
+          // reach the exact same generate_layout-style code path (dispatchMcpTool ->
+          // generateBuilderAction) and would hit the identical 504 otherwise.
+          origin: new origins.FunctionUrlOrigin(serverFnUrl, {
+            customHeaders: { "x-origin-verify": originVerifySecret! },
+            readTimeout: cdk.Duration.seconds(60),
+          }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
