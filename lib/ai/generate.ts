@@ -21,6 +21,9 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   // response ("Unterminated string in JSON..."). See TRUNCATED_RETRY_CAP below for the
   // further adaptive bump this mode's edits get if even this isn't enough.
   edit_raw_html: 32000,
+  // Same full-document-output reasoning as edit_raw_html just above — a freshly generated
+  // page can be just as large as an edited one.
+  generate_raw_html: 32000,
   // A full post as HTML plus excerpt/SEO/category/tag/image-prompt metadata — lighter than
   // a builder layout's nested JSON per token, so a smaller ceiling than edit_layout/
   // generate_layout is enough for a genuinely long post.
@@ -89,6 +92,19 @@ Respond with ONLY a JSON object of this exact shape, no markdown fences, no pros
 { "summary": "<one short sentence describing the change you made>", "result": "<the COMPLETE modified HTML document as a single string, starting from <!DOCTYPE html> or <html>, not a diff or partial snippet>" }`;
   }
 
+  if (mode === "generate_raw_html") {
+    return `You are Plexo's builder AI. Generate a brand-new, complete, production-quality ${kindLabel} as a single self-contained HTML document, from the user's prompt.
+This is the premium, fully hand-crafted alternative to Plexo's drag-and-drop builder — the whole point is design freedom the builder's block system can't offer, so write real, bespoke markup and styling rather than a generic template. Aim for a genuinely polished, professional-grade finish: thoughtful typography and spacing, a real color/visual identity implied by the prompt, and a complete set of sections appropriate to what was asked for (not just a bare hero).
+Requirements:
+- One complete HTML document: <!DOCTYPE html>, <html>, <head> (including <meta charset>, <meta name="viewport">, a <title>), and <body>. Nothing outside that document.
+- All CSS inline in a single <style> block in <head> — no external stylesheets/CDN links, no CSS frameworks. Fully responsive (mobile-first, real breakpoints), since this ships to real visitors on real devices.
+- Vanilla JavaScript only, inline in a single <script> block before </body> if the page genuinely needs interactivity (a mobile nav toggle, a simple form handler, smooth-scrolling anchors) — never a framework/library, never a build step, never external <script src>.
+- Use real, on-topic copy that fits the prompt — never lorem ipsum or "Company Name" placeholders. Use https://picsum.photos/seed/<any-word>/<width>/<height> for any photo the page needs (a real, working placeholder-image service), never a broken/fake image URL.
+- Semantic HTML5 (header/nav/main/section/footer, proper heading hierarchy) — this also renders and reads well without the CSS/JS, not just with it.
+Respond with ONLY a JSON object of this exact shape, no markdown fences, no prose outside the JSON:
+{ "summary": "<one or two short sentences describing the page you built>", "result": "<the COMPLETE HTML document as a single string, starting from <!DOCTYPE html>>" }`;
+  }
+
   if (mode === "edit_element") {
     return `You are Plexo's builder AI. You modify a single element's JSON (style + attributes) inside a ${kindLabel} builder according to the user's instruction.
 The "result" you return is applied by merging "style" and "attributes" over the element's current values — so "style" and "attributes" must each be the COMPLETE object, not a partial diff: include every existing key that isn't changing, unchanged, alongside the key(s) you are changing. Never omit an existing key just because its value didn't change, and never return an empty object for "style" or "attributes" unless the element genuinely has no style/attributes at all.
@@ -113,7 +129,7 @@ Respond with ONLY a JSON object of this exact shape, no markdown fences, no pros
 }
 
 function resultSchemaFor(mode: AiActionMode) {
-  if (mode === "edit_raw_html") {
+  if (mode === "edit_raw_html" || mode === "generate_raw_html") {
     return z.object({ summary: z.string().max(2000), result: z.string().min(1) });
   }
   if (mode === "generate_blog_post") {
@@ -224,8 +240,12 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
     // harder for the model to read as an actual document rather than a JSON string.
     const contextBlock = params.mode === "edit_raw_html"
       ? `Current HTML document:\n${(trimmedContext as { html: string }).html}`
-      : `Current JSON:\n${JSON.stringify(trimmedContext)}`;
-    const userPrompt = `${opts?.extraNote ? `${opts.extraNote}\n\n` : ""}User instruction: ${params.prompt}\n\n${contextBlock}`;
+      // generate_raw_html starts from nothing — no context to echo back at all, unlike
+      // every other mode (even generate_layout gets a real, if empty, TemplateJSON skeleton).
+      : params.mode === "generate_raw_html"
+        ? ""
+        : `Current JSON:\n${JSON.stringify(trimmedContext)}`;
+    const userPrompt = `${opts?.extraNote ? `${opts.extraNote}\n\n` : ""}User instruction: ${params.prompt}${contextBlock ? `\n\n${contextBlock}` : ""}`;
     const tokensForThisCall = opts?.maxTokensOverride ?? maxTokens;
     let text: string;
     let usage: ProviderCallResult["usage"];
@@ -256,7 +276,15 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
     // LLMs frequently omit structural bookkeeping (id/style/attributes/width) on repeated
     // rows/columns/elements — hydrate the same way MCP/publish/compile/templates callers do
     // before validating, instead of failing the whole response over missing defaults.
-    if (params.mode !== "edit_element" && params.mode !== "edit_raw_html" && params.mode !== "generate_blog_post" && parsed && typeof parsed === "object" && "result" in parsed) {
+    if (
+      params.mode !== "edit_element" &&
+      params.mode !== "edit_raw_html" &&
+      params.mode !== "generate_raw_html" &&
+      params.mode !== "generate_blog_post" &&
+      parsed &&
+      typeof parsed === "object" &&
+      "result" in parsed
+    ) {
       parsed.result = hydrateStructuralDefaults(parsed.result);
     }
     const validated = schema.parse(parsed);

@@ -3,6 +3,12 @@ export type AiActionMode =
   | "edit_layout"
   | "generate_layout"
   | "edit_raw_html"
+  // Generates a brand-new, complete, self-contained HTML document from a prompt — the
+  // "premium, fully custom" counterpart to generate_layout's drag-and-drop builder output
+  // (see NewSiteWizard.tsx's page-type toggle and SOL's own system prompt for the same
+  // builder-vs-raw-HTML framing). Distinct from edit_raw_html, which only ever modifies an
+  // EXISTING document and is worded accordingly — this one starts from nothing.
+  | "generate_raw_html"
   | "generate_blog_post"
   // SOL, the AI agent chat feature (lib/ai/solAgent.ts) — one turn of a multi-turn,
   // tool-using conversation. See MAX_TOKENS below (lib/ai/generate.ts) for its output

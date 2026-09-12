@@ -9,6 +9,16 @@ import { CustomSelect } from "../../_components/CustomSelect";
 // — kept here as its own small copy rather than a shared import since that file's TIER_OPTIONS
 // isn't exported and this is the only other place in the app letting someone choose a tier
 // for a single one-off AI action rather than a stored per-key default.
+// Same builder-vs-raw-HTML framing as SOL's own ask_user_question for this exact choice
+// (lib/ai/solAgent.ts's system prompt) — Pretty HTML is the recommended option in both
+// places: real hand-crafted markup/CSS the model writes directly is the premium, most
+// polished result, at the cost of not being editable afterward in the drag-and-drop
+// builder the way generate_layout's designJson output is.
+const PAGE_TYPE_OPTIONS: Array<{ value: "html" | "builder"; label: string; description: string }> = [
+  { value: "html", label: "Pretty HTML (Recommended)", description: "Hand-crafted markup for the most premium, polished result — not editable in the drag-and-drop builder afterward" },
+  { value: "builder", label: "Drag & Drop Builder", description: "Editable afterward with Plexo's own visual builder" },
+];
+
 const AI_TIER_OPTIONS: Array<{ label: string; value: "AUTO" | "BASIC" | "MEDIUM" | "HIGH"; description: string }> = [
   { label: "Auto", value: "AUTO", description: "Let Plexo pick based on the prompt" },
   { label: "Standard", value: "BASIC", description: "Fast and efficient" },
@@ -262,6 +272,9 @@ export function NewSiteWizard() {
 
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiTier, setAiTier] = useState<"AUTO" | "BASIC" | "MEDIUM" | "HIGH">("AUTO");
+  // Pretty HTML is the recommended default — see PAGE_TYPE_OPTIONS below for why (matches
+  // the same framing SOL's own ask_user_question uses for this exact choice).
+  const [pageType, setPageType] = useState<"html" | "builder">("html");
   const [aiGenerating, setAiGenerating] = useState(false);
   // AI is a per-ApiKey setting (Settings → AI), not a single account-wide flag — "enabled"
   // means at least one active key has useAi:true. Checked once, the first time the AI tab
@@ -392,19 +405,21 @@ export function NewSiteWizard() {
       setError("Describe the site you want first.");
       return;
     }
+    if (pageType === "html" && !agreed) {
+      setError("You must agree to the Acceptable Use Policy to publish unsanitized HTML.");
+      return;
+    }
     setError(null);
     setAiGenerating(true);
     try {
       const genRes = await fetch("/api/v1/ai/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": "workspace-internal" },
-        body: JSON.stringify({
-          mode: "generate_layout",
-          prompt: aiPrompt.trim(),
-          templateKind: "LANDING_PAGE",
-          context: BLANK_DESIGN_JSON,
-          tier: aiTier,
-        }),
+        body: JSON.stringify(
+          pageType === "html"
+            ? { mode: "generate_raw_html", prompt: aiPrompt.trim(), templateKind: "LANDING_PAGE", context: null, tier: aiTier }
+            : { mode: "generate_layout", prompt: aiPrompt.trim(), templateKind: "LANDING_PAGE", context: BLANK_DESIGN_JSON, tier: aiTier },
+        ),
       });
       const genData = await genRes.json().catch(() => ({}));
       if (!genRes.ok) {
@@ -418,14 +433,18 @@ export function NewSiteWizard() {
       }
 
       const name = aiPrompt.trim().slice(0, 60);
-      const publishRes = await fetch("/api/v1/publish", {
+      const publishRes = await fetch(pageType === "html" ? "/api/v1/templates/upload-raw" : "/api/v1/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, kind: "LANDING_PAGE", designJson: genData.result }),
+        body: JSON.stringify(
+          pageType === "html"
+            ? { name, htmlContent: genData.result, acceptAup: true }
+            : { name, kind: "LANDING_PAGE", designJson: genData.result },
+        ),
       });
       const publishData = await publishRes.json().catch(() => ({}));
       if (!publishRes.ok) {
-        setError(publishData.error ?? "Generated the design, but couldn't save it.");
+        setError(publishData.error ?? "Generated the page, but couldn't save it.");
         return;
       }
       advanceToConnect({ id: publishData.templateId, name: publishData.name });
@@ -715,6 +734,16 @@ export function NewSiteWizard() {
                     <>
                       <div>
                         <span style={{ display: "block", fontSize: "11px", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-faint)", marginBottom: "0.35rem" }}>
+                          Page Type
+                        </span>
+                        <CustomSelect
+                          value={pageType}
+                          options={PAGE_TYPE_OPTIONS}
+                          onChange={(v) => setPageType(v as typeof pageType)}
+                        />
+                      </div>
+                      <div>
+                        <span style={{ display: "block", fontSize: "11px", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-faint)", marginBottom: "0.35rem" }}>
                           Creativity Tier
                         </span>
                         <CustomSelect
@@ -730,11 +759,23 @@ export function NewSiteWizard() {
                         rows={5}
                         style={{ ...inputStyle(), resize: "vertical", fontFamily: "inherit" }}
                       />
+                      {pageType === "html" && (
+                        <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.7, cursor: "pointer" }}>
+                          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0 }} />
+                          <span>
+                            I agree to the{" "}
+                            <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--brand)" }}>
+                              Acceptable Use Policy
+                            </Link>
+                            . Pretty HTML pages are published exactly as generated, with no modification.
+                          </span>
+                        </label>
+                      )}
                       <button
                         type="button"
                         onClick={() => void handleGenerateWithAi()}
-                        disabled={aiGenerating || !aiPrompt.trim()}
-                        style={{ ...primaryButtonStyle(!aiGenerating && !!aiPrompt.trim()), alignSelf: "flex-start", cursor: aiGenerating ? "wait" : "pointer" }}
+                        disabled={aiGenerating || !aiPrompt.trim() || (pageType === "html" && !agreed)}
+                        style={{ ...primaryButtonStyle(!aiGenerating && !!aiPrompt.trim() && (pageType !== "html" || agreed)), alignSelf: "flex-start", cursor: aiGenerating ? "wait" : "pointer" }}
                       >
                         {aiGenerating ? "Generating your site…" : "Generate my site"}
                       </button>
