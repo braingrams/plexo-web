@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Info,
 } from "lucide-react";
+import { IntegrationSubTabs } from "./_components/IntegrationSubTabs";
 type IntegrationClientProps = {
   user: {
     name: string;
@@ -107,6 +108,7 @@ POST {yourWebhookUrl}/ai-charge
 
   return (
     <div className="space-y-6 font-sans text-[#f0f2ff]">
+      <IntegrationSubTabs />
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/10">
         <div>

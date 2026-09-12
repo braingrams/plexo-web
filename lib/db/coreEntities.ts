@@ -44,7 +44,7 @@ export const User = new Entity(
       adminRole: { type: ["SUPERADMIN", "SUPPORT", "MODERATOR", "FINANCE"] as const },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       // Dashboard shell UI preference — server/orgDynamo.ts's cutover of app/dashboard/layout.tsx.
-      layoutMode: { type: ["CLASSIC", "MODERN"] as const, default: "MODERN" },
+      layoutMode: { type: ["CLASSIC", "MODERN"] as const, default: "CLASSIC" },
       // Plan-gated preferences (resolveHideBranding/resolveManageLandingPagePublishing in
       // lib/subscription.ts do the actual entitlement collapse — these store the raw
       // stated preference, same as Prisma did).

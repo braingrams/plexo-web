@@ -14,9 +14,9 @@ const PROVIDER_OPTIONS: Array<{ label: string; value: Provider }> = [
 ];
 
 const TIER_OPTIONS: Array<{ label: string; value: AiTier; desc: string }> = [
-  { label: "Base", value: "BASIC", desc: "Strict, deterministic outputs" },
-  { label: "Medium", value: "MEDIUM", desc: "Balanced creativity" },
-  { label: "High", value: "HIGH", desc: "Creative & exploratory" },
+  { label: "Standard", value: "BASIC", desc: "Strict, deterministic outputs" },
+  { label: "Advanced", value: "MEDIUM", desc: "Balanced creativity" },
+  { label: "Most Capable", value: "HIGH", desc: "Creative & exploratory" },
   { label: "Auto", value: "AUTO", desc: "System default" },
 ];
 
@@ -244,24 +244,39 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                         )}
                       </div>
 
-                      {/* Provider */}
-                      <div>
-                        <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
-                          AI Provider
-                        </span>
-                        <CustomSelect
-                          value={draftAiProvider}
-                          options={PROVIDER_OPTIONS}
-                          disabled={!activeKey.isActive}
-                          onChange={(next) => {
-                            const v = next as Provider;
-                            setDraftAiProvider(v);
-                            setProviderTouched(true);
-                            setDraftDirty(true);
-                            setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiProvider: v } : item)));
-                          }}
-                        />
-                      </div>
+                      {/* Provider — only meaningful for BYOK/Host-Managed. Under System AI, Plexo
+                          picks and maintains the provider server-side (resolveSystemProvider()),
+                          so this field is read-only there instead of implying a choice that does
+                          nothing. */}
+                      {draftAccessMode === "SYSTEM" ? (
+                        <div>
+                          <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
+                            AI Provider
+                          </span>
+                          <div style={{ padding: "0.65rem 0.75rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
+                            <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "rgba(240,242,255,0.75)" }}>Plexo&apos;s managed AI</p>
+                            <p style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.3)" }}>Automatically selected and maintained by Plexo — nothing to configure here.</p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
+                            AI Provider
+                          </span>
+                          <CustomSelect
+                            value={draftAiProvider}
+                            options={PROVIDER_OPTIONS}
+                            disabled={!activeKey.isActive}
+                            onChange={(next) => {
+                              const v = next as Provider;
+                              setDraftAiProvider(v);
+                              setProviderTouched(true);
+                              setDraftDirty(true);
+                              setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiProvider: v } : item)));
+                            }}
+                          />
+                        </div>
+                      )}
 
                       {/* Tier */}
                       <div>

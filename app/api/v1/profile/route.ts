@@ -58,7 +58,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         allowanceBalance: user.allowanceBalance ?? 0,
         topupBalance: user.topupBalance ?? 0,
         totalCredits: (user.allowanceBalance ?? 0) + (user.topupBalance ?? 0),
-        layoutMode: user.layoutMode ?? "MODERN",
+        layoutMode: user.layoutMode ?? "CLASSIC",
         createdAt: user.createdAt,
       },
       limits: {

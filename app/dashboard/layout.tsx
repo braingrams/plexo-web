@@ -21,7 +21,7 @@ export default async function DashboardLayout({
   const userEmail = session.user.email ?? "";
 
   const { data: dbUser } = await User.get({ id: session.user.id }).go();
-  const initialLayoutMode = dbUser?.layoutMode ?? "MODERN";
+  const initialLayoutMode = dbUser?.layoutMode ?? "CLASSIC";
 
   // Org-scoped login: makes sure this session always has an active organization before
   // rendering the dashboard shell (auto-picks a single membership, restores/creates one
