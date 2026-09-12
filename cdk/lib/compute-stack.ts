@@ -500,6 +500,17 @@ export class ComputeStack extends cdk.Stack {
       runtime: lambda.Runtime.NODEJS_24_X,
       entry: SOL_CHAT_ENTRY,
       handler: "handler",
+      // NodejsFunction otherwise infers `projectRoot` from `entry`'s own location and
+      // requires it to be a DESCENDANT of that root — but this handler's entry lives at
+      // the repo root's lambda/sol-chat/index.ts, a sibling of cdk/, not underneath it,
+      // which fails synthesis with "entryPath ... should be under projectRoot" the moment
+      // this stack is actually deployed (caught by a real `cdk deploy` run, not `cdk
+      // synth`, which doesn't reach this check). Pointing both explicitly at the repo
+      // root — where this handler's own package.json/package-lock.json actually live —
+      // is what lets esbuild resolve its dependencies correctly regardless of entry's
+      // position relative to cdk/'s own directory.
+      projectRoot: path.join(__dirname, "..", ".."),
+      depsLockFilePath: path.join(__dirname, "..", "..", "package-lock.json"),
       // Response-streaming Lambda handlers wrap the export in the runtime-global
       // `awslambda.streamifyResponse(...)` (see lambda/sol-chat/index.ts) — esbuild must
       // not tree-shake that global away, and nothing else in this file's handler needs a
