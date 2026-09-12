@@ -7,7 +7,7 @@ import { Composer } from "./Composer";
 import { Greeting } from "./Greeting";
 import { CreditExhaustedModal } from "./CreditExhaustedModal";
 import { AskUserQuestionOverlay } from "./AskUserQuestionCard";
-import { ArtifactCanvas, type ActiveArtifact } from "./ArtifactCanvas";
+import { ArtifactCanvas, ArtifactCard, type ActiveArtifact } from "./ArtifactCanvas";
 import { useSolStream } from "./useSolStream";
 import { useSolSidebar } from "./SolSidebarContext";
 import { registerSolReadinessTask, resolveSolReadinessTask } from "./solReadinessGate";
@@ -121,7 +121,15 @@ export function SolChatView({
   // rename, a reload — either was the user's own action or happens before they're looking
   // at this specific text at all).
   const [titleJustGenerated, setTitleJustGenerated] = useState(false);
+  // `activeArtifact` is just "which page, if any, is the current candidate to show" —
+  // whether the full split-view canvas is actually OPEN is the separate showArtifactPanel
+  // flag below. Reopening/reloading a conversation always starts collapsed (a small card,
+  // not the split view), even when a past turn built something real — the split view only
+  // auto-opens itself the instant a build finishes LIVE in this session (see the
+  // stream.blocks effect below), the same way a "skill" action expands once when it runs
+  // and stays a quiet, re-openable card afterward rather than pinning itself open forever.
   const [activeArtifact, setActiveArtifact] = useState<ActiveArtifact | null>(() => findLatestArtifactInMessages(initialMessages));
+  const [showArtifactPanel, setShowArtifactPanel] = useState(false);
 
   const stream = useSolStream();
   const optimisticUserMessageIdRef = useRef<string | null>(null);
@@ -193,6 +201,7 @@ export function SolChatView({
     setModelTier(initialConversation?.modelTier ?? "BASIC");
     setTitleJustGenerated(false);
     setActiveArtifact(findLatestArtifactInMessages(initialMessages));
+    setShowArtifactPanel(false);
     stream.reset();
     // A conversation can arrive here with an already-unresolved pause baked into its
     // history — the user left mid-confirmation/mid-question and came back (reload, a
@@ -242,15 +251,27 @@ export function SolChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream.finalMessageId, stream.blocks, stream.usage]);
 
+  // Tracks which artifact the panel has already auto-opened FOR, so re-running the effect
+  // below (it fires on every block mutation, not just a genuinely new artifact) never
+  // re-opens a panel the user just deliberately closed for the same page.
+  const autoOpenedArtifactIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    // Auto-opens/updates the canvas the moment a page-building tool call in the LIVE
-    // stream succeeds — re-runs on every block mutation (a new tool call starting, an
-    // existing one's status flipping to success), picking the most recent match each time.
+    // Auto-opens the canvas the moment a page-building tool call in the LIVE stream
+    // succeeds — but only the first time THIS artifact is seen; re-closing it (the user's
+    // own action) sticks for the rest of this page's life, same as a "skill" card that ran
+    // once and collapses back down rather than pinning itself open. Still keeps
+    // activeArtifact itself up to date on every match, purely so the collapsed card always
+    // reflects the latest build even when the panel itself stays closed.
     const toolBlocks = stream.blocks.filter(isToolUseBlock);
     for (let i = toolBlocks.length - 1; i >= 0; i--) {
       const artifact = extractArtifact(toolBlocks[i]);
       if (artifact) {
         setActiveArtifact(artifact);
+        if (autoOpenedArtifactIdRef.current !== artifact.templateId) {
+          autoOpenedArtifactIdRef.current = artifact.templateId;
+          setShowArtifactPanel(true);
+        }
         break;
       }
     }
@@ -475,7 +496,7 @@ export function SolChatView({
         </div>
       ) : (
         <div className="sol-split-row" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "row" }}>
-          <div className="sol-split-chat" style={{ position: "relative", flex: activeArtifact ? "1 1 50%" : "1 1 100%", minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <div className="sol-split-chat" style={{ position: "relative", flex: showArtifactPanel ? "1 1 50%" : "1 1 100%", minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
             <MessageList
               messages={messages}
               conversationId={conversation?.id ?? "pending"}
@@ -485,7 +506,12 @@ export function SolChatView({
               confirmBusy={streaming && pendingConfirmMessageId !== null}
             />
             <div style={{ padding: "0 1.25rem 1.25rem" }}>
-              <div style={{ maxWidth: 760, margin: "0 auto" }}>{composer}</div>
+              <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                {activeArtifact && !showArtifactPanel && (
+                  <ArtifactCard artifact={activeArtifact} onOpen={() => setShowArtifactPanel(true)} />
+                )}
+                {composer}
+              </div>
             </div>
             {pendingQuestionBlock && (
               <AskUserQuestionOverlay
@@ -495,9 +521,9 @@ export function SolChatView({
               />
             )}
           </div>
-          {activeArtifact && (
+          {activeArtifact && showArtifactPanel && (
             <div className="sol-split-canvas" style={{ flex: "1 1 50%", minWidth: 0, minHeight: 0 }}>
-              <ArtifactCanvas artifact={activeArtifact} onClose={() => setActiveArtifact(null)} />
+              <ArtifactCanvas artifact={activeArtifact} onClose={() => setShowArtifactPanel(false)} />
             </div>
           )}
           <style>{`

@@ -7,7 +7,7 @@ import { Brain, Check, MessageSquarePlus, Pencil, Search, Settings, Trash2, X } 
 import { SolAccountFooter } from "./SolAccountFooter";
 import { exitSolToPlexo } from "./SolModeSwitch";
 import { registerSolReadinessTask, resolveSolReadinessTask } from "./solReadinessGate";
-import type { ConversationSummary } from "./types";
+import { clearSolLastConversationCookie, type ConversationSummary } from "./types";
 
 // A hard browser reload fully remounts this component (unlike navigating between SOL's own
 // routes, which keeps the layout — and this sidebar — mounted), so it always started from
@@ -115,6 +115,12 @@ export function ThreadSidebar({
     // the blank composer unconditionally instead of its normal "resume the most recent
     // conversation" landing behavior — otherwise, once any real conversation exists, this
     // would just bounce straight back into it instead of ever showing a blank composer.
+    //
+    // Also clears the "last conversation" session cookie — without this, the CURRENT view
+    // goes blank but the cookie still points at the conversation you just left, so the next
+    // time SOL is opened (even later in this same session) it would resume that one right
+    // back instead of staying on a fresh chat.
+    clearSolLastConversationCookie();
     router.push("/dashboard/sol?new=1");
   }
 

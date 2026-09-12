@@ -13,6 +13,40 @@ export type ActiveArtifact = {
 
 type ArtifactPage = { id: string; name: string; kind: string; compiledHtml: string; previewHtml: string };
 
+/** The collapsed form of the canvas — a small, re-openable card (not the split view
+ * itself), the same "ran once, now a quiet summary you can expand again" shape a skill
+ * invocation has, rather than a panel that pins itself open. Shown whenever an artifact
+ * exists but the user (or a fresh page load) isn't currently looking at its full preview. */
+export function ArtifactCard({ artifact, onOpen }: { artifact: ActiveArtifact; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.6rem",
+        width: "100%",
+        padding: "0.65rem 0.85rem",
+        borderRadius: 12,
+        border: "1px solid rgba(255,255,255,0.09)",
+        background: "rgba(255,255,255,0.03)",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        textAlign: "left",
+      }}
+    >
+      <span style={{ display: "grid", placeItems: "center", width: 26, height: 26, borderRadius: 7, background: "linear-gradient(135deg, var(--brand-light), var(--brand-deep))", color: "#fff", flexShrink: 0 }}>
+        <Eye size={13} />
+      </span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: "0.8rem", fontWeight: 600, color: "#f0f2ff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {artifact.name}
+      </span>
+      <span style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.4)", flexShrink: 0 }}>View preview</span>
+    </button>
+  );
+}
+
 /**
  * SOL's split-screen canvas: a live preview + raw-code view of a page SOL just built,
  * alongside the ongoing conversation — mirroring Claude/ChatGPT's artifact/canvas pattern.

@@ -112,3 +112,16 @@ export type CreditInfo = { requiredCredits: number; availableCredits: number };
  * (a plain, "no 'use client'" module) rather than in SolChatView.tsx so the server-side page
  * doesn't have to import anything from a client-only file to get the name right. */
 export const SOL_LAST_CONVERSATION_COOKIE = "sol_last_conversation";
+
+/** Clears the remembered "last conversation" cookie — "New chat" needs this so the NEXT
+ * time /dashboard/sol is opened (in this same session) it actually shows a blank composer
+ * again instead of the conversation you just deliberately navigated away from. Without
+ * this, "New chat" only cleared the CURRENT view; the cookie still pointed at the old
+ * conversation, so leaving and reopening SOL resumed it right back. */
+export function clearSolLastConversationCookie(): void {
+  try {
+    document.cookie = `${SOL_LAST_CONVERSATION_COOKIE}=; path=/; max-age=0`;
+  } catch {
+    // Best-effort — worst case the old conversation resumes once more next time.
+  }
+}
