@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { resolveUser } from "@/lib/auth/resolveUser";
+import type { resolveUser } from "@/lib/auth/resolveUser";
 import { slugify } from "@/server/slugDynamo";
 import { encryptDigitalAccessSecret, encryptBankDetail, encryptPaystackKey, encryptMaildripKey, encryptStripeKey, decryptPaystackKey, decryptMaildripKey, decryptStripeKey, tryDecrypt } from "@/lib/crypto";
 import { isKnownCurrency, isPaystackCompatibleCurrency } from "@/lib/commerce/currency";
 import { ensureProductDetailLayout } from "@/lib/commerce/productDetailLayout";
 import { ensureStorefrontLayout, getStorefrontSlug, renameStorefrontSlug } from "@/lib/commerce/storefrontLayout";
-import { maskSecret } from "@/lib/commerce/adminAuthDynamo";
+import { maskSecret } from "@/lib/commerce/maskSecret";
 import { resolveCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { resendDigitalDelivery } from "@/lib/commerce/digitalDeliveryDynamo";
 import { sendCommerceStripeAccessRequestNotificationEmail, sendCommerceWithdrawalRequestNotificationEmail } from "@/lib/email";

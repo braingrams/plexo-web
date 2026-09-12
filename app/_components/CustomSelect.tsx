@@ -36,15 +36,21 @@ export function CustomSelect({
   onChange,
   placeholder,
   className,
+  menuWidth,
 }: {
   value: string;
-  options: Array<{ label: string; value: string; disabled?: boolean }>;
+  options: Array<{ label: string; value: string; disabled?: boolean; description?: string }>;
   disabled?: boolean;
   onChange: (val: string) => void;
   /** Shown when value doesn't match any option (e.g. no selection yet) — falls back to the raw value. */
   placeholder?: string;
   /** Applied to the trigger button, for callers that need a different size/shape than the default. */
   className?: string;
+  /** Overrides the dropdown panel's width instead of matching the trigger's own width 1:1 —
+   * for a deliberately compact trigger (e.g. a toolbar icon-row switcher) whose options still
+   * need room for a label + description on two lines, matching how e.g. Gemini's own compact
+   * model-picker trigger opens a much wider panel than the trigger button itself. */
+  menuWidth?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
@@ -61,18 +67,23 @@ export function CustomSelect({
     const el = triggerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
+    const width = menuWidth ?? rect.width;
     const menuHeight = Math.min(320, options.length * 40 + 16);
     const spaceBelow = window.innerHeight - rect.bottom;
     const shouldOpenUpwards = spaceBelow < menuHeight + 12 && rect.top > spaceBelow;
+    // Right-align a wider-than-trigger menu when it would otherwise overflow the viewport's
+    // right edge — a plain `left: rect.left` is fine when width matches the trigger, but not
+    // once the panel is deliberately wider than a small trigger sitting near that edge.
+    const left = menuWidth && rect.left + width > window.innerWidth - 12 ? Math.max(12, rect.right - width) : rect.left;
     setMenuStyle({
       position: "fixed",
-      left: rect.left,
-      width: rect.width,
+      left,
+      width,
       ...(shouldOpenUpwards
         ? { bottom: window.innerHeight - rect.top + 6 }
         : { top: rect.bottom + 6 }),
     });
-  }, [options.length]);
+  }, [options.length, menuWidth]);
 
   useEffect(() => {
     if (!open) return;
@@ -154,6 +165,7 @@ export function CustomSelect({
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
+                    gap: "0.5rem",
                     padding: "0.625rem 0.875rem",
                     background: isActive ? "var(--brand-subtle)" : "transparent",
                     border: "none",
@@ -167,8 +179,13 @@ export function CustomSelect({
                     transition: "background 0.15s, color 0.15s",
                   }}
                 >
-                  <span>{opt.label}</span>
-                  {isActive && <span style={{ color: "var(--brand)", display: "flex", alignItems: "center" }}><IconCheck /></span>}
+                  <span style={{ display: "flex", flexDirection: "column", gap: "0.1rem", minWidth: 0 }}>
+                    <span>{opt.label}</span>
+                    {opt.description && (
+                      <span style={{ fontSize: "0.72rem", fontWeight: 400, color: "var(--text-faint)" }}>{opt.description}</span>
+                    )}
+                  </span>
+                  {isActive && <span style={{ color: "var(--brand)", display: "flex", alignItems: "center", flexShrink: 0 }}><IconCheck /></span>}
                 </button>
               );
             })}

@@ -1,0 +1,1762 @@
+import { randomUUID } from "node:crypto";
+import { uploadObject, deleteObjects } from "@/lib/storage";
+import { compileToHTML } from "@/lib/compiler";
+import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
+import { getTierFeatures } from "@/lib/subscription";
+import type { resolveUser } from "@/lib/auth/resolveUser";
+import { getDomainLimit } from "@/lib/domainLimit";
+import { removeCloudFrontDomain, requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
+import { resolveStrataProjectId, fetchStrataTokens } from "@/server/strataDynamo";
+import { getPagesDomain } from "@/server/pagesDomain";
+import {
+  slugify,
+  isValidSlugSegment,
+  isReservedTopLevelSlug,
+  ensureUniqueSlug,
+  isSameOrAncestor,
+  getPageTree,
+  pathForPage,
+  getDescendantIds,
+} from "@/server/slugDynamo";
+import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
+import { scanPublishedDomain } from "@/lib/safeBrowsing";
+import { BLOG_MCP_TOOLS, BLOG_TOOL_NAMES, handleBlogTool } from "./blogTools";
+import type { RevalidateFn } from "@/lib/blog/savePostCore";
+import { COMMERCE_MCP_TOOLS, COMMERCE_TOOL_NAMES, handleCommerceTool } from "./commerceTools";
+import { LMS_MCP_TOOLS, LMS_TOOL_NAMES, handleLmsTool } from "./lmsTools";
+import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
+import { User } from "@/lib/db/coreEntities";
+
+// Split out of lib/mcp/mcpServer.ts so dispatchMcpTool (and everything it needs) has NO
+// `next/server` import anywhere in its own module or its import graph — mcpServer.ts itself
+// imports { NextRequest, NextResponse } from "next/server" for handleMcpJsonRpc (the real
+// Next.js API route handler for /api/v1/mcp), and esbuild bundles a whole module's imports
+// regardless of which export within it is actually used. lambda/sol-chat/index.ts (a bare,
+// standalone Lambda handler bundled by CDK's NodejsFunction/esbuild at deploy time — see
+// cdk/lib/compute-stack.ts's SolChatFn) needs dispatchMcpTool for SOL's agent loop
+// (lib/ai/solAgent.ts) but must never pull in next/server, which transitively drags in real
+// Next.js server runtime code (next/dist/server/lib/trace/tracer.js) that requires
+// "@opentelemetry/api" — an optional peer dependency Next.js handles internally, not a real
+// dependency of this repo, so esbuild's standalone bundle fails to resolve it.
+//
+// Only the `resolveUser` TYPE (via `typeof resolveUser` in ResolvedUser below) is needed
+// here, imported with `import type` so it's erased before esbuild ever sees it — this file
+// never calls resolveUser() itself. mcpServer.ts re-exports both `dispatchMcpTool` and
+// `ResolvedUser` from here so handleMcpJsonRpc's existing call site, and any other file that
+// imported them from mcpServer.ts, keep working completely unchanged.
+
+const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+
+const RESERVED_SUBDOMAINS = new Set([
+  "admin", "api", "auth", "dashboard", "plexobuilder", "www", "localhost", "dev",
+  "test", "prod", "staging", "status", "dns", "mail", "email", "support", "help",
+  "static", "assets", "sdk", "pub", "published", "templates", "compile", "settings",
+  "profile", "domains", "account", "login", "register", "signup", "logout", "signin"
+]);
+
+const SCHEMA_HINT =
+  "Every row must already be a fully hydrated layout: { id, style, columns: [{ id, width, elements: [{ id, type, style, attributes }] }] }. " +
+  "Shorthand content blocks like { \"type\": \"products\", \"content\": { \"items\": [...] } } are not accepted here — expand each item into its own " +
+  "column with real elements (e.g. one column per product, each with a heading/image/paragraph for name/price/description) before calling this tool. " +
+  "See this tool's description for a full worked example.";
+
+export type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
+
+/**
+ * Validates designJson against the exact same TemplateJSONSchema the dashboard's
+ * own save endpoint enforces. Throws with an actionable message (fed back to the
+ * calling AI as an MCP tool error) instead of silently accepting a lossy shape —
+ * callers get one clean shot to retry with the corrected, fully hydrated JSON.
+ */
+function validateDesignJson(rawDesignJson: any): any {
+  const hydrated = hydrateStructuralDefaults(rawDesignJson);
+  const validation = TemplateJSONSchema.safeParse(hydrated);
+  if (!validation.success) {
+    throw new Error(`designJson failed schema validation: ${formatValidationIssues(validation.error)}. ${SCHEMA_HINT}`);
+  }
+  return validation.data;
+}
+
+/**
+ * Shared gate for every path that creates a RAW_UPLOAD page (create_raw_landing_page,
+ * publish_raw_landing_page, and the raw branch of create_landing_page_subpage) — mirrors
+ * the REST /api/v1/templates/upload-raw route's AUP-acceptance and daily-rate-limit checks
+ * exactly, since MCP is a second front door onto the same unsanitized-HTML capability.
+ * Throws an actionable error (fed back to the calling AI) rather than silently proceeding
+ * or silently accepting on the account's behalf.
+ */
+async function assertRawUploadAllowed(userId: string, organizationId: string, acceptAup: boolean): Promise<void> {
+  const { data: user } = await User.get({ id: userId }).go();
+  if (!user?.aupAcceptedAt) {
+    if (!acceptAup) {
+      throw new Error(
+        "This creates a page that serves unsanitized HTML/CSS/JS as-is — the account must accept the " +
+        "Acceptable Use Policy first (see /legal/acceptable-use). Show the user this policy and only retry " +
+        "this call with acceptAup: true once they've explicitly agreed."
+      );
+    }
+    await User.patch({ id: userId }).set({ aupAcceptedAt: new Date().toISOString() }).go();
+  }
+
+  // Org-scoped, not global across every org this user has ever created templates in —
+  // same adaptation as app/api/v1/templates/upload-raw/route.ts's identical rate-limit
+  // check, since Template has no cross-org index over userId to check this globally.
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go({ pages: "all" });
+  const recentUploadCount = orgTemplates.filter(
+    (t) => t.userId === userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
+  ).length;
+  if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
+    throw new Error(`You've reached the raw-upload limit of ${RAW_UPLOAD_DAILY_LIMIT} per 24 hours. Try again later.`);
+  }
+}
+
+/**
+ * Validates and links a domain to an existing template — shared by
+ * publish_landing_page (domain arg on a freshly-created template) and
+ * publish_existing_landing_page (an already-existing one). Correctly
+ * rejects re-linking a domain owned by a different account (409-equivalent
+ * thrown error) — the same check app/api/v1/publish/route.ts's REST
+ * counterpart already enforces.
+ */
+async function linkDomainToTemplate(
+  resolved: { userId: string; organizationId: string; subscriptionPlan: string; customDomainLimit: number | null },
+  templateId: string,
+  rawDomainInput: string,
+  domainTypeInput?: "SUBDOMAIN" | "CUSTOM"
+): Promise<{
+  finalDomain: string;
+  publishedUrl: string;
+  routingEndpoint: string | undefined;
+  certificateValidationName: string | undefined;
+  certificateValidationValue: string | undefined;
+}> {
+  const rawDomain = rawDomainInput.trim().toLowerCase();
+  if (!rawDomain) {
+    throw new Error("A domain is required to publish.");
+  }
+
+  // Tenant subdomains live on the dedicated pages domain (server/pagesDomain.ts),
+  // isolated from the dashboard's own cookie/session domain — not the app's own
+  // hostname. This function previously derived baseDomain from NEXT_PUBLIC_APP_URL
+  // directly, missing the plexopages.io migration entirely: every subdomain published
+  // through MCP was still landing on the dashboard's own domain regardless of that fix.
+  const pagesDomain = getPagesDomain();
+
+  let domainType = domainTypeInput;
+  if (!domainType) {
+    domainType = rawDomain.includes(".") ? "CUSTOM" : "SUBDOMAIN";
+  }
+
+  let finalDomain = rawDomain;
+  if (domainType === "SUBDOMAIN") {
+    if (!SUBDOMAIN_REGEX.test(rawDomain)) {
+      throw new Error("Subdomain slug must be lowercase alphanumeric characters or hyphens.");
+    }
+    if (RESERVED_SUBDOMAINS.has(rawDomain)) {
+      throw new Error(`Subdomain '${rawDomain}' is reserved.`);
+    }
+    finalDomain = `${rawDomain}.${pagesDomain}`;
+  } else {
+    if (!DOMAIN_REGEX.test(rawDomain)) {
+      throw new Error("Invalid custom domain format.");
+    }
+    if (rawDomain.endsWith("." + pagesDomain) || rawDomain === pagesDomain) {
+      throw new Error("Custom domains cannot end with the platform pages domain.");
+    }
+  }
+
+  // PublishedDomain has no org-wide index (only templateId-primary and byDomain-GSI1,
+  // see contentEntities.ts) — fan out per org root template, same bound every other
+  // ported org-wide domain count uses (app/api/v1/domains/route.ts, publish/route.ts).
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+  const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
+  const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
+  const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);
+  const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
+  if (currentDomainCount >= domainLimit) {
+    throw new Error(`Published domain limit reached (${domainLimit}). Unlink an existing domain to publish a new one.`);
+  }
+
+  const { data: domainMatches } = await PublishedDomain.query.byDomain({ domain: finalDomain }).go();
+  const existingDomain = domainMatches[0] ?? null;
+  if (existingDomain) {
+    if (existingDomain.organizationId !== resolved.organizationId) {
+      throw new Error(`Domain '${finalDomain}' is already registered by another account.`);
+    }
+    // templateId is part of this entity's own primary key (see contentEntities.ts) —
+    // ElectroDB can't .set() a key-composite attribute in place, so a real re-link moves
+    // the item via create-at-new-key + remove-old-key, same pattern used everywhere else
+    // this migration has hit the same constraint (BlogPost slug rename, this same
+    // re-link in app/api/v1/domains/route.ts and app/api/v1/publish/route.ts).
+    if (existingDomain.templateId !== templateId) {
+      await PublishedDomain.create({ ...existingDomain, templateId }).go();
+      await PublishedDomain.remove({ templateId: existingDomain.templateId, id: existingDomain.id }).go();
+    }
+  } else {
+    // A CUSTOM domain needs a real CloudFront distribution tenant (cdk/lib/published-
+    // sites-stack.ts) before it has any valid routing or TLS cert — without this, the
+    // database row alone would never actually work when visited. Connecting one is now a
+    // two-phase, asynchronous process (see lib/cloudfrontDomains.ts's own comment): this
+    // only requests the certificate and records what's needed to finish later;
+    // lib/lambda/certificateAttachment.ts's scheduled check creates the actual
+    // distribution tenant once ACM issues it.
+    let cfRoutingEndpoint: string | undefined;
+    let certificateArn: string | undefined;
+    let certificateValidationName: string | undefined;
+    let certificateValidationValue: string | undefined;
+    if (domainType === "CUSTOM") {
+      const result = await requestCustomDomainConnection(finalDomain);
+      cfRoutingEndpoint = result.routingEndpoint;
+      certificateArn = result.certificateArn;
+      certificateValidationName = result.certificateValidationName;
+      certificateValidationValue = result.certificateValidationValue;
+    }
+    await PublishedDomain.create({
+      id: randomUUID(),
+      userId: resolved.userId,
+      organizationId: resolved.organizationId,
+      templateId,
+      domain: finalDomain,
+      type: domainType,
+      ...(domainType === "CUSTOM" ? { certificateArn, certificateStatus: "PENDING_VALIDATION" as const, certificateValidationName, certificateValidationValue } : {}),
+    }).go();
+    const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+    return {
+      finalDomain,
+      publishedUrl: `${protocol}://${finalDomain}`,
+      routingEndpoint: cfRoutingEndpoint,
+      certificateValidationName,
+      certificateValidationValue,
+    };
+  }
+
+  const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+  return { finalDomain, publishedUrl: `${protocol}://${finalDomain}`, routingEndpoint: undefined, certificateValidationName: undefined, certificateValidationValue: undefined };
+}
+
+export const PLEXO_MCP_TOOLS = [
+  {
+    name: "publish_landing_page",
+    title: "Publish Landing Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    description: `Creates, compiles, and publishes a landing page template to a subdomain or custom domain in 1 step.
+
+IMPORTANT INSTRUCTION FOR AI CLIENTS:
+The designJson argument MUST be a fully hydrated layout tree containing body style and rows array. There is no shorthand format —
+do NOT send rows shaped like { "type": "products", "content": { "items": [...] } }. That will be REJECTED with a validation error.
+Every row MUST already contain a 'columns' array with percentage widths ('100%', '50%', '33.33%'), and each column MUST contain an
+'elements' array with fully-styled component objects ('heading', 'paragraph', 'button', 'card', 'image', 'menu', 'social', 'divider',
+'spacer', 'form_container'). For any repeated-item section (products, features, testimonials, pricing tiers, etc.) YOU must expand
+each item into its own column with real elements — one column per item — rather than passing a list for the server to interpret.
+
+EXAMPLE VALID designJson PAYLOAD (hero row, plus a 3-item product grid row):
+{
+  "body": {
+    "style": { "backgroundColor": "#08090f", "color": "#f0f2ff", "fontFamily": "Inter, sans-serif", "htmlTitle": "Bulum SaaS Platform" },
+    "rows": [
+      {
+        "id": "row-hero",
+        "style": { "paddingTop": "80px", "paddingBottom": "80px" },
+        "columns": [
+          {
+            "id": "col-hero",
+            "width": "100%",
+            "elements": [
+              { "type": "heading", "style": { "fontSize": "48px", "fontWeight": "800", "textAlign": "center", "color": "#ffffff" }, "attributes": { "text": "Build & Scale Faster" } },
+              { "type": "paragraph", "style": { "fontSize": "18px", "color": "#94a3b8", "textAlign": "center" }, "attributes": { "text": "The ultimate platform for modern digital teams." } },
+              { "type": "button", "style": { "textAlign": "center", "backgroundColor": "#8b5cf6", "color": "#ffffff", "borderRadius": "12px", "paddingTop": "14px", "paddingBottom": "14px", "paddingLeft": "28px", "paddingRight": "28px" }, "attributes": { "text": "Start Free Trial", "href": "#signup" } }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "row-products",
+        "style": { "paddingTop": "60px", "paddingBottom": "60px" },
+        "columns": [
+          { "id": "col-product-1", "width": "33.33%", "elements": [
+            { "type": "image", "style": { "width": "100%", "borderRadius": "12px" }, "attributes": { "src": "https://...", "alt": "Urban Runner" } },
+            { "type": "heading", "style": { "fontSize": "20px", "marginTop": "12px" }, "attributes": { "text": "Urban Runner" } },
+            { "type": "paragraph", "style": { "fontSize": "14px", "color": "#94a3b8" }, "attributes": { "text": "Lightweight sneakers for daily adventures" } },
+            { "type": "paragraph", "style": { "fontSize": "16px", "fontWeight": "700", "color": "#8b5cf6" }, "attributes": { "text": "$89" } }
+          ] },
+          { "id": "col-product-2", "width": "33.33%", "elements": [
+            { "type": "image", "style": { "width": "100%", "borderRadius": "12px" }, "attributes": { "src": "https://...", "alt": "Classic Court" } },
+            { "type": "heading", "style": { "fontSize": "20px", "marginTop": "12px" }, "attributes": { "text": "Classic Court" } },
+            { "type": "paragraph", "style": { "fontSize": "14px", "color": "#94a3b8" }, "attributes": { "text": "Timeless style with modern comfort" } },
+            { "type": "paragraph", "style": { "fontSize": "16px", "fontWeight": "700", "color": "#8b5cf6" }, "attributes": { "text": "$79" } }
+          ] },
+          { "id": "col-product-3", "width": "33.33%", "elements": [
+            { "type": "image", "style": { "width": "100%", "borderRadius": "12px" }, "attributes": { "src": "https://...", "alt": "Street Flex" } },
+            { "type": "heading", "style": { "fontSize": "20px", "marginTop": "12px" }, "attributes": { "text": "Street Flex" } },
+            { "type": "paragraph", "style": { "fontSize": "14px", "color": "#94a3b8" }, "attributes": { "text": "Flexible performance footwear" } },
+            { "type": "paragraph", "style": { "fontSize": "16px", "fontWeight": "700", "color": "#8b5cf6" }, "attributes": { "text": "$99" } }
+          ] }
+        ]
+      }
+    ]
+  }
+}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Title or brand name of the landing page (e.g. 'Kicks Store', 'Bulum SaaS')",
+        },
+        designJson: {
+          type: "object",
+          description: "Plexo layout schema object generated by the AI containing body style and rows array with columns and elements.",
+          required: ["body"],
+          properties: {
+            body: {
+              type: "object",
+              required: ["style", "rows"],
+              properties: {
+                style: {
+                  type: "object",
+                  description: "Global CSS style and page metadata.",
+                  required: ["backgroundColor", "color", "fontFamily", "htmlTitle"],
+                  properties: {
+                    backgroundColor: {
+                      type: "string",
+                      description: "Background color of the page in hex format (e.g. '#08090f' for dark mode, '#ffffff' for light mode)."
+                    },
+                    color: {
+                      type: "string",
+                      description: "Default text color of the page in hex format (e.g. '#f0f2ff' for dark mode, '#1e293b' for light mode)."
+                    },
+                    fontFamily: {
+                      type: "string",
+                      description: "Font family of the page text (e.g. 'Inter, sans-serif')."
+                    },
+                    htmlTitle: {
+                      type: "string",
+                      description: "The HTML title of the page (matches the brand name or page title, e.g. 'Bulum SaaS Platform')."
+                    }
+                  }
+                },
+                rows: {
+                  type: "array",
+                  description: "Array of row objects. Every row MUST already have a 'columns' array — there is no shorthand row type; rows without 'columns' are rejected.",
+                  items: {
+                    type: "object",
+                    required: ["id", "style", "columns"],
+                    properties: {
+                      id: { type: "string" },
+                      style: { type: "object" },
+                      columns: {
+                        type: "array",
+                        description: "Required. One entry per column — for a repeated-item section (products, features, testimonials), put one item per column here, not a nested list.",
+                        items: {
+                          type: "object",
+                          required: ["id", "width", "elements"],
+                          properties: {
+                            id: { type: "string" },
+                            width: { type: "string", description: "Percentage width (e.g. '100%', '50%', '33.33%')." },
+                            elements: {
+                              type: "array",
+                              items: {
+                                type: "object",
+                                required: ["id", "type", "style", "attributes"],
+                                properties: {
+                                  type: {
+                                    type: "string",
+                                    enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video", "accordion", "blog_title", "blog_content", "blog_featured_image", "blog_date", "blog_author", "blog_categories", "blog_comments", "blog_post_list"],
+                                  },
+                                  style: { type: "object" },
+                                  attributes: { type: "object", description: "Component attributes (text, href, src, title, description, links, fields). For type 'html', raw markup goes under 'htmlContent' — NOT 'text'." },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        compiledHtml: {
+          type: "string",
+          description: "Ignored. HTML is always compiled server-side from the validated designJson (and sanitized) so the published page can never drift from what's editable in the Plexo dashboard.",
+        },
+        domain: {
+          type: "string",
+          description: "Subdomain slug (e.g. 'kicks', 'bulum') or custom domain ('kicks.com')",
+        },
+        type: {
+          type: "string",
+          enum: ["SUBDOMAIN", "CUSTOM"],
+          description: "Domain routing type (SUBDOMAIN or CUSTOM)",
+        },
+      },
+      required: ["name", "designJson"],
+    },
+  },
+  {
+    name: "create_email_template",
+    title: "Create Email Template",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    description: `Creates and saves a responsive HTML email template for newsletters or promotional campaigns.
+
+Uses the SAME fully-hydrated layout schema as publish_landing_page — designJson MUST be { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [{ "id", "type", "style", "attributes" }] }] }] } }. There is no shorthand row format; rows without a 'columns' array are rejected. Text content for heading/paragraph/text/button elements MUST be under attributes.text (NOT attributes.content) — a "content" key is silently ignored by the editor and renders as empty/placeholder text. See publish_landing_page's description for a full worked example.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Subject line or template title (e.g. 'Weekly Newsletter #42')",
+        },
+        designJson: {
+          type: "object",
+          description: "Plexo layout schema object (same shape as publish_landing_page's designJson) containing body style and a fully hydrated rows array with columns and elements.",
+          required: ["body"],
+          properties: {
+            body: {
+              type: "object",
+              required: ["style", "rows"],
+              properties: {
+                style: {
+                  type: "object",
+                  description: "Global CSS style and page metadata.",
+                  required: ["backgroundColor", "color", "fontFamily", "htmlTitle"],
+                  properties: {
+                    backgroundColor: { type: "string", description: "Background color of the email in hex format (e.g. '#F4F2F8')." },
+                    color: { type: "string", description: "Default text color of the email in hex format." },
+                    fontFamily: { type: "string", description: "Font family of the email text (e.g. 'Arial, Helvetica, sans-serif')." },
+                    htmlTitle: { type: "string", description: "The HTML title of the email (matches the subject/brand name)." },
+                  },
+                },
+                rows: {
+                  type: "array",
+                  description: "Array of row objects. Every row MUST already have a 'columns' array — there is no shorthand row type; rows without 'columns' are rejected.",
+                  items: {
+                    type: "object",
+                    required: ["id", "style", "columns"],
+                    properties: {
+                      id: { type: "string" },
+                      style: { type: "object" },
+                      columns: {
+                        type: "array",
+                        description: "Required. One entry per column.",
+                        items: {
+                          type: "object",
+                          required: ["id", "width", "elements"],
+                          properties: {
+                            id: { type: "string" },
+                            width: { type: "string", description: "Percentage width (e.g. '100%', '50%', '33.33%')." },
+                            elements: {
+                              type: "array",
+                              items: {
+                                type: "object",
+                                required: ["id", "type", "style", "attributes"],
+                                properties: {
+                                  type: {
+                                    type: "string",
+                                    enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video", "accordion", "blog_title", "blog_content", "blog_featured_image", "blog_date", "blog_author", "blog_categories", "blog_comments", "blog_post_list"],
+                                  },
+                                  style: { type: "object" },
+                                  attributes: {
+                                    type: "object",
+                                    description: "Component attributes. IMPORTANT: text content for 'heading'/'paragraph'/'text'/'button' elements goes under the key 'text' (NOT 'content'). Images use 'src'/'alt'. Buttons/links use 'href'. Raw markup for type 'html' goes under 'htmlContent' (NOT 'text').",
+                                    properties: {
+                                      text: { type: "string", description: "Visible text for heading/paragraph/text/button elements." },
+                                      href: { type: "string", description: "Link URL for button/card elements." },
+                                      src: { type: "string", description: "Image URL for image elements." },
+                                      alt: { type: "string", description: "Alt text for image elements." },
+                                      htmlContent: { type: "string", description: "Raw HTML markup for type 'html' elements only." },
+                                    },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        compiledHtml: {
+          type: "string",
+          description: "Ignored. HTML is always compiled server-side from the validated designJson (and sanitized).",
+        },
+      },
+      required: ["name", "designJson"],
+    },
+  },
+  {
+    name: "get_strata_tokens",
+    title: "Get Strata Design Tokens",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description: `Checks whether the account has a Strata design-system project connected and, if so, fetches its design tokens (colors, typography, spacing, etc).
+
+Call this BEFORE publish_landing_page or create_email_template whenever the user wants their brand/Strata colors and styles used. Call with no arguments first to check the currently connected project. If the result has "connected": false, ask the user for their Strata project id (found in their Strata project's snapshot/share URL) and call this tool again with that projectId — it connects the account to that project (remembered for future calls) and fetches its tokens in the same call.
+
+Map the returned tokens into designJson style fields: color-type tokens into backgroundColor/color/borderColor, spacing-type tokens into padding/margin values, and any font-related tokens into fontFamily/fontSize. Prefer tokens whose "name" hints at their role (e.g. a name containing "primary", "background", "text", "accent").`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: {
+          type: "string",
+          description: "Optional. The user's Strata project id to connect (or switch to). Omit to check/use the previously connected project, if any.",
+        },
+      },
+    },
+  },
+  {
+    name: "update_template",
+    title: "Update Landing Page Template",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description: `Edits an existing landing page or email template in place, under the same template ID. Recompiles and re-saves the HTML from the new designJson — the editable URL stays the same, and for a published landing page the live URL and domain are unchanged too (this does not publish/unpublish or change the domain; call publish_landing_page again with a domain for that).
+
+This is for drag-and-drop BUILDER pages only — it REJECTS a page created via create_raw_landing_page/publish_raw_landing_page/create_landing_page_subpage's htmlContent option. Use update_raw_landing_page for those instead. If unsure which kind an existing page is, check its sourceType via list_landing_pages/get_landing_page_pages first.
+
+Uses the SAME fully-hydrated layout schema as publish_landing_page/create_email_template — designJson MUST be { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [{ "id", "type", "style", "attributes" }] }] }] } }. There is no shorthand row format; rows without a 'columns' array are rejected, and this replaces the ENTIRE designJson — to edit one section, fetch the current template's designJson first (via list_landing_pages/list_email_templates, or the Plexo dashboard) and send back the full modified tree, not just the changed part. See publish_landing_page's description for a full worked example.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the template to update — the templateId returned by publish_landing_page, create_email_template, list_landing_pages, or list_email_templates.",
+        },
+        name: {
+          type: "string",
+          description: "Optional new title for the template. Omit to keep the existing name.",
+        },
+        designJson: {
+          type: "object",
+          description: "The FULL replacement Plexo layout schema (same shape as publish_landing_page's designJson) — not a partial patch.",
+        },
+        compiledHtml: {
+          type: "string",
+          description: "Ignored. HTML is always compiled server-side from the validated designJson (and sanitized).",
+        },
+      },
+      required: ["templateId", "designJson"],
+    },
+  },
+  {
+    name: "update_raw_landing_page",
+    title: "Update Raw HTML Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description: `Replaces an existing RAW_UPLOAD page's HTML in place, under the same template ID — the editable URL, live URL, and domain (if published) are all unchanged. This is for pages created via create_raw_landing_page/publish_raw_landing_page/create_landing_page_subpage's htmlContent option ONLY — it REJECTS a drag-and-drop BUILDER page (use update_template for those). If unsure which kind an existing page is, check its sourceType via list_landing_pages/get_landing_page_pages first.
+
+This replaces the ENTIRE HTML document, not a patch — send back the full modified document. Same 1MB single-document scope as create_raw_landing_page.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the raw-upload page to update — the templateId returned by create_raw_landing_page, publish_raw_landing_page, list_landing_pages, or get_landing_page_pages.",
+        },
+        htmlContent: {
+          type: "string",
+          description: "The FULL replacement raw HTML document (up to 1MB) — not a partial patch.",
+        },
+        name: {
+          type: "string",
+          description: "Optional new title for the page. Omit to keep the existing name.",
+        },
+      },
+      required: ["templateId", "htmlContent"],
+    },
+  },
+  {
+    name: "create_landing_page",
+    title: "Create Landing Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    description: `Creates and saves a landing page template WITHOUT publishing it to a domain — use this when the user wants to build a page (or start a multi-page site) first and go live later. Call publish_existing_landing_page afterward with the returned templateId to link a subdomain or custom domain whenever they're ready. To create a page AND publish it in one step, use publish_landing_page instead.
+
+Uses the SAME fully-hydrated layout schema as publish_landing_page — designJson MUST be { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [...] }] }] } }. See publish_landing_page's description for a full worked example.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Title of the landing page (e.g. 'Kicks Store').",
+        },
+        designJson: {
+          type: "object",
+          description: "Plexo layout schema object — same shape as publish_landing_page's designJson.",
+        },
+      },
+      required: ["name", "designJson"],
+    },
+  },
+  {
+    name: "create_raw_landing_page",
+    title: "Create Raw HTML Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    description: `Creates a landing page from a RAW HTML document you supply directly, WITHOUT publishing it to a domain — for when the user wants a page built from hand-written or externally-sourced HTML/CSS/JS instead of Plexo's drag-and-drop builder. The page is served byte-for-byte as given, completely unsanitized (no designJson, no compilation) — this is a DIFFERENT storage mode from create_landing_page/publish_landing_page/update_template, which are for the drag-and-drop BUILDER pages built from designJson. Do NOT use this tool for a page you want to build with designJson — use create_landing_page instead.
+
+Scope: a single self-contained HTML document only (inline or CDN-linked CSS/JS), up to 1MB — no zip/multi-file sites with separate local asset files (that's a dashboard-only "import a website" feature with no MCP equivalent yet).
+
+Because this serves unsanitized content, the account must accept the Acceptable Use Policy once — see the acceptAup argument. Call publish_existing_landing_page afterward with the returned templateId to link a subdomain or custom domain, or use publish_raw_landing_page to create and publish in one step. To edit this page's HTML later, use update_raw_landing_page (NOT update_template — that tool now rejects raw-upload pages).`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Title of the landing page (e.g. 'Kicks Store').",
+        },
+        htmlContent: {
+          type: "string",
+          description: "The full, self-contained raw HTML document to serve as-is (up to 1MB). Inline or CDN-linked CSS/JS only — no separate local asset files.",
+        },
+        acceptAup: {
+          type: "boolean",
+          description: "Pass true ONLY after explicitly telling the user this publishes unsanitized HTML/CSS/JS as-is and getting their confirmation of the Acceptable Use Policy (/legal/acceptable-use). Not needed once the account has accepted it once before.",
+        },
+      },
+      required: ["name", "htmlContent"],
+    },
+  },
+  {
+    name: "publish_raw_landing_page",
+    title: "Publish Raw HTML Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    description: `Creates, and publishes to a domain, a landing page from a RAW HTML document you supply directly — the combined create+publish equivalent of create_raw_landing_page. See create_raw_landing_page's description for the unsanitized-content, AUP, and scope caveats (single self-contained HTML document, up to 1MB, no zip/multi-file sites). For drag-and-drop BUILDER pages built from designJson, use publish_landing_page instead — this tool is a different storage mode.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Title of the landing page (e.g. 'Kicks Store').",
+        },
+        htmlContent: {
+          type: "string",
+          description: "The full, self-contained raw HTML document to serve as-is (up to 1MB). Inline or CDN-linked CSS/JS only — no separate local asset files.",
+        },
+        acceptAup: {
+          type: "boolean",
+          description: "Pass true ONLY after explicitly telling the user this publishes unsanitized HTML/CSS/JS as-is and getting their confirmation of the Acceptable Use Policy (/legal/acceptable-use). Not needed once the account has accepted it once before.",
+        },
+        domain: {
+          type: "string",
+          description: "Subdomain slug (e.g. 'kicks') or custom domain ('kicks.com').",
+        },
+        type: {
+          type: "string",
+          enum: ["SUBDOMAIN", "CUSTOM"],
+          description: "Domain routing type. Inferred from the domain string if omitted.",
+        },
+      },
+      required: ["name", "htmlContent", "domain"],
+    },
+  },
+  {
+    name: "publish_existing_landing_page",
+    title: "Publish Existing Landing Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description: `Links a subdomain or custom domain to an already-existing landing page template — for a template created via create_landing_page, or the home page of a multi-page site (see create_landing_page_subpage) once its sub-pages are ready. Unlike publish_landing_page, this does NOT create a new template — it publishes the one you already have. Every sub-page nested under templateId automatically becomes reachable at this domain too (e.g. domain.com/about) — no separate publish call is needed per sub-page.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of an existing landing page template to publish — must be a home page (no parent), not a sub-page.",
+        },
+        domain: {
+          type: "string",
+          description: "Subdomain slug (e.g. 'kicks') or custom domain ('kicks.com').",
+        },
+        type: {
+          type: "string",
+          enum: ["SUBDOMAIN", "CUSTOM"],
+          description: "Domain routing type. Inferred from the domain string if omitted.",
+        },
+      },
+      required: ["templateId", "domain"],
+    },
+  },
+  {
+    name: "create_landing_page_subpage",
+    title: "Create Sub-Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    description: `Adds a new page nested under an existing landing page, reachable at <site domain>/<slug> — or nested deeper (e.g. /blog/post-1) if parentTemplateId is itself a sub-page rather than the home page. This is how a single landing page becomes a multi-page site (BUILDER and RAW_UPLOAD pages can be freely mixed within the same site — each page's own sourceType is independent of its siblings). No separate publish step is needed for sub-pages: they automatically become reachable once the site's home page has a domain linked (see publish_existing_landing_page). Requires an Ultra subscription plan — sub-pages are otherwise unlimited per site once enabled (the plan's template limit only counts home pages, not their sub-pages).
+
+Provide EITHER designJson (a drag-and-drop BUILDER sub-page) OR htmlContent (a raw-HTML sub-page, same unsanitized/AUP/1MB caveats as create_raw_landing_page) — not both. Omit both to create a blank BUILDER page (fill it in afterward with update_template using the returned templateId). Edit an existing sub-page's content afterward with update_template (BUILDER) or update_raw_landing_page (RAW_UPLOAD) depending on which mode it was created with.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        parentTemplateId: {
+          type: "string",
+          description: "ID of the page this new page should be nested under — the site's home page for a top-level page (e.g. /about), or another sub-page's ID to nest deeper (e.g. a 'Blog' page's ID to create /blog/post-1).",
+        },
+        name: {
+          type: "string",
+          description: "Friendly name of the page (e.g. 'About Us').",
+        },
+        slug: {
+          type: "string",
+          description: "Optional URL segment (e.g. 'about-us'). Auto-generated from name if omitted; auto-suffixed (about-us-2, ...) if it collides with a sibling page under the same parent.",
+        },
+        designJson: {
+          type: "object",
+          description: "Optional. Plexo layout schema object — same shape as publish_landing_page's designJson. Creates a drag-and-drop BUILDER sub-page. Omit (along with htmlContent) to create a blank BUILDER page. Mutually exclusive with htmlContent.",
+        },
+        htmlContent: {
+          type: "string",
+          description: "Optional. A full, self-contained raw HTML document (up to 1MB) to serve as-is. Creates a RAW_UPLOAD sub-page instead of a BUILDER one. Mutually exclusive with designJson.",
+        },
+        acceptAup: {
+          type: "boolean",
+          description: "Only relevant when htmlContent is given. Pass true ONLY after explicitly telling the user this publishes unsanitized HTML/CSS/JS as-is and getting their confirmation of the Acceptable Use Policy (/legal/acceptable-use). Not needed once the account has accepted it once before.",
+        },
+      },
+      required: ["parentTemplateId", "name"],
+    },
+  },
+  {
+    name: "get_landing_page_pages",
+    title: "Get Site Pages",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description: "Returns every page belonging to the same multi-page site as the given template — its home page plus all nested sub-pages, each with its name, URL segment (slug), parent, and full resolved path (e.g. '/blog/post-1'). Pass the home page's ID or any sub-page's ID — either way you get the whole tree back. Use this before create_landing_page_subpage/update_landing_page_page when you need to know what pages already exist or what a page's current slug/parent is.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the site's home page, or any sub-page within it.",
+        },
+      },
+      required: ["templateId"],
+    },
+  },
+  {
+    name: "update_landing_page_page",
+    title: "Update Page Structure",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description: `Renames a page, changes its URL segment (slug), moves it under a different parent page, or reorders it among its siblings. The home page of a site (no parent) can be renamed but has no slug of its own and can't be re-parented — use publish_existing_landing_page to manage its domain instead.
+
+To edit a page's CONTENT (designJson), use update_template with the same templateId instead — this tool only manages the page's place in the site's structure, not what's on it.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the page to update.",
+        },
+        name: {
+          type: "string",
+          description: "Optional new name.",
+        },
+        slug: {
+          type: "string",
+          description: "Optional new URL segment. Not allowed for the home page.",
+        },
+        parentTemplateId: {
+          type: "string",
+          description: "Optional new parent page ID, to move this page elsewhere in the site's tree. Rejected if it would create a cycle (e.g. moving a page underneath its own sub-page).",
+        },
+        order: {
+          type: "number",
+          description: "Optional sort position among sibling pages under the same parent (lower = earlier).",
+        },
+      },
+      required: ["templateId"],
+    },
+  },
+  {
+    name: "delete_template",
+    title: "Delete Template",
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    description: "Permanently deletes any landing page or email template by templateId or template name (e.g. 'buzm'). Cleans up attached sub-pages, Vercel Blob assets, and custom domain routing. Confirm with user before calling as this action cannot be undone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the template or page to delete (UUID, or exact/partial template name like 'buzm').",
+        },
+        name: {
+          type: "string",
+          description: "Optional template name or search phrase if templateId is unknown (e.g. 'buzm').",
+        },
+      },
+    },
+  },
+  {
+    name: "delete_landing_page_page",
+    title: "Delete Page",
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    description: "Deletes a page. If it has sub-pages nested under it, they're deleted too (cascade) — the response reports how many. Deleting a site's home page deletes the whole site, including every page nested under it and its published domain link — this can't be undone, confirm with the user first.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the page to delete.",
+        },
+      },
+      required: ["templateId"],
+    },
+  },
+  {
+    name: "duplicate_landing_page_page",
+    title: "Duplicate Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    description: "Clones a sub-page's content into a new sibling page under the same parent — handy for building several similar pages (e.g. multiple product pages) without starting blank. Not available for a site's home page. Requires an Ultra subscription plan.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "ID of the sub-page to duplicate — must not be a home page.",
+        },
+      },
+      required: ["templateId"],
+    },
+  },
+  {
+    name: "list_landing_pages",
+    title: "List Landing Pages",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description: "Lists all saved landing page templates and published domain URLs in the user's Plexo account.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "list_email_templates",
+    title: "List Email Templates",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description: "Lists all saved email templates in the user's Plexo account.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "get_analytics",
+    title: "Get Analytics",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description: "Fetches visitor analytics, total page views, unique visitor counts, and daily timeline metrics.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: {
+          type: "string",
+          description: "Optional template ID to filter analytics",
+        },
+      },
+    },
+  },
+  {
+    name: "get_user_profile",
+    title: "Get User Profile",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description: "Retrieves user details, subscription plan (FREE, PRO, ULTRA), AI credit balance, and domain usage limits.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "delete_published_domain",
+    title: "Delete Published Domain",
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    description: "Deletes or unlinks a published domain routing from a landing page.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        domain: {
+          type: "string",
+          description: "Domain name to delete (e.g. 'acme.plexobuilder.com')",
+        },
+        domainId: {
+          type: "string",
+          description: "ID of the published domain record",
+        },
+      },
+    },
+  },
+  ...BLOG_MCP_TOOLS,
+  ...COMMERCE_MCP_TOOLS,
+  ...LMS_MCP_TOOLS,
+];
+
+/**
+ * The full MCP tool-dispatch switch, extracted verbatim from handleMcpJsonRpc's
+ * tools/call branch so it can be called directly (e.g. by SOL's agent loop, see
+ * lib/ai/solAgent.ts) without going through the JSON-RPC HTTP route. Every case
+ * body below is unchanged from its original inline form — this is a pure
+ * extraction, not a rewrite.
+ *
+ * `revalidateBlogPost` is an optional, injected dependency (NOT a direct import of
+ * lib/blog/revalidateDynamo.ts, which calls Next's `revalidatePath` from "next/cache") —
+ * this file must stay entirely free of `next/*` imports so it (and everything it imports,
+ * including blogTools.ts) can be esbuild-bundled standalone for SOL's Lambda (see this
+ * file's own next/server comment above). mcpServer.ts's handleMcpJsonRpc — the real
+ * /api/v1/mcp Next.js route, which DOES have next/cache available — passes the real
+ * revalidateBlogPost here so blog-write tools keep revalidating exactly as before this
+ * split. lib/ai/solAgent.ts's calls omit it, so SOL's blog-tool calls skip revalidation
+ * (a no-op in effect anyway: a bare Lambda invocation has no Next.js page cache to
+ * invalidate in the first place).
+ */
+export async function dispatchMcpTool(toolName: string, args: any, resolved: ResolvedUser, revalidateBlogPost?: RevalidateFn): Promise<any> {
+  let toolResult: any;
+  switch (toolName) {
+    case "publish_landing_page": {
+      const features = getTierFeatures(resolved.subscriptionPlan);
+      {
+        const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+        const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
+        if (rootCount >= features.maxLandingPages) {
+          throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
+        }
+      }
+
+      const name = args.name?.trim() || "AI Landing Page";
+      let rawDesignJson = args.designJson;
+
+      if (typeof rawDesignJson === "string") {
+        try {
+          rawDesignJson = JSON.parse(rawDesignJson);
+        } catch (e) {
+          rawDesignJson = null;
+        }
+      }
+
+      if (!rawDesignJson || typeof rawDesignJson !== "object") {
+        throw new Error("designJson object is required to compile and publish a landing page. Please provide a valid Plexo layout schema.");
+      }
+
+      const designJson = validateDesignJson(rawDesignJson);
+      if (designJson.body.style) {
+        designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+      }
+      // compiledHtml is always derived server-side from the validated designJson (never
+      // trusted from the caller) so the published page can never drift from what's
+      // editable in the dashboard, and so an AI client can't hand us raw HTML/script.
+      const compiledHtml = sanitizeHtml(compileToHTML(designJson));
+      let rawDomain = args.domain?.trim().toLowerCase() || "";
+      let domainType = args.type as "SUBDOMAIN" | "CUSTOM" | undefined;
+
+      const newTemplateId = randomUUID();
+      await Template.create({
+        id: newTemplateId,
+        userId: resolved.userId,
+        organizationId: resolved.organizationId,
+        name,
+        kind: "LANDING_PAGE",
+        designJson,
+        compiledHtml,
+      }).go();
+      const { data: template } = await Template.get({ id: newTemplateId }).go();
+      if (!template) throw new Error(`Template ${newTemplateId} vanished immediately after being created`);
+
+      const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+      const editableUrl = `${baseAppUrl}/dashboard/templates/${template.id}`;
+
+      if (!rawDomain) {
+        toolResult = {
+          success: true,
+          templateId: template.id,
+          name: template.name,
+          editableUrl,
+          publishedUrl: null,
+        };
+        break;
+      }
+
+      const { finalDomain, publishedUrl, routingEndpoint, certificateValidationName, certificateValidationValue } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
+      toolResult = {
+        success: true,
+        templateId: template.id,
+        name: template.name,
+        domain: finalDomain,
+        publishedUrl,
+        editableUrl,
+        routingEndpoint,
+        certificateValidationName,
+        certificateValidationValue,
+      };
+      break;
+    }
+
+    case "create_email_template": {
+      const features = getTierFeatures(resolved.subscriptionPlan);
+      {
+        const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+        const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "EMAIL").length;
+        if (rootCount >= features.maxEmailTemplates) {
+          throw new Error(`Template limit reached (${features.maxEmailTemplates} email templates). Upgrade plan to create more.`);
+        }
+      }
+
+      const name = args.name?.trim() || "AI Email Template";
+      let rawDesignJson = args.designJson;
+
+      if (typeof rawDesignJson === "string") {
+        try {
+          rawDesignJson = JSON.parse(rawDesignJson);
+        } catch (e) {
+          rawDesignJson = null;
+        }
+      }
+
+      if (!rawDesignJson || typeof rawDesignJson !== "object") {
+        throw new Error("designJson object is required to create an email template.");
+      }
+
+      const designJson = validateDesignJson(rawDesignJson);
+      const compiledHtml = sanitizeHtml(compileToHTML(designJson));
+      const emailTemplateId = randomUUID();
+      await Template.create({
+        id: emailTemplateId,
+        userId: resolved.userId,
+        organizationId: resolved.organizationId,
+        name,
+        kind: "EMAIL",
+        designJson,
+        compiledHtml,
+      }).go();
+      const { data: template } = await Template.get({ id: emailTemplateId }).go();
+      if (!template) throw new Error(`Template ${emailTemplateId} vanished immediately after being created`);
+
+      const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+      toolResult = {
+        success: true,
+        templateId: template.id,
+        name: template.name,
+        editableUrl: `${baseAppUrl}/dashboard/templates/${template.id}`,
+      };
+      break;
+    }
+
+    case "update_template": {
+      const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+      if (!templateId) {
+        throw new Error("templateId is required to update a template.");
+      }
+
+      const { data: existing } = await Template.get({ id: templateId }).go();
+      if (!existing || existing.organizationId !== resolved.organizationId) {
+        throw new Error(`No template found with id "${templateId}" in this account. Use list_landing_pages or list_email_templates to look up the correct id.`);
+      }
+      if (existing.sourceType === "RAW_UPLOAD") {
+        throw new Error(`"${existing.name}" was created via raw upload (create_raw_landing_page/publish_raw_landing_page) — use update_raw_landing_page to edit its HTML instead.`);
+      }
+
+      let rawDesignJson = args.designJson;
+      if (typeof rawDesignJson === "string") {
+        try {
+          rawDesignJson = JSON.parse(rawDesignJson);
+        } catch (e) {
+          rawDesignJson = null;
+        }
+      }
+      if (!rawDesignJson || typeof rawDesignJson !== "object") {
+        throw new Error("designJson object is required to update a template. Please provide the full replacement Plexo layout schema.");
+      }
+
+      const name = args.name?.trim() || existing.name;
+      const designJson = validateDesignJson(rawDesignJson);
+      if (designJson.body.style) {
+        designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+      }
+      const compiledHtml = sanitizeHtml(compileToHTML(designJson));
+
+      await Template.patch({ id: existing.id }).set({ name, designJson, compiledHtml }).go();
+      const { data: updated } = await Template.get({ id: existing.id }).go();
+      if (!updated) throw new Error(`Template ${existing.id} vanished immediately after being updated`);
+
+      const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+      const editableUrl = `${baseAppUrl}/dashboard/templates/${updated.id}`;
+
+      let publishedUrl: string | null = null;
+      if (existing.kind === "LANDING_PAGE") {
+        const { data: domains } = await PublishedDomain.query.primary({ templateId: updated.id }).go();
+        if (domains[0]) {
+          const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+          publishedUrl = `${protocol}://${domains[0].domain}`;
+        }
+      }
+
+      toolResult = {
+        success: true,
+        templateId: updated.id,
+        name: updated.name,
+        kind: existing.kind,
+        editableUrl,
+        publishedUrl,
+      };
+      break;
+    }
+
+    case "create_landing_page": {
+      const features = getTierFeatures(resolved.subscriptionPlan);
+      {
+        // Root/home pages only — a page's sub-pages don't count against this limit.
+        const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+        const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
+        if (rootCount >= features.maxLandingPages) {
+          throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
+        }
+      }
+
+      const name = args.name?.trim() || "AI Landing Page";
+      let rawDesignJson = args.designJson;
+      if (typeof rawDesignJson === "string") {
+        try {
+          rawDesignJson = JSON.parse(rawDesignJson);
+        } catch (e) {
+          rawDesignJson = null;
+        }
+      }
+      if (!rawDesignJson || typeof rawDesignJson !== "object") {
+        throw new Error("designJson object is required to create a landing page.");
+      }
+
+      const designJson = validateDesignJson(rawDesignJson);
+      if (designJson.body.style) {
+        designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+      }
+      const compiledHtml = sanitizeHtml(compileToHTML(designJson));
+
+      const createdId = randomUUID();
+      await Template.create({
+        id: createdId,
+        userId: resolved.userId,
+        organizationId: resolved.organizationId,
+        name,
+        kind: "LANDING_PAGE",
+        designJson,
+        compiledHtml,
+      }).go();
+      const { data: template } = await Template.get({ id: createdId }).go();
+      if (!template) throw new Error(`Template ${createdId} vanished immediately after being created`);
+
+      const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+      toolResult = {
+        success: true,
+        templateId: template.id,
+        name: template.name,
+        editableUrl: `${baseAppUrl}/dashboard/templates/${template.id}`,
+        publishedUrl: null,
+        message: "Landing page created without publishing. Call publish_existing_landing_page with this templateId when ready to go live, or create_landing_page_subpage to add more pages to it first.",
+      };
+      break;
+    }
+
+    case "create_raw_landing_page":
+    case "publish_raw_landing_page": {
+      const htmlContent = typeof args.htmlContent === "string" ? args.htmlContent : "";
+      try {
+        validateRawHtmlContent(htmlContent);
+      } catch (err) {
+        if (err instanceof RawUploadValidationError) throw new Error(err.message);
+        throw err;
+      }
+
+      await assertRawUploadAllowed(resolved.userId, resolved.organizationId, args.acceptAup === true);
+
+      const features = getTierFeatures(resolved.subscriptionPlan);
+      const { data: orgTemplatesRaw } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+      const rootCount = orgTemplatesRaw.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
+      if (rootCount >= features.maxLandingPages) {
+        throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
+      }
+
+      const name = typeof args.name === "string" && args.name.trim() ? args.name.trim() : "AI Landing Page";
+      const rawUploadId = randomUUID();
+      await Template.create({
+        id: rawUploadId,
+        userId: resolved.userId,
+        organizationId: resolved.organizationId,
+        name,
+        kind: "LANDING_PAGE",
+        sourceType: "RAW_UPLOAD",
+        designJson: {},
+        compiledHtml: htmlContent,
+      }).go();
+      const { data: template } = await Template.get({ id: rawUploadId }).go();
+      if (!template) throw new Error(`Template ${rawUploadId} vanished immediately after being created`);
+
+      const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+      const editableUrl = `${baseAppUrl}/dashboard/templates/${template.id}`;
+
+      const rawDomain = typeof args.domain === "string" ? args.domain.trim() : "";
+      if (!rawDomain) {
+        toolResult = {
+          success: true,
+          templateId: template.id,
+          name: template.name,
+          editableUrl,
+          publishedUrl: null,
+          ...(toolName === "create_raw_landing_page"
+            ? { message: "Raw-HTML page created without publishing. Call publish_existing_landing_page with this templateId when ready to go live." }
+            : {}),
+        };
+        break;
+      }
+
+      const domainType = args.type === "SUBDOMAIN" || args.type === "CUSTOM" ? args.type : undefined;
+      const { finalDomain, publishedUrl, routingEndpoint, certificateValidationName, certificateValidationValue } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
+      toolResult = {
+        success: true,
+        templateId: template.id,
+        name: template.name,
+        domain: finalDomain,
+        publishedUrl,
+        editableUrl,
+        routingEndpoint,
+        certificateValidationName,
+        certificateValidationValue,
+      };
+      break;
+    }
+
+    case "update_raw_landing_page": {
+      const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+      if (!templateId) {
+        throw new Error("templateId is required to update a raw-upload page.");
+      }
+      const htmlContent = typeof args.htmlContent === "string" ? args.htmlContent : "";
+      try {
+        validateRawHtmlContent(htmlContent);
+      } catch (err) {
+        if (err instanceof RawUploadValidationError) throw new Error(err.message);
+        throw err;
+      }
+
+      const { data: existing } = await Template.get({ id: templateId }).go();
+      if (!existing || existing.organizationId !== resolved.organizationId) {
+        throw new Error(`No template found with id "${templateId}" in this account. Use list_landing_pages to look up the correct id.`);
+      }
+      if (existing.sourceType !== "RAW_UPLOAD") {
+        throw new Error(`"${existing.name}" was created via the drag-and-drop builder — use update_template to edit its content instead.`);
+      }
+
+      const name = typeof args.name === "string" && args.name.trim() ? args.name.trim() : existing.name;
+      await Template.patch({ id: existing.id }).set({ name, compiledHtml: htmlContent }).go();
+      const { data: updated } = await Template.get({ id: existing.id }).go();
+      if (!updated) throw new Error(`Template ${existing.id} vanished immediately after being updated`);
+
+      const { data: linkedDomains } = await PublishedDomain.query.primary({ templateId: updated.id }).go();
+      for (const d of linkedDomains) {
+        void scanPublishedDomain(updated.id, d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
+      }
+
+      const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+      const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
+      toolResult = {
+        success: true,
+        templateId: updated.id,
+        name: updated.name,
+        editableUrl: `${baseAppUrl}/dashboard/templates/${updated.id}`,
+        publishedUrl: linkedDomains[0] ? `${protocol}://${linkedDomains[0].domain}` : null,
+      };
+      break;
+    }
+
+    case "publish_existing_landing_page": {
+      const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+      if (!templateId) {
+        throw new Error("templateId is required.");
+      }
+      const rawDomain = typeof args.domain === "string" ? args.domain : "";
+      if (!rawDomain.trim()) {
+        throw new Error("domain is required.");
+      }
+
+      const { data: template } = await Template.get({ id: templateId }).go();
+      if (!template || template.organizationId !== resolved.organizationId || template.kind !== "LANDING_PAGE") {
+        throw new Error(`No landing page template found with id "${templateId}" in this account. Use list_landing_pages to look up the correct id.`);
+      }
+
+      const domainType = args.type === "SUBDOMAIN" || args.type === "CUSTOM" ? args.type : undefined;
+      const { finalDomain, publishedUrl, routingEndpoint, certificateValidationName, certificateValidationValue } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
+
+      const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+      toolResult = {
+        success: true,
+        templateId: template.id,
+        name: template.name,
+        domain: finalDomain,
+        publishedUrl,
+        editableUrl: `${baseAppUrl}/dashboard/templates/${template.id}`,
+        routingEndpoint,
+        certificateValidationName,
+        certificateValidationValue,
+      };
+      break;
+    }
+
+    case "create_landing_page_subpage": {
+      const features = getTierFeatures(resolved.subscriptionPlan);
+      if (!features.multiPageSitesEnabled) {
+        throw new Error("Multi-page sites require an Ultra subscription plan.");
+      }
+
+      const parentTemplateId = typeof args.parentTemplateId === "string" ? args.parentTemplateId.trim() : "";
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      if (!parentTemplateId || !name) {
+        throw new Error("parentTemplateId and name are required to create a sub-page.");
+      }
+
+      const { data: parent } = await Template.get({ id: parentTemplateId }).go();
+      if (!parent || parent.organizationId !== resolved.organizationId) {
+        throw new Error(`No page found with id "${parentTemplateId}" in this account.`);
+      }
+      if (parent.kind !== "LANDING_PAGE") {
+        throw new Error("Only landing pages can have sub-pages.");
+      }
+
+      const rawHtmlContent = typeof args.htmlContent === "string" ? args.htmlContent : "";
+
+      let rawDesignJson = args.designJson;
+      if (typeof rawDesignJson === "string") {
+        try {
+          rawDesignJson = JSON.parse(rawDesignJson);
+        } catch (e) {
+          rawDesignJson = null;
+        }
+      }
+      if (rawHtmlContent && rawDesignJson && typeof rawDesignJson === "object") {
+        throw new Error("Provide either htmlContent or designJson, not both.");
+      }
+
+      let designJson: any;
+      let compiledHtml: string;
+      let sourceType: "BUILDER" | "RAW_UPLOAD" = "BUILDER";
+      if (rawHtmlContent) {
+        try {
+          validateRawHtmlContent(rawHtmlContent);
+        } catch (err) {
+          if (err instanceof RawUploadValidationError) throw new Error(err.message);
+          throw err;
+        }
+        await assertRawUploadAllowed(resolved.userId, resolved.organizationId, args.acceptAup === true);
+        sourceType = "RAW_UPLOAD";
+        designJson = {};
+        compiledHtml = rawHtmlContent;
+      } else if (rawDesignJson && typeof rawDesignJson === "object") {
+        designJson = validateDesignJson(rawDesignJson);
+        if (designJson.body.style) {
+          designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+        }
+        compiledHtml = sanitizeHtml(compileToHTML(designJson));
+      } else {
+        designJson = { body: { style: { background: "#0b0f19", padding: "24px" }, rows: [] } };
+        compiledHtml = "";
+      }
+
+      const slug = await ensureUniqueSlug(parentTemplateId, (typeof args.slug === "string" && args.slug.trim()) || name);
+      const { data: siblings } = await Template.query.byParent({ parentId: parentTemplateId }).go();
+      const nextOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
+
+      const newPageId = randomUUID();
+      await Template.create({
+        id: newPageId,
+        userId: resolved.userId,
+        organizationId: resolved.organizationId,
+        name,
+        kind: "LANDING_PAGE",
+        sourceType,
+        parentId: parentTemplateId,
+        slug,
+        order: nextOrder,
+        designJson,
+        compiledHtml,
+      }).go();
+      const { data: page } = await Template.get({ id: newPageId }).go();
+      if (!page) throw new Error(`Template ${newPageId} vanished immediately after being created`);
+
+      const tree = await getPageTree(resolved.organizationId, page.id);
+      const path = tree ? pathForPage(page.id, tree.pages) : `/${slug}`;
+      const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+
+      toolResult = {
+        success: true,
+        templateId: page.id,
+        parentTemplateId,
+        name: page.name,
+        slug: page.slug,
+        path,
+        editableUrl: `${baseAppUrl}/dashboard/templates/${page.id}`,
+      };
+      break;
+    }
+
+    case "get_landing_page_pages": {
+      const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+      if (!templateId) {
+        throw new Error("templateId is required.");
+      }
+
+      const tree = await getPageTree(resolved.organizationId, templateId);
+      if (!tree) {
+        throw new Error(`No page found with id "${templateId}" in this account.`);
+      }
+
+      toolResult = {
+        rootId: tree.rootId,
+        pages: tree.pages.map((p) => ({
+          templateId: p.id,
+          name: p.name,
+          slug: p.slug,
+          parentTemplateId: p.parentId,
+          isHomePage: p.parentId === null,
+          path: pathForPage(p.id, tree.pages),
+          order: p.order,
+          sourceType: p.sourceType,
+        })),
+      };
+      break;
+    }
+
+    case "update_landing_page_page": {
+      const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+      if (!templateId) {
+        throw new Error("templateId is required.");
+      }
+
+      const { data: existing } = await Template.get({ id: templateId }).go();
+      if (!existing || existing.organizationId !== resolved.organizationId) {
+        throw new Error(`No page found with id "${templateId}" in this account.`);
+      }
+
+      const data: any = {};
+
+      if (typeof args.name === "string" && args.name.trim()) {
+        data.name = args.name.trim();
+      }
+
+      if (typeof args.slug === "string") {
+        if (!existing.parentId) {
+          throw new Error("The home page doesn't have its own URL segment.");
+        }
+        const nextSlug = slugify(args.slug);
+        if (!nextSlug || !isValidSlugSegment(nextSlug)) {
+          throw new Error("That page URL isn't valid. Use lowercase letters, numbers, and hyphens.");
+        }
+        data.slug = nextSlug;
+      }
+
+      if (typeof args.parentTemplateId === "string" && args.parentTemplateId.trim()) {
+        if (!existing.parentId) {
+          throw new Error("The home page can't be nested under another page.");
+        }
+        const targetParentId = args.parentTemplateId.trim();
+        if (targetParentId === existing.id) {
+          throw new Error("A page can't be nested under itself.");
+        }
+        const { data: targetParent } = await Template.get({ id: targetParentId }).go();
+        if (!targetParent || targetParent.organizationId !== resolved.organizationId) {
+          throw new Error(`Target parent page "${targetParentId}" not found.`);
+        }
+        if (await isSameOrAncestor(targetParentId, existing.id)) {
+          throw new Error("Can't move a page underneath one of its own sub-pages.");
+        }
+        data.parentId = targetParentId;
+      }
+
+      if (typeof args.order === "number" && Number.isFinite(args.order)) {
+        data.order = args.order;
+      }
+
+      if (Object.keys(data).length === 0) {
+        throw new Error("Provide at least one of name, slug, parentTemplateId, or order to update.");
+      }
+
+      const effectiveParentId: string | null = data.parentId ?? existing.parentId ?? null;
+      const effectiveSlug: string | null = data.slug ?? existing.slug ?? null;
+      if (effectiveSlug && effectiveParentId && (await isReservedTopLevelSlug(effectiveParentId, effectiveSlug))) {
+        throw new Error("That URL is reserved for the site's blog.");
+      }
+
+      // Sibling-slug uniqueness (prisma: @@unique([parentId, slug])) has no DynamoDB
+      // constraint equivalent — checked explicitly here, same as the REST PATCH route
+      // (app/api/templates/[id]/route.ts).
+      if (data.slug !== undefined && effectiveParentId) {
+        const { data: siblings } = await Template.query.byParent({ parentId: effectiveParentId }).go();
+        if (siblings.some((s) => s.id !== existing.id && s.slug === data.slug)) {
+          throw new Error("A page with this URL already exists here.");
+        }
+      }
+
+      await Template.patch({ id: existing.id }).set(data).go();
+      const { data: updated } = await Template.get({ id: existing.id }).go();
+      if (!updated) throw new Error(`Template ${existing.id} vanished immediately after being updated`);
+
+      toolResult = {
+        success: true,
+        templateId: updated.id,
+        name: updated.name,
+        slug: updated.slug,
+        parentTemplateId: updated.parentId,
+        order: updated.order,
+      };
+      break;
+    }
+
+    case "delete_template":
+    case "delete_landing_page_page": {
+      const queryStr = (typeof args.templateId === "string" ? args.templateId : "") || (typeof args.name === "string" ? args.name : "") || (typeof args.templateName === "string" ? args.templateName : "");
+      const rawInput = queryStr.trim();
+      if (!rawInput) {
+        throw new Error("templateId or template name is required.");
+      }
+
+      // 1. First try exact UUID/id match
+      let existing: { id: string; parentId?: string; name: string; kind: string } | null = null;
+      {
+        const { data: byId } = await Template.get({ id: rawInput }).go();
+        if (byId && byId.organizationId === resolved.organizationId) existing = byId;
+      }
+
+      // 2. If not found by ID, search by case-insensitive name match across the org —
+      // Template has no name index, so this fans out via byOrg (GSI1) and filters in
+      // memory, same bound as every other org-wide non-indexed lookup in this migration.
+      if (!existing) {
+        const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+        const needle = rawInput.toLowerCase();
+        const matches = orgTemplates.filter((t) => t.name.toLowerCase().includes(needle));
+        // Tie-break on createdAt — the org-backfill migration's updateMany bumped
+        // every template's updatedAt to the same instant.
+        matches.sort((a, b) => {
+          const byUpdated = (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "");
+          if (byUpdated !== 0) return byUpdated;
+          return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
+        });
+        existing = matches[0] ?? null;
+      }
+
+      if (!existing) {
+        throw new Error(`No template found matching "${rawInput}" in this account. Use list_landing_pages or list_email_templates to view saved templates.`);
+      }
+
+      const descendantIds = await getDescendantIds(resolved.organizationId, existing.id);
+      const allIds = [existing.id, ...descendantIds];
+
+      // Same cleanup as the REST DELETE route (app/api/templates/[id]/route.ts) —
+      // TemplateAsset rows and PublishedDomain rows cascade at the DB level under
+      // Prisma, but S3 and Vercel's own domain registry have no idea a delete
+      // happened, so both need explicit cleanup before removing the rows.
+      const assetBatches = await Promise.all(allIds.map((tid) => TemplateAsset.query.primary({ templateId: tid }).go()));
+      const assets = assetBatches.flatMap((b) => b.data);
+      if (assets.length > 0) {
+        await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
+          console.error("Failed to delete blobs during MCP page delete (non-fatal):", err)
+        );
+      }
+      await Promise.all(assets.map((a) => TemplateAsset.remove({ templateId: a.templateId, path: a.path }).go()));
+
+      const domainBatches = await Promise.all(allIds.map((tid) => PublishedDomain.query.primary({ templateId: tid }).go()));
+      const domains = domainBatches.flatMap((b) => b.data);
+      for (const d of domains) {
+        if (d.type === "CUSTOM") {
+          await removeCloudFrontDomain(d.domain, { tenantId: d.tenantId, certificateArn: d.certificateArn }).catch((err) =>
+            console.error(`Failed to remove CloudFront distribution tenant for ${d.domain} during MCP page delete (non-fatal):`, err)
+          );
+        }
+      }
+      await Promise.all(domains.map((d) => PublishedDomain.remove({ templateId: d.templateId, id: d.id }).go()));
+
+      await Promise.all(descendantIds.map((did) => Template.remove({ id: did }).go()));
+      await Template.remove({ id: existing.id }).go();
+
+      toolResult = {
+        success: true,
+        deletedTemplateId: existing.id,
+        deletedDescendantCount: descendantIds.length,
+        wasHomePage: !existing.parentId,
+      };
+      break;
+    }
+
+    case "duplicate_landing_page_page": {
+      const features = getTierFeatures(resolved.subscriptionPlan);
+      if (!features.multiPageSitesEnabled) {
+        throw new Error("Multi-page sites require an Ultra subscription plan.");
+      }
+
+      const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
+      if (!templateId) {
+        throw new Error("templateId is required.");
+      }
+
+      const { data: existing } = await Template.get({ id: templateId }).go();
+      if (!existing || existing.organizationId !== resolved.organizationId) {
+        throw new Error(`No page found with id "${templateId}" in this account.`);
+      }
+      if (!existing.parentId) {
+        throw new Error("The home page can't be duplicated from here.");
+      }
+
+      const { data: siblings } = await Template.query.byParent({ parentId: existing.parentId }).go();
+      const nextOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
+
+      const name = `${existing.name} copy`;
+      const slug = await ensureUniqueSlug(existing.parentId, `${existing.slug ?? name}-copy`);
+
+      // Raw-upload pages own real files in storage — copy them independently rather
+      // than sharing a reference, so editing/deleting one page's files can never
+      // silently break its duplicate (or vice versa). Same fix as the REST duplicate
+      // route (app/api/templates/[id]/duplicate/route.ts) — this tool has its own
+      // separate implementation, so it needed the fix separately too.
+      const newId = randomUUID();
+      let copiedAssets: { templateId: string; path: string; blobUrl: string; contentType: string; size: number }[] = [];
+      if (existing.sourceType === "RAW_UPLOAD") {
+        const { data: sourceAssets } = await TemplateAsset.query.primary({ templateId: existing.id }).go();
+        if (sourceAssets.length > 0) {
+          copiedAssets = await Promise.all(
+            sourceAssets.map(async (asset) => {
+              const sourceRes = await fetch(asset.blobUrl);
+              const buffer = Buffer.from(await sourceRes.arrayBuffer());
+              const blob = await uploadObject(`raw-sites/${newId}/${asset.path}`, buffer, {
+                access: "public",
+                contentType: asset.contentType,
+              });
+              return {
+                templateId: newId,
+                path: asset.path,
+                blobUrl: blob.url,
+                contentType: asset.contentType,
+                size: buffer.byteLength,
+              };
+            })
+          );
+        }
+      }
+
+      await Template.create({
+        id: newId,
+        userId: resolved.userId,
+        organizationId: resolved.organizationId,
+        name,
+        kind: existing.kind,
+        sourceType: existing.sourceType,
+        parentId: existing.parentId,
+        slug,
+        order: nextOrder,
+        designJson: existing.designJson,
+        compiledHtml: existing.compiledHtml,
+      }).go();
+      const { data: duplicate } = await Template.get({ id: newId }).go();
+      if (!duplicate) throw new Error(`Template ${newId} vanished immediately after being created`);
+
+      if (copiedAssets.length > 0) {
+        await Promise.all(copiedAssets.map((a) => TemplateAsset.create({ id: randomUUID(), ...a }).go()));
+      }
+
+      const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
+      toolResult = {
+        success: true,
+        templateId: duplicate.id,
+        name: duplicate.name,
+        slug: duplicate.slug,
+        parentTemplateId: duplicate.parentId,
+        editableUrl: `${baseAppUrl}/dashboard/templates/${duplicate.id}`,
+      };
+      break;
+    }
+
+    case "list_landing_pages": {
+      const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+      const templates = orgTemplates.filter((t) => t.kind === "LANDING_PAGE");
+
+      // PublishedDomain has no org-wide index (only templateId-primary and
+      // byDomain-GSI1, see contentEntities.ts) — fan out per org root template, same
+      // bound as every other org-wide domain listing in this migration.
+      const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
+      const domainBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
+      const domains = domainBatches.flatMap((b) => b.data).map((d) => ({ domain: d.domain, type: d.type, templateId: d.templateId }));
+
+      toolResult = {
+        templates: templates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          parentId: t.parentId ?? null,
+          slug: t.slug ?? null,
+          sourceType: t.sourceType,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+          isHomePage: !t.parentId,
+        })),
+        publishedDomains: domains,
+      };
+      break;
+    }
+
+    case "list_email_templates": {
+      const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+      const templates = orgTemplates
+        .filter((t) => t.kind === "EMAIL")
+        .map((t) => ({ id: t.id, name: t.name, createdAt: t.createdAt, updatedAt: t.updatedAt }));
+      toolResult = { emailTemplates: templates };
+      break;
+    }
+
+    case "get_user_profile": {
+      const { data: userRow } = await User.get({ id: resolved.userId }).go();
+      const user = userRow
+        ? {
+            id: userRow.id,
+            name: userRow.name,
+            email: userRow.email,
+            subscriptionPlan: userRow.subscriptionPlan,
+            allowanceBalance: userRow.allowanceBalance,
+            topupBalance: userRow.topupBalance,
+            customDomainLimit: userRow.customDomainLimit ?? null,
+          }
+        : null;
+      const features = getTierFeatures(user?.subscriptionPlan);
+      toolResult = { user, features, limit: getDomainLimit(user?.subscriptionPlan ?? "FREE", user?.customDomainLimit ?? null) };
+      break;
+    }
+
+    case "get_strata_tokens": {
+      const incomingProjectId = typeof args.projectId === "string" ? args.projectId : undefined;
+      const projectId = await resolveStrataProjectId(resolved.userId, incomingProjectId);
+
+      if (!projectId) {
+        toolResult = {
+          connected: false,
+          projectId: null,
+          tokens: [],
+          message: "No Strata project connected yet. Pass a projectId to connect (find it in your Strata project's snapshot/share URL).",
+        };
+        break;
+      }
+
+      const result = await fetchStrataTokens(projectId);
+      if ("error" in result) {
+        toolResult = { connected: false, projectId, tokens: [], error: result.error };
+      } else {
+        toolResult = { connected: true, projectId, tokenCount: result.tokens.length, tokens: result.tokens };
+      }
+      break;
+    }
+
+    default: {
+      if (BLOG_TOOL_NAMES.has(toolName)) {
+        toolResult = revalidateBlogPost
+          ? await handleBlogTool(toolName, args, resolved, revalidateBlogPost)
+          : await handleBlogTool(toolName, args, resolved);
+        break;
+      }
+      if (COMMERCE_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleCommerceTool(toolName, args, resolved);
+        break;
+      }
+      if (LMS_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleLmsTool(toolName, args, resolved);
+        break;
+      }
+      throw new Error(`Unknown tool: ${toolName}`);
+    }
+  }
+  return toolResult;
+}

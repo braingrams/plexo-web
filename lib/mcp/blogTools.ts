@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
-import { resolveUser } from "@/lib/auth/resolveUser";
-import { createBlogPost, updateBlogPost, deleteBlogPost } from "@/lib/blog/savePostDynamo";
+import type { resolveUser } from "@/lib/auth/resolveUser";
+import { createBlogPost, updateBlogPost, deleteBlogPost, type RevalidateFn } from "@/lib/blog/savePostCore";
 import { generateUniqueAuthorSlug } from "@/lib/blog/authorsDynamo";
 import { effectiveStatus } from "@/lib/blog/queriesDynamo";
 import { findCommentById, getDescendantCommentIds } from "@/lib/blog/commentsDynamo";
 import { slugify, avoidPageReservedSlug, isValidUuid } from "@/server/slugDynamo";
 import { convertWordPressHtmlToTiptapJson } from "@/lib/blogImport/htmlToTiptap";
-import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogTheme";
+import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogFontPresets";
 import { hasBlogMarker, type BlogMarkerName } from "@/lib/pub/blogLayoutRender";
 import { Template, BlogSite, BlogCategory, BlogTag, BlogAuthor, BlogPost, BlogPostCategory, BlogPostTag, BlogComment } from "@/lib/db/contentEntities";
 
@@ -529,7 +529,18 @@ categoryNames/tagNames/authorName are plain names, not ids — matching ones are
 
 export const BLOG_TOOL_NAMES = new Set(BLOG_MCP_TOOLS.map((t) => t.name));
 
-export async function handleBlogTool(toolName: string, args: any, resolved: ResolvedUser): Promise<any> {
+// No-op default for `revalidate`: this file must never statically import lib/blog/
+// revalidateDynamo.ts (it calls Next's `revalidatePath` from "next/cache", whose own import
+// graph transitively requires "@opentelemetry/api" and can't be esbuild-bundled standalone
+// — see lib/blog/savePostCore.ts's own top-of-file comment). handleMcpJsonRpc (the real
+// Next.js /api/v1/mcp route, which DOES have next/cache available) passes the real
+// revalidateBlogPost through dispatchMcpTool's optional `revalidate` parameter — see
+// mcpServer.ts and dispatchMcpTool.ts. SOL's agent loop (lib/ai/solAgent.ts) never passes
+// one, so its blog-tool calls silently skip revalidation, which is a no-op in effect anyway
+// since a bare Lambda invocation has no Next.js page cache of its own to invalidate.
+const NOOP_REVALIDATE: RevalidateFn = async () => {};
+
+export async function handleBlogTool(toolName: string, args: any, resolved: ResolvedUser, revalidate: RevalidateFn = NOOP_REVALIDATE): Promise<any> {
   const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
 
   switch (toolName) {
@@ -822,7 +833,7 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
         authorId: authorId ?? null,
         categoryIds: categoryIds ?? [],
         tagIds: tagIds ?? [],
-      });
+      }, revalidate);
 
       return {
         success: true,
@@ -860,7 +871,7 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const tagIds = await resolveTagIds(siteId, normalizeStringArray(args.tagNames));
       if (tagIds !== undefined) input.tagIds = tagIds;
 
-      const post = await updateBlogPost(siteId, postId, input as any);
+      const post = await updateBlogPost(siteId, postId, input as any, revalidate);
       if (!post) throw new Error(`Post not found with id "${postId}".`);
 
       return { success: true, postId: post.id, slug: post.slug, status: post.status };
@@ -871,7 +882,7 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const postId = typeof args.postId === "string" ? args.postId.trim() : "";
       if (!postId) throw new Error("postId is required.");
 
-      const deleted = await deleteBlogPost(siteId, postId);
+      const deleted = await deleteBlogPost(siteId, postId, revalidate);
       if (!deleted) throw new Error(`Post not found with id "${postId}".`);
 
       return { success: true, deletedPostId: postId };

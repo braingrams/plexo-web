@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { resolveUser } from "@/lib/auth/resolveUser";
+import type { resolveUser } from "@/lib/auth/resolveUser";
 import { getAvailableFunnelSlots } from "@/lib/lms/funnelSlots";
 import { defaultUnlockRules } from "@/lib/lms/rules";
 import { compileFunnelStarterDesign } from "@/lib/lms/funnelStarterDesign";
