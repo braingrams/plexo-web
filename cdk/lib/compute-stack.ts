@@ -634,6 +634,21 @@ export class ComputeStack extends cdk.Stack {
     // that fix's own commit) — confirmed by a real 403 AccessDenied on bedrock:InvokeModel
     // once SYSTEM_AI_PROVIDER=bedrock_claude actually started being used.
     serverFn.addToRolePolicy(bedrockInvokePolicy);
+
+    // Anthropic's Claude models on Bedrock are AWS Marketplace listings under the hood —
+    // the FIRST invoke from a given IAM principal implicitly subscribes it to the model's
+    // Marketplace listing, which needs these two account-level (not resource-scoped, hence
+    // `resources: ["*"]` — AWS Marketplace actions aren't ARN-scoped the way Bedrock's own
+    // actions are) permissions in addition to bedrock:InvokeModel itself. Confirmed by a
+    // real 403 distinct from (and only reachable after fixing) the bedrock:InvokeModel
+    // AccessDenied above: "... not authorized to perform the required AWS Marketplace
+    // actions (aws-marketplace:ViewSubscriptions, aws-marketplace:Subscribe) ...".
+    const bedrockMarketplacePolicy = new iam.PolicyStatement({
+      actions: ["aws-marketplace:ViewSubscriptions", "aws-marketplace:Subscribe"],
+      resources: ["*"],
+    });
+    solChatFn.addToRolePolicy(bedrockMarketplacePolicy);
+    serverFn.addToRolePolicy(bedrockMarketplacePolicy);
     // RESPONSE_STREAM is the entire reason this is a second Lambda rather than a change
     // to serverFn: it's what lets the handler flush tokens to the client as they're
     // generated instead of buffering the whole response first. AuthType.NONE (like
