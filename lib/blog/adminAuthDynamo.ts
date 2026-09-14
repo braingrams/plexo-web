@@ -9,6 +9,7 @@ export type BlogAdminContext = {
   organizationId: string;
   role: OrgRole | null;
   templateId: string;
+  subscriptionPlan: string;
 };
 
 /**
@@ -21,15 +22,25 @@ export async function resolveBlogAdminSite(
 ): Promise<{ context: BlogAdminContext } | { error: NextResponse }> {
   const resolved = await resolveUser(request);
   if (!resolved) {
-    return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+    return {
+      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
+    };
   }
   if (!isValidUuid(templateId)) {
-    return { error: NextResponse.json({ error: "Site not found." }, { status: 404 }) };
+    return {
+      error: NextResponse.json({ error: "Site not found." }, { status: 404 }),
+    };
   }
 
   const { data: site } = await Template.get({ id: templateId }).go();
-  if (!site || site.organizationId !== resolved.organizationId || site.parentId) {
-    return { error: NextResponse.json({ error: "Site not found." }, { status: 404 }) };
+  if (
+    !site ||
+    site.organizationId !== resolved.organizationId ||
+    site.parentId
+  ) {
+    return {
+      error: NextResponse.json({ error: "Site not found." }, { status: 404 }),
+    };
   }
 
   return {
@@ -38,6 +49,7 @@ export async function resolveBlogAdminSite(
       organizationId: resolved.organizationId,
       role: resolved.role,
       templateId: site.id,
+      subscriptionPlan: resolved.subscriptionPlan,
     },
   };
 }

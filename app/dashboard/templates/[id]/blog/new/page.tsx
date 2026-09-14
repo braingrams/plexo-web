@@ -1,18 +1,43 @@
-import { BlogCategory, BlogTag, BlogAuthor, PublishedDomain } from "@/lib/db/contentEntities";
+import {
+  BlogCategory,
+  BlogTag,
+  BlogAuthor,
+  PublishedDomain,
+} from "@/lib/db/contentEntities";
 import { requireBlogSiteAccess } from "@/lib/blog/pageAuthDynamo";
 import { findOrCreateAuthorForUser } from "@/lib/blog/authorsDynamo";
+import { getPublishedBlogPostQuotaStatus } from "@/lib/blog/publishQuota";
 import { BlogPostEditor } from "../BlogPostEditor";
 
-export default async function NewBlogPostPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function NewBlogPostPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
-  const access = await requireBlogSiteAccess(id, `/dashboard/templates/${id}/blog/new`);
+  const access = await requireBlogSiteAccess(
+    id,
+    `/dashboard/templates/${id}/blog/new`,
+  );
 
-  const [currentUserAuthor, { data: categories }, { data: tags }, { data: authors }, { data: domains }] = await Promise.all([
-    findOrCreateAuthorForUser(access.templateId, access.userId, access.userName || access.userEmail),
+  const [
+    currentUserAuthor,
+    { data: categories },
+    { data: tags },
+    { data: authors },
+    { data: domains },
+    quota,
+  ] = await Promise.all([
+    findOrCreateAuthorForUser(
+      access.templateId,
+      access.userId,
+      access.userName || access.userEmail,
+    ),
     BlogCategory.query.primary({ templateId: access.templateId }).go(),
     BlogTag.query.primary({ templateId: access.templateId }).go(),
     BlogAuthor.query.primary({ templateId: access.templateId }).go(),
     PublishedDomain.query.primary({ templateId: access.templateId }).go(),
+    getPublishedBlogPostQuotaStatus(access.templateId, access.subscriptionPlan),
   ]);
   categories.sort((a, b) => a.name.localeCompare(b.name));
   tags.sort((a, b) => a.name.localeCompare(b.name));
@@ -22,7 +47,9 @@ export default async function NewBlogPostPage({ params }: { params: Promise<{ id
   // it's reflected in the dropdown's option list even though `authors` was fetched in parallel.
   const allAuthors = authors.some((a) => a.id === currentUserAuthor.id)
     ? authors
-    : [...authors, currentUserAuthor].sort((a, b) => a.name.localeCompare(b.name));
+    : [...authors, currentUserAuthor].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
 
   return (
     <BlogPostEditor
@@ -33,6 +60,9 @@ export default async function NewBlogPostPage({ params }: { params: Promise<{ id
       authors={allAuthors}
       currentUserAuthorId={currentUserAuthor.id}
       siteDomain={domains[0]?.domain ?? null}
+      publishedCount={quota.count}
+      publishedLimit={quota.limit}
+      plan={quota.plan}
     />
   );
 }
