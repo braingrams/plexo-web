@@ -8,7 +8,7 @@ import { computeSeoChecklist } from "./seoChecklist";
 import { PageContainer } from "../../../_components/PageContainer";
 import { CustomSelect } from "../../../../_components/CustomSelect";
 import { UpgradeModal } from "../../../_components/UpgradeModal";
-import { formatPublishedQuotaLabel } from "@/lib/blog/publishQuota";
+import { formatPublishedQuotaLabel } from "@/lib/blog/publishQuotaLabel";
 
 type Status = "DRAFT" | "SCHEDULED" | "PUBLISHED" | "ARCHIVED";
 

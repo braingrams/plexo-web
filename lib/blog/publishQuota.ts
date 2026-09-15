@@ -64,10 +64,3 @@ export async function assertPublishedBlogPostQuota(
     count: status.count,
   };
 }
-
-export function formatPublishedQuotaLabel(
-  count: number,
-  limit: number | null,
-): string {
-  return limit === null ? "Unlimited" : `${count} / ${limit} published`;
-}

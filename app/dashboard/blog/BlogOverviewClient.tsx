@@ -8,7 +8,7 @@ import { PageContainer } from "../_components/PageContainer";
 import { NewFromMarketplace } from "../templates/NewFromMarketplace";
 import { formatDate, IconLayout } from "../templates/TemplateCard";
 import { CustomSelect } from "../../_components/CustomSelect";
-import { formatPublishedQuotaLabel } from "@/lib/blog/publishQuota";
+import { formatPublishedQuotaLabel } from "@/lib/blog/publishQuotaLabel";
 
 export type BlogSummary = {
   id: string;

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageContainer } from "../../../_components/PageContainer";
 import { UpgradeModal } from "../../../_components/UpgradeModal";
-import { formatPublishedQuotaLabel } from "@/lib/blog/publishQuota";
+import { formatPublishedQuotaLabel } from "@/lib/blog/publishQuotaLabel";
 
 type PostRow = {
   id: string;
