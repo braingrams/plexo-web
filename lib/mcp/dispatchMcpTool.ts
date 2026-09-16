@@ -243,55 +243,78 @@ export const PLEXO_MCP_TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description: `Creates, compiles, and publishes a landing page template to a subdomain or custom domain in 1 step.
 
-IMPORTANT INSTRUCTION FOR AI CLIENTS:
+DESIGN QUALITY — read this before writing designJson. Followed correctly it is what separates a premium, bespoke-looking result from a generic AI template; the worked example below demonstrates every rule.
+- Palette: choose one small, deliberate system before writing any row — a near-black/navy/charcoal "ink" plus an off-white/cream "paper" (never pure #000000/#ffffff), one brand accent color used sparingly for CTAs/highlights only, and 2-3 muted grays derived from the ink color for secondary text. Reuse these exact hex values everywhere. Default to this kind of restrained, brand-appropriate palette — NOT a generic dark background with a purple/blue accent — unless the user's prompt clearly calls for that look.
+- Typography: at most three font families — one serif or otherwise distinctive display font for headings (line-height 1.0-1.25, fontWeight 500-600, never 800+), one clean sans-serif for body copy and buttons (paragraphs at line-height 1.6-1.75), and optionally one monospace/condensed font in uppercase with letterSpacing "0.14em"-"0.18em" at a small fontSize (11-13px) reserved only for short eyebrow labels above a heading. Give headings/paragraphs a "maxWidth" (roughly 480-780px) so text never stretches edge-to-edge.
+- Section shell: every section is two layers, using the column's optional 'nestedRows' array (see schema below) — an OUTER row carries the section's full-bleed backgroundColor to the viewport edge with horizontal padding of either "0" or a fluid "clamp(20px, 6vw, 56px)" (never a fixed px value), containing one "100%"-width column whose 'nestedRows' holds an INNER row that caps actual content at maxWidth ~1200-1440px. Alternate background colors between sections (ink, paper, a warm neutral, a soft accent tint) for rhythm instead of leaving every section the same color.
+- Restraint: borderRadius near 0 by default (an editorial, premium feel) — reserve a rounded pill (~100px) only for tags/badges, small radii (2-10px) only for buttons/cards/inputs. Use boxShadow rarely and only as a soft, large, low-opacity shadow tinted with the ink color (never plain black) — most elements should have none.
+- Layout variety: vary column-width splits across sections (an asymmetric ~55/45 hero, a 33.33/33.33/33.33 feature grid, alternating ~60/40 image-and-text rows) instead of repeating the same centered block or identical grid everywhere. Buttons: understated solid-accent fill or a text link with a colored underline/arrow, fontWeight 600, padding ~"14px 26px", sharp-to-small corner radius, specific action copy ("Book a Consultation →") not generic "Click Here". Images: descriptive specific "alt" text, an intentional width/maxWidth so nothing stretches full-bleed by accident.
+
+STRUCTURAL RULES:
 The designJson argument MUST be a fully hydrated layout tree containing body style and rows array. There is no shorthand format —
 do NOT send rows shaped like { "type": "products", "content": { "items": [...] } }. That will be REJECTED with a validation error.
-Every row MUST already contain a 'columns' array with percentage widths ('100%', '50%', '33.33%'), and each column MUST contain an
-'elements' array with fully-styled component objects ('heading', 'paragraph', 'button', 'card', 'image', 'menu', 'social', 'divider',
-'spacer', 'form_container'). For any repeated-item section (products, features, testimonials, pricing tiers, etc.) YOU must expand
-each item into its own column with real elements — one column per item — rather than passing a list for the server to interpret.
+Every row MUST already contain a 'columns' array with percentage widths ('100%', '50%', '33.33%'), and each column MUST contain either
+an 'elements' array of fully-styled component objects ('heading', 'paragraph', 'button', 'card', 'image', 'menu', 'social', 'divider',
+'spacer', 'form_container') and/or a 'nestedRows' array (same shape as a top-level row — id/style/columns — used for the outer/inner
+full-bleed section shell described above; a column may have nestedRows, elements, or both). For any repeated-item section (products,
+features, testimonials, pricing tiers, etc.) YOU must expand each item into its own column with real elements — one column per item —
+rather than passing a list for the server to interpret.
 
-EXAMPLE VALID designJson PAYLOAD (hero row, plus a 3-item product grid row):
+EXAMPLE VALID designJson PAYLOAD (full-bleed hero with an asymmetric 55/45 split, plus a full-bleed 3-up feature row) — note the
+restrained ink/paper/terracotta palette, the serif/sans/mono type system, near-zero border radius, and the outer/inner row shell:
 {
   "body": {
-    "style": { "backgroundColor": "#08090f", "color": "#f0f2ff", "fontFamily": "Inter, sans-serif", "htmlTitle": "Bulum SaaS Platform" },
+    "style": { "backgroundColor": "#FAF7F1", "color": "#1B2430", "fontFamily": "'Inter', sans-serif", "htmlTitle": "Norrland Coffee Roasters" },
     "rows": [
       {
-        "id": "row-hero",
-        "style": { "paddingTop": "80px", "paddingBottom": "80px" },
+        "id": "row-hero-outer",
+        "style": { "backgroundColor": "#1B2430", "padding": "0 clamp(24px, 6vw, 64px)" },
         "columns": [
-          {
-            "id": "col-hero",
-            "width": "100%",
-            "elements": [
-              { "type": "heading", "style": { "fontSize": "48px", "fontWeight": "800", "textAlign": "center", "color": "#ffffff" }, "attributes": { "text": "Build & Scale Faster" } },
-              { "type": "paragraph", "style": { "fontSize": "18px", "color": "#94a3b8", "textAlign": "center" }, "attributes": { "text": "The ultimate platform for modern digital teams." } },
-              { "type": "button", "style": { "textAlign": "center", "backgroundColor": "#8b5cf6", "color": "#ffffff", "borderRadius": "12px", "paddingTop": "14px", "paddingBottom": "14px", "paddingLeft": "28px", "paddingRight": "28px" }, "attributes": { "text": "Start Free Trial", "href": "#signup" } }
-            ]
-          }
+          { "id": "col-hero-outer", "width": "100%", "elements": [], "nestedRows": [
+            {
+              "id": "row-hero-inner",
+              "style": { "maxWidth": "1200px", "margin": "0 auto" },
+              "columns": [
+                { "id": "col-hero-text", "width": "55%", "styles": { "padding": "96px 32px 96px 0" }, "elements": [
+                  { "id": "el-eyebrow", "type": "text", "style": { "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "12px", "letterSpacing": "0.16em", "textTransform": "uppercase", "color": "#C4623B" }, "attributes": { "text": "Small-Batch Roastery" } },
+                  { "id": "el-heading", "type": "heading", "style": { "fontFamily": "'Playfair Display', serif", "fontWeight": "600", "fontSize": "48px", "lineHeight": "1.1", "color": "#FAF7F1", "maxWidth": "560px", "margin": "16px 0 0" }, "attributes": { "text": "Coffee, Roasted With Intention" } },
+                  { "id": "el-sub", "type": "paragraph", "style": { "fontFamily": "'Inter', sans-serif", "fontSize": "17px", "lineHeight": "1.7", "color": "#B7BEC9", "maxWidth": "480px", "margin": "20px 0 0" }, "attributes": { "text": "Single-origin beans sourced direct from growers, roasted weekly in small batches for a cup that actually tastes like where it came from." } },
+                  { "id": "el-cta", "type": "button", "style": { "backgroundColor": "#C4623B", "color": "#FAF7F1", "border": "none", "borderRadius": "2px", "fontFamily": "'Inter', sans-serif", "fontWeight": "600", "fontSize": "15px", "padding": "14px 26px", "margin": "28px 0 0" }, "attributes": { "text": "Shop This Week's Roast →", "href": "/shop" } }
+                ] },
+                { "id": "col-hero-image", "width": "45%", "elements": [
+                  { "id": "el-hero-img", "type": "image", "style": { "width": "100%", "borderRadius": "4px", "boxShadow": "0 18px 34px -14px rgba(27,36,48,0.45)" }, "attributes": { "src": "https://...", "alt": "Roaster pouring fresh-roasted beans into a cooling tray" } }
+                ] }
+              ]
+            }
+          ] }
         ]
       },
       {
-        "id": "row-products",
-        "style": { "paddingTop": "60px", "paddingBottom": "60px" },
+        "id": "row-features-outer",
+        "style": { "backgroundColor": "#FAF7F1", "padding": "0 clamp(24px, 6vw, 64px)" },
         "columns": [
-          { "id": "col-product-1", "width": "33.33%", "elements": [
-            { "type": "image", "style": { "width": "100%", "borderRadius": "12px" }, "attributes": { "src": "https://...", "alt": "Urban Runner" } },
-            { "type": "heading", "style": { "fontSize": "20px", "marginTop": "12px" }, "attributes": { "text": "Urban Runner" } },
-            { "type": "paragraph", "style": { "fontSize": "14px", "color": "#94a3b8" }, "attributes": { "text": "Lightweight sneakers for daily adventures" } },
-            { "type": "paragraph", "style": { "fontSize": "16px", "fontWeight": "700", "color": "#8b5cf6" }, "attributes": { "text": "$89" } }
-          ] },
-          { "id": "col-product-2", "width": "33.33%", "elements": [
-            { "type": "image", "style": { "width": "100%", "borderRadius": "12px" }, "attributes": { "src": "https://...", "alt": "Classic Court" } },
-            { "type": "heading", "style": { "fontSize": "20px", "marginTop": "12px" }, "attributes": { "text": "Classic Court" } },
-            { "type": "paragraph", "style": { "fontSize": "14px", "color": "#94a3b8" }, "attributes": { "text": "Timeless style with modern comfort" } },
-            { "type": "paragraph", "style": { "fontSize": "16px", "fontWeight": "700", "color": "#8b5cf6" }, "attributes": { "text": "$79" } }
-          ] },
-          { "id": "col-product-3", "width": "33.33%", "elements": [
-            { "type": "image", "style": { "width": "100%", "borderRadius": "12px" }, "attributes": { "src": "https://...", "alt": "Street Flex" } },
-            { "type": "heading", "style": { "fontSize": "20px", "marginTop": "12px" }, "attributes": { "text": "Street Flex" } },
-            { "type": "paragraph", "style": { "fontSize": "14px", "color": "#94a3b8" }, "attributes": { "text": "Flexible performance footwear" } },
-            { "type": "paragraph", "style": { "fontSize": "16px", "fontWeight": "700", "color": "#8b5cf6" }, "attributes": { "text": "$99" } }
+          { "id": "col-features-outer", "width": "100%", "elements": [], "nestedRows": [
+            {
+              "id": "row-features-inner",
+              "style": { "maxWidth": "1200px", "margin": "0 auto", "padding": "80px 0" },
+              "columns": [
+                { "id": "col-feature-1", "width": "33.33%", "elements": [
+                  { "id": "el-icon-1", "type": "icon", "style": { "color": "#C4623B" }, "attributes": { "iconName": "leaf", "iconSize": 30 } },
+                  { "id": "el-h-1", "type": "heading", "style": { "fontFamily": "'Playfair Display', serif", "fontWeight": "600", "fontSize": "22px", "color": "#1B2430", "margin": "16px 0 0" }, "attributes": { "text": "Direct Trade" } },
+                  { "id": "el-p-1", "type": "paragraph", "style": { "fontFamily": "'Inter', sans-serif", "fontSize": "15px", "lineHeight": "1.65", "color": "#5B6472", "margin": "8px 0 0" }, "attributes": { "text": "Every farm relationship is ours, not a broker's." } }
+                ] },
+                { "id": "col-feature-2", "width": "33.33%", "elements": [
+                  { "id": "el-icon-2", "type": "icon", "style": { "color": "#C4623B" }, "attributes": { "iconName": "flame", "iconSize": 30 } },
+                  { "id": "el-h-2", "type": "heading", "style": { "fontFamily": "'Playfair Display', serif", "fontWeight": "600", "fontSize": "22px", "color": "#1B2430", "margin": "16px 0 0" }, "attributes": { "text": "Roasted Weekly" } },
+                  { "id": "el-p-2", "type": "paragraph", "style": { "fontFamily": "'Inter', sans-serif", "fontSize": "15px", "lineHeight": "1.65", "color": "#5B6472", "margin": "8px 0 0" }, "attributes": { "text": "Never more than seven days off the roaster." } }
+                ] },
+                { "id": "col-feature-3", "width": "33.33%", "elements": [
+                  { "id": "el-icon-3", "type": "icon", "style": { "color": "#C4623B" }, "attributes": { "iconName": "truck", "iconSize": 30 } },
+                  { "id": "el-h-3", "type": "heading", "style": { "fontFamily": "'Playfair Display', serif", "fontWeight": "600", "fontSize": "22px", "color": "#1B2430", "margin": "16px 0 0" }, "attributes": { "text": "Shipped Fresh" } },
+                  { "id": "el-p-3", "type": "paragraph", "style": { "fontFamily": "'Inter', sans-serif", "fontSize": "15px", "lineHeight": "1.65", "color": "#5B6472", "margin": "8px 0 0" }, "attributes": { "text": "Out the door within 24 hours of roasting." } }
+                ] }
+              ]
+            }
           ] }
         ]
       }
@@ -357,6 +380,7 @@ EXAMPLE VALID designJson PAYLOAD (hero row, plus a 3-item product grid row):
                             width: { type: "string", description: "Percentage width (e.g. '100%', '50%', '33.33%')." },
                             elements: {
                               type: "array",
+                              description: "This column's own content elements. May be empty ([]) when the column instead uses 'nestedRows' below (the full-bleed section-shell pattern) — a column may have elements, nestedRows, or both.",
                               items: {
                                 type: "object",
                                 required: ["id", "type", "style", "attributes"],
@@ -368,6 +392,15 @@ EXAMPLE VALID designJson PAYLOAD (hero row, plus a 3-item product grid row):
                                   style: { type: "object" },
                                   attributes: { type: "object", description: "Component attributes (text, href, src, title, description, links, fields). For type 'html', raw markup goes under 'htmlContent' — NOT 'text'." },
                                 },
+                              },
+                            },
+                            nestedRows: {
+                              type: "array",
+                              description: "OPTIONAL. Nested row(s) inside this column, each the SAME shape as a top-level row (id/style/columns). This is how you build a full-bleed section: the outer row/column carries the background color edge-to-edge, and a nestedRow here caps content at a readable maxWidth. Use this instead of putting a 'maxWidth' directly on the outer row.",
+                              items: {
+                                type: "object",
+                                required: ["id", "style", "columns"],
+                                description: "Same shape as a top-level row: { id, style, columns: [{ id, width, elements, nestedRows? }] } — nesting may repeat if genuinely needed, but one level (outer band + inner capped row) covers nearly every section.",
                               },
                             },
                           },

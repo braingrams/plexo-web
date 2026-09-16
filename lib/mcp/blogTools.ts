@@ -161,26 +161,28 @@ async function ensureBlogLayoutTemplate(resolved: ResolvedUser, siteId: string, 
 }
 
 const BLOG_LAYOUT_EXAMPLE = `
+DESIGN QUALITY applies here exactly as in publish_landing_page's description: pick one small ink/paper/accent palette and a serif-heading + sans-body (+ optional uppercase-mono eyebrow) type system, keep borderRadius near 0, use boxShadow sparingly, and give blog_content a constrained maxWidth (~680-760px) so long-form reading stays comfortable — do not default to generic #ffffff/Inter/fontWeight-800.
+
 EXAMPLE — a single-post layout with a hero image, title, meta line, and content:
 {
   "body": {
-    "style": { "backgroundColor": "#ffffff", "color": "#1e293b", "fontFamily": "Inter, sans-serif", "htmlTitle": "Blog Post" },
+    "style": { "backgroundColor": "#FAF7F1", "color": "#1B2430", "fontFamily": "'Inter', sans-serif", "htmlTitle": "Blog Post" },
     "rows": [
       { "id": "row-hero", "style": { "paddingTop": "0px" }, "columns": [
         { "id": "col-hero", "width": "100%", "elements": [
           { "id": "el-featured", "type": "blog_featured_image", "style": { "width": "100%", "maxHeight": "420px", "objectFit": "cover" }, "attributes": {} }
         ] }
       ] },
-      { "id": "row-meta", "style": { "paddingTop": "32px", "paddingBottom": "8px" }, "columns": [
+      { "id": "row-meta", "style": { "paddingTop": "40px", "paddingBottom": "8px", "maxWidth": "760px", "margin": "0 auto" }, "columns": [
         { "id": "col-title", "width": "100%", "elements": [
-          { "id": "el-title", "type": "blog_title", "style": { "fontSize": "40px", "fontWeight": "800" }, "attributes": {} },
-          { "id": "el-authordate", "type": "blog_author", "style": { "fontSize": "14px", "color": "#64748b", "display": "inline-block", "marginRight": "12px" }, "attributes": {} },
-          { "id": "el-date", "type": "blog_date", "style": { "fontSize": "14px", "color": "#64748b", "display": "inline-block" }, "attributes": {} }
+          { "id": "el-title", "type": "blog_title", "style": { "fontFamily": "'Playfair Display', serif", "fontWeight": "600", "fontSize": "40px", "lineHeight": "1.15" }, "attributes": {} },
+          { "id": "el-authordate", "type": "blog_author", "style": { "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "12px", "letterSpacing": "0.1em", "textTransform": "uppercase", "color": "#5B6472", "display": "inline-block", "marginRight": "12px", "marginTop": "16px" }, "attributes": {} },
+          { "id": "el-date", "type": "blog_date", "style": { "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "12px", "letterSpacing": "0.1em", "textTransform": "uppercase", "color": "#5B6472", "display": "inline-block" }, "attributes": {} }
         ] }
       ] },
-      { "id": "row-body", "style": { "paddingTop": "24px", "paddingBottom": "48px" }, "columns": [
+      { "id": "row-body", "style": { "paddingTop": "24px", "paddingBottom": "48px", "maxWidth": "760px", "margin": "0 auto" }, "columns": [
         { "id": "col-body", "width": "100%", "elements": [
-          { "id": "el-content", "type": "blog_content", "style": { "fontSize": "17px", "lineHeight": "1.7" }, "attributes": {} },
+          { "id": "el-content", "type": "blog_content", "style": { "fontFamily": "'Inter', sans-serif", "fontSize": "17px", "lineHeight": "1.75", "color": "#1B2430" }, "attributes": {} },
           { "id": "el-comments", "type": "blog_comments", "style": { "marginTop": "48px" }, "attributes": {} }
         ] }
       ] }
@@ -191,14 +193,15 @@ EXAMPLE — a single-post layout with a hero image, title, meta line, and conten
 EXAMPLE — a listing layout with a 3-column post grid:
 {
   "body": {
-    "style": { "backgroundColor": "#ffffff", "color": "#1e293b", "fontFamily": "Inter, sans-serif", "htmlTitle": "Blog" },
+    "style": { "backgroundColor": "#FAF7F1", "color": "#1B2430", "fontFamily": "'Inter', sans-serif", "htmlTitle": "Blog" },
     "rows": [
-      { "id": "row-heading", "style": { "paddingTop": "48px", "paddingBottom": "16px" }, "columns": [
+      { "id": "row-heading", "style": { "paddingTop": "56px", "paddingBottom": "16px" }, "columns": [
         { "id": "col-heading", "width": "100%", "elements": [
-          { "id": "el-heading", "type": "heading", "style": { "fontSize": "36px", "fontWeight": "800", "textAlign": "center" }, "attributes": { "text": "Latest Posts" } }
+          { "id": "el-eyebrow", "type": "text", "style": { "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "12px", "letterSpacing": "0.16em", "textTransform": "uppercase", "color": "#C4623B", "textAlign": "center" }, "attributes": { "text": "Journal" } },
+          { "id": "el-heading", "type": "heading", "style": { "fontFamily": "'Playfair Display', serif", "fontWeight": "600", "fontSize": "36px", "textAlign": "center", "margin": "8px 0 0" }, "attributes": { "text": "Latest Posts" } }
         ] }
       ] },
-      { "id": "row-list", "style": { "paddingBottom": "48px" }, "columns": [
+      { "id": "row-list", "style": { "paddingBottom": "56px" }, "columns": [
         { "id": "col-list", "width": "100%", "elements": [
           { "id": "el-postlist", "type": "blog_post_list", "style": { "gridColumns": "3" }, "attributes": {} }
         ] }
