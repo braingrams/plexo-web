@@ -7,6 +7,7 @@ import { buildLivePreviewHtml } from "@/lib/buildLivePreviewHtml";
 import { Template, TemplateAsset, PublishedDomain, BlogSite, SiteLayout } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
 import { PageView, FormSubmission } from "@/lib/db/opsEntities";
+import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
 
 import { DetailClient } from "./detail-client";
 
@@ -69,7 +70,7 @@ export default async function TemplateDetailPage(
       CommerceSettings.get({ templateId: template.id }).go(),
     ]);
 
-    const domain = domains[0] ?? null;
+    const domain = pickPrimaryDomain(domains);
 
     siteData = {
       domain: domain ? { domain: domain.domain, type: domain.type, dnsVerified: domain.dnsVerified ?? false, active: domain.active ?? true } : null,
