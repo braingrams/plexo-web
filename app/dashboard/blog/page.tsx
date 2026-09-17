@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { Template, BlogSite, PublishedDomain, BlogPost } from "@/lib/db/contentEntities";
+import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
 
 import { BlogOverviewClient } from "./BlogOverviewClient";
 
@@ -57,7 +58,7 @@ export default async function BlogOverviewPage() {
   candidates.forEach((t, i) => {
     const blogSite = blogSites[i].data;
     if (blogSite?.enabled) {
-      const activeDomain = domainBatches[i].data.find((d) => d.active);
+      const activeDomain = pickPrimaryDomain(domainBatches[i].data.filter((d) => d.active));
       blogs.push({
         id: t.id,
         name: t.name,

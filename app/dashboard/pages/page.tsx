@@ -5,6 +5,7 @@ import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { getTierFeatures } from "@/lib/subscription";
 import { Template, BlogSite, PublishedDomain } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
+import { sortDomainsPrimaryFirst } from "@/lib/domains/primaryDomain";
 
 import { PagesOverviewClient } from "./PagesOverviewClient";
 import { PagesShell } from "../_components/PagesShell";
@@ -72,10 +73,7 @@ export default async function PagesOverviewPage() {
           compiledHtml: r.template.compiledHtml,
           updatedAt: r.template.updatedAt ?? new Date().toISOString(),
           pageCount: r.children.length,
-          domains: domainBatches[i].data
-            .slice()
-            .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))
-            .map((d) => d.domain),
+          domains: sortDomainsPrimaryFirst(domainBatches[i].data).map((d) => d.domain),
         }))}
       />
     </PagesShell>
