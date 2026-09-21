@@ -9,6 +9,7 @@ import { Mulish } from "next/font/google";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
 import { triggerGoogleSignIn } from "@/lib/charisolAuth";
+import { isPrPreviewHost } from "@/lib/isPrPreviewHost";
 
 const mulish = Mulish({
   subsets: ["latin"],
@@ -61,7 +62,18 @@ function LoginForm() {
       // Google instead of showing a dead-end error or a second "continue with Google"
       // click. No banner, no extra info shown — same full-page redirect
       // GoogleAuthButton's own click handler triggers, just fired automatically here.
+      //
+      // Suppressed on PR previews: they share staging's real Users table (see
+      // .github/workflows/pr-deploy-aws.yml), so testing with any account that happens
+      // to have been created via Google silently bounces the tester off to a Google
+      // OAuth flow whose redirect URI likely isn't even registered for the preview's
+      // own throwaway hostname. A plain inline message keeps preview testing on
+      // email+password without a surprise redirect.
       if (result?.error?.code === "google_account_only") {
+        if (isPrPreviewHost(window.location.hostname)) {
+          setError("This account uses Google sign-in, which isn't available on PR previews — use a different test account with a password.");
+          return;
+        }
         await triggerGoogleSignIn(redirectTo);
         return;
       }

@@ -38,7 +38,7 @@ export default async function FunnelsRootPage() {
       >
         <span style={{
           display: "grid", placeItems: "center", width: 52, height: 52, borderRadius: 14,
-          background: "rgba(139,92,246,0.12)", color: "#c084fc",
+          background: "rgba(var(--brand-rgb),0.12)", color: "var(--brand-light)",
         }}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />

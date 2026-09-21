@@ -34,6 +34,19 @@ function keyFromUrl(url: string): string {
 
 export class StorageError extends Error {}
 
+/** True if `url` was actually minted by publicUrlFor above (i.e. this module owns the
+ * object it points at) — lets a caller safely decide "is it OK to deleteObjects(this)"
+ * before doing so, instead of risking a delete call built from parsing an arbitrary
+ * external URL a user pasted in (e.g. branding's Logo URL field, which accepts either an
+ * upload from this module OR a plain external link). */
+export function isOwnedStorageUrl(url: string): boolean {
+  try {
+    return new URL(url).hostname === `${bucketName()}.s3.${REGION}.amazonaws.com`;
+  } catch {
+    return false;
+  }
+}
+
 /** Replaces put(path, buffer, {access, contentType}) — access:"public" objects live
  * under "public/", readable by anyone via the bucket's scoped public-read policy;
  * access:"private" objects live under "private/", never publicly readable. */

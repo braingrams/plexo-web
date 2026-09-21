@@ -1,6 +1,14 @@
 import Link from "next/link";
 import type { BlogPostCard } from "@/lib/blog/queriesDynamo";
-import { GOOGLE_FONTS_LIST, buildGoogleFontHref } from "./googleFonts";
+import { buildGoogleFontHref } from "./googleFonts";
+import { FONT_PRESET_OPTIONS, resolveFontStack } from "./blogFontPresets";
+
+// FONT_PRESET_OPTIONS and resolveFontStack now live in lib/pub/blogFontPresets.ts (no
+// `next/link` import there) so lib/mcp/blogTools.ts — part of SOL's standalone Lambda
+// bundle — can import FONT_PRESET_OPTIONS without pulling next/link into that bundle.
+// Re-exported here so every existing call site that already imports it from this file keeps
+// working unchanged. See blogFontPresets.ts's own top-of-file comment for the full story.
+export { FONT_PRESET_OPTIONS };
 
 const HEX_COLOR_REGEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 const DEFAULT_ACCENT = "#6d28d9";
@@ -13,41 +21,6 @@ const DEFAULT_ACCENT = "#6d28d9";
  */
 function sanitizeHexColor(input?: string | null): string {
   return input && HEX_COLOR_REGEX.test(input) ? input : DEFAULT_ACCENT;
-}
-
-// The 4 original no-download system stacks, kept as-is for anyone who picked them before
-// the full Google Fonts catalog was added below.
-const SYSTEM_FONT_STACKS: Record<string, string> = {
-  sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  serif: 'Georgia, "Times New Roman", Times, serif',
-  modern: '"Helvetica Neue", Helvetica, Arial, sans-serif',
-  elegant: '"Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif',
-};
-
-const SYSTEM_FONT_OPTIONS = [
-  { value: "sans", label: "Sans-serif (default)" },
-  { value: "serif", label: "Serif (classic editorial)" },
-  { value: "modern", label: "Modern sans" },
-  { value: "elegant", label: "Elegant serif" },
-];
-
-// Every selectable value in the Font dropdown — the 4 system stacks plus the full curated
-// Google Fonts catalog (see googleFonts.ts). Still a closed, code-controlled set (never a
-// raw user-supplied font-family string) even though it's now ~85 entries instead of 4 —
-// see BlogSite.fontPreset's schema comment for why that invariant matters. A Google Font's
-// `value` doubles as its own CSS font stack (it already includes a generic fallback, e.g.
-// "'Roboto', sans-serif"), so no separate stacks table is needed for those.
-export const FONT_PRESET_OPTIONS = [
-  ...SYSTEM_FONT_OPTIONS,
-  ...GOOGLE_FONTS_LIST.map((f) => ({ value: f.value, label: f.label })),
-];
-
-const VALID_FONT_PRESET_VALUES = new Set(FONT_PRESET_OPTIONS.map((o) => o.value));
-
-function resolveFontStack(preset?: string | null): string {
-  if (preset && SYSTEM_FONT_STACKS[preset]) return SYSTEM_FONT_STACKS[preset];
-  if (preset && VALID_FONT_PRESET_VALUES.has(preset)) return preset;
-  return SYSTEM_FONT_STACKS.sans;
 }
 
 export interface BlogAppearance {

@@ -47,7 +47,7 @@ function PagesNav() {
                   padding: "0.55rem 0.7rem", borderRadius: 9,
                   fontSize: "0.84rem", fontWeight: isActive ? 600 : 500,
                   color: isActive ? "#fff" : "rgba(240,242,255,0.55)",
-                  background: isActive ? "rgba(139,92,246,0.12)" : "transparent",
+                  background: isActive ? "rgba(var(--brand-rgb),0.12)" : "transparent",
                   textDecoration: "none",
                   transition: "background 0.15s ease, color 0.15s ease",
                 }}

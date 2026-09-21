@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization, listMembers, listPendingInvitations } from "@/server/orgDynamo";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
-import { PageContainer } from "@/app/dashboard/_components/PageContainer";
+import { SettingsShell } from "@/app/dashboard/_components/SettingsShell";
 import { TeamClient } from "./team-client";
 
 export default async function TeamSettingsPage() {
@@ -23,7 +23,7 @@ export default async function TeamSettingsPage() {
   ]);
 
   return (
-    <PageContainer>
+    <SettingsShell>
       <PageHeader
         eyebrow="Organization"
         title="Team"
@@ -49,6 +49,6 @@ export default async function TeamSettingsPage() {
           createdAt: i.createdAt,
         }))}
       />
-    </PageContainer>
+    </SettingsShell>
   );
 }

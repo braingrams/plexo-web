@@ -40,7 +40,7 @@ function scopeLabel(m: Pick<DeliveryMethodSummary, "countries" | "states">): str
 
 function IconPickup() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c084fc" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-light)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" />
     </svg>
   );
@@ -185,7 +185,7 @@ export function DeliveryClient({ templateId, initialMethods, currency }: { templ
         </button>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 12, padding: "0.7rem 1rem", marginBottom: "1.25rem", fontSize: "0.82rem", color: "#c4b5fd" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", background: "rgba(var(--brand-rgb),0.08)", border: "1px solid rgba(var(--brand-rgb),0.2)", borderRadius: 12, padding: "0.7rem 1rem", marginBottom: "1.25rem", fontSize: "0.82rem", color: "#c4b5fd" }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
         A customer only sees the methods that match their delivery address — set each one&apos;s country and state coverage below.
       </div>
@@ -197,7 +197,7 @@ export function DeliveryClient({ templateId, initialMethods, currency }: { templ
       ) : (
         methods.map((m) => (
           <div key={m.id} style={{ display: "flex", alignItems: "center", gap: "0.9rem", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1rem 1.2rem", marginBottom: "0.7rem" }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, background: m.type === "PICKUP" ? "rgba(139,92,246,0.14)" : "rgba(96,165,250,0.14)", display: "grid", placeItems: "center" }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, background: m.type === "PICKUP" ? "rgba(var(--brand-rgb),0.14)" : "rgba(96,165,250,0.14)", display: "grid", placeItems: "center" }}>
               {m.type === "PICKUP" ? <IconPickup /> : <IconCourier />}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>

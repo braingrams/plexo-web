@@ -249,7 +249,7 @@ export function ColorSwatchPicker({ value, onChange }: Props) {
         title="Pick a color"
         style={{
           position: "relative", width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-          overflow: "hidden", border: isOpen ? "1px solid #8b5cf6" : "1px solid rgba(255,255,255,0.15)",
+          overflow: "hidden", border: isOpen ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.15)",
           cursor: "pointer", padding: 0,
           backgroundImage:
             "linear-gradient(45deg, rgba(255,255,255,0.12) 25%, transparent 25%), linear-gradient(-45deg, rgba(255,255,255,0.12) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.12) 75%), linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.12) 75%)",
@@ -333,7 +333,7 @@ export function ColorSwatchPicker({ value, onChange }: Props) {
                 value={opacity}
                 disabled={isTransparent}
                 onChange={(e) => handleOpacityChange(parseInt(e.target.value, 10))}
-                style={{ width: "100%", accentColor: "#8b5cf6" }}
+                style={{ width: "100%", accentColor: "var(--brand)" }}
               />
             </div>
 
@@ -363,7 +363,7 @@ export function ColorSwatchPicker({ value, onChange }: Props) {
                   onClick={() => onChange(isTransparent ? hex : "transparent")}
                   style={{
                     position: "relative", width: 30, height: 17, borderRadius: 999, border: "none", flexShrink: 0,
-                    cursor: "pointer", background: isTransparent ? "#8b5cf6" : "rgba(255,255,255,0.15)",
+                    cursor: "pointer", background: isTransparent ? "var(--brand)" : "rgba(255,255,255,0.15)",
                   }}
                 >
                   <span

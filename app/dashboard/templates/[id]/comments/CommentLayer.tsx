@@ -200,7 +200,7 @@ export function CommentLayer({
             left: Math.min(pendingPin.clientX, window.innerWidth - 300),
             top: Math.min(pendingPin.clientY, window.innerHeight - 200),
             width: 280, zIndex: 95, background: "rgba(13,15,26,0.98)",
-            border: "1px solid rgba(139,92,246,0.4)", borderRadius: 12,
+            border: "1px solid rgba(var(--brand-rgb),0.4)", borderRadius: 12,
             boxShadow: "0 20px 50px rgba(0,0,0,0.5)", padding: "0.75rem",
           }}
         >

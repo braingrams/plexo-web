@@ -104,6 +104,11 @@ select {
 :root.dark {
   --brand: #8b5cf6;
   --brand-deep: #7c3aed;
+  --brand-deeper: #6d28d9;
+  --brand-light: #c084fc;
+  --brand-rgb: 139, 92, 246;
+  --brand-deep-rgb: 124, 58, 237;
+  --brand-light-rgb: 196, 132, 252;
   --brand-glow: rgba(139, 92, 246, 0.35);
   --brand-subtle: rgba(139, 92, 246, 0.1);
 
@@ -125,6 +130,11 @@ select {
 :root.light {
   --brand: #7c3aed;
   --brand-deep: #6d28d9;
+  --brand-deeper: #5b21b6;
+  --brand-light: #a855f7;
+  --brand-rgb: 124, 58, 237;
+  --brand-deep-rgb: 109, 40, 217;
+  --brand-light-rgb: 168, 85, 247;
   --brand-glow: rgba(124, 58, 237, 0.18);
   --brand-subtle: rgba(124, 58, 237, 0.08);
 
@@ -549,6 +559,67 @@ select {
 }
 
 /* ─────────────────────────────────────────
+   Toggle switch — backs app/dashboard/_components/Toggle.tsx's .toggle/.toggle-track/
+   .toggle-thumb classNames. That component shipped in the classic/modern dashboard-shells
+   refactor with no matching CSS anywhere in the repo, so every existing usage rendered as
+   a bare native checkbox plus two empty, zero-size spans; this fills in the checkbox-hack
+   pill-switch styling the component's own doc comment already promises. Sized/colored to
+   match the hand-rolled toggle button in AiSettingsClient.tsx (44x24 pill, 16px thumb,
+   var(--brand) when on) so both read as the same control.
+   ───────────────────────────────────────── */
+.toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.toggle input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  transition: left 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.toggle input:checked ~ .toggle-track {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.toggle input:checked ~ .toggle-thumb {
+  left: 22px;
+}
+
+.toggle input:disabled ~ .toggle-track {
+  opacity: 0.6;
+}
+
+/* ─────────────────────────────────────────
    DASHBOARD SHELLS — classic + modern mobile responsiveness. The shell components
    (dashboard-shell-classic.tsx, dashboard-shell-modern.tsx) render these classNames as
    forward-references with no definitions anywhere in the codebase, so the intended
@@ -697,8 +768,37 @@ select {
   display: none;
 }
 
+/* The Plexo/SOL switch floats at the true horizontal center of the topbar pill via
+   absolute positioning (dash-topbar is already `position: sticky`, which — like any
+   non-static position — establishes the containing block this needs) rather than sitting
+   in the trailing icon cluster with OrgSwitcher/FeedbackButton/NotificationBell, where it
+   would otherwise be fighting those for space and reading as just another cluttered icon
+   instead of a deliberate, prominent piece of navigation. */
+.dash-sol-switch-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  pointer-events: none;
+}
+.dash-sol-switch-center > * {
+  pointer-events: auto;
+}
+
 .dash-main-modern {
   padding: 1.5rem 2rem 4rem;
+}
+
+/* LayoutSwitchBanner renders null once dismissed/hidden — leaving its wrapper div with zero
+   children, but the wrapper's own inline padding (dash-classic-banner's 2rem top padding)
+   still reserved that space regardless, since padding lives on the wrapper, not the content
+   it wraps. :empty targets exactly that "no children at all" case, collapsing the reserved
+   gap the instant there's nothing left inside it — no component-level plumbing needed. */
+.dash-classic-banner:empty,
+.dash-modern-banner:empty {
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 @media (max-width: 767px) {
@@ -708,8 +808,22 @@ select {
     gap: 0.5rem;
   }
 
-  .dash-pill-nav {
+  /* Scoped to the topbar's OWN pill nav specifically, not the bare .dash-pill-nav class —
+     that class is also reused by Commerce/Settings' pill sub-navs (SettingsPillNav.tsx,
+     SettingsShell.tsx) and SOL's ArtifactCanvas Preview/Code tabs, none of which have a
+     hamburger-menu replacement the way this topbar nav does below. A bare `.dash-pill-nav`
+     selector here was silently deleting all of those too — real bug, found by a mobile
+     audit, not a deliberate shared behavior. */
+  .dash-topbar .dash-pill-nav {
     display: none !important;
+  }
+
+  /* At this width the pill-nav is gone and the mobile hamburger toggle sits roughly
+     center-left — an absolutely-centered switch would overlap it. SOL is still reachable
+     from inside SOL's own header switch either way, so this is a clean drop, not a lost
+     feature. */
+  .dash-sol-switch-center {
+    display: none;
   }
 
   .dash-mobile-nav-toggle {
@@ -732,6 +846,201 @@ select {
   .dash-modern-editor-route .dash-main-modern {
     padding: 0 !important;
   }
+}
+
+/* ─────────────────────────────────────────
+   SOL (the AI agent chat surface, app/dashboard/sol/**) is its own full-viewport app —
+   its own header, its own conversation sidebar — with no room for either dashboard
+   shell's chrome alongside it. Unlike .dash-modern-editor-route/.dash-classic-editor-route
+   above (which only hide chrome below the mobile breakpoint — the template editor still
+   fits fine under the modern shell's floating pill topbar at desktop widths), SOL hides
+   shell chrome at every viewport size: it's a deliberately distinct surface, not a page
+   embedded in the normal dashboard layout. !important is required here because the shells
+   set width/margin-left/padding inline (React style objects), which otherwise always wins
+   over a plain class selector. */
+.dash-sol-route .dash-topbar {
+  display: none !important;
+}
+
+.dash-sol-route .dash-main-modern {
+  padding: 0 !important;
+}
+
+.dash-sol-route .dash-classic-aside,
+.dash-sol-route .dash-classic-mobile-topbar,
+.dash-sol-route .dash-classic-banner,
+.dash-sol-route .dash-mobile-nav-backdrop {
+  display: none !important;
+}
+
+.dash-sol-route .dash-classic-main {
+  margin-left: 0 !important;
+  max-width: 100% !important;
+}
+
+/* SOL's own chrome (SolHeader/ThreadSidebar) */
+.sol-mobile-sidebar-toggle {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .sol-mobile-sidebar-toggle {
+    display: flex !important;
+  }
+}
+
+.sol-thread-row-actions {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.sol-thread-row:hover .sol-thread-row-actions {
+  opacity: 1;
+}
+
+/* ─────────────────────────────────────────
+   SOL markdown rendering — the one feature in this codebase whose output isn't hand-rolled
+   inline styles, since react-markdown/rehype-highlight produce unpredictable nested tags
+   (headings, lists, tables, code fences, blockquotes) that inline style objects can't
+   reasonably cover per-element. Scoped entirely under .sol-markdown so nothing here leaks
+   into the rest of the app.
+   ───────────────────────────────────────── */
+.sol-markdown {
+  color: #f0eefa;
+  font-size: 0.92rem;
+  line-height: 1.65;
+  word-wrap: break-word;
+}
+
+.sol-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.sol-markdown > *:last-child {
+  margin-bottom: 0;
+}
+
+.sol-markdown p {
+  margin: 0 0 0.85em;
+}
+
+.sol-markdown h1,
+.sol-markdown h2,
+.sol-markdown h3,
+.sol-markdown h4 {
+  font-family: var(--font-heading), sans-serif;
+  font-weight: 700;
+  color: #fff;
+  margin: 1.3em 0 0.5em;
+  line-height: 1.3;
+}
+
+.sol-markdown h1 {
+  font-size: 1.3rem;
+}
+.sol-markdown h2 {
+  font-size: 1.15rem;
+}
+.sol-markdown h3 {
+  font-size: 1.02rem;
+}
+.sol-markdown h4 {
+  font-size: 0.95rem;
+}
+
+.sol-markdown ul,
+.sol-markdown ol {
+  margin: 0 0 0.85em;
+  padding-left: 1.4em;
+}
+
+.sol-markdown li {
+  margin: 0.25em 0;
+}
+
+.sol-markdown li > p {
+  margin: 0;
+}
+
+.sol-markdown a {
+  color: #c4b5fd;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.sol-markdown a:hover {
+  color: #e9d5ff;
+}
+
+.sol-markdown strong {
+  color: #fff;
+  font-weight: 700;
+}
+
+.sol-markdown blockquote {
+  margin: 0 0 0.85em;
+  padding: 0.2em 1em;
+  border-left: 3px solid rgba(168, 85, 247, 0.45);
+  color: rgba(240, 242, 255, 0.65);
+  background: rgba(168, 85, 247, 0.05);
+  border-radius: 0 8px 8px 0;
+}
+
+.sol-markdown hr {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 1.2em 0;
+}
+
+.sol-markdown code {
+  font-family: var(--font-mono, "SFMono-Regular", Consolas, monospace);
+  font-size: 0.85em;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.15em 0.4em;
+  border-radius: 5px;
+}
+
+.sol-markdown pre {
+  margin: 0 0 0.85em;
+  padding: 0.85em 1em;
+  border-radius: 10px;
+  background: #0d0b14;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+}
+
+.sol-markdown pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.sol-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 0.85em;
+  font-size: 0.85rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.sol-markdown th,
+.sol-markdown td {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.45em 0.7em;
+  text-align: left;
+}
+
+.sol-markdown th {
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 700;
+  color: #fff;
+}
+
+.sol-markdown img {
+  max-width: 100%;
+  border-radius: 10px;
 }
 
 /* Last-resort safety net for the narrowest phones: a white-labeled org's custom name

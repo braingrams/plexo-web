@@ -220,6 +220,14 @@ jobs:
         env:
           STACK_KIND: compute
           APP_DOMAIN: plexo.charisol.io
+          # compute-stack.ts bakes these directly into ServerFn's environment (optional —
+          # see its own comment on why this doesn't throw like AUTH_SECRET/etc. do). Never
+          # actually reached the deployed Lambda before this — see deploy-staging.yml's
+          # matching comment for the full story.
+          SYSTEM_AI_PROVIDER: ${{ secrets.SYSTEM_AI_PROVIDER }}
+          SYSTEM_AI_KEY_ANTHROPIC_CLAUDE: ${{ secrets.SYSTEM_AI_KEY_ANTHROPIC_CLAUDE }}
+          SYSTEM_AI_KEY_OPENAI: ${{ secrets.SYSTEM_AI_KEY_OPENAI }}
+          SYSTEM_AI_KEY_GOOGLE_GEMINI: ${{ secrets.SYSTEM_AI_KEY_GOOGLE_GEMINI }}
           # The real key/ ARN of plexo-ledger's customer-managed KMS key, NOT its alias
           # ARN — see compute-stack.ts's own ledgerKmsKeyArn comment for why an alias ARN
           # silently fails to authorize the kms:Decrypt calls DynamoDB actually makes.

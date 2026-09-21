@@ -1,18 +1,31 @@
 import { cookies } from "next/headers";
 import { randomUUID } from "node:crypto";
-
-function isConditionalCheckFailure(err: unknown): boolean {
-  const anyErr = err as { name?: string; cause?: { name?: string } };
-  return anyErr?.name === "ConditionalCheckFailedException" || anyErr?.cause?.name === "ConditionalCheckFailedException";
-}
+import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 
 import type { EntityItem } from "electrodb";
+import { docClient } from "@/lib/db/client";
 import { Organization, Member, Invitation, User } from "@/lib/db/coreEntities";
 import type { OrgRole } from "@/server/accessControl";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildInviteEmail } from "@/lib/mail/templates";
 import { canWhiteLabel } from "@/lib/subscription";
 import { logEmailDelivery } from "@/lib/mail/logEmail";
+import { membershipsForUser, ensurePersonalWorkspace, ACTIVE_ORG_COOKIE } from "@/server/orgMemberships";
+
+// Same small helper orgMemberships.ts and commerceOperations.ts each already keep their own
+// copy of, rather than exporting one shared utility for a four-line check.
+function isConditionalCheckFailure(err: unknown): boolean {
+  const anyErr = err as { name?: string; cause?: { name?: string } };
+  return anyErr?.name === "ConditionalCheckFailedException" || anyErr?.cause?.name === "ConditionalCheckFailedException";
+}
+
+// membershipsForUser, ensurePersonalWorkspace, and ACTIVE_ORG_COOKIE now live in
+// server/orgMemberships.ts (no `next/headers` import there) so lambda/sol-chat/
+// sessionAuth.ts — which resolves a session OUTSIDE any Next.js request context and can't
+// use this file's cookies()-dependent ensureActiveOrganization — can import just those three
+// without pulling next/headers into its esbuild bundle. Re-exported here so every existing
+// call site that already imports them from this file keeps working unchanged.
+export { membershipsForUser, ensurePersonalWorkspace, ACTIVE_ORG_COOKIE } from "@/server/orgMemberships";
 
 // DynamoDB-native replacement for lib/subscription.ts's getOrgBrand/getOrganizationOwnerPlan
 // (both Prisma-backed) — can't reuse those directly here: an organization created through
@@ -28,12 +41,14 @@ export async function getOrganizationOwnerPlanDynamo(organizationId: string): Pr
   return ownerUser?.subscriptionPlan ?? "FREE";
 }
 
-export async function getOrgBrandDynamo(organizationId: string): Promise<{ name: string; logoUrl?: string; color?: string } | undefined> {
+export async function getOrgBrandDynamo(
+  organizationId: string,
+): Promise<{ name: string; logoUrl?: string; color?: string; displayMode: "LOGO_ONLY" | "NAME_ONLY" | "BOTH" } | undefined> {
   const { data: org } = await Organization.get({ id: organizationId }).go();
   if (!org) return undefined;
   const plan = await getOrganizationOwnerPlanDynamo(organizationId);
   if (!canWhiteLabel(plan) || !org.whiteLabelEnabled) return undefined;
-  return { name: org.name, logoUrl: org.logo, color: org.brandColor };
+  return { name: org.name, logoUrl: org.logo, color: org.brandColor, displayMode: org.brandDisplayMode ?? "BOTH" };
 }
 
 // DynamoDB-stack replacement for server/org.ts + everything better-auth's `organization`
@@ -46,23 +61,16 @@ export async function getOrgBrandDynamo(organizationId: string): Promise<{ name:
 // Auth.js's session shape has no equivalent slot without a custom callback coupling this
 // app's org-switching to Auth.js's internals, so it's tracked independently as a plain
 // httpOnly cookie instead — same "last org you were in" semantics, one fewer moving part.
-const ACTIVE_ORG_COOKIE = "plexo_active_org";
+// Exported (not just used internally) so lambda/sol-chat/sessionAuth.ts — which resolves a
+// session OUTSIDE any Next.js request context and so can't call ensureActiveOrganization
+// below (it reads this via next/headers' cookies(), unavailable in a bare Lambda) — can
+// read the exact same cookie name off its own hand-parsed cookie list instead of
+// duplicating this string and risking drift.
 const INVITATION_TTL_DAYS = 7;
 
 export type ActiveOrgResolution =
   | { status: "resolved"; organizationId: string; organizationName: string; role: OrgRole }
   | { status: "needs-choice"; organizations: { id: string; name: string; role: OrgRole }[] };
-
-export async function membershipsForUser(userId: string): Promise<{ organizationId: string; role: OrgRole; organization: { id: string; name: string } }[]> {
-  const { data: memberships } = await Member.query.byUser({ userId }).go();
-  const orgs = await Promise.all(
-    memberships.map(async (m) => {
-      const { data: org } = await Organization.get({ id: m.organizationId }).go();
-      return org ? { organizationId: m.organizationId, role: m.role as OrgRole, organization: { id: org.id, name: org.name } } : null;
-    }),
-  );
-  return orgs.filter((o): o is NonNullable<typeof o> => o !== null);
-}
 
 export async function ensureActiveOrganization(userId: string): Promise<ActiveOrgResolution> {
   const cookieStore = await cookies();
@@ -113,44 +121,6 @@ export async function setActiveOrganizationCookie(organizationId: string): Promi
   });
 }
 
-/**
- * Auto-provisions a brand-new user's default personal workspace — unlike createOrganization
- * below (an explicit, user-initiated action with no uniqueness concern), this runs from
- * ensureActiveOrganization, which is called independently from many places in the same
- * request (e.g. app/dashboard/layout.tsx AND app/dashboard/page.tsx both call it for the
- * same render, with no data dependency between them forcing one to await the other). Two
- * such calls racing on a genuinely new user's very first request would both observe zero
- * memberships and both try to create a workspace, producing two orgs (and two owner Member
- * rows) for one user. A deterministic, per-user org id plus ElectroDB's .create()
- * attribute_not_exists condition closes that race the same way resolveCommerceWallet does
- * for a site's first sale: only one racing create() can win; the other observes
- * ConditionalCheckFailedException and just re-fetches what the winner created.
- */
-async function ensurePersonalWorkspace(userId: string, name: string): Promise<{ id: string; name: string }> {
-  const id = `personal-${userId}`;
-  const slug = `ws-${userId.slice(0, 8)}-${Date.now().toString(36)}`;
-
-  // Each create is independently idempotent (conditioned on its own primary key —
-  // Organization's is `id`, Member's is the {organizationId, userId} composite) so this
-  // also self-heals the rare case where a previous call created the org but failed before
-  // creating its Member row (e.g. a transient error, not a race) — a plain "does the org
-  // already exist" short-circuit would have skipped repairing that.
-  try {
-    await Organization.create({ id, name, slug }).go();
-  } catch (err) {
-    if (!isConditionalCheckFailure(err)) throw err; // lost the create race — another concurrent call already provisioned this org
-  }
-  try {
-    await Member.create({ id: randomUUID(), organizationId: id, userId, role: "owner" }).go();
-  } catch (err) {
-    if (!isConditionalCheckFailure(err)) throw err; // membership already exists
-  }
-
-  const { data: org } = await Organization.get({ id }).go();
-  if (!org) throw new Error(`Failed to provision personal workspace for user ${userId}`);
-  return { id: org.id, name: org.name };
-}
-
 export async function createOrganization(
   userId: string,
   name: string,
@@ -196,7 +166,33 @@ export async function updateMemberRole(
   scopedTemplateIds?: string[],
 ): Promise<void> {
   const nextScopedTemplateIds = role === "editor" ? (scopedTemplateIds ?? []) : [];
-  await Member.patch({ organizationId, userId }).set({ role, scopedTemplateIds: nextScopedTemplateIds }).go();
+
+  if (role !== "owner") {
+    await Member.patch({ organizationId, userId }).set({ role, scopedTemplateIds: nextScopedTemplateIds }).go();
+    return;
+  }
+
+  // Ownership transfer only (rare — a handful of these per org, ever): exactly one Member
+  // per org should hold role "owner", but DynamoDB has no "at most one row matching X"
+  // constraint the way a SQL unique-partial-index would give us. Without this, promoting a
+  // second member to owner left two owner-role rows behind, and plexo-admin's owner badge
+  // (organizations/page.tsx, organizations/[id]/page.tsx) picked one of them via .find() —
+  // effectively at random. Demoting every existing owner in the SAME transaction that
+  // promotes the new one closes that: either the whole swap lands, or none of it does.
+  const { data: currentOwners } = await Member.query.primary({ organizationId }).where((attr, op) => op.eq(attr.role, "owner")).go();
+  const toDemote = currentOwners.filter((m) => m.userId !== userId);
+
+  const updates = [
+    Member.patch({ organizationId, userId }).set({ role: "owner", scopedTemplateIds: [] }).params(),
+    ...toDemote.map((m) => Member.patch({ organizationId, userId: m.userId }).set({ role: "admin", scopedTemplateIds: [] }).params()),
+  ];
+
+  await docClient.send(
+    new TransactWriteCommand({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      TransactItems: updates.map((params) => ({ Update: params as any })),
+    }),
+  );
 }
 
 export type InvitationView = {
@@ -297,13 +293,20 @@ export async function acceptInvitation(id: string, userId: string): Promise<{ or
   if (!inv || inv.status !== "pending") return null;
   if (new Date(inv.expiresAt).getTime() < Date.now()) return null;
 
-  await Member.create({
-    id: randomUUID(),
-    organizationId: inv.organizationId,
-    userId,
-    role: inv.role,
-    scopedTemplateIds: inv.scopedTemplateIds ?? [],
-  }).go();
+  try {
+    await Member.create({
+      id: randomUUID(),
+      organizationId: inv.organizationId,
+      userId,
+      role: inv.role,
+      scopedTemplateIds: inv.scopedTemplateIds ?? [],
+    }).go();
+  } catch (err) {
+    // Already a member of this org (e.g. the same invite accepted twice concurrently, or
+    // re-opened after already accepting) — same DynamoDB-key guard as ensurePersonalWorkspace
+    // above. Not an error from the caller's point of view: they end up a member either way.
+    if (!isConditionalCheckFailure(err)) throw err;
+  }
   await Invitation.patch({ id }).set({ status: "accepted" }).go();
   return { organizationId: inv.organizationId };
 }

@@ -6,7 +6,7 @@ import { DashboardShellModern } from "./dashboard-shell-modern";
 
 /** Resolved by lib/subscription.ts's getOrgBrand — undefined when the org isn't
  * white-label-entitled or has set no branding, in which case shells fall back to Plexo. */
-export type OrgBranding = { name: string; logoUrl?: string; color?: string };
+export type OrgBranding = { name: string; logoUrl?: string; color?: string; displayMode?: "LOGO_ONLY" | "NAME_ONLY" | "BOTH" };
 
 type Props = {
   children: React.ReactNode;

@@ -23,7 +23,7 @@ type Props = {
 
 const PLAN_COLORS: Record<string, { bg: string; color: string; border: string }> = {
   FREE: { bg: "rgba(255,255,255,0.06)", color: "rgba(240,242,255,0.55)", border: "rgba(255,255,255,0.1)" },
-  PRO: { bg: "var(--brand-subtle)", color: "var(--brand)", border: "rgba(139,92,246,0.25)" },
+  PRO: { bg: "var(--brand-subtle)", color: "var(--brand)", border: "rgba(var(--brand-rgb),0.25)" },
   ULTRA: { bg: "rgba(129,140,248,0.1)", color: "#818cf8", border: "rgba(129,140,248,0.25)" },
 };
 
@@ -134,7 +134,7 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
           display: "grid", placeItems: "center",
           fontSize: "1.35rem", fontWeight: 800, color: "#fff",
           fontFamily: "var(--font-heading), sans-serif",
-          boxShadow: "0 0 28px rgba(139,92,246,0.4)",
+          boxShadow: "0 0 28px rgba(var(--brand-rgb),0.4)",
           flexShrink: 0,
           letterSpacing: "-0.02em",
         }}>
@@ -220,8 +220,8 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
                   transition: "border-color 0.15s, box-shadow 0.15s",
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = "rgba(139,92,246,0.5)";
-                  e.target.style.boxShadow = "0 0 0 3px rgba(139,92,246,0.12)";
+                  e.target.style.borderColor = "rgba(var(--brand-rgb),0.5)";
+                  e.target.style.boxShadow = "0 0 0 3px rgba(var(--brand-rgb),0.12)";
                 }}
                 onBlur={(e) => {
                   e.target.style.borderColor = "rgba(255,255,255,0.1)";

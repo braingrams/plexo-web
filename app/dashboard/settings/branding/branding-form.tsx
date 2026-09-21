@@ -1,9 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Card } from "@/app/dashboard/_components/Card";
+
+type BrandDisplayMode = "LOGO_ONLY" | "NAME_ONLY" | "BOTH";
+
+const DISPLAY_MODE_OPTIONS: Array<{ value: BrandDisplayMode; label: string; description: string }> = [
+  { value: "BOTH", label: "Logo + Name", description: "Show both together" },
+  { value: "LOGO_ONLY", label: "Logo only", description: "Hide the name wherever the logo shows" },
+  { value: "NAME_ONLY", label: "Name only", description: "Hide the logo wherever the name shows" },
+];
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -33,6 +41,7 @@ type Props = {
   initialName: string;
   initialLogo: string | null;
   initialBrandColor: string | null;
+  initialBrandDisplayMode: BrandDisplayMode;
 };
 
 export function BrandingForm({
@@ -43,17 +52,45 @@ export function BrandingForm({
   initialName,
   initialLogo,
   initialBrandColor,
+  initialBrandDisplayMode,
 }: Props) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
   const [logo, setLogo] = useState(initialLogo ?? "");
+  const [displayMode, setDisplayMode] = useState<BrandDisplayMode>(initialBrandDisplayMode);
+  // A real hex literal, not var(--brand) — this is form DATA (what gets saved / fed to an
+  // <input type="color">, which requires a literal #rrggbb value), not a CSS style.
   const [brandColor, setBrandColor] = useState(initialBrandColor ?? "#8b5cf6");
   const [whiteLabelOn, setWhiteLabelOn] = useState(initialWhiteLabelEnabled);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const disabled = !canManage || !planAllowsWhiteLabel;
+
+  // Reuses the same generic image-upload endpoint the blog/media pickers already use
+  // (public access, org-scoped, 8MB/JPEG-PNG-GIF-WebP-AVIF-SVG limit) rather than a new
+  // upload route just for logos. Replacing an old UPLOADED logo (never a pasted external
+  // URL) is handled server-side, in the PATCH below — see that route's own comment.
+  async function handleFileSelected(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/v1/media/upload", { method: "POST", body: formData });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error ?? "Upload failed.");
+      setLogo(data.url as string);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -68,6 +105,7 @@ export function BrandingForm({
           name,
           logo: logo.trim() || null,
           brandColor: brandColor.trim() || null,
+          brandDisplayMode: displayMode,
           whiteLabelEnabled: whiteLabelOn,
         }),
       });
@@ -84,6 +122,9 @@ export function BrandingForm({
     }
   }
 
+  const showLogo = logo && displayMode !== "NAME_ONLY";
+  const showName = displayMode !== "LOGO_ONLY";
+
   return (
     <Card>
       {!planAllowsWhiteLabel && (
@@ -92,8 +133,8 @@ export function BrandingForm({
             marginBottom: "1.5rem",
             padding: "1rem 1.25rem",
             borderRadius: 10,
-            background: "rgba(139,92,246,0.08)",
-            border: "1px solid rgba(139,92,246,0.25)",
+            background: "rgba(var(--brand-rgb),0.08)",
+            border: "1px solid rgba(var(--brand-rgb),0.25)",
             color: "#e2e8f0",
             fontSize: "0.85rem",
             lineHeight: 1.5,
@@ -190,17 +231,91 @@ export function BrandingForm({
           />
         </label>
 
-        <label style={{ display: "block" }}>
-          <span style={labelStyle}>Logo URL</span>
-          <input
-            type="url"
-            value={logo}
-            onChange={(e) => setLogo(e.target.value)}
-            disabled={disabled}
-            placeholder="https://yourcompany.com/logo.png"
-            style={inputStyle}
-          />
-        </label>
+        <div>
+          <span style={labelStyle}>Logo</span>
+          <div style={{ display: "flex", gap: "0.6rem" }}>
+            <input
+              type="url"
+              value={logo}
+              onChange={(e) => setLogo(e.target.value)}
+              disabled={disabled}
+              placeholder="https://yourcompany.com/logo.png, or upload one"
+              style={{ ...inputStyle, flex: 1 }}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp,image/avif,image/svg+xml"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                void handleFileSelected(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={disabled || uploading}
+              style={{
+                flexShrink: 0,
+                padding: "0 1.1rem",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.05)",
+                color: "#f0f2ff",
+                fontSize: "0.85rem",
+                fontWeight: 600,
+                cursor: disabled || uploading ? "not-allowed" : "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {uploading ? "Uploading…" : "Upload"}
+            </button>
+          </div>
+          <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", marginTop: "0.4rem" }}>
+            Paste a link or upload an image — uploading a new one replaces whatever was there before.
+          </p>
+        </div>
+
+        <div>
+          <span style={labelStyle}>Brand Display</span>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "0.5rem" }}>
+            {DISPLAY_MODE_OPTIONS.map((option) => {
+              const active = displayMode === option.value;
+              const optionDisabled = disabled || (option.value !== "NAME_ONLY" && !logo);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={optionDisabled}
+                  onClick={() => setDisplayMode(option.value)}
+                  style={{
+                    padding: "0.65rem 0.75rem",
+                    borderRadius: 9,
+                    border: active ? "1.5px solid rgba(var(--brand-rgb),0.4)" : "1px solid rgba(255,255,255,0.08)",
+                    background: active ? "rgba(var(--brand-rgb),0.1)" : "rgba(255,255,255,0.03)",
+                    color: active ? "#c4b5fd" : "rgba(240,242,255,0.55)",
+                    cursor: optionDisabled ? "not-allowed" : "pointer",
+                    opacity: optionDisabled && !active ? 0.4 : 1,
+                    fontFamily: "inherit",
+                    textAlign: "left",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  <p style={{ fontSize: "0.8rem", fontWeight: active ? 700 : 600, margin: 0 }}>{option.label}</p>
+                  <p style={{ fontSize: "0.68rem", color: active ? "rgba(196,181,253,0.7)" : "rgba(240,242,255,0.3)", margin: "0.15rem 0 0" }}>
+                    {option.description}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+          {!logo && displayMode !== "NAME_ONLY" && (
+            <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", marginTop: "0.4rem" }}>
+              Add a logo above to enable the logo-only option.
+            </p>
+          )}
+        </div>
 
         <label style={{ display: "block" }}>
           <span style={labelStyle}>Accent Color</span>
@@ -223,7 +338,7 @@ export function BrandingForm({
           </div>
         </label>
 
-        {logo && (
+        {(logo || name) && (
           <div>
             <span style={labelStyle}>Preview</span>
             <div
@@ -237,15 +352,17 @@ export function BrandingForm({
                 borderRadius: 10,
               }}
             >
-              <img
-                src={logo}
-                alt={name}
-                style={{ width: 30, height: 30, borderRadius: 8, objectFit: "cover" }}
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
-                }}
-              />
-              <span style={{ fontWeight: 700, color: "#f0f2ff" }}>{name || "Your Brand"}</span>
+              {showLogo && (
+                <img
+                  src={logo}
+                  alt={name}
+                  style={{ width: 30, height: 30, borderRadius: 8, objectFit: "cover" }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
+                  }}
+                />
+              )}
+              {showName && <span style={{ fontWeight: 700, color: "#f0f2ff" }}>{name || "Your Brand"}</span>}
             </div>
           </div>
         )}

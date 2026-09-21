@@ -63,7 +63,7 @@ export function FunnelTabs({ templateId }: { templateId: string }) {
               display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.55rem 0.85rem",
               fontSize: "0.83rem", fontWeight: isActive ? 600 : 500,
               color: isActive ? "#fff" : "rgba(240,242,255,0.5)",
-              borderBottom: `2px solid ${isActive ? "var(--brand, #8b5cf6)" : "transparent"}`,
+              borderBottom: `2px solid ${isActive ? "var(--brand, var(--brand))" : "transparent"}`,
               whiteSpace: "nowrap", flexShrink: 0, textDecoration: "none",
             }}
           >

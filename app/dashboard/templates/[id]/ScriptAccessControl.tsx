@@ -131,7 +131,7 @@ export function ScriptAccessControl({ templateId, onModeChange }: Props) {
   const rowStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", flexWrap: "wrap" };
   const buttonStyle: React.CSSProperties = {
     padding: "0.3rem 0.7rem", borderRadius: 7, fontSize: "0.72rem", fontWeight: 600,
-    background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.35)", color: "#c4b5fd",
+    background: "rgba(var(--brand-rgb),0.12)", border: "1px solid rgba(var(--brand-rgb),0.35)", color: "#c4b5fd",
     cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.6 : 1,
   };
   const inputStyle: React.CSSProperties = {
