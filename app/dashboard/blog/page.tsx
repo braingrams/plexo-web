@@ -90,7 +90,7 @@ export default async function BlogOverviewPage() {
   candidates.forEach((t, i) => {
     const blogSite = blogSites[i].data;
     if (blogSite?.enabled) {
-      const activeDomain = pickPrimaryDomain(domainBatches[i].data.filter((d) => d.active));
+      const activeDomain = pickPrimaryDomain(domainBatches[i].data);
       blogs.push({
         id: t.id,
         name: t.name,

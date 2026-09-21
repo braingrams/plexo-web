@@ -65,6 +65,7 @@ const LAYOUT_ELEMENT_SCHEMA = {
   type: "object",
   required: ["id", "type", "style", "attributes"],
   properties: {
+    id: { type: "string" },
     type: {
       type: "string",
       enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video", "accordion", "blog_title", "blog_content", "blog_featured_image", "blog_date", "blog_author", "blog_categories", "blog_comments", "blog_post_list"],
@@ -91,6 +92,7 @@ const LAYOUT_SCHEMA_DEFS = {
     properties: {
       id: { type: "string" },
       width: { type: "string", description: "Percentage width (e.g. '100%', '50%', '33.33%')." },
+      style: { type: "object" },
       elements: {
         type: "array",
         description: "This column's own content elements. May be empty ([]) when the column instead uses 'nestedRows' below (the full-bleed section-shell pattern) — a column may have elements, nestedRows, or both.",
