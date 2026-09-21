@@ -470,6 +470,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   // custom domain input or cert instructions.
   function closeDrawer() {
     setIsDrawerOpen(false);
+    setSubdomainPrefix("");
     setCustomDomainInput("");
     setJustAddedCertValidation(null);
     setSuccessMsg(null);
