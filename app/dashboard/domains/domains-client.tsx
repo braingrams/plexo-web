@@ -426,8 +426,13 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
       if (isCustom && payload.domain?.certificateValidationName && payload.domain?.certificateValidationValue) {
         setJustAddedCertValidation({ name: payload.domain.certificateValidationName, value: payload.domain.certificateValidationValue });
       }
+      // CUSTOM keeps the drawer open with the DNS/cert instructions below — those are
+      // still reading customDomainInput (dnsHostLabel), so clearing it here would blank
+      // out the "Name/Host" field to its empty-state placeholder ("subdomain") right when
+      // the customer needs to see and copy their actual host. Only reset for SUBDOMAIN,
+      // whose drawer closes shortly after anyway.
       setSubdomainPrefix("");
-      setCustomDomainInput("");
+      if (!isCustom) setCustomDomainInput("");
 
       // Refresh list
       const updatedRes = await fetch("/api/v1/domains");
@@ -458,6 +463,17 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  // Closing (not just successfully submitting) is the one point we can safely wipe the
+  // form — a reopen should start fresh rather than showing the previous link's leftover
+  // custom domain input or cert instructions.
+  function closeDrawer() {
+    setIsDrawerOpen(false);
+    setCustomDomainInput("");
+    setJustAddedCertValidation(null);
+    setSuccessMsg(null);
+    setErrorMsg(null);
   }
 
   function handleDeleteDomain(domainId: string, domainName: string) {
@@ -966,7 +982,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
         <>
           {/* Backdrop Overlay */}
           <div
-            onClick={() => setIsDrawerOpen(false)}
+            onClick={closeDrawer}
             style={{
               position: "fixed",
               inset: 0,
@@ -1010,7 +1026,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
               </div>
               <button
                 type="button"
-                onClick={() => setIsDrawerOpen(false)}
+                onClick={closeDrawer}
                 style={{
                   background: "none", border: "none", cursor: "pointer", color: "rgba(240,242,255,0.35)",
                   padding: "0.25rem", transition: "color 0.15s", lineHeight: 1, display: "flex", alignItems: "center"
@@ -1195,27 +1211,27 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                         <span style={{ width: "35%" }}>Name / Host</span>
                         <span style={{ width: "40%", textAlign: "right" }}>Target / Value</span>
                       </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: "0.72rem", alignItems: "center" }}>
-                        <span style={{ width: "25%", color: "#c4b5fd", fontWeight: 600 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: "0.72rem", alignItems: "flex-start", flexWrap: "wrap", gap: "0.4rem 0" }}>
+                        <span style={{ width: "25%", minWidth: 0, color: "#c4b5fd", fontWeight: 600 }}>
                           CNAME
                         </span>
-                        <span style={{ width: "35%", color: "#f0f2ff", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                          {dnsHostLabel}
+                        <span style={{ width: "35%", minWidth: 0, color: "#f0f2ff", fontWeight: 600, display: "flex", alignItems: "flex-start", gap: "0.25rem", wordBreak: "break-all", overflowWrap: "anywhere" }}>
+                          <span style={{ minWidth: 0 }}>{dnsHostLabel}</span>
                           <button
                             type="button"
                             onClick={() => handleCopy(dnsHostLabel, 'host')}
-                            style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", alignSelf: "center" }}
+                            style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", flexShrink: 0 }}
                             title="Copy Host"
                           >
                             {copiedField === 'host' ? <IconCheck /> : <IconCopy />}
                           </button>
                         </span>
-                        <span style={{ width: "40%", color: "var(--brand)", fontWeight: 600, textAlign: "right", wordBreak: "break-all", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.25rem" }}>
-                          {dnsCnameTarget}
+                        <span style={{ width: "40%", minWidth: 0, color: "var(--brand)", fontWeight: 600, textAlign: "right", wordBreak: "break-all", overflowWrap: "anywhere", display: "flex", alignItems: "flex-start", justifyContent: "flex-end", gap: "0.25rem" }}>
+                          <span style={{ minWidth: 0 }}>{dnsCnameTarget}</span>
                           <button
                             type="button"
                             onClick={() => handleCopy(dnsCnameTarget, 'target')}
-                            style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", alignSelf: "center" }}
+                            style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", flexShrink: 0 }}
                             title="Copy Target"
                           >
                             {copiedField === 'target' ? <IconCheck /> : <IconCopy />}
@@ -1248,25 +1264,25 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                         Add this CNAME too — it proves you own the domain so we can issue its certificate. Needed for every domain, root or subdomain.
                       </p>
                       <div style={{ background: "rgba(0,0,0,0.25)", borderRadius: 8, padding: "0.6rem 0.75rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: "0.72rem", alignItems: "center" }}>
-                          <span style={{ width: "25%", color: "#6ee7b7", fontWeight: 600 }}>CNAME</span>
-                          <span style={{ width: "35%", color: "#f0f2ff", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                            {justAddedCertValidation.name}
+                        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: "0.72rem", alignItems: "flex-start", flexWrap: "wrap", gap: "0.4rem 0" }}>
+                          <span style={{ width: "25%", minWidth: 0, color: "#6ee7b7", fontWeight: 600 }}>CNAME</span>
+                          <span style={{ width: "35%", minWidth: 0, color: "#f0f2ff", fontWeight: 600, display: "flex", alignItems: "flex-start", gap: "0.25rem", wordBreak: "break-all", overflowWrap: "anywhere" }}>
+                            <span style={{ minWidth: 0 }}>{justAddedCertValidation.name}</span>
                             <button
                               type="button"
                               onClick={() => handleCopy(justAddedCertValidation.name, 'certHost')}
-                              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", alignSelf: "center" }}
+                              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", flexShrink: 0 }}
                               title="Copy Host"
                             >
                               {copiedField === 'certHost' ? <IconCheck /> : <IconCopy />}
                             </button>
                           </span>
-                          <span style={{ width: "40%", color: "#34d399", fontWeight: 600, textAlign: "right", wordBreak: "break-all", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.25rem" }}>
-                            {justAddedCertValidation.value}
+                          <span style={{ width: "40%", minWidth: 0, color: "#34d399", fontWeight: 600, textAlign: "right", wordBreak: "break-all", overflowWrap: "anywhere", display: "flex", alignItems: "flex-start", justifyContent: "flex-end", gap: "0.25rem" }}>
+                            <span style={{ minWidth: 0 }}>{justAddedCertValidation.value}</span>
                             <button
                               type="button"
                               onClick={() => handleCopy(justAddedCertValidation.value, 'certValue')}
-                              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", alignSelf: "center" }}
+                              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", flexShrink: 0 }}
                               title="Copy Value"
                             >
                               {copiedField === 'certValue' ? <IconCheck /> : <IconCopy />}
