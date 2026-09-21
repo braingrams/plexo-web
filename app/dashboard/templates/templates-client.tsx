@@ -239,7 +239,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
                   padding: "0.4rem 0.9rem",
                   borderRadius: 8, border: "none", cursor: "pointer",
                   fontSize: "0.8rem", fontWeight: active ? 700 : 500,
-                  background: active ? "rgba(139,92,246,0.15)" : "transparent",
+                  background: active ? "rgba(var(--brand-rgb),0.15)" : "transparent",
                   color: active ? "var(--brand)" : "rgba(240,242,255,0.5)",
                   transition: "background 0.15s, color 0.15s",
                   fontFamily: "inherit",
@@ -323,8 +323,8 @@ export function TemplatesClient({ initialTemplates }: Props) {
         }}>
           <div style={{
             width: 52, height: 52, borderRadius: 14,
-            background: "rgba(139,92,246,0.08)",
-            border: "1px solid rgba(139,92,246,0.15)",
+            background: "rgba(var(--brand-rgb),0.08)",
+            border: "1px solid rgba(var(--brand-rgb),0.15)",
             display: "grid", placeItems: "center",
             margin: "0 auto 1rem",
             color: "var(--brand)",
@@ -534,7 +534,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
                             display: "flex", alignItems: "center", gap: "0.6rem",
                             padding: "0.75rem 1rem",
                             borderRadius: 10,
-                            border: active ? "1.5px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                            border: active ? "1.5px solid rgba(var(--brand-rgb),0.5)" : "1px solid rgba(255,255,255,0.08)",
                             background: active ? "var(--brand-subtle)" : "rgba(255,255,255,0.03)",
                             color: active ? "var(--brand)" : "rgba(240,242,255,0.55)",
                             cursor: "pointer", fontFamily: "inherit",

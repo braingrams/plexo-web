@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
-import { resolveUser } from "@/lib/auth/resolveUser";
-import { createBlogPost, updateBlogPost, deleteBlogPost } from "@/lib/blog/savePostDynamo";
+import type { resolveUser } from "@/lib/auth/resolveUser";
+import { createBlogPost, updateBlogPost, deleteBlogPost, type RevalidateFn } from "@/lib/blog/savePostCore";
 import { generateUniqueAuthorSlug } from "@/lib/blog/authorsDynamo";
 import { effectiveStatus } from "@/lib/blog/queriesDynamo";
 import { findCommentById, getDescendantCommentIds } from "@/lib/blog/commentsDynamo";
 import { slugify, avoidPageReservedSlug, isValidUuid } from "@/server/slugDynamo";
 import { convertWordPressHtmlToTiptapJson } from "@/lib/blogImport/htmlToTiptap";
-import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogTheme";
+import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogFontPresets";
 import { hasBlogMarker, type BlogMarkerName } from "@/lib/pub/blogLayoutRender";
 import { Template, BlogSite, BlogCategory, BlogTag, BlogAuthor, BlogPost, BlogPostCategory, BlogPostTag, BlogComment } from "@/lib/db/contentEntities";
 
@@ -161,26 +161,28 @@ async function ensureBlogLayoutTemplate(resolved: ResolvedUser, siteId: string, 
 }
 
 const BLOG_LAYOUT_EXAMPLE = `
+DESIGN QUALITY applies here exactly as in publish_landing_page's description: pick one small ink/paper/accent palette and a serif-heading + sans-body (+ optional uppercase-mono eyebrow) type system, keep borderRadius near 0, use boxShadow sparingly, and give blog_content a constrained maxWidth (~680-760px) so long-form reading stays comfortable — do not default to generic #ffffff/Inter/fontWeight-800.
+
 EXAMPLE — a single-post layout with a hero image, title, meta line, and content:
 {
   "body": {
-    "style": { "backgroundColor": "#ffffff", "color": "#1e293b", "fontFamily": "Inter, sans-serif", "htmlTitle": "Blog Post" },
+    "style": { "backgroundColor": "#FAF7F1", "color": "#1B2430", "fontFamily": "'Inter', sans-serif", "htmlTitle": "Blog Post" },
     "rows": [
       { "id": "row-hero", "style": { "paddingTop": "0px" }, "columns": [
         { "id": "col-hero", "width": "100%", "elements": [
           { "id": "el-featured", "type": "blog_featured_image", "style": { "width": "100%", "maxHeight": "420px", "objectFit": "cover" }, "attributes": {} }
         ] }
       ] },
-      { "id": "row-meta", "style": { "paddingTop": "32px", "paddingBottom": "8px" }, "columns": [
+      { "id": "row-meta", "style": { "paddingTop": "40px", "paddingBottom": "8px", "maxWidth": "760px", "margin": "0 auto" }, "columns": [
         { "id": "col-title", "width": "100%", "elements": [
-          { "id": "el-title", "type": "blog_title", "style": { "fontSize": "40px", "fontWeight": "800" }, "attributes": {} },
-          { "id": "el-authordate", "type": "blog_author", "style": { "fontSize": "14px", "color": "#64748b", "display": "inline-block", "marginRight": "12px" }, "attributes": {} },
-          { "id": "el-date", "type": "blog_date", "style": { "fontSize": "14px", "color": "#64748b", "display": "inline-block" }, "attributes": {} }
+          { "id": "el-title", "type": "blog_title", "style": { "fontFamily": "'Playfair Display', serif", "fontWeight": "600", "fontSize": "40px", "lineHeight": "1.15" }, "attributes": {} },
+          { "id": "el-authordate", "type": "blog_author", "style": { "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "12px", "letterSpacing": "0.1em", "textTransform": "uppercase", "color": "#5B6472", "display": "inline-block", "marginRight": "12px", "marginTop": "16px" }, "attributes": {} },
+          { "id": "el-date", "type": "blog_date", "style": { "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "12px", "letterSpacing": "0.1em", "textTransform": "uppercase", "color": "#5B6472", "display": "inline-block" }, "attributes": {} }
         ] }
       ] },
-      { "id": "row-body", "style": { "paddingTop": "24px", "paddingBottom": "48px" }, "columns": [
+      { "id": "row-body", "style": { "paddingTop": "24px", "paddingBottom": "48px", "maxWidth": "760px", "margin": "0 auto" }, "columns": [
         { "id": "col-body", "width": "100%", "elements": [
-          { "id": "el-content", "type": "blog_content", "style": { "fontSize": "17px", "lineHeight": "1.7" }, "attributes": {} },
+          { "id": "el-content", "type": "blog_content", "style": { "fontFamily": "'Inter', sans-serif", "fontSize": "17px", "lineHeight": "1.75", "color": "#1B2430" }, "attributes": {} },
           { "id": "el-comments", "type": "blog_comments", "style": { "marginTop": "48px" }, "attributes": {} }
         ] }
       ] }
@@ -191,14 +193,15 @@ EXAMPLE — a single-post layout with a hero image, title, meta line, and conten
 EXAMPLE — a listing layout with a 3-column post grid:
 {
   "body": {
-    "style": { "backgroundColor": "#ffffff", "color": "#1e293b", "fontFamily": "Inter, sans-serif", "htmlTitle": "Blog" },
+    "style": { "backgroundColor": "#FAF7F1", "color": "#1B2430", "fontFamily": "'Inter', sans-serif", "htmlTitle": "Blog" },
     "rows": [
-      { "id": "row-heading", "style": { "paddingTop": "48px", "paddingBottom": "16px" }, "columns": [
+      { "id": "row-heading", "style": { "paddingTop": "56px", "paddingBottom": "16px" }, "columns": [
         { "id": "col-heading", "width": "100%", "elements": [
-          { "id": "el-heading", "type": "heading", "style": { "fontSize": "36px", "fontWeight": "800", "textAlign": "center" }, "attributes": { "text": "Latest Posts" } }
+          { "id": "el-eyebrow", "type": "text", "style": { "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "12px", "letterSpacing": "0.16em", "textTransform": "uppercase", "color": "#C4623B", "textAlign": "center" }, "attributes": { "text": "Journal" } },
+          { "id": "el-heading", "type": "heading", "style": { "fontFamily": "'Playfair Display', serif", "fontWeight": "600", "fontSize": "36px", "textAlign": "center", "margin": "8px 0 0" }, "attributes": { "text": "Latest Posts" } }
         ] }
       ] },
-      { "id": "row-list", "style": { "paddingBottom": "48px" }, "columns": [
+      { "id": "row-list", "style": { "paddingBottom": "56px" }, "columns": [
         { "id": "col-list", "width": "100%", "elements": [
           { "id": "el-postlist", "type": "blog_post_list", "style": { "gridColumns": "3" }, "attributes": {} }
         ] }
@@ -529,7 +532,18 @@ categoryNames/tagNames/authorName are plain names, not ids — matching ones are
 
 export const BLOG_TOOL_NAMES = new Set(BLOG_MCP_TOOLS.map((t) => t.name));
 
-export async function handleBlogTool(toolName: string, args: any, resolved: ResolvedUser): Promise<any> {
+// No-op default for `revalidate`: this file must never statically import lib/blog/
+// revalidateDynamo.ts (it calls Next's `revalidatePath` from "next/cache", whose own import
+// graph transitively requires "@opentelemetry/api" and can't be esbuild-bundled standalone
+// — see lib/blog/savePostCore.ts's own top-of-file comment). handleMcpJsonRpc (the real
+// Next.js /api/v1/mcp route, which DOES have next/cache available) passes the real
+// revalidateBlogPost through dispatchMcpTool's optional `revalidate` parameter — see
+// mcpServer.ts and dispatchMcpTool.ts. SOL's agent loop (lib/ai/solAgent.ts) never passes
+// one, so its blog-tool calls silently skip revalidation, which is a no-op in effect anyway
+// since a bare Lambda invocation has no Next.js page cache of its own to invalidate.
+const NOOP_REVALIDATE: RevalidateFn = async () => {};
+
+export async function handleBlogTool(toolName: string, args: any, resolved: ResolvedUser, revalidate: RevalidateFn = NOOP_REVALIDATE): Promise<any> {
   const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
 
   switch (toolName) {
@@ -822,7 +836,7 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
         authorId: authorId ?? null,
         categoryIds: categoryIds ?? [],
         tagIds: tagIds ?? [],
-      });
+      }, revalidate);
 
       return {
         success: true,
@@ -860,7 +874,7 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const tagIds = await resolveTagIds(siteId, normalizeStringArray(args.tagNames));
       if (tagIds !== undefined) input.tagIds = tagIds;
 
-      const post = await updateBlogPost(siteId, postId, input as any);
+      const post = await updateBlogPost(siteId, postId, input as any, revalidate);
       if (!post) throw new Error(`Post not found with id "${postId}".`);
 
       return { success: true, postId: post.id, slug: post.slug, status: post.status };
@@ -871,7 +885,7 @@ export async function handleBlogTool(toolName: string, args: any, resolved: Reso
       const postId = typeof args.postId === "string" ? args.postId.trim() : "";
       if (!postId) throw new Error("postId is required.");
 
-      const deleted = await deleteBlogPost(siteId, postId);
+      const deleted = await deleteBlogPost(siteId, postId, revalidate);
       if (!deleted) throw new Error(`Post not found with id "${postId}".`);
 
       return { success: true, deletedPostId: postId };

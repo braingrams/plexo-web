@@ -3,6 +3,13 @@ import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
 import type { OrgRole } from "@/server/accessControl";
 
+// maskSecret now lives in lib/commerce/maskSecret.ts (no `next/server` import there) so
+// lib/mcp/commerceTools.ts — part of SOL's standalone Lambda bundle — can import it without
+// pulling next/server into that bundle. Re-exported here so every existing call site that
+// already imports it from this file keeps working unchanged. See maskSecret.ts's own
+// top-of-file comment for the full story.
+export { maskSecret } from "./maskSecret";
+
 export type ResolvedCommerceAdmin = {
   userId: string;
   organizationId: string;
@@ -39,12 +46,4 @@ export async function resolveCommerceAdmin(
       templateId,
     },
   };
-}
-
-/** Masks a Paystack/MailDrip secret for display — same idea as ApiKey.maskedKey: never
- * return the real value once it's set, just enough to confirm something is configured. */
-export function maskSecret(plain: string | null): string | null {
-  if (!plain) return null;
-  if (plain.length <= 8) return "••••••••";
-  return `${plain.slice(0, 4)}${"•".repeat(8)}${plain.slice(-4)}`;
 }

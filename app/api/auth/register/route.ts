@@ -4,6 +4,7 @@ import { hashPassword } from "@better-auth/utils/password";
 
 import { dynamoAdapter } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
+import { createUserWithEmailLock, EmailAlreadyInUseError } from "@/lib/db/coreOperations";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildVerificationEmail } from "@/lib/mail/templates";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
@@ -51,7 +52,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const passwordHash = await hashPassword(password);
   const id = randomUUID();
-  await User.create({ id, email, name, passwordHash, isConfirmed: false, pendingPlan }).go();
+  try {
+    await createUserWithEmailLock({ id, email, name, passwordHash, isConfirmed: false, pendingPlan });
+  } catch (err) {
+    if (err instanceof EmailAlreadyInUseError) {
+      // Lost the race the pre-check above couldn't catch (two concurrent submissions for
+      // the same email) — same response as the ordinary pre-check 409 above, just reached
+      // via the transaction instead.
+      return NextResponse.json({ error: { message: "An account with this email already exists." } }, { status: 409 });
+    }
+    throw err;
+  }
 
   const token = randomUUID();
   await dynamoAdapter.createVerificationToken?.({

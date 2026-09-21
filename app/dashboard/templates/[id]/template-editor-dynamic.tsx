@@ -57,8 +57,8 @@ function EditorSkeleton() {
           width: 40,
           height: 40,
           borderRadius: "50%",
-          border: "3px solid rgba(139,92,246,0.2)",
-          borderTopColor: "#8b5cf6",
+          border: "3px solid rgba(var(--brand-rgb),0.2)",
+          borderTopColor: "var(--brand)",
           animation: "spin 0.7s linear infinite",
         }}
       />

@@ -213,6 +213,17 @@ jobs:
         working-directory: ./cdk
         env:
           STACK_KIND: compute
+          # compute-stack.ts bakes these directly into ServerFn's environment (optional —
+          # see its own comment on why this doesn't throw like AUTH_SECRET/etc. do above).
+          # Previously only ever synced to SSM (the "Sync secrets from GitHub to SSM" step
+          # above), never actually reaching the deployed Lambda — the runtime SSM-loading
+          # path (lib/ssmEnv.ts) has never actually run in any real deploy (see that gap's
+          # own comment in compute-stack.ts), so System AI has been silently unconfigured
+          # in every environment until this was added.
+          SYSTEM_AI_PROVIDER: ${{ secrets.SYSTEM_AI_PROVIDER }}
+          SYSTEM_AI_KEY_ANTHROPIC_CLAUDE: ${{ secrets.SYSTEM_AI_KEY_ANTHROPIC_CLAUDE }}
+          SYSTEM_AI_KEY_OPENAI: ${{ secrets.SYSTEM_AI_KEY_OPENAI }}
+          SYSTEM_AI_KEY_GOOGLE_GEMINI: ${{ secrets.SYSTEM_AI_KEY_GOOGLE_GEMINI }}
           # Registers staging-plexo.charisol.io on the distribution (so it's ready to
           # accept traffic once DNS points there) without yet changing what the app
           # itself thinks its own URL is (NEXT_PUBLIC_APP_URL, below, stays on the bare

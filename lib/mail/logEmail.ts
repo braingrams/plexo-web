@@ -17,6 +17,7 @@ export type EmailDeliveryContext =
   | "invitation"
   | "form_submission"
   | "commerce_receipt"
+  | "commerce_order_status"
   | "commerce_digital_delivery"
   | "commerce_payment_received"
   | "testimonial_notification"

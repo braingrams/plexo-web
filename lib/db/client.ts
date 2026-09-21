@@ -16,7 +16,7 @@ export const docClient = DynamoDBDocument.from(ddb, {
 // lives in exactly one place, cdk/lib/data-stack.ts, and gets wired into every deployed
 // Lambda's real environment at deploy time (cdk/lib/compute-stack.ts's `tableEnv`, spread
 // into ServerFn's `environment` block) — staging, production, and every PR preview alike,
-// unconditionally. So these six vars are ALWAYS set in a real deployed environment; the
+// unconditionally. So these seven vars are ALWAYS set in a real deployed environment; the
 // only place they can be missing is a local `next dev` that hasn't configured them.
 //
 // This used to silently fall back to the bare PRODUCTION table names
@@ -37,6 +37,7 @@ const REQUIRED_TABLE_ENV_VARS = [
   "PLEXO_CONTENT_TABLE",
   "PLEXO_OPS_TABLE",
   "PLEXO_IMPORT_TABLE",
+  "PLEXO_SOL_TABLE",
 ] as const;
 
 if (process.env.NEXT_PHASE !== "phase-production-build") {
@@ -59,4 +60,5 @@ export const TABLES = {
   content: process.env.PLEXO_CONTENT_TABLE!,
   ops: process.env.PLEXO_OPS_TABLE!,
   import: process.env.PLEXO_IMPORT_TABLE!,
+  sol: process.env.PLEXO_SOL_TABLE!,
 } as const;

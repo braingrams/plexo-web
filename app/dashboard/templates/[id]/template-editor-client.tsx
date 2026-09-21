@@ -324,7 +324,7 @@ function EditorHeaderLeft({
               ? "var(--brand-subtle)"
               : "rgba(129,140,248,0.1)",
             color: isEmail ? "var(--brand)" : "#818cf8",
-            border: `1px solid ${isEmail ? "rgba(139,92,246,0.25)" : "rgba(129,140,248,0.2)"}`,
+            border: `1px solid ${isEmail ? "rgba(var(--brand-rgb),0.25)" : "rgba(129,140,248,0.2)"}`,
             flexShrink: 0,
           }}
         >
@@ -1000,8 +1000,8 @@ export function TemplateEditorClient({
         <div
           style={{
             padding: "0.6rem 1rem",
-            background: "rgba(139,92,246,0.1)",
-            borderBottom: "1px solid rgba(139,92,246,0.25)",
+            background: "rgba(var(--brand-rgb),0.1)",
+            borderBottom: "1px solid rgba(var(--brand-rgb),0.25)",
             color: "#c4b5fd",
             fontSize: "0.78rem",
             textAlign: "center",
@@ -1027,7 +1027,7 @@ export function TemplateEditorClient({
           onMaildripAuth={isEmail ? undefined : handleMaildripAuth}
           initialTemplate={initialDesignJson}
           backgroundColor="#0b1526"
-          themeBgColor="#8b5cf6"
+          themeBgColor="var(--brand)"
           themeFgColor="#ffffff"
           textColor="#ecfeff"
           showSaveButton={false}
@@ -1370,8 +1370,8 @@ export function TemplateEditorClient({
                         style={{
                           marginTop: "0.6rem",
                           padding: "0.6rem",
-                          background: "rgba(139,92,246,0.04)",
-                          border: "1px solid rgba(139,92,246,0.12)",
+                          background: "rgba(var(--brand-rgb),0.04)",
+                          border: "1px solid rgba(var(--brand-rgb),0.12)",
                           borderRadius: 8,
                           fontSize: "0.72rem",
                           color: "rgba(240,242,255,0.65)",

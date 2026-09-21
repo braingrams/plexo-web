@@ -56,8 +56,8 @@ function Thread({
         borderRadius: 12,
         padding: "0.75rem",
         marginBottom: "0.6rem",
-        background: highlighted ? "rgba(139,92,246,0.1)" : "rgba(255,255,255,0.03)",
-        border: highlighted ? "1px solid rgba(139,92,246,0.35)" : "1px solid transparent",
+        background: highlighted ? "rgba(var(--brand-rgb),0.1)" : "rgba(255,255,255,0.03)",
+        border: highlighted ? "1px solid rgba(var(--brand-rgb),0.35)" : "1px solid transparent",
         transition: "background 0.2s, border-color 0.2s",
         opacity: root.resolved ? 0.6 : 1,
       }}

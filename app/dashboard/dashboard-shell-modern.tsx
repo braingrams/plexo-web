@@ -9,8 +9,9 @@ import { Avatar } from "./_components/Avatar";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { NotificationBell, OrgSwitcher } from "./_components/TeamHeaderControls";
 import { FeedbackButton } from "./_components/FeedbackButton";
+import { SolModeSwitch } from "./sol/_components/SolModeSwitch";
 import type { OrgBranding } from "./dashboard-shell";
-import { darken, toRgba } from "@/lib/color";
+import { darken, lighten, toRgba, toRgbTriplet } from "@/lib/color";
 
 function IconChevronDown() {
   return (
@@ -68,14 +69,27 @@ type Props = {
 
 export function DashboardShellModern({ children, userName, userEmail, organizationName, orgBranding }: Props) {
   const brandName = orgBranding?.name ?? "Plexo";
+  // Undefined displayMode (whitelabeling off, or an org that hasn't set this field yet)
+  // shows both — the exact behavior every brand mark already had before this existed.
+  const showBrandLogo = orgBranding?.displayMode !== "NAME_ONLY";
+  const showBrandName = orgBranding?.displayMode !== "LOGO_ONLY";
   // Overrides the globals.css --brand triplet for this subtree only (inline style on the
   // shell root cascades to every var(--brand)/var(--brand-deep)/var(--brand-glow) read
   // below it) — leaves the marketing site and other dashboards' sessions untouched.
+  // Same full token set as DashboardShellClassic's identical brandVars — see that file's
+  // own comment on --brand-light/--brand-rgb previously being silently left on the default
+  // Plexo purple even for a fully white-labeled org.
   const brandVars: React.CSSProperties = orgBranding?.color
     ? ({
         "--brand": orgBranding.color,
         "--brand-deep": darken(orgBranding.color, 0.12),
+        "--brand-deeper": darken(orgBranding.color, 0.22),
+        "--brand-light": lighten(orgBranding.color, 0.2),
+        "--brand-rgb": toRgbTriplet(orgBranding.color),
+        "--brand-deep-rgb": toRgbTriplet(darken(orgBranding.color, 0.12)),
+        "--brand-light-rgb": toRgbTriplet(lighten(orgBranding.color, 0.2)),
         "--brand-glow": toRgba(orgBranding.color, 0.35),
+        "--brand-subtle": toRgba(orgBranding.color, 0.1),
       } as React.CSSProperties)
     : {};
   const pathname = usePathname();
@@ -97,7 +111,12 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
   // or any /blog subroutes — those are normal PageContainer pages that still need the topbar.
   const editorRouteMatch = pathname.match(/^\/dashboard\/templates\/([^/]+)$/);
   const isEditorRoute = Boolean(editorRouteMatch && editorRouteMatch[1] !== "upload");
-  const rootClassName = isEditorRoute ? "dash-modern-editor-route" : undefined;
+  // SOL is its own full-viewport surface (own header/sidebar, see app/dashboard/sol/layout.tsx,
+  // and its own Settings/Memory subpages under that same /dashboard/sol/ tree) — no room
+  // for this shell's floating topbar alongside it, same reasoning as the template editor
+  // route above.
+  const isSolRoute = /^\/dashboard\/sol(\/.*)?$/.test(pathname);
+  const rootClassName = isEditorRoute ? "dash-modern-editor-route" : isSolRoute ? "dash-sol-route" : undefined;
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -132,7 +151,7 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
       {/* ── FLOATING TOPBAR ─────────────────────────── */}
       <header className="dash-topbar">
         <Link href="/" className="dash-brand-link" style={{ display: "flex", alignItems: "center", gap: "0.5rem", textDecoration: "none", flexShrink: 1, minWidth: 0, overflow: "hidden" }}>
-          {orgBranding?.logoUrl ? (
+          {showBrandLogo && (orgBranding?.logoUrl ? (
             <img
               src={orgBranding.logoUrl}
               alt={brandName}
@@ -152,24 +171,30 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
                 <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
+          ))}
+          {showBrandName && (
+            <span
+              className="dash-brand-name"
+              style={{
+                fontFamily: "var(--font-heading), sans-serif",
+                fontWeight: 700,
+                fontSize: "0.95rem",
+                color: "#f0f2ff",
+                letterSpacing: "-0.02em",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                minWidth: 0,
+              }}
+            >
+              {brandName}
+            </span>
           )}
-          <span
-            className="dash-brand-name"
-            style={{
-              fontFamily: "var(--font-heading), sans-serif",
-              fontWeight: 700,
-              fontSize: "0.95rem",
-              color: "#f0f2ff",
-              letterSpacing: "-0.02em",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              minWidth: 0,
-            }}
-          >
-            {brandName}
-          </span>
         </Link>
+
+        <div className="dash-sol-switch-center">
+          <SolModeSwitch active="plexo" />
+        </div>
 
         <nav className="dash-pill-nav" style={{ overflowX: "auto" }} aria-label="Dashboard navigation">
           {NAV_ITEMS.map((item) => {
@@ -185,7 +210,7 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
                 {item.badge && (
                   <span style={{
                     fontSize: "9.5px", fontWeight: 700, letterSpacing: "0.04em",
-                    color: "#c084fc", background: "rgba(196,132,252,0.16)",
+                    color: "var(--brand-light)", background: "rgba(var(--brand-light-rgb),0.16)",
                     padding: "2px 6px", borderRadius: 100,
                   }}>
                     {item.badge.toUpperCase()}
@@ -247,7 +272,7 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
                     {item.badge && (
                       <span style={{
                         fontSize: "9.5px", fontWeight: 700, letterSpacing: "0.04em",
-                        color: "#c084fc", background: "rgba(196,132,252,0.16)",
+                        color: "var(--brand-light)", background: "rgba(var(--brand-light-rgb),0.16)",
                         padding: "2px 6px", borderRadius: 100,
                       }}>
                         {item.badge.toUpperCase()}

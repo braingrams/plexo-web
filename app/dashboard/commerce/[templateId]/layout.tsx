@@ -3,6 +3,7 @@ import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
+import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
 import { PageContainer } from "../../_components/PageContainer";
 import { CommerceSiteHeader, type CommerceSiteInfo } from "../_components/CommerceSiteHeader";
 import { CommerceTabs } from "../_components/CommerceTabs";
@@ -51,16 +52,18 @@ export default async function CommerceSiteLayout({
         CommerceSettings.get({ templateId: t.id }).go(),
         PublishedDomain.query.primary({ templateId: t.id }).where((attr, op) => op.eq(attr.active, true)).go(),
       ]);
+      const storefrontPage = settings?.storefrontTemplateId ? (await Template.get({ id: settings.storefrontTemplateId }).go()).data : null;
       return {
         id: t.id,
         name: t.name,
-        domain: domains[0]?.domain ?? null,
+        domain: pickPrimaryDomain(domains)?.domain ?? null,
         enabled: settings?.enabled ?? false,
+        storefrontSlug: storefrontPage?.slug ?? null,
       };
     }),
   );
 
-  const currentSite = sites.find((s) => s.id === templateId) ?? { id: templateId, name: site.name, domain: null, enabled: false };
+  const currentSite = sites.find((s) => s.id === templateId) ?? { id: templateId, name: site.name, domain: null, enabled: false, storefrontSlug: null };
   const otherSites = sites.filter((s) => s.id !== templateId);
 
   return (

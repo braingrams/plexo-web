@@ -13,6 +13,7 @@ import {
 } from "@/lib/crypto";
 import { isKnownCurrency, isPaystackCompatibleCurrency } from "@/lib/commerce/currency";
 import { ensureProductDetailLayout } from "@/lib/commerce/productDetailLayout";
+import { ensureStorefrontLayout, getStorefrontSlug, renameStorefrontSlug } from "@/lib/commerce/storefrontLayout";
 import { CommerceSettings, CommerceStripeAccessRequest, CommerceOrder } from "@/lib/db/commerceEntities";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
@@ -21,10 +22,12 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   if (resolved.error) return resolved.error;
 
   const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  const storefrontSlug = await getStorefrontSlug(templateId);
 
   return NextResponse.json({
     settings: {
       enabled: settings?.enabled ?? false,
+      storefrontSlug,
       currency: settings?.currency ?? "NGN",
       paymentProvider: settings?.paymentProvider ?? "BYO_PAYSTACK",
       paystackMode: settings?.paystackMode ?? "TEST",
@@ -56,7 +59,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
       maildripApiKeyMasked: settings?.maildripApiKeyEncrypted ? maskSecret(tryDecrypt(() => decryptMaildripKey(settings.maildripApiKeyEncrypted!))) : null,
       maildripPaidGroupId: settings?.maildripPaidGroupId ?? null,
       maildripNewsletterGroupId: settings?.maildripNewsletterGroupId ?? null,
+      newsletterPopupEnabled: settings?.newsletterPopupEnabled ?? false,
       notificationEmail: settings?.notificationEmail ?? null,
+      notifyCustomerOnPaid: settings?.notifyCustomerOnPaid ?? true,
+      notifyCustomerOnProcessing: settings?.notifyCustomerOnProcessing ?? true,
+      notifyCustomerOnReadyForPickup: settings?.notifyCustomerOnReadyForPickup ?? true,
+      notifyCustomerOnShipped: settings?.notifyCustomerOnShipped ?? true,
+      notifyCustomerOnCompleted: settings?.notifyCustomerOnCompleted ?? true,
+      notifyCustomerOnRefunded: settings?.notifyCustomerOnRefunded ?? true,
       webhookUrl: `${request.nextUrl.origin}/api/webhooks/paystack/${templateId}`,
       stripeWebhookUrl: `${request.nextUrl.origin}/api/webhooks/stripe/commerce/${templateId}`,
     },
@@ -92,8 +102,20 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     maildripApiKey,
     maildripPaidGroupId,
     maildripNewsletterGroupId,
+    newsletterPopupEnabled,
     notificationEmail,
+    storefrontSlug,
+    notifyCustomerOnPaid,
+    notifyCustomerOnProcessing,
+    notifyCustomerOnReadyForPickup,
+    notifyCustomerOnShipped,
+    notifyCustomerOnCompleted,
+    notifyCustomerOnRefunded,
   } = body;
+
+  if (storefrontSlug !== undefined && typeof storefrontSlug !== "string") {
+    return NextResponse.json({ error: "storefrontSlug must be a string." }, { status: 400 });
+  }
 
   if (paystackMode !== undefined && paystackMode !== "TEST" && paystackMode !== "LIVE") {
     return NextResponse.json({ error: "paystackMode must be TEST or LIVE." }, { status: 400 });
@@ -226,10 +248,17 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     if (maildripNewsletterGroupId) data.maildripNewsletterGroupId = maildripNewsletterGroupId;
     else toRemove.push("maildripNewsletterGroupId");
   }
+  if (typeof newsletterPopupEnabled === "boolean") data.newsletterPopupEnabled = newsletterPopupEnabled;
   if (typeof notificationEmail === "string") {
     if (notificationEmail) data.notificationEmail = notificationEmail;
     else toRemove.push("notificationEmail");
   }
+  if (typeof notifyCustomerOnPaid === "boolean") data.notifyCustomerOnPaid = notifyCustomerOnPaid;
+  if (typeof notifyCustomerOnProcessing === "boolean") data.notifyCustomerOnProcessing = notifyCustomerOnProcessing;
+  if (typeof notifyCustomerOnReadyForPickup === "boolean") data.notifyCustomerOnReadyForPickup = notifyCustomerOnReadyForPickup;
+  if (typeof notifyCustomerOnShipped === "boolean") data.notifyCustomerOnShipped = notifyCustomerOnShipped;
+  if (typeof notifyCustomerOnCompleted === "boolean") data.notifyCustomerOnCompleted = notifyCustomerOnCompleted;
+  if (typeof notifyCustomerOnRefunded === "boolean") data.notifyCustomerOnRefunded = notifyCustomerOnRefunded;
 
   const { data: existing } = await CommerceSettings.get({ templateId }).go();
   if (existing) {
@@ -245,16 +274,30 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
   // anything; ensureProductDetailLayout is idempotent, so this is a no-op once one's
   // attached (whether auto-created here before, or deliberately designed/reused).
   const effectiveEnabled = typeof enabled === "boolean" ? enabled : (existing?.enabled ?? false);
+  let storefrontWarning: string | null = null;
   if (effectiveEnabled) {
     await ensureProductDetailLayout(templateId, organizationId, userId);
+    await ensureStorefrontLayout(templateId, organizationId, userId);
+  }
+  if (typeof storefrontSlug === "string" && storefrontSlug.trim()) {
+    if (!effectiveEnabled) {
+      return NextResponse.json({ error: "Enable Commerce before renaming the storefront." }, { status: 400 });
+    }
+    try {
+      await renameStorefrontSlug(templateId, storefrontSlug.trim());
+    } catch (err) {
+      storefrontWarning = err instanceof Error ? err.message : "Failed to rename the storefront.";
+    }
   }
 
   const { data: settings } = await CommerceSettings.get({ templateId }).go();
   if (!settings) throw new Error(`CommerceSettings for template ${templateId} vanished immediately after being saved`);
+  const resolvedStorefrontSlug = await getStorefrontSlug(templateId);
 
   return NextResponse.json({
     settings: {
       enabled: settings.enabled,
+      storefrontSlug: resolvedStorefrontSlug,
       currency: settings.currency ?? "NGN",
       paymentProvider: settings.paymentProvider,
       paystackMode: settings.paystackMode,
@@ -272,10 +315,17 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
       maildripApiKeyMasked: settings.maildripApiKeyEncrypted ? maskSecret(tryDecrypt(() => decryptMaildripKey(settings.maildripApiKeyEncrypted!))) : null,
       maildripPaidGroupId: settings.maildripPaidGroupId ?? null,
       maildripNewsletterGroupId: settings.maildripNewsletterGroupId ?? null,
+      newsletterPopupEnabled: settings.newsletterPopupEnabled ?? false,
       notificationEmail: settings.notificationEmail ?? null,
+      notifyCustomerOnPaid: settings.notifyCustomerOnPaid ?? true,
+      notifyCustomerOnProcessing: settings.notifyCustomerOnProcessing ?? true,
+      notifyCustomerOnReadyForPickup: settings.notifyCustomerOnReadyForPickup ?? true,
+      notifyCustomerOnShipped: settings.notifyCustomerOnShipped ?? true,
+      notifyCustomerOnCompleted: settings.notifyCustomerOnCompleted ?? true,
+      notifyCustomerOnRefunded: settings.notifyCustomerOnRefunded ?? true,
       webhookUrl: `${request.nextUrl.origin}/api/webhooks/paystack/${templateId}`,
       stripeWebhookUrl: `${request.nextUrl.origin}/api/webhooks/stripe/commerce/${templateId}`,
     },
-    ...(currencyWarning ? { warning: currencyWarning } : {}),
+    ...(currencyWarning || storefrontWarning ? { warning: [currencyWarning, storefrontWarning].filter(Boolean).join(" ") } : {}),
   });
 }

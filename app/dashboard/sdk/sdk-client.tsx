@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { PageHeader } from "../_components/PageHeader";
 import { Card } from "../_components/Card";
+import { IntegrationSubTabs } from "../integrations/_components/IntegrationSubTabs";
 import { CustomSelect } from "@/app/_components/CustomSelect";
 
 type SimpleKey = {
@@ -143,11 +144,19 @@ const text = compileToPlainText(template.designJson);
 
   return (
     <>
+      <IntegrationSubTabs />
       <PageHeader
         eyebrow="Integration"
         title="Plexo SDK Client"
         subtitle="Connect your application visually and programmatically using our SDK."
       />
+
+      <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", marginTop: "-0.75rem", marginBottom: "1.25rem" }}>
+        Testing HTML/JSON by hand instead?{" "}
+        <Link href="/dashboard/compile" style={{ color: "var(--brand)", textDecoration: "underline" }}>
+          Open the Compile tool
+        </Link>
+      </p>
 
       {/* Select key warning/option */}
       <Card padded={false} style={{ padding: "1rem 1.25rem", marginBottom: "1.25rem" }}>
@@ -329,8 +338,8 @@ const text = compileToPlainText(template.designJson);
 
         {/* Documentation links */}
         <div style={{
-          background: "linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(100,50,255,0.06) 100%)",
-          border: "1px solid rgba(139,92,246,0.15)", borderRadius: 16, padding: "1.5rem",
+          background: "linear-gradient(135deg, rgba(var(--brand-rgb),0.08) 0%, rgba(100,50,255,0.06) 100%)",
+          border: "1px solid rgba(var(--brand-rgb),0.15)", borderRadius: 16, padding: "1.5rem",
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap",
         }}>
           <div>

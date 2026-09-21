@@ -6,8 +6,9 @@ import { getTierFeatures } from "@/lib/subscription";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { findRootTemplateId } from "@/lib/siteLayoutDynamo";
 import { Template } from "@/lib/db/contentEntities";
-import { User, ApiKey } from "@/lib/db/coreEntities";
+import { User } from "@/lib/db/coreEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
+import { resolveActiveApiKeyForUser } from "@/lib/ai/resolveUserAiKey";
 
 import { TemplateEditorDynamic } from "./template-editor-dynamic";
 import { RawFileEditor } from "./raw-file-editor";
@@ -56,9 +57,9 @@ export default async function TemplateEditorPage(props: {
     notFound();
   }
 
-  const [{ data: user }, { data: userApiKeys }] = await Promise.all([
+  const [{ data: user }, activeApiKey] = await Promise.all([
     User.get({ id: session.user.id }).go(),
-    ApiKey.query.byUser({ userId: session.user.id }).go(),
+    resolveActiveApiKeyForUser(session.user.id),
   ]);
 
   // Commerce (and Site Layout) are scoped per SITE (the root Template — parentId null),
@@ -73,12 +74,6 @@ export default async function TemplateEditorPage(props: {
     templateId: rootTemplateId,
   }).go();
 
-  const activeApiKey =
-    userApiKeys
-      .filter((k) => k.isActive)
-      .sort((a, b) =>
-        (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
-      )[0] ?? null;
   const tierFeatures = getTierFeatures(user?.subscriptionPlan);
 
   if (template.sourceType === "RAW_UPLOAD") {

@@ -178,7 +178,7 @@ function DeviceToggle({ value, onChange }: { value: DeviceMode; onChange: (devic
             onClick={() => onChange(opt.key)}
             style={{
               display: "grid", placeItems: "center", width: 26, height: 22, borderRadius: 6, border: "none",
-              background: active ? "rgba(139,92,246,0.4)" : "transparent",
+              background: active ? "rgba(var(--brand-rgb),0.4)" : "transparent",
               color: active ? "#fff" : "rgba(240,242,255,0.55)",
               cursor: "pointer",
             }}
@@ -237,7 +237,7 @@ function BackgroundSizeSelect({
         style={{
           width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
           background: "rgba(255,255,255,0.04)",
-          border: open ? "1px solid rgba(139,92,246,0.5)" : "1px solid rgba(255,255,255,0.1)",
+          border: open ? "1px solid rgba(var(--brand-rgb),0.5)" : "1px solid rgba(255,255,255,0.1)",
           borderRadius: 7, color: "#f0f2ff", padding: "0.35rem 0.5rem", fontSize: "0.78rem",
           outline: "none", fontFamily: "inherit", cursor: "pointer",
         }}
@@ -251,7 +251,7 @@ function BackgroundSizeSelect({
       {open && (
         <div style={{
           position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 20,
-          background: "rgba(18,16,36,0.98)", border: "1px solid rgba(139,92,246,0.3)",
+          background: "rgba(18,16,36,0.98)", border: "1px solid rgba(var(--brand-rgb),0.3)",
           borderRadius: 8, overflow: "hidden", boxShadow: "0 12px 30px rgba(0,0,0,0.5)",
         }}>
           {BG_SIZE_OPTIONS.map((opt) => {
@@ -266,7 +266,7 @@ function BackgroundSizeSelect({
                 }}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-                  padding: "0.5rem 0.6rem", background: isActive ? "rgba(139,92,246,0.15)" : "transparent",
+                  padding: "0.5rem 0.6rem", background: isActive ? "rgba(var(--brand-rgb),0.15)" : "transparent",
                   border: "none", color: isActive ? "#c4b5fd" : "rgba(240,242,255,0.8)",
                   fontSize: "0.78rem", fontWeight: isActive ? 600 : 400, textAlign: "left", cursor: "pointer",
                   fontFamily: "inherit",
@@ -458,7 +458,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
       width: "14px",
       height: "14px",
       borderRadius: "50%",
-      background: "#8b5cf6",
+      background: "var(--brand)",
       border: "2px solid #fff",
       boxShadow: "0 1px 4px rgba(0,0,0,0.45)",
       cursor: "nwse-resize",
@@ -909,8 +909,8 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                           style={{
                             display: "flex", gap: "0.65rem", padding: "0.65rem",
                             borderRadius: 10,
-                            border: isActive ? "1px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)",
-                            boxShadow: isActive ? "0 0 0 3px rgba(139,92,246,0.2)" : "none",
+                            border: isActive ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.08)",
+                            boxShadow: isActive ? "0 0 0 3px rgba(var(--brand-rgb),0.2)" : "none",
                             background: "rgba(255,255,255,0.02)",
                           }}
                         >
@@ -970,7 +970,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                                 style={{
                                   marginLeft: "auto", width: 26, height: 26, borderRadius: 6,
                                   border: "1px solid rgba(255,255,255,0.1)",
-                                  background: lockAspect[node.id] ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.04)",
+                                  background: lockAspect[node.id] ? "rgba(var(--brand-rgb),0.18)" : "rgba(255,255,255,0.04)",
                                   color: lockAspect[node.id] ? "#a78bfa" : "rgba(240,242,255,0.4)",
                                   cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0,
                                 }}
@@ -1002,8 +1002,8 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                           style={{
                             display: "flex", gap: "0.65rem", padding: "0.65rem",
                             borderRadius: 10,
-                            border: isActive ? "1px solid #8b5cf6" : "1px solid rgba(255,255,255,0.08)",
-                            boxShadow: isActive ? "0 0 0 3px rgba(139,92,246,0.2)" : "none",
+                            border: isActive ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.08)",
+                            boxShadow: isActive ? "0 0 0 3px rgba(var(--brand-rgb),0.2)" : "none",
                             background: "rgba(255,255,255,0.02)",
                           }}
                         >
@@ -1072,7 +1072,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                       style={{
                         display: "flex", flexDirection: "column", gap: "0.4rem", width: 168,
                         padding: "0.55rem", borderRadius: 10, cursor: "pointer",
-                        border: changed ? "1px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                        border: changed ? "1px solid rgba(var(--brand-rgb),0.4)" : "1px solid rgba(255,255,255,0.08)",
                         background: "rgba(255,255,255,0.02)",
                       }}
                     >
@@ -1134,9 +1134,9 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                             width: "100%",
                             background: "rgba(255,255,255,0.04)",
                             border: isActive
-                              ? "1px solid #8b5cf6"
-                              : changed ? "1px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.1)",
-                            boxShadow: isActive ? "0 0 0 3px rgba(139,92,246,0.2)" : "none",
+                              ? "1px solid var(--brand)"
+                              : changed ? "1px solid rgba(var(--brand-rgb),0.4)" : "1px solid rgba(255,255,255,0.1)",
+                            boxShadow: isActive ? "0 0 0 3px rgba(var(--brand-rgb),0.2)" : "none",
                             borderRadius: 8,
                             color: "#f0f2ff",
                             padding: "0.6rem 0.75rem",

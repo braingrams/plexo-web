@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { Template, LmsFunnel, PublishedDomain } from "@/lib/db/contentEntities";
+import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
 import { PageContainer } from "../../_components/PageContainer";
 import { FunnelTabs } from "../_components/FunnelTabs";
 import { FunnelSiteHeader } from "../_components/FunnelSiteHeader";
@@ -35,7 +36,7 @@ export default async function FunnelLayout({
 
   return (
     <PageContainer>
-      <FunnelSiteHeader templateId={templateId} name={site.name} enabled={funnel.enabled ?? false} domain={domains[0]?.domain ?? null} />
+      <FunnelSiteHeader templateId={templateId} name={site.name} enabled={funnel.enabled ?? false} domain={pickPrimaryDomain(domains)?.domain ?? null} />
       <FunnelTabs templateId={templateId} />
       <div style={{ minWidth: 0 }}>{children}</div>
     </PageContainer>

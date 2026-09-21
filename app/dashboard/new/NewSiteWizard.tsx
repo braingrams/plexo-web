@@ -3,6 +3,28 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, FormEvent } from "react";
 import Link from "next/link";
+import { CustomSelect } from "../../_components/CustomSelect";
+
+// Same four tiers/labels as Settings → AI's own Creativity Tier picker (AiSettingsClient.tsx)
+// — kept here as its own small copy rather than a shared import since that file's TIER_OPTIONS
+// isn't exported and this is the only other place in the app letting someone choose a tier
+// for a single one-off AI action rather than a stored per-key default.
+// Same builder-vs-raw-HTML framing as SOL's own ask_user_question for this exact choice
+// (lib/ai/solAgent.ts's system prompt) — Pretty HTML is the recommended option in both
+// places: real hand-crafted markup/CSS the model writes directly is the premium, most
+// polished result, at the cost of not being editable afterward in the drag-and-drop
+// builder the way generate_layout's designJson output is.
+const PAGE_TYPE_OPTIONS: Array<{ value: "html" | "builder"; label: string; description: string }> = [
+  { value: "html", label: "Pretty HTML (Recommended)", description: "Hand-crafted markup for the most premium, polished result — not editable in the drag-and-drop builder afterward" },
+  { value: "builder", label: "Drag & Drop Builder", description: "Editable afterward with Plexo's own visual builder" },
+];
+
+const AI_TIER_OPTIONS: Array<{ label: string; value: "AUTO" | "BASIC" | "MEDIUM" | "HIGH"; description: string }> = [
+  { label: "Auto", value: "AUTO", description: "Let Plexo pick based on the prompt" },
+  { label: "Standard", value: "BASIC", description: "Fast and efficient" },
+  { label: "Advanced", value: "MEDIUM", description: "Stronger reasoning" },
+  { label: "Most Capable", value: "HIGH", description: "Most creative & thorough" },
+];
 
 type MarketplaceItem = {
   id: string;
@@ -18,7 +40,7 @@ const hairline = "rgba(255,255,255,0.09)";
 const hairlineSoft = "rgba(255,255,255,0.055)";
 
 const SWATCHES = [
-  "linear-gradient(150deg,#312e81,#7c3aed 60%,#c084fc)",
+  "linear-gradient(150deg,#312e81,var(--brand-deep) 60%,var(--brand-light))",
   "linear-gradient(150deg,#0f172a,#0ea5e9 65%,#67e8f9)",
   "linear-gradient(150deg,#134e4a,#10b981 65%,#6ee7b7)",
   "linear-gradient(150deg,#450a0a,#f43f5e 65%,#fda4af)",
@@ -80,6 +102,20 @@ function IconSparkle() {
     </svg>
   );
 }
+
+function IconWand() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m15 4 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z" />
+      <path d="M5 20 19 6" />
+      <path d="m5 13 .8 1.7L7.5 15.5l-1.7.8L5 18l-.8-1.7L2.5 15.5l1.7-.8L5 13Z" />
+    </svg>
+  );
+}
+
+/** A blank canvas for AI generation to start from — same empty-body shape
+ * create_landing_page_subpage falls back to when no content is given. */
+const BLANK_DESIGN_JSON = { body: { style: { background: "#ffffff", fontFamily: "inherit" }, rows: [] } };
 
 /** Step indicator badge — filled brand while active or done, a checkmark once done,
  * an outlined faint circle while still upcoming. */
@@ -228,11 +264,24 @@ function Dropzone({ file, onFile }: { file: File | null; onFile: (f: File | null
 
 export function NewSiteWizard() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [startTab, setStartTab] = useState<"marketplace" | "upload">("marketplace");
+  const [startTab, setStartTab] = useState<"marketplace" | "ai" | "upload">("marketplace");
 
   const [items, setItems] = useState<MarketplaceItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiTier, setAiTier] = useState<"AUTO" | "BASIC" | "MEDIUM" | "HIGH">("BASIC");
+  // Pretty HTML is the recommended default — see PAGE_TYPE_OPTIONS below for why (matches
+  // the same framing SOL's own ask_user_question uses for this exact choice).
+  const [pageType, setPageType] = useState<"html" | "builder">("html");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  // AI is a per-ApiKey setting (Settings → AI), not a single account-wide flag — "enabled"
+  // means at least one active key has useAi:true. Checked once, the first time the AI tab
+  // is opened, so a first-time user is asked to turn it on right here instead of hitting a
+  // bare permission error only after they've already written a prompt.
+  const [aiKeyStatus, setAiKeyStatus] = useState<"unchecked" | "checking" | "enabled" | "disabled">("unchecked");
+  const [enablingAi, setEnablingAi] = useState(false);
 
   const [uploadName, setUploadName] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -264,6 +313,61 @@ export function NewSiteWizard() {
       .catch(() => { });
   }, []);
 
+  useEffect(() => {
+    if (startTab !== "ai" || aiKeyStatus !== "unchecked") return;
+    setAiKeyStatus("checking");
+    fetch("/api/settings/api-keys")
+      .then((res) => res.json())
+      .then((data) => {
+        const keys: { isActive: boolean; useAi: boolean }[] = data.apiKeys ?? [];
+        setAiKeyStatus(keys.some((k) => k.isActive && k.useAi) ? "enabled" : "disabled");
+      })
+      .catch(() => setAiKeyStatus("disabled"));
+  }, [startTab, aiKeyStatus]);
+
+  /** Turns AI on right here in the wizard instead of sending the user to Settings — reuses
+   * their most recent active API key if they have one (System AI needs no provider/BYOK
+   * key to work, just useAi:true — see AiSettingsClient.tsx), or creates one first if they
+   * have none yet. */
+  async function handleEnableAi() {
+    setError(null);
+    setEnablingAi(true);
+    try {
+      const listRes = await fetch("/api/settings/api-keys");
+      const listData = await listRes.json().catch(() => ({}));
+      const keys: { id: string; isActive: boolean; createdAt?: string }[] = listData.apiKeys ?? [];
+      let keyId = keys.find((k) => k.isActive)?.id;
+
+      if (!keyId) {
+        const createRes = await fetch("/api/settings/api-keys", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Site builder AI" }),
+        });
+        const createData = await createRes.json().catch(() => ({}));
+        if (!createRes.ok) {
+          setError(createData.error ?? "Couldn't create an API key to enable AI with.");
+          return;
+        }
+        keyId = createData.apiKey.id;
+      }
+
+      const patchRes = await fetch(`/api/settings/api-keys/${keyId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ useAi: true }),
+      });
+      const patchData = await patchRes.json().catch(() => ({}));
+      if (!patchRes.ok) {
+        setError(patchData.error ?? "Couldn't enable AI.");
+        return;
+      }
+      setAiKeyStatus("enabled");
+    } finally {
+      setEnablingAi(false);
+    }
+  }
+
   function advanceToConnect(created: CreatedTemplate) {
     setTemplate(created);
     if (!slugTouched) setSlug(slugify(created.name));
@@ -283,6 +387,69 @@ export function NewSiteWizard() {
       advanceToConnect(data.template);
     } finally {
       setBusyId(null);
+    }
+  }
+
+  /**
+   * Calls the SAME two native, in-process endpoints an MCP client (or any first-party AI
+   * caller) would — /api/v1/ai/generate (mode: generate_layout, the exact bridge
+   * RawAiEditPanel.tsx already uses for in-dashboard AI edits, via the
+   * x-api-key: "workspace-internal" sentinel that resolves the caller's real session
+   * instead of a stored API key) to turn the prompt into a designJson tree, then
+   * /api/v1/publish (the same endpoint plexo-mcp's create_landing_page ultimately calls)
+   * to compile and save it as a real Template. No MCP round-trip, no extra hop — this is
+   * the fastest path plexo-web itself has to a working page from a prompt.
+   */
+  async function handleGenerateWithAi() {
+    if (!aiPrompt.trim()) {
+      setError("Describe the site you want first.");
+      return;
+    }
+    if (pageType === "html" && !agreed) {
+      setError("You must agree to the Acceptable Use Policy to publish unsanitized HTML.");
+      return;
+    }
+    setError(null);
+    setAiGenerating(true);
+    try {
+      const genRes = await fetch("/api/v1/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": "workspace-internal" },
+        body: JSON.stringify(
+          pageType === "html"
+            ? { mode: "generate_raw_html", prompt: aiPrompt.trim(), templateKind: "LANDING_PAGE", context: null, tier: aiTier }
+            : { mode: "generate_layout", prompt: aiPrompt.trim(), templateKind: "LANDING_PAGE", context: BLANK_DESIGN_JSON, tier: aiTier },
+        ),
+      });
+      const genData = await genRes.json().catch(() => ({}));
+      if (!genRes.ok) {
+        // "AI is not enabled for this account" is the one error here a first-time user is
+        // actually likely to hit (AI access is opt-in per account, set up in Settings —
+        // same requirement every other in-dashboard AI feature already has) — point them
+        // at the fix instead of leaving a bare permission error on their very first action.
+        const hint = genRes.status === 403 ? " Enable AI for your account in Settings, then try again." : "";
+        setError((genData.error ?? "Failed to generate your site.") + hint);
+        return;
+      }
+
+      const name = aiPrompt.trim().slice(0, 60);
+      const publishRes = await fetch(pageType === "html" ? "/api/v1/templates/upload-raw" : "/api/v1/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          pageType === "html"
+            ? { name, htmlContent: genData.result, acceptAup: true }
+            : { name, kind: "LANDING_PAGE", designJson: genData.result },
+        ),
+      });
+      const publishData = await publishRes.json().catch(() => ({}));
+      if (!publishRes.ok) {
+        setError(publishData.error ?? "Generated the page, but couldn't save it.");
+        return;
+      }
+      advanceToConnect({ id: publishData.templateId, name: publishData.name });
+    } finally {
+      setAiGenerating(false);
     }
   }
 
@@ -427,6 +594,23 @@ export function NewSiteWizard() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setStartTab("ai")}
+                  style={{
+                    fontSize: "12.5px",
+                    fontWeight: 650,
+                    padding: "7px 14px",
+                    borderRadius: 999,
+                    border: "none",
+                    cursor: "pointer",
+                    background: startTab === "ai" ? "var(--brand)" : "transparent",
+                    color: startTab === "ai" ? "#fff" : "var(--text-muted)",
+                    transition: "background 0.15s, color 0.15s",
+                  }}
+                >
+                  Build with AI
+                </button>
+                <button
+                  type="button"
                   onClick={() => setStartTab("upload")}
                   style={{
                     fontSize: "12.5px",
@@ -496,6 +680,113 @@ export function NewSiteWizard() {
                     })}
                   </div>
                 )
+              ) : startTab === "ai" ? (
+                <div style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 18 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{
+                        width: 36, height: 36, borderRadius: 10, background: "var(--brand-subtle)",
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                      }}
+                    >
+                      <IconWand />
+                    </div>
+                    <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-muted)" }}>
+                      Describe the site you want — Plexo's AI builds a complete, working page from your prompt.
+                    </p>
+                  </div>
+
+                  {aiKeyStatus === "checking" || aiKeyStatus === "unchecked" ? (
+                    <p style={{ fontSize: "12.5px", color: "var(--text-faint)" }}>Checking your AI settings…</p>
+                  ) : aiKeyStatus === "disabled" ? (
+                    <div
+                      style={{
+                        borderRadius: 12,
+                        border: `1px solid ${hairline}`,
+                        background: "rgba(255,255,255,0.02)",
+                        padding: "18px 20px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 10,
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <p style={{ margin: 0, fontSize: "13px", fontWeight: 650 }}>Turn on AI to build with a prompt</p>
+                      <p style={{ margin: 0, fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+                        AI generation isn&rsquo;t on for your account yet. Turning it on uses Plexo&rsquo;s system AI by
+                        default (billed from your credit balance) — no setup needed. You can switch to your own API key
+                        any time in{" "}
+                        <Link href="/dashboard/settings/ai" target="_blank" style={{ color: "var(--brand)" }}>
+                          Settings
+                        </Link>
+                        .
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void handleEnableAi()}
+                        disabled={enablingAi}
+                        style={{ ...primaryButtonStyle(!enablingAi), cursor: enablingAi ? "wait" : "pointer" }}
+                      >
+                        {enablingAi ? "Turning on…" : "Turn on AI"}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <span style={{ display: "block", fontSize: "11px", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-faint)", marginBottom: "0.35rem" }}>
+                          Page Type
+                        </span>
+                        <CustomSelect
+                          value={pageType}
+                          options={PAGE_TYPE_OPTIONS}
+                          onChange={(v) => setPageType(v as typeof pageType)}
+                        />
+                      </div>
+                      <div>
+                        <span style={{ display: "block", fontSize: "11px", fontWeight: 600, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--text-faint)", marginBottom: "0.35rem" }}>
+                          Creativity Tier
+                        </span>
+                        <CustomSelect
+                          value={aiTier}
+                          options={AI_TIER_OPTIONS}
+                          onChange={(v) => setAiTier(v as typeof aiTier)}
+                        />
+                      </div>
+                      <textarea
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        placeholder="A modern landing page for a boutique coffee roastery, with a hero section, our story, a product grid, and a newsletter signup."
+                        rows={5}
+                        style={{ ...inputStyle(), resize: "vertical", fontFamily: "inherit" }}
+                      />
+                      {pageType === "html" && (
+                        <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.7, cursor: "pointer" }}>
+                          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0 }} />
+                          <span>
+                            I agree to the{" "}
+                            <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--brand)" }}>
+                              Acceptable Use Policy
+                            </Link>
+                            . Pretty HTML pages are published exactly as generated, with no modification.
+                          </span>
+                        </label>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void handleGenerateWithAi()}
+                        disabled={aiGenerating || !aiPrompt.trim() || (pageType === "html" && !agreed)}
+                        style={{ ...primaryButtonStyle(!aiGenerating && !!aiPrompt.trim() && (pageType !== "html" || agreed)), alignSelf: "flex-start", cursor: aiGenerating ? "wait" : "pointer" }}
+                      >
+                        {aiGenerating ? "Generating your site…" : "Generate my site"}
+                      </button>
+                      {aiGenerating && (
+                        <p style={{ fontSize: "11.5px", color: "var(--text-faint)", margin: 0 }}>
+                          This can take up to a minute for a full layout.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               ) : (
                 <form onSubmit={handleUpload} style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 22 }}>
                   <Dropzone file={file} onFile={setFile} />

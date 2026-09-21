@@ -50,7 +50,7 @@ export function CustomersClient({ templateId, paystackConfigured }: { templateId
           </p>
           <Link
             href={`/dashboard/commerce/${templateId}/settings`}
-            style={{ display: "inline-flex", padding: "0.55rem 1.1rem", borderRadius: 10, fontSize: "0.82rem", fontWeight: 700, background: "rgba(139,92,246,0.15)", color: "var(--brand)", textDecoration: "none" }}
+            style={{ display: "inline-flex", padding: "0.55rem 1.1rem", borderRadius: 10, fontSize: "0.82rem", fontWeight: 700, background: "rgba(var(--brand-rgb),0.15)", color: "var(--brand)", textDecoration: "none" }}
           >
             Go to Settings
           </Link>

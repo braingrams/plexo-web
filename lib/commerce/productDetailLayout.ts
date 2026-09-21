@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { compileToHTML } from "@/lib/compiler";
 import { sanitizeHtml } from "@/server/sanitizer";
-import { getEnabledSiteLayoutRows, spliceLayoutRows } from "@/lib/siteLayoutDynamo";
+import { getEnabledSiteLayoutRows, spliceLayoutRows } from "@/lib/siteLayoutCore";
 import { Template } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
 

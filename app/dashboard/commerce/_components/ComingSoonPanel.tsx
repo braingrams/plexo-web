@@ -9,7 +9,7 @@ export function ComingSoonPanel({ title, description, icon }: { title: string; d
     }}>
       <div style={{
         width: 46, height: 46, borderRadius: 12,
-        background: "rgba(196,132,252,0.16)",
+        background: "rgba(var(--brand-light-rgb),0.16)",
         display: "grid", placeItems: "center",
         margin: "0 auto 16px",
       }}>

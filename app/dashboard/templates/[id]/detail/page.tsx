@@ -13,6 +13,7 @@ import {
 } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
 import { PageView, FormSubmission } from "@/lib/db/opsEntities";
+import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
 
 import { DetailClient } from "./detail-client";
 
@@ -93,7 +94,7 @@ export default async function TemplateDetailPage(props: {
       CommerceSettings.get({ templateId: template.id }).go(),
     ]);
 
-    const domain = domains[0] ?? null;
+    const domain = pickPrimaryDomain(domains);
 
     siteData = {
       domain: domain

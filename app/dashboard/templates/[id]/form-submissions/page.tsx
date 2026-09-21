@@ -126,7 +126,7 @@ export default async function FormSubmissionsPage({ params }: { params: Promise<
                       style={{
                         display: "inline-flex", alignItems: "center", gap: "0.4rem",
                         padding: "0.4rem 0.8rem", borderRadius: 8,
-                        border: "1px solid rgba(139,92,246,0.25)", background: "rgba(139,92,246,0.1)",
+                        border: "1px solid rgba(var(--brand-rgb),0.25)", background: "rgba(var(--brand-rgb),0.1)",
                         color: "var(--brand)", fontSize: "0.78rem", fontWeight: 700, textDecoration: "none",
                       }}
                     >

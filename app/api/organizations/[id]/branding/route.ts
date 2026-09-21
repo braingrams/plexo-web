@@ -6,7 +6,10 @@ import { requirePermission } from "@/server/requirePermissionDynamo";
 import { canWhiteLabel } from "@/lib/subscription";
 import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
 import { isValidHexColor } from "@/lib/color";
+import { deleteObjects, isOwnedStorageUrl } from "@/lib/storage";
 import type { OrgRole } from "@/server/accessControl";
+
+const DISPLAY_MODES = new Set(["LOGO_ONLY", "NAME_ONLY", "BOTH"]);
 
 async function getMembership(organizationId: string): Promise<{ userId: string; role: OrgRole } | null> {
   const session = await auth();
@@ -51,6 +54,7 @@ export async function GET(
     name: org.name,
     logo: org.logo,
     brandColor: org.brandColor,
+    brandDisplayMode: org.brandDisplayMode ?? "BOTH",
     planAllowsWhiteLabel: canWhiteLabel(plan),
     whiteLabelEnabled: org.whiteLabelEnabled,
   });
@@ -81,10 +85,16 @@ export async function PATCH(
     name?: string;
     logo?: string | null;
     brandColor?: string | null;
+    brandDisplayMode?: string;
     whiteLabelEnabled?: boolean;
   };
 
-  const data: { name?: string; logo?: string; brandColor?: string; whiteLabelEnabled?: boolean } = {};
+  const { data: existing } = await Organization.get({ id }).go();
+  if (!existing) {
+    return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+  }
+
+  const data: { name?: string; logo?: string; brandColor?: string; brandDisplayMode?: "LOGO_ONLY" | "NAME_ONLY" | "BOTH"; whiteLabelEnabled?: boolean } = {};
   const toRemove: ("logo" | "brandColor")[] = [];
 
   if (typeof body.name === "string") {
@@ -110,6 +120,13 @@ export async function PATCH(
     else toRemove.push("brandColor");
   }
 
+  if (typeof body.brandDisplayMode === "string") {
+    if (!DISPLAY_MODES.has(body.brandDisplayMode)) {
+      return NextResponse.json({ error: "brandDisplayMode must be LOGO_ONLY, NAME_ONLY, or BOTH." }, { status: 400 });
+    }
+    data.brandDisplayMode = body.brandDisplayMode as "LOGO_ONLY" | "NAME_ONLY" | "BOTH";
+  }
+
   if (typeof body.whiteLabelEnabled === "boolean") {
     data.whiteLabelEnabled = body.whiteLabelEnabled;
   }
@@ -118,6 +135,14 @@ export async function PATCH(
   if (toRemove.length) patch = patch.remove(toRemove);
   await patch.go();
 
+  // Clean up the replaced logo blob — only if the OLD logo was actually one of ours
+  // (uploaded via /api/v1/media/upload) and the org is genuinely moving away from it
+  // (a new value, or removed entirely), never for a plain external URL someone pasted in.
+  const logoChanged = ("logo" in data && data.logo !== existing.logo) || (toRemove.includes("logo") && !!existing.logo);
+  if (logoChanged && existing.logo && isOwnedStorageUrl(existing.logo)) {
+    await deleteObjects(existing.logo).catch((err) => console.error(`Failed to delete replaced org logo blob for org ${id} (non-fatal):`, err));
+  }
+
   const { data: updated } = await Organization.get({ id }).go();
   if (!updated) throw new Error(`Organization ${id} vanished immediately after being updated`);
 
@@ -125,6 +150,7 @@ export async function PATCH(
     name: updated.name,
     logo: updated.logo,
     brandColor: updated.brandColor,
+    brandDisplayMode: updated.brandDisplayMode ?? "BOTH",
     whiteLabelEnabled: updated.whiteLabelEnabled,
     planAllowsWhiteLabel: true,
   });

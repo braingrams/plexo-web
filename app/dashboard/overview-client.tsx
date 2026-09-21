@@ -96,6 +96,90 @@ function IconSdk() {
   );
 }
 
+function IconChartLine() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v16a2 2 0 0 0 2 2h16" />
+      <path d="m19 9-5 5-4-4-4 4" />
+    </svg>
+  );
+}
+
+function IconFilePlus() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-main)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M12 12v6" />
+      <path d="M9 15h6" />
+    </svg>
+  );
+}
+
+/** A section that has nothing to show yet renders one of these instead of an empty table/
+ * chart shell sized as if it were full of data — the whole point being that the page's
+ * visual weight should track how much is actually going on, not render the same fixed
+ * skeleton of boxes for a brand-new account and a busy one. */
+function EmptyStateCard({
+  icon,
+  title,
+  subtitle,
+  action,
+  compact = false,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  action?: { label: string; href: string };
+  compact?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        textAlign: "center",
+        gap: 8,
+        padding: compact ? "26px 18px" : "40px 24px",
+        border: `1px dashed ${hairline}`,
+        borderRadius: 10,
+      }}
+    >
+      <div
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 9,
+          background: "rgba(255,255,255,0.045)",
+          display: "grid",
+          placeItems: "center",
+          marginBottom: 2,
+        }}
+      >
+        {icon}
+      </div>
+      <p style={{ margin: 0, fontSize: "13.5px", fontWeight: 650, color: "var(--text-main)" }}>{title}</p>
+      <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-muted)", maxWidth: 280, lineHeight: 1.5 }}>{subtitle}</p>
+      {action && (
+        <Link
+          href={action.href}
+          style={{
+            marginTop: 6,
+            fontSize: "12.5px",
+            fontWeight: 700,
+            color: "var(--brand)",
+            textDecoration: "none",
+          }}
+        >
+          {action.label} &rarr;
+        </Link>
+      )}
+    </div>
+  );
+}
+
 function timeAgo(iso: string): string {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (seconds < 60) return "just now";
@@ -172,8 +256,8 @@ function TrafficChart({ chartData }: { chartData: TimelineDay[] }) {
       >
         <defs>
           <linearGradient id="overviewChartFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="var(--brand)" stopOpacity="0" />
           </linearGradient>
         </defs>
         {gridLines.map((y) => (
@@ -182,18 +266,18 @@ function TrafficChart({ chartData }: { chartData: TimelineDay[] }) {
         <line x1="0" y1={baseline} x2={width} y2={baseline} stroke={hairline} strokeWidth="1" />
         {areaD && <path d={areaD} fill="url(#overviewChartFill)" />}
         {pathD && (
-          <path d={pathD} fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={pathD} fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         )}
         {active && hoverIndex !== null && (
-          <line x1={active.x} y1={top} x2={active.x} y2={baseline} stroke="rgba(139,92,246,0.35)" strokeWidth="1" strokeDasharray="3 3" />
+          <line x1={active.x} y1={top} x2={active.x} y2={baseline} stroke="rgba(var(--brand-rgb),0.35)" strokeWidth="1" strokeDasharray="3 3" />
         )}
         {active && (
           <circle
             cx={active.x}
             cy={active.y}
             r={hoverIndex === null ? 3 : 4.5}
-            fill={hoverIndex === null ? "#8b5cf6" : "#0d0f1a"}
-            stroke="#8b5cf6"
+            fill={hoverIndex === null ? "var(--brand)" : "#0d0f1a"}
+            stroke="var(--brand)"
             strokeWidth={hoverIndex === null ? 0 : 2}
           />
         )}
@@ -271,6 +355,12 @@ export function OverviewClient(props: Props) {
     return ((totalViews - previousViews7d) / previousViews7d) * 100;
   }, [totalViews, previousViews7d]);
 
+  // A full 7-day trend chart is only meaningful once there's actually something to trend —
+  // rendering it anyway (a flat line pinned to zero, a stretch of empty grid) is exactly
+  // the "one-size-fits-all, mostly empty space" look this page is being redesigned away
+  // from. Falls back to a compact prompt instead, sized to match what's really there.
+  const hasAnyTraffic = (totalViews ?? 0) > 0 || previousViews7d > 0 || chartData.some((d) => d.views > 0);
+
   return (
     <div style={{ color: "var(--text-main)" }}>
       {/* Header */}
@@ -299,23 +389,23 @@ export function OverviewClient(props: Props) {
 
       {/* Stat strip */}
       <div style={{ height: 1, background: hairline }} />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", padding: "26px 0" }}>
-        <div style={{ paddingRight: 32 }}>
+      <div className="overview-stat-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", padding: "26px 0" }}>
+        <div className="overview-stat-cell" style={{ paddingRight: 32 }}>
           <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
             Templates
           </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          <div className="overview-stat-value" style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
             {templatesCount}
           </div>
           <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
             <span style={{ color: "var(--success)", fontWeight: 650 }}>{liveTemplatesCount}</span> live
           </div>
         </div>
-        <div style={{ padding: "0 32px", borderLeft: `1px solid ${hairlineSoft}` }}>
+        <div className="overview-stat-cell" style={{ padding: "0 32px", borderLeft: `1px solid ${hairlineSoft}` }}>
           <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
             Live domains
           </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          <div className="overview-stat-value" style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
             {domainsCount}
           </div>
           <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
@@ -328,11 +418,11 @@ export function OverviewClient(props: Props) {
             )}
           </div>
         </div>
-        <div style={{ padding: "0 32px", borderLeft: `1px solid ${hairlineSoft}` }}>
+        <div className="overview-stat-cell" style={{ padding: "0 32px", borderLeft: `1px solid ${hairlineSoft}` }}>
           <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
             Views &middot; 7d
           </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          <div className="overview-stat-value" style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
             {loadingViews ? "—" : (totalViews ?? 0).toLocaleString()}
           </div>
           <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
@@ -357,11 +447,11 @@ export function OverviewClient(props: Props) {
             )}
           </div>
         </div>
-        <div style={{ paddingLeft: 32, borderLeft: `1px solid ${hairlineSoft}` }}>
+        <div className="overview-stat-cell" style={{ paddingLeft: 32, borderLeft: `1px solid ${hairlineSoft}` }}>
           <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 12 }}>
             API keys
           </div>
-          <div style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          <div className="overview-stat-value" style={{ fontFamily: "var(--font-mono)", fontSize: "38px", fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>
             {apiKeysCount}
           </div>
           <div style={{ fontSize: "12.5px", color: "var(--text-muted)" }}>
@@ -371,74 +461,141 @@ export function OverviewClient(props: Props) {
           </div>
         </div>
       </div>
+      <style>{`
+        /* This grid has no mobile fallback at all otherwise — 4 fixed-padding columns of
+           38px monospace numbers genuinely overflow/clip on a ~375px phone (found by a
+           mobile-responsiveness audit, not a spacing preference). Two columns, normalized
+           padding (the four cells' padding/border values differ from each other, hence
+           !important here rather than restructuring each cell), and a smaller number size
+           give each stat real room again. */
+        @media (max-width: 680px) {
+          .overview-stat-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+            row-gap: 22px;
+          }
+          .overview-stat-cell {
+            padding: 0 14px !important;
+            border-left: none !important;
+          }
+          .overview-stat-value {
+            font-size: 28px !important;
+          }
+        }
+
+        /* Recent templates + Activity: fixed 65%/35% split plus a 250px-wide fixed table
+           header (Type/Pages/Updated columns) leaves negative room for "Name" once the
+           left column is squeezed to 65% of a ~375px phone screen — genuine overflow, not
+           just cramped. Stacks to one full-width column at a time; the divider between
+           them only makes sense side-by-side, so it's dropped rather than rendered as a
+           stray horizontal rule. Below 480px the two least-essential columns (Type,
+           Updated) are dropped too, so Name/Pages — the two things actually worth glancing
+           at — get real room instead of three-way-splitting an already-narrow row. */
+        @media (max-width: 768px) {
+          .overview-split-row {
+            flex-direction: column !important;
+          }
+          .overview-split-col {
+            flex: 1 1 auto !important;
+            padding: 0 !important;
+          }
+          .overview-split-col-templates {
+            margin-bottom: 28px;
+          }
+          .overview-split-divider {
+            display: none !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .overview-col-type,
+          .overview-col-updated {
+            display: none !important;
+          }
+        }
+      `}</style>
       <div style={{ height: 1, background: hairline }} />
 
-      {/* Traffic + Needs attention */}
-      <div style={{ display: "flex", alignItems: "stretch", padding: "32px 0" }}>
-        <div style={{ flex: "0 0 65%", paddingRight: 40 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 22 }}>
-            <span style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
-              Traffic &middot; 7 days
-            </span>
-            <Link href="/dashboard/insights" style={{ fontSize: "12.5px", fontWeight: 650, color: "var(--brand)", textDecoration: "none" }}>
-              Open Insights &rarr;
-            </Link>
-          </div>
-          <TrafficChart chartData={chartData} />
-        </div>
-
-        <div style={{ width: 1, background: hairline, alignSelf: "stretch" }} />
-
-        <div style={{ flex: 1, paddingLeft: 40 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-            <span style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
-              Needs attention
-            </span>
-            {needsAttention.length > 0 && (
+      {/* Needs attention — a full-width strip, only rendered when there's actually
+          something to flag. Previously paired side-by-side with Traffic in a fixed-height
+          row, which meant a short list (often just one item) got force-stretched to match
+          a much taller chart next to it, leaving a dead gap under its own content. Standing
+          on its own, its height is exactly whatever its items need — nothing reserved,
+          nothing to fill. Skipped entirely rather than showing an "all caught up" filler
+          when empty, for the same reason: a whole labeled section just to say there's
+          nothing to say is its own kind of empty space. */}
+      {needsAttention.length > 0 && (
+        <>
+          <div style={{ padding: "26px 0" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+              <span style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+                Needs attention
+              </span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-muted)" }}>{needsAttention.length}</span>
-            )}
-          </div>
-
-          {needsAttention.length === 0 ? (
-            <p style={{ fontSize: "12.5px", color: "var(--text-faint)", margin: 0 }}>All caught up — nothing needs your attention.</p>
-          ) : (
+            </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
               {needsAttention.map((item, i) => (
                 <div
                   key={item.id}
                   style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 24,
                     padding: "13px 0",
-                    borderTop: `1px solid ${hairlineSoft}`,
-                    borderBottom: i === needsAttention.length - 1 ? `1px solid ${hairlineSoft}` : undefined,
+                    borderTop: i === 0 ? undefined : `1px solid ${hairlineSoft}`,
                   }}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                  <div>
                     <span style={{ fontSize: "13px", fontWeight: 650 }}>{item.title}</span>
-                    <Link
-                      href={item.href}
-                      style={{
-                        fontSize: "11.5px",
-                        fontWeight: 700,
-                        color: toneColor(item.tone),
-                        textTransform: "uppercase",
-                        letterSpacing: "0.03em",
-                        textDecoration: "none",
-                      }}
-                    >
-                      {item.actionLabel}
-                    </Link>
+                    <span style={{ marginLeft: 10, fontSize: "12px", color: "var(--text-muted)" }}>{item.subtitle}</span>
                   </div>
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>{item.subtitle}</div>
+                  <Link
+                    href={item.href}
+                    style={{
+                      flexShrink: 0,
+                      fontSize: "11.5px",
+                      fontWeight: 700,
+                      color: toneColor(item.tone),
+                      textTransform: "uppercase",
+                      letterSpacing: "0.03em",
+                      textDecoration: "none",
+                    }}
+                  >
+                    {item.actionLabel}
+                  </Link>
                 </div>
               ))}
             </div>
-          )}
+          </div>
+          <div style={{ height: 1, background: hairline }} />
+        </>
+      )}
+
+      {/* Traffic — full width now that it isn't forced into a same-height row with a
+          variable-length list. */}
+      <div style={{ padding: "32px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 22 }}>
+          <span style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+            Traffic &middot; 7 days
+          </span>
+          <Link href="/dashboard/insights" style={{ fontSize: "12.5px", fontWeight: 650, color: "var(--brand)", textDecoration: "none" }}>
+            Open Insights &rarr;
+          </Link>
         </div>
+        {!loadingViews && !hasAnyTraffic ? (
+          <EmptyStateCard
+            icon={<IconChartLine />}
+            title="No traffic yet"
+            subtitle="Once your site starts getting visits, a 7-day trend will show up here."
+            action={{ label: "Share your page", href: "/dashboard/templates" }}
+          />
+        ) : (
+          <TrafficChart chartData={chartData} />
+        )}
       </div>
 
       {/* Recent templates + Activity */}
-      <div style={{ display: "flex", alignItems: "stretch", padding: "0 0 32px" }}>
-        <div style={{ flex: "0 0 65%", paddingRight: 40 }}>
+      <div className="overview-split-row" style={{ display: "flex", alignItems: "stretch", padding: "0 0 32px" }}>
+        <div className="overview-split-col overview-split-col-templates" style={{ flex: "0 0 65%", paddingRight: 40 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 18 }}>
             <span style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)" }}>
               Recent templates
@@ -448,51 +605,59 @@ export function OverviewClient(props: Props) {
             </Link>
           </div>
 
-          <div style={{ display: "flex", paddingBottom: 10, borderBottom: `1px solid ${hairline}` }}>
-            <span style={{ flex: 1, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)" }}>Name</span>
-            <span style={{ width: 100, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)" }}>Type</span>
-            <span style={{ width: 60, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)", textAlign: "right" }}>Pages</span>
-            <span style={{ width: 90, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)", textAlign: "right" }}>Updated</span>
-          </div>
-
           {recentTemplates.length === 0 ? (
-            <p style={{ fontSize: "12.5px", color: "var(--text-faint)", padding: "16px 0 0" }}>No templates yet.</p>
+            <EmptyStateCard
+              icon={<IconFilePlus />}
+              title="Create your first template"
+              subtitle="Landing pages and emails you build will show up here, ready to publish."
+              action={{ label: "Start building", href: "/dashboard/new" }}
+            />
           ) : (
-            recentTemplates.map((t, i) => (
-              <Link
-                key={t.id}
-                href={`/dashboard/templates/${t.id}`}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  padding: "13px 0",
-                  borderBottom: i === recentTemplates.length - 1 ? undefined : `1px solid ${hairlineSoft}`,
-                  textDecoration: "none",
-                  color: "inherit",
-                }}
-              >
-                <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 9, fontSize: "13.5px", fontWeight: 600 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.isLive ? "var(--success)" : "var(--text-faint)", flexShrink: 0 }} />
-                  {t.name}
-                </span>
-                <span style={{ width: 100, fontSize: "12.5px", color: "var(--text-muted)" }}>{kindLabel(t.kind)}</span>
-                <span style={{ width: 60, fontSize: "12.5px", color: "var(--text-muted)", textAlign: "right", fontFamily: "var(--font-mono)" }}>
-                  {t.kind === "LANDING_PAGE" ? t.pageCount + 1 : "—"}
-                </span>
-                <span style={{ width: 90, fontSize: "12.5px", color: "var(--text-faint)", textAlign: "right" }}>{timeAgo(t.updatedAt)}</span>
-              </Link>
-            ))
+            <>
+              <div style={{ display: "flex", paddingBottom: 10, borderBottom: `1px solid ${hairline}` }}>
+                <span style={{ flex: 1, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)" }}>Name</span>
+                <span className="overview-col-type" style={{ width: 100, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)" }}>Type</span>
+                <span style={{ width: 60, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)", textAlign: "right" }}>Pages</span>
+                <span className="overview-col-updated" style={{ width: 90, fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-faint)", textAlign: "right" }}>Updated</span>
+              </div>
+              {recentTemplates.map((t, i) => (
+                <Link
+                  key={t.id}
+                  href={`/dashboard/templates/${t.id}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "13px 0",
+                    borderBottom: i === recentTemplates.length - 1 ? undefined : `1px solid ${hairlineSoft}`,
+                    textDecoration: "none",
+                    color: "inherit",
+                  }}
+                >
+                  <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 9, fontSize: "13.5px", fontWeight: 600 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.isLive ? "var(--success)" : "var(--text-faint)", flexShrink: 0 }} />
+                    {t.name}
+                  </span>
+                  <span className="overview-col-type" style={{ width: 100, fontSize: "12.5px", color: "var(--text-muted)" }}>{kindLabel(t.kind)}</span>
+                  <span style={{ width: 60, fontSize: "12.5px", color: "var(--text-muted)", textAlign: "right", fontFamily: "var(--font-mono)" }}>
+                    {t.kind === "LANDING_PAGE" ? t.pageCount + 1 : "—"}
+                  </span>
+                  <span className="overview-col-updated" style={{ width: 90, fontSize: "12.5px", color: "var(--text-faint)", textAlign: "right" }}>{timeAgo(t.updatedAt)}</span>
+                </Link>
+              ))}
+            </>
           )}
         </div>
 
-        <div style={{ width: 1, background: hairline, alignSelf: "stretch" }} />
+        <div className="overview-split-divider" style={{ width: 1, background: hairline, alignSelf: "stretch" }} />
 
-        <div style={{ flex: 1, paddingLeft: 40 }}>
+        <div className="overview-split-col" style={{ flex: 1, paddingLeft: 40 }}>
           <div style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", marginBottom: 18 }}>
             Activity
           </div>
           {recentActivity.length === 0 ? (
-            <p style={{ fontSize: "12.5px", color: "var(--text-faint)", margin: 0 }}>Nothing to show yet.</p>
+            <p style={{ fontSize: "12.5px", color: "var(--text-faint)", margin: 0 }}>
+              Nothing yet — actions like publishing a page or connecting a domain will show up here.
+            </p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 15 }}>
               {recentActivity.map((item) => (
