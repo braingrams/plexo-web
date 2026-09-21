@@ -337,7 +337,7 @@ restrained ink/paper/terracotta palette, the serif/sans/mono type system, near-z
               "id": "row-hero-inner",
               "style": { "maxWidth": "1200px", "margin": "0 auto" },
               "columns": [
-                { "id": "col-hero-text", "width": "55%", "styles": { "padding": "96px 32px 96px 0" }, "elements": [
+                { "id": "col-hero-text", "width": "55%", "style": { "padding": "96px 32px 96px 0" }, "elements": [
                   { "id": "el-eyebrow", "type": "text", "style": { "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "12px", "letterSpacing": "0.16em", "textTransform": "uppercase", "color": "#C4623B" }, "attributes": { "text": "Small-Batch Roastery" } },
                   { "id": "el-heading", "type": "heading", "style": { "fontFamily": "'Playfair Display', serif", "fontWeight": "600", "fontSize": "48px", "lineHeight": "1.1", "color": "#FAF7F1", "maxWidth": "560px", "margin": "16px 0 0" }, "attributes": { "text": "Coffee, Roasted With Intention" } },
                   { "id": "el-sub", "type": "paragraph", "style": { "fontFamily": "'Inter', sans-serif", "fontSize": "17px", "lineHeight": "1.7", "color": "#B7BEC9", "maxWidth": "480px", "margin": "20px 0 0" }, "attributes": { "text": "Single-origin beans sourced direct from growers, roasted weekly in small batches for a cup that actually tastes like where it came from." } },
