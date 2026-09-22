@@ -17,7 +17,10 @@ export function IntegrationSubTabs() {
   return (
     <nav aria-label="Integrations sub-navigation" className="dash-pill-nav" style={{ marginBottom: "1.25rem", flex: "0 0 auto" }}>
       {TABS.map((tab) => {
-        const isActive = pathname.startsWith(tab.href);
+        const isActive =
+          tab.href === "/dashboard/integrations"
+            ? pathname === tab.href || pathname.startsWith(`${tab.href}/`)
+            : pathname === tab.href;
         return (
           <Link key={tab.href} href={tab.href} className={`dash-pill-nav-item${isActive ? " active" : ""}`}>
             {tab.label}
