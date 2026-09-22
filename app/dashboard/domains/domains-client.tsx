@@ -14,6 +14,31 @@ import { CustomSelect } from "../../_components/CustomSelect";
 // before that fetch resolves.
 const DNS_CNAME_TARGET_FALLBACK = "connecting…";
 
+// ACM's DomainValidationOptions.ResourceRecord.Name (lib/acmCertificates.ts's
+// requestCertificate) comes back as the full, absolute record name with a trailing dot
+// (e.g. "_9f29d…d.www.example.com."), unlike the routing CNAME's dnsHostLabel below, which
+// is deliberately shown relative to the zone ("www", not "www.example.com") because that's
+// what a registrar's own "Name/Host" field expects — it appends the zone itself. Showing
+// the cert-validation record's absolute name unchanged means pasting it whole into that
+// same field silently doubles the domain onto the end (GoDaddy: "_9f29d…d.www.example.com"
+// typed into Name becomes "_9f29d…d.www.example.com.example.com" once saved) — a record
+// ACM will never see, so the certificate sits at PENDING_VALIDATION forever with no
+// indication anything is wrong. Confirmed live against a real stuck customer domain: the
+// exact doubled name resolved to the ACM target value, while the name ACM actually polls
+// for was NXDOMAIN. Stripping the trailing dot and the zone suffix here — the same way
+// dnsHostLabel already does for the routing CNAME — makes both records safe to paste as-is.
+function toRegistrarRelativeHost(fullyQualifiedName: string, domain: string): string {
+  const stripped = fullyQualifiedName.replace(/\.$/, "");
+  if (stripped.toLowerCase() === domain.toLowerCase()) return "@";
+  const suffix = `.${domain}`;
+  if (stripped.toLowerCase().endsWith(suffix.toLowerCase())) {
+    return stripped.slice(0, stripped.length - suffix.length);
+  }
+  // Unexpected shape (e.g. domain changed after the cert was requested) — show the real
+  // value rather than hide a mismatch behind a guessed transform.
+  return stripped;
+}
+
 type DomainType = "SUBDOMAIN" | "CUSTOM" | "BUY";
 
 // Present only on a domain bought through Plexo (RegisteredDomain, lib/db/contentEntities.ts)
@@ -896,7 +921,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                                   )}
                                   {item.certificateStatus === "PENDING_VALIDATION" && item.certificateValidationName && item.certificateValidationValue && (
                                     <div style={{ fontFamily: "monospace", fontSize: "0.68rem", color: "rgba(240,242,255,0.4)", marginTop: "0.2rem", wordBreak: "break-all" }}>
-                                      CNAME {item.certificateValidationName} → {item.certificateValidationValue}
+                                      CNAME {toRegistrarRelativeHost(item.certificateValidationName, item.domain)} → {item.certificateValidationValue}
                                     </div>
                                   )}
                                 </div>
@@ -1301,10 +1326,10 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                         <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: "0.72rem", alignItems: "flex-start", flexWrap: "wrap", gap: "0.4rem 0" }}>
                           <span style={{ width: "25%", minWidth: 0, color: "#6ee7b7", fontWeight: 600 }}>CNAME</span>
                           <span style={{ width: "35%", minWidth: 0, color: "#f0f2ff", fontWeight: 600, display: "flex", alignItems: "flex-start", gap: "0.25rem", wordBreak: "break-all", overflowWrap: "anywhere" }}>
-                            <span style={{ minWidth: 0 }}>{justAddedCertValidation.name}</span>
+                            <span style={{ minWidth: 0 }}>{toRegistrarRelativeHost(justAddedCertValidation.name, customDomainInput)}</span>
                             <button
                               type="button"
-                              onClick={() => handleCopy(justAddedCertValidation.name, 'certHost')}
+                              onClick={() => handleCopy(toRegistrarRelativeHost(justAddedCertValidation.name, customDomainInput), 'certHost')}
                               style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", flexShrink: 0 }}
                               title="Copy Host"
                             >
