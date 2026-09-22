@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/contentEntities";
 import { getTierFeatures } from "@/lib/subscription";
 import { User } from "@/lib/db/coreEntities";
+import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
 
 import { BlogOverviewClient } from "./BlogOverviewClient";
 
@@ -89,7 +90,7 @@ export default async function BlogOverviewPage() {
   candidates.forEach((t, i) => {
     const blogSite = blogSites[i].data;
     if (blogSite?.enabled) {
-      const activeDomain = domainBatches[i].data.find((d) => d.active);
+      const activeDomain = pickPrimaryDomain(domainBatches[i].data);
       blogs.push({
         id: t.id,
         name: t.name,

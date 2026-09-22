@@ -3,6 +3,7 @@ import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
+import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
 import { PageContainer } from "../../_components/PageContainer";
 import { CommerceSiteHeader, type CommerceSiteInfo } from "../_components/CommerceSiteHeader";
 import { CommerceTabs } from "../_components/CommerceTabs";
@@ -55,7 +56,7 @@ export default async function CommerceSiteLayout({
       return {
         id: t.id,
         name: t.name,
-        domain: domains[0]?.domain ?? null,
+        domain: pickPrimaryDomain(domains)?.domain ?? null,
         enabled: settings?.enabled ?? false,
         storefrontSlug: storefrontPage?.slug ?? null,
       };
