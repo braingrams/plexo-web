@@ -61,6 +61,70 @@ const SCHEMA_HINT =
   "column with real elements (e.g. one column per product, each with a heading/image/paragraph for name/price/description) before calling this tool. " +
   "See this tool's description for a full worked example.";
 
+const LAYOUT_ELEMENT_SCHEMA = {
+  type: "object",
+  required: ["id", "type", "style", "attributes"],
+  properties: {
+    id: { type: "string" },
+    type: {
+      type: "string",
+      enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video", "accordion", "blog_title", "blog_content", "blog_featured_image", "blog_date", "blog_author", "blog_categories", "blog_comments", "blog_post_list"],
+    },
+    style: { type: "object" },
+    attributes: {
+      type: "object",
+      description: "Component attributes. IMPORTANT: text content for 'heading'/'paragraph'/'text'/'button' elements goes under the key 'text' (NOT 'content'). Images use 'src'/'alt'. Buttons/links use 'href'. Raw markup for type 'html' goes under 'htmlContent' (NOT 'text').",
+      properties: {
+        text: { type: "string", description: "Visible text for heading/paragraph/text/button elements." },
+        href: { type: "string", description: "Link URL for button/card elements." },
+        src: { type: "string", description: "Image URL for image elements." },
+        alt: { type: "string", description: "Alt text for image elements." },
+        htmlContent: { type: "string", description: "Raw HTML markup for type 'html' elements only." },
+      },
+    },
+  },
+};
+
+const LAYOUT_SCHEMA_DEFS = {
+  layoutColumn: {
+    type: "object",
+    required: ["id", "width", "elements"],
+    properties: {
+      id: { type: "string" },
+      width: { type: "string", description: "Percentage width (e.g. '100%', '50%', '33.33%')." },
+      style: { type: "object" },
+      elements: {
+        type: "array",
+        description: "This column's own content elements. May be empty ([]) when the column instead uses 'nestedRows' below (the full-bleed section-shell pattern) — a column may have elements, nestedRows, or both.",
+        items: LAYOUT_ELEMENT_SCHEMA,
+      },
+      nestedRows: {
+        type: "array",
+        description: "OPTIONAL. Nested row(s) inside this column, each the SAME shape as a top-level row (id/style/columns). This is how you build a full-bleed section: the outer row/column carries the background color edge-to-edge, and a nestedRow here caps content at a readable maxWidth. Use this instead of putting a 'maxWidth' directly on the outer row.",
+        items: {
+          $ref: "#/$defs/layoutRow",
+          description: "Same shape as a top-level row: { id, style, columns: [{ id, width, elements, nestedRows? }] } — nesting may repeat if genuinely needed, but one level (outer band + inner capped row) covers nearly every section.",
+        },
+      },
+    },
+  },
+  layoutRow: {
+    type: "object",
+    required: ["id", "style", "columns"],
+    properties: {
+      id: { type: "string" },
+      style: { type: "object" },
+      columns: {
+        type: "array",
+        description: "Required. One entry per column — for a repeated-item section (products, features, testimonials), put one item per column here, not a nested list.",
+        items: {
+          $ref: "#/$defs/layoutColumn",
+        },
+      },
+    },
+  },
+};
+
 export type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
 
 /**
@@ -275,7 +339,7 @@ restrained ink/paper/terracotta palette, the serif/sans/mono type system, near-z
               "id": "row-hero-inner",
               "style": { "maxWidth": "1200px", "margin": "0 auto" },
               "columns": [
-                { "id": "col-hero-text", "width": "55%", "styles": { "padding": "96px 32px 96px 0" }, "elements": [
+                { "id": "col-hero-text", "width": "55%", "style": { "padding": "96px 32px 96px 0" }, "elements": [
                   { "id": "el-eyebrow", "type": "text", "style": { "fontFamily": "'IBM Plex Mono', monospace", "fontSize": "12px", "letterSpacing": "0.16em", "textTransform": "uppercase", "color": "#C4623B" }, "attributes": { "text": "Small-Batch Roastery" } },
                   { "id": "el-heading", "type": "heading", "style": { "fontFamily": "'Playfair Display', serif", "fontWeight": "600", "fontSize": "48px", "lineHeight": "1.1", "color": "#FAF7F1", "maxWidth": "560px", "margin": "16px 0 0" }, "attributes": { "text": "Coffee, Roasted With Intention" } },
                   { "id": "el-sub", "type": "paragraph", "style": { "fontFamily": "'Inter', sans-serif", "fontSize": "17px", "lineHeight": "1.7", "color": "#B7BEC9", "maxWidth": "480px", "margin": "20px 0 0" }, "attributes": { "text": "Single-origin beans sourced direct from growers, roasted weekly in small batches for a cup that actually tastes like where it came from." } },
@@ -323,6 +387,7 @@ restrained ink/paper/terracotta palette, the serif/sans/mono type system, near-z
 }`,
     inputSchema: {
       type: "object",
+      $defs: LAYOUT_SCHEMA_DEFS,
       properties: {
         name: {
           type: "string",
@@ -364,49 +429,7 @@ restrained ink/paper/terracotta palette, the serif/sans/mono type system, near-z
                   type: "array",
                   description: "Array of row objects. Every row MUST already have a 'columns' array — there is no shorthand row type; rows without 'columns' are rejected.",
                   items: {
-                    type: "object",
-                    required: ["id", "style", "columns"],
-                    properties: {
-                      id: { type: "string" },
-                      style: { type: "object" },
-                      columns: {
-                        type: "array",
-                        description: "Required. One entry per column — for a repeated-item section (products, features, testimonials), put one item per column here, not a nested list.",
-                        items: {
-                          type: "object",
-                          required: ["id", "width", "elements"],
-                          properties: {
-                            id: { type: "string" },
-                            width: { type: "string", description: "Percentage width (e.g. '100%', '50%', '33.33%')." },
-                            elements: {
-                              type: "array",
-                              description: "This column's own content elements. May be empty ([]) when the column instead uses 'nestedRows' below (the full-bleed section-shell pattern) — a column may have elements, nestedRows, or both.",
-                              items: {
-                                type: "object",
-                                required: ["id", "type", "style", "attributes"],
-                                properties: {
-                                  type: {
-                                    type: "string",
-                                    enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video", "accordion", "blog_title", "blog_content", "blog_featured_image", "blog_date", "blog_author", "blog_categories", "blog_comments", "blog_post_list"],
-                                  },
-                                  style: { type: "object" },
-                                  attributes: { type: "object", description: "Component attributes (text, href, src, title, description, links, fields). For type 'html', raw markup goes under 'htmlContent' — NOT 'text'." },
-                                },
-                              },
-                            },
-                            nestedRows: {
-                              type: "array",
-                              description: "OPTIONAL. Nested row(s) inside this column, each the SAME shape as a top-level row (id/style/columns). This is how you build a full-bleed section: the outer row/column carries the background color edge-to-edge, and a nestedRow here caps content at a readable maxWidth. Use this instead of putting a 'maxWidth' directly on the outer row.",
-                              items: {
-                                type: "object",
-                                required: ["id", "style", "columns"],
-                                description: "Same shape as a top-level row: { id, style, columns: [{ id, width, elements, nestedRows? }] } — nesting may repeat if genuinely needed, but one level (outer band + inner capped row) covers nearly every section.",
-                              },
-                            },
-                          },
-                        },
-                      },
-                    },
+                    $ref: "#/$defs/layoutRow",
                   },
                 },
               },
@@ -439,6 +462,7 @@ restrained ink/paper/terracotta palette, the serif/sans/mono type system, near-z
 Uses the SAME fully-hydrated layout schema as publish_landing_page — designJson MUST be { "body": { "style": {...}, "rows": [{ "id", "style", "columns": [{ "id", "width", "elements": [{ "id", "type", "style", "attributes" }] }] }] } }. There is no shorthand row format; rows without a 'columns' array are rejected. Text content for heading/paragraph/text/button elements MUST be under attributes.text (NOT attributes.content) — a "content" key is silently ignored by the editor and renders as empty/placeholder text. See publish_landing_page's description for a full worked example.`,
     inputSchema: {
       type: "object",
+      $defs: LAYOUT_SCHEMA_DEFS,
       properties: {
         name: {
           type: "string",
@@ -468,49 +492,7 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page — designJso
                   type: "array",
                   description: "Array of row objects. Every row MUST already have a 'columns' array — there is no shorthand row type; rows without 'columns' are rejected.",
                   items: {
-                    type: "object",
-                    required: ["id", "style", "columns"],
-                    properties: {
-                      id: { type: "string" },
-                      style: { type: "object" },
-                      columns: {
-                        type: "array",
-                        description: "Required. One entry per column.",
-                        items: {
-                          type: "object",
-                          required: ["id", "width", "elements"],
-                          properties: {
-                            id: { type: "string" },
-                            width: { type: "string", description: "Percentage width (e.g. '100%', '50%', '33.33%')." },
-                            elements: {
-                              type: "array",
-                              items: {
-                                type: "object",
-                                required: ["id", "type", "style", "attributes"],
-                                properties: {
-                                  type: {
-                                    type: "string",
-                                    enum: ["heading", "paragraph", "text", "button", "card", "image", "menu", "social", "divider", "spacer", "form_container", "input", "textarea", "select", "carousel", "html", "icon", "table", "timer", "video", "accordion", "blog_title", "blog_content", "blog_featured_image", "blog_date", "blog_author", "blog_categories", "blog_comments", "blog_post_list"],
-                                  },
-                                  style: { type: "object" },
-                                  attributes: {
-                                    type: "object",
-                                    description: "Component attributes. IMPORTANT: text content for 'heading'/'paragraph'/'text'/'button' elements goes under the key 'text' (NOT 'content'). Images use 'src'/'alt'. Buttons/links use 'href'. Raw markup for type 'html' goes under 'htmlContent' (NOT 'text').",
-                                    properties: {
-                                      text: { type: "string", description: "Visible text for heading/paragraph/text/button elements." },
-                                      href: { type: "string", description: "Link URL for button/card elements." },
-                                      src: { type: "string", description: "Image URL for image elements." },
-                                      alt: { type: "string", description: "Alt text for image elements." },
-                                      htmlContent: { type: "string", description: "Raw HTML markup for type 'html' elements only." },
-                                    },
-                                  },
-                                },
-                              },
-                            },
-                          },
-                        },
-                      },
-                    },
+                    $ref: "#/$defs/layoutRow",
                   },
                 },
               },

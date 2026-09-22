@@ -17,3 +17,13 @@ When implementing or fixing something, check:
 - **Does the fix address the whole flow, not just the reported symptom?** The storefront fix didn't stop at the grid page — it also covered checkout, confirmation, and order tracking, because a broken link at any one of those points is just as confusing to a real visitor.
 
 This applies to dashboard UI, public site behavior, and MCP tools alike — an MCP tool an AI assistant calls on the user's behalf should also require the fewest steps and least prior knowledge to get a working result.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

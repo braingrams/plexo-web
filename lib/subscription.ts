@@ -13,6 +13,8 @@ export type TierFeatures = {
   maxEmailTemplates: number;
   /** Maximum number of landing pages the user can create */
   maxLandingPages: number;
+  /** Maximum number of PUBLISHED blog posts per site. `null` means unlimited (Ultra). */
+  maxPublishedBlogPosts: number | null;
   /** Whether AI layout editing is allowed */
   aiEnabled: boolean;
   /** Whether the user can access the MJML compile API */
@@ -74,6 +76,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
   FREE: {
     maxEmailTemplates: 5,
     maxLandingPages: 5,
+    maxPublishedBlogPosts: 5,
     // Free ships 10 monthly AI credits (PLAN_MONTHLY_CREDITS.FREE below) — hard-locking the
     // AI entry point here made those credits impossible to ever spend (a free user could
     // never even open the AI prompt box to try one). The real, already-enforced limit is
@@ -97,6 +100,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
   PRO: {
     maxEmailTemplates: 25,
     maxLandingPages: 25,
+    maxPublishedBlogPosts: 50,
     aiEnabled: true,
     compileApiEnabled: true,
     strataEnabled: true,
@@ -113,6 +117,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
   ULTRA: {
     maxEmailTemplates: 100,
     maxLandingPages: 100,
+    maxPublishedBlogPosts: null,
     aiEnabled: true,
     compileApiEnabled: true,
     strataEnabled: true,
@@ -194,7 +199,9 @@ export function resolveManageLandingPagePublishing(
  * one that actually matters; the save-time check just gives a clearer error
  * earlier.
  */
-export function canUseHostManagedAi(plan: SubscriptionPlan | string | null | undefined): boolean {
+export function canUseHostManagedAi(
+  plan: SubscriptionPlan | string | null | undefined,
+): boolean {
   return canDo(plan, "hostManagedAiEnabled");
 }
 
@@ -215,7 +222,9 @@ export function resolveHideBranding(
  * Whether an account on the given plan may white-label (set its own name/logo/color in
  * place of the Plexo brand). See TierFeatures.whiteLabelEnabled.
  */
-export function canWhiteLabel(plan: SubscriptionPlan | string | null | undefined): boolean {
+export function canWhiteLabel(
+  plan: SubscriptionPlan | string | null | undefined,
+): boolean {
   return canDo(plan, "whiteLabelEnabled");
 }
 
