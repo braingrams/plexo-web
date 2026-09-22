@@ -37,9 +37,9 @@ const BLANK_TEMPLATE_SHELL: TemplateJSON = {
   },
 };
 
-export default async function TemplateEditorPage(
-  props: { params: Promise<{ id: string }> },
-) {
+export default async function TemplateEditorPage(props: {
+  params: Promise<{ id: string }>;
+}) {
   const params = await props.params;
   const session = await auth();
 
@@ -66,8 +66,13 @@ export default async function TemplateEditorPage(
   // not per page, so a sub-page's editor needs to walk up to the root to know whether to
   // show the Commerce block palette / where to link Site Layout. Most sites are only one
   // level deep, but the page tree can nest further.
-  const rootTemplateId = await findRootTemplateId(template.id, template.parentId ?? null);
-  const { data: commerceSettings } = await CommerceSettings.get({ templateId: rootTemplateId }).go();
+  const rootTemplateId = await findRootTemplateId(
+    template.id,
+    template.parentId ?? null,
+  );
+  const { data: commerceSettings } = await CommerceSettings.get({
+    templateId: rootTemplateId,
+  }).go();
 
   const tierFeatures = getTierFeatures(user?.subscriptionPlan);
 
@@ -85,9 +90,13 @@ export default async function TemplateEditorPage(
     );
   }
 
-  const initialDesignJson = isTemplateJson(template.designJson)
+  const liveDesignJson = isTemplateJson(template.designJson)
     ? template.designJson
     : BLANK_TEMPLATE_SHELL;
+  const initialDesignJson = isTemplateJson(template.draftJson)
+    ? template.draftJson
+    : liveDesignJson;
+  const hasUnpublishedChanges = template.draftJson != null;
 
   const unsplashKey = process.env.UNSPLASH_KEY || "";
   const pexelsKey = process.env.PEXELS_KEY || "";
@@ -100,6 +109,8 @@ export default async function TemplateEditorPage(
       templateKind={template.kind}
       templateParentId={template.parentId ?? null}
       initialDesignJson={initialDesignJson}
+      liveDesignJson={liveDesignJson}
+      hasUnpublishedChanges={hasUnpublishedChanges}
       subscriptionPlan={user?.subscriptionPlan ?? "FREE"}
       useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}
       aiProvider={activeApiKey?.aiProvider ?? "openai"}

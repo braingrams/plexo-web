@@ -33,6 +33,14 @@ type Props = {
   // own PublishedDomain and shouldn't trigger the "publish this page" nudge.
   templateParentId: string | null;
   initialDesignJson: TemplateJSON;
+  // The live/published designJson baseline — compared (via JSON.stringify) against the
+  // draft after every save to decide if there are real unpublished changes, instead of
+  // just trusting that a save happened.
+  liveDesignJson: TemplateJSON;
+  // Whether this template has draft edits (draftJson) that haven't been Published yet —
+  // seeds the header's "Unpublished changes" indicator on load; kept in sync client-side
+  // after every save/publish rather than re-fetched.
+  hasUnpublishedChanges: boolean;
   subscriptionPlan: string;
   useAi: boolean;
   aiProvider: string;
@@ -204,6 +212,25 @@ function IconWarning() {
   );
 }
 
+function IconUpload() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  );
+}
+
 function IconRocket() {
   return (
     <svg
@@ -347,6 +374,11 @@ function EditorHeaderRight({
   subscriptionPlan,
   isSaving,
   onSave,
+  hasUnpublishedChanges,
+  isPublishing,
+  publishMessage,
+  publishError,
+  onPublish,
   commentsOpen,
   onToggleComments,
   autoSaveEnabled,
@@ -358,6 +390,11 @@ function EditorHeaderRight({
   subscriptionPlan: string;
   isSaving: boolean;
   onSave: () => void;
+  hasUnpublishedChanges: boolean;
+  isPublishing: boolean;
+  publishMessage: string | null;
+  publishError: string | null;
+  onPublish: () => void;
   commentsOpen: boolean;
   onToggleComments: () => void;
   autoSaveEnabled: boolean;
@@ -460,6 +497,60 @@ function EditorHeaderRight({
         </span>
       )}
 
+      {publishMessage && (
+        <span
+          style={{
+            fontSize: "0.78rem",
+            color: "#34d399",
+            whiteSpace: "nowrap",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.3rem",
+          }}
+        >
+          <IconCheck /> {publishMessage}
+        </span>
+      )}
+      {publishError && (
+        <span
+          style={{
+            fontSize: "0.78rem",
+            color: "#f87171",
+            whiteSpace: "nowrap",
+            maxWidth: 200,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {publishError}
+        </span>
+      )}
+
+      {/* {hasUnpublishedChanges && !publishMessage && (
+        <span
+          title="Your draft has changes that aren't live yet"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.35rem",
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            color: "#fbbf24",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "#fbbf24",
+            }}
+          />
+          Unpublished changes
+        </span>
+      )} */}
+
       <span
         style={{
           display: "none",
@@ -489,17 +580,15 @@ function EditorHeaderRight({
           gap: "0.45rem",
           padding: "0.5rem 1rem",
           borderRadius: 9,
-          border: "none",
+          border: "1px solid rgba(255,255,255,0.12)",
           cursor: isSaving ? "not-allowed" : "pointer",
           fontSize: "0.85rem",
           fontWeight: 700,
-          background:
-            "linear-gradient(135deg, var(--brand), var(--brand-deep))",
-          color: "#fff",
+          background: "transparent",
+          color: "rgba(240,242,255,0.85)",
           opacity: isSaving ? 0.7 : 1,
-          boxShadow: "0 3px 16px var(--brand-glow)",
           fontFamily: "inherit",
-          transition: "opacity 0.15s, box-shadow 0.15s",
+          transition: "opacity 0.15s",
         }}
       >
         {isSaving ? (
@@ -517,7 +606,49 @@ function EditorHeaderRight({
         ) : (
           <IconSave />
         )}
-        {isSaving ? "Saving…" : "Save"}
+        {isSaving ? "Saving…" : "Save Draft"}
+      </button>
+
+      <button
+        id="editor-publish-btn"
+        type="button"
+        onClick={onPublish}
+        disabled={isPublishing}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.45rem",
+          padding: "0.5rem 1rem",
+          borderRadius: 9,
+          border: "none",
+          cursor: isPublishing ? "not-allowed" : "pointer",
+          fontSize: "0.85rem",
+          fontWeight: 700,
+          background:
+            "linear-gradient(135deg, var(--brand), var(--brand-deep))",
+          color: "#fff",
+          opacity: isPublishing ? 0.7 : 1,
+          boxShadow: "0 3px 16px var(--brand-glow)",
+          fontFamily: "inherit",
+          transition: "opacity 0.15s, box-shadow 0.15s",
+        }}
+      >
+        {isPublishing ? (
+          <span
+            style={{
+              width: 13,
+              height: 13,
+              borderRadius: "50%",
+              border: "2px solid rgba(255,255,255,0.3)",
+              borderTopColor: "#fff",
+              animation: "spin 0.65s linear infinite",
+              flexShrink: 0,
+            }}
+          />
+        ) : (
+          <IconUpload />
+        )}
+        {isPublishing ? "Publishing…" : "Publish"}
       </button>
     </div>
   );
@@ -529,6 +660,8 @@ export function TemplateEditorClient({
   templateKind,
   templateParentId,
   initialDesignJson,
+  liveDesignJson,
+  hasUnpublishedChanges: initialHasUnpublishedChanges,
   subscriptionPlan,
   useAi,
   aiProvider,
@@ -550,6 +683,9 @@ export function TemplateEditorClient({
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(
+    initialHasUnpublishedChanges,
+  );
   const [autoSaveNotification, setAutoSaveNotification] = useState<
     string | null
   >(null);
@@ -558,6 +694,13 @@ export function TemplateEditorClient({
     const stored = localStorage.getItem(`autosave-${templateId}`);
     return stored === null ? true : stored === "true";
   });
+  // Baseline for the "is the draft actually different from what's live" check below —
+  // a plain string compare is far cheaper than deep-diffing the design tree on every
+  // autosave tick. Updated after every successful publish.
+  const liveDesignJsonRef = useRef(JSON.stringify(liveDesignJson));
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishMessage, setPublishMessage] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [modalDomainType, setModalDomainType] = useState<
     "SUBDOMAIN" | "CUSTOM" | "BUY"
@@ -594,8 +737,8 @@ export function TemplateEditorClient({
     currentUserRole === "viewer" || currentUserRole === "commenter";
 
   /** Exports and persists the current canvas without any of the save button's UI side effects — used when switching pages so the outgoing page's edits aren't lost. */
-  async function flushSave(): Promise<void> {
-    if (!builderRef.current) return;
+  async function flushSave(): Promise<{ json: TemplateJSON; html: string }> {
+    if (!builderRef.current) return { json: initialDesignJson, html: "" };
     const mode = isEmail ? "email" : "landing_page";
     const exported = await builderRef.current.exportDesign(mode);
     const response = await fetch(`/api/templates/update/${templateId}`, {
@@ -612,6 +755,10 @@ export function TemplateEditorClient({
       };
       throw new Error(payload.error ?? "Unable to save template.");
     }
+    setHasUnpublishedChanges(
+      JSON.stringify(exported.json) !== liveDesignJsonRef.current,
+    );
+    return exported;
   }
 
   /** Quiet background autosave (PlexoBuilder's own autoSave/autoSaveDuration timer) — persists
@@ -633,6 +780,11 @@ export function TemplateEditorClient({
           throw new Error(payload.error ?? "Unable to save template.");
         }
         setSaveError(null);
+        setHasUnpublishedChanges(
+          JSON.stringify(data.json) !== liveDesignJsonRef.current,
+        );
+        // setSaveMessage("Draft saved.");
+        // setTimeout(() => setSaveMessage(null), 3000);
       })
       .catch((err) => {
         console.warn("Autosave failed:", err);
@@ -749,8 +901,45 @@ export function TemplateEditorClient({
     setIsSaving(true);
     try {
       await flushSave();
-      setSaveMessage("Design saved successfully.");
+      setSaveMessage("Draft saved.");
       setTimeout(() => setSaveMessage(null), 3000);
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "Unable to save template.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  /** Publish: snapshots the current draft as a new immutable version and makes it the
+   * live site (POST /api/templates/:id/publish — lib/templateVersions.ts). Flushes the
+   * canvas's own latest edits into the draft first, same as switching pages does, so
+   * Publish always goes live with whatever is on the canvas right now, not a stale
+   * previously-autosaved draft. */
+  async function handlePublish(): Promise<void> {
+    if (!builderRef.current) {
+      setPublishError("Builder is not ready yet.");
+      return;
+    }
+    setPublishError(null);
+    setPublishMessage(null);
+    setIsPublishing(true);
+    try {
+      const exported = await flushSave();
+      const response = await fetch(`/api/templates/${templateId}/publish`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(payload.error ?? "Unable to publish template.");
+      }
+      liveDesignJsonRef.current = JSON.stringify(exported.json);
+      setHasUnpublishedChanges(false);
+      setPublishMessage("Published — now live.");
+      setTimeout(() => setPublishMessage(null), 3000);
       router.refresh();
 
       // Check if it's a landing page and doesn't have a linked domain (sub-pages
@@ -782,11 +971,11 @@ export function TemplateEditorClient({
         }
       }
     } catch (error) {
-      setSaveError(
-        error instanceof Error ? error.message : "Unable to save template.",
+      setPublishError(
+        error instanceof Error ? error.message : "Unable to publish template.",
       );
     } finally {
-      setIsSaving(false);
+      setIsPublishing(false);
     }
   }
 
@@ -965,6 +1154,11 @@ export function TemplateEditorClient({
               subscriptionPlan={subscriptionPlan}
               isSaving={isSaving}
               onSave={() => void handleSave()}
+              hasUnpublishedChanges={hasUnpublishedChanges}
+              isPublishing={isPublishing}
+              publishMessage={publishMessage}
+              publishError={publishError}
+              onPublish={() => void handlePublish()}
               commentsOpen={commentsOpen}
               onToggleComments={() => {
                 setCommentsOpen((v) => !v);

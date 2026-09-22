@@ -6,10 +6,11 @@ import { Template, TemplateRevision } from "@/lib/db/contentEntities";
 /**
  * GET /api/templates/:id/revisions
  *
- * Lists a template's revision history for the dashboard's Version History panel — id and
- * createdAt only, not the full designJson/compiledHtml blobs, to keep the response small.
- * A restore round-trips the `id` back through POST /api/templates/:id/restore/:revisionId,
- * which fetches the full content itself.
+ * Lists a template's published version history for the dashboard's Version History
+ * panel — id, createdAt, author, and whether it's the currently-active/live version, not
+ * the full designJson/compiledHtml blobs, to keep the response small. A restore round-trips
+ * the `id` back through POST /api/templates/:id/restore/:revisionId, which fetches the
+ * full content itself.
  */
 export async function GET(
   request: NextRequest,
@@ -26,9 +27,17 @@ export async function GET(
     return NextResponse.json({ error: "Template not found." }, { status: 404 });
   }
 
-  const { data: revisions } = await TemplateRevision.query.primary({ templateId: id }).go({ order: "desc" });
+  const { data: revisions } = await TemplateRevision.query
+    .primary({ templateId: id })
+    .go({ order: "desc" });
 
   return NextResponse.json({
-    revisions: revisions.map((r) => ({ id: r.id, createdAt: r.createdAt })),
+    revisions: revisions.map((r) => ({
+      id: r.id,
+      createdAt: r.createdAt,
+      authorName: r.authorName ?? "Unknown",
+      isActive: r.id === template.activeVersionId,
+    })),
+    hasUnpublishedChanges: template.draftJson != null,
   });
 }

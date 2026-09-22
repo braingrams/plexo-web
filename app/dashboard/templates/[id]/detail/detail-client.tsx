@@ -10,16 +10,32 @@ import { CustomSelect } from "../../../../_components/CustomSelect";
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
 type SiteData = {
-  domain: { domain: string; type: string; dnsVerified: boolean; active: boolean } | null;
+  domain: {
+    domain: string;
+    type: string;
+    dnsVerified: boolean;
+    active: boolean;
+  } | null;
   pageViews30d: number;
   blogEnabled: boolean;
   siteLayoutEnabled: boolean;
   commerceEnabled: boolean;
 };
 
-type PreviewPage = { id: string; name: string; parentId: string | null; slug: string | null; sourceType: string };
+type PreviewPage = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  slug: string | null;
+  sourceType: string;
+};
 
-type Revision = { id: string; createdAt: string };
+type Revision = {
+  id: string;
+  createdAt: string;
+  authorName: string;
+  isActive: boolean;
+};
 
 /** Walks a page's parentId chain within the already-fetched tree to assemble its full
  * slug path (e.g. "shop/product-1") — mirrors how a real nested page's URL is built. */
@@ -45,36 +61,100 @@ type Props = {
   compiledAt: string | null;
   designJson: unknown;
   compiledHtml: string;
+  hasUnpublishedChanges: boolean;
   previewHtml: string;
   pageCount: number;
   formSubmissionCount: number;
   siteData: SiteData | null;
 };
 
-const CARD_TITLE: React.CSSProperties = { fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", margin: 0 };
-const CARD_HEADER: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "1.1rem", flexWrap: "wrap" };
-const ROW: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.5rem 1rem", padding: "0.7rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)" };
-const LABEL: React.CSSProperties = { fontSize: "0.82rem", color: "rgba(240,242,255,0.5)" };
-const VALUE: React.CSSProperties = { fontSize: "0.82rem", color: "#f0f2ff", fontWeight: 600 };
-const LINK_BTN: React.CSSProperties = { padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.85)", fontSize: "0.78rem", fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap" };
+const CARD_TITLE: React.CSSProperties = {
+  fontSize: "0.95rem",
+  fontWeight: 700,
+  color: "#f0f2ff",
+  margin: 0,
+};
+const CARD_HEADER: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "1rem",
+  marginBottom: "1.1rem",
+  flexWrap: "wrap",
+};
+const ROW: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  flexWrap: "wrap",
+  gap: "0.5rem 1rem",
+  padding: "0.7rem 0",
+  borderBottom: "1px solid rgba(255,255,255,0.06)",
+};
+const LABEL: React.CSSProperties = {
+  fontSize: "0.82rem",
+  color: "rgba(240,242,255,0.5)",
+};
+const VALUE: React.CSSProperties = {
+  fontSize: "0.82rem",
+  color: "#f0f2ff",
+  fontWeight: 600,
+};
+const LINK_BTN: React.CSSProperties = {
+  padding: "0.4rem 0.8rem",
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.12)",
+  color: "rgba(240,242,255,0.85)",
+  fontSize: "0.78rem",
+  fontWeight: 600,
+  textDecoration: "none",
+  whiteSpace: "nowrap",
+};
 
 function IconArrowLeft() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M19 12H5M12 19l-7-7 7-7" />
     </svg>
   );
 }
 function IconArrow() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M5 12h14M12 5l7 7-7 7" />
     </svg>
   );
 }
 function IconWarning() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
       <line x1="12" y1="9" x2="12" y2="13" />
       <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -83,7 +163,16 @@ function IconWarning() {
 }
 function IconClose() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M18 6 6 18M6 6l12 12" />
     </svg>
   );
@@ -91,15 +180,33 @@ function IconClose() {
 function IconChevronDown({ open }: { open: boolean }) {
   return (
     <svg
-      width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-      style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{
+        transform: open ? "rotate(180deg)" : "none",
+        transition: "transform 0.15s",
+      }}
     >
       <polyline points="6 9 12 15 18 9" />
     </svg>
   );
 }
 
-function Chip({ on, onLabel, offLabel }: { on: boolean; onLabel: string; offLabel: string }) {
+function Chip({
+  on,
+  onLabel,
+  offLabel,
+}: {
+  on: boolean;
+  onLabel: string;
+  offLabel: string;
+}) {
   return (
     <span
       style={{
@@ -114,14 +221,24 @@ function Chip({ on, onLabel, offLabel }: { on: boolean; onLabel: string; offLabe
         color: on ? "#4ade80" : "rgba(240,242,255,0.4)",
       }}
     >
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor" }} />
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          background: "currentColor",
+        }}
+      />
       {on ? onLabel : offLabel}
     </span>
   );
 }
 
 function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  return new Date(iso).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
 }
 
 /** Strips tags for a rough plain-text view — good enough for "what does this page say",
@@ -162,6 +279,7 @@ export function DetailClient({
   compiledAt,
   designJson,
   compiledHtml,
+  hasUnpublishedChanges: initialHasUnpublishedChanges,
   previewHtml: initialPreviewHtml,
   pageCount,
   formSubmissionCount,
@@ -183,12 +301,16 @@ export function DetailClient({
     setDuplicating(true);
     setDuplicateError(null);
     try {
-      const res = await fetch(`/api/templates/${templateId}/duplicate-site`, { method: "POST" });
+      const res = await fetch(`/api/templates/${templateId}/duplicate-site`, {
+        method: "POST",
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to duplicate site");
       router.push(`/dashboard/templates/${data.template.id}/detail`);
     } catch (err) {
-      setDuplicateError(err instanceof Error ? err.message : "Failed to duplicate site");
+      setDuplicateError(
+        err instanceof Error ? err.message : "Failed to duplicate site",
+      );
       setDuplicating(false);
     }
   }
@@ -199,22 +321,83 @@ export function DetailClient({
   const [revisionsError, setRevisionsError] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [deletingVersionId, setDeletingVersionId] = useState<string | null>(
+    null,
+  );
+  const [deleteVersionError, setDeleteVersionError] = useState<string | null>(
+    null,
+  );
+  const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(
+    initialHasUnpublishedChanges,
+  );
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   async function openVersionHistory() {
     setShowVersionHistory(true);
     setRestoreError(null);
+    setDeleteVersionError(null);
     if (revisions !== null) return; // already fetched this session — reopening is instant
     setRevisionsLoading(true);
     setRevisionsError(null);
     try {
       const res = await fetch(`/api/templates/${templateId}/revisions`);
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Couldn't load version history.");
+      if (!res.ok)
+        throw new Error(data.error ?? "Couldn't load version history.");
       setRevisions(data.revisions ?? []);
+      if (typeof data.hasUnpublishedChanges === "boolean")
+        setHasUnpublishedChanges(data.hasUnpublishedChanges);
     } catch (err) {
-      setRevisionsError(err instanceof Error ? err.message : "Couldn't load version history.");
+      setRevisionsError(
+        err instanceof Error ? err.message : "Couldn't load version history.",
+      );
     } finally {
       setRevisionsLoading(false);
+    }
+  }
+
+  async function handlePublish() {
+    setPublishError(null);
+    setIsPublishing(true);
+    try {
+      const res = await fetch(`/api/templates/${templateId}/publish`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "Unable to publish.");
+      setHasUnpublishedChanges(false);
+      setRevisions(null); // stale — next open of Version History refetches with the new active version
+      router.refresh();
+    } catch (err) {
+      setPublishError(
+        err instanceof Error ? err.message : "Unable to publish.",
+      );
+    } finally {
+      setIsPublishing(false);
+    }
+  }
+
+  async function handleDeleteVersion(revisionId: string) {
+    setDeletingVersionId(revisionId);
+    setDeleteVersionError(null);
+    try {
+      const res = await fetch(
+        `/api/templates/${templateId}/revisions/${revisionId}`,
+        { method: "DELETE" },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok)
+        throw new Error(data.error ?? "Couldn't delete this version.");
+      setRevisions((prev) =>
+        prev ? prev.filter((r) => r.id !== revisionId) : prev,
+      );
+    } catch (err) {
+      setDeleteVersionError(
+        err instanceof Error ? err.message : "Couldn't delete this version.",
+      );
+    } finally {
+      setDeletingVersionId(null);
     }
   }
 
@@ -222,16 +405,23 @@ export function DetailClient({
     setRestoringId(revisionId);
     setRestoreError(null);
     try {
-      const res = await fetch(`/api/templates/${templateId}/restore/${revisionId}`, { method: "POST" });
+      const res = await fetch(
+        `/api/templates/${templateId}/restore/${revisionId}`,
+        { method: "POST" },
+      );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Couldn't restore this version.");
+      if (!res.ok)
+        throw new Error(data.error ?? "Couldn't restore this version.");
       setShowVersionHistory(false);
-      // The restore itself created one more revision (the pre-restore snapshot) — drop the
-      // cached list so the next open refetches instead of showing a stale count.
+      setHasUnpublishedChanges(false);
+      // The restore replaces both live content AND the draft baseline — drop the cached
+      // list so the next open refetches instead of showing a stale active-version badge.
       setRevisions(null);
       router.refresh();
     } catch (err) {
-      setRestoreError(err instanceof Error ? err.message : "Couldn't restore this version.");
+      setRestoreError(
+        err instanceof Error ? err.message : "Couldn't restore this version.",
+      );
     } finally {
       setRestoringId(null);
     }
@@ -254,9 +444,13 @@ export function DetailClient({
   // page: `compiledHtml` (the true, unmodified source — View Source reads this) and
   // `previewHtml` (server-processed for a script-free iframe — <script>/<noscript>
   // stripped, scroll-reveal sections forced visible; see lib/buildLivePreviewHtml.ts).
-  const [previewPages, setPreviewPages] = useState<PreviewPage[]>([{ id: templateId, name, parentId: null, slug: null, sourceType }]);
+  const [previewPages, setPreviewPages] = useState<PreviewPage[]>([
+    { id: templateId, name, parentId: null, slug: null, sourceType },
+  ]);
   const [selectedPreviewId, setSelectedPreviewId] = useState(templateId);
-  const [pageHtmlCache, setPageHtmlCache] = useState<Record<string, { compiledHtml: string; previewHtml: string }>>({
+  const [pageHtmlCache, setPageHtmlCache] = useState<
+    Record<string, { compiledHtml: string; previewHtml: string }>
+  >({
     [templateId]: { compiledHtml, previewHtml: initialPreviewHtml },
   });
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -281,7 +475,13 @@ export function DetailClient({
       const res = await fetch(`/api/templates/${id}`);
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.page) {
-        setPageHtmlCache((prev) => ({ ...prev, [id]: { compiledHtml: data.page.compiledHtml, previewHtml: data.page.previewHtml } }));
+        setPageHtmlCache((prev) => ({
+          ...prev,
+          [id]: {
+            compiledHtml: data.page.compiledHtml,
+            previewHtml: data.page.previewHtml,
+          },
+        }));
       }
     } finally {
       setPreviewLoading(false);
@@ -331,7 +531,9 @@ export function DetailClient({
       setShowConvertModal(false);
       router.refresh();
     } catch (err) {
-      setConvertError(err instanceof Error ? err.message : "Unable to convert template.");
+      setConvertError(
+        err instanceof Error ? err.message : "Unable to convert template.",
+      );
     } finally {
       setIsConverting(false);
     }
@@ -341,7 +543,9 @@ export function DetailClient({
     setDeleteError(null);
     setIsDeleting(true);
     try {
-      const res = await fetch(`/api/templates/${templateId}`, { method: "DELETE" });
+      const res = await fetch(`/api/templates/${templateId}`, {
+        method: "DELETE",
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? "Unable to delete.");
@@ -370,36 +574,86 @@ export function DetailClient({
         : "Not live"
     : "Not connected";
 
-  const currentCompiledHtml = pageHtmlCache[selectedPreviewId]?.compiledHtml ?? compiledHtml;
-  const sourceText = sourceTab === "json" ? JSON.stringify(designJson, null, 2) : sourceTab === "html" ? currentCompiledHtml : stripTags(currentCompiledHtml);
+  const currentCompiledHtml =
+    pageHtmlCache[selectedPreviewId]?.compiledHtml ?? compiledHtml;
+  const sourceText =
+    sourceTab === "json"
+      ? JSON.stringify(designJson, null, 2)
+      : sourceTab === "html"
+        ? currentCompiledHtml
+        : stripTags(currentCompiledHtml);
 
   const selectedPreviewHtml = pageHtmlCache[selectedPreviewId]?.previewHtml;
-  const previewOptions = previewPages.map((p) => ({ label: p.parentId === null ? `${p.name} (Home)` : p.name, value: p.id }));
-  const previewSourceType = previewPages.find((p) => p.id === selectedPreviewId)?.sourceType ?? sourceType;
+  const previewOptions = previewPages.map((p) => ({
+    label: p.parentId === null ? `${p.name} (Home)` : p.name,
+    value: p.id,
+  }));
+  const previewSourceType =
+    previewPages.find((p) => p.id === selectedPreviewId)?.sourceType ??
+    sourceType;
   const previewPagePath = buildPagePath(previewPages, selectedPreviewId);
   const previewSrcDoc =
     selectedPreviewHtml === undefined
       ? undefined
       : previewSourceType === "RAW_UPLOAD" && siteData?.domain
-        ? injectBaseHref(selectedPreviewHtml, `https://${siteData.domain.domain}/${previewPagePath}${previewPagePath ? "/" : ""}`)
+        ? injectBaseHref(
+            selectedPreviewHtml,
+            `https://${siteData.domain.domain}/${previewPagePath}${previewPagePath ? "/" : ""}`,
+          )
         : selectedPreviewHtml;
 
   return (
     <PageContainer>
-      <Link href="/dashboard/templates" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 600, color: "rgba(240,242,255,0.5)", textDecoration: "none", marginBottom: "1.5rem" }}>
+      <Link
+        href="/dashboard/templates"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.4rem",
+          fontSize: "0.8rem",
+          fontWeight: 600,
+          color: "rgba(240,242,255,0.5)",
+          textDecoration: "none",
+          marginBottom: "1.5rem",
+        }}
+      >
         <IconArrowLeft /> Templates
       </Link>
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1.5rem", marginBottom: "2rem", flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: "1.5rem",
+          marginBottom: "2rem",
+          flexWrap: "wrap",
+        }}
+      >
         <div style={{ flex: 1, minWidth: 280 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.6rem" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              marginBottom: "0.6rem",
+            }}
+          >
             <span
               style={{
-                display: "inline-flex", alignItems: "center", gap: "0.3rem",
-                padding: "0.2rem 0.6rem", borderRadius: 999,
-                fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-                background: isEmail ? "var(--brand-subtle)" : "rgba(129,140,248,0.1)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.3rem",
+                padding: "0.2rem 0.6rem",
+                borderRadius: 999,
+                fontSize: "0.68rem",
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+                background: isEmail
+                  ? "var(--brand-subtle)"
+                  : "rgba(129,140,248,0.1)",
                 color: isEmail ? "var(--brand)" : "#818cf8",
               }}
             >
@@ -407,9 +661,15 @@ export function DetailClient({
             </span>
             <span
               style={{
-                display: "inline-flex", alignItems: "center", gap: "0.3rem",
-                padding: "0.2rem 0.6rem", borderRadius: 999,
-                fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.3rem",
+                padding: "0.2rem 0.6rem",
+                borderRadius: 999,
+                fontSize: "0.68rem",
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
                 background: "rgba(255,255,255,0.06)",
                 color: "rgba(240,242,255,0.55)",
               }}
@@ -441,10 +701,28 @@ export function DetailClient({
               width: "100%",
               maxWidth: 560,
             }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)")}
+            onFocus={(e) =>
+              (e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)")
+            }
           />
-          {nameError && <p style={{ fontSize: "0.75rem", color: "#f87171", marginTop: "0.3rem" }}>{nameError}</p>}
-          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", marginTop: "0.35rem" }}>
+          {nameError && (
+            <p
+              style={{
+                fontSize: "0.75rem",
+                color: "#f87171",
+                marginTop: "0.3rem",
+              }}
+            >
+              {nameError}
+            </p>
+          )}
+          <p
+            style={{
+              fontSize: "0.8rem",
+              color: "rgba(240,242,255,0.4)",
+              marginTop: "0.35rem",
+            }}
+          >
             Updated {formatDateTime(updatedAt)}
           </p>
         </div>
@@ -452,11 +730,19 @@ export function DetailClient({
           type="button"
           onClick={() => router.push(`/dashboard/templates/${templateId}`)}
           style={{
-            display: "inline-flex", alignItems: "center", gap: "0.5rem",
-            padding: "0.75rem 1.4rem", borderRadius: 10, border: "none", cursor: "pointer",
-            fontSize: "0.92rem", fontWeight: 700,
-            background: "var(--brand)", color: "#fff",
-            fontFamily: "inherit", whiteSpace: "nowrap",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            padding: "0.75rem 1.4rem",
+            borderRadius: 10,
+            border: "none",
+            cursor: "pointer",
+            fontSize: "0.92rem",
+            fontWeight: 700,
+            background: "var(--brand)",
+            color: "#fff",
+            fontFamily: "inherit",
+            whiteSpace: "nowrap",
           }}
         >
           Open Editor <IconArrow />
@@ -478,13 +764,25 @@ export function DetailClient({
             <div style={CARD_HEADER}>
               <div>
                 <h2 style={CARD_TITLE}>Preview</h2>
-                <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
-                  {isEmail ? "How this email renders." : "What this page actually looks like, live."}
+                <p
+                  style={{
+                    fontSize: "0.78rem",
+                    color: "rgba(240,242,255,0.4)",
+                    margin: "0.25rem 0 0",
+                  }}
+                >
+                  {isEmail
+                    ? "How this email renders."
+                    : "What this page actually looks like, live."}
                 </p>
               </div>
               {previewOptions.length > 1 && (
                 <div style={{ width: "min(260px, 100%)" }}>
-                  <CustomSelect value={selectedPreviewId} options={previewOptions} onChange={(val) => void selectPreview(val)} />
+                  <CustomSelect
+                    value={selectedPreviewId}
+                    options={previewOptions}
+                    onChange={(val) => void selectPreview(val)}
+                  />
                 </div>
               )}
             </div>
@@ -496,15 +794,47 @@ export function DetailClient({
                 background: "#fff",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", padding: "0.55rem 0.75rem", background: "#12172a", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.55rem 0.75rem",
+                  background: "#12172a",
+                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                }}
+              >
                 {["#f87171", "#fbbf24", "#4ade80"].map((c) => (
-                  <span key={c} style={{ width: 9, height: 9, borderRadius: "50%", background: c, opacity: 0.7 }} />
+                  <span
+                    key={c}
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: "50%",
+                      background: c,
+                      opacity: 0.7,
+                    }}
+                  />
                 ))}
               </div>
-              <div className="detail-preview-frame" style={{ position: "relative", height: 620 }}>
+              <div
+                className="detail-preview-frame"
+                style={{ position: "relative", height: 620 }}
+              >
                 {previewLoading && (
-                  <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(255,255,255,0.6)" }}>
-                    <div className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      display: "grid",
+                      placeItems: "center",
+                      background: "rgba(255,255,255,0.6)",
+                    }}
+                  >
+                    <div
+                      className="spinner"
+                      style={{ width: 28, height: 28, borderWidth: 3 }}
+                    />
                   </div>
                 )}
                 {previewSrcDoc !== undefined && (
@@ -513,7 +843,12 @@ export function DetailClient({
                     srcDoc={previewSrcDoc}
                     title="Page preview"
                     sandbox=""
-                    style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      border: "none",
+                      display: "block",
+                    }}
                   />
                 )}
               </div>
@@ -522,23 +857,122 @@ export function DetailClient({
         </div>
 
         {/* Sidebar column */}
-        <div className="detail-grid-sidebar" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", minWidth: 0 }}>
+        <div
+          className="detail-grid-sidebar"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "1.5rem",
+            minWidth: 0,
+          }}
+        >
           <Card>
-            <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>Properties</h2>
+            <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>
+              Properties
+            </h2>
             <div style={ROW}>
               <span style={LABEL}>Created</span>
               <span style={VALUE}>{formatDateTime(createdAt)}</span>
             </div>
             <div style={ROW}>
               <span style={LABEL}>Last compiled</span>
-              <span style={VALUE}>{compiledAt ? formatDateTime(compiledAt) : "Never"}</span>
+              <span style={VALUE}>
+                {compiledAt ? formatDateTime(compiledAt) : "Never"}
+              </span>
             </div>
-            <div style={{ ...ROW, borderBottom: isBlogLayout ? "none" : undefined }}>
+            {/* <div style={ROW}>
+              <span style={LABEL}>Draft status</span>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.65rem",
+                }}
+              >
+                {hasUnpublishedChanges ? (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      color: "#fbbf24",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: "#fbbf24",
+                      }}
+                    />
+                    Unpublished changes
+                  </span>
+                ) : (
+                  <Chip on={true} onLabel="Live matches draft" offLabel="" />
+                )}
+                <button
+                  type="button"
+                  onClick={() => void handlePublish()}
+                  disabled={isPublishing || !hasUnpublishedChanges}
+                  style={{
+                    padding: "0.3rem 0.7rem",
+                    borderRadius: 7,
+                    border: "none",
+                    background: hasUnpublishedChanges
+                      ? "var(--brand)"
+                      : "rgba(255,255,255,0.06)",
+                    color: hasUnpublishedChanges
+                      ? "#fff"
+                      : "rgba(240,242,255,0.35)",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    cursor:
+                      isPublishing || !hasUnpublishedChanges
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  {isPublishing ? "Publishing…" : "Publish"}
+                </button>
+              </div>
+            </div>
+            {publishError && (
+              <p
+                style={{
+                  fontSize: "0.75rem",
+                  color: "#f87171",
+                  margin: "0.4rem 0 0",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                }}
+              >
+                <IconWarning /> {publishError}
+              </p>
+            )} */}
+            <div
+              style={{
+                ...ROW,
+                borderBottom: isBlogLayout ? "none" : undefined,
+              }}
+            >
               <span style={LABEL}>Version History</span>
               <button
                 type="button"
                 onClick={() => void openVersionHistory()}
-                style={{ padding: "0.3rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "rgba(240,242,255,0.75)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer" }}
+                style={{
+                  padding: "0.3rem 0.7rem",
+                  borderRadius: 7,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "transparent",
+                  color: "rgba(240,242,255,0.75)",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
               >
                 View
               </button>
@@ -549,7 +983,16 @@ export function DetailClient({
                 <button
                   type="button"
                   onClick={() => setShowConvertModal(true)}
-                  style={{ padding: "0.3rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "rgba(240,242,255,0.75)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer" }}
+                  style={{
+                    padding: "0.3rem 0.7rem",
+                    borderRadius: 7,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "transparent",
+                    color: "rgba(240,242,255,0.75)",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
                 >
                   Switch to {isEmail ? "Landing Page" : "Email"}
                 </button>
@@ -562,52 +1005,130 @@ export function DetailClient({
               <Card>
                 <div style={CARD_HEADER}>
                   <h2 style={CARD_TITLE}>Domain &amp; Traffic</h2>
-                  <Chip on={domainStatus === "Live"} onLabel="Live" offLabel={domainStatus} />
+                  <Chip
+                    on={domainStatus === "Live"}
+                    onLabel="Live"
+                    offLabel={domainStatus}
+                  />
                 </div>
                 <div style={ROW}>
-                  <div style={VALUE}>{siteData.domain?.domain ?? "No domain connected"}</div>
-                  <Link href={`/dashboard/domains?templateId=${templateId}`} style={LINK_BTN}>
+                  <div style={VALUE}>
+                    {siteData.domain?.domain ?? "No domain connected"}
+                  </div>
+                  <Link
+                    href={`/dashboard/domains?templateId=${templateId}`}
+                    style={LINK_BTN}
+                  >
                     {siteData.domain ? "Manage" : "Connect"}
                   </Link>
                 </div>
                 <div style={{ ...ROW, borderBottom: "none" }}>
                   <div>
-                    <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#f0f2ff" }}>{siteData.pageViews30d.toLocaleString()}</div>
+                    <div
+                      style={{
+                        fontSize: "1.3rem",
+                        fontWeight: 800,
+                        color: "#f0f2ff",
+                      }}
+                    >
+                      {siteData.pageViews30d.toLocaleString()}
+                    </div>
                     <div style={LABEL}>page views, last 30 days</div>
                   </div>
-                  <Link href={`/dashboard/insights?templateId=${templateId}`} style={LINK_BTN}>
+                  <Link
+                    href={`/dashboard/insights?templateId=${templateId}`}
+                    style={LINK_BTN}
+                  >
                     View analytics
                   </Link>
                 </div>
               </Card>
 
               <Card>
-                <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>Site Modules</h2>
+                <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>
+                  Site Modules
+                </h2>
                 <div style={ROW}>
                   <span style={LABEL}>Site Layout</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
-                    <Chip on={siteData.siteLayoutEnabled} onLabel="On" offLabel="Off" />
-                    <Link href={`/dashboard/templates/${templateId}/site-layout`} style={LINK_BTN}>Configure</Link>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.65rem",
+                    }}
+                  >
+                    <Chip
+                      on={siteData.siteLayoutEnabled}
+                      onLabel="On"
+                      offLabel="Off"
+                    />
+                    <Link
+                      href={`/dashboard/templates/${templateId}/site-layout`}
+                      style={LINK_BTN}
+                    >
+                      Configure
+                    </Link>
                   </div>
                 </div>
                 <div style={ROW}>
                   <span style={LABEL}>Blog</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
-                    <Chip on={siteData.blogEnabled} onLabel="On" offLabel="Off" />
-                    <Link href={`/dashboard/templates/${templateId}/blog`} style={LINK_BTN}>Manage</Link>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.65rem",
+                    }}
+                  >
+                    <Chip
+                      on={siteData.blogEnabled}
+                      onLabel="On"
+                      offLabel="Off"
+                    />
+                    <Link
+                      href={`/dashboard/templates/${templateId}/blog`}
+                      style={LINK_BTN}
+                    >
+                      Manage
+                    </Link>
                   </div>
                 </div>
                 <div style={ROW}>
                   <span style={LABEL}>Commerce</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
-                    <Chip on={siteData.commerceEnabled} onLabel="On" offLabel="Off" />
-                    <Link href={`/dashboard/commerce/${templateId}/settings`} style={LINK_BTN}>Configure</Link>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.65rem",
+                    }}
+                  >
+                    <Chip
+                      on={siteData.commerceEnabled}
+                      onLabel="On"
+                      offLabel="Off"
+                    />
+                    <Link
+                      href={`/dashboard/commerce/${templateId}/settings`}
+                      style={LINK_BTN}
+                    >
+                      Configure
+                    </Link>
                   </div>
                 </div>
                 <div style={{ ...ROW, borderBottom: "none" }}>
                   <span style={LABEL}>Content Types</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
-                    <Link href={`/dashboard/templates/${templateId}/content-types`} style={LINK_BTN}>Manage</Link>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.65rem",
+                    }}
+                  >
+                    <Link
+                      href={`/dashboard/templates/${templateId}/content-types`}
+                      style={LINK_BTN}
+                    >
+                      Manage
+                    </Link>
                   </div>
                 </div>
               </Card>
@@ -615,12 +1136,25 @@ export function DetailClient({
               <Card>
                 <div style={ROW}>
                   <span style={LABEL}>Pages</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.65rem",
+                    }}
+                  >
                     <span style={VALUE}>{pageCount + 1}</span>
                     <button
                       type="button"
-                      onClick={() => router.push(`/dashboard/templates/${templateId}`)}
-                      style={{ ...LINK_BTN, background: "transparent", cursor: "pointer", fontFamily: "inherit" }}
+                      onClick={() =>
+                        router.push(`/dashboard/templates/${templateId}`)
+                      }
+                      style={{
+                        ...LINK_BTN,
+                        background: "transparent",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                      }}
                     >
                       Manage
                     </button>
@@ -628,24 +1162,56 @@ export function DetailClient({
                 </div>
                 <div style={ROW}>
                   <span style={LABEL}>Form Submissions</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.65rem",
+                    }}
+                  >
                     <span style={VALUE}>{formSubmissionCount}</span>
-                    <Link href={`/dashboard/templates/${templateId}/form-submissions`} style={LINK_BTN}>View</Link>
+                    <Link
+                      href={`/dashboard/templates/${templateId}/form-submissions`}
+                      style={LINK_BTN}
+                    >
+                      View
+                    </Link>
                   </div>
                 </div>
                 <div style={ROW}>
                   <span style={LABEL}>Redirects</span>
-                  <Link href={`/dashboard/templates/${templateId}/redirects`} style={LINK_BTN}>Manage</Link>
+                  <Link
+                    href={`/dashboard/templates/${templateId}/redirects`}
+                    style={LINK_BTN}
+                  >
+                    Manage
+                  </Link>
                 </div>
                 <div style={ROW}>
                   <span style={LABEL}>Duplicate Site</span>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.65rem" }}>
-                    {duplicateError && <span style={{ fontSize: "0.75rem", color: "#f87171" }}>{duplicateError}</span>}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.65rem",
+                    }}
+                  >
+                    {duplicateError && (
+                      <span style={{ fontSize: "0.75rem", color: "#f87171" }}>
+                        {duplicateError}
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => void handleDuplicate()}
                       disabled={duplicating}
-                      style={{ ...LINK_BTN, background: "transparent", cursor: duplicating ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: duplicating ? 0.6 : 1 }}
+                      style={{
+                        ...LINK_BTN,
+                        background: "transparent",
+                        cursor: duplicating ? "not-allowed" : "pointer",
+                        fontFamily: "inherit",
+                        opacity: duplicating ? 0.6 : 1,
+                      }}
                     >
                       {duplicating ? "Duplicating…" : "Duplicate"}
                     </button>
@@ -653,7 +1219,12 @@ export function DetailClient({
                 </div>
                 <div style={{ ...ROW, borderBottom: "none" }}>
                   <span style={LABEL}>Transfer Site</span>
-                  <Link href={`/dashboard/templates/${templateId}/transfer`} style={LINK_BTN}>Transfer</Link>
+                  <Link
+                    href={`/dashboard/templates/${templateId}/transfer`}
+                    style={LINK_BTN}
+                  >
+                    Transfer
+                  </Link>
                 </div>
               </Card>
             </>
@@ -662,7 +1233,15 @@ export function DetailClient({
 
         {/* Bottom group — named grid area "bottom" (see the <style jsx> block): sits under
             Preview in the same column on desktop, and last on mobile's single column. */}
-        <div className="detail-grid-bottom" style={{ display: "flex", flexDirection: "column", gap: "1.5rem", minWidth: 0 }}>
+        <div
+          className="detail-grid-bottom"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "1.5rem",
+            minWidth: 0,
+          }}
+        >
           {/* View Source — collapsed by default; a debugging/inspection aid, not something
               most visits to this page need open. */}
           <Card padded={false}>
@@ -670,15 +1249,30 @@ export function DetailClient({
               type="button"
               onClick={() => setShowSource((v) => !v)}
               style={{
-                width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-                gap: "1rem", padding: "1.4rem", background: "none", border: "none", cursor: "pointer",
-                fontFamily: "inherit", textAlign: "left",
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "1rem",
+                padding: "1.4rem",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                textAlign: "left",
               }}
             >
               <div>
                 <h2 style={CARD_TITLE}>View Source</h2>
-                <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
-                  The compiled HTML, design JSON, or plain text behind this {isEmail ? "email" : "page"}.
+                <p
+                  style={{
+                    fontSize: "0.78rem",
+                    color: "rgba(240,242,255,0.4)",
+                    margin: "0.25rem 0 0",
+                  }}
+                >
+                  The compiled HTML, design JSON, or plain text behind this{" "}
+                  {isEmail ? "email" : "page"}.
                 </p>
               </div>
               <span style={{ color: "rgba(240,242,255,0.5)", flexShrink: 0 }}>
@@ -687,17 +1281,37 @@ export function DetailClient({
             </button>
             {showSource && (
               <div style={{ padding: "0 1.4rem 1.4rem" }}>
-                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "flex-end", gap: "0.3rem", marginBottom: "0.75rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    justifyContent: "flex-end",
+                    gap: "0.3rem",
+                    marginBottom: "0.75rem",
+                  }}
+                >
                   {(["html", "json", "text"] as const).map((tab) => (
                     <button
                       key={tab}
                       type="button"
                       onClick={() => setSourceTab(tab)}
                       style={{
-                        padding: "0.3rem 0.7rem", borderRadius: 7, border: "none", cursor: "pointer",
-                        fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.02em",
-                        background: sourceTab === tab ? "var(--brand-subtle)" : "transparent",
-                        color: sourceTab === tab ? "var(--brand)" : "rgba(240,242,255,0.5)",
+                        padding: "0.3rem 0.7rem",
+                        borderRadius: 7,
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.02em",
+                        background:
+                          sourceTab === tab
+                            ? "var(--brand-subtle)"
+                            : "transparent",
+                        color:
+                          sourceTab === tab
+                            ? "var(--brand)"
+                            : "rgba(240,242,255,0.5)",
                       }}
                     >
                       {tab === "text" ? "Plain text" : tab}
@@ -706,7 +1320,16 @@ export function DetailClient({
                   <button
                     type="button"
                     onClick={() => handleCopy(sourceText)}
-                    style={{ padding: "0.3rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.72rem", fontWeight: 600, cursor: "pointer" }}
+                    style={{
+                      padding: "0.3rem 0.7rem",
+                      borderRadius: 7,
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      background: "transparent",
+                      color: "rgba(240,242,255,0.6)",
+                      fontSize: "0.72rem",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
                   >
                     {copied ? "Copied!" : "Copy"}
                   </button>
@@ -734,16 +1357,35 @@ export function DetailClient({
 
           {/* Danger zone — last item on the page, both breakpoints. */}
           <Card style={{ border: "1px solid rgba(239,68,68,0.2)" }}>
-            <h2 style={{ ...CARD_TITLE, color: "#f87171", marginBottom: "0.9rem" }}>Danger Zone</h2>
+            <h2
+              style={{
+                ...CARD_TITLE,
+                color: "#f87171",
+                marginBottom: "0.9rem",
+              }}
+            >
+              Danger Zone
+            </h2>
             <div style={{ ...ROW, borderBottom: "none" }}>
               <div>
-                <div style={VALUE}>Delete {isEmail ? "this template" : "this site"}</div>
+                <div style={VALUE}>
+                  Delete {isEmail ? "this template" : "this site"}
+                </div>
                 <div style={LABEL}>Can&apos;t be undone.</div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowDeleteConfirm(true)}
-                style={{ padding: "0.5rem 1rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer" }}
+                style={{
+                  padding: "0.5rem 1rem",
+                  borderRadius: 8,
+                  border: "1px solid rgba(239,68,68,0.25)",
+                  background: "rgba(239,68,68,0.08)",
+                  color: "#f87171",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
               >
                 Delete
               </button>
@@ -754,57 +1396,263 @@ export function DetailClient({
 
       {/* Version History modal */}
       {showVersionHistory && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(3, 7, 18, 0.85)", zIndex: 100, display: "grid", placeItems: "center", backdropFilter: "blur(8px)" }}>
-          <div style={{ background: "#0d1324", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, width: "90%", maxWidth: 480, maxHeight: "80vh", display: "flex", flexDirection: "column", padding: "1.75rem", boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-              <h2 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#f0f2ff", fontFamily: "var(--font-heading)" }}>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(3, 7, 18, 0.85)",
+            zIndex: 100,
+            display: "grid",
+            placeItems: "center",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <div
+            style={{
+              background: "#0d1324",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 16,
+              width: "90%",
+              maxWidth: 480,
+              maxHeight: "80vh",
+              display: "flex",
+              flexDirection: "column",
+              padding: "1.75rem",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "1rem",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "1.2rem",
+                  fontWeight: 800,
+                  color: "#f0f2ff",
+                  fontFamily: "var(--font-heading)",
+                }}
+              >
                 Version History
               </h2>
-              <button onClick={() => setShowVersionHistory(false)} style={{ background: "none", border: "none", color: "rgba(240,242,255,0.4)", cursor: "pointer", display: "flex" }}>
+              <button
+                onClick={() => setShowVersionHistory(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "rgba(240,242,255,0.4)",
+                  cursor: "pointer",
+                  display: "flex",
+                }}
+              >
                 <IconClose />
               </button>
             </div>
-            <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.6)", lineHeight: 1.5, marginBottom: "1.1rem" }}>
-              Every save is kept here. Restoring an earlier version saves the current one first, so nothing is ever lost for good.
+            <p
+              style={{
+                fontSize: "0.82rem",
+                color: "rgba(240,242,255,0.6)",
+                lineHeight: 1.5,
+                marginBottom: "1.1rem",
+              }}
+            >
+              Every Publish is kept here. Restoring an earlier version makes it
+              live immediately; the live version can&apos;t be deleted.
             </p>
             {restoreError && (
-              <p style={{ fontSize: "0.78rem", color: "#f87171", margin: "0 0 1rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+              <p
+                style={{
+                  fontSize: "0.78rem",
+                  color: "#f87171",
+                  margin: "0 0 1rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                }}
+              >
                 <IconWarning /> {restoreError}
+              </p>
+            )}
+            {deleteVersionError && (
+              <p
+                style={{
+                  fontSize: "0.78rem",
+                  color: "#f87171",
+                  margin: "0 0 1rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                }}
+              >
+                <IconWarning /> {deleteVersionError}
               </p>
             )}
             <div style={{ overflowY: "auto", flex: 1 }}>
               {revisionsLoading && (
-                <div style={{ display: "flex", justifyContent: "center", padding: "1.5rem 0" }}>
-                  <div className="spinner" style={{ width: 24, height: 24, borderWidth: 3 }} />
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "center",
+                    padding: "1.5rem 0",
+                  }}
+                >
+                  <div
+                    className="spinner"
+                    style={{ width: 24, height: 24, borderWidth: 3 }}
+                  />
                 </div>
               )}
               {!revisionsLoading && revisionsError && (
-                <p style={{ fontSize: "0.82rem", color: "#f87171" }}>{revisionsError}</p>
-              )}
-              {!revisionsLoading && !revisionsError && revisions !== null && revisions.length === 0 && (
-                <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.5)" }}>
-                  No earlier versions yet — history starts building the next time this is saved.
+                <p style={{ fontSize: "0.82rem", color: "#f87171" }}>
+                  {revisionsError}
                 </p>
               )}
               {!revisionsLoading &&
                 !revisionsError &&
                 revisions !== null &&
+                revisions.length === 0 && (
+                  <p
+                    style={{
+                      fontSize: "0.82rem",
+                      color: "rgba(240,242,255,0.5)",
+                    }}
+                  >
+                    No published versions yet — history starts building the next
+                    time this is published.
+                  </p>
+                )}
+              {!revisionsLoading &&
+                !revisionsError &&
+                revisions !== null &&
                 revisions.map((rev) => (
                   <div key={rev.id} style={ROW}>
-                    <span style={VALUE}>{formatDateTime(rev.createdAt)}</span>
-                    <button
-                      type="button"
-                      disabled={restoringId !== null}
-                      onClick={() => void handleRestore(rev.id)}
+                    <div
                       style={{
-                        padding: "0.35rem 0.8rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)",
-                        background: "transparent", color: "rgba(240,242,255,0.85)", fontSize: "0.75rem", fontWeight: 600,
-                        cursor: restoringId !== null ? "not-allowed" : "pointer",
-                        opacity: restoringId !== null && restoringId !== rev.id ? 0.5 : 1,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.15rem",
+                        minWidth: 0,
                       }}
                     >
-                      {restoringId === rev.id ? "Restoring…" : "Restore"}
-                    </button>
+                      <span
+                        style={{
+                          ...VALUE,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "0.4rem",
+                        }}
+                      >
+                        {formatDateTime(rev.createdAt)}
+                        {rev.isActive && (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.3rem",
+                              padding: "0.1rem 0.5rem",
+                              borderRadius: 999,
+                              fontSize: "0.65rem",
+                              fontWeight: 700,
+                              letterSpacing: "0.04em",
+                              textTransform: "uppercase",
+                              background: "rgba(74,222,128,0.12)",
+                              color: "#4ade80",
+                            }}
+                          >
+                            <span
+                              style={{
+                                width: 5,
+                                height: 5,
+                                borderRadius: "50%",
+                                background: "currentColor",
+                              }}
+                            />
+                            Live
+                          </span>
+                        )}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "0.74rem",
+                          color: "rgba(240,242,255,0.45)",
+                        }}
+                      >
+                        by {rev.authorName}
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.4rem",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        disabled={restoringId !== null || rev.isActive}
+                        onClick={() => void handleRestore(rev.id)}
+                        style={{
+                          padding: "0.35rem 0.8rem",
+                          borderRadius: 7,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: "transparent",
+                          color: "rgba(240,242,255,0.85)",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          cursor:
+                            restoringId !== null || rev.isActive
+                              ? "not-allowed"
+                              : "pointer",
+                          opacity:
+                            rev.isActive ||
+                            (restoringId !== null && restoringId !== rev.id)
+                              ? 0.5
+                              : 1,
+                        }}
+                      >
+                        {rev.isActive
+                          ? "Active"
+                          : restoringId === rev.id
+                            ? "Restoring…"
+                            : "Restore"}
+                      </button>
+                      <button
+                        type="button"
+                        title={
+                          rev.isActive
+                            ? "The active, live version can't be deleted"
+                            : "Delete this version"
+                        }
+                        disabled={rev.isActive || deletingVersionId !== null}
+                        onClick={() => void handleDeleteVersion(rev.id)}
+                        style={{
+                          padding: "0.35rem 0.6rem",
+                          borderRadius: 7,
+                          border: "1px solid rgba(239,68,68,0.2)",
+                          background: "rgba(239,68,68,0.06)",
+                          color: "#f87171",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          cursor:
+                            rev.isActive || deletingVersionId !== null
+                              ? "not-allowed"
+                              : "pointer",
+                          opacity: rev.isActive
+                            ? 0.35
+                            : deletingVersionId !== null &&
+                                deletingVersionId !== rev.id
+                              ? 0.5
+                              : 1,
+                        }}
+                      >
+                        {deletingVersionId === rev.id ? "…" : "Delete"}
+                      </button>
+                    </div>
                   </div>
                 ))}
             </div>
@@ -814,35 +1662,118 @@ export function DetailClient({
 
       {/* Convert modal */}
       {showConvertModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(3, 7, 18, 0.85)", zIndex: 100, display: "grid", placeItems: "center", backdropFilter: "blur(8px)" }}>
-          <div style={{ background: "#0d1324", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, width: "90%", maxWidth: 460, padding: "1.75rem", boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-              <h2 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#f0f2ff", fontFamily: "var(--font-heading)" }}>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(3, 7, 18, 0.85)",
+            zIndex: 100,
+            display: "grid",
+            placeItems: "center",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <div
+            style={{
+              background: "#0d1324",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 16,
+              width: "90%",
+              maxWidth: 460,
+              padding: "1.75rem",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "1.25rem",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "1.2rem",
+                  fontWeight: 800,
+                  color: "#f0f2ff",
+                  fontFamily: "var(--font-heading)",
+                }}
+              >
                 Switch to {isEmail ? "Landing Page" : "Email"}
               </h2>
-              <button onClick={() => setShowConvertModal(false)} style={{ background: "none", border: "none", color: "rgba(240,242,255,0.4)", cursor: "pointer", display: "flex" }}>
+              <button
+                onClick={() => setShowConvertModal(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "rgba(240,242,255,0.4)",
+                  cursor: "pointer",
+                  display: "flex",
+                }}
+              >
                 <IconClose />
               </button>
             </div>
-            <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.6)", lineHeight: 1.5, marginBottom: "1.25rem" }}>
+            <p
+              style={{
+                fontSize: "0.82rem",
+                color: "rgba(240,242,255,0.6)",
+                lineHeight: 1.5,
+                marginBottom: "1.25rem",
+              }}
+            >
               {isEmail
                 ? "This keeps all your content and design — it'll just be recompiled as a landing page instead of an email."
                 : "This keeps all your content and design, but interactive blocks like carousels, videos, timers, menus, and accordions won't animate or respond in email clients — they'll show as static images/snapshots instead."}
             </p>
             {convertError && (
-              <p style={{ fontSize: "0.78rem", color: "#f87171", margin: "0 0 1rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+              <p
+                style={{
+                  fontSize: "0.78rem",
+                  color: "#f87171",
+                  margin: "0 0 1rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                }}
+              >
                 <IconWarning /> {convertError}
               </p>
             )}
             <div style={{ display: "flex", gap: "0.6rem" }}>
-              <button type="button" onClick={() => setShowConvertModal(false)} style={{ flex: 1, padding: "0.6rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "rgba(240,242,255,0.8)", fontSize: "0.85rem", fontWeight: 600, cursor: "pointer" }}>
+              <button
+                type="button"
+                onClick={() => setShowConvertModal(false)}
+                style={{
+                  flex: 1,
+                  padding: "0.6rem",
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "transparent",
+                  color: "rgba(240,242,255,0.8)",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
                 Cancel
               </button>
               <button
                 type="button"
                 disabled={isConverting}
                 onClick={() => void handleConvert()}
-                style={{ flex: 1, padding: "0.6rem", borderRadius: 8, border: "none", background: "var(--brand)", color: "#fff", fontSize: "0.85rem", fontWeight: 700, cursor: "pointer" }}
+                style={{
+                  flex: 1,
+                  padding: "0.6rem",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "var(--brand)",
+                  color: "#fff",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
               >
                 {isConverting ? "Switching…" : "Switch"}
               </button>
@@ -853,30 +1784,98 @@ export function DetailClient({
 
       {/* Delete confirm modal */}
       {showDeleteConfirm && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(3, 7, 18, 0.85)", zIndex: 100, display: "grid", placeItems: "center", backdropFilter: "blur(8px)" }}>
-          <div style={{ background: "#0d1324", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, width: "90%", maxWidth: 420, padding: "1.75rem", boxShadow: "0 20px 50px rgba(0,0,0,0.5)" }}>
-            <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: "#f0f2ff", fontFamily: "var(--font-heading)", marginBottom: "0.75rem" }}>
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(3, 7, 18, 0.85)",
+            zIndex: 100,
+            display: "grid",
+            placeItems: "center",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <div
+            style={{
+              background: "#0d1324",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 16,
+              width: "90%",
+              maxWidth: 420,
+              padding: "1.75rem",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "1.15rem",
+                fontWeight: 800,
+                color: "#f0f2ff",
+                fontFamily: "var(--font-heading)",
+                marginBottom: "0.75rem",
+              }}
+            >
               Delete &quot;{name}&quot;?
             </h2>
-            <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.6)", lineHeight: 1.5, marginBottom: "1.25rem" }}>
+            <p
+              style={{
+                fontSize: "0.82rem",
+                color: "rgba(240,242,255,0.6)",
+                lineHeight: 1.5,
+                marginBottom: "1.25rem",
+              }}
+            >
               {isEmail
                 ? "This email template will be permanently deleted."
                 : `This site${pageCount > 0 ? `, all ${pageCount + 1} of its pages,` : ""} and its connected domain (if any) will be permanently deleted.`}
             </p>
             {deleteError && (
-              <p style={{ fontSize: "0.78rem", color: "#f87171", margin: "0 0 1rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+              <p
+                style={{
+                  fontSize: "0.78rem",
+                  color: "#f87171",
+                  margin: "0 0 1rem",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                }}
+              >
                 <IconWarning /> {deleteError}
               </p>
             )}
             <div style={{ display: "flex", gap: "0.6rem" }}>
-              <button type="button" onClick={() => setShowDeleteConfirm(false)} style={{ flex: 1, padding: "0.6rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "rgba(240,242,255,0.8)", fontSize: "0.85rem", fontWeight: 600, cursor: "pointer" }}>
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(false)}
+                style={{
+                  flex: 1,
+                  padding: "0.6rem",
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "transparent",
+                  color: "rgba(240,242,255,0.8)",
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
                 Cancel
               </button>
               <button
                 type="button"
                 disabled={isDeleting}
                 onClick={() => void handleDelete()}
-                style={{ flex: 1, padding: "0.6rem", borderRadius: 8, border: "none", background: "#dc2626", color: "#fff", fontSize: "0.85rem", fontWeight: 700, cursor: "pointer" }}
+                style={{
+                  flex: 1,
+                  padding: "0.6rem",
+                  borderRadius: 8,
+                  border: "none",
+                  background: "#dc2626",
+                  color: "#fff",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
               >
                 {isDeleting ? "Deleting…" : "Delete"}
               </button>
@@ -895,17 +1894,25 @@ export function DetailClient({
           gap: 1.5rem;
           align-items: start;
         }
-        .detail-grid-preview { grid-area: preview; }
-        .detail-grid-sidebar { grid-area: sidebar; }
-        .detail-grid-bottom { grid-area: bottom; }
+        .detail-grid-preview {
+          grid-area: preview;
+        }
+        .detail-grid-sidebar {
+          grid-area: sidebar;
+        }
+        .detail-grid-bottom {
+          grid-area: bottom;
+        }
         .spinner {
-          border: 2px solid rgba(0,0,0,0.1);
+          border: 2px solid rgba(0, 0, 0, 0.1);
           border-top-color: var(--brand);
           border-radius: 50%;
           animation: spin 0.65s linear infinite;
         }
         @keyframes spin {
-          to { transform: rotate(360deg); }
+          to {
+            transform: rotate(360deg);
+          }
         }
         @media (max-width: 1000px) {
           .detail-grid {
