@@ -55,7 +55,6 @@ export function CsvImportDialog({
   const [columnMapping, setColumnMapping] = useState<
     Record<number, ProductCsvField | null>
   >({});
-  const [mappingLoading, setMappingLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{
     importedCount: number;
@@ -83,33 +82,8 @@ export function CsvImportDialog({
       const [headerRow, ...rest] = rows;
       setHeaders(headerRow);
       setDataRows(rest);
+      setColumnMapping(autoDetectColumnMapping(headerRow));
       setStep("mapping");
-
-      setMappingLoading(true);
-      const fallback = autoDetectColumnMapping(headerRow);
-      setColumnMapping(fallback);
-      try {
-        const res = await fetch(
-          `/api/v1/commerce/${templateId}/products/import`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              intent: "suggest_mapping",
-              headers: headerRow,
-              sampleRows: rest.slice(0, 3),
-            }),
-          },
-        );
-        if (res.ok) {
-          const data = await res.json();
-          if (data.mapping) setColumnMapping(data.mapping);
-        }
-      } catch {
-        // fall back to the heuristic mapping already applied above
-      } finally {
-        setMappingLoading(false);
-      }
     } catch {
       setError("Could not read that file. Make sure it's a valid CSV.");
     }
@@ -279,9 +253,8 @@ export function CsvImportDialog({
         {step === "mapping" && (
           <div style={{ display: "grid", gap: "1rem" }}>
             <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.55)" }}>
-              {mappingLoading
-                ? "Suggesting a column mapping with AI…"
-                : "Review the suggested column mapping, then adjust any that look wrong."}
+              Review the suggested column mapping, then adjust any that look
+              wrong.
             </p>
             <div style={{ display: "grid", gap: "0.6rem" }}>
               {headers.map((header, index) => (

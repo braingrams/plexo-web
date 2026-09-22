@@ -4,6 +4,11 @@ export interface ProviderCallParams {
   systemPrompt: string;
   userPrompt: string;
   maxTokens: number;
+  /** Optional inline file attachments (e.g. a PDF catalog to read alongside the prompt),
+   * base64-encoded. Providers with native multimodal document support (Anthropic, Bedrock
+   * Claude, Gemini) forward these as real document/inline-data blocks; OpenAI's
+   * chat.completions API has no inline-document equivalent, so it degrades to a text note. */
+  attachments?: Array<{ mediaType: string; data: string; name?: string }>;
 }
 
 export interface ProviderCallResult {

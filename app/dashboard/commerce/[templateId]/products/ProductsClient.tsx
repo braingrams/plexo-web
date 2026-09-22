@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { SUPPORTED_STORE_CURRENCIES } from "@/lib/commerce/currency";
 import { CsvImportDialog } from "./CsvImportDialog";
+import { AiImportDialog } from "./AiImportDialog";
 
 export type ProductSummary = {
   id: string;
@@ -132,6 +133,7 @@ export function ProductsClient({
   const [bulkActing, setBulkActing] = useState(false);
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [aiImportOpen, setAiImportOpen] = useState(false);
   const PAGE_SIZE = 12;
 
   const apiBase = `/api/v1/commerce/${templateId}/products`;
@@ -504,6 +506,23 @@ export function ProductsClient({
           </button>
           <button
             type="button"
+            onClick={() => setAiImportOpen(true)}
+            style={{
+              padding: "0.6rem 1.1rem",
+              borderRadius: 10,
+              cursor: "pointer",
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              fontFamily: "inherit",
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.04)",
+              color: "#f0f2ff",
+            }}
+          >
+            Import with AI
+          </button>
+          <button
+            type="button"
             onClick={openCreate}
             style={{
               padding: "0.6rem 1.1rem",
@@ -529,6 +548,25 @@ export function ProductsClient({
           onClose={() => setImportOpen(false)}
           onImported={async () => {
             setImportOpen(false);
+            try {
+              const res = await fetch(apiBase);
+              if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data.products)) setProducts(data.products);
+              }
+            } catch {
+              // non-fatal — the dialog already reported the import result
+            }
+          }}
+        />
+      )}
+
+      {aiImportOpen && (
+        <AiImportDialog
+          templateId={templateId}
+          onClose={() => setAiImportOpen(false)}
+          onImported={async () => {
+            setAiImportOpen(false);
             try {
               const res = await fetch(apiBase);
               if (res.ok) {

@@ -3,57 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
 import { slugify } from "@/server/slugDynamo";
-import { resolveSystemProvider } from "@/lib/ai/systemProvider";
-import { resolveModel } from "@/lib/ai/modelRegistry";
-import * as anthropicProvider from "@/lib/ai/providers/anthropic";
-import * as bedrockProvider from "@/lib/ai/providers/bedrockClaude";
-import * as geminiProvider from "@/lib/ai/providers/gemini";
-import * as openaiProvider from "@/lib/ai/providers/openai";
-import type { AiProvider } from "@/lib/ai/types";
 import { CommerceProduct, CommerceCategory } from "@/lib/db/commerceEntities";
 import {
   PRODUCT_CSV_FIELDS,
-  autoDetectColumnMapping,
   buildProductRows,
   type ProductCsvField,
 } from "@/lib/commerce/csvProductImporter";
-
-// Mirrors lib/ai/generate.ts's own callProvider dispatch — that one isn't exported, and
-// this call shape (plain text-in/JSON-out, no template/element schema) doesn't fit
-// generateBuilderAction's AiActionMode contract, so it's kept small and local here instead.
-async function callProvider(
-  provider: AiProvider,
-  model: string,
-  apiKey: string,
-  systemPrompt: string,
-  userPrompt: string,
-  maxTokens: number,
-) {
-  const params = { model, apiKey, systemPrompt, userPrompt, maxTokens };
-  switch (provider) {
-    case "anthropic_claude":
-      return anthropicProvider.generate(params);
-    case "openai":
-      return openaiProvider.generate(params);
-    case "google_gemini":
-      return geminiProvider.generate(params);
-    case "bedrock_claude":
-      return bedrockProvider.generate(params);
-    default:
-      throw new Error(`Unsupported AI provider: ${provider satisfies never}`);
-  }
-}
-
-function cleanJsonString(raw: string): string {
-  let cleaned = raw.trim();
-  if (cleaned.startsWith("```")) {
-    const lines = cleaned.split("\n");
-    if (lines[0].startsWith("```")) lines.shift();
-    if (lines[lines.length - 1]?.startsWith("```")) lines.pop();
-    cleaned = lines.join("\n").trim();
-  }
-  return cleaned;
-}
 
 async function ensureUniqueProductSlug(
   templateId: string,
@@ -101,69 +56,6 @@ async function resolveCategoryId(
   return id;
 }
 
-/** Step 1: given raw headers + a few sample rows, ask the system AI provider to suggest a
- * column mapping. Falls back to the cheap heuristic matcher (no error surfaced to the
- * caller) when no system AI provider is configured or the call/parse fails, so the dialog
- * always gets a usable starting mapping. */
-async function suggestColumnMapping(
-  headers: string[],
-  sampleRows: string[][],
-): Promise<Record<number, ProductCsvField | null>> {
-  const fallback = autoDetectColumnMapping(headers);
-  let systemProvider;
-  try {
-    systemProvider = resolveSystemProvider();
-  } catch {
-    return fallback;
-  }
-
-  const fieldList = PRODUCT_CSV_FIELDS.map(
-    (f) => `"${f.key}" (${f.label}${f.required ? ", required" : ""})`,
-  ).join(", ");
-  const systemPrompt = `You map spreadsheet columns to a fixed product schema for a bulk import tool. The target fields are: ${fieldList}. Given the uploaded file's header row and a few sample data rows, respond with ONLY a JSON object of this exact shape, no markdown fences, no prose: { "mapping": { "<0-based column index>": "<one of the target field keys, or null if the column doesn't match any field>" } }. Every column index present in the input must appear as a key. Never map two different columns to the same field.`;
-  const userPrompt = `Headers: ${JSON.stringify(headers)}\n\nSample rows:\n${sampleRows.map((r) => JSON.stringify(r)).join("\n")}`;
-
-  try {
-    const model = resolveModel(systemProvider.provider, "BASIC");
-    const { text } = await callProvider(
-      systemProvider.provider,
-      model,
-      systemProvider.apiKey,
-      systemPrompt,
-      userPrompt,
-      1000,
-    );
-    const parsed = JSON.parse(cleanJsonString(text)) as {
-      mapping?: Record<string, string | null>;
-    };
-    if (!parsed.mapping || typeof parsed.mapping !== "object") return fallback;
-
-    const validKeys = new Set(PRODUCT_CSV_FIELDS.map((f) => f.key));
-    const mapping: Record<number, ProductCsvField | null> = {};
-    const used = new Set<string>();
-    headers.forEach((_, index) => {
-      const suggested = parsed.mapping?.[String(index)];
-      if (
-        suggested &&
-        validKeys.has(suggested as ProductCsvField) &&
-        !used.has(suggested)
-      ) {
-        mapping[index] = suggested as ProductCsvField;
-        used.add(suggested);
-      } else {
-        mapping[index] =
-          fallback[index] && !used.has(fallback[index] as string)
-            ? fallback[index]
-            : null;
-        if (mapping[index]) used.add(mapping[index] as string);
-      }
-    });
-    return mapping;
-  } catch {
-    return fallback;
-  }
-}
-
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ templateId: string }> },
@@ -178,25 +70,6 @@ export async function POST(
 
   const body = await request.json().catch(() => ({}));
   const intent = body?.intent;
-
-  if (intent === "suggest_mapping") {
-    const headers = Array.isArray(body.headers)
-      ? body.headers.map((h: unknown) => String(h ?? ""))
-      : null;
-    const sampleRows = Array.isArray(body.sampleRows)
-      ? body.sampleRows.map((r: unknown) =>
-          Array.isArray(r) ? r.map((c) => String(c ?? "")) : [],
-        )
-      : [];
-    if (!headers || headers.length === 0) {
-      return NextResponse.json(
-        { error: "headers is required." },
-        { status: 400 },
-      );
-    }
-    const mapping = await suggestColumnMapping(headers, sampleRows.slice(0, 3));
-    return NextResponse.json({ mapping });
-  }
 
   if (intent === "commit") {
     const dataRows = Array.isArray(body.rows)
@@ -279,7 +152,7 @@ export async function POST(
   }
 
   return NextResponse.json(
-    { error: 'intent must be "suggest_mapping" or "commit".' },
+    { error: 'intent must be "commit".' },
     { status: 400 },
   );
 }

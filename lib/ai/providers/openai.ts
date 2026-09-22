@@ -1,6 +1,14 @@
 import OpenAI from "openai";
-import type { ChatCompletionMessageParam, ChatCompletionContentPart } from "openai/resources/chat/completions/completions";
-import type { ProviderCallParams, ProviderCallResult, GenerateWithToolsParams, GenerateWithToolsResult } from "./shared";
+import type {
+  ChatCompletionMessageParam,
+  ChatCompletionContentPart,
+} from "openai/resources/chat/completions/completions";
+import type {
+  ProviderCallParams,
+  ProviderCallResult,
+  GenerateWithToolsParams,
+  GenerateWithToolsResult,
+} from "./shared";
 import { toOpenAiTools } from "@/lib/ai/solToolSchema";
 
 /**
@@ -16,15 +24,24 @@ export async function generate({
   systemPrompt,
   userPrompt,
   maxTokens,
+  attachments,
 }: ProviderCallParams): Promise<ProviderCallResult> {
   const client = new OpenAI({ apiKey });
+
+  // chat.completions has no inline-document content part (that needs the separate
+  // Files/Assistants API) — degrade each attachment to a text note naming it so the model
+  // at least knows a file was attached, matching generateWithTools' document handling below.
+  const userContent =
+    attachments && attachments.length > 0
+      ? `${attachments.map((attachment) => `[Attached file: ${attachment.name ?? attachment.mediaType}]`).join("\n")}\n\n${userPrompt}`
+      : userPrompt;
 
   const response = await client.chat.completions.create({
     model,
     max_completion_tokens: maxTokens,
     messages: [
       { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
+      { role: "user", content: userContent },
     ],
     response_format: { type: "json_object" },
   });
@@ -53,25 +70,46 @@ export async function generate({
  * them (see solChatHandler.ts's buildUserMessageContent). */
 type AnthropicContentBlock =
   | { type: "text"; text: string }
-  | { type: "image"; source: { type: "url"; url: string } | { type: "base64"; media_type: string; data: string } }
-  | { type: "document"; source: { type: "url"; url: string } | { type: "base64"; media_type: string; data: string } }
+  | {
+      type: "image";
+      source:
+        | { type: "url"; url: string }
+        | { type: "base64"; media_type: string; data: string };
+    }
+  | {
+      type: "document";
+      source:
+        | { type: "url"; url: string }
+        | { type: "base64"; media_type: string; data: string };
+    }
   | { type: "tool_use"; id: string; name: string; input: any }
-  | { type: "tool_result"; tool_use_id: string; content: unknown; is_error?: boolean };
+  | {
+      type: "tool_result";
+      tool_use_id: string;
+      content: unknown;
+      is_error?: boolean;
+    };
 
-function anthropicContentToOpenAiParts(blocks: AnthropicContentBlock[]): ChatCompletionContentPart[] {
+function anthropicContentToOpenAiParts(
+  blocks: AnthropicContentBlock[],
+): ChatCompletionContentPart[] {
   const parts: ChatCompletionContentPart[] = [];
   for (const block of blocks) {
     if (block.type === "text") {
       parts.push({ type: "text", text: block.text });
     } else if (block.type === "image") {
-      const url = block.source.type === "url" ? block.source.url : `data:${block.source.media_type};base64,${block.source.data}`;
+      const url =
+        block.source.type === "url"
+          ? block.source.url
+          : `data:${block.source.media_type};base64,${block.source.data}`;
       parts.push({ type: "image_url", image_url: { url } });
     } else if (block.type === "document") {
       // OpenAI's chat.completions API has no equivalent inline-document content part (that
       // would need the separate Files/Assistants API) — degrade to a text note naming the
       // attachment rather than silently dropping it, so BYOK-OpenAI accounts at least see
       // that something was attached even though its contents aren't analyzed.
-      const url = block.source.type === "url" ? block.source.url : "(inline document)";
+      const url =
+        block.source.type === "url" ? block.source.url : "(inline document)";
       parts.push({ type: "text", text: `[Attached document: ${url}]` });
     }
   }
@@ -87,27 +125,47 @@ function toOpenAiMessages(
   systemPrompt: string,
   conversationHistory: GenerateWithToolsParams["conversationHistory"],
 ): ChatCompletionMessageParam[] {
-  const messages: ChatCompletionMessageParam[] = [{ role: "system", content: systemPrompt }];
+  const messages: ChatCompletionMessageParam[] = [
+    { role: "system", content: systemPrompt },
+  ];
 
   for (const entry of conversationHistory) {
-    const blocks: AnthropicContentBlock[] = Array.isArray(entry.content) ? entry.content : [{ type: "text", text: String(entry.content) }];
+    const blocks: AnthropicContentBlock[] = Array.isArray(entry.content)
+      ? entry.content
+      : [{ type: "text", text: String(entry.content) }];
 
     if (entry.role === "user") {
       if (blocks.length > 0 && blocks[0].type === "tool_result") {
         for (const block of blocks) {
           if (block.type !== "tool_result") continue;
-          const content = typeof block.content === "string" ? block.content : JSON.stringify(block.content ?? null);
-          messages.push({ role: "tool", tool_call_id: block.tool_use_id, content });
+          const content =
+            typeof block.content === "string"
+              ? block.content
+              : JSON.stringify(block.content ?? null);
+          messages.push({
+            role: "tool",
+            tool_call_id: block.tool_use_id,
+            content,
+          });
         }
       } else {
-        messages.push({ role: "user", content: anthropicContentToOpenAiParts(blocks) });
+        messages.push({
+          role: "user",
+          content: anthropicContentToOpenAiParts(blocks),
+        });
       }
       continue;
     }
 
     // assistant
-    const textBlocks = blocks.filter((b): b is Extract<AnthropicContentBlock, { type: "text" }> => b.type === "text");
-    const toolUseBlocks = blocks.filter((b): b is Extract<AnthropicContentBlock, { type: "tool_use" }> => b.type === "tool_use");
+    const textBlocks = blocks.filter(
+      (b): b is Extract<AnthropicContentBlock, { type: "text" }> =>
+        b.type === "text",
+    );
+    const toolUseBlocks = blocks.filter(
+      (b): b is Extract<AnthropicContentBlock, { type: "tool_use" }> =>
+        b.type === "tool_use",
+    );
     const text = textBlocks.map((b) => b.text).join("");
     messages.push({
       role: "assistant",
@@ -117,7 +175,10 @@ function toOpenAiMessages(
             tool_calls: toolUseBlocks.map((b) => ({
               id: b.id,
               type: "function" as const,
-              function: { name: b.name, arguments: JSON.stringify(b.input ?? {}) },
+              function: {
+                name: b.name,
+                arguments: JSON.stringify(b.input ?? {}),
+              },
             })),
           }
         : {}),
@@ -167,7 +228,12 @@ export async function generateWithTools({
     } catch {
       input = {};
     }
-    content.push({ type: "tool_use", id: toolCall.id, name: toolCall.function.name, input });
+    content.push({
+      type: "tool_use",
+      id: toolCall.id,
+      name: toolCall.function.name,
+      input,
+    });
   }
 
   return {

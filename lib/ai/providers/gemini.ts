@@ -1,5 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
-import type { ProviderCallParams, ProviderCallResult, GenerateWithToolsParams, GenerateWithToolsResult } from "./shared";
+import type {
+  ProviderCallParams,
+  ProviderCallResult,
+  GenerateWithToolsParams,
+  GenerateWithToolsResult,
+} from "./shared";
 import { toGeminiTools } from "@/lib/ai/solToolSchema";
 
 /**
@@ -29,12 +34,30 @@ export async function generate({
   systemPrompt,
   userPrompt,
   maxTokens,
+  attachments,
 }: ProviderCallParams): Promise<ProviderCallResult> {
   const client = new GoogleGenAI({ apiKey });
 
+  const input =
+    attachments && attachments.length > 0
+      ? [
+          {
+            type: "user_input",
+            content: [
+              ...attachments.map((attachment) => ({
+                type: "document",
+                data: attachment.data,
+                mime_type: attachment.mediaType,
+              })),
+              { type: "text", text: userPrompt },
+            ],
+          },
+        ]
+      : userPrompt;
+
   const interaction = await client.interactions.create({
     model,
-    input: userPrompt,
+    input,
     system_instruction: systemPrompt,
     response_format: { type: "text", mime_type: "application/json" },
     generation_config: {
@@ -48,11 +71,22 @@ export async function generate({
   // (model_output steps, text content parts) rather than fight the SDK's
   // internal aliasing.
   const text = ((interaction.steps ?? []) as unknown[])
-    .filter((step): step is { type: "model_output"; content?: Array<{ type: string; text: string }> } => (
-      typeof step === "object" && step !== null && (step as { type?: unknown }).type === "model_output"
-    ))
+    .filter(
+      (
+        step,
+      ): step is {
+        type: "model_output";
+        content?: Array<{ type: string; text: string }>;
+      } =>
+        typeof step === "object" &&
+        step !== null &&
+        (step as { type?: unknown }).type === "model_output",
+    )
     .flatMap((step) => step.content ?? [])
-    .filter((item): item is { type: "text"; text: string } => item.type === "text" && typeof item.text === "string")
+    .filter(
+      (item): item is { type: "text"; text: string } =>
+        item.type === "text" && typeof item.text === "string",
+    )
     .map((item) => item.text)
     .join("");
 
@@ -94,10 +128,25 @@ export async function generate({
 
 type GeminiContentBlock =
   | { type: "text"; text: string }
-  | { type: "image"; source: { type: "url"; url: string } | { type: "base64"; media_type: string; data: string } }
-  | { type: "document"; source: { type: "url"; url: string } | { type: "base64"; media_type: string; data: string } }
+  | {
+      type: "image";
+      source:
+        | { type: "url"; url: string }
+        | { type: "base64"; media_type: string; data: string };
+    }
+  | {
+      type: "document";
+      source:
+        | { type: "url"; url: string }
+        | { type: "base64"; media_type: string; data: string };
+    }
   | { type: "tool_use"; id: string; name: string; input: any }
-  | { type: "tool_result"; tool_use_id: string; content: unknown; is_error?: boolean };
+  | {
+      type: "tool_result";
+      tool_use_id: string;
+      content: unknown;
+      is_error?: boolean;
+    };
 
 function blocksToGeminiContent(blocks: GeminiContentBlock[]): any[] {
   const content: any[] = [];
@@ -108,23 +157,35 @@ function blocksToGeminiContent(blocks: GeminiContentBlock[]): any[] {
       content.push(
         block.source.type === "url"
           ? { type: "image", uri: block.source.url }
-          : { type: "image", data: block.source.data, mime_type: block.source.media_type },
+          : {
+              type: "image",
+              data: block.source.data,
+              mime_type: block.source.media_type,
+            },
       );
     } else if (block.type === "document") {
       content.push(
         block.source.type === "url"
           ? { type: "document", uri: block.source.url }
-          : { type: "document", data: block.source.data, mime_type: block.source.media_type },
+          : {
+              type: "document",
+              data: block.source.data,
+              mime_type: block.source.media_type,
+            },
       );
     }
   }
   return content;
 }
 
-function toGeminiSteps(conversationHistory: GenerateWithToolsParams["conversationHistory"]): any[] {
+function toGeminiSteps(
+  conversationHistory: GenerateWithToolsParams["conversationHistory"],
+): any[] {
   const steps: any[] = [];
   for (const entry of conversationHistory) {
-    const blocks: GeminiContentBlock[] = Array.isArray(entry.content) ? entry.content : [{ type: "text", text: String(entry.content) }];
+    const blocks: GeminiContentBlock[] = Array.isArray(entry.content)
+      ? entry.content
+      : [{ type: "text", text: String(entry.content) }];
 
     if (entry.role === "user") {
       if (blocks.length > 0 && blocks[0].type === "tool_result") {
@@ -133,24 +194,46 @@ function toGeminiSteps(conversationHistory: GenerateWithToolsParams["conversatio
           steps.push({
             type: "function_result",
             call_id: block.tool_use_id,
-            result: typeof block.content === "string" ? block.content : JSON.stringify(block.content ?? null),
+            result:
+              typeof block.content === "string"
+                ? block.content
+                : JSON.stringify(block.content ?? null),
             is_error: block.is_error,
           });
         }
       } else {
-        steps.push({ type: "user_input", content: blocksToGeminiContent(blocks) });
+        steps.push({
+          type: "user_input",
+          content: blocksToGeminiContent(blocks),
+        });
       }
       continue;
     }
 
     // assistant
-    const textBlocks = blocks.filter((b): b is Extract<GeminiContentBlock, { type: "text" }> => b.type === "text");
-    const toolUseBlocks = blocks.filter((b): b is Extract<GeminiContentBlock, { type: "tool_use" }> => b.type === "tool_use");
+    const textBlocks = blocks.filter(
+      (b): b is Extract<GeminiContentBlock, { type: "text" }> =>
+        b.type === "text",
+    );
+    const toolUseBlocks = blocks.filter(
+      (b): b is Extract<GeminiContentBlock, { type: "tool_use" }> =>
+        b.type === "tool_use",
+    );
     if (textBlocks.length > 0) {
-      steps.push({ type: "model_output", content: [{ type: "text", text: textBlocks.map((b) => b.text).join("") }] });
+      steps.push({
+        type: "model_output",
+        content: [
+          { type: "text", text: textBlocks.map((b) => b.text).join("") },
+        ],
+      });
     }
     for (const block of toolUseBlocks) {
-      steps.push({ type: "function_call", id: block.id, name: block.name, arguments: block.input ?? {} });
+      steps.push({
+        type: "function_call",
+        id: block.id,
+        name: block.name,
+        arguments: block.input ?? {},
+      });
     }
   }
   return steps;
@@ -185,24 +268,36 @@ export async function generateWithTools({
   const content: any[] = [];
   for (const step of (interaction.steps ?? []) as any[]) {
     if (step?.type === "model_output") {
-      const text = ((step.content ?? []) as Array<{ type: string; text?: string }>)
+      const text = (
+        (step.content ?? []) as Array<{ type: string; text?: string }>
+      )
         .filter((part) => part.type === "text" && typeof part.text === "string")
         .map((part) => part.text)
         .join("");
       if (text) content.push({ type: "text", text });
     } else if (step?.type === "function_call") {
-      content.push({ type: "tool_use", id: step.id, name: step.name, input: step.arguments ?? {} });
+      content.push({
+        type: "tool_use",
+        id: step.id,
+        name: step.name,
+        input: step.arguments ?? {},
+      });
     }
   }
 
   if (onTextDelta) {
-    const fullText = content.filter((b) => b.type === "text").map((b) => b.text).join("");
+    const fullText = content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("");
     if (fullText) onTextDelta(fullText);
   }
 
   return {
     content,
-    stopReason: mapInteractionStatus((interaction as { status?: string }).status),
+    stopReason: mapInteractionStatus(
+      (interaction as { status?: string }).status,
+    ),
     usage: {
       inputTokens: interaction.usage?.total_input_tokens ?? 0,
       outputTokens: interaction.usage?.total_output_tokens ?? 0,
