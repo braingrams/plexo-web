@@ -20,6 +20,7 @@ import "@charisol/plexo-sdk/dist/plexo-sdk.css";
 import { PagesPanel } from "./PagesPanel";
 import { CommentLayer } from "./comments/CommentLayer";
 import { BuyDomainFlow } from "../../domains/domains-client";
+import { Toggle } from "../../_components/Toggle";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 
@@ -250,6 +251,24 @@ function IconRocket() {
   );
 }
 
+function IconAutoSave() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
 function EditorHeaderLeft({
   isEmail,
   templateName,
@@ -362,6 +381,9 @@ function EditorHeaderRight({
   onPublish,
   commentsOpen,
   onToggleComments,
+  autoSaveEnabled,
+  onToggleAutoSave,
+  autoSaveNotification,
 }: {
   saveMessage: string | null;
   saveError: string | null;
@@ -375,6 +397,9 @@ function EditorHeaderRight({
   onPublish: () => void;
   commentsOpen: boolean;
   onToggleComments: () => void;
+  autoSaveEnabled: boolean;
+  onToggleAutoSave: () => void;
+  autoSaveNotification: string | null;
 }) {
   return (
     <div
@@ -385,6 +410,39 @@ function EditorHeaderRight({
         flexShrink: 0,
       }}
     >
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.4rem",
+          fontSize: "0.8rem",
+          fontWeight: 600,
+          color: autoSaveEnabled ? "var(--brand)" : "rgba(240,242,255,0.6)",
+          whiteSpace: "nowrap",
+        }}
+        title={autoSaveEnabled ? "Auto-save enabled" : "Auto-save disabled"}
+      >
+        <IconAutoSave />
+        Auto Save
+        <Toggle
+          checked={autoSaveEnabled}
+          onChange={onToggleAutoSave}
+          label="Toggle auto-save"
+        />
+      </div>
+
+      {autoSaveNotification && (
+        <span
+          style={{
+            fontSize: "0.78rem",
+            color: autoSaveEnabled ? "#34d399" : "rgba(240,242,255,0.6)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {autoSaveNotification}
+        </span>
+      )}
+
       <button
         type="button"
         onClick={onToggleComments}
@@ -628,6 +686,14 @@ export function TemplateEditorClient({
   const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(
     initialHasUnpublishedChanges,
   );
+  const [autoSaveNotification, setAutoSaveNotification] = useState<
+    string | null
+  >(null);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.getItem(`autosave-${templateId}`);
+    return stored === null ? true : stored === "true";
+  });
   // Baseline for the "is the draft actually different from what's live" check below —
   // a plain string compare is far cheaper than deep-diffing the design tree on every
   // autosave tick. Updated after every successful publish.
@@ -811,6 +877,18 @@ export function TemplateEditorClient({
       console.error("Failed to save before switching pages:", err);
     }
     router.push(`/dashboard/templates/${pageId}`);
+  }
+
+  function handleToggleAutoSave(): void {
+    const newState = !autoSaveEnabled;
+    setAutoSaveEnabled(newState);
+    try {
+      localStorage.setItem(`autosave-${templateId}`, String(newState));
+    } catch (err) {
+      console.warn("Failed to persist autosave preference:", err);
+    }
+    setAutoSaveNotification(newState ? "Autosave on" : "Autosave off");
+    setTimeout(() => setAutoSaveNotification(null), 3000);
   }
 
   async function handleSave(): Promise<void> {
@@ -1031,7 +1109,7 @@ export function TemplateEditorClient({
           themeFgColor="#ffffff"
           textColor="#ecfeff"
           showSaveButton={false}
-          autoSave
+          autoSave={autoSaveEnabled}
           autoSaveDuration={6000}
           onSave={handleAutoSave}
           onCreateMaildripOptInPage={
@@ -1086,6 +1164,9 @@ export function TemplateEditorClient({
                 setCommentsOpen((v) => !v);
                 setPendingPin(null);
               }}
+              autoSaveEnabled={autoSaveEnabled}
+              onToggleAutoSave={handleToggleAutoSave}
+              autoSaveNotification={autoSaveNotification}
             />
           }
           {...({ __internalPlan: subscriptionPlan } as any)}

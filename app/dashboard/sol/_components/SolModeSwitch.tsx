@@ -16,18 +16,19 @@ import { SolIcon } from "./SolIcon";
  * SOL" entry point (this switch's own Plexo segment below, and ThreadSidebar's Plexo logo)
  * must go through this, not a plain Link, for exactly that reason.
  */
-export async function exitSolToPlexo(router: ReturnType<typeof useRouter>): Promise<void> {
+export async function exitSolToPlexo(router: ReturnType<typeof useRouter>): Promise<boolean> {
   try {
-    await fetch("/api/profile", {
+    const response = await fetch("/api/profile", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ preferredSurface: "DASHBOARD" }),
     });
+    if (!response.ok) return false;
   } catch {
-    // Best-effort — still navigate even if the save failed, rather than trap the user
-    // inside SOL; worst case the redirect bounces them back and they can retry.
+    return false;
   }
   router.push("/dashboard");
+  return true;
 }
 
 /**
@@ -119,7 +120,9 @@ export function SolModeSwitch({
   async function exitToPlexo() {
     if (active === "plexo" || switching) return;
     setSwitching(true);
-    await exitSolToPlexo(router);
+    if (!(await exitSolToPlexo(router))) {
+      setSwitching(false);
+    }
   }
 
   if (sidebarCard) {
