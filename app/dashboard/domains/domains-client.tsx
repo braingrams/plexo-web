@@ -321,6 +321,15 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
     return parts.length > 2 ? parts[0] : "@";
   }, [customDomainInput]);
 
+  // Root/apex domains (e.g. "mycompany.com", host "@") can't take a CNAME record — DNS
+  // forbids a CNAME coexisting with the NS/SOA records every zone apex already has, and
+  // registrars (GoDaddy included) enforce that by rejecting the add outright. Only domains
+  // bought through Plexo dodge this automatically (lib/domains/domainDns.ts writes a
+  // Route53 ALIAS record instead); a manually-connected CUSTOM domain has no such backend
+  // to lean on, so the UI needs to warn the owner and give them a path that actually works
+  // at their registrar, instead of silently repeating instructions that will fail.
+  const isApexDomain = dnsHostLabel === "@" && customDomainInput.trim() !== "";
+
   const templateOptions = useMemo(() => {
     if (landingPages.length === 0) {
       return [{ label: "No landing pages available", value: "" }];
@@ -1246,6 +1255,31 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                       * DNS changes can take anywhere from a few minutes up to 24 hours to take effect worldwide.
                     </p>
                   </div>
+
+                  {/* Root/apex domains can't take the CNAME above at most registrars — see
+                      isApexDomain's own comment. Rather than let the owner hit a dead end
+                      (add a CNAME at "@", get rejected, guess their way into an invalid A
+                      record instead), spell out why and give two paths that actually work. */}
+                  {isApexDomain && (
+                    <div style={{
+                      marginTop: "0.75rem", padding: "0.85rem", background: "rgba(251,191,36,0.06)",
+                      border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, fontSize: "0.75rem",
+                      color: "rgba(240,242,255,0.7)", lineHeight: 1.5
+                    }}>
+                      <p style={{ fontWeight: 700, color: "#fbbf24", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <IconWarningLarge width={14} height={14} /> Root domains usually can&apos;t use a CNAME
+                      </p>
+                      <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.55)", marginBottom: "0.6rem" }}>
+                        <strong style={{ color: "#f0f2ff" }}>{customDomainInput}</strong> has no prefix like &quot;www&quot;, so the record above goes at your domain&apos;s root (&quot;@&quot;). Most registrars — including GoDaddy — block CNAME records there, since it conflicts with records they already require. You have two options:
+                      </p>
+                      <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.55)", marginBottom: "0.4rem" }}>
+                        <strong style={{ color: "#f0f2ff" }}>1. Use an ALIAS or ANAME record instead</strong>, if your registrar offers one (Cloudflare, Namecheap, and DNSimple do) — same Host (@) and Value as above, just a different record type.
+                      </p>
+                      <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.55)", margin: 0 }}>
+                        <strong style={{ color: "#f0f2ff" }}>2. Connect www.{customDomainInput} instead</strong> — retype it above with &quot;www.&quot; in front, add the CNAME to that, then turn on &quot;domain forwarding&quot; at your registrar to redirect {customDomainInput} to www.{customDomainInput}. Nearly every registrar, GoDaddy included, offers this under domain settings.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Shown right after submitting — the certificate validation record is
                       unique per domain, generated only once the backend actually requests
