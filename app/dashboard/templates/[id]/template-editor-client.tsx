@@ -20,6 +20,7 @@ import "@charisol/plexo-sdk/dist/plexo-sdk.css";
 import { PagesPanel } from "./PagesPanel";
 import { CommentLayer } from "./comments/CommentLayer";
 import { BuyDomainFlow } from "../../domains/domains-client";
+import { Toggle } from "../../_components/Toggle";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 
@@ -350,6 +351,7 @@ function EditorHeaderRight({
   onToggleComments,
   autoSaveEnabled,
   onToggleAutoSave,
+  autoSaveNotification,
 }: {
   saveMessage: string | null;
   saveError: string | null;
@@ -360,6 +362,7 @@ function EditorHeaderRight({
   onToggleComments: () => void;
   autoSaveEnabled: boolean;
   onToggleAutoSave: () => void;
+  autoSaveNotification: string | null;
 }) {
   return (
     <div
@@ -370,32 +373,38 @@ function EditorHeaderRight({
         flexShrink: 0,
       }}
     >
-      <button
-        type="button"
-        onClick={onToggleAutoSave}
-        title={autoSaveEnabled ? "Auto-save enabled" : "Auto-save disabled"}
+      <div
         style={{
           display: "inline-flex",
           alignItems: "center",
           gap: "0.4rem",
-          padding: "0.45rem 0.8rem",
-          borderRadius: 9,
-          border: autoSaveEnabled
-            ? "1px solid var(--brand)"
-            : "1px solid rgba(255,255,255,0.1)",
-          background: autoSaveEnabled ? "var(--brand-subtle)" : "transparent",
-          color: autoSaveEnabled ? "var(--brand)" : "rgba(240,242,255,0.6)",
-          cursor: "pointer",
-          fontFamily: "inherit",
           fontSize: "0.8rem",
           fontWeight: 600,
+          color: autoSaveEnabled ? "var(--brand)" : "rgba(240,242,255,0.6)",
           whiteSpace: "nowrap",
-          transition: "all 0.15s",
         }}
+        title={autoSaveEnabled ? "Auto-save enabled" : "Auto-save disabled"}
       >
         <IconAutoSave />
-        Auto-save
-      </button>
+        Auto Save
+        <Toggle
+          checked={autoSaveEnabled}
+          onChange={onToggleAutoSave}
+          label="Toggle auto-save"
+        />
+      </div>
+
+      {autoSaveNotification && (
+        <span
+          style={{
+            fontSize: "0.78rem",
+            color: autoSaveEnabled ? "#34d399" : "rgba(240,242,255,0.6)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {autoSaveNotification}
+        </span>
+      )}
 
       <button
         type="button"
@@ -541,6 +550,9 @@ export function TemplateEditorClient({
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [autoSaveNotification, setAutoSaveNotification] = useState<
+    string | null
+  >(null);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
     const stored = localStorage.getItem(`autosave-${templateId}`);
@@ -723,6 +735,8 @@ export function TemplateEditorClient({
     } catch (err) {
       console.warn("Failed to persist autosave preference:", err);
     }
+    setAutoSaveNotification(newState ? "Autosave on" : "Autosave off");
+    setTimeout(() => setAutoSaveNotification(null), 3000);
   }
 
   async function handleSave(): Promise<void> {
@@ -958,6 +972,7 @@ export function TemplateEditorClient({
               }}
               autoSaveEnabled={autoSaveEnabled}
               onToggleAutoSave={handleToggleAutoSave}
+              autoSaveNotification={autoSaveNotification}
             />
           }
           {...({ __internalPlan: subscriptionPlan } as any)}
