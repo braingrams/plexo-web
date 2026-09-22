@@ -38,22 +38,21 @@ export async function generate({
 }: ProviderCallParams): Promise<ProviderCallResult> {
   const client = new GoogleGenAI({ apiKey });
 
-  const input =
-    attachments && attachments.length > 0
-      ? [
-          {
-            type: "user_input",
-            content: [
-              ...attachments.map((attachment) => ({
-                type: "document",
-                data: attachment.data,
-                mime_type: attachment.mediaType,
-              })),
-              { type: "text", text: userPrompt },
-            ],
-          },
-        ]
-      : userPrompt;
+  const input: any = [
+    {
+      type: "user_input",
+      content: [
+        ...(attachments && attachments.length > 0
+          ? attachments.map((attachment) => ({
+              type: "document",
+              data: attachment.data,
+              mime_type: attachment.mediaType,
+            }))
+          : []),
+        { type: "text", text: userPrompt },
+      ],
+    },
+  ];
 
   const interaction = await client.interactions.create({
     model,
