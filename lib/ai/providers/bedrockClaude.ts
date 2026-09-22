@@ -1,5 +1,10 @@
 import { AnthropicBedrock } from "@anthropic-ai/bedrock-sdk";
-import type { ProviderCallParams, ProviderCallResult, GenerateWithToolsParams, GenerateWithToolsResult } from "./shared";
+import type {
+  ProviderCallParams,
+  ProviderCallResult,
+  GenerateWithToolsParams,
+  GenerateWithToolsResult,
+} from "./shared";
 
 // Amazon Bedrock's Anthropic Messages API is wire-compatible with the direct
 // Anthropic API — `AnthropicBedrock` (from `@anthropic-ai/bedrock-sdk`) extends the
@@ -25,14 +30,30 @@ function buildClient(): AnthropicBedrock {
  * parameter/return shape exactly (`apiKey` is accepted for shape parity with the other
  * providers' `ProviderCallParams` but is unused: see the auth note above).
  */
-export async function generate({ model, systemPrompt, userPrompt, maxTokens }: ProviderCallParams): Promise<ProviderCallResult> {
+export async function generate({
+  model,
+  systemPrompt,
+  userPrompt,
+  maxTokens,
+  attachments,
+}: ProviderCallParams): Promise<ProviderCallResult> {
   const client = buildClient();
+
+  const content: any[] = (attachments ?? []).map((attachment) => ({
+    type: "document",
+    source: {
+      type: "base64",
+      media_type: attachment.mediaType as any,
+      data: attachment.data,
+    },
+  }));
+  content.push({ type: "text", text: userPrompt });
 
   const response = await client.messages.create({
     model,
     max_tokens: maxTokens,
     system: systemPrompt,
-    messages: [{ role: "user", content: userPrompt }],
+    messages: [{ role: "user", content }],
   });
 
   const textBlock = response.content.find((block) => block.type === "text");
@@ -79,13 +100,23 @@ export async function generateWithTools({
   // uncached, since caching a moving target buys nothing.
   const cachedTools =
     tools && tools.length > 0
-      ? tools.map((tool, i) => (i === tools.length - 1 ? { ...tool, cache_control: { type: "ephemeral" as const } } : tool))
+      ? tools.map((tool, i) =>
+          i === tools.length - 1
+            ? { ...tool, cache_control: { type: "ephemeral" as const } }
+            : tool,
+        )
       : undefined;
 
   const stream = client.messages.stream({
     model,
     max_tokens: maxTokens,
-    system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+    system: [
+      {
+        type: "text",
+        text: systemPrompt,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
     messages: conversationHistory,
     ...(cachedTools ? { tools: cachedTools } : {}),
   });

@@ -1,5 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { ProviderCallParams, ProviderCallResult, GenerateWithToolsParams, GenerateWithToolsResult } from "./shared";
+import type {
+  ProviderCallParams,
+  ProviderCallResult,
+  GenerateWithToolsParams,
+  GenerateWithToolsResult,
+} from "./shared";
 
 // `client.messages.create` request/response shape verified against the current
 // Anthropic API reference (claude-api skill), including current model IDs in
@@ -11,14 +16,25 @@ export async function generate({
   systemPrompt,
   userPrompt,
   maxTokens,
+  attachments,
 }: ProviderCallParams): Promise<ProviderCallResult> {
   const client = new Anthropic({ apiKey });
+
+  const content: any[] = (attachments ?? []).map((attachment) => ({
+    type: "document",
+    source: {
+      type: "base64",
+      media_type: attachment.mediaType as any,
+      data: attachment.data,
+    },
+  }));
+  content.push({ type: "text", text: userPrompt });
 
   const response = await client.messages.create({
     model,
     max_tokens: maxTokens,
     system: systemPrompt,
-    messages: [{ role: "user", content: userPrompt }],
+    messages: [{ role: "user", content }],
   });
 
   const textBlock = response.content.find((block) => block.type === "text");
@@ -59,13 +75,23 @@ export async function generateWithTools({
   // on a long-running BYOK conversation the same way it does for the system Bedrock path.
   const cachedTools =
     tools && tools.length > 0
-      ? tools.map((tool, i) => (i === tools.length - 1 ? { ...tool, cache_control: { type: "ephemeral" as const } } : tool))
+      ? tools.map((tool, i) =>
+          i === tools.length - 1
+            ? { ...tool, cache_control: { type: "ephemeral" as const } }
+            : tool,
+        )
       : undefined;
 
   const stream = client.messages.stream({
     model,
     max_tokens: maxTokens,
-    system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
+    system: [
+      {
+        type: "text",
+        text: systemPrompt,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
     messages: conversationHistory,
     ...(cachedTools ? { tools: cachedTools } : {}),
   });
