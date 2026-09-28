@@ -1,0 +1,94 @@
+import { randomBytes, randomUUID } from "node:crypto";
+import { hashPassword } from "@better-auth/utils/password";
+
+import { User } from "@/lib/db/coreEntities";
+import { createUserWithEmailLock, EmailAlreadyInUseError } from "@/lib/db/coreOperations";
+
+/**
+ * Turns an already signature-verified Charisol ID token's claims into a local Plexo user.
+ * Kept out of server/authDynamo.ts so the matching rules are unit-testable without
+ * constructing NextAuth. The caller MUST have verified the token (CognitoJwtVerifier) first —
+ * nothing here re-checks signature/issuer/audience, only what the claims say about the email.
+ */
+
+export type CharisolClaims = Record<string, unknown>;
+
+export interface CharisolLocalUser {
+  id: string;
+  email: string;
+  name: string;
+  image: string | null;
+}
+
+/** A random, never-disclosed password hash: the account has no password anyone can type. */
+export async function unusablePasswordHash(): Promise<string> {
+  return hashPassword(randomBytes(32).toString("hex"));
+}
+
+/** Cognito emits email_verified as a boolean in ID tokens but some flows serialise it as a string. */
+export function isEmailVerifiedClaim(value: unknown): boolean {
+  return value === true || value === "true";
+}
+
+/**
+ * Match order (see the Charisol legacy-user-migration guide):
+ *   1. `legacy_user_id` — Plexo's OWN user id, only ever set by Charisol for Plexo's client.
+ *   2. the verified, lowercased `email`.
+ *   3. otherwise create a new user (verified email, no usable password).
+ * Returns null for: unverified email, missing email, or a suspended account.
+ */
+export async function resolveCharisolUser(claims: CharisolClaims): Promise<CharisolLocalUser | null> {
+  if (!isEmailVerifiedClaim(claims.email_verified)) return null;
+  const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
+  if (!email) return null;
+
+  let existing: UserRecord | undefined;
+
+  const legacyUserId = typeof claims.legacy_user_id === "string" ? claims.legacy_user_id.trim() : "";
+  if (legacyUserId) {
+    const { data } = await User.get({ id: legacyUserId }).go();
+    if (data) existing = data;
+  }
+  if (!existing) existing = await loadByEmail(email);
+
+  if (existing) return signInExisting(existing, email);
+
+  const id = randomUUID();
+  const name = typeof claims.name === "string" && claims.name ? claims.name : email.split("@")[0];
+  const image = typeof claims.picture === "string" ? claims.picture : undefined;
+  try {
+    // Same email-lock transaction as password registration, so one email can never end up
+    // with two Plexo accounts (see lib/db/coreOperations.ts).
+    await createUserWithEmailLock({ id, email, name, image, isConfirmed: true, passwordHash: await unusablePasswordHash() });
+  } catch (err) {
+    if (!(err instanceof EmailAlreadyInUseError)) throw err;
+    // Lost a race with a concurrent registration/sign-in for this same email. The winning
+    // row is this person's account — sign in as it, under the same rules as any existing
+    // account (suspended → refused; unconfirmed → confirmed and password rotated).
+    const winner = await loadByEmail(email);
+    if (!winner) throw err;
+    return signInExisting(winner, email);
+  }
+  return { id, email, name, image: image ?? null };
+}
+
+async function signInExisting(existing: UserRecord, email: string): Promise<CharisolLocalUser | null> {
+  if (existing.suspendedAt) return null;
+
+  // Pre-registration takeover fix: /api/auth/register lets anyone create an UNCONFIRMED
+  // account with a password of their choosing for any email. A Charisol login (with
+  // email_verified) proves the real owner controls the address, so confirm the account
+  // AND rotate the password hash — otherwise the squatter's password keeps working on
+  // the now-confirmed account.
+  if (!existing.isConfirmed) {
+    await User.patch({ id: existing.id }).set({ isConfirmed: true, passwordHash: await unusablePasswordHash() }).go();
+  }
+  return { id: existing.id, email: existing.email, name: existing.name ?? email.split("@")[0], image: existing.image ?? null };
+}
+
+type UserRecord = NonNullable<Awaited<ReturnType<typeof loadByEmail>>>;
+
+async function loadByEmail(email: string) {
+  const { data } = await User.query.byEmail({ email }).go();
+  return data[0];
+}

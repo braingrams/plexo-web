@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { DynamoDBAdapter } from "@auth/dynamodb-adapter";
@@ -7,7 +6,7 @@ import { CognitoJwtVerifier } from "aws-jwt-verify";
 
 import { docClient, TABLES } from "@/lib/db/client";
 import { User } from "@/lib/db/coreEntities";
-import { createUserWithEmailLock, EmailAlreadyInUseError } from "@/lib/db/coreOperations";
+import { resolveCharisolUser } from "@/server/charisolAccount";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 
 // Verifies Charisol/Cognito-issued ID tokens server-side before trusting any claim in
@@ -140,36 +139,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null; // bad signature, wrong client_id/aud, expired, or malformed
         }
 
-        const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
-        if (!email) return null;
-
-        const { data: matches } = await User.query.byEmail({ email }).go();
-        const existing = matches[0];
-        if (existing?.suspendedAt) return null;
-        if (existing) {
-          return { id: existing.id, email: existing.email, name: existing.name, image: existing.image ?? null };
-        }
-
-        const id = randomUUID();
-        const name = typeof claims.name === "string" && claims.name ? claims.name : email.split("@")[0];
-        const image = typeof claims.picture === "string" ? claims.picture : undefined;
-        // Google-verified email via Cognito — same trust level the old Google provider
-        // implicitly granted, so this account doesn't need Plexo's own email-verification
-        // step (isConfirmed gate only applies to the Credentials/password provider above).
-        try {
-          await createUserWithEmailLock({ id, email, name, image, isConfirmed: true });
-        } catch (err) {
-          if (!(err instanceof EmailAlreadyInUseError)) throw err;
-          // Lost the race the pre-check above couldn't catch (this same email registered
-          // or signed in concurrently) — unlike the password-registration route, this isn't
-          // a user-facing error: whichever row won is an equally valid identity for this
-          // verified email, so just sign in as that one instead of failing the login.
-          const { data: winner } = await User.query.byEmail({ email }).go();
-          const won = winner[0];
-          if (!won) throw err;
-          return { id: won.id, email: won.email, name: won.name, image: won.image ?? null };
-        }
-        return { id, email, name, image: image ?? null };
+        // Identity comes ONLY from the verified claims. resolveCharisolUser requires
+        // email_verified, matches legacy_user_id (Plexo's own id) before the lowercased
+        // verified email, refuses suspended accounts, confirms a previously-unconfirmed
+        // account and rotates its password hash (pre-registration takeover fix), and creates
+        // new users with a verified email and no usable password.
+        return resolveCharisolUser(claims);
       },
     }),
     Credentials({
@@ -202,6 +177,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const valid = await verifyPassword(user.passwordHash, password);
         if (!valid) return null;
+        // A password equal to the account's own email is derivable by anyone — refuse it
+        // (defends accounts that were ever created that way).
+        if (password.trim().toLowerCase() === user.email.toLowerCase()) return null;
 
         if (!user.isConfirmed) throw new UnverifiedEmailError();
         if (user.suspendedAt) return null;

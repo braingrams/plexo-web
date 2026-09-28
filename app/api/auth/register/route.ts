@@ -45,6 +45,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: { message: "Password must be at least 8 characters." } }, { status: 400 });
   }
 
+  if (password.trim().toLowerCase() === email) {
+    return NextResponse.json({ error: { message: "Password can't be the same as your email address." } }, { status: 400 });
+  }
+
   const { data: existing } = await User.query.byEmail({ email }).go();
   if (existing.length > 0) {
     return NextResponse.json({ error: { message: "An account with this email already exists." } }, { status: 409 });
