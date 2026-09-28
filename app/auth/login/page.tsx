@@ -2,13 +2,12 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useEffect, useState } from "react";
-import { ArrowLeft, Sparkles, ShieldCheck, CheckCircle2, Lock, Eye, EyeOff } from "lucide-react";
-import { authClient } from "@/lib/auth-client";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { ArrowLeft, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { Mulish } from "next/font/google";
 import { PlexoLogo } from "@/app/plexo-logo";
-import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
-import { triggerGoogleSignIn } from "@/lib/charisolAuth";
+import { CharisolSignInButton } from "@/app/auth/CharisolSignInButton";
+import { authClient } from "@/lib/auth-client";
 import { isPrPreviewHost } from "@/lib/isPrPreviewHost";
 
 const mulish = Mulish({
@@ -17,14 +16,89 @@ const mulish = Mulish({
   display: "swap",
 });
 
+/**
+ * PR previews only. Charisol (like Google before it) only redirects back to callback URLs
+ * registered for Plexo, and every preview has its own throwaway pr-<N>.plexo.aws.charisol.io
+ * host that never is — so "Sign in with Charisol" can't complete there. Previews share
+ * staging's Users table (see .github/workflows/pr-deploy-aws.yml), so testers sign in with
+ * an existing staging account's password instead. Never rendered on a real host.
+ */
+function PreviewPasswordSignIn({ redirectTo }: { redirectTo: string }) {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setError(null);
+    if (!email.trim() || !password) {
+      setError("Enter your email and password.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await authClient.signIn.email({ email, password, callbackURL: redirectTo });
+      if (result?.error?.code === "google_account_only") {
+        setError("This account signs in with Google, which isn't available on PR previews — use a test account that has a password.");
+        return;
+      }
+      if (result?.error?.status === 403) {
+        setError("This account is not verified yet. Check your email for the verification link.");
+        return;
+      }
+      if (result?.error) {
+        setError(result.error.message ?? "Invalid credentials.");
+        return;
+      }
+      router.push(redirectTo);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Invalid credentials.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-3 rounded-2xl border border-amber-700/50 bg-amber-950/30 p-4">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-amber-300">PR preview — test sign-in</p>
+      {error && <p className="text-xs font-semibold text-red-300">{error}</p>}
+      <input
+        type="email"
+        autoComplete="email"
+        placeholder="Email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-purple-500"
+      />
+      <input
+        type="password"
+        autoComplete="current-password"
+        placeholder="Password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white outline-none focus:border-purple-500"
+      />
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full rounded-xl bg-slate-700 py-3 text-sm font-extrabold text-white hover:bg-slate-600 disabled:opacity-50"
+      >
+        {loading ? "Signing in…" : "Sign in with password"}
+      </button>
+    </form>
+  );
+}
+
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(() => params.get("error"));
+  const [error] = useState<string | null>(() => params.get("error") ?? params.get("verifyError"));
+  const verified = params.get("verified") === "1";
+  // Read after mount (not during render) so server and client markup match.
+  const [onPrPreview, setOnPrPreview] = useState(false);
+  useEffect(() => setOnPrPreview(isPrPreviewHost(window.location.hostname)), []);
 
   // A failed Charisol/Google sign-in routes back here with ?error=... (see
   // app/auth/charisol/callback/page.tsx) rather than showing anything on that page
@@ -36,67 +110,6 @@ function LoginForm() {
     router.replace(`${url.pathname}${url.search}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    setError(null);
-
-    if (!email.trim() || !password) {
-      setError("Enter your email and password.");
-      return;
-    }
-
-    setLoading(true);
-
-    const redirectTo = params.get("redirectTo") ?? "/dashboard";
-
-    try {
-      const result = await authClient.signIn.email({
-        email,
-        password,
-        callbackURL: redirectTo,
-      });
-
-      // This account is real but Google-only (server/authDynamo.ts's
-      // GoogleAccountOnlyError) — a password can never work for it, so go straight to
-      // Google instead of showing a dead-end error or a second "continue with Google"
-      // click. No banner, no extra info shown — same full-page redirect
-      // GoogleAuthButton's own click handler triggers, just fired automatically here.
-      //
-      // Suppressed on PR previews: they share staging's real Users table (see
-      // .github/workflows/pr-deploy-aws.yml), so testing with any account that happens
-      // to have been created via Google silently bounces the tester off to a Google
-      // OAuth flow whose redirect URI likely isn't even registered for the preview's
-      // own throwaway hostname. A plain inline message keeps preview testing on
-      // email+password without a surprise redirect.
-      if (result?.error?.code === "google_account_only") {
-        if (isPrPreviewHost(window.location.hostname)) {
-          setError("This account uses Google sign-in, which isn't available on PR previews — use a different test account with a password.");
-          return;
-        }
-        await triggerGoogleSignIn(redirectTo);
-        return;
-      }
-
-      const status = result?.error?.status;
-      if (status === 403) {
-        setError("This account is not verified yet. Check your email for the verification link.");
-        return;
-      }
-
-      if (result?.error) {
-        setError(result.error.message ?? "Invalid credentials.");
-        return;
-      }
-
-      router.push(redirectTo);
-    } catch (submitError) {
-      const message = submitError instanceof Error ? submitError.message : "Invalid credentials.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   return (
     <div className="w-full max-w-md mx-auto space-y-8 py-12 px-4 sm:px-8">
@@ -119,84 +132,25 @@ function LoginForm() {
         </p>
       </div>
 
-      {/* Google */}
-      <GoogleAuthButton callbackURL={params.get("redirectTo") ?? "/dashboard"} />
+      {verified && !error && (
+        <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-semibold">
+          Email verified. Sign in to continue.
+        </div>
+      )}
+      {error && (
+        <div className="p-4 rounded-2xl bg-red-950/80 border border-red-800 text-red-300 text-xs font-semibold">
+          {error}
+        </div>
+      )}
 
-      <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-slate-800" />
-        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">or</span>
-        <div className="h-px flex-1 bg-slate-800" />
+      {/* Charisol hosts the actual sign-in page (Google or email + password). */}
+      <div className="space-y-3">
+        <CharisolSignInButton callbackURL={params.get("redirectTo") ?? "/dashboard"} />
+        <p className="text-center text-[11px] font-semibold text-slate-500">
+          One Charisol account works across Plexo, Maildrip and more.
+        </p>
+        {onPrPreview && <PreviewPasswordSignIn redirectTo={params.get("redirectTo") ?? "/dashboard"} />}
       </div>
-
-      {/* Form */}
-      <form onSubmit={onSubmit} className="space-y-5" noValidate>
-        {error && (
-          <div className="p-4 rounded-2xl bg-red-950/80 border border-red-800 text-red-300 text-xs font-semibold">
-            {error}
-          </div>
-        )}
-
-        {/* Email */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-extrabold uppercase tracking-wider text-slate-300 block">
-            Email address
-          </label>
-          <input
-            id="login-email"
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@company.com"
-            className="w-full bg-[#090d16] border border-slate-800 focus:border-purple-500 rounded-2xl px-4 py-3.5 text-sm text-white placeholder-slate-600 focus:outline-none transition-all"
-          />
-        </div>
-
-        {/* Password */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-extrabold uppercase tracking-wider text-slate-300 block">
-              Password
-            </label>
-            <Link href="/auth/forgot-password" className="text-xs font-bold text-purple-400 hover:underline">
-              Forgot password?
-            </Link>
-          </div>
-          <div className="relative">
-            <input
-              id="login-password"
-              type={showPw ? "text" : "password"}
-              required
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••••••"
-              className="w-full bg-[#090d16] border border-slate-800 focus:border-purple-500 rounded-2xl px-4 py-3.5 pr-12 text-sm text-white placeholder-slate-600 focus:outline-none transition-all"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPw((v) => !v)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
-              aria-label={showPw ? "Hide password" : "Show password"}
-            >
-              {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-
-        {/* Submit */}
-        <div className="pt-2">
-          <button
-            id="login-submit"
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[#6b3bf9] hover:bg-[#5b2be6] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-          >
-            {loading ? <span>Signing in...</span> : <span>Sign In</span>}
-          </button>
-        </div>
-      </form>
 
       {/* Meta Link */}
       <p className="text-center text-xs font-semibold text-slate-400">

@@ -70,7 +70,7 @@ export const authClient = {
     async charisol({ idToken }: { idToken: string }): Promise<AuthResult> {
       const result = await nextAuthSignIn("charisol", { idToken, redirect: false });
       if (result?.error) {
-        return { error: { status: 401, message: "Could not complete Google sign-in." } };
+        return { error: { status: 401, message: "We couldn't complete sign-in. Make sure your email is verified, then try again." } };
       }
       return { data: {} };
     },

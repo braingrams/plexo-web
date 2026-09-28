@@ -41,7 +41,7 @@ export default function CharisolCallbackPage() {
       }
 
       if (!session) {
-        failAndReturnToLogin("Google sign-in didn't complete. Please try again.");
+        failAndReturnToLogin("Sign-in didn't complete. Please try again.");
         return;
       }
 
@@ -49,7 +49,7 @@ export default function CharisolCallbackPage() {
       if (cancelled) return;
 
       if (result.error) {
-        failAndReturnToLogin(result.error.message ?? "Google sign-in didn't complete. Please try again.");
+        failAndReturnToLogin(result.error.message ?? "Sign-in didn't complete. Please try again.");
         return;
       }
 

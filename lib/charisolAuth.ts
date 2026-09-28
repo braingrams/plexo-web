@@ -34,9 +34,9 @@ export { CharisolAuth };
 // back once the sign-in round-trip completes.
 export const POST_LOGIN_REDIRECT_KEY = "plexo_post_login_redirect";
 
-// Shared by GoogleAuthButton.tsx and app/auth/login/page.tsx's "this account uses Google
-// sign-in" prompt — one place for the stash-then-redirect sequence so both stay in sync.
-export async function triggerGoogleSignIn(callbackURL: string): Promise<void> {
+// Shared by every "Sign in with Charisol" / "Continue with Google" button — one place for the
+// stash-then-redirect sequence. The Charisol-hosted page offers Google and email+password.
+export async function triggerCharisolSignIn(callbackURL: string): Promise<void> {
   window.sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, callbackURL);
   await CharisolAuth.signIn();
 }
