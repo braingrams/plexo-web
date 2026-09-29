@@ -2,7 +2,14 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
-import { Template, BlogSite, PublishedDomain, BlogPost } from "@/lib/db/contentEntities";
+import {
+  Template,
+  BlogSite,
+  PublishedDomain,
+  BlogPost,
+} from "@/lib/db/contentEntities";
+import { getTierFeatures } from "@/lib/subscription";
+import { User } from "@/lib/db/coreEntities";
 import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
 
 import { BlogOverviewClient } from "./BlogOverviewClient";
@@ -29,7 +36,9 @@ export default async function BlogOverviewPage() {
   // the org, newest-updated first — filtered here in memory for the root/LANDING_PAGE/
   // not-a-layout shape, same "one partition per org" bound this migration uses throughout
   // (an org's own template count is small enough that this isn't a real cost concern).
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go({ pages: "all" });
+  const { data: orgTemplates } = await Template.query
+    .byOrg({ organizationId: orgResolution.organizationId })
+    .go({ pages: "all" });
   const candidates = orgTemplates.filter(
     (t) =>
       !t.parentId &&
@@ -46,24 +55,50 @@ export default async function BlogOverviewPage() {
     return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
   });
 
-  const [blogSites, domainBatches, postCountBatches] = await Promise.all([
-    Promise.all(candidates.map((t) => BlogSite.get({ templateId: t.id }).go())),
-    Promise.all(candidates.map((t) => PublishedDomain.query.primary({ templateId: t.id }).go())),
-    Promise.all(candidates.map((t) => BlogPost.query.byStatus({ templateId: t.id }).go())),
-  ]);
+  const [blogSites, domainBatches, postCountBatches, { data: currentUser }] =
+    await Promise.all([
+      Promise.all(
+        candidates.map((t) => BlogSite.get({ templateId: t.id }).go()),
+      ),
+      Promise.all(
+        candidates.map((t) =>
+          PublishedDomain.query.primary({ templateId: t.id }).go(),
+        ),
+      ),
+      Promise.all(
+        candidates.map((t) =>
+          BlogPost.query.byStatus({ templateId: t.id }).go(),
+        ),
+      ),
+      User.get({ id: session.user.id }).go(),
+    ]);
+  const publishedLimit = getTierFeatures(
+    currentUser?.subscriptionPlan ?? "FREE",
+  ).maxPublishedBlogPosts;
 
-  const blogs: { id: string; name: string; blogTitle: string; postCount: number; updatedAt: string; liveDomain: string | null }[] = [];
+  const blogs: {
+    id: string;
+    name: string;
+    blogTitle: string;
+    publishedCount: number;
+    publishedLimit: number | null;
+    updatedAt: string;
+    liveDomain: string | null;
+  }[] = [];
   const eligibleTemplates: { id: string; name: string }[] = [];
 
   candidates.forEach((t, i) => {
     const blogSite = blogSites[i].data;
     if (blogSite?.enabled) {
-      const activeDomain = pickPrimaryDomain(domainBatches[i].data.filter((d) => d.active));
+      const activeDomain = pickPrimaryDomain(domainBatches[i].data);
       blogs.push({
         id: t.id,
         name: t.name,
         blogTitle: blogSite.title ?? "Blog",
-        postCount: postCountBatches[i].data.length,
+        publishedCount: postCountBatches[i].data.filter(
+          (p) => p.status === "PUBLISHED",
+        ).length,
+        publishedLimit,
         updatedAt: t.updatedAt ?? new Date().toISOString(),
         liveDomain: activeDomain?.domain ?? null,
       });
@@ -74,5 +109,7 @@ export default async function BlogOverviewPage() {
     }
   });
 
-  return <BlogOverviewClient blogs={blogs} eligibleTemplates={eligibleTemplates} />;
+  return (
+    <BlogOverviewClient blogs={blogs} eligibleTemplates={eligibleTemplates} />
+  );
 }

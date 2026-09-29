@@ -175,7 +175,7 @@ export function InsightsClient() {
               disabled={totalViews === 0}
               style={{
                 padding: "0.5rem 0.9rem", borderRadius: 10, fontSize: "0.78rem", fontWeight: 650,
-                background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.25)",
+                background: "rgba(var(--brand-rgb),0.1)", border: "1px solid rgba(var(--brand-rgb),0.25)",
                 color: totalViews === 0 ? "rgba(240,242,255,0.25)" : "#c4b5fd",
                 cursor: totalViews === 0 ? "not-allowed" : "pointer", whiteSpace: "nowrap",
               }}

@@ -64,10 +64,13 @@ jobs:
       # to redact from output.
       - name: Fetch staging's secrets required just to load the CDK app
         run: |
+          AUTH_SECRET="$(aws ssm get-parameter --name /plexo/staging/AUTH_SECRET --with-decryption --query Parameter.Value --output text)"
           ORIGIN_VERIFY_SECRET="$(aws ssm get-parameter --name /plexo/staging/PLEXO_ORIGIN_VERIFY_SECRET --with-decryption --query Parameter.Value --output text)"
           CRON_SECRET="$(aws ssm get-parameter --name /plexo/staging/CRON_SECRET --with-decryption --query Parameter.Value --output text)"
+          echo "::add-mask::$AUTH_SECRET"
           echo "::add-mask::$ORIGIN_VERIFY_SECRET"
           echo "::add-mask::$CRON_SECRET"
+          echo "AUTH_SECRET=$AUTH_SECRET" >> "$GITHUB_ENV"
           echo "ORIGIN_VERIFY_SECRET=$ORIGIN_VERIFY_SECRET" >> "$GITHUB_ENV"
           echo "CRON_SECRET=$CRON_SECRET" >> "$GITHUB_ENV"
 

@@ -15,7 +15,7 @@ export type CommerceSiteInfo = {
 // sessions (hashed off the site id, not randomized) — the same idea as Avatar.tsx's
 // initials-based identity, but per-site rather than per-user, since "which site am I
 // looking at" is the thing this header exists to make unmistakable at a glance.
-const AVATAR_COLORS = ["#f472b6", "#34d399", "#60a5fa", "#fbbf24", "#c084fc", "#f87171", "#2dd4bf"];
+const AVATAR_COLORS = ["#f472b6", "#34d399", "#60a5fa", "#fbbf24", "var(--brand-light)", "#f87171", "#2dd4bf"];
 
 function colorForSite(id: string): string {
   let hash = 0;
@@ -202,7 +202,7 @@ export function CommerceSiteHeader({
                     gap: "0.65rem",
                     padding: "0.55rem 0.6rem",
                     borderRadius: 10,
-                    background: isActive ? "var(--brand-subtle, rgba(139,92,246,0.1))" : "transparent",
+                    background: isActive ? "var(--brand-subtle, rgba(var(--brand-rgb),0.1))" : "transparent",
                     border: "none",
                     cursor: "pointer",
                     textAlign: "left",
@@ -217,7 +217,7 @@ export function CommerceSiteHeader({
                   </div>
                   <span style={{ width: 6, height: 6, borderRadius: "50%", background: site.enabled ? "#34d399" : "#fbbf24", flexShrink: 0 }} />
                   {isActive && (
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand, #8b5cf6)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand, var(--brand))" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
                       <polyline points="20 6 9 17 4 12" />
                     </svg>
                   )}
@@ -291,7 +291,7 @@ export function CommerceSiteHeader({
                   inset: -6,
                   borderRadius: 14,
                   border: "2.5px solid rgba(255,255,255,0.12)",
-                  borderTopColor: "var(--brand, #8b5cf6)",
+                  borderTopColor: "var(--brand, var(--brand))",
                   animation: "commerce-switch-spin 0.7s linear infinite",
                 }}
               />

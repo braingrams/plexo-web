@@ -168,7 +168,7 @@ export function TemplateCard({ template, onDelete, onDuplicate, duplicating }: P
           width: "100%",
           height: "100%",
             background: isEmail
-              ? "linear-gradient(135deg,rgba(139,92,246,0.12) 0%,rgba(252,6,148,0.03) 100%)"
+              ? "linear-gradient(135deg,rgba(var(--brand-rgb),0.12) 0%,rgba(252,6,148,0.03) 100%)"
               : "linear-gradient(135deg,rgba(129,140,248,0.12) 0%,rgba(129,140,248,0.03) 100%)",
             alignItems: "center",
             justifyContent: "center",
@@ -191,7 +191,7 @@ export function TemplateCard({ template, onDelete, onDuplicate, duplicating }: P
           fontWeight: 700,
           letterSpacing: "0.06em",
           textTransform: "uppercase",
-          background: isFunnel ? "#c084fc" : isEmail ? "var(--brand)" : "#818cf8",
+          background: isFunnel ? "var(--brand-light)" : isEmail ? "var(--brand)" : "#818cf8",
           color: "#ffffff",
           boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
           zIndex: 2,
@@ -234,13 +234,13 @@ export function TemplateCard({ template, onDelete, onDuplicate, duplicating }: P
               padding: "0.6rem 1rem",
               borderRadius: 10, border: "none", cursor: "pointer",
               fontSize: "0.85rem", fontWeight: 700,
-              background: "rgba(139, 92, 246, 0.15)",
+              background: "rgba(var(--brand-rgb),0.15)",
               color: "var(--brand)",
               transition: "all 0.2s",
               fontFamily: "inherit",
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(139, 92, 246, 0.25)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(139, 92, 246, 0.15)"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(var(--brand-rgb),0.25)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(var(--brand-rgb),0.15)"; }}
           >
             Open Editor
             <IconArrow />

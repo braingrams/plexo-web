@@ -18,6 +18,7 @@ import {
   ChevronRight,
   Info,
 } from "lucide-react";
+import { IntegrationSubTabs } from "./_components/IntegrationSubTabs";
 type IntegrationClientProps = {
   user: {
     name: string;
@@ -107,11 +108,12 @@ POST {yourWebhookUrl}/ai-charge
 
   return (
     <div className="space-y-6 font-sans text-[#f0f2ff]">
+      <IntegrationSubTabs />
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-white/10">
         <div>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#8b5cf6] to-[#7c3aed] flex items-center justify-center shadow-lg shadow-[#8b5cf6]/25 shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[var(--brand)] to-[var(--brand-deep)] flex items-center justify-center shadow-lg shadow-[var(--brand)]/25 shrink-0">
               <Bot className="w-5 h-5 text-white" />
             </div>
             <div>
@@ -129,7 +131,7 @@ POST {yourWebhookUrl}/ai-charge
         <a
           href="/mcp/login"
           target="_blank"
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#8b5cf6]/10 border border-[#8b5cf6]/25 text-[#a78bfa] hover:bg-[#8b5cf6]/20 text-xs font-semibold transition shrink-0 self-start sm:self-auto"
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--brand)]/10 border border-[var(--brand)]/25 text-[#a78bfa] hover:bg-[var(--brand)]/20 text-xs font-semibold transition shrink-0 self-start sm:self-auto"
         >
           <Lock className="w-4 h-4" />
           Authenticate Session Token
@@ -154,7 +156,7 @@ POST {yourWebhookUrl}/ai-charge
               onClick={() => setActiveTab(tab.id as any)}
               className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition whitespace-nowrap ${
                 active
-                  ? "bg-[#8b5cf6] text-white shadow-lg shadow-[#8b5cf6]/25"
+                  ? "bg-[var(--brand)] text-white shadow-lg shadow-[var(--brand)]/25"
                   : "bg-white/[0.04] text-white/60 hover:text-white border border-white/10"
               }`}
             >
@@ -170,7 +172,7 @@ POST {yourWebhookUrl}/ai-charge
         <div className="bg-[#111827]/80 border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 space-y-6 shadow-xl">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 flex items-center justify-center text-[#8b5cf6] shrink-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[var(--brand)]/10 border border-[var(--brand)]/20 flex items-center justify-center text-[var(--brand)] shrink-0">
                 <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
               <div>
@@ -178,7 +180,7 @@ POST {yourWebhookUrl}/ai-charge
                 <p className="text-xs text-white/60 mt-0.5">Connect Plexo in Claude Web under <code className="text-[#a78bfa]">Customize → Connectors</code>.</p>
               </div>
             </div>
-            <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-[#8b5cf6]/10 text-[#a78bfa] border border-[#8b5cf6]/20 self-start sm:self-auto shrink-0">
+            <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-[var(--brand)]/10 text-[#a78bfa] border border-[var(--brand)]/20 self-start sm:self-auto shrink-0">
               Remote MCP
             </span>
           </div>
@@ -186,7 +188,7 @@ POST {yourWebhookUrl}/ai-charge
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-[#8b5cf6]" />
+                <Sliders className="w-4 h-4 text-[var(--brand)]" />
                 Step-by-Step Instructions
               </h3>
               <ol className="space-y-3 text-xs text-white/70 list-decimal list-inside leading-relaxed">

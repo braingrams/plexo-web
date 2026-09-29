@@ -471,8 +471,8 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
                   onClick={() => setActiveMode(tab.key)}
                   style={{
                     padding: "0.35rem 0.75rem", borderRadius: 7, fontSize: "0.78rem", fontWeight: 600,
-                    background: activeMode === tab.key ? "rgba(139,92,246,0.1)" : "none",
-                    border: activeMode === tab.key ? "1px solid rgba(139,92,246,0.3)" : "1px solid rgba(255,255,255,0.1)",
+                    background: activeMode === tab.key ? "rgba(var(--brand-rgb),0.1)" : "none",
+                    border: activeMode === tab.key ? "1px solid rgba(var(--brand-rgb),0.3)" : "1px solid rgba(255,255,255,0.1)",
                     color: disabled ? "rgba(240,242,255,0.25)" : activeMode === tab.key ? "#c4b5fd" : "rgba(240,242,255,0.6)",
                     cursor: disabled ? "not-allowed" : "pointer",
                     whiteSpace: "nowrap", flexShrink: 0,
@@ -591,7 +591,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
                     onClick={() => setActivePath(f.path)}
                     style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
-                      padding: "0.6rem 0.9rem", background: f.path === activePath ? "rgba(139,92,246,0.1)" : "none",
+                      padding: "0.6rem 0.9rem", background: f.path === activePath ? "rgba(var(--brand-rgb),0.1)" : "none",
                       border: "none", borderLeft: f.path === activePath ? "2px solid var(--brand)" : "2px solid transparent",
                       color: f.path === activePath ? "#f0f2ff" : "rgba(240,242,255,0.6)",
                       fontSize: "0.8rem", textAlign: "left", cursor: "pointer", fontFamily: "monospace",

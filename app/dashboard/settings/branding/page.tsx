@@ -5,7 +5,7 @@ import { Organization } from "@/lib/db/coreEntities";
 import { ensureActiveOrganization, getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
 import { canWhiteLabel } from "@/lib/subscription";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
-import { PageContainer } from "@/app/dashboard/_components/PageContainer";
+import { SettingsShell } from "@/app/dashboard/_components/SettingsShell";
 import { BrandingForm } from "./branding-form";
 
 export default async function BrandingSettingsPage() {
@@ -26,7 +26,7 @@ export default async function BrandingSettingsPage() {
   if (!org) throw new Error(`Organization ${orgResolution.organizationId} not found`);
 
   return (
-    <PageContainer>
+    <SettingsShell>
       <PageHeader
         eyebrow="Organization"
         title="Branding"
@@ -40,7 +40,8 @@ export default async function BrandingSettingsPage() {
         initialName={org.name}
         initialLogo={org.logo ?? null}
         initialBrandColor={org.brandColor ?? null}
+        initialBrandDisplayMode={org.brandDisplayMode ?? "BOTH"}
       />
-    </PageContainer>
+    </SettingsShell>
   );
 }

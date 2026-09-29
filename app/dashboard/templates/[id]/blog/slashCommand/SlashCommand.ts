@@ -39,7 +39,7 @@ function renderMenu(items: SlashCommandItem[], selectedIndex: number, onPick: (i
     row.style.borderRadius = "6px";
     row.style.border = "none";
     row.style.cursor = "pointer";
-    row.style.background = i === selectedIndex ? "rgba(139,92,246,0.15)" : "transparent";
+    row.style.background = i === selectedIndex ? "rgba(var(--brand-rgb),0.15)" : "transparent";
     row.style.color = i === selectedIndex ? "#a78bfa" : "#f0f2ff";
 
     const title = document.createElement("div");

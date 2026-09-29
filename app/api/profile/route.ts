@@ -14,6 +14,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   let body: {
     name?: string;
     layoutMode?: string;
+    preferredSurface?: string;
     manageLandingPagePublishing?: boolean;
     hideBranding?: boolean;
     pendingPlan?: null;
@@ -28,6 +29,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   const data: {
     name?: string;
     layoutMode?: "CLASSIC" | "MODERN";
+    preferredSurface?: "DASHBOARD" | "SOL";
     manageLandingPagePublishing?: boolean;
     hideBranding?: boolean;
     funnelBuilderLevel?: "BEGINNER" | "INTERMEDIATE" | "PROFESSIONAL";
@@ -50,6 +52,13 @@ export async function PATCH(request: Request): Promise<NextResponse> {
       return NextResponse.json({ error: "Invalid layout mode." }, { status: 400 });
     }
     data.layoutMode = body.layoutMode;
+  }
+
+  if (body.preferredSurface !== undefined) {
+    if (body.preferredSurface !== "DASHBOARD" && body.preferredSurface !== "SOL") {
+      return NextResponse.json({ error: "Invalid preferred surface." }, { status: 400 });
+    }
+    data.preferredSurface = body.preferredSurface;
   }
 
   if (body.manageLandingPagePublishing !== undefined) {

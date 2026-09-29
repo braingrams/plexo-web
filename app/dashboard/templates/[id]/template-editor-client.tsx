@@ -11,1187 +11,1566 @@
 import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-	PlexoBuilder,
-	type PlexoBuilderRef,
-	type TemplateJSON,
-	type CommentTarget,
+  PlexoBuilder,
+  type PlexoBuilderRef,
+  type TemplateJSON,
+  type CommentTarget,
 } from "@charisol/plexo-sdk";
 import "@charisol/plexo-sdk/dist/plexo-sdk.css";
 import { PagesPanel } from "./PagesPanel";
 import { CommentLayer } from "./comments/CommentLayer";
 import { BuyDomainFlow } from "../../domains/domains-client";
+import { Toggle } from "../../_components/Toggle";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 
 type Props = {
-	templateId: string;
-	templateName: string;
-	templateKind: "EMAIL" | "LANDING_PAGE";
-	// Non-null when this page is a sub-page of another landing page — sub-pages
-	// are reached through their site's shared domain, so they never get their
-	// own PublishedDomain and shouldn't trigger the "publish this page" nudge.
-	templateParentId: string | null;
-	initialDesignJson: TemplateJSON;
-	subscriptionPlan: string;
-	useAi: boolean;
-	aiProvider: string;
-	aiTier: AiTier;
-	unsplashKey?: string;
-	pexelsKey?: string;
-	pixabayKey?: string;
-	currentUserId: string;
-	currentUserRole: string;
-	organizationId: string;
-	// True for a Template created via Blog Settings' "Design custom layout" — shows the
-	// Blog block palette group in PlexoBuilder and an instructional banner here.
-	isBlogLayout?: boolean;
-	// True when this page's SITE (its root Template) has Commerce enabled — shows the
-	// Commerce block palette group in PlexoBuilder. Resolved server-side in page.tsx by
-	// walking up to the root, since Commerce is scoped per site, not per page.
-	commerceEnabled?: boolean;
-	// True when this site already has a MailDrip API key saved (CommerceSettings) — lets
-	// form_container's 'maildrip' provider panel skip straight to "Create Opt-in Page"
-	// instead of showing the Connect flow. Resolved server-side the same way as
-	// commerceEnabled, for the same reason (MailDrip is a per-site concern, not per-page).
-	maildripConnected?: boolean;
-	// This page's site's root Template id — same walk as commerceEnabled, reused here to
-	// link to /dashboard/templates/{root}/site-layout regardless of how deep the current
-	// page sits in the site's page tree.
-	rootTemplateId: string;
+  templateId: string;
+  templateName: string;
+  templateKind: "EMAIL" | "LANDING_PAGE";
+  // Non-null when this page is a sub-page of another landing page — sub-pages
+  // are reached through their site's shared domain, so they never get their
+  // own PublishedDomain and shouldn't trigger the "publish this page" nudge.
+  templateParentId: string | null;
+  initialDesignJson: TemplateJSON;
+  // The live/published designJson baseline — compared (via JSON.stringify) against the
+  // draft after every save to decide if there are real unpublished changes, instead of
+  // just trusting that a save happened.
+  liveDesignJson: TemplateJSON;
+  // Whether this template has draft edits (draftJson) that haven't been Published yet —
+  // seeds the header's "Unpublished changes" indicator on load; kept in sync client-side
+  // after every save/publish rather than re-fetched.
+  hasUnpublishedChanges: boolean;
+  subscriptionPlan: string;
+  useAi: boolean;
+  aiProvider: string;
+  aiTier: AiTier;
+  unsplashKey?: string;
+  pexelsKey?: string;
+  pixabayKey?: string;
+  currentUserId: string;
+  currentUserRole: string;
+  organizationId: string;
+  // True for a Template created via Blog Settings' "Design custom layout" — shows the
+  // Blog block palette group in PlexoBuilder and an instructional banner here.
+  isBlogLayout?: boolean;
+  // True when this page's SITE (its root Template) has Commerce enabled — shows the
+  // Commerce block palette group in PlexoBuilder. Resolved server-side in page.tsx by
+  // walking up to the root, since Commerce is scoped per site, not per page.
+  commerceEnabled?: boolean;
+  // True when this site already has a MailDrip API key saved (CommerceSettings) — lets
+  // form_container's 'maildrip' provider panel skip straight to "Create Opt-in Page"
+  // instead of showing the Connect flow. Resolved server-side the same way as
+  // commerceEnabled, for the same reason (MailDrip is a per-site concern, not per-page).
+  maildripConnected?: boolean;
+  // This page's site's root Template id — same walk as commerceEnabled, reused here to
+  // link to /dashboard/templates/{root}/site-layout regardless of how deep the current
+  // page sits in the site's page tree.
+  rootTemplateId: string;
 };
 
 function IconArrowLeft() {
-	return (
-		<svg
-			width="15"
-			height="15"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2.2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<path d="M19 12H5M12 5l-7 7 7 7" />
-		</svg>
-	);
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M19 12H5M12 5l-7 7 7 7" />
+    </svg>
+  );
 }
 
 function IconSave() {
-	return (
-		<svg
-			width="15"
-			height="15"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-			<polyline points="17 21 17 13 7 13 7 21" />
-			<polyline points="7 3 7 8 15 8" />
-		</svg>
-	);
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <polyline points="17 21 17 13 7 13 7 21" />
+      <polyline points="7 3 7 8 15 8" />
+    </svg>
+  );
 }
 
 function IconMail() {
-	return (
-		<svg
-			width="13"
-			height="13"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<rect x="2" y="4" width="20" height="16" rx="3" />
-			<path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-		</svg>
-	);
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="4" width="20" height="16" rx="3" />
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+    </svg>
+  );
 }
 
 function IconComment() {
-	return (
-		<svg
-			width="14"
-			height="14"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-		</svg>
-	);
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
 }
 
 function IconLayout() {
-	return (
-		<svg
-			width="13"
-			height="13"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<rect x="3" y="3" width="18" height="18" rx="3" />
-			<path d="M3 9h18M9 21V9" />
-		</svg>
-	);
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="M3 9h18M9 21V9" />
+    </svg>
+  );
 }
 
 function IconCheck() {
-	return (
-		<svg
-			width="13"
-			height="13"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2.4"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<polyline points="20 6 9 17 4 12" />
-		</svg>
-	);
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
 }
 
 function IconClose() {
-	return (
-		<svg
-			width="14"
-			height="14"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2.2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<line x1="18" y1="6" x2="6" y2="18" />
-			<line x1="6" y1="6" x2="18" y2="18" />
-		</svg>
-	);
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
 }
 
 function IconWarning() {
-	return (
-		<svg
-			width="13"
-			height="13"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-			<line x1="12" y1="9" x2="12" y2="13" />
-			<line x1="12" y1="17" x2="12.01" y2="17" />
-		</svg>
-	);
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+function IconUpload() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  );
 }
 
 function IconRocket() {
-	return (
-		<svg
-			width="16"
-			height="16"
-			viewBox="0 0 24 24"
-			fill="none"
-			stroke="currentColor"
-			strokeWidth="2"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-		>
-			<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
-			<path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
-			<path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
-			<path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
-		</svg>
-	);
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+      <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+      <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+      <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+    </svg>
+  );
+}
+
+function IconAutoSave() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
 }
 
 function EditorHeaderLeft({
-	isEmail,
-	templateName,
-	onBack,
+  isEmail,
+  templateName,
+  onBack,
 }: {
-	isEmail: boolean;
-	templateName: string;
-	onBack: () => void;
+  isEmail: boolean;
+  templateName: string;
+  onBack: () => void;
 }) {
-	return (
-		<div
-			style={{
-				display: "flex",
-				alignItems: "center",
-				gap: "0.75rem",
-				minWidth: 0,
-			}}
-		>
-			<button
-				type="button"
-				onClick={onBack}
-				style={{
-					display: "flex",
-					alignItems: "center",
-					gap: "0.4rem",
-					padding: "0.4rem 0.75rem",
-					borderRadius: 8,
-					border: "1px solid rgba(255,255,255,0.1)",
-					background: "transparent",
-					color: "rgba(240,242,255,0.6)",
-					cursor: "pointer",
-					fontFamily: "inherit",
-					fontSize: "0.8rem",
-					fontWeight: 600,
-					whiteSpace: "nowrap",
-					transition: "background 0.15s, color 0.15s",
-				}}
-			>
-				<IconArrowLeft />
-				Details
-			</button>
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+        minWidth: 0,
+      }}
+    >
+      <button
+        type="button"
+        onClick={onBack}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.4rem",
+          padding: "0.4rem 0.75rem",
+          borderRadius: 8,
+          border: "1px solid rgba(255,255,255,0.1)",
+          background: "transparent",
+          color: "rgba(240,242,255,0.6)",
+          cursor: "pointer",
+          fontFamily: "inherit",
+          fontSize: "0.8rem",
+          fontWeight: 600,
+          whiteSpace: "nowrap",
+          transition: "background 0.15s, color 0.15s",
+        }}
+      >
+        <IconArrowLeft />
+        Details
+      </button>
 
-			<div
-				style={{
-					width: 1,
-					height: 20,
-					background: "rgba(255,255,255,0.1)",
-					flexShrink: 0,
-				}}
-			/>
+      <div
+        style={{
+          width: 1,
+          height: 20,
+          background: "rgba(255,255,255,0.1)",
+          flexShrink: 0,
+        }}
+      />
 
-			<div
-				style={{
-					display: "flex",
-					alignItems: "center",
-					gap: "0.5rem",
-					minWidth: 0,
-				}}
-			>
-				<span
-					style={{
-						display: "inline-flex",
-						alignItems: "center",
-						gap: "0.3rem",
-						padding: "0.2rem 0.55rem",
-						borderRadius: 999,
-						fontSize: "0.68rem",
-						fontWeight: 700,
-						letterSpacing: "0.06em",
-						textTransform: "uppercase",
-						background: isEmail
-							? "var(--brand-subtle)"
-							: "rgba(129,140,248,0.1)",
-						color: isEmail ? "var(--brand)" : "#818cf8",
-						border: `1px solid ${isEmail ? "rgba(139,92,246,0.25)" : "rgba(129,140,248,0.2)"}`,
-						flexShrink: 0,
-					}}
-				>
-					{isEmail ? <IconMail /> : <IconLayout />}
-					{isEmail ? "Email" : "Page"}
-				</span>
-				<h1
-					style={{
-						fontFamily: "var(--font-heading), sans-serif",
-						fontSize: "0.95rem",
-						fontWeight: 700,
-						color: "#f0f2ff",
-						whiteSpace: "nowrap",
-						overflow: "hidden",
-						textOverflow: "ellipsis",
-					}}
-				>
-					{templateName}
-				</h1>
-			</div>
-		</div>
-	);
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          minWidth: 0,
+        }}
+      >
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.3rem",
+            padding: "0.2rem 0.55rem",
+            borderRadius: 999,
+            fontSize: "0.68rem",
+            fontWeight: 700,
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            background: isEmail
+              ? "var(--brand-subtle)"
+              : "rgba(129,140,248,0.1)",
+            color: isEmail ? "var(--brand)" : "#818cf8",
+            border: `1px solid ${isEmail ? "rgba(var(--brand-rgb),0.25)" : "rgba(129,140,248,0.2)"}`,
+            flexShrink: 0,
+          }}
+        >
+          {isEmail ? <IconMail /> : <IconLayout />}
+          {isEmail ? "Email" : "Page"}
+        </span>
+        <h1
+          style={{
+            fontFamily: "var(--font-heading), sans-serif",
+            fontSize: "0.95rem",
+            fontWeight: 700,
+            color: "#f0f2ff",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {templateName}
+        </h1>
+      </div>
+    </div>
+  );
 }
 
 function EditorHeaderRight({
-	saveMessage,
-	saveError,
-	subscriptionPlan,
-	isSaving,
-	onSave,
-	commentsOpen,
-	onToggleComments,
+  saveMessage,
+  saveError,
+  subscriptionPlan,
+  isSaving,
+  onSave,
+  hasUnpublishedChanges,
+  isPublishing,
+  publishMessage,
+  publishError,
+  onPublish,
+  commentsOpen,
+  onToggleComments,
+  autoSaveEnabled,
+  onToggleAutoSave,
+  autoSaveNotification,
 }: {
-	saveMessage: string | null;
-	saveError: string | null;
-	subscriptionPlan: string;
-	isSaving: boolean;
-	onSave: () => void;
-	commentsOpen: boolean;
-	onToggleComments: () => void;
+  saveMessage: string | null;
+  saveError: string | null;
+  subscriptionPlan: string;
+  isSaving: boolean;
+  onSave: () => void;
+  hasUnpublishedChanges: boolean;
+  isPublishing: boolean;
+  publishMessage: string | null;
+  publishError: string | null;
+  onPublish: () => void;
+  commentsOpen: boolean;
+  onToggleComments: () => void;
+  autoSaveEnabled: boolean;
+  onToggleAutoSave: () => void;
+  autoSaveNotification: string | null;
 }) {
-	return (
-		<div
-			style={{
-				display: "flex",
-				alignItems: "center",
-				gap: "0.6rem",
-				flexShrink: 0,
-			}}
-		>
-			<button
-				type="button"
-				onClick={onToggleComments}
-				style={{
-					display: "inline-flex",
-					alignItems: "center",
-					gap: "0.4rem",
-					padding: "0.45rem 0.8rem",
-					borderRadius: 9,
-					border: commentsOpen ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
-					background: commentsOpen ? "var(--brand-subtle)" : "transparent",
-					color: commentsOpen ? "var(--brand)" : "rgba(240,242,255,0.6)",
-					cursor: "pointer",
-					fontFamily: "inherit",
-					fontSize: "0.8rem",
-					fontWeight: 600,
-					whiteSpace: "nowrap",
-				}}
-			>
-				<IconComment />
-				Comments
-			</button>
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.6rem",
+        flexShrink: 0,
+      }}
+    >
+      <div
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.4rem",
+          fontSize: "0.8rem",
+          fontWeight: 600,
+          color: autoSaveEnabled ? "var(--brand)" : "rgba(240,242,255,0.6)",
+          whiteSpace: "nowrap",
+        }}
+        title={autoSaveEnabled ? "Auto-save enabled" : "Auto-save disabled"}
+      >
+        <IconAutoSave />
+        Auto Save
+        <Toggle
+          checked={autoSaveEnabled}
+          onChange={onToggleAutoSave}
+          label="Toggle auto-save"
+        />
+      </div>
 
-			{saveMessage && (
-				<span
-					style={{
-						fontSize: "0.78rem",
-						color: "#34d399",
-						whiteSpace: "nowrap",
-						display: "inline-flex",
-						alignItems: "center",
-						gap: "0.3rem",
-					}}
-				>
-					<IconCheck /> {saveMessage}
-				</span>
-			)}
-			{saveError && (
-				<span
-					style={{
-						fontSize: "0.78rem",
-						color: "#f87171",
-						whiteSpace: "nowrap",
-						maxWidth: 200,
-						overflow: "hidden",
-						textOverflow: "ellipsis",
-					}}
-				>
-					{saveError}
-				</span>
-			)}
+      {autoSaveNotification && (
+        <span
+          style={{
+            fontSize: "0.78rem",
+            color: autoSaveEnabled ? "#34d399" : "rgba(240,242,255,0.6)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {autoSaveNotification}
+        </span>
+      )}
 
-			<span
-				style={{
-					display: "none",
-					padding: "0.2rem 0.6rem",
-					borderRadius: 999,
-					fontSize: "0.68rem",
-					fontWeight: 700,
-					letterSpacing: "0.06em",
-					textTransform: "uppercase",
-					background: "rgba(255,255,255,0.06)",
-					color: "rgba(240,242,255,0.45)",
-					border: "1px solid rgba(255,255,255,0.08)",
-				}}
-				className="sm:inline-flex"
-			>
-				{subscriptionPlan}
-			</span>
+      <button
+        type="button"
+        onClick={onToggleComments}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.4rem",
+          padding: "0.45rem 0.8rem",
+          borderRadius: 9,
+          border: commentsOpen
+            ? "1px solid var(--brand)"
+            : "1px solid rgba(255,255,255,0.1)",
+          background: commentsOpen ? "var(--brand-subtle)" : "transparent",
+          color: commentsOpen ? "var(--brand)" : "rgba(240,242,255,0.6)",
+          cursor: "pointer",
+          fontFamily: "inherit",
+          fontSize: "0.8rem",
+          fontWeight: 600,
+          whiteSpace: "nowrap",
+        }}
+      >
+        <IconComment />
+        Comments
+      </button>
 
-			<button
-				id="editor-save-btn"
-				type="button"
-				onClick={onSave}
-				disabled={isSaving}
-				style={{
-					display: "inline-flex",
-					alignItems: "center",
-					gap: "0.45rem",
-					padding: "0.5rem 1rem",
-					borderRadius: 9,
-					border: "none",
-					cursor: isSaving ? "not-allowed" : "pointer",
-					fontSize: "0.85rem",
-					fontWeight: 700,
-					background:
-						"linear-gradient(135deg, var(--brand), var(--brand-deep))",
-					color: "#fff",
-					opacity: isSaving ? 0.7 : 1,
-					boxShadow: "0 3px 16px var(--brand-glow)",
-					fontFamily: "inherit",
-					transition: "opacity 0.15s, box-shadow 0.15s",
-				}}
-			>
-				{isSaving ? (
-					<span
-						style={{
-							width: 13,
-							height: 13,
-							borderRadius: "50%",
-							border: "2px solid rgba(255,255,255,0.3)",
-							borderTopColor: "#fff",
-							animation: "spin 0.65s linear infinite",
-							flexShrink: 0,
-						}}
-					/>
-				) : (
-					<IconSave />
-				)}
-				{isSaving ? "Saving…" : "Save"}
-			</button>
-		</div>
-	);
+      {saveMessage && (
+        <span
+          style={{
+            fontSize: "0.78rem",
+            color: "#34d399",
+            whiteSpace: "nowrap",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.3rem",
+          }}
+        >
+          <IconCheck /> {saveMessage}
+        </span>
+      )}
+      {saveError && (
+        <span
+          style={{
+            fontSize: "0.78rem",
+            color: "#f87171",
+            whiteSpace: "nowrap",
+            maxWidth: 200,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {saveError}
+        </span>
+      )}
+
+      {publishMessage && (
+        <span
+          style={{
+            fontSize: "0.78rem",
+            color: "#34d399",
+            whiteSpace: "nowrap",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.3rem",
+          }}
+        >
+          <IconCheck /> {publishMessage}
+        </span>
+      )}
+      {publishError && (
+        <span
+          style={{
+            fontSize: "0.78rem",
+            color: "#f87171",
+            whiteSpace: "nowrap",
+            maxWidth: 200,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {publishError}
+        </span>
+      )}
+
+      {/* {hasUnpublishedChanges && !publishMessage && (
+        <span
+          title="Your draft has changes that aren't live yet"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.35rem",
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            color: "#fbbf24",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "#fbbf24",
+            }}
+          />
+          Unpublished changes
+        </span>
+      )} */}
+
+      <span
+        style={{
+          display: "none",
+          padding: "0.2rem 0.6rem",
+          borderRadius: 999,
+          fontSize: "0.68rem",
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          background: "rgba(255,255,255,0.06)",
+          color: "rgba(240,242,255,0.45)",
+          border: "1px solid rgba(255,255,255,0.08)",
+        }}
+        className="sm:inline-flex"
+      >
+        {subscriptionPlan}
+      </span>
+
+      <button
+        id="editor-save-btn"
+        type="button"
+        onClick={onSave}
+        disabled={isSaving}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.45rem",
+          padding: "0.5rem 1rem",
+          borderRadius: 9,
+          border: "1px solid rgba(255,255,255,0.12)",
+          cursor: isSaving ? "not-allowed" : "pointer",
+          fontSize: "0.85rem",
+          fontWeight: 700,
+          background: "transparent",
+          color: "rgba(240,242,255,0.85)",
+          opacity: isSaving ? 0.7 : 1,
+          fontFamily: "inherit",
+          transition: "opacity 0.15s",
+        }}
+      >
+        {isSaving ? (
+          <span
+            style={{
+              width: 13,
+              height: 13,
+              borderRadius: "50%",
+              border: "2px solid rgba(255,255,255,0.3)",
+              borderTopColor: "#fff",
+              animation: "spin 0.65s linear infinite",
+              flexShrink: 0,
+            }}
+          />
+        ) : (
+          <IconSave />
+        )}
+        {isSaving ? "Saving…" : "Save Draft"}
+      </button>
+
+      <button
+        id="editor-publish-btn"
+        type="button"
+        onClick={onPublish}
+        disabled={isPublishing}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.45rem",
+          padding: "0.5rem 1rem",
+          borderRadius: 9,
+          border: "none",
+          cursor: isPublishing ? "not-allowed" : "pointer",
+          fontSize: "0.85rem",
+          fontWeight: 700,
+          background:
+            "linear-gradient(135deg, var(--brand), var(--brand-deep))",
+          color: "#fff",
+          opacity: isPublishing ? 0.7 : 1,
+          boxShadow: "0 3px 16px var(--brand-glow)",
+          fontFamily: "inherit",
+          transition: "opacity 0.15s, box-shadow 0.15s",
+        }}
+      >
+        {isPublishing ? (
+          <span
+            style={{
+              width: 13,
+              height: 13,
+              borderRadius: "50%",
+              border: "2px solid rgba(255,255,255,0.3)",
+              borderTopColor: "#fff",
+              animation: "spin 0.65s linear infinite",
+              flexShrink: 0,
+            }}
+          />
+        ) : (
+          <IconUpload />
+        )}
+        {isPublishing ? "Publishing…" : "Publish"}
+      </button>
+    </div>
+  );
 }
 
 export function TemplateEditorClient({
-	templateId,
-	templateName,
-	templateKind,
-	templateParentId,
-	initialDesignJson,
-	subscriptionPlan,
-	useAi,
-	aiProvider,
-	aiTier,
-	unsplashKey,
-	pexelsKey,
-	pixabayKey,
-	currentUserId,
-	currentUserRole,
-	organizationId,
-	isBlogLayout,
-	commerceEnabled,
-	maildripConnected,
-	rootTemplateId,
+  templateId,
+  templateName,
+  templateKind,
+  templateParentId,
+  initialDesignJson,
+  liveDesignJson,
+  hasUnpublishedChanges: initialHasUnpublishedChanges,
+  subscriptionPlan,
+  useAi,
+  aiProvider,
+  aiTier,
+  unsplashKey,
+  pexelsKey,
+  pixabayKey,
+  currentUserId,
+  currentUserRole,
+  organizationId,
+  isBlogLayout,
+  commerceEnabled,
+  maildripConnected,
+  rootTemplateId,
 }: Props) {
-	const router = useRouter();
-	const searchParams = useSearchParams();
-	const builderRef = useRef<PlexoBuilderRef>(null);
-	const [isSaving, setIsSaving] = useState(false);
-	const [saveMessage, setSaveMessage] = useState<string | null>(null);
-	const [saveError, setSaveError] = useState<string | null>(null);
-	const [showPublishModal, setShowPublishModal] = useState(false);
-	const [modalDomainType, setModalDomainType] = useState<
-		"SUBDOMAIN" | "CUSTOM" | "BUY"
-	>("SUBDOMAIN");
-	const [modalSubdomainPrefix, setModalSubdomainPrefix] = useState("");
-	const [modalCustomDomain, setModalCustomDomain] = useState("");
-	const [modalIsSubmitting, setModalIsSubmitting] = useState(false);
-	const [modalError, setModalError] = useState<string | null>(null);
-	const [modalSuccess, setModalSuccess] = useState<string | null>(null);
-	const [baseDomain, setBaseDomain] = useState("plexo.charisol.io");
-	// The actual CloudFront routing endpoint a CUSTOM domain's CNAME must target — distinct
-	// from baseDomain (the free-subdomain wildcard base, e.g. "plexopages.com") above. This
-	// modal used to show baseDomain here instead, which pointed customers at the wrong
-	// CNAME target entirely; see handleModalPublish's own comment on the rest of the fix.
-	const [routingEndpoint, setRoutingEndpoint] = useState<string | null>(null);
-	const [modalCertValidation, setModalCertValidation] = useState<{ name: string; value: string } | null>(null);
-	// Deep-linked from a mention/reply notification email (?comment=<id>) — opens the
-	// panel straight to that thread. See lib/mail/templates.ts's buildMentionEmail.
-	const [commentsOpen, setCommentsOpen] = useState(() => searchParams.has("comment"));
-	const [pendingPin, setPendingPin] = useState<import("@charisol/plexo-sdk").CommentTarget | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const builderRef = useRef<PlexoBuilderRef>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(
+    initialHasUnpublishedChanges,
+  );
+  const [autoSaveNotification, setAutoSaveNotification] = useState<
+    string | null
+  >(null);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.getItem(`autosave-${templateId}`);
+    return stored === null ? true : stored === "true";
+  });
+  // Baseline for the "is the draft actually different from what's live" check below —
+  // a plain string compare is far cheaper than deep-diffing the design tree on every
+  // autosave tick. Updated after every successful publish.
+  const liveDesignJsonRef = useRef(JSON.stringify(liveDesignJson));
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishMessage, setPublishMessage] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const [modalDomainType, setModalDomainType] = useState<
+    "SUBDOMAIN" | "CUSTOM" | "BUY"
+  >("SUBDOMAIN");
+  const [modalSubdomainPrefix, setModalSubdomainPrefix] = useState("");
+  const [modalCustomDomain, setModalCustomDomain] = useState("");
+  const [modalIsSubmitting, setModalIsSubmitting] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [modalSuccess, setModalSuccess] = useState<string | null>(null);
+  const [baseDomain, setBaseDomain] = useState("plexo.charisol.io");
+  // The actual CloudFront routing endpoint a CUSTOM domain's CNAME must target — distinct
+  // from baseDomain (the free-subdomain wildcard base, e.g. "plexopages.com") above. This
+  // modal used to show baseDomain here instead, which pointed customers at the wrong
+  // CNAME target entirely; see handleModalPublish's own comment on the rest of the fix.
+  const [routingEndpoint, setRoutingEndpoint] = useState<string | null>(null);
+  const [modalCertValidation, setModalCertValidation] = useState<{
+    name: string;
+    value: string;
+  } | null>(null);
+  // Deep-linked from a mention/reply notification email (?comment=<id>) — opens the
+  // panel straight to that thread. See lib/mail/templates.ts's buildMentionEmail.
+  const [commentsOpen, setCommentsOpen] = useState(() =>
+    searchParams.has("comment"),
+  );
+  const [pendingPin, setPendingPin] = useState<
+    import("@charisol/plexo-sdk").CommentTarget | null
+  >(null);
 
-	const isEmail = templateKind === "EMAIL";
-	// Viewer/Commenter roles get a read-only canvas (enforced for real server-side by
-	// every mutating route's requirePermission check — this is UX support only, see
-	// plexo-sdk's readOnly prop docs).
-	const isReadOnlyRole = currentUserRole === "viewer" || currentUserRole === "commenter";
+  const isEmail = templateKind === "EMAIL";
+  // Viewer/Commenter roles get a read-only canvas (enforced for real server-side by
+  // every mutating route's requirePermission check — this is UX support only, see
+  // plexo-sdk's readOnly prop docs).
+  const isReadOnlyRole =
+    currentUserRole === "viewer" || currentUserRole === "commenter";
 
-	/** Exports and persists the current canvas without any of the save button's UI side effects — used when switching pages so the outgoing page's edits aren't lost. */
-	async function flushSave(): Promise<void> {
-		if (!builderRef.current) return;
-		const mode = isEmail ? "email" : "landing_page";
-		const exported = await builderRef.current.exportDesign(mode);
-		const response = await fetch(`/api/templates/update/${templateId}`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				designJson: exported.json,
-				compiledHtml: exported.html,
-			}),
-		});
-		if (!response.ok) {
-			const payload = (await response.json().catch(() => ({}))) as { error?: string };
-			throw new Error(payload.error ?? "Unable to save template.");
-		}
-	}
+  /** Exports and persists the current canvas without any of the save button's UI side effects — used when switching pages so the outgoing page's edits aren't lost. */
+  async function flushSave(): Promise<{ json: TemplateJSON; html: string }> {
+    if (!builderRef.current) return { json: initialDesignJson, html: "" };
+    const mode = isEmail ? "email" : "landing_page";
+    const exported = await builderRef.current.exportDesign(mode);
+    const response = await fetch(`/api/templates/update/${templateId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        designJson: exported.json,
+        compiledHtml: exported.html,
+      }),
+    });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      throw new Error(payload.error ?? "Unable to save template.");
+    }
+    setHasUnpublishedChanges(
+      JSON.stringify(exported.json) !== liveDesignJsonRef.current,
+    );
+    return exported;
+  }
 
-	/** Quiet background autosave (PlexoBuilder's own autoSave/autoSaveDuration timer) — persists
-	 * the same way flushSave/handleSave do, but skips the UI side effects that make sense for an
-	 * explicit click and not a silent tick: no saveMessage toast, no router.refresh(), and no
-	 * publish-modal nudge. A persistently-failing autosave still surfaces via saveError so it
-	 * doesn't fail silently forever. */
-	function handleAutoSave(data: { json: TemplateJSON; html: string }): void {
-		fetch(`/api/templates/update/${templateId}`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ designJson: data.json, compiledHtml: data.html }),
-		})
-			.then(async (response) => {
-				if (!response.ok) {
-					const payload = (await response.json().catch(() => ({}))) as { error?: string };
-					throw new Error(payload.error ?? "Unable to save template.");
-				}
-				setSaveError(null);
-			})
-			.catch((err) => {
-				console.warn("Autosave failed:", err);
-				setSaveError(err instanceof Error ? err.message : "Autosave failed.");
-			});
-	}
+  /** Quiet background autosave (PlexoBuilder's own autoSave/autoSaveDuration timer) — persists
+   * the same way flushSave/handleSave do, but skips the UI side effects that make sense for an
+   * explicit click and not a silent tick: no saveMessage toast, no router.refresh(), and no
+   * publish-modal nudge. A persistently-failing autosave still surfaces via saveError so it
+   * doesn't fail silently forever. */
+  function handleAutoSave(data: { json: TemplateJSON; html: string }): void {
+    fetch(`/api/templates/update/${templateId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ designJson: data.json, compiledHtml: data.html }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(payload.error ?? "Unable to save template.");
+        }
+        setSaveError(null);
+        setHasUnpublishedChanges(
+          JSON.stringify(data.json) !== liveDesignJsonRef.current,
+        );
+        // setSaveMessage("Draft saved.");
+        // setTimeout(() => setSaveMessage(null), 3000);
+      })
+      .catch((err) => {
+        console.warn("Autosave failed:", err);
+        setSaveError(err instanceof Error ? err.message : "Autosave failed.");
+      });
+  }
 
-	/** Backs form_container's 'maildrip' provider "Connect MailDrip" flow (see
-	 * plexo-sdk's FormContainerPropertiesAccordion / MaildripConnectPanel) — a real
-	 * login-or-create-account modal inside the builder itself, never a redirect to
-	 * app.maildrip.io. Every action is relayed to our own backend, which is the only place
-	 * a password can be forwarded to MailDrip's API and the resulting API key decrypted/
-	 * encrypted for storage; see app/api/v1/maildrip/[templateId]/connect's own comment for
-	 * the full register/login/verify/resend state machine. */
-	async function handleMaildripAuth(
-		input:
-			| { action: "register"; email: string; password: string; name: string }
-			| { action: "login"; email: string; password: string }
-			| { action: "verify"; email: string; code: string; password: string }
-			| { action: "resend"; email: string },
-	): Promise<{ status: "connected" } | { status: "verify_required"; email: string } | { status: "sent" } | { error: string }> {
-		try {
-			const response = await fetch(`/api/v1/maildrip/${rootTemplateId}/connect`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(input),
-			});
-			const payload = await response.json().catch(() => ({}));
-			if (!response.ok) {
-				return { error: typeof payload.error === "string" ? payload.error : "MailDrip request failed." };
-			}
-			return payload;
-		} catch {
-			return { error: "Could not reach the server. Please try again." };
-		}
-	}
+  /** Backs form_container's 'maildrip' provider "Connect MailDrip" flow (see
+   * plexo-sdk's FormContainerPropertiesAccordion / MaildripConnectPanel) — a real
+   * login-or-create-account modal inside the builder itself, never a redirect to
+   * app.maildrip.io. Every action is relayed to our own backend, which is the only place
+   * a password can be forwarded to MailDrip's API and the resulting API key decrypted/
+   * encrypted for storage; see app/api/v1/maildrip/[templateId]/connect's own comment for
+   * the full register/login/verify/resend state machine. */
+  async function handleMaildripAuth(
+    input:
+      | { action: "register"; email: string; password: string; name: string }
+      | { action: "login"; email: string; password: string }
+      | { action: "verify"; email: string; code: string; password: string }
+      | { action: "resend"; email: string },
+  ): Promise<
+    | { status: "connected" }
+    | { status: "verify_required"; email: string }
+    | { status: "sent" }
+    | { error: string }
+  > {
+    try {
+      const response = await fetch(
+        `/api/v1/maildrip/${rootTemplateId}/connect`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        return {
+          error:
+            typeof payload.error === "string"
+              ? payload.error
+              : "MailDrip request failed.",
+        };
+      }
+      return payload;
+    } catch {
+      return { error: "Could not reach the server. Please try again." };
+    }
+  }
 
-	/** Backs form_container's 'maildrip' provider "Create MailDrip Opt-in Page" action (see
-	 * plexo-sdk's FormContainerPropertiesAccordion) — brokers the call to the site's own
-	 * MailDrip account through our own backend, which is the only place the site's
-	 * encrypted MailDrip API key can be decrypted. */
-	async function handleCreateMaildripOptInPage(title: string): Promise<{ pageId: string; editUrl: string } | { error: string }> {
-		try {
-			const response = await fetch(`/api/v1/maildrip/${rootTemplateId}/opt-in-pages`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ title }),
-			});
-			const payload = await response.json().catch(() => ({}));
-			if (!response.ok) {
-				const message = typeof payload.error === "string" ? payload.error : "Could not create the MailDrip opt-in page.";
-				return { error: payload.needsMaildripKey ? `${message} (Commerce → Settings → MailDrip)` : message };
-			}
-			return { pageId: payload.pageId, editUrl: payload.editUrl };
-		} catch {
-			return { error: "Could not reach the server. Please try again." };
-		}
-	}
+  /** Backs form_container's 'maildrip' provider "Create MailDrip Opt-in Page" action (see
+   * plexo-sdk's FormContainerPropertiesAccordion) — brokers the call to the site's own
+   * MailDrip account through our own backend, which is the only place the site's
+   * encrypted MailDrip API key can be decrypted. */
+  async function handleCreateMaildripOptInPage(
+    title: string,
+  ): Promise<{ pageId: string; editUrl: string } | { error: string }> {
+    try {
+      const response = await fetch(
+        `/api/v1/maildrip/${rootTemplateId}/opt-in-pages`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title }),
+        },
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const message =
+          typeof payload.error === "string"
+            ? payload.error
+            : "Could not create the MailDrip opt-in page.";
+        return {
+          error: payload.needsMaildripKey
+            ? `${message} (Commerce → Settings → MailDrip)`
+            : message,
+        };
+      }
+      return { pageId: payload.pageId, editUrl: payload.editUrl };
+    } catch {
+      return { error: "Could not reach the server. Please try again." };
+    }
+  }
 
-	async function handleNavigateToPage(pageId: string): Promise<void> {
-		if (pageId === templateId) return;
-		try {
-			await flushSave();
-		} catch (err) {
-			console.error("Failed to save before switching pages:", err);
-		}
-		router.push(`/dashboard/templates/${pageId}`);
-	}
+  async function handleNavigateToPage(pageId: string): Promise<void> {
+    if (pageId === templateId) return;
+    try {
+      await flushSave();
+    } catch (err) {
+      console.error("Failed to save before switching pages:", err);
+    }
+    router.push(`/dashboard/templates/${pageId}`);
+  }
 
-	async function handleSave(): Promise<void> {
-		if (!builderRef.current) {
-			setSaveError("Builder is not ready yet.");
-			return;
-		}
-		setSaveError(null);
-		setSaveMessage(null);
-		setIsSaving(true);
-		try {
-			await flushSave();
-			setSaveMessage("Design saved successfully.");
-			setTimeout(() => setSaveMessage(null), 3000);
-			router.refresh();
+  function handleToggleAutoSave(): void {
+    const newState = !autoSaveEnabled;
+    setAutoSaveEnabled(newState);
+    try {
+      localStorage.setItem(`autosave-${templateId}`, String(newState));
+    } catch (err) {
+      console.warn("Failed to persist autosave preference:", err);
+    }
+    setAutoSaveNotification(newState ? "Autosave on" : "Autosave off");
+    setTimeout(() => setAutoSaveNotification(null), 3000);
+  }
 
-			// Check if it's a landing page and doesn't have a linked domain (sub-pages
-			// share their site's domain and never get their own, so skip them). Blog
-			// layout templates are never published to their own domain either — they're
-			// only ever rendered as a substituted layout for a blog site (see
-			// lib/pub/blogLayoutRender.ts) — so the nudge would be meaningless there.
-			if (templateKind === "LANDING_PAGE" && !templateParentId && !isBlogLayout) {
-				try {
-					const checkRes = await fetch(
-						`/api/v1/domains?templateId=${templateId}`,
-					);
-					const checkData = await checkRes.json();
-					if (checkData.domains && checkData.domains.length === 0) {
-						if (checkData.baseDomain) {
-							setBaseDomain(checkData.baseDomain);
-						}
-						if (checkData.routingEndpoint) {
-							setRoutingEndpoint(checkData.routingEndpoint);
-						}
-						setShowPublishModal(true);
-					}
-				} catch (e) {
-					console.error("Failed to check domain status:", e);
-				}
-			}
-		} catch (error) {
-			setSaveError(
-				error instanceof Error ? error.message : "Unable to save template.",
-			);
-		} finally {
-			setIsSaving(false);
-		}
-	}
+  async function handleSave(): Promise<void> {
+    if (!builderRef.current) {
+      setSaveError("Builder is not ready yet.");
+      return;
+    }
+    setSaveError(null);
+    setSaveMessage(null);
+    setIsSaving(true);
+    try {
+      await flushSave();
+      setSaveMessage("Draft saved.");
+      setTimeout(() => setSaveMessage(null), 3000);
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "Unable to save template.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
-	// SUBDOMAIN/CUSTOM only — BUY has its own submission flow entirely (BuyDomainFlow calls
-	// POST /api/v1/domains/purchase directly, not this handler).
-	async function handleModalPublish(e: React.FormEvent) {
-		e.preventDefault();
-		setModalError(null);
-		setModalSuccess(null);
-		setModalCertValidation(null);
+  /** Publish: snapshots the current draft as a new immutable version and makes it the
+   * live site (POST /api/templates/:id/publish — lib/templateVersions.ts). Flushes the
+   * canvas's own latest edits into the draft first, same as switching pages does, so
+   * Publish always goes live with whatever is on the canvas right now, not a stale
+   * previously-autosaved draft. */
+  async function handlePublish(): Promise<void> {
+    if (!builderRef.current) {
+      setPublishError("Builder is not ready yet.");
+      return;
+    }
+    setPublishError(null);
+    setPublishMessage(null);
+    setIsPublishing(true);
+    try {
+      const exported = await flushSave();
+      const response = await fetch(`/api/templates/${templateId}/publish`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(payload.error ?? "Unable to publish template.");
+      }
+      liveDesignJsonRef.current = JSON.stringify(exported.json);
+      setHasUnpublishedChanges(false);
+      setPublishMessage("Published — now live.");
+      setTimeout(() => setPublishMessage(null), 3000);
+      router.refresh();
 
-		const inputDomain =
-			modalDomainType === "SUBDOMAIN"
-				? modalSubdomainPrefix
-				: modalCustomDomain;
-		if (!inputDomain.trim()) {
-			setModalError("Please enter a domain name.");
-			return;
-		}
+      // Check if it's a landing page and doesn't have a linked domain (sub-pages
+      // share their site's domain and never get their own, so skip them). Blog
+      // layout templates are never published to their own domain either — they're
+      // only ever rendered as a substituted layout for a blog site (see
+      // lib/pub/blogLayoutRender.ts) — so the nudge would be meaningless there.
+      if (
+        templateKind === "LANDING_PAGE" &&
+        !templateParentId &&
+        !isBlogLayout
+      ) {
+        try {
+          const checkRes = await fetch(
+            `/api/v1/domains?templateId=${templateId}`,
+          );
+          const checkData = await checkRes.json();
+          if (checkData.domains && checkData.domains.length === 0) {
+            if (checkData.baseDomain) {
+              setBaseDomain(checkData.baseDomain);
+            }
+            if (checkData.routingEndpoint) {
+              setRoutingEndpoint(checkData.routingEndpoint);
+            }
+            setShowPublishModal(true);
+          }
+        } catch (e) {
+          console.error("Failed to check domain status:", e);
+        }
+      }
+    } catch (error) {
+      setPublishError(
+        error instanceof Error ? error.message : "Unable to publish template.",
+      );
+    } finally {
+      setIsPublishing(false);
+    }
+  }
 
-		setModalIsSubmitting(true);
-		try {
-			const response = await fetch("/api/v1/domains", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					templateId,
-					type: modalDomainType,
-					domain: inputDomain,
-				}),
-			});
-			const data = await response.json();
-			if (!response.ok) {
-				throw new Error(data.error ?? "Failed to publish domain.");
-			}
+  // SUBDOMAIN/CUSTOM only — BUY has its own submission flow entirely (BuyDomainFlow calls
+  // POST /api/v1/domains/purchase directly, not this handler).
+  async function handleModalPublish(e: React.FormEvent) {
+    e.preventDefault();
+    setModalError(null);
+    setModalSuccess(null);
+    setModalCertValidation(null);
 
-			// Update local storage key domain mapping config to sync immediately
-			try {
-				const key = `plexo-published-domain-${templateId}`;
-				localStorage.setItem(
-					key,
-					JSON.stringify({ domain: data.domain.domain, type: modalDomainType }),
-				);
-			} catch (err) {
-				console.warn(err);
-			}
+    const inputDomain =
+      modalDomainType === "SUBDOMAIN"
+        ? modalSubdomainPrefix
+        : modalCustomDomain;
+    if (!inputDomain.trim()) {
+      setModalError("Please enter a domain name.");
+      return;
+    }
 
-			// A CUSTOM domain isn't actually live yet — it needs the cert-validation CNAME
-			// added too (app/api/internal/certificate-attachment finishes the rest
-			// automatically once that record propagates). Surface it here instead of
-			// closing the modal on a false "published!" — this was the modal's own real
-			// gap: it never showed this record at all, so a customer using THIS flow (as
-			// opposed to the fuller Domains dashboard drawer, which always has) had no way
-			// to find out what to add.
-			if (modalDomainType === "CUSTOM" && data.domain?.certificateValidationName && data.domain?.certificateValidationValue) {
-				setModalCertValidation({ name: data.domain.certificateValidationName, value: data.domain.certificateValidationValue });
-				setModalSuccess("Domain added — add the DNS records below, then this finishes automatically.");
-			} else {
-				setModalSuccess("Landing page published successfully!");
-				setTimeout(() => {
-					setShowPublishModal(false);
-					setModalSuccess(null);
-					setModalSubdomainPrefix("");
-					setModalCustomDomain("");
-				}, 2000);
-			}
-		} catch (err) {
-			setModalError(err instanceof Error ? err.message : "Publish failed.");
-		} finally {
-			setModalIsSubmitting(false);
-		}
-	}
+    setModalIsSubmitting(true);
+    try {
+      const response = await fetch("/api/v1/domains", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          templateId,
+          type: modalDomainType,
+          domain: inputDomain,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to publish domain.");
+      }
 
-	return (
-		<div
-			style={{
-				display: "flex",
-				flexDirection: "column",
-				height: "100vh",
-				overflow: "hidden",
-			}}
-		>
-			{templateKind === "LANDING_PAGE" && !isBlogLayout && (
-				<PagesPanel
-					templateId={templateId}
-					subscriptionPlan={subscriptionPlan}
-					onNavigate={(pageId) => void handleNavigateToPage(pageId)}
-				/>
-			)}
-			{isBlogLayout && (
-				<div
-					style={{
-						padding: "0.6rem 1rem",
-						background: "rgba(139,92,246,0.1)",
-						borderBottom: "1px solid rgba(139,92,246,0.25)",
-						color: "#c4b5fd",
-						fontSize: "0.78rem",
-						textAlign: "center",
-					}}
-				>
-					Designing a custom blog layout — drag in the &quot;Blog&quot; blocks from the panel (Post Title, Post Content,
-					Featured Image, Post Date, Post Author, Categories, Comments{"; or Post List for a listing layout"}) wherever
-					you want your real content to appear. This template needs at least one <strong>Post Content</strong> (or{" "}
-					<strong>Post List</strong>) block to go live.
-				</div>
-			)}
-			<div style={{ flex: 1, overflow: "hidden", background: "#0a0c15" }}>
-				<PlexoBuilder
-					ref={builderRef}
-					apiKey="workspace-internal"
-					mode={isEmail ? "email" : "landing_page"}
-					isBlogLayout={isBlogLayout}
-					commerceEnabled={commerceEnabled}
-					maildripConnected={maildripConnected}
-					onMaildripAuth={isEmail ? undefined : handleMaildripAuth}
-					initialTemplate={initialDesignJson}
-					backgroundColor="#0b1526"
-					themeBgColor="#8b5cf6"
-					themeFgColor="#ffffff"
-					textColor="#ecfeff"
-					showSaveButton={false}
-					autoSave
-					autoSaveDuration={6000}
-					onSave={handleAutoSave}
-					onCreateMaildripOptInPage={isEmail ? undefined : handleCreateMaildripOptInPage}
-					useAi={useAi}
-					aiProvider={aiProvider}
-					aiTier={aiTier}
-					allowPublishLandingPage={templateKind === "LANDING_PAGE" && !isBlogLayout}
-					templateId={templateId}
-					unsplashKey={unsplashKey}
-					pexelsKey={pexelsKey}
-					pixabayKey={pixabayKey}
-					readOnly={isReadOnlyRole}
-					// commentMode only gates the separate "click anywhere on the canvas" behavior.
-					// onRequestComment is always live so the selected-element toolbar's own Comment
-					// button (see plexo-sdk's SortableElement.tsx) works regardless of whether the
-					// Comments panel toggle is on — clicking it opens the panel automatically.
-					commentMode={commentsOpen}
-					onRequestComment={(target) => {
-						setPendingPin(target);
-						setCommentsOpen(true);
-					}}
-					headerLeftContent={
-						<EditorHeaderLeft
-							isEmail={isEmail}
-							templateName={templateName}
-							onBack={() => {
-								// The Detail page is server-rendered fresh on every navigation, so a
-								// just-saved edit is never stale there the way the old flat Templates
-								// list needed a forced refresh to avoid.
-								router.push(`/dashboard/templates/${rootTemplateId}/detail`);
-							}}
-						/>
-					}
-					headerRightContent={
-						<EditorHeaderRight
-							saveMessage={saveMessage}
-							saveError={saveError}
-							subscriptionPlan={subscriptionPlan}
-							isSaving={isSaving}
-							onSave={() => void handleSave()}
-							commentsOpen={commentsOpen}
-							onToggleComments={() => {
-								setCommentsOpen((v) => !v);
-								setPendingPin(null);
-							}}
-						/>
-					}
-					{...({ __internalPlan: subscriptionPlan } as any)}
-				/>
+      // Update local storage key domain mapping config to sync immediately
+      try {
+        const key = `plexo-published-domain-${templateId}`;
+        localStorage.setItem(
+          key,
+          JSON.stringify({ domain: data.domain.domain, type: modalDomainType }),
+        );
+      } catch (err) {
+        console.warn(err);
+      }
 
-				<CommentLayer
-					builderRef={builderRef}
-					templateId={templateId}
-					organizationId={organizationId}
-					currentUserId={currentUserId}
-					currentUserRole={currentUserRole}
-					active={commentsOpen}
-					pendingPin={pendingPin}
-					onConsumePendingPin={() => setPendingPin(null)}
-					onClose={() => setCommentsOpen(false)}
-					deepLinkCommentId={searchParams.get("comment")}
-				/>
-			</div>
+      // A CUSTOM domain isn't actually live yet — it needs the cert-validation CNAME
+      // added too (app/api/internal/certificate-attachment finishes the rest
+      // automatically once that record propagates). Surface it here instead of
+      // closing the modal on a false "published!" — this was the modal's own real
+      // gap: it never showed this record at all, so a customer using THIS flow (as
+      // opposed to the fuller Domains dashboard drawer, which always has) had no way
+      // to find out what to add.
+      if (
+        modalDomainType === "CUSTOM" &&
+        data.domain?.certificateValidationName &&
+        data.domain?.certificateValidationValue
+      ) {
+        setModalCertValidation({
+          name: data.domain.certificateValidationName,
+          value: data.domain.certificateValidationValue,
+        });
+        setModalSuccess(
+          "Domain added — add the DNS records below, then this finishes automatically.",
+        );
+      } else {
+        setModalSuccess("Landing page published successfully!");
+        setTimeout(() => {
+          setShowPublishModal(false);
+          setModalSuccess(null);
+          setModalSubdomainPrefix("");
+          setModalCustomDomain("");
+        }, 2000);
+      }
+    } catch (err) {
+      setModalError(err instanceof Error ? err.message : "Publish failed.");
+    } finally {
+      setModalIsSubmitting(false);
+    }
+  }
 
-			{/* ── Publish Modal Popup ──────────────────── */}
-			{showPublishModal && (
-				<div
-					style={{
-						position: "fixed",
-						top: 0,
-						left: 0,
-						right: 0,
-						bottom: 0,
-						background: "rgba(3, 7, 18, 0.85)",
-						zIndex: 100,
-						display: "grid",
-						placeItems: "center",
-						backdropFilter: "blur(8px)",
-						animation: "fadeIn 0.2s ease-out",
-					}}
-				>
-					<div
-						style={{
-							background: "#0d1324",
-							border: "1px solid rgba(255,255,255,0.08)",
-							borderRadius: 16,
-							width: "90%",
-							maxWidth: 480,
-						maxHeight: "85vh",
-						overflowY: "auto",
-							padding: "1.75rem",
-							boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
-						}}
-					>
-						<div
-							style={{
-								display: "flex",
-								justifyContent: "space-between",
-								alignItems: "center",
-								marginBottom: "1.25rem",
-							}}
-						>
-							<h2
-								style={{
-									fontSize: "1.2rem",
-									fontWeight: 800,
-									color: "#f0f2ff",
-									fontFamily: "var(--font-heading)",
-									display: "flex",
-									alignItems: "center",
-									gap: "0.5rem",
-								}}
-							>
-								<IconRocket /> Publish Landing Page
-							</h2>
-							<button
-								onClick={() => setShowPublishModal(false)}
-								style={{
-									background: "none",
-									border: "none",
-									color: "rgba(240,242,255,0.4)",
-									cursor: "pointer",
-									display: "flex",
-									alignItems: "center",
-								}}
-							>
-								<IconClose />
-							</button>
-						</div>
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        overflow: "hidden",
+      }}
+    >
+      {templateKind === "LANDING_PAGE" && !isBlogLayout && (
+        <PagesPanel
+          templateId={templateId}
+          subscriptionPlan={subscriptionPlan}
+          onNavigate={(pageId) => void handleNavigateToPage(pageId)}
+        />
+      )}
+      {isBlogLayout && (
+        <div
+          style={{
+            padding: "0.6rem 1rem",
+            background: "rgba(var(--brand-rgb),0.1)",
+            borderBottom: "1px solid rgba(var(--brand-rgb),0.25)",
+            color: "#c4b5fd",
+            fontSize: "0.78rem",
+            textAlign: "center",
+          }}
+        >
+          Designing a custom blog layout — drag in the &quot;Blog&quot; blocks
+          from the panel (Post Title, Post Content, Featured Image, Post Date,
+          Post Author, Categories, Comments
+          {"; or Post List for a listing layout"}) wherever you want your real
+          content to appear. This template needs at least one{" "}
+          <strong>Post Content</strong> (or <strong>Post List</strong>) block to
+          go live.
+        </div>
+      )}
+      <div style={{ flex: 1, overflow: "hidden", background: "#0a0c15" }}>
+        <PlexoBuilder
+          ref={builderRef}
+          apiKey="workspace-internal"
+          mode={isEmail ? "email" : "landing_page"}
+          isBlogLayout={isBlogLayout}
+          commerceEnabled={commerceEnabled}
+          maildripConnected={maildripConnected}
+          onMaildripAuth={isEmail ? undefined : handleMaildripAuth}
+          initialTemplate={initialDesignJson}
+          backgroundColor="#0b1526"
+          themeBgColor="var(--brand)"
+          themeFgColor="#ffffff"
+          textColor="#ecfeff"
+          showSaveButton={false}
+          autoSave={autoSaveEnabled}
+          autoSaveDuration={6000}
+          onSave={handleAutoSave}
+          onCreateMaildripOptInPage={
+            isEmail ? undefined : handleCreateMaildripOptInPage
+          }
+          useAi={useAi}
+          aiProvider={aiProvider}
+          aiTier={aiTier}
+          allowPublishLandingPage={
+            templateKind === "LANDING_PAGE" && !isBlogLayout
+          }
+          templateId={templateId}
+          unsplashKey={unsplashKey}
+          pexelsKey={pexelsKey}
+          pixabayKey={pixabayKey}
+          readOnly={isReadOnlyRole}
+          // commentMode only gates the separate "click anywhere on the canvas" behavior.
+          // onRequestComment is always live so the selected-element toolbar's own Comment
+          // button (see plexo-sdk's SortableElement.tsx) works regardless of whether the
+          // Comments panel toggle is on — clicking it opens the panel automatically.
+          commentMode={commentsOpen}
+          onRequestComment={(target) => {
+            setPendingPin(target);
+            setCommentsOpen(true);
+          }}
+          headerLeftContent={
+            <EditorHeaderLeft
+              isEmail={isEmail}
+              templateName={templateName}
+              onBack={() => {
+                // The Detail page is server-rendered fresh on every navigation, so a
+                // just-saved edit is never stale there the way the old flat Templates
+                // list needed a forced refresh to avoid.
+                router.push(`/dashboard/templates/${rootTemplateId}/detail`);
+              }}
+            />
+          }
+          headerRightContent={
+            <EditorHeaderRight
+              saveMessage={saveMessage}
+              saveError={saveError}
+              subscriptionPlan={subscriptionPlan}
+              isSaving={isSaving}
+              onSave={() => void handleSave()}
+              hasUnpublishedChanges={hasUnpublishedChanges}
+              isPublishing={isPublishing}
+              publishMessage={publishMessage}
+              publishError={publishError}
+              onPublish={() => void handlePublish()}
+              commentsOpen={commentsOpen}
+              onToggleComments={() => {
+                setCommentsOpen((v) => !v);
+                setPendingPin(null);
+              }}
+              autoSaveEnabled={autoSaveEnabled}
+              onToggleAutoSave={handleToggleAutoSave}
+              autoSaveNotification={autoSaveNotification}
+            />
+          }
+          {...({ __internalPlan: subscriptionPlan } as any)}
+        />
 
-						<p
-							style={{
-								fontSize: "0.82rem",
-								color: "rgba(240,242,255,0.6)",
-								lineHeight: 1.5,
-								marginBottom: "1.25rem",
-							}}
-						>
-							Your changes have been saved! Would you like to publish this
-							landing page to a subdomain or custom domain?
-						</p>
+        <CommentLayer
+          builderRef={builderRef}
+          templateId={templateId}
+          organizationId={organizationId}
+          currentUserId={currentUserId}
+          currentUserRole={currentUserRole}
+          active={commentsOpen}
+          pendingPin={pendingPin}
+          onConsumePendingPin={() => setPendingPin(null)}
+          onClose={() => setCommentsOpen(false)}
+          deepLinkCommentId={searchParams.get("comment")}
+        />
+      </div>
 
-						<div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-							{/* Type Switch */}
-							<div
-								style={{
-									display: "flex",
-									background: "rgba(255,255,255,0.04)",
-									padding: 3,
-									borderRadius: 8,
-									gap: 2,
-								}}
-							>
-								<button
-									type="button"
-									onClick={() => setModalDomainType("SUBDOMAIN")}
-									style={{
-										flex: 1,
-										padding: "0.35rem",
-										fontSize: "0.78rem",
-										fontWeight: 600,
-										border: "none",
-										cursor: "pointer",
-										borderRadius: 6,
-										background:
-											modalDomainType === "SUBDOMAIN"
-												? "var(--brand)"
-												: "transparent",
-										color:
-											modalDomainType === "SUBDOMAIN"
-												? "#fff"
-												: "rgba(240,242,255,0.55)",
-										transition: "all 0.15s",
-									}}
-								>
-									Subdomain
-								</button>
-								<button
-									type="button"
-									onClick={() => setModalDomainType("CUSTOM")}
-									style={{
-										flex: 1,
-										padding: "0.35rem",
-										fontSize: "0.78rem",
-										fontWeight: 600,
-										border: "none",
-										cursor: "pointer",
-										borderRadius: 6,
-										background:
-											modalDomainType === "CUSTOM"
-												? "var(--brand)"
-												: "transparent",
-										color:
-											modalDomainType === "CUSTOM"
-												? "#fff"
-												: "rgba(240,242,255,0.55)",
-										transition: "all 0.15s",
-									}}
-								>
-									Custom Domain
-								</button>
-								<button
-									type="button"
-									onClick={() => setModalDomainType("BUY")}
-									style={{
-										flex: 1,
-										padding: "0.35rem",
-										fontSize: "0.78rem",
-										fontWeight: 600,
-										border: "none",
-										cursor: "pointer",
-										borderRadius: 6,
-										whiteSpace: "nowrap",
-										background:
-											modalDomainType === "BUY"
-												? "var(--brand)"
-												: "transparent",
-										color:
-											modalDomainType === "BUY"
-												? "#fff"
-												: "rgba(240,242,255,0.55)",
-										transition: "all 0.15s",
-									}}
-								>
-									Buy a Domain
-								</button>
-							</div>
+      {/* ── Publish Modal Popup ──────────────────── */}
+      {showPublishModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(3, 7, 18, 0.85)",
+            zIndex: 100,
+            display: "grid",
+            placeItems: "center",
+            backdropFilter: "blur(8px)",
+            animation: "fadeIn 0.2s ease-out",
+          }}
+        >
+          <div
+            style={{
+              background: "#0d1324",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 16,
+              width: "90%",
+              maxWidth: 480,
+              maxHeight: "85vh",
+              overflowY: "auto",
+              padding: "1.75rem",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "1.25rem",
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: "1.2rem",
+                  fontWeight: 800,
+                  color: "#f0f2ff",
+                  fontFamily: "var(--font-heading)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                }}
+              >
+                <IconRocket /> Publish Landing Page
+              </h2>
+              <button
+                onClick={() => setShowPublishModal(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "rgba(240,242,255,0.4)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <IconClose />
+              </button>
+            </div>
 
-							{modalDomainType === "BUY" ? (
-								<BuyDomainFlow
-									templateId={templateId}
-									resumedPurchase={null}
-									onPurchased={() => setShowPublishModal(false)}
-								/>
-							) : (
-							<form
-								onSubmit={handleModalPublish}
-								style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
-							>
-							{/* Inputs */}
-							{modalDomainType === "SUBDOMAIN" ? (
-								<div>
-									<label
-										htmlFor="modal-subdomain"
-										style={{
-											fontSize: "0.78rem",
-											fontWeight: 600,
-											color: "rgba(240,242,255,0.65)",
-										}}
-									>
-										Configure Subdomain
-									</label>
-									<div style={{ display: "flex", marginTop: "0.35rem" }}>
-										<input
-											id="modal-subdomain"
-											type="text"
-											placeholder="my-landing-page"
-											value={modalSubdomainPrefix}
-											onChange={(e) =>
-												setModalSubdomainPrefix(
-													e.target.value
-														.toLowerCase()
-														.replace(/[^a-z0-9-]/g, ""),
-												)
-											}
-											className="field-input"
-											style={{
-												borderTopRightRadius: 0,
-												borderBottomRightRadius: 0,
-												flex: 1,
-											}}
-										/>
-										<span
-											style={{
-												background: "rgba(255,255,255,0.04)",
-												border: "1px solid rgba(255,255,255,0.08)",
-												borderLeft: "none",
-												borderTopRightRadius: 8,
-												borderBottomRightRadius: 8,
-												display: "flex",
-												alignItems: "center",
-												padding: "0 0.65rem",
-												fontSize: "0.75rem",
-												color: "rgba(240,242,255,0.45)",
-												fontWeight: 550,
-											}}
-										>
-											.{baseDomain === "localhost" ? "localhost" : baseDomain}
-										</span>
-									</div>
-								</div>
-							) : (
-								<div>
-									<label
-										htmlFor="modal-custom"
-										style={{
-											fontSize: "0.78rem",
-											fontWeight: 600,
-											color: "rgba(240,242,255,0.65)",
-										}}
-									>
-										Custom Domain Name
-									</label>
-									<input
-										id="modal-custom"
-										type="text"
-										placeholder="landing.mybrand.com"
-										value={modalCustomDomain}
-										onChange={(e) =>
-											setModalCustomDomain(e.target.value.toLowerCase().trim())
-										}
-										className="field-input"
-										style={{ marginTop: "0.35rem" }}
-									/>
-									<div
-										style={{
-											marginTop: "0.6rem",
-											padding: "0.6rem",
-											background: "rgba(139,92,246,0.04)",
-											border: "1px solid rgba(139,92,246,0.12)",
-											borderRadius: 8,
-											fontSize: "0.72rem",
-											color: "rgba(240,242,255,0.65)",
-											lineHeight: 1.35,
-										}}
-									>
-										Configure a CNAME record mapping your domain to{" "}
-										<code style={{ color: "var(--brand)" }}>{routingEndpoint ?? "connecting…"}</code>.
-									</div>
-									{modalCertValidation && (
-										<div
-											style={{
-												marginTop: "0.5rem",
-												padding: "0.6rem",
-												background: "rgba(52,211,153,0.05)",
-												border: "1px solid rgba(52,211,153,0.2)",
-												borderRadius: 8,
-												fontSize: "0.72rem",
-												color: "rgba(240,242,255,0.65)",
-												lineHeight: 1.35,
-											}}
-										>
-											Also add this certificate-validation CNAME — it proves you own the domain:
-											<div style={{ fontFamily: "monospace", fontSize: "0.68rem", color: "#6ee7b7", marginTop: "0.3rem", wordBreak: "break-all" }}>
-												{modalCertValidation.name} &rarr; {modalCertValidation.value}
-											</div>
-										</div>
-									)}
-								</div>
-							)}
+            <p
+              style={{
+                fontSize: "0.82rem",
+                color: "rgba(240,242,255,0.6)",
+                lineHeight: 1.5,
+                marginBottom: "1.25rem",
+              }}
+            >
+              Your changes have been saved! Would you like to publish this
+              landing page to a subdomain or custom domain?
+            </p>
 
-							{modalError && (
-								<p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}>
-									<IconWarning /> {modalError}
-								</p>
-							)}
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+            >
+              {/* Type Switch */}
+              <div
+                style={{
+                  display: "flex",
+                  background: "rgba(255,255,255,0.04)",
+                  padding: 3,
+                  borderRadius: 8,
+                  gap: 2,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setModalDomainType("SUBDOMAIN")}
+                  style={{
+                    flex: 1,
+                    padding: "0.35rem",
+                    fontSize: "0.78rem",
+                    fontWeight: 600,
+                    border: "none",
+                    cursor: "pointer",
+                    borderRadius: 6,
+                    background:
+                      modalDomainType === "SUBDOMAIN"
+                        ? "var(--brand)"
+                        : "transparent",
+                    color:
+                      modalDomainType === "SUBDOMAIN"
+                        ? "#fff"
+                        : "rgba(240,242,255,0.55)",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  Subdomain
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalDomainType("CUSTOM")}
+                  style={{
+                    flex: 1,
+                    padding: "0.35rem",
+                    fontSize: "0.78rem",
+                    fontWeight: 600,
+                    border: "none",
+                    cursor: "pointer",
+                    borderRadius: 6,
+                    background:
+                      modalDomainType === "CUSTOM"
+                        ? "var(--brand)"
+                        : "transparent",
+                    color:
+                      modalDomainType === "CUSTOM"
+                        ? "#fff"
+                        : "rgba(240,242,255,0.55)",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  Custom Domain
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalDomainType("BUY")}
+                  style={{
+                    flex: 1,
+                    padding: "0.35rem",
+                    fontSize: "0.78rem",
+                    fontWeight: 600,
+                    border: "none",
+                    cursor: "pointer",
+                    borderRadius: 6,
+                    whiteSpace: "nowrap",
+                    background:
+                      modalDomainType === "BUY"
+                        ? "var(--brand)"
+                        : "transparent",
+                    color:
+                      modalDomainType === "BUY"
+                        ? "#fff"
+                        : "rgba(240,242,255,0.55)",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  Buy a Domain
+                </button>
+              </div>
 
-							{modalSuccess && (
-								<p style={{ fontSize: "0.78rem", color: "#34d399", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}>
-									<IconCheck /> {modalSuccess}
-								</p>
-							)}
+              {modalDomainType === "BUY" ? (
+                <BuyDomainFlow
+                  templateId={templateId}
+                  resumedPurchase={null}
+                  onPurchased={() => setShowPublishModal(false)}
+                />
+              ) : (
+                <form
+                  onSubmit={handleModalPublish}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "1rem",
+                  }}
+                >
+                  {/* Inputs */}
+                  {modalDomainType === "SUBDOMAIN" ? (
+                    <div>
+                      <label
+                        htmlFor="modal-subdomain"
+                        style={{
+                          fontSize: "0.78rem",
+                          fontWeight: 600,
+                          color: "rgba(240,242,255,0.65)",
+                        }}
+                      >
+                        Configure Subdomain
+                      </label>
+                      <div style={{ display: "flex", marginTop: "0.35rem" }}>
+                        <input
+                          id="modal-subdomain"
+                          type="text"
+                          placeholder="my-landing-page"
+                          value={modalSubdomainPrefix}
+                          onChange={(e) =>
+                            setModalSubdomainPrefix(
+                              e.target.value
+                                .toLowerCase()
+                                .replace(/[^a-z0-9-]/g, ""),
+                            )
+                          }
+                          className="field-input"
+                          style={{
+                            borderTopRightRadius: 0,
+                            borderBottomRightRadius: 0,
+                            flex: 1,
+                          }}
+                        />
+                        <span
+                          style={{
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid rgba(255,255,255,0.08)",
+                            borderLeft: "none",
+                            borderTopRightRadius: 8,
+                            borderBottomRightRadius: 8,
+                            display: "flex",
+                            alignItems: "center",
+                            padding: "0 0.65rem",
+                            fontSize: "0.75rem",
+                            color: "rgba(240,242,255,0.45)",
+                            fontWeight: 550,
+                          }}
+                        >
+                          .
+                          {baseDomain === "localhost"
+                            ? "localhost"
+                            : baseDomain}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label
+                        htmlFor="modal-custom"
+                        style={{
+                          fontSize: "0.78rem",
+                          fontWeight: 600,
+                          color: "rgba(240,242,255,0.65)",
+                        }}
+                      >
+                        Custom Domain Name
+                      </label>
+                      <input
+                        id="modal-custom"
+                        type="text"
+                        placeholder="landing.mybrand.com"
+                        value={modalCustomDomain}
+                        onChange={(e) =>
+                          setModalCustomDomain(
+                            e.target.value.toLowerCase().trim(),
+                          )
+                        }
+                        className="field-input"
+                        style={{ marginTop: "0.35rem" }}
+                      />
+                      <div
+                        style={{
+                          marginTop: "0.6rem",
+                          padding: "0.6rem",
+                          background: "rgba(var(--brand-rgb),0.04)",
+                          border: "1px solid rgba(var(--brand-rgb),0.12)",
+                          borderRadius: 8,
+                          fontSize: "0.72rem",
+                          color: "rgba(240,242,255,0.65)",
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        Configure a CNAME record mapping your domain to{" "}
+                        <code style={{ color: "var(--brand)" }}>
+                          {routingEndpoint ?? "connecting…"}
+                        </code>
+                        .
+                      </div>
+                      {modalCertValidation && (
+                        <div
+                          style={{
+                            marginTop: "0.5rem",
+                            padding: "0.6rem",
+                            background: "rgba(52,211,153,0.05)",
+                            border: "1px solid rgba(52,211,153,0.2)",
+                            borderRadius: 8,
+                            fontSize: "0.72rem",
+                            color: "rgba(240,242,255,0.65)",
+                            lineHeight: 1.35,
+                          }}
+                        >
+                          Also add this certificate-validation CNAME — it proves
+                          you own the domain:
+                          <div
+                            style={{
+                              fontFamily: "monospace",
+                              fontSize: "0.68rem",
+                              color: "#6ee7b7",
+                              marginTop: "0.3rem",
+                              wordBreak: "break-all",
+                            }}
+                          >
+                            {modalCertValidation.name} &rarr;{" "}
+                            {modalCertValidation.value}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-							{/* Action buttons */}
-							<div
-								style={{ display: "flex", gap: "0.6rem", marginTop: "0.5rem" }}
-							>
-								<button
-									type="button"
-									onClick={() => setShowPublishModal(false)}
-									className="btn-secondary"
-									style={{ flex: 1, padding: "0.6rem" }}
-								>
-									Skip for now
-								</button>
-								<button
-									type="submit"
-									disabled={modalIsSubmitting}
-									className="btn-primary"
-									style={{
-										flex: 1,
-										padding: "0.6rem",
-										display: "inline-flex",
-										alignItems: "center",
-										justifyContent: "center",
-										gap: "0.4rem",
-									}}
-								>
-									{modalIsSubmitting && (
-										<span
-											className="spinner"
-											style={{ width: 11, height: 11 }}
-										/>
-									)}
-									{modalIsSubmitting ? "Publishing…" : "Publish Live"}
-								</button>
-							</div>
-						</form>
-						)}
-						</div>
-					</div>
-				</div>
-			)}
+                  {modalError && (
+                    <p
+                      style={{
+                        fontSize: "0.78rem",
+                        color: "#f87171",
+                        margin: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.35rem",
+                      }}
+                    >
+                      <IconWarning /> {modalError}
+                    </p>
+                  )}
 
-		</div>
-	);
+                  {modalSuccess && (
+                    <p
+                      style={{
+                        fontSize: "0.78rem",
+                        color: "#34d399",
+                        margin: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.35rem",
+                      }}
+                    >
+                      <IconCheck /> {modalSuccess}
+                    </p>
+                  )}
+
+                  {/* Action buttons */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "0.6rem",
+                      marginTop: "0.5rem",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setShowPublishModal(false)}
+                      className="btn-secondary"
+                      style={{ flex: 1, padding: "0.6rem" }}
+                    >
+                      Skip for now
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={modalIsSubmitting}
+                      className="btn-primary"
+                      style={{
+                        flex: 1,
+                        padding: "0.6rem",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "0.4rem",
+                      }}
+                    >
+                      {modalIsSubmitting && (
+                        <span
+                          className="spinner"
+                          style={{ width: 11, height: 11 }}
+                        />
+                      )}
+                      {modalIsSubmitting ? "Publishing…" : "Publish Live"}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

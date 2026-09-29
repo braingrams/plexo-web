@@ -504,6 +504,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   // custom domain input or cert instructions.
   function closeDrawer() {
     setIsDrawerOpen(false);
+    setSubdomainPrefix("");
     setCustomDomainInput("");
     setJustAddedCertValidation(null);
     setSuccessMsg(null);
@@ -749,11 +750,11 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
             }}>
               <div style={{
                 width: 64, height: 64, borderRadius: "50%",
-                background: "rgba(139,92,246,0.05)",
+                background: "rgba(var(--brand-rgb),0.05)",
                 display: "grid", placeItems: "center",
                 marginBottom: "1.5rem",
-                border: "1px solid rgba(139,92,246,0.15)",
-                boxShadow: "0 0 30px rgba(139,92,246,0.06)"
+                border: "1px solid rgba(var(--brand-rgb),0.15)",
+                boxShadow: "0 0 30px rgba(var(--brand-rgb),0.06)"
               }}>
                 <span style={{ display: "flex" }}>
                   <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -1228,8 +1229,8 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                   />
                   {/* DNS Info */}
                   <div style={{
-                    marginTop: "0.75rem", padding: "0.85rem", background: "rgba(139,92,246,0.03)",
-                    border: "1px solid rgba(139,92,246,0.12)", borderRadius: 10, fontSize: "0.75rem",
+                    marginTop: "0.75rem", padding: "0.85rem", background: "rgba(var(--brand-rgb),0.03)",
+                    border: "1px solid rgba(var(--brand-rgb),0.12)", borderRadius: 10, fontSize: "0.75rem",
                     color: "rgba(240,242,255,0.7)", lineHeight: 1.45
                   }}>
                     <p style={{ fontWeight: 700, color: "#a5b4fc", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
@@ -1515,7 +1516,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
           >
             <div style={{
               width: 48, height: 48, borderRadius: "50%",
-              background: "rgba(139, 92, 246, 0.1)",
+              background: "rgba(var(--brand-rgb),0.1)",
               display: "grid", placeItems: "center", margin: "0 auto",
               color: "var(--brand)",
             }}>

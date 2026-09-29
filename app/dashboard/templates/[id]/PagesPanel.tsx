@@ -862,7 +862,7 @@ function ManagePagesModal({
 
 				<div style={{ flex: 1, overflowY: "auto", padding: "0.75rem" }}>
 					{!isUltra && (
-						<div style={{ margin: "0.25rem 0.25rem 0.75rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "var(--brand-subtle)", border: "1px solid rgba(139,92,246,0.25)", fontSize: "0.8rem", color: "rgba(240,242,255,0.8)", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+						<div style={{ margin: "0.25rem 0.25rem 0.75rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "var(--brand-subtle)", border: "1px solid rgba(var(--brand-rgb),0.25)", fontSize: "0.8rem", color: "rgba(240,242,255,0.8)", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
 							<IconSparkle /> <span>Multi-page sites (adding, duplicating pages) require an <strong>Ultra</strong> plan. Existing pages remain fully usable below.</span>
 						</div>
 					)}
@@ -940,7 +940,7 @@ function ManagePagesModal({
 					style={{ position: "fixed", inset: 0, zIndex: 70, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.6)", padding: "1rem" }}
 					onClick={(e) => { if (e.target === e.currentTarget) setAupPending(null); }}
 				>
-					<div style={{ width: "min(100%,440px)", background: "#0d0f1a", border: "1px solid rgba(139,92,246,0.3)", borderRadius: 16, padding: "1.5rem" }}>
+					<div style={{ width: "min(100%,440px)", background: "#0d0f1a", border: "1px solid rgba(var(--brand-rgb),0.3)", borderRadius: 16, padding: "1.5rem" }}>
 						<h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.05rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.6rem" }}>
 							Accept the Acceptable Use Policy
 						</h3>

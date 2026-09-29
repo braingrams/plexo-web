@@ -27,7 +27,7 @@ export function ActivityHeatmap({ data }: { data: HeatmapPoint[] }) {
   function cellColor(value: number): string {
     if (value === 0) return "rgba(255,255,255,0.035)";
     const ratio = value / max;
-    return `rgba(139, 92, 246, ${0.15 + ratio * 0.75})`;
+    return `rgba(var(--brand-rgb),${0.15 + ratio * 0.75})`;
   }
 
   return (
@@ -67,7 +67,7 @@ export function ActivityHeatmap({ data }: { data: HeatmapPoint[] }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.4rem", marginTop: "0.9rem" }}>
         <span style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.3)" }}>Less</span>
         {[0.1, 0.3, 0.5, 0.75, 1].map((ratio) => (
-          <div key={ratio} style={{ width: 11, height: 11, borderRadius: 3, background: `rgba(139,92,246,${0.12 + ratio * 0.7})` }} />
+          <div key={ratio} style={{ width: 11, height: 11, borderRadius: 3, background: `rgba(var(--brand-rgb),${0.12 + ratio * 0.7})` }} />
         ))}
         <span style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.3)" }}>More</span>
       </div>

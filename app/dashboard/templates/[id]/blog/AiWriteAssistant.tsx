@@ -90,8 +90,8 @@ export function AiWriteAssistant({
         onClick={() => setOpen((v) => !v)}
         style={{
           display: "inline-flex", alignItems: "center", gap: "0.45rem",
-          padding: "0.5rem 0.9rem", borderRadius: 9, border: "1px solid rgba(139,92,246,0.3)",
-          background: "rgba(139,92,246,0.1)", color: "var(--brand)", cursor: "pointer",
+          padding: "0.5rem 0.9rem", borderRadius: 9, border: "1px solid rgba(var(--brand-rgb),0.3)",
+          background: "rgba(var(--brand-rgb),0.1)", color: "var(--brand)", cursor: "pointer",
           fontSize: "0.8rem", fontWeight: 700, fontFamily: "inherit",
         }}
       >
@@ -174,13 +174,13 @@ export function AiWriteAssistant({
                 .ai-write-preview-content p { margin: 0 0 0.75em; }
                 .ai-write-preview-content ul, .ai-write-preview-content ol { margin: 0 0 0.75em; padding-left: 1.25em; }
                 .ai-write-preview-content li { margin-bottom: 0.3em; }
-                .ai-write-preview-content blockquote { margin: 0 0 0.75em; padding-left: 0.9em; border-left: 2px solid rgba(139,92,246,0.4); color: rgba(240,242,255,0.65); }
+                .ai-write-preview-content blockquote { margin: 0 0 0.75em; padding-left: 0.9em; border-left: 2px solid rgba(var(--brand-rgb),0.4); color: rgba(240,242,255,0.65); }
               `}</style>
 
               {(preview.categories.length > 0 || preview.tags.length > 0) && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginBottom: "0.5rem" }}>
                   {preview.categories.map((c) => (
-                    <span key={`cat-${c}`} style={{ padding: "0.15rem 0.55rem", borderRadius: 999, background: "rgba(139,92,246,0.15)", color: "var(--brand)", fontSize: "0.7rem", fontWeight: 600 }}>
+                    <span key={`cat-${c}`} style={{ padding: "0.15rem 0.55rem", borderRadius: 999, background: "rgba(var(--brand-rgb),0.15)", color: "var(--brand)", fontSize: "0.7rem", fontWeight: 600 }}>
                       {c}
                     </span>
                   ))}
@@ -215,8 +215,8 @@ export function AiWriteAssistant({
                   onClick={() => void runGenerate()}
                   disabled={isInserting || isGenerating}
                   style={{
-                    padding: "0.55rem 1rem", borderRadius: 9, border: "1px solid rgba(139,92,246,0.3)",
-                    background: "rgba(139,92,246,0.08)", color: "var(--brand)", cursor: isInserting || isGenerating ? "not-allowed" : "pointer",
+                    padding: "0.55rem 1rem", borderRadius: 9, border: "1px solid rgba(var(--brand-rgb),0.3)",
+                    background: "rgba(var(--brand-rgb),0.08)", color: "var(--brand)", cursor: isInserting || isGenerating ? "not-allowed" : "pointer",
                     opacity: isInserting || isGenerating ? 0.7 : 1, fontSize: "0.82rem", fontWeight: 600, fontFamily: "inherit", whiteSpace: "nowrap",
                   }}
                 >

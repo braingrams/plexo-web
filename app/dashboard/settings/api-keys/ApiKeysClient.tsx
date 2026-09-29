@@ -105,7 +105,7 @@ export function ApiKeysClient({ initialApiKeys }: { initialApiKeys: SettingsApiK
       <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.06)", flexWrap: "wrap", gap: "0.75rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-            <div style={{ width: 34, height: 34, borderRadius: 9, background: "var(--brand-subtle)", border: "1px solid rgba(139,92,246,0.2)", display: "grid", placeItems: "center", color: "var(--brand)", flexShrink: 0 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: "var(--brand-subtle)", border: "1px solid rgba(var(--brand-rgb),0.2)", display: "grid", placeItems: "center", color: "var(--brand)", flexShrink: 0 }}>
               <IconKey />
             </div>
             <div>
@@ -194,9 +194,9 @@ export function ApiKeysClient({ initialApiKeys }: { initialApiKeys: SettingsApiK
 
       {generatedRawKey && (
         <div role="dialog" aria-modal="true" aria-labelledby="key-modal-title" style={{ position: "fixed", inset: 0, zIndex: 50, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", padding: "1rem" }}>
-          <div style={{ width: "min(100%,480px)", background: "#0d0f1a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "1.75rem", boxShadow: "0 30px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.08)" }}>
+          <div style={{ width: "min(100%,480px)", background: "#0d0f1a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "1.75rem", boxShadow: "0 30px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(var(--brand-rgb),0.08)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.5rem" }}>
-              <div style={{ width: 34, height: 34, borderRadius: 9, background: "var(--brand-subtle)", border: "1px solid rgba(139,92,246,0.25)", display: "grid", placeItems: "center", color: "var(--brand)" }}>
+              <div style={{ width: 34, height: 34, borderRadius: 9, background: "var(--brand-subtle)", border: "1px solid rgba(var(--brand-rgb),0.25)", display: "grid", placeItems: "center", color: "var(--brand)" }}>
                 <IconKey />
               </div>
               <h3 id="key-modal-title" style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff" }}>Your New API Key</h3>
@@ -204,7 +204,7 @@ export function ApiKeysClient({ initialApiKeys }: { initialApiKeys: SettingsApiK
             <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.45)", marginBottom: "1.25rem" }}>
               This is the only time the full key will be shown. Copy and store it securely.
             </p>
-            <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 10, padding: "0.9rem 1rem", fontFamily: "monospace", fontSize: "0.82rem", color: "var(--brand)", wordBreak: "break-all", marginBottom: "1.25rem" }}>
+            <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(var(--brand-rgb),0.2)", borderRadius: 10, padding: "0.9rem 1rem", fontFamily: "monospace", fontSize: "0.82rem", color: "var(--brand)", wordBreak: "break-all", marginBottom: "1.25rem" }}>
               {generatedRawKey}
             </div>
             <div style={{ display: "flex", gap: "0.75rem" }}>

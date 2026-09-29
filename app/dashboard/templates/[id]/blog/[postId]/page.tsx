@@ -1,24 +1,56 @@
 import { notFound } from "next/navigation";
-import { BlogPost, BlogCategory, BlogTag, BlogAuthor, BlogPostCategory, BlogPostTag, PublishedDomain } from "@/lib/db/contentEntities";
+import {
+  BlogPost,
+  BlogCategory,
+  BlogTag,
+  BlogAuthor,
+  BlogPostCategory,
+  BlogPostTag,
+  PublishedDomain,
+} from "@/lib/db/contentEntities";
 import { requireBlogSiteAccess } from "@/lib/blog/pageAuthDynamo";
 import { findOrCreateAuthorForUser } from "@/lib/blog/authorsDynamo";
+import { getPublishedBlogPostQuotaStatus } from "@/lib/blog/publishQuota";
 import { BlogPostEditor } from "../BlogPostEditor";
 
-export default async function EditBlogPostPage({ params }: { params: Promise<{ id: string; postId: string }> }) {
+export default async function EditBlogPostPage({
+  params,
+}: {
+  params: Promise<{ id: string; postId: string }>;
+}) {
   const { id, postId } = await params;
-  const access = await requireBlogSiteAccess(id, `/dashboard/templates/${id}/blog/${postId}`);
+  const access = await requireBlogSiteAccess(
+    id,
+    `/dashboard/templates/${id}/blog/${postId}`,
+  );
 
-  const [currentUserAuthor, { data: allPosts }, { data: categories }, { data: tags }, { data: authors }, { data: domains }, { data: postCategories }, { data: postTags }] =
-    await Promise.all([
-      findOrCreateAuthorForUser(access.templateId, access.userId, access.userName || access.userEmail),
-      BlogPost.query.byStatus({ templateId: access.templateId }).go(),
-      BlogCategory.query.primary({ templateId: access.templateId }).go(),
-      BlogTag.query.primary({ templateId: access.templateId }).go(),
-      BlogAuthor.query.primary({ templateId: access.templateId }).go(),
-      PublishedDomain.query.primary({ templateId: access.templateId }).go(),
-      BlogPostCategory.query.primary({ templateId: access.templateId, postId }).go(),
-      BlogPostTag.query.primary({ templateId: access.templateId, postId }).go(),
-    ]);
+  const [
+    currentUserAuthor,
+    { data: allPosts },
+    { data: categories },
+    { data: tags },
+    { data: authors },
+    { data: domains },
+    { data: postCategories },
+    { data: postTags },
+    quota,
+  ] = await Promise.all([
+    findOrCreateAuthorForUser(
+      access.templateId,
+      access.userId,
+      access.userName || access.userEmail,
+    ),
+    BlogPost.query.byStatus({ templateId: access.templateId }).go(),
+    BlogCategory.query.primary({ templateId: access.templateId }).go(),
+    BlogTag.query.primary({ templateId: access.templateId }).go(),
+    BlogAuthor.query.primary({ templateId: access.templateId }).go(),
+    PublishedDomain.query.primary({ templateId: access.templateId }).go(),
+    BlogPostCategory.query
+      .primary({ templateId: access.templateId, postId })
+      .go(),
+    BlogPostTag.query.primary({ templateId: access.templateId, postId }).go(),
+    getPublishedBlogPostQuotaStatus(access.templateId, access.subscriptionPlan),
+  ]);
   categories.sort((a, b) => a.name.localeCompare(b.name));
   tags.sort((a, b) => a.name.localeCompare(b.name));
   authors.sort((a, b) => a.name.localeCompare(b.name));
@@ -30,7 +62,9 @@ export default async function EditBlogPostPage({ params }: { params: Promise<{ i
 
   const allAuthors = authors.some((a) => a.id === currentUserAuthor.id)
     ? authors
-    : [...authors, currentUserAuthor].sort((a, b) => a.name.localeCompare(b.name));
+    : [...authors, currentUserAuthor].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      );
 
   return (
     <BlogPostEditor
@@ -52,12 +86,17 @@ export default async function EditBlogPostPage({ params }: { params: Promise<{ i
         noindex: post.noindex ?? false,
         authorId: post.authorId ?? null,
         categoryIds: postCategories.map((c) => c.categoryId),
-        tagNames: postTags.map((t) => tagNameById.get(t.tagId)).filter((n): n is string => !!n),
+        tagNames: postTags
+          .map((t) => tagNameById.get(t.tagId))
+          .filter((n): n is string => !!n),
       }}
       categories={categories}
       tags={tags}
       authors={allAuthors}
       siteDomain={domains[0]?.domain ?? null}
+      publishedCount={quota.count}
+      publishedLimit={quota.limit}
+      plan={quota.plan}
     />
   );
 }

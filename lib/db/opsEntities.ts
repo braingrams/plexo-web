@@ -297,7 +297,154 @@ export const EmailLog = new Entity(
   { table, client: docClient },
 );
 
+// SolUsageEvent: a permanent, no-TTL analytics log of every completed SOL chat turn — the
+// SOL-specific counterpart to AdminAuditLog above (same "real, permanent event log, no ttl
+// populated" discipline, see file header) and PageViewDailyStat's atomic-rollup precedent
+// for SolDailyStat below. Written by lib/solAnalytics.ts's recordSolUsageEvent, fired
+// fire-and-forget right after lib/db/ledgerOperations.ts's chargeUsage() charges credits
+// for the turn (see that file — this is a sibling write, not a replacement). Holds no
+// prompt/response text itself — see SolUsageEventContent, a separate short-TTL entity,
+// for that. Byte-for-byte mirrored in plexo-admin's lib/db/opsEntities.ts (read-only
+// there) — keep both copies identical.
+export const SolUsageEvent = new Entity(
+  {
+    model: { entity: "solUsageEvent", version: "1", service: "plexoOps" },
+    attributes: {
+      id: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      conversationId: { type: "string", required: true },
+      provider: { type: "string", required: true }, // e.g. "bedrock_claude"
+      tier: { type: ["BASIC", "MEDIUM", "HIGH"] as const, required: true },
+      inputTokens: { type: "number", default: 0 },
+      outputTokens: { type: "number", default: 0 },
+      creditsCharged: { type: "number", default: 0 },
+      latencyMs: { type: "number" },
+      outcome: { type: ["success", "error", "timeout"] as const, required: true },
+      errorCode: { type: "string" },
+      // Array of {name, destructive, confirmed, executed, errorCode} — schema-free, same
+      // "replay-verbatim, don't force a rigid shape" reasoning as SolMessage.content in
+      // lib/db/solEntities.ts.
+      toolCalls: { type: "any" },
+      attachmentCount: { type: "number", default: 0 },
+      // string[] of attachment mime/kind labels — kept as "any" rather than a typed list
+      // since the open-ended set of attachment kinds isn't worth a union here.
+      attachmentTypes: { type: "any" },
+      voiceTranscriptUsed: { type: "boolean", default: false },
+      // Set later, after the turn completes, by recordSolFeedback's .patch() — absent at
+      // creation time.
+      feedback: { type: ["UP", "DOWN"] as const },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      // No ttl attribute populated — permanent, same discipline as AdminAuditLog/
+      // FormSubmission/EmailLog above.
+    },
+    indexes: {
+      // A conversation's SOL usage history, chronological — mirrors SolMessage's own
+      // primary index shape (lib/db/solEntities.ts).
+      primary: {
+        pk: { field: "pk", composite: ["conversationId"], template: "CONVO#${conversationId}" },
+        sk: { field: "sk", composite: ["createdAt", "id"], template: "TURN#${createdAt}#${id}" },
+      },
+      // "this user's SOL history" — a support/debugging lookup with no other access path
+      // (the primary index above is conversation-scoped, not user-scoped). Reuses GSI1,
+      // already provisioned on this table and already shared by AdminAuditLog.byTarget/
+      // FormSubmission.byOrg/EmailLog.byOrg — see EmailLog's comment on why that's safe.
+      byUser: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["userId"], template: "USER#${userId}" },
+        sk: { field: "GSI1SK", composite: ["createdAt", "id"], template: "${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// SolUsageEventContent: the ONLY place any SOL prompt/response text is stored for
+// analytics purposes — split out from SolUsageEvent (which is permanent) so the actual
+// conversation content this entity holds ages out automatically after a short window.
+// Text is truncated and passed through lib/privacy/redact.ts's best-effort scrub before
+// being written here (see lib/solAnalytics.ts's recordSolUsageEvent) — this is not a
+// substitute for SolMessage/SolConversation (lib/db/solEntities.ts), the real, unredacted
+// transcript; it exists purely so a SUPERADMIN/SUPPORT admin can sanity-check a flagged
+// conversation without querying plexo-sol's own table.
+export const SolUsageEventContent = new Entity(
+  {
+    model: { entity: "solUsageEventContent", version: "1", service: "plexoOps" },
+    attributes: {
+      id: { type: "string", required: true }, // same id as the matching SolUsageEvent row
+      conversationId: { type: "string", required: true },
+      createdAt: { type: "string", required: true },
+      promptPreview: { type: "string" }, // redacted, truncated to ~500 chars
+      responsePreview: { type: "string" }, // redacted, truncated to ~500 chars
+      // 30 days — short-lived by design, unlike SolUsageEvent's permanent metadata row.
+      ttl: { type: "number", default: () => days(30) },
+    },
+    indexes: {
+      // Same pk, and the same {createdAt, id} composite, as SolUsageEvent's own primary
+      // key — so a given turn's content row is a direct .get() away from its metadata row
+      // with no extra lookup. The sk's literal prefix ("TURNCONTENT" vs SolUsageEvent's
+      // "TURN") deliberately differs, though: both entities live in the same physical
+      // table under this same service, and an identical template would make them compute
+      // to the literal same DynamoDB item — their two .create() calls (run concurrently
+      // via Promise.all in lib/solAnalytics.ts) would then race for one physical row,
+      // guaranteeing a ConditionalCheckFailedException on whichever loses. Caught in local
+      // testing: this was firing on every single completed turn.
+      primary: {
+        pk: { field: "pk", composite: ["conversationId"], template: "CONVO#${conversationId}" },
+        sk: { field: "sk", composite: ["createdAt", "id"], template: "TURNCONTENT#${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// SolDailyStat: SOL's usage rollup, following PageViewDailyStat's exact sparse-dimension,
+// atomic-`.add()` pattern above (see that entity's comment for the full "why sparse rows
+// per dimension, not nested map counters" reasoning — it applies identically here).
+// Written by lib/solAnalytics.ts's recordSolUsageEvent/recordSolFeedback; read by
+// plexo-admin's lib/solAnalytics.ts for its /sol dashboard.
+export const SolDailyStat = new Entity(
+  {
+    model: { entity: "solDailyStat", version: "1", service: "plexoOps" },
+    attributes: {
+      date: { type: "string", required: true }, // "YYYY-MM-DD", UTC
+      // "TOTAL" | "MODEL#<provider>/<tier>" | "TOOL#<name>" | "TOOL#<name>#DECLINED" |
+      // "USER#<userId>" (sparse DAU rows) | "ERROR#<errorCode>" | "FEEDBACK#UP" |
+      // "FEEDBACK#DOWN" — see lib/solAnalytics.ts, the only writer. Plain string, same
+      // "open-ended dimension values" reasoning as PageViewDailyStat.dimension.
+      dimension: { type: "string", required: true },
+      count: { type: "number", default: 0 },
+      inputTokens: { type: "number", default: 0 },
+      outputTokens: { type: "number", default: 0 },
+      creditsCharged: { type: "number", default: 0 },
+      latencyMsSum: { type: "number", default: 0 }, // divide by count for an average
+      // 180 days — longer runway than SolUsageEvent's own retention needs, since a
+      // rollup row stays tiny regardless of how much raw volume feeds it.
+      ttl: { type: "number", default: () => days(180) },
+    },
+    indexes: {
+      // One partition per day, same write-load-spreading reasoning as PageViewDailyStat.
+      primary: {
+        pk: { field: "pk", composite: ["date"], template: "SOLDAY#${date}" },
+        sk: { field: "sk", composite: ["dimension"], template: "DIM#${dimension}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoOpsService = new Service(
-  { PageView, PageViewDailyStat, RateLimit, StockCache, AdminAuditLog, FormSubmission, EmailLog },
+  {
+    PageView,
+    PageViewDailyStat,
+    RateLimit,
+    StockCache,
+    AdminAuditLog,
+    FormSubmission,
+    EmailLog,
+    SolUsageEvent,
+    SolUsageEventContent,
+    SolDailyStat,
+  },
   { table, client: docClient },
 );

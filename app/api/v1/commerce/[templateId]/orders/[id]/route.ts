@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
+import { updateOrderFulfillmentStatus, FULFILLMENT_STATUSES } from "@/lib/commerce/orderStatusActions";
 import { CommerceOrder, CommerceOrderItem, CommerceBooking } from "@/lib/db/commerceEntities";
-
-const FULFILLMENT_STATUSES = new Set(["UNFULFILLED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "COMPLETED"]);
 
 export async function GET(
   request: NextRequest,
@@ -33,7 +32,7 @@ export async function PATCH(
   const { templateId, id } = await context.params;
   const resolved = await resolveCommerceAdmin(request, templateId);
   if (resolved.error) return resolved.error;
-  const { role } = resolved.context;
+  const { organizationId, role } = resolved.context;
 
   const permissionError = requirePermission(role, { commerce: ["update"] });
   if (permissionError) return permissionError;
@@ -47,7 +46,6 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid fulfillmentStatus." }, { status: 400 });
   }
 
-  await CommerceOrder.patch({ templateId, id }).set({ fulfillmentStatus: fulfillmentStatus as any }).go();
-  const { data: order } = await CommerceOrder.get({ templateId, id }).go();
+  const order = await updateOrderFulfillmentStatus(templateId, organizationId, id, fulfillmentStatus);
   return NextResponse.json({ order });
 }

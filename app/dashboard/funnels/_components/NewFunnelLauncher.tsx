@@ -19,7 +19,7 @@ const cardStyle: React.CSSProperties = {
 
 const buttonPrimary: React.CSSProperties = {
   padding: "0.65rem 1.2rem", borderRadius: 10, fontSize: "0.85rem", fontWeight: 700,
-  background: "var(--brand, #8b5cf6)", color: "#fff", border: "none", cursor: "pointer",
+  background: "var(--brand, var(--brand))", color: "#fff", border: "none", cursor: "pointer",
 };
 
 const buttonGhost: React.CSSProperties = {
@@ -279,7 +279,7 @@ function BeginnerWizardModal({
           {steps.map((label, i) => (
             <div key={label} style={{ flex: 1, textAlign: "center" }}>
               <div style={{
-                height: 4, borderRadius: 2, background: i <= stepIndex ? "var(--brand, #8b5cf6)" : "rgba(255,255,255,0.1)", marginBottom: "0.4rem",
+                height: 4, borderRadius: 2, background: i <= stepIndex ? "var(--brand, var(--brand))" : "rgba(255,255,255,0.1)", marginBottom: "0.4rem",
               }} />
               <div style={{ fontSize: "0.7rem", color: i <= stepIndex ? "#f0f2ff" : "rgba(240,242,255,0.4)" }}>{label}</div>
             </div>
@@ -310,8 +310,8 @@ function BeginnerWizardModal({
                   onClick={() => setPageKind(opt.kind)}
                   style={{
                     flex: 1, padding: "0.55rem", borderRadius: 9, fontSize: "0.8rem", fontWeight: 600, cursor: "pointer",
-                    background: pageKind === opt.kind ? "rgba(139,92,246,0.18)" : "rgba(255,255,255,0.03)",
-                    border: `1px solid ${pageKind === opt.kind ? "var(--brand, #8b5cf6)" : "rgba(255,255,255,0.09)"}`,
+                    background: pageKind === opt.kind ? "rgba(var(--brand-rgb),0.18)" : "rgba(255,255,255,0.03)",
+                    border: `1px solid ${pageKind === opt.kind ? "var(--brand, var(--brand))" : "rgba(255,255,255,0.09)"}`,
                     color: pageKind === opt.kind ? "#c4b5fd" : "rgba(240,242,255,0.6)",
                   }}
                 >

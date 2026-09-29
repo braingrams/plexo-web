@@ -144,7 +144,7 @@ export function CommerceTabs({ templateId }: { templateId: string }) {
               fontSize: "0.83rem",
               fontWeight: isActive ? 600 : 500,
               color: isActive ? "#fff" : "rgba(240,242,255,0.5)",
-              borderBottom: `2px solid ${isActive ? "var(--brand, #8b5cf6)" : "transparent"}`,
+              borderBottom: `2px solid ${isActive ? "var(--brand, var(--brand))" : "transparent"}`,
               whiteSpace: "nowrap",
               flexShrink: 0,
               textDecoration: "none",

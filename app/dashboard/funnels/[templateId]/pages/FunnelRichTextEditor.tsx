@@ -12,7 +12,7 @@ const TOOLBAR_BUTTON_STYLE = (active: boolean): React.CSSProperties => ({
   display: "inline-flex", alignItems: "center", justifyContent: "center",
   minWidth: 28, height: 28, padding: "0 5px", borderRadius: 6, border: "none", cursor: "pointer",
   fontSize: "0.78rem", fontWeight: 700,
-  background: active ? "rgba(139,92,246,0.18)" : "transparent",
+  background: active ? "rgba(var(--brand-rgb),0.18)" : "transparent",
   color: active ? "var(--brand, #c4b5fd)" : "rgba(240,242,255,0.6)",
 });
 

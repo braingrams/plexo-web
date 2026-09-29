@@ -6,8 +6,9 @@ import { getTierFeatures } from "@/lib/subscription";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { findRootTemplateId } from "@/lib/siteLayoutDynamo";
 import { Template } from "@/lib/db/contentEntities";
-import { User, ApiKey } from "@/lib/db/coreEntities";
+import { User } from "@/lib/db/coreEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
+import { resolveActiveApiKeyForUser } from "@/lib/ai/resolveUserAiKey";
 
 import { TemplateEditorDynamic } from "./template-editor-dynamic";
 import { RawFileEditor } from "./raw-file-editor";
@@ -36,9 +37,9 @@ const BLANK_TEMPLATE_SHELL: TemplateJSON = {
   },
 };
 
-export default async function TemplateEditorPage(
-  props: { params: Promise<{ id: string }> },
-) {
+export default async function TemplateEditorPage(props: {
+  params: Promise<{ id: string }>;
+}) {
   const params = await props.params;
   const session = await auth();
 
@@ -56,21 +57,23 @@ export default async function TemplateEditorPage(
     notFound();
   }
 
-  const [{ data: user }, { data: userApiKeys }] = await Promise.all([
+  const [{ data: user }, activeApiKey] = await Promise.all([
     User.get({ id: session.user.id }).go(),
-    ApiKey.query.byUser({ userId: session.user.id }).go(),
+    resolveActiveApiKeyForUser(session.user.id),
   ]);
 
   // Commerce (and Site Layout) are scoped per SITE (the root Template — parentId null),
   // not per page, so a sub-page's editor needs to walk up to the root to know whether to
   // show the Commerce block palette / where to link Site Layout. Most sites are only one
   // level deep, but the page tree can nest further.
-  const rootTemplateId = await findRootTemplateId(template.id, template.parentId ?? null);
-  const { data: commerceSettings } = await CommerceSettings.get({ templateId: rootTemplateId }).go();
+  const rootTemplateId = await findRootTemplateId(
+    template.id,
+    template.parentId ?? null,
+  );
+  const { data: commerceSettings } = await CommerceSettings.get({
+    templateId: rootTemplateId,
+  }).go();
 
-  const activeApiKey = userApiKeys
-    .filter((k) => k.isActive)
-    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0] ?? null;
   const tierFeatures = getTierFeatures(user?.subscriptionPlan);
 
   if (template.sourceType === "RAW_UPLOAD") {
@@ -87,9 +90,13 @@ export default async function TemplateEditorPage(
     );
   }
 
-  const initialDesignJson = isTemplateJson(template.designJson)
+  const liveDesignJson = isTemplateJson(template.designJson)
     ? template.designJson
     : BLANK_TEMPLATE_SHELL;
+  const initialDesignJson = isTemplateJson(template.draftJson)
+    ? template.draftJson
+    : liveDesignJson;
+  const hasUnpublishedChanges = template.draftJson != null;
 
   const unsplashKey = process.env.UNSPLASH_KEY || "";
   const pexelsKey = process.env.PEXELS_KEY || "";
@@ -102,6 +109,8 @@ export default async function TemplateEditorPage(
       templateKind={template.kind}
       templateParentId={template.parentId ?? null}
       initialDesignJson={initialDesignJson}
+      liveDesignJson={liveDesignJson}
+      hasUnpublishedChanges={hasUnpublishedChanges}
       subscriptionPlan={user?.subscriptionPlan ?? "FREE"}
       useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}
       aiProvider={activeApiKey?.aiProvider ?? "openai"}

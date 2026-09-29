@@ -18,6 +18,11 @@ export type TemplateEditorProps = {
   templateKind: "EMAIL" | "LANDING_PAGE";
   templateParentId: string | null;
   initialDesignJson: TemplateJSON;
+  // The live/published designJson baseline — compared against the draft client-side to
+  // decide whether there are actually unpublished changes, rather than trusting draftJson's
+  // mere presence.
+  liveDesignJson: TemplateJSON;
+  hasUnpublishedChanges: boolean;
   subscriptionPlan: string;
   useAi: boolean;
   aiProvider: string;
@@ -52,8 +57,8 @@ function EditorSkeleton() {
           width: 40,
           height: 40,
           borderRadius: "50%",
-          border: "3px solid rgba(139,92,246,0.2)",
-          borderTopColor: "#8b5cf6",
+          border: "3px solid rgba(var(--brand-rgb),0.2)",
+          borderTopColor: "var(--brand)",
           animation: "spin 0.7s linear infinite",
         }}
       />
