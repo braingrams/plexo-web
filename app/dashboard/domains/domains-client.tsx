@@ -14,6 +14,31 @@ import { CustomSelect } from "../../_components/CustomSelect";
 // before that fetch resolves.
 const DNS_CNAME_TARGET_FALLBACK = "connecting…";
 
+// ACM's DomainValidationOptions.ResourceRecord.Name (lib/acmCertificates.ts's
+// requestCertificate) comes back as the full, absolute record name with a trailing dot
+// (e.g. "_9f29d…d.www.example.com."), unlike the routing CNAME's dnsHostLabel below, which
+// is deliberately shown relative to the zone ("www", not "www.example.com") because that's
+// what a registrar's own "Name/Host" field expects — it appends the zone itself. Showing
+// the cert-validation record's absolute name unchanged means pasting it whole into that
+// same field silently doubles the domain onto the end (GoDaddy: "_9f29d…d.www.example.com"
+// typed into Name becomes "_9f29d…d.www.example.com.example.com" once saved) — a record
+// ACM will never see, so the certificate sits at PENDING_VALIDATION forever with no
+// indication anything is wrong. Confirmed live against a real stuck customer domain: the
+// exact doubled name resolved to the ACM target value, while the name ACM actually polls
+// for was NXDOMAIN. Stripping the trailing dot and the zone suffix here — the same way
+// dnsHostLabel already does for the routing CNAME — makes both records safe to paste as-is.
+function toRegistrarRelativeHost(fullyQualifiedName: string, domain: string): string {
+  const stripped = fullyQualifiedName.replace(/\.$/, "");
+  if (stripped.toLowerCase() === domain.toLowerCase()) return "@";
+  const suffix = `.${domain}`;
+  if (stripped.toLowerCase().endsWith(suffix.toLowerCase())) {
+    return stripped.slice(0, stripped.length - suffix.length);
+  }
+  // Unexpected shape (e.g. domain changed after the cert was requested) — show the real
+  // value rather than hide a mismatch behind a guessed transform.
+  return stripped;
+}
+
 type DomainType = "SUBDOMAIN" | "CUSTOM" | "BUY";
 
 // Present only on a domain bought through Plexo (RegisteredDomain, lib/db/contentEntities.ts)
@@ -320,6 +345,15 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
     const parts = customDomainInput.split(".");
     return parts.length > 2 ? parts[0] : "@";
   }, [customDomainInput]);
+
+  // Root/apex domains (e.g. "mycompany.com", host "@") can't take a CNAME record — DNS
+  // forbids a CNAME coexisting with the NS/SOA records every zone apex already has, and
+  // registrars (GoDaddy included) enforce that by rejecting the add outright. Only domains
+  // bought through Plexo dodge this automatically (lib/domains/domainDns.ts writes a
+  // Route53 ALIAS record instead); a manually-connected CUSTOM domain has no such backend
+  // to lean on, so the UI needs to warn the owner and give them a path that actually works
+  // at their registrar, instead of silently repeating instructions that will fail.
+  const isApexDomain = dnsHostLabel === "@" && customDomainInput.trim() !== "";
 
   const templateOptions = useMemo(() => {
     if (landingPages.length === 0) {
@@ -888,7 +922,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                                   )}
                                   {item.certificateStatus === "PENDING_VALIDATION" && item.certificateValidationName && item.certificateValidationValue && (
                                     <div style={{ fontFamily: "monospace", fontSize: "0.68rem", color: "rgba(240,242,255,0.4)", marginTop: "0.2rem", wordBreak: "break-all" }}>
-                                      CNAME {item.certificateValidationName} → {item.certificateValidationValue}
+                                      CNAME {toRegistrarRelativeHost(item.certificateValidationName, item.domain)} → {item.certificateValidationValue}
                                     </div>
                                   )}
                                 </div>
@@ -1248,6 +1282,31 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                     </p>
                   </div>
 
+                  {/* Root/apex domains can't take the CNAME above at most registrars — see
+                      isApexDomain's own comment. Rather than let the owner hit a dead end
+                      (add a CNAME at "@", get rejected, guess their way into an invalid A
+                      record instead), spell out why and give two paths that actually work. */}
+                  {isApexDomain && (
+                    <div style={{
+                      marginTop: "0.75rem", padding: "0.85rem", background: "rgba(251,191,36,0.06)",
+                      border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, fontSize: "0.75rem",
+                      color: "rgba(240,242,255,0.7)", lineHeight: 1.5
+                    }}>
+                      <p style={{ fontWeight: 700, color: "#fbbf24", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                        <IconWarningLarge width={14} height={14} /> Root domains usually can&apos;t use a CNAME
+                      </p>
+                      <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.55)", marginBottom: "0.6rem" }}>
+                        <strong style={{ color: "#f0f2ff" }}>{customDomainInput}</strong> has no prefix like &quot;www&quot;, so the record above goes at your domain&apos;s root (&quot;@&quot;). Most registrars — including GoDaddy — block CNAME records there, since it conflicts with records they already require. You have two options:
+                      </p>
+                      <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.55)", marginBottom: "0.4rem" }}>
+                        <strong style={{ color: "#f0f2ff" }}>1. Use an ALIAS or ANAME record instead</strong>, if your registrar offers one (Cloudflare, Namecheap, and DNSimple do) — same Host (@) and Value as above, just a different record type.
+                      </p>
+                      <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.55)", margin: 0 }}>
+                        <strong style={{ color: "#f0f2ff" }}>2. Connect www.{customDomainInput} instead</strong> — retype it above with &quot;www.&quot; in front, add the CNAME to that, then turn on &quot;domain forwarding&quot; at your registrar to redirect {customDomainInput} to www.{customDomainInput}. Nearly every registrar, GoDaddy included, offers this under domain settings.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Shown right after submitting — the certificate validation record is
                       unique per domain, generated only once the backend actually requests
                       the certificate (see app/api/v1/domains/route.ts's POST handler), so
@@ -1268,10 +1327,10 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                         <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: "0.72rem", alignItems: "flex-start", flexWrap: "wrap", gap: "0.4rem 0" }}>
                           <span style={{ width: "25%", minWidth: 0, color: "#6ee7b7", fontWeight: 600 }}>CNAME</span>
                           <span style={{ width: "35%", minWidth: 0, color: "#f0f2ff", fontWeight: 600, display: "flex", alignItems: "flex-start", gap: "0.25rem", wordBreak: "break-all", overflowWrap: "anywhere" }}>
-                            <span style={{ minWidth: 0 }}>{justAddedCertValidation.name}</span>
+                            <span style={{ minWidth: 0 }}>{toRegistrarRelativeHost(justAddedCertValidation.name, customDomainInput)}</span>
                             <button
                               type="button"
-                              onClick={() => handleCopy(justAddedCertValidation.name, 'certHost')}
+                              onClick={() => handleCopy(toRegistrarRelativeHost(justAddedCertValidation.name, customDomainInput), 'certHost')}
                               style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", flexShrink: 0 }}
                               title="Copy Host"
                             >
