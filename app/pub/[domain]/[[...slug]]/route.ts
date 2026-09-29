@@ -357,7 +357,16 @@ function optimizeImages(html: string): string {
       try {
         const host = new URL(src).hostname;
         if (host.endsWith(".amazonaws.com") && !/\/_next\/image\?/.test(src)) {
-          const optimizedSrc = `/_next/image?url=${encodeURIComponent(src)}&w=1600&q=75`;
+          // 1920, not an arbitrary round number — next.config.ts doesn't override
+          // images.deviceSizes/imageSizes, so Next's own defaults apply
+          // ([640,750,828,1080,1200,1920,2048,3840] / [16,32,48,64,96,128,256,384]), and
+          // the optimizer 400s on any "w" outside that exact list ("w" parameter (width)
+          // of 1600 is not allowed — confirmed live, once the separate CloudFront
+          // query-string-forwarding bug in published-sites-stack.ts/compute-stack.ts was
+          // fixed enough for this validation to even run: before that fix the origin
+          // never received the query string at all, which is why this masked as the same
+          // failure regardless of "w").
+          const optimizedSrc = `/_next/image?url=${encodeURIComponent(src)}&w=1920&q=75`;
           newAttrs = newAttrs.replace(srcMatch![0], `src="${optimizedSrc}"`);
         }
       } catch {
