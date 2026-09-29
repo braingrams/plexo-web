@@ -545,6 +545,13 @@ export const CommerceSettings = new Entity(
       notifyCustomerOnShipped: { type: "boolean", default: true },
       notifyCustomerOnCompleted: { type: "boolean", default: true },
       notifyCustomerOnRefunded: { type: "boolean", default: true },
+      // Optional manual override for the shared commerce widget's (public/commerce.js) look
+      // — "Add to Cart" cards, cart/checkout controls, the newsletter signup button. Absent
+      // means "automatic": lib/commerce/deriveCommerceTheme.ts derives both from the site's
+      // own real button choices instead, so a merchant who never touches this still gets a
+      // widget that matches their brand, not the platform's hardcoded default.
+      themeAccentColor: { type: "string" },
+      themeButtonRadius: { type: ["sharp", "rounded", "pill"] as const },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },

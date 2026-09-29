@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { SUPPORTED_STORE_CURRENCIES } from "@/lib/commerce/currency";
+import type { CommerceButtonRadius, CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
+import { ColorSwatchPicker } from "@/app/dashboard/templates/[id]/ColorSwatchPicker";
 import { SettingsActionBar } from "../_components/SettingsActionBar";
 
 type LayoutInfo = { templateId: string; ready: boolean } | null;
@@ -12,7 +14,16 @@ type InitialGeneralSettings = {
   enabled: boolean;
   currency: string;
   productDetailLayout: LayoutInfo;
+  themeAccentColor: string | null;
+  themeButtonRadius: CommerceButtonRadius | null;
+  autoDetectedTheme: CommerceTheme | null;
 };
+
+const RADIUS_OPTIONS: { value: CommerceButtonRadius; label: string; preview: string }[] = [
+  { value: "sharp", label: "Sharp", preview: "2px" },
+  { value: "rounded", label: "Rounded", preview: "10px" },
+  { value: "pill", label: "Pill", preview: "100px" },
+];
 
 const inputStyle: React.CSSProperties = {
   width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
@@ -201,6 +212,98 @@ function CurrencyGrid({ value, onChange, disabled }: { value: string; onChange: 
   );
 }
 
+/** The shop grid, cart/checkout controls, and newsletter signup button (public/commerce.js)
+ * default to matching this site's own dominant button color/shape automatically — see
+ * lib/commerce/deriveCommerceTheme.ts. Overriding here is optional; "Automatic" always
+ * shows what that auto-detection currently resolves to, so the merchant can see it before
+ * deciding whether to override it. */
+function AppearanceSection({
+  accentColor, onAccentColorChange, buttonRadius, onButtonRadiusChange, autoDetected, disabled,
+}: {
+  accentColor: string | null;
+  onAccentColorChange: (value: string | null) => void;
+  buttonRadius: CommerceButtonRadius | null;
+  onButtonRadiusChange: (value: CommerceButtonRadius | null) => void;
+  autoDetected: CommerceTheme | null;
+  disabled: boolean;
+}) {
+  const effectiveColor = accentColor ?? autoDetected?.accentColor ?? "#16233F";
+  const effectiveRadius = buttonRadius ?? autoDetected?.buttonRadius ?? "sharp";
+
+  return (
+    <Section
+      title="Commerce widget appearance"
+      description="The shop grid, cart, checkout, and newsletter signup button match your site's own colors automatically. Override below only if you want something different."
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#f0f2ff" }}>Accent color</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.7rem" }}>
+          <div style={{ pointerEvents: disabled ? "none" : undefined, opacity: disabled ? 0.5 : 1 }}>
+            <ColorSwatchPicker value={effectiveColor} onChange={(v) => onAccentColorChange(v)} />
+          </div>
+          <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.45)" }}>
+            {accentColor ? "Custom" : `Automatic — detected ${autoDetected?.accentColor ?? "no signal yet, using default"}`}
+          </span>
+          {accentColor && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onAccentColorChange(null)}
+              style={{ padding: "0.3rem 0.6rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff", fontSize: "0.72rem", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+            >
+              Reset to automatic
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#f0f2ff" }}>Button shape</span>
+        <div style={{ display: "flex", gap: "0.6rem" }}>
+          {RADIUS_OPTIONS.map((opt) => {
+            const selected = effectiveRadius === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                disabled={disabled}
+                onClick={() => onButtonRadiusChange(opt.value)}
+                style={{
+                  padding: "0.5rem 0.9rem",
+                  fontSize: "0.78rem",
+                  fontFamily: "inherit",
+                  cursor: disabled ? "not-allowed" : "pointer",
+                  color: "#f0f2ff",
+                  border: selected ? "1.5px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
+                  background: selected ? "var(--brand-subtle)" : "rgba(255,255,255,0.03)",
+                  borderRadius: opt.preview,
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+          {buttonRadius && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onButtonRadiusChange(null)}
+              style={{ padding: "0.3rem 0.6rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff", fontSize: "0.72rem", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+            >
+              Reset to automatic
+            </button>
+          )}
+        </div>
+        {!buttonRadius && (
+          <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.45)" }}>
+            Automatic — currently {autoDetected?.buttonRadius ?? "sharp (default, no signal yet)"}
+          </span>
+        )}
+      </div>
+    </Section>
+  );
+}
+
 /** Wraps a section that only makes sense once Commerce is enabled — dimmed and
  * non-interactive with a one-line explanation instead of the real controls, so the page
  * reads as a sequence (enable, then configure) rather than a pile of independent choices. */
@@ -216,6 +319,8 @@ export function GeneralSettingsClient({ templateId, initial }: { templateId: str
   const router = useRouter();
   const [enabled, setEnabled] = useState(initial.enabled);
   const [currency, setCurrency] = useState(initial.currency);
+  const [themeAccentColor, setThemeAccentColor] = useState(initial.themeAccentColor);
+  const [themeButtonRadius, setThemeButtonRadius] = useState(initial.themeButtonRadius);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error" | "warning"; text: string } | null>(null);
 
@@ -226,7 +331,9 @@ export function GeneralSettingsClient({ templateId, initial }: { templateId: str
       const res = await fetch(`/api/v1/commerce/${templateId}/settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled, currency }),
+        // Empty string is this route's existing convention for "clear it" (see paystackTestPublicKey
+        // etc. in the PUT handler) — null here means "no override," so it round-trips to "".
+        body: JSON.stringify({ enabled, currency, themeAccentColor: themeAccentColor ?? "", themeButtonRadius: themeButtonRadius ?? "" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to save settings.");
@@ -258,6 +365,14 @@ export function GeneralSettingsClient({ templateId, initial }: { templateId: str
             <CurrencyGrid value={currency} onChange={setCurrency} disabled={saving} />
           </Section>
           <ProductDetailLayoutSection templateId={templateId} layout={initial.productDetailLayout} />
+          <AppearanceSection
+            accentColor={themeAccentColor}
+            onAccentColorChange={setThemeAccentColor}
+            buttonRadius={themeButtonRadius}
+            onButtonRadiusChange={setThemeButtonRadius}
+            autoDetected={initial.autoDetectedTheme}
+            disabled={saving}
+          />
         </>
       ) : (
         <Locked>

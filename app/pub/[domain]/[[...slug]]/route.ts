@@ -9,6 +9,7 @@ import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
 import { Template, TemplateAsset, BlogSite } from "@/lib/db/contentEntities";
 import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
 import { getStorefrontSlug, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
+import { deriveCommerceTheme, type CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
 import { PageView } from "@/lib/db/opsEntities";
 import { recordPageViewRollup } from "@/lib/analyticsRollup";
 
@@ -127,22 +128,41 @@ function injectBrandingBar(html: string, ctaHref: string): string {
   return html + bar;
 }
 
+// Explicit merchant override (CommerceSettings) wins; otherwise auto-detect from the site's
+// own root designJson (lib/commerce/deriveCommerceTheme.ts); null when neither exists — the
+// widget then uses its own hardcoded default, unchanged from before per-site theming existed.
+function resolveCommerceTheme(
+  commerceSettings: { themeAccentColor?: string | null; themeButtonRadius?: string | null } | null | undefined,
+  rootDesignJson: unknown,
+): CommerceTheme | null {
+  if (commerceSettings?.themeAccentColor) {
+    return {
+      accentColor: commerceSettings.themeAccentColor,
+      buttonRadius: (commerceSettings.themeButtonRadius as CommerceTheme["buttonRadius"] | undefined) ?? "sharp",
+    };
+  }
+  return deriveCommerceTheme(rootDesignJson);
+}
+
 // Plexo Commerce's runtime — the marker divs product/booking/shop_grid/etc. compile to
 // (see plexo-sdk's compiler.ts) carry no inline <script> of their own (sanitizeCompiledHtml.ts
 // strips script tags from the compiled body itself, BUILDER or RAW_UPLOAD), so this is
 // injected outside that sanitized body, the same way as injectBrandingBar below — a
 // Commerce-disabled site never gets this tag at all, see the call site's CommerceSettings
 // gate.
-function injectCommerceScript(html: string, storefrontPath: string): string {
+function injectCommerceScript(html: string, storefrontPath: string, theme: CommerceTheme | null): string {
   // ?v=<deploy sha> busts both CloudFront and any visitor's browser cache on every
   // deploy — see cdk/lib/compute-stack.ts's assetVersion comment for why the origin's
   // own shorter Cache-Control on commerce.js isn't enough by itself (a browser that
   // already cached the pre-fix immutable response never re-requests this exact URL).
   // The config script must load BEFORE commerce.js reads window.__PLEXO_COMMERCE__ at
   // parse time — storefrontPath lets the site owner rename the storefront's URL (default
-  // /store) without a commerce.js code change. JSON.stringify already escapes quotes;
-  // the "</" replace is defense in depth against a slug somehow containing it.
-  const configTag = `<script>window.__PLEXO_COMMERCE__=${JSON.stringify({ storefrontPath }).replace(/<\//g, "<\\/")};</script>`;
+  // /store) without a commerce.js code change. `theme` is null when there's neither a
+  // merchant override nor an auto-detected signal (see the call site) — commerce.js falls
+  // back to its own hardcoded look in that case, unchanged from before theming existed.
+  // JSON.stringify already escapes quotes; the "</" replace is defense in depth against a
+  // slug somehow containing it.
+  const configTag = `<script>window.__PLEXO_COMMERCE__=${JSON.stringify({ storefrontPath, theme }).replace(/<\//g, "<\\/")};</script>`;
   const scriptTag = `${configTag}<script src="/commerce.js?v=${process.env.ASSET_VERSION ?? "dev"}" defer></script>`;
   const maskedHtml = html.replace(
     /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
@@ -513,7 +533,11 @@ export async function GET(
     // Commerce is a per-site setting, same as CommerceSettings itself.
     const { data: commerceSettings } = await CommerceSettings.get({ templateId: published.templateId }).go();
     if (commerceSettings?.enabled) {
-      html = injectCommerceScript(html, `/${(await getStorefrontSlug(published.templateId)) ?? DEFAULT_STOREFRONT_SLUG}`);
+      html = injectCommerceScript(
+        html,
+        `/${(await getStorefrontSlug(published.templateId)) ?? DEFAULT_STOREFRONT_SLUG}`,
+        resolveCommerceTheme(commerceSettings, published.template.designJson),
+      );
     }
     if (html.includes(LMS_SIGNUP_MARKER_ATTR)) {
       html = injectLmsSignupScript(html);
@@ -595,7 +619,11 @@ export async function GET(
             siteName: published.template.name || rawDomain,
           });
           html = optimizeImages(html);
-          html = injectCommerceScript(html, `/${(await getStorefrontSlug(published.templateId)) ?? DEFAULT_STOREFRONT_SLUG}`);
+          html = injectCommerceScript(
+            html,
+            `/${(await getStorefrontSlug(published.templateId)) ?? DEFAULT_STOREFRONT_SLUG}`,
+            resolveCommerceTheme(commerceSettings, published.template.designJson),
+          );
           if (commerceSettings.newsletterPopupEnabled && commerceSettings.maildripNewsletterGroupId) {
             html = injectNewsletterPopupScript(html);
           }
