@@ -9,10 +9,14 @@
  * — sanitizeCompiledHtml.ts strips <script> tags from the compiled body itself, so this
  * file is the ONLY place Commerce's client behavior can live.
  *
- * Styling is deliberately neutral (not Helimax-specific, or any other single site's
- * brand) — this runs on every Commerce-enabled Plexo site. A site-level "Commerce
- * appearance" setting (accent color, font) would be a reasonable fast-follow, mirroring
- * BlogSite.accentColor/fontPreset, but isn't built yet.
+ * Styling defaults to a neutral navy/gold look (not tied to any one site's brand), but is
+ * now theme-aware: window.__PLEXO_COMMERCE__.theme (set by injectCommerceScript, resolved
+ * by an explicit CommerceSettings override or, failing that, auto-detected from the site's
+ * own button choices — see lib/commerce/deriveCommerceTheme.ts) drives the primary button's
+ * accent color and the shared corner radius. `theme` is absent/null whenever neither exists
+ * (a brand-new site with no filled buttons yet), in which case every value below falls back
+ * to these exact literals — a site with nothing to detect renders identically to before
+ * theming existed.
  */
 (function () {
   "use strict";
@@ -52,30 +56,50 @@
 
   function injectStyles() {
     if (document.getElementById(STYLE_ID)) return;
+    var theme = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.theme) || null;
+    var accent = (theme && theme.accentColor) || "#16233F";
+    var radius = { sharp: "2px", rounded: "10px", pill: "100px" }[theme && theme.buttonRadius] || "2px";
+    // Any derived/configured accent could be light or dark — picking the on-accent text
+    // color unconditionally (the old hardcoded #FBFAF6) only happened to work because
+    // #16233F is dark. Relative luminance (WCAG's simplified sRGB formula) keeps button
+    // text legible regardless of what accent a given site resolves to.
+    var accentTextColor = (function () {
+      var hex = accent.replace("#", "");
+      if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+      if (!/^[0-9a-fA-F]{6}$/.test(hex)) return "#FBFAF6";
+      var r = parseInt(hex.slice(0, 2), 16) / 255;
+      var g = parseInt(hex.slice(2, 4), 16) / 255;
+      var b = parseInt(hex.slice(4, 6), 16) / 255;
+      var luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      return luminance > 0.6 ? "#16233F" : "#FBFAF6";
+    })();
     var css = [
       ".pc-root{font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;color:#1B2333;}",
       ".pc-root *{box-sizing:border-box;}",
       ".pc-mono{font-family:'IBM Plex Mono',monospace;}",
       ".pc-serif{font-family:'Fraunces',serif;}",
       ".pc-muted{color:#565F72;}",
-      ".pc-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#16233F;color:#FBFAF6;border:none;padding:14px 22px;font-size:14.5px;font-weight:600;cursor:pointer;border-radius:2px;font-family:'Public Sans',sans-serif;line-height:1.2;}",
-      ".pc-btn:hover{background:#1E2F52;}",
+      ".pc-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:" + accent + ";color:" + accentTextColor + ";border:none;padding:14px 22px;font-size:14.5px;font-weight:600;cursor:pointer;border-radius:" + radius + ";font-family:'Public Sans',sans-serif;line-height:1.2;}",
+      ".pc-btn:hover{filter:brightness(1.12);}",
       ".pc-btn:disabled{opacity:0.5;cursor:not-allowed;}",
-      ".pc-btn-gold{background:#E3B23C;color:#16233F;}",
-      ".pc-btn-gold:hover{background:#F6E7C3;}",
+      // Historically a fixed gold variant; now just the theme's accent again — kept as a
+      // separate class (rather than folded into .pc-btn) since call sites combine it with
+      // .pc-btn for layout/sizing overrides while relying on this rule for color/radius.
+      ".pc-btn-gold{background:" + accent + ";color:" + accentTextColor + ";border-radius:" + radius + ";}",
+      ".pc-btn-gold:hover{filter:brightness(1.12);}",
       ".pc-btn-outline{background:transparent;color:#16233F;border:1.5px solid #E4E1D6;}",
       ".pc-btn-outline:hover{background:#F3F1EA;}",
-      ".pc-input{width:100%;padding:14px 16px;font-size:14px;border:1px solid #E4E1D6;border-radius:0;font-family:'Public Sans',sans-serif;color:#1B2333;background:#FFFFFF;}",
+      ".pc-input{width:100%;padding:14px 16px;font-size:14px;border:1px solid #E4E1D6;border-radius:" + radius + ";font-family:'Public Sans',sans-serif;color:#1B2333;background:#FFFFFF;}",
       ".pc-input:focus{outline:1.5px solid #16233F;outline-offset:-1px;}",
       ".pc-label{display:block;font-size:12.5px;font-weight:600;color:#16233F;margin-bottom:8px;}",
-      ".pc-card{background:#FFFFFF;border:1px solid #E4E1D6;border-radius:0;overflow:hidden;}",
+      ".pc-card{background:#FFFFFF;border:1px solid #E4E1D6;border-radius:" + radius + ";overflow:hidden;}",
       ".pc-error{background:#F3E4E1;border:1px solid #E3B8AE;color:#8C3A2E;padding:10px 14px;border-radius:2px;font-size:13.5px;margin:10px 0;}",
       ".pc-badge{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:500;letter-spacing:0.05em;text-transform:uppercase;padding:4px 8px;border-radius:0;}",
       ".pc-badge-ok{background:#E4F0E7;color:#1F5C3C;}",
       ".pc-badge-low{background:#FBEFD8;color:#8A5A22;}",
       ".pc-badge-out{background:#F3E4E1;color:#8C3A2E;}",
       ".pc-grid{display:grid;gap:24px;}",
-      ".pc-select{padding:12px 32px 12px 14px;font-size:13.5px;border:1px solid #E4E1D6;border-radius:0;font-family:'Public Sans',sans-serif;color:#1B2333;background-color:#FFFFFF;appearance:none;-webkit-appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23565F72' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 12px center;}",
+      ".pc-select{padding:12px 32px 12px 14px;font-size:13.5px;border:1px solid #E4E1D6;border-radius:" + radius + ";font-family:'Public Sans',sans-serif;color:#1B2333;background-color:#FFFFFF;appearance:none;-webkit-appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23565F72' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 12px center;}",
       ".pc-newsletter-input::placeholder{color:#8FA0C4;}",
       ".pc-spin{width:22px;height:22px;border-radius:50%;border:2.5px solid #E4E1D6;border-top-color:#16233F;animation:pc-spin 0.7s linear infinite;}",
       "@keyframes pc-spin{to{transform:rotate(360deg);}}",

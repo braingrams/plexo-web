@@ -14,7 +14,9 @@ import {
 import { isKnownCurrency, isPaystackCompatibleCurrency } from "@/lib/commerce/currency";
 import { ensureProductDetailLayout } from "@/lib/commerce/productDetailLayout";
 import { ensureStorefrontLayout, getStorefrontSlug, renameStorefrontSlug } from "@/lib/commerce/storefrontLayout";
+import { deriveCommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
 import { CommerceSettings, CommerceStripeAccessRequest, CommerceOrder } from "@/lib/db/commerceEntities";
+import { Template } from "@/lib/db/contentEntities";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
   const { templateId } = await context.params;
@@ -23,9 +25,17 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
 
   const { data: settings } = await CommerceSettings.get({ templateId }).go();
   const storefrontSlug = await getStorefrontSlug(templateId);
+  const { data: rootTemplate } = await Template.get({ id: templateId }).go();
+  const autoTheme = deriveCommerceTheme(rootTemplate?.designJson);
 
   return NextResponse.json({
     settings: {
+      // Manual override (null = "use automatic"), plus the live auto-detected value so the
+      // dashboard can show what "automatic" actually resolves to right now — see
+      // lib/commerce/deriveCommerceTheme.ts.
+      themeAccentColor: settings?.themeAccentColor ?? null,
+      themeButtonRadius: settings?.themeButtonRadius ?? null,
+      autoDetectedTheme: autoTheme,
       enabled: settings?.enabled ?? false,
       storefrontSlug,
       currency: settings?.currency ?? "NGN",
@@ -111,6 +121,8 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     notifyCustomerOnShipped,
     notifyCustomerOnCompleted,
     notifyCustomerOnRefunded,
+    themeAccentColor,
+    themeButtonRadius,
   } = body;
 
   if (storefrontSlug !== undefined && typeof storefrontSlug !== "string") {
@@ -192,7 +204,9 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     | "stripeLivePublishableKey"
     | "maildripPaidGroupId"
     | "maildripNewsletterGroupId"
-    | "notificationEmail";
+    | "notificationEmail"
+    | "themeAccentColor"
+    | "themeButtonRadius";
   const toRemove: RemovableField[] = [];
 
   if (typeof enabled === "boolean") data.enabled = enabled;
@@ -259,6 +273,14 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
   if (typeof notifyCustomerOnShipped === "boolean") data.notifyCustomerOnShipped = notifyCustomerOnShipped;
   if (typeof notifyCustomerOnCompleted === "boolean") data.notifyCustomerOnCompleted = notifyCustomerOnCompleted;
   if (typeof notifyCustomerOnRefunded === "boolean") data.notifyCustomerOnRefunded = notifyCustomerOnRefunded;
+  if (typeof themeAccentColor === "string") {
+    if (themeAccentColor) data.themeAccentColor = themeAccentColor;
+    else toRemove.push("themeAccentColor");
+  }
+  if (typeof themeButtonRadius === "string") {
+    if (themeButtonRadius) data.themeButtonRadius = themeButtonRadius;
+    else toRemove.push("themeButtonRadius");
+  }
 
   const { data: existing } = await CommerceSettings.get({ templateId }).go();
   if (existing) {
