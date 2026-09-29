@@ -203,6 +203,30 @@ export class PublishedSitesStack extends cdk.Stack {
       enableAcceptEncodingBrotli: true,
     });
 
+    // The "_next/image*" behavior below used CACHING_OPTIMIZED (a managed policy with no
+    // query-string forwarding/cache-keying at all) with no originRequestPolicyId — the
+    // ImageFn origin's own Lambda never received "url"/"w"/"q" at all, so every image ever
+    // requested through this distribution's optimizer 400ed with "\"url\" parameter is
+    // required" (confirmed live on a real published site). compute-stack.ts's own
+    // Distribution (the dashboard app, a completely separate CloudFront distribution from
+    // this one — this stack is what actually serves published customer sites) had the
+    // identical bug, independently duplicated when these behaviors were ported; fixed
+    // there first in a separate PR before this file's copy was found. Unlike the
+    // 2026-09-04 outage documented on pageCachePolicy above (a cache policy HEADER
+    // allow-list on the DEFAULT behavior's ServerFn origin corrupting the Host header),
+    // this only touches the ImageFn origin's own isolated behavior, and reuses
+    // ALL_VIEWER_EXCEPT_HOST — the same origin request policy already safely in use on the
+    // default behavior above — rather than introducing a new one.
+    const imageOptimizerCachePolicy = new cloudfront.CachePolicy(this, "ImageOptimizerCachePolicy", {
+      cachePolicyName: `${this.stackName}-image-optimizer`,
+      comment: "Query-string-aware cache policy for the Next.js image optimizer — see this resource's own comment",
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("url", "w", "q"),
+      headerBehavior: cloudfront.CacheHeaderBehavior.none(),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    });
+
     // --- The multi-tenant "primary" distribution — behaviors are a straight port of
     // compute-stack.ts's own Distribution (see that file's comment: "behaviors match
     // open-next.output.json exactly"). ConnectionMode "tenant-only" + TenantConfig is what
@@ -287,7 +311,7 @@ export class PublishedSitesStack extends cdk.Stack {
           functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }],
         },
         cacheBehaviors: [
-          { pathPattern: "_next/image*", targetOriginId: "ImageFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
+          { pathPattern: "_next/image*", targetOriginId: "ImageFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: imageOptimizerCachePolicy.cachePolicyId, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "_next/*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "commerce.js", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "uploads/*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
