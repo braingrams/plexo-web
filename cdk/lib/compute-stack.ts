@@ -786,6 +786,26 @@ export class ComputeStack extends cdk.Stack {
       },
     });
 
+    // The managed CACHING_OPTIMIZED policy the "_next/image*" behavior below uses doesn't
+    // include the query string in its cache key OR forward it to the origin at all — Next's
+    // own image-optimizer Lambda needs "url"/"w"/"q" to know what to fetch/resize, so every
+    // request to it 400ed with "\"url\" parameter is required" (confirmed live: the origin
+    // never even received the query string, regardless of its value). Every OTHER
+    // Lambda-backed behavior in this stack sets ALL_VIEWER_EXCEPT_HOST_HEADER for exactly
+    // this reason; this one was simply missed when these behaviors were ported from
+    // open-next.output.json (whose manifest only specifies origin routing, not cache/
+    // origin-request policy). This custom cache policy is the origin-request fix's
+    // necessary pair: without it, CloudFront would still forward the query string
+    // correctly but cache every w/q variant under one shared key, serving one arbitrarily-
+    // sized image for every request at a given "url".
+    const imageOptimizerCachePolicy = new cloudfront.CachePolicy(this, "ImageOptimizerCachePolicy", {
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("url", "w", "q"),
+      headerBehavior: cloudfront.CacheHeaderBehavior.none(),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    });
+
     // DNS-validated via a manual CNAME (see appDomain's own comment above) — `cdk deploy`
     // blocks here until that CNAME is added and ACM sees it, same wait behavior
     // published-sites-stack.ts's own wildcardCert already relies on. Imported instead when
@@ -871,7 +891,8 @@ export class ComputeStack extends cdk.Stack {
         "_next/image*": {
           origin: origins.FunctionUrlOrigin.withOriginAccessControl(imageFnUrl),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          cachePolicy: imageOptimizerCachePolicy,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
           responseHeadersPolicy: securityHeadersPolicy,
         },
         "_next/*": {
