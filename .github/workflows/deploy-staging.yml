@@ -268,7 +268,20 @@ jobs:
       # shorter origin Cache-Control and the ?v=<sha> query param, and why it's
       # continue-on-error (this role's IAM permissions outside `cdk deploy` itself aren't
       # verified — a permissions gap here must not fail the deploy or skip the smoke test).
-      - name: Invalidate CloudFront cache for commerce.js
+      #
+      # Loops every distribution TENANT, not just the primary distribution — this
+      # distribution runs connectionMode "tenant-only" (published-sites-stack.ts), so no
+      # real visitor's traffic is ever served by the primary distribution's own cache at
+      # all; every domain (the *.plexopages.com wildcard AND every custom domain) is
+      # served through its own CfnDistributionTenant, each caching independently. The
+      # plain create-invalidation call below only ever cleared the primary distribution —
+      # confirmed live on yeshuahelimax.com (a custom domain): it kept serving a stale
+      # commerce.js for hours after a deploy until its own dedicated tenant was found and
+      # invalidated by hand (see create-invalidation-for-distribution-tenant, the
+      # tenant-scoped equivalent — the plain command 404s as NoSuchDistribution against a
+      # tenant ID). Keeping the plain call too costs nothing and covers any other cache
+      # CloudFront might hold at the distribution level itself.
+      - name: Invalidate CloudFront cache for commerce.js (every distribution tenant)
         working-directory: ./cdk
         continue-on-error: true
         run: |
@@ -276,7 +289,18 @@ jobs:
             --stack-name "${STACK_ID}-published-sites-stack" \
             --query "Stacks[0].Outputs[?OutputKey=='PrimaryDistributionId'].OutputValue" \
             --output text)
-          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths "/commerce.js"
+          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths "/commerce.js" >/dev/null
+
+          TENANT_IDS=$(aws cloudfront list-distribution-tenants \
+            --association-filter DistributionId="$DISTRIBUTION_ID" \
+            --query "DistributionTenantList[].Id" --output text)
+          for TENANT_ID in $TENANT_IDS; do
+            echo "Invalidating tenant $TENANT_ID"
+            aws cloudfront create-invalidation-for-distribution-tenant \
+              --id "$TENANT_ID" \
+              --invalidation-batch "{\"Paths\":{\"Quantity\":1,\"Items\":[\"/commerce.js\"]},\"CallerReference\":\"gh-${{ github.run_id }}-${{ github.run_attempt }}-$TENANT_ID\"}" \
+              || echo "::warning::Failed to invalidate distribution tenant $TENANT_ID"
+          done
 
       # Checks staging-plexo.charisol.io directly, NOT the distribution's own
       # *.cloudfront.net domain — now that NEXT_PUBLIC_APP_URL is the custom domain,
