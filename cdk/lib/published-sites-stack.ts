@@ -144,6 +144,7 @@ export class PublishedSitesStack extends cdk.Stack {
     });
 
     const CACHING_OPTIMIZED = cloudfront.CachePolicy.CACHING_OPTIMIZED.cachePolicyId;
+    const CACHING_DISABLED = cloudfront.CachePolicy.CACHING_DISABLED.cachePolicyId;
     const ALL_VIEWER_EXCEPT_HOST = cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER.originRequestPolicyId;
     const ALLOW_ALL_METHODS = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"];
     const CACHED_METHODS = ["GET", "HEAD"];
@@ -311,6 +312,20 @@ export class PublishedSitesStack extends cdk.Stack {
           functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }],
         },
         cacheBehaviors: [
+          // Every route under app/api/public/commerce/* (cart, checkout, etc.) is
+          // per-visitor dynamic state read from a cookie (CART_COOKIE) — but with no
+          // dedicated behavior here, these fell through to defaultCacheBehavior below,
+          // which uses pageCachePolicy (cookieBehavior: none, 10s/60s TTL). CloudFront
+          // doesn't vary that cache key by cookie at all, so it cached ONE visitor's cart
+          // response and served it to every other visitor hitting the same URL within the
+          // TTL window — confirmed live: two back-to-back curls to
+          // /api/public/commerce/cart returned "X-Cache: Miss" then "X-Cache: Hit from
+          // cloudfront" on the second, meaning a real visitor's own cart request could
+          // (and did) return someone else's cached snapshot, explaining "add to cart, go
+          // to checkout, cart shows empty/stale until reload" — the reload just happened
+          // to land after the cached entry expired. CACHING_DISABLED is CloudFront's own
+          // managed zero-TTL policy — every request here always reaches ServerFn fresh.
+          { pathPattern: "api/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_DISABLED, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: ALLOW_ALL_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
           { pathPattern: "_next/image*", targetOriginId: "ImageFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: imageOptimizerCachePolicy.cachePolicyId, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "_next/*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "commerce.js", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
