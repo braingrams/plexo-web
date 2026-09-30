@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { PageContainer } from "../../../_components/PageContainer";
 import { Card } from "../../../_components/Card";
 import { CustomSelect } from "../../../../_components/CustomSelect";
+import { SiteAppearancePanel } from "./SiteAppearancePanel";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
@@ -1132,6 +1133,8 @@ export function DetailClient({
                   </div>
                 </div>
               </Card>
+
+              <SiteAppearancePanel templateId={templateId} />
 
               <Card>
                 <div style={ROW}>
