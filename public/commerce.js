@@ -421,6 +421,37 @@
     return api("/api/public/commerce/cart");
   }
 
+  // Lets shopCard/renderProduct/renderProductDetail mark a product's Add-to-Cart button
+  // as already "Added ✓" on initial paint, not only right after a fresh in-page click —
+  // the cart itself already persists across reloads (CART_COOKIE), but until now nothing
+  // re-checked it when a button was first built, so the button silently forgot its own
+  // product was already in the cart the moment the page reloaded or was navigated to.
+  // Memoized per page load (one fetch shared by every card) and kept in sync by
+  // broadcastCart's own CART_EVENT, which every add/update/remove already dispatches.
+  var cartProductIdsPromise = null;
+  function cartItemsToIdSet(items) {
+    var ids = {};
+    (items || []).forEach(function (item) {
+      ids[item.productId] = true;
+    });
+    return ids;
+  }
+  function getCartProductIds() {
+    if (!cartProductIdsPromise) {
+      cartProductIdsPromise = fetchCart()
+        .then(function (snapshot) {
+          return cartItemsToIdSet(snapshot.items);
+        })
+        .catch(function () {
+          return {};
+        });
+    }
+    return cartProductIdsPromise;
+  }
+  document.addEventListener(CART_EVENT, function (e) {
+    cartProductIdsPromise = Promise.resolve(cartItemsToIdSet(e.detail.items));
+  });
+
   // ---------------------------------------------------------------------
   // Added-to-cart flyout — appears immediately on a successful add, showing what was
   // just added plus a direct "View Cart" link into the checkout page. Only one shown at
@@ -607,6 +638,9 @@
               )),
             ])
           );
+          getCartProductIds().then(function (ids) {
+            if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+          });
           return;
         }
 
@@ -692,6 +726,9 @@
         node.appendChild(
           el("div", { style: Object.assign({ height: "100%", overflow: "hidden" }, teaser ? { background: "#1E2F52", border: "1px solid rgba(227,178,60,0.16)" } : { background: "#fff", border: "1px solid #E4E1D6" }) }, body)
         );
+        getCartProductIds().then(function (ids) {
+          if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+        });
       })
       .catch(function (err) {
         showError(node, err.message);
@@ -837,6 +874,11 @@
           ]),
         ]);
         node.appendChild(heroWrap);
+        if (addBtn) {
+          getCartProductIds().then(function (ids) {
+            if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+          });
+        }
 
         // Staff-curated only (CommerceProductRelation, set from the product's own admin
         // edit form) — never a guessed/automatic pick, and the whole section simply
@@ -1037,7 +1079,7 @@
     // price and Add to Cart sit OUTSIDE that link (a nested interactive button inside
     // an <a> is invalid HTML and unreliable to click) so adding to cart from the grid
     // still works without navigating away.
-    return el("div", { style: { display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: dark ? "#1E2F52" : "#fff", border: dark ? "1px solid rgba(227,178,60,0.16)" : "1px solid #E4E1D6" } }, [
+    var card = el("div", { style: { display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: dark ? "#1E2F52" : "#fff", border: dark ? "1px solid rgba(227,178,60,0.16)" : "1px solid #E4E1D6" } }, [
       el("a", { href: href, style: { display: "block", textDecoration: "none", color: "inherit" } }, [
         media,
         el("div", { style: { padding: "14px 14px 0" } }, [
@@ -1074,6 +1116,10 @@
         )),
       ]),
     ]);
+    getCartProductIds().then(function (ids) {
+      if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+    });
+    return card;
   }
 
   // A card for a slot the curated grid couldn't fill (a brand-new catalog with nothing
