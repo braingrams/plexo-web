@@ -27,6 +27,14 @@
   // injectCommerceScript in app/pub/[domain]/[[...slug]]/route.ts). "/shop" is only a
   // last-resort fallback for a page that somehow loads this script without that config.
   var STOREFRONT_PATH = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.storefrontPath) || "/shop";
+  // The checkout page's own REAL resolved path (see getCheckoutPath in
+  // lib/commerce/storefrontLayout.ts) — NOT assumed to be "{STOREFRONT_PATH}/checkout"
+  // anymore. That assumption only held for the auto-provisioned flow (checkout genuinely a
+  // child of the storefront page); a hand-built site can have its checkout page anywhere
+  // in the tree, including a sibling of the storefront rather than a child — confirmed
+  // live: a real site's checkout 404ed under that assumption. Falls back to the old
+  // concatenation only if the config predates this (null), never as the normal case.
+  var CHECKOUT_PATH = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.checkoutPath) || (STOREFRONT_PATH + "/checkout");
   var CART_EVENT = "plexo:cart-updated";
   var CHECKOUT_STATE_EVENT = "plexo:checkout-state-changed";
   // Shared between the checkout page's two independent marker blocks — checkout_flow
@@ -43,6 +51,8 @@
     deliveryFeeMinor: 0,
     shippingCountry: "",
     shippingState: "",
+    shippingCity: "",
+    shippingCityIsOther: false,
     shippingAddressLine: "",
     customerName: "",
     customerEmail: "",
@@ -59,6 +69,13 @@
     var theme = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.theme) || null;
     var accent = (theme && theme.accentColor) || "#16233F";
     var radius = { sharp: "2px", rounded: "10px", pill: "100px" }[theme && theme.buttonRadius] || "2px";
+    // Large rectangular containers (cards, inputs, selects) use a capped radius even when
+    // the site's own button style is "pill" — a 100px corner radius reads fine on a small
+    // button (the whole point of a pill shape) but turns a tall card into a stretched oval/
+    // stadium blob, confirmed live on the checkout page's order-summary card. "Pill" here
+    // means "generously rounded," not "literally capsule-shaped," for anything taller than
+    // a button.
+    var containerRadius = { sharp: "2px", rounded: "10px", pill: "16px" }[theme && theme.buttonRadius] || "2px";
     // Any derived/configured accent could be light or dark — picking the on-accent text
     // color unconditionally (the old hardcoded #FBFAF6) only happened to work because
     // #16233F is dark. Relative luminance (WCAG's simplified sRGB formula) keeps button
@@ -305,6 +322,71 @@
     node.appendChild(el("div", { class: "pc-error" }, [message]));
   }
 
+  // Delivery methods are configured with ISO-3166-1 alpha-2 codes and free-text state names
+  // (lib/commerce/delivery.ts matches address.country/state against exactly those, case-
+  // insensitively) — a free-text field expecting a customer to already know a country's ISO
+  // code, or to spell a state exactly as the merchant typed it, is a real dead end (confirmed
+  // live: "Nigeria" typed into a plain text box silently failed to match a method scoped to
+  // "NG"). COUNTRIES is a standard ISO-3166-1 list for the dropdown; STATES_BY_COUNTRY gives
+  // a proper state dropdown for countries this covers (currently Nigeria, the common case for
+  // this platform's merchants) — any other country falls back to a plain text state input,
+  // same as before, rather than pretending to have every country's subdivisions memorized.
+  var COUNTRIES = [
+    ["NG", "Nigeria"], ["GH", "Ghana"], ["KE", "Kenya"], ["ZA", "South Africa"], ["EG", "Egypt"],
+    ["MA", "Morocco"], ["ET", "Ethiopia"], ["TZ", "Tanzania"], ["UG", "Uganda"], ["CI", "Côte d'Ivoire"],
+    ["SN", "Senegal"], ["CM", "Cameroon"], ["ZW", "Zimbabwe"], ["ZM", "Zambia"], ["RW", "Rwanda"],
+    ["BJ", "Benin"], ["TG", "Togo"], ["SL", "Sierra Leone"], ["LR", "Liberia"], ["NE", "Niger"],
+    ["ML", "Mali"], ["BF", "Burkina Faso"], ["GM", "Gambia"], ["GW", "Guinea-Bissau"], ["GN", "Guinea"],
+    ["MR", "Mauritania"], ["TD", "Chad"], ["CD", "DR Congo"], ["CG", "Congo"], ["GA", "Gabon"],
+    ["GQ", "Equatorial Guinea"], ["AO", "Angola"], ["NA", "Namibia"], ["BW", "Botswana"], ["MZ", "Mozambique"],
+    ["MW", "Malawi"], ["MG", "Madagascar"], ["SS", "South Sudan"], ["SD", "Sudan"], ["SO", "Somalia"],
+    ["DJ", "Djibouti"], ["ER", "Eritrea"], ["LY", "Libya"], ["TN", "Tunisia"], ["DZ", "Algeria"],
+    ["CV", "Cabo Verde"], ["ST", "São Tomé and Príncipe"], ["SC", "Seychelles"], ["MU", "Mauritius"],
+    ["KM", "Comoros"], ["SZ", "Eswatini"], ["LS", "Lesotho"], ["BI", "Burundi"], ["US", "United States"],
+    ["GB", "United Kingdom"], ["CA", "Canada"], ["AU", "Australia"], ["NZ", "New Zealand"], ["IE", "Ireland"],
+    ["DE", "Germany"], ["FR", "France"], ["ES", "Spain"], ["PT", "Portugal"], ["IT", "Italy"],
+    ["NL", "Netherlands"], ["BE", "Belgium"], ["CH", "Switzerland"], ["AT", "Austria"], ["SE", "Sweden"],
+    ["NO", "Norway"], ["DK", "Denmark"], ["FI", "Finland"], ["PL", "Poland"], ["GR", "Greece"],
+    ["TR", "Türkiye"], ["RU", "Russia"], ["UA", "Ukraine"], ["AE", "United Arab Emirates"],
+    ["SA", "Saudi Arabia"], ["QA", "Qatar"], ["KW", "Kuwait"], ["BH", "Bahrain"], ["OM", "Oman"],
+    ["JO", "Jordan"], ["LB", "Lebanon"], ["IL", "Israel"], ["IN", "India"], ["PK", "Pakistan"],
+    ["BD", "Bangladesh"], ["CN", "China"], ["JP", "Japan"], ["KR", "South Korea"], ["SG", "Singapore"],
+    ["MY", "Malaysia"], ["ID", "Indonesia"], ["PH", "Philippines"], ["TH", "Thailand"], ["VN", "Vietnam"],
+    ["BR", "Brazil"], ["MX", "Mexico"], ["AR", "Argentina"], ["CO", "Colombia"], ["CL", "Chile"],
+    ["PE", "Peru"], ["JM", "Jamaica"], ["TT", "Trinidad and Tobago"],
+  ];
+
+  var STATES_BY_COUNTRY = {
+    NG: [
+      "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno",
+      "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "Gombe", "Imo", "Jigawa",
+      "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara", "Lagos", "Nasarawa", "Niger",
+      "Ogun", "Ondo", "Osun", "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe",
+      "Zamfara", "FCT (Abuja)",
+    ],
+  };
+
+  // City is informational only — captured as part of the shipping address, never used to
+  // gate delivery-method eligibility (that stays country/state, same as
+  // lib/commerce/delivery.ts's isMethodApplicable always has). Each state's own capital
+  // plus a small number of other well-known major cities — not an exhaustive LGA list
+  // (Nigeria has 774 of those, too large and too easy to get subtly wrong to hardcode here
+  // with confidence) — "Other" always falls back to free text for anywhere not listed.
+  var MAJOR_CITIES_BY_STATE = {
+    Abia: ["Umuahia", "Aba"], Adamawa: ["Yola", "Mubi"], "Akwa Ibom": ["Uyo"],
+    Anambra: ["Awka", "Onitsha", "Nnewi"], Bauchi: ["Bauchi"], Bayelsa: ["Yenagoa"],
+    Benue: ["Makurdi"], Borno: ["Maiduguri"], "Cross River": ["Calabar"],
+    Delta: ["Asaba", "Warri"], Ebonyi: ["Abakaliki"], Edo: ["Benin City"],
+    Ekiti: ["Ado-Ekiti"], Enugu: ["Enugu"], Gombe: ["Gombe"], Imo: ["Owerri"],
+    Jigawa: ["Dutse"], Kaduna: ["Kaduna", "Zaria"], Kano: ["Kano"], Katsina: ["Katsina"],
+    Kebbi: ["Birnin Kebbi"], Kogi: ["Lokoja"], Kwara: ["Ilorin"],
+    Lagos: ["Ikeja", "Lagos Island", "Lekki", "Surulere"], Nasarawa: ["Lafia"],
+    Niger: ["Minna"], Ogun: ["Abeokuta"], Ondo: ["Akure"], Osun: ["Osogbo"],
+    Oyo: ["Ibadan"], Plateau: ["Jos"], Rivers: ["Port Harcourt"], Sokoto: ["Sokoto"],
+    Taraba: ["Jalingo"], Yobe: ["Damaturu"], Zamfara: ["Gusau"], "FCT (Abuja)": ["Abuja"],
+  };
+  var OTHER_CITY_VALUE = "__other__";
+
   function stockBadge(stockQuantity) {
     if (stockQuantity === null || stockQuantity === undefined) return el("span", { class: "pc-badge pc-badge-ok" }, ["In Stock"]);
     if (stockQuantity <= 0) return el("span", { class: "pc-badge pc-badge-out" }, ["Out of Stock"]);
@@ -408,7 +490,7 @@
         ]),
         el(
           "a",
-          { class: "pc-btn", href: STOREFRONT_PATH + "/checkout", style: { textDecoration: "none", width: "100%", marginTop: "14px" } },
+          { class: "pc-btn", href: CHECKOUT_PATH, style: { textDecoration: "none", width: "100%", marginTop: "14px" } },
           ["View Cart"]
         ),
       ]
@@ -1504,7 +1586,11 @@
                 deliveryMethodId: checkoutFormState.deliveryMethodId || undefined,
                 shippingCountry: checkoutFormState.shippingCountry || undefined,
                 shippingState: checkoutFormState.shippingState || undefined,
-                shippingAddressLine: checkoutFormState.shippingAddressLine || undefined,
+                // City is informational only (see MAJOR_CITIES_BY_STATE's own comment) — no
+                // dedicated column for it, so it rides along as part of the address line
+                // rather than needing a backend/schema change for a non-eligibility field.
+                shippingAddressLine:
+                  [checkoutFormState.shippingAddressLine, checkoutFormState.shippingCity].filter(Boolean).join(", ") || undefined,
                 discountCode: checkoutFormState.discountCode || undefined,
               }),
             })
@@ -1711,24 +1797,117 @@
         var sections = [];
 
         if (needsDelivery) {
-          var countryInput = el("input", {
-            class: "pc-input",
-            value: checkoutFormState.shippingCountry,
-            placeholder: "e.g. NG",
-            oninput: function (e) {
-              checkoutFormState.shippingCountry = e.target.value.trim().toUpperCase();
-              scheduleDeliveryReload();
+          var stateFieldBox = el("div", {});
+          var cityFieldBox = el("div", {});
+
+          function buildCityField() {
+            clear(cityFieldBox);
+            var cities = MAJOR_CITIES_BY_STATE[checkoutFormState.shippingState];
+            var field;
+            if (cities && !checkoutFormState.shippingCityIsOther) {
+              if (checkoutFormState.shippingCity && cities.indexOf(checkoutFormState.shippingCity) === -1) {
+                checkoutFormState.shippingCity = "";
+              }
+              field = el(
+                "select",
+                {
+                  class: "pc-select",
+                  style: { width: "100%" },
+                  onchange: function (e) {
+                    if (e.target.value === OTHER_CITY_VALUE) {
+                      checkoutFormState.shippingCityIsOther = true;
+                      checkoutFormState.shippingCity = "";
+                      buildCityField();
+                      return;
+                    }
+                    checkoutFormState.shippingCity = e.target.value;
+                  },
+                },
+                [el("option", { value: "" }, ["Select city"])]
+                  .concat(
+                    cities.map(function (name) {
+                      return el("option", { value: name, selected: checkoutFormState.shippingCity === name ? "selected" : null }, [name]);
+                    })
+                  )
+                  .concat([el("option", { value: OTHER_CITY_VALUE }, ["Other (type below)"])])
+              );
+            } else {
+              field = el("input", {
+                class: "pc-input",
+                value: checkoutFormState.shippingCity,
+                placeholder: "City / town",
+                oninput: function (e) {
+                  checkoutFormState.shippingCity = e.target.value;
+                },
+              });
+            }
+            cityFieldBox.appendChild(field);
+          }
+
+          function buildStateField() {
+            clear(stateFieldBox);
+            var options = STATES_BY_COUNTRY[checkoutFormState.shippingCountry];
+            var field;
+            if (options) {
+              // A state chosen under one country, then the country changed, is no longer
+              // meaningful — cleared rather than left stale so a leftover value can't
+              // silently mismatch the new country in the delivery-method lookup.
+              if (checkoutFormState.shippingState && options.indexOf(checkoutFormState.shippingState) === -1) {
+                checkoutFormState.shippingState = "";
+              }
+              field = el(
+                "select",
+                {
+                  class: "pc-select",
+                  style: { width: "100%" },
+                  onchange: function (e) {
+                    checkoutFormState.shippingState = e.target.value;
+                    checkoutFormState.shippingCity = "";
+                    checkoutFormState.shippingCityIsOther = false;
+                    buildCityField();
+                    scheduleDeliveryReload();
+                  },
+                },
+                [el("option", { value: "" }, ["Select state"])].concat(
+                  options.map(function (name) {
+                    return el("option", { value: name, selected: checkoutFormState.shippingState === name ? "selected" : null }, [name]);
+                  })
+                )
+              );
+            } else {
+              field = el("input", {
+                class: "pc-input",
+                value: checkoutFormState.shippingState,
+                placeholder: "State / region",
+                oninput: function (e) {
+                  checkoutFormState.shippingState = e.target.value.trim();
+                  scheduleDeliveryReload();
+                },
+              });
+            }
+            stateFieldBox.appendChild(field);
+            buildCityField();
+          }
+
+          var countryInput = el(
+            "select",
+            {
+              class: "pc-select",
+              style: { width: "100%" },
+              onchange: function (e) {
+                checkoutFormState.shippingCountry = e.target.value;
+                buildStateField();
+                scheduleDeliveryReload();
+              },
             },
-          });
-          var stateInput = el("input", {
-            class: "pc-input",
-            value: checkoutFormState.shippingState,
-            placeholder: "e.g. Lagos",
-            oninput: function (e) {
-              checkoutFormState.shippingState = e.target.value.trim();
-              scheduleDeliveryReload();
-            },
-          });
+            [el("option", { value: "" }, ["Select country"])].concat(
+              COUNTRIES.map(function (c) {
+                return el("option", { value: c[0], selected: checkoutFormState.shippingCountry === c[0] ? "selected" : null }, [c[1]]);
+              })
+            )
+          );
+          buildStateField();
+
           var addressLineInput = el("input", {
             class: "pc-input",
             value: checkoutFormState.shippingAddressLine,
@@ -1743,7 +1922,8 @@
               el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Delivery"]),
               el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "14px" } }, [
                 el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["Country"]), countryInput]),
-                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["State / region"]), stateInput]),
+                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["State / region"]), stateFieldBox]),
+                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["City"]), cityFieldBox]),
               ]),
               el("div", { style: { marginBottom: "16px" } }, [el("label", { class: "pc-label" }, ["Street address"]), addressLineInput]),
               deliverySection,
