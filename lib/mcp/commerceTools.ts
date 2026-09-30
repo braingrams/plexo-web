@@ -9,8 +9,7 @@ import { maskSecret } from "@/lib/commerce/maskSecret";
 import { resolveCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { resendDigitalDelivery } from "@/lib/commerce/digitalDeliveryDynamo";
 import { sendCommerceStripeAccessRequestNotificationEmail, sendCommerceWithdrawalRequestNotificationEmail } from "@/lib/email";
-import { listPaystackCustomers } from "@/lib/paystack";
-import { resolveActivePaystackKeys } from "@/lib/commerce/paystack";
+import { resolveCommerceCustomers } from "@/lib/commerce/customers";
 import { updateOrderFulfillmentStatus, refundCommerceOrder } from "@/lib/commerce/orderStatusActions";
 import { Template } from "@/lib/db/contentEntities";
 import { Organization, User } from "@/lib/db/coreEntities";
@@ -458,7 +457,7 @@ export const COMMERCE_MCP_TOOLS = [
   },
   {
     name: "list_commerce_customers",
-    description: "Lists this site's customers directly from its Paystack account (the merchant account that actually processed their payments) — requires Paystack to be configured on this site.",
+    description: "Lists everyone who's completed a paid order with this site, aggregated from its own orders (works for Stripe or Paystack, however the customer paid).",
     inputSchema: {
       type: "object",
       properties: {
@@ -1185,19 +1184,8 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
 
     case "list_commerce_customers": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const { data: settings } = await CommerceSettings.get({ templateId: siteId }).go();
-      const activeSecretKeyEncrypted = settings
-        ? resolveActivePaystackKeys({
-            paystackMode: settings.paystackMode ?? "TEST",
-            paystackTestPublicKey: settings.paystackTestPublicKey ?? null,
-            paystackTestSecretKeyEncrypted: settings.paystackTestSecretKeyEncrypted ?? null,
-            paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
-            paystackLiveSecretKeyEncrypted: settings.paystackLiveSecretKeyEncrypted ?? null,
-          }).secretKeyEncrypted
-        : null;
-      if (!activeSecretKeyEncrypted) throw new Error("Paystack isn't configured for this site yet.");
       const page = Number(args.page) || 1;
-      return await listPaystackCustomers({ secretKey: decryptPaystackKey(activeSecretKeyEncrypted), page });
+      return await resolveCommerceCustomers(siteId, { page });
     }
 
     default:
