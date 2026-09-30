@@ -8,7 +8,7 @@ import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
 import { Template, TemplateAsset, BlogSite } from "@/lib/db/contentEntities";
 import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
-import { getStorefrontSlug, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
+import { getStorefrontSlug, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
 import { deriveCommerceTheme, type CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
 import { PageView } from "@/lib/db/opsEntities";
 import { recordPageViewRollup } from "@/lib/analyticsRollup";
@@ -150,19 +150,24 @@ function resolveCommerceTheme(
 // injected outside that sanitized body, the same way as injectBrandingBar below — a
 // Commerce-disabled site never gets this tag at all, see the call site's CommerceSettings
 // gate.
-function injectCommerceScript(html: string, storefrontPath: string, theme: CommerceTheme | null): string {
+function injectCommerceScript(html: string, storefrontPath: string, checkoutPath: string | null, theme: CommerceTheme | null): string {
   // ?v=<deploy sha> busts both CloudFront and any visitor's browser cache on every
   // deploy — see cdk/lib/compute-stack.ts's assetVersion comment for why the origin's
   // own shorter Cache-Control on commerce.js isn't enough by itself (a browser that
   // already cached the pre-fix immutable response never re-requests this exact URL).
   // The config script must load BEFORE commerce.js reads window.__PLEXO_COMMERCE__ at
   // parse time — storefrontPath lets the site owner rename the storefront's URL (default
-  // /store) without a commerce.js code change. `theme` is null when there's neither a
-  // merchant override nor an auto-detected signal (see the call site) — commerce.js falls
-  // back to its own hardcoded look in that case, unchanged from before theming existed.
-  // JSON.stringify already escapes quotes; the "</" replace is defense in depth against a
-  // slug somehow containing it.
-  const configTag = `<script>window.__PLEXO_COMMERCE__=${JSON.stringify({ storefrontPath, theme }).replace(/<\//g, "<\\/")};</script>`;
+  // /store) without a commerce.js code change. checkoutPath is the checkout page's own
+  // REAL resolved path (see getCheckoutPath) — commerce.js used to assume it always lives
+  // at "{storefrontPath}/checkout" (true for the auto-provisioned flow, where checkout is
+  // a genuine child of the storefront page), which 404ed for a hand-built site whose
+  // checkout page isn't nested under its shop page at all; null falls back to that same
+  // old assumption client-side, for a site with no CommerceSettings row yet. `theme` is
+  // null when there's neither a merchant override nor an auto-detected signal (see the
+  // call site) — commerce.js falls back to its own hardcoded look in that case, unchanged
+  // from before theming existed. JSON.stringify already escapes quotes; the "</" replace
+  // is defense in depth against a slug somehow containing it.
+  const configTag = `<script>window.__PLEXO_COMMERCE__=${JSON.stringify({ storefrontPath, checkoutPath, theme }).replace(/<\//g, "<\\/")};</script>`;
   const scriptTag = `${configTag}<script src="/commerce.js?v=${process.env.ASSET_VERSION ?? "dev"}" defer></script>`;
   const maskedHtml = html.replace(
     /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
@@ -545,6 +550,7 @@ export async function GET(
       html = injectCommerceScript(
         html,
         `/${(await getStorefrontSlug(published.templateId)) ?? DEFAULT_STOREFRONT_SLUG}`,
+        await getCheckoutPath(published.templateId),
         resolveCommerceTheme(commerceSettings, published.template.designJson),
       );
     }
@@ -631,6 +637,7 @@ export async function GET(
           html = injectCommerceScript(
             html,
             `/${(await getStorefrontSlug(published.templateId)) ?? DEFAULT_STOREFRONT_SLUG}`,
+            await getCheckoutPath(published.templateId),
             resolveCommerceTheme(commerceSettings, published.template.designJson),
           );
           if (commerceSettings.newsletterPopupEnabled && commerceSettings.maildripNewsletterGroupId) {
