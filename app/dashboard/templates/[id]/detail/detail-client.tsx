@@ -1134,8 +1134,6 @@ export function DetailClient({
                 </div>
               </Card>
 
-              <SiteAppearancePanel templateId={templateId} />
-
               <Card>
                 <div style={ROW}>
                   <span style={LABEL}>Pages</span>
@@ -1245,6 +1243,8 @@ export function DetailClient({
             minWidth: 0,
           }}
         >
+          {siteData && <SiteAppearancePanel templateId={templateId} />}
+
           {/* View Source — collapsed by default; a debugging/inspection aid, not something
               most visits to this page need open. */}
           <Card padded={false}>
