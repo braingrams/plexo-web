@@ -3,11 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import { Card } from "../../../_components/Card";
 
-const CARD_TITLE: React.CSSProperties = { fontSize: "1rem", fontWeight: 800, color: "#f0f2ff", margin: 0 };
-const LABEL_STYLE: React.CSSProperties = { fontSize: "0.78rem", fontWeight: 600, color: "rgba(240,242,255,0.55)" };
-const INPUT_STYLE: React.CSSProperties = {
-  width: "100%", padding: "0.55rem 0.75rem", borderRadius: 8, fontSize: "0.85rem",
-  border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontFamily: "inherit",
+const CARD_TITLE: React.CSSProperties = { fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", margin: 0 };
+const FIELD_LABEL: React.CSSProperties = { fontSize: "0.82rem", color: "rgba(240,242,255,0.5)", fontWeight: 600 };
+const FIELD_HINT: React.CSSProperties = { fontSize: "0.74rem", color: "rgba(240,242,255,0.35)", margin: "0.35rem 0 0" };
+
+// Matches GeneralSettingsClient.tsx's own `inputStyle` (Commerce settings) exactly, plus
+// the `.site-appearance-field:focus` rule below — outline:none alone (as this codebase's
+// other settings inputs already do) left every field showing the browser's raw default
+// blue focus ring against this dark theme, jarring enough on its own to be the main
+// complaint about this panel's polish.
+const FIELD_STYLE: React.CSSProperties = {
+  width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+  borderRadius: 9, color: "#f0f2ff", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
+  outline: "none", fontFamily: "inherit", boxSizing: "border-box",
 };
 
 type SiteMeta = { htmlTitle: string; favicon: string; metaDescription: string; ogImageUrl: string };
@@ -24,7 +32,7 @@ async function uploadImage(file: File): Promise<string> {
   return data.url as string;
 }
 
-function FieldWithUpload({
+function ImageField({
   label, hint, value, onChange, uploading, onUpload,
 }: {
   label: string;
@@ -37,15 +45,44 @@ function FieldWithUpload({
   const fileInputRef = useRef<HTMLInputElement>(null);
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.35rem" }}>
-        <span style={LABEL_STYLE}>{label}</span>
+      <span style={{ ...FIELD_LABEL, display: "block", marginBottom: "0.5rem" }}>{label}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+        <div
+          style={{
+            flexShrink: 0, width: 44, height: 44, borderRadius: 8,
+            border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)",
+            display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+          }}
+        >
+          {value ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={value} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            <span style={{ fontSize: "0.65rem", color: "rgba(240,242,255,0.25)" }}>None</span>
+          )}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="Paste an image URL, or upload one"
+            className="site-appearance-field"
+            style={FIELD_STYLE}
+          />
+        </div>
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading}
-          style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--brand)", background: "none", border: "none", cursor: uploading ? "not-allowed" : "pointer", padding: 0 }}
+          style={{
+            flexShrink: 0, padding: "0.6rem 0.9rem", borderRadius: 9, fontSize: "0.8rem", fontWeight: 700,
+            border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", color: "rgba(240,242,255,0.85)",
+            cursor: uploading ? "not-allowed" : "pointer", whiteSpace: "nowrap", opacity: uploading ? 0.6 : 1,
+            fontFamily: "inherit",
+          }}
         >
-          {uploading ? "Uploading…" : "Upload image"}
+          {uploading ? "Uploading…" : "Upload"}
         </button>
         <input
           ref={fileInputRef}
@@ -59,14 +96,7 @@ function FieldWithUpload({
           }}
         />
       </div>
-      {value ? (
-        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.4rem" }}>
-          <img src={value} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: "cover", border: "1px solid rgba(255,255,255,0.1)" }} />
-          <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</span>
-        </div>
-      ) : null}
-      <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Or paste an image URL" style={INPUT_STYLE} />
-      <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", margin: "0.3rem 0 0" }}>{hint}</p>
+      <p style={FIELD_HINT}>{hint}</p>
     </div>
   );
 }
@@ -116,7 +146,7 @@ export function SiteAppearancePanel({ templateId }: { templateId: string }) {
   return (
     <Card>
       <h2 style={{ ...CARD_TITLE, marginBottom: "0.3rem" }}>Site Appearance</h2>
-      <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", margin: "0 0 1rem" }}>
+      <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0 0 1.25rem" }}>
         The favicon, browser-tab title, and social share preview for your home page.
       </p>
 
@@ -125,52 +155,57 @@ export function SiteAppearancePanel({ templateId }: { templateId: string }) {
       ) : !meta ? (
         <p style={{ fontSize: "0.82rem", color: "#f87171" }}>{error ?? "Couldn't load site appearance."}</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-          <FieldWithUpload
-            label="Favicon"
-            hint="Shown in the browser tab. A square PNG works best (at least 64×64px)."
-            value={meta.favicon}
-            onChange={(v) => setMeta({ ...meta, favicon: v })}
-            uploading={uploadingFavicon}
-            onUpload={async (file) => {
-              setUploadingFavicon(true);
-              setError(null);
-              try {
-                const url = await uploadImage(file);
-                setMeta((prev) => (prev ? { ...prev, favicon: url } : prev));
-              } catch (err) {
-                setError(err instanceof Error ? err.message : "Upload failed.");
-              } finally {
-                setUploadingFavicon(false);
-              }
-            }}
-          />
-
-          <div>
-            <span style={{ ...LABEL_STYLE, display: "block", marginBottom: "0.35rem" }}>Browser tab title</span>
-            <input
-              type="text"
-              value={meta.htmlTitle}
-              onChange={(e) => setMeta({ ...meta, htmlTitle: e.target.value })}
-              placeholder="Your site's name"
-              maxLength={200}
-              style={INPUT_STYLE}
+        <div style={{ display: "flex", flexDirection: "column", gap: "1.4rem" }}>
+          <div className="site-appearance-row" style={{ display: "grid", gridTemplateColumns: "minmax(220px, 320px) 1fr", gap: "1.4rem", alignItems: "start" }}>
+            <ImageField
+              label="Favicon"
+              hint="Shown in the browser tab. A square PNG works best (at least 64×64px)."
+              value={meta.favicon}
+              onChange={(v) => setMeta({ ...meta, favicon: v })}
+              uploading={uploadingFavicon}
+              onUpload={async (file) => {
+                setUploadingFavicon(true);
+                setError(null);
+                try {
+                  const url = await uploadImage(file);
+                  setMeta((prev) => (prev ? { ...prev, favicon: url } : prev));
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : "Upload failed.");
+                } finally {
+                  setUploadingFavicon(false);
+                }
+              }}
             />
+
+            <div>
+              <span style={{ ...FIELD_LABEL, display: "block", marginBottom: "0.5rem" }}>Browser tab title</span>
+              <input
+                type="text"
+                value={meta.htmlTitle}
+                onChange={(e) => setMeta({ ...meta, htmlTitle: e.target.value })}
+                placeholder="Your site's name"
+                maxLength={200}
+                className="site-appearance-field"
+                style={FIELD_STYLE}
+              />
+              <p style={FIELD_HINT}>Shown in the browser tab and search engine results.</p>
+            </div>
           </div>
 
           <div>
-            <span style={{ ...LABEL_STYLE, display: "block", marginBottom: "0.35rem" }}>Meta description</span>
+            <span style={{ ...FIELD_LABEL, display: "block", marginBottom: "0.5rem" }}>Meta description</span>
             <textarea
               value={meta.metaDescription}
               onChange={(e) => setMeta({ ...meta, metaDescription: e.target.value })}
               placeholder="A short summary shown in search results and link previews"
               maxLength={300}
-              rows={3}
-              style={{ ...INPUT_STYLE, resize: "vertical" }}
+              rows={4}
+              className="site-appearance-field"
+              style={{ ...FIELD_STYLE, resize: "vertical", lineHeight: 1.5, minHeight: "6rem" }}
             />
           </div>
 
-          <FieldWithUpload
+          <ImageField
             label="Social share image"
             hint="Shown when this page is shared on social media or messaging apps."
             value={meta.ogImageUrl}
@@ -192,23 +227,38 @@ export function SiteAppearancePanel({ templateId }: { templateId: string }) {
 
           {error && <p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0 }}>{error}</p>}
 
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", paddingTop: "0.25rem", borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: "0.1rem" }}>
             <button
               type="button"
               onClick={save}
               disabled={saving}
               style={{
-                padding: "0.55rem 1.1rem", borderRadius: 8, fontSize: "0.82rem", fontWeight: 700,
-                border: "1px solid rgba(var(--brand-rgb),0.3)", background: "rgba(var(--brand-rgb),0.12)", color: "var(--brand)",
-                cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1,
+                padding: "0.65rem 1.4rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 700, border: "none",
+                background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff",
+                cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", marginTop: "0.85rem",
               }}
             >
               {saving ? "Saving…" : "Save"}
             </button>
-            {saved && <span style={{ fontSize: "0.78rem", color: "#4ade80", fontWeight: 600 }}>Saved ✓</span>}
+            {saved && <span style={{ fontSize: "0.8rem", color: "#4ade80", fontWeight: 600, marginTop: "0.85rem" }}>Saved ✓</span>}
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        :global(.site-appearance-field:focus) {
+          border-color: rgba(var(--brand-rgb), 0.5) !important;
+          box-shadow: 0 0 0 3px rgba(var(--brand-rgb), 0.15);
+        }
+        :global(.site-appearance-field::placeholder) {
+          color: rgba(240, 242, 255, 0.3);
+        }
+        @media (max-width: 620px) {
+          :global(.site-appearance-row) {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </Card>
   );
 }
