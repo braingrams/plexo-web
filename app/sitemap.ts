@@ -2,6 +2,8 @@ import type { MetadataRoute } from "next";
 import type { EntityItem } from "electrodb";
 import { Template } from "@/lib/db/contentEntities";
 import { RELEASES } from "@/app/releases/data";
+import { listAllPublishedSlugs } from "@/lib/blog/queriesDynamo";
+import { MARKETING_BLOG_TEMPLATE_ID } from "@/lib/blog/marketingBlog";
 
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL?.startsWith("http")
   ? process.env.NEXT_PUBLIC_APP_URL
@@ -13,6 +15,7 @@ const STATIC_ROUTES: Array<{ path: string; changeFrequency: MetadataRoute.Sitema
   { path: "/sdk", changeFrequency: "monthly", priority: 0.7 },
   { path: "/mcp", changeFrequency: "monthly", priority: 0.7 },
   { path: "/marketplace", changeFrequency: "daily", priority: 0.8 },
+  { path: "/blog", changeFrequency: "daily", priority: 0.7 },
   { path: "/releases", changeFrequency: "weekly", priority: 0.6 },
   { path: "/legal/acceptable-use", changeFrequency: "yearly", priority: 0.2 },
 ];
@@ -64,5 +67,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.4,
   }));
 
-  return [...staticEntries, ...releaseEntries, ...templateEntries];
+  // Every published marketing-blog post — one partition query (GSI1), same low-frequency
+  // non-request-critical job as the template scan above.
+  const blogPosts = await listAllPublishedSlugs(MARKETING_BLOG_TEMPLATE_ID);
+  const blogEntries: MetadataRoute.Sitemap = blogPosts.map((p) => ({
+    url: `${SITE_URL}/blog/${p.slug}`,
+    lastModified: p.updatedAt,
+    changeFrequency: "monthly",
+    priority: 0.6,
+  }));
+
+  return [...staticEntries, ...blogEntries, ...releaseEntries, ...templateEntries];
 }
