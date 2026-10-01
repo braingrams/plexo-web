@@ -751,18 +751,25 @@ export class ComputeStack extends cdk.Stack {
     // CloudFront sends the viewer, including error-classified ones — confirmed this one
     // isn't skipped the same way. Scoped to its own behavior below (api/v1/mcp*) rather
     // than the whole distribution, since the header's only meaningful on that route.
+    // ResponseHeadersPolicy resources are only created in production. The AWS account has
+    // a hard limit of 100 ResponseHeadersPolicy resources shared across ALL CloudFormation
+    // stacks — creating one per PR preview stack exhausts the quota quickly. PR previews
+    // are short-lived test environments where security headers have no practical value, so
+    // skipping them there is safe. Production retains them in full.
     const mcpBaseUrl = appDomain ? `https://${appDomain}` : "https://plexo.charisol.io";
-    const mcpResponseHeadersPolicy = new cloudfront.ResponseHeadersPolicy(this, "McpResponseHeadersPolicy", {
-      customHeadersBehavior: {
-        customHeaders: [
-          {
-            header: "WWW-Authenticate",
-            value: `Bearer resource_metadata="${mcpBaseUrl}/.well-known/oauth-protected-resource"`,
-            override: true,
+    const mcpResponseHeadersPolicy = isProd
+      ? new cloudfront.ResponseHeadersPolicy(this, "McpResponseHeadersPolicy", {
+          customHeadersBehavior: {
+            customHeaders: [
+              {
+                header: "WWW-Authenticate",
+                value: `Bearer resource_metadata="${mcpBaseUrl}/.well-known/oauth-protected-resource"`,
+                override: true,
+              },
+            ],
           },
-        ],
-      },
-    });
+        })
+      : undefined;
 
     // Baseline security headers for the dashboard/app distribution — closes a real,
     // confirmed gap (no CSP/HSTS/X-Frame-Options/X-Content-Type-Options were set anywhere
@@ -777,14 +784,17 @@ export class ComputeStack extends cdk.Stack {
     // (which stays scoped to api/v1/mcp* only, for the WWW-Authenticate reason explained
     // there) — a CloudFront behavior accepts only one responseHeadersPolicy, so this is a
     // second, independent policy applied to the other behaviors below.
-    const securityHeadersPolicy = new cloudfront.ResponseHeadersPolicy(this, "SecurityHeadersPolicy", {
-      securityHeadersBehavior: {
-        contentTypeOptions: { override: true },
-        frameOptions: { frameOption: cloudfront.HeadersFrameOption.SAMEORIGIN, override: true },
-        referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
-        strictTransportSecurity: { accessControlMaxAge: cdk.Duration.days(365), includeSubdomains: true, preload: true, override: true },
-      },
-    });
+    // Not created in non-prod — same account-limit reason as mcpResponseHeadersPolicy above.
+    const securityHeadersPolicy = isProd
+      ? new cloudfront.ResponseHeadersPolicy(this, "SecurityHeadersPolicy", {
+          securityHeadersBehavior: {
+            contentTypeOptions: { override: true },
+            frameOptions: { frameOption: cloudfront.HeadersFrameOption.SAMEORIGIN, override: true },
+            referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
+            strictTransportSecurity: { accessControlMaxAge: cdk.Duration.days(365), includeSubdomains: true, preload: true, override: true },
+          },
+        })
+      : undefined;
 
     // The managed CACHING_OPTIMIZED policy the "_next/image*" behavior below uses doesn't
     // include the query string in its cache key OR forward it to the origin at all — Next's
