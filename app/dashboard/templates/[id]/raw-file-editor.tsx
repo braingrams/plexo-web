@@ -13,6 +13,7 @@ import { buildPreviewHtml } from "./preview-utils";
 import { PagesPanel } from "./PagesPanel";
 import { RawTextContentEditor, type RawTextContentEditorHandle, type RawTextContentSaveStatus } from "./RawTextContentEditor";
 import { RawAiEditPanel } from "./RawAiEditPanel";
+import { EmbedCodeModal } from "./EmbedCodeModal";
 
 type Props = {
   templateId: string;
@@ -174,6 +175,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
     savedFlash: false,
   });
 
+  const [embedModalOpen, setEmbedModalOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewHtml, setPreviewHtml] = useState("");
   const [previewRootPath, setPreviewRootPath] = useState("index.html");
@@ -494,6 +496,18 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
             onChange={handlePickReplaceFile}
             style={{ display: "none" }}
           />
+          <button
+            type="button"
+            onClick={() => setEmbedModalOpen(true)}
+            style={{
+              padding: "0.45rem 0.9rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 600,
+              background: "none", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.8)",
+              cursor: "pointer",
+            }}
+            title="Copy a snippet to add a shop grid, cart, checkout, or other commerce widget to your HTML"
+          >
+            Embed Widget
+          </button>
           <button
             type="button"
             onClick={() => replaceInputRef.current?.click()}
@@ -850,6 +864,8 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
           </div>
         </>
       )}
+
+      {embedModalOpen && <EmbedCodeModal onClose={() => setEmbedModalOpen(false)} />}
 
       <style jsx>{`
         @media (max-width: 900px) {

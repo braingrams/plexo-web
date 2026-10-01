@@ -48,6 +48,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Too many submissions. Please try again shortly." }, { status: 429 });
   }
 
+  // A real visitor's browser sends Referer/Origin for a same-origin form POST (default
+  // under every standard referrer-policy); a script posting straight to this URL from
+  // outside a real page load either omits both or sends one pointing somewhere else
+  // entirely. Only rejects on an actual MISMATCH, never on absence — some real visitors
+  // do have Referer stripped by a privacy setting/extension, and that alone shouldn't cost
+  // them their message. Same silent-success response as the honeypot below: a rejected bot
+  // gets no signal to detect and route around.
+  const originHeader = request.headers.get("origin") ?? request.headers.get("referer");
+  if (originHeader) {
+    let originHost: string | null = null;
+    try {
+      originHost = new URL(originHeader).hostname;
+    } catch {
+      originHost = null;
+    }
+    if (originHost && originHost !== hostname) {
+      console.info(`[forms] origin mismatch: templateId=${templateId} origin=${originHost} expected=${hostname}`);
+      const redirectParam = new URL(request.url).searchParams.get("redirect") || "/";
+      const redirectPath = redirectParam.startsWith("/") ? redirectParam : "/";
+      return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
+    }
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();
