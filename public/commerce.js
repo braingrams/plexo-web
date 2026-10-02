@@ -461,10 +461,26 @@
     return wrap;
   }
 
+  // A question with `countries` is only asked when the order ships to one of them (mirrors
+  // isCheckoutFieldShown in lib/commerce/checkoutFields.ts — the server re-checks). `country`
+  // is null whenever there's no delivery address: pickup, bookings.
+  function isFieldShown(f, country) {
+    if (!f.countries || !f.countries.length) return true;
+    return Boolean(country) && f.countries.indexOf(String(country).toUpperCase()) !== -1;
+  }
+
+  // The cart checkout's current delivery country — only while the customer is actually
+  // choosing delivery, never a leftover from before they switched to pickup.
+  function checkoutDeliveryCountry() {
+    return checkoutFormState.fulfillmentMode === "delivery" ? checkoutFormState.shippingCountry || null : null;
+  }
+
   // The site owner's own checkout questions (Settings → Checkout). `values` is the object
   // answers are written into — checkoutFormState.customFields for the cart checkout, a
-  // local object for a booking.
-  function customFieldsSection(fields, values, heading) {
+  // local object for a booking. `getCountry` (optional) returns the current delivery country;
+  // call the returned node's refresh() whenever it may have changed, so country-limited
+  // questions appear/disappear in place without losing anything already typed.
+  function customFieldsSection(fields, values, heading, getCountry) {
     if (!fields || !fields.length) return null;
     var rows = fields.map(function (f) {
       var label = f.label + (f.required ? " *" : "");
@@ -505,17 +521,30 @@
       }
       return el("div", {}, [el("label", { class: "pc-label" }, [label]), input]);
     });
-    return el("div", {}, [
+    var section = el("div", {}, [
       heading ? el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, [heading]) : null,
       el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, rows),
     ]);
+    section.refresh = function () {
+      var country = getCountry ? getCountry() : null;
+      var anyShown = false;
+      fields.forEach(function (f, i) {
+        var shown = isFieldShown(f, country);
+        rows[i].style.display = shown ? "" : "none";
+        if (shown) anyShown = true;
+      });
+      section.style.display = anyShown ? "" : "none";
+    };
+    section.refresh();
+    return section;
   }
 
   // Client-side mirror of resolveCheckoutFieldAnswers' required check — just for a fast,
   // friendly message before submitting; the server re-validates everything.
-  function missingRequiredField(fields, values) {
+  function missingRequiredField(fields, values, country) {
     for (var i = 0; i < (fields || []).length; i++) {
       var f = fields[i];
+      if (!isFieldShown(f, country)) continue;
       if (f.required && !String(values[f.id] || "").trim()) return f.label;
     }
     return null;
@@ -547,7 +576,7 @@
       ]);
     }
     return el("div", { style: { background: "#F3F1EA", border: "1px solid #E4E1D6", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "2px" } }, [
-      row("Bank", bank.bankName),
+      row("Pay via", bank.bankName),
       row("Account name", bank.accountName),
       row("Account number", bank.accountNumber, true),
       amountText ? row("Amount", amountText) : null,
@@ -1251,7 +1280,7 @@
                 confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
                 return;
               }
-              var missing = missingRequiredField(config.fields, answers);
+              var missing = missingRequiredField(config.fields, answers, null);
               if (missing) {
                 errorBox = el("div", { class: "pc-error" }, ['Please answer "' + missing + '".']);
                 confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
@@ -1898,7 +1927,7 @@
               payBtn.parentNode.insertBefore(errorBox, payBtn);
               return;
             }
-            var missing = config ? missingRequiredField(config.fields, checkoutFormState.customFields) : null;
+            var missing = config ? missingRequiredField(config.fields, checkoutFormState.customFields, checkoutDeliveryCountry()) : null;
             if (missing) {
               errorBox = el("div", { class: "pc-error" }, ['Please answer "' + missing + '".']);
               payBtn.parentNode.insertBefore(errorBox, payBtn);
@@ -2040,6 +2069,9 @@
         var deliverySection = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } });
         var pickupSection = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } });
         var addressBlock = null; // built below, once its inputs exist
+        // Says what's actually on offer once pickup options have loaded — "Delivery or
+        // pickup" only when both genuinely exist.
+        var fulfillmentHeading = el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, [deliveryAllowed ? "Delivery" : "Pickup"]);
         var deliveryFetchTimer = null;
 
         function selectMethod(method) {
@@ -2095,13 +2127,17 @@
           var qs = [];
           if (checkoutFormState.shippingCountry) qs.push("country=" + encodeURIComponent(checkoutFormState.shippingCountry));
           if (checkoutFormState.shippingState) qs.push("state=" + encodeURIComponent(checkoutFormState.shippingState));
-          var emptyText = pickupMethods.length
-            ? "No delivery options cover this address yet — try a different country or state, or choose pickup instead."
-            : "No delivery options cover this address yet — try a different country or state, or contact the seller directly.";
+          var emptyText = !checkoutFormState.shippingCountry
+            ? "Choose your country to see delivery options."
+            : pickupMethods.length
+              ? "No delivery options cover this address yet — try a different country or state, or choose pickup instead."
+              : "No delivery options cover this address yet — try a different country or state, or contact the seller directly.";
           api("/api/public/commerce/delivery-methods" + (qs.length ? "?" + qs.join("&") : ""))
             .then(function (data) {
               var courier = (data.methods || []).filter(function (m) {
-                return m.type === "COURIER";
+                // A country-limited option only makes sense once a country is chosen —
+                // offering it earlier lets a customer pick one the server then rejects.
+                return m.type === "COURIER" && (checkoutFormState.shippingCountry || !(m.countries && m.countries.length));
               });
               paintOptions(deliverySection, courier, emptyText, courierSubtitle);
             })
@@ -2137,6 +2173,7 @@
             );
             return;
           }
+          fulfillmentHeading.textContent = deliveryAllowed && hasPickup ? "Delivery or pickup" : deliveryAllowed ? "Delivery" : "Pickup";
           if (deliveryAllowed && hasPickup) {
             modeSection.appendChild(
               el("div", { role: "radiogroup", style: { display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "16px" } }, [
@@ -2297,6 +2334,7 @@
                 checkoutFormState.shippingCountry = e.target.value;
                 buildStateField();
                 scheduleDeliveryReload();
+                document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
               },
             },
             [el("option", { value: "" }, ["Select country"])].concat(
@@ -2329,7 +2367,7 @@
 
           sections.push(
             el("div", {}, [
-              el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, [deliveryAllowed ? "Delivery or pickup" : "Pickup"]),
+              fulfillmentHeading,
               modeSection,
               fulfillmentBody,
             ])
@@ -2349,10 +2387,13 @@
           ])
         );
 
-        var extraQuestions = customFieldsSection(config.fields, checkoutFormState.customFields, "Additional information");
-        if (extraQuestions) sections.push(extraQuestions);
+        var extraQuestions = customFieldsSection(config.fields, checkoutFormState.customFields, "Additional information", checkoutDeliveryCountry);
+        if (extraQuestions) {
+          sections.push(extraQuestions);
+          document.addEventListener(CHECKOUT_STATE_EVENT, extraQuestions.refresh);
+        }
 
-        sections.push(
+        if (config.discounts !== false) sections.push(
           el("div", {}, [
             el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Discount code"]),
             el("div", { style: { display: "flex", gap: "10px" } }, [

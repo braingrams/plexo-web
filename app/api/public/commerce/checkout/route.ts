@@ -113,13 +113,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   const isBankTransfer = paymentChoice.method === "BANK_TRANSFER";
 
-  let customFieldAnswers;
-  try {
-    customFieldAnswers = resolveCheckoutFieldAnswers(readCheckoutFields(settings.checkoutFields), rawCustomFields);
-  } catch (err) {
-    if (err instanceof CheckoutFieldsError) return NextResponse.json({ error: err.message }, { status: 400 });
-    throw err;
-  }
   // Currency is a site-wide setting (Settings > General), not a per-product value — a
   // product's own `currency` attribute is a vestigial per-record default from before that
   // decision and is never read here anymore.
@@ -199,6 +192,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
       throw err;
     }
+  }
+
+  // After delivery resolution on purpose — see the cart route: country-limited questions
+  // follow where the order actually ships (none for pickup, bookings or digital products).
+  const deliveryCountry = resolvedDeliveryMethod?.type === "COURIER" ? shippingAddress.shippingCountry : null;
+  let customFieldAnswers;
+  try {
+    customFieldAnswers = resolveCheckoutFieldAnswers(readCheckoutFields(settings.checkoutFields), rawCustomFields, deliveryCountry);
+  } catch (err) {
+    if (err instanceof CheckoutFieldsError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
   }
 
   const subtotalMinor = product.priceMinor * quantity;

@@ -154,7 +154,7 @@ export async function notifyBankTransferPlaced(order: OrderItem, settings: Setti
       siteName,
       amountFormatted,
       orderNumber: order.orderNumber,
-      bankRows: [["Bank", bank.bankName], ["Account name", bank.accountName], ["Account number", bank.accountNumber]],
+      bankRows: [["Pay via", bank.bankName], ["Account name", bank.accountName], ["Account number", bank.accountNumber]],
       instructions: bank.instructions,
       orderUrl: `${storeUrl}/order-confirmation?order=${encodeURIComponent(order.orderNumber)}&email=${encodeURIComponent(order.customerEmail)}`,
       brand,
