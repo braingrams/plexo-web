@@ -11,7 +11,10 @@ import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo"
 import { readCartToken, findOpenCart, clearCartCookie } from "@/lib/commerce/cartDynamo";
 import { createCommerceStripeCheckoutSession } from "@/lib/commerce/stripeClient";
 import { createCommerceCartOrder, failCommerceCartOrder, OutOfStockError, InvalidDiscountError, CartAlreadyCheckedOutError } from "@/lib/commerce/checkoutDynamo";
-import { resolveOrderDeliveryMethod, InvalidDeliveryMethodError } from "@/lib/commerce/delivery";
+import { resolveOrderDeliveryMethod, InvalidDeliveryMethodError, pickupLocationFor } from "@/lib/commerce/delivery";
+import { readCheckoutFields, resolveCheckoutFieldAnswers, CheckoutFieldsError } from "@/lib/commerce/checkoutFields";
+import { chooseCheckoutPaymentMethod } from "@/lib/commerce/checkoutPayment";
+import { isBankTransferReady, generateBankTransferToken, notifyBankTransferPlaced } from "@/lib/commerce/bankTransfer";
 import { CommerceOrder, CommerceSettings, CommerceCartItem, CommerceProduct, CommerceDiscountCode } from "@/lib/db/commerceEntities";
 
 function generateOrderNumber(): string {
@@ -55,7 +58,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
-  const { customerEmail, customerName, customerPhone, deliveryMethodId, shippingCountry, shippingState, shippingAddressLine, discountCode: rawDiscountCode } = body;
+  const { customerEmail, customerName, customerPhone, deliveryMethodId, shippingCountry, shippingState, shippingAddressLine, discountCode: rawDiscountCode, paymentMethod: requestedPaymentMethod, customFields: rawCustomFields } = body;
 
   if (typeof customerEmail !== "string" || !isValidEmail(customerEmail)) {
     return NextResponse.json({ error: "A valid customerEmail is required." }, { status: 400 });
@@ -88,11 +91,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         stripeLiveWebhookSecretEncrypted: settings.stripeLiveWebhookSecretEncrypted ?? null,
       })
     : null;
-  if (!isStripeFlow && (!paystackKeys?.secretKeyEncrypted || !paystackKeys.publicKey)) {
-    return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
+  const gatewayReady = isStripeFlow ? Boolean(stripeKeys?.secretKeyEncrypted) : Boolean(paystackKeys?.secretKeyEncrypted && paystackKeys.publicKey);
+  const paymentChoice = chooseCheckoutPaymentMethod(requestedPaymentMethod, gatewayReady, isBankTransferReady(settings));
+  if ("error" in paymentChoice) {
+    return NextResponse.json({ error: paymentChoice.error }, { status: 400 });
   }
-  if (isStripeFlow && !stripeKeys?.secretKeyEncrypted) {
-    return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
+  const isBankTransfer = paymentChoice.method === "BANK_TRANSFER";
+
+  let customFieldAnswers;
+  try {
+    customFieldAnswers = resolveCheckoutFieldAnswers(readCheckoutFields(settings.checkoutFields), rawCustomFields);
+  } catch (err) {
+    if (err instanceof CheckoutFieldsError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
   }
 
   const { data: cartItemRows } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
@@ -120,6 +131,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // skips delivery entirely.
   let resolvedDeliveryMethod: Awaited<ReturnType<typeof resolveOrderDeliveryMethod>> = null;
   if (activeItems.some((i) => i.product.kind === "PHYSICAL")) {
+    if (typeof deliveryMethodId !== "string" || !deliveryMethodId) {
+      return NextResponse.json({ error: "Please choose how you'd like to get your order — delivery or pickup." }, { status: 400 });
+    }
     try {
       resolvedDeliveryMethod = await resolveOrderDeliveryMethod(
         templateId,
@@ -166,8 +180,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const orderNumber = generateOrderNumber();
-  const paystackMode = isStripeFlow || paystackKeys?.isPlatform ? null : settings.paystackMode ?? "TEST";
-  const paystackReference = isStripeFlow ? null : generatePaystackReference();
+  const paystackMode = isBankTransfer || isStripeFlow || paystackKeys?.isPlatform ? null : settings.paystackMode ?? "TEST";
+  const paystackReference = isBankTransfer || isStripeFlow ? null : generatePaystackReference();
 
   let order;
   try {
@@ -189,6 +203,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       currency,
       paymentProvider: settings.paymentProvider ?? "BYO_PAYSTACK",
       paystackMode,
+      extras: {
+        paymentMethod: paymentChoice.method,
+        bankTransferConfirmToken: isBankTransfer ? generateBankTransferToken() : null,
+        pickupLocationSnapshot: pickupLocationFor(resolvedDeliveryMethod, settings),
+        customFields: customFieldAnswers,
+      },
     });
   } catch (err) {
     if (err instanceof OutOfStockError) {
@@ -204,6 +224,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const callbackUrl = `${request.nextUrl.origin}/order-confirmation?order=${order.orderNumber}&email=${encodeURIComponent(customerEmail)}`;
+
+  // Bank transfer: nothing to hand off to a gateway — the order is placed (stock reserved)
+  // and waits for the owner to confirm the money arrived. See lib/commerce/bankTransfer.ts.
+  if (isBankTransfer) {
+    await notifyBankTransferPlaced(order, settings).catch((err) => console.error("Commerce: bank transfer notify failed", err));
+    const response = NextResponse.json({ orderNumber: order.orderNumber, paymentMethod: "BANK_TRANSFER", redirectUrl: callbackUrl });
+    clearCartCookie(response);
+    return response;
+  }
 
   try {
     if (isStripeFlow) {

@@ -373,6 +373,121 @@ export function buildOrderStatusEmail(input: {
   return { subject: `${copy.subject} — ${input.siteName}`, html };
 }
 
+// ── Direct bank transfer (lib/commerce/bankTransfer.ts) — the customer pays the store's
+// bank account directly, so nothing is confirmed until the OWNER says the money arrived.
+// Every value a customer typed (name, checkout answers) is escaped: unlike the other
+// builders here, these interpolate free text from an anonymous storefront visitor.
+
+function esc(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function detailRows(rows: [string, string][]): string {
+  return rows
+    .map(
+      ([key, value]) => `
+        <tr>
+          <td style="padding:6px 16px 6px 0;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;vertical-align:top;white-space:nowrap;">${esc(key)}</td>
+          <td style="padding:6px 0;font-size:14px;color:#334155;line-height:1.5;">${esc(value)}</td>
+        </tr>`,
+    )
+    .join("");
+}
+
+/** To the site owner: a customer says they've transferred the money — check your bank,
+ * then one click confirms (or rejects) it. */
+export function buildBankTransferOwnerEmail(input: {
+  siteName: string;
+  amountFormatted: string;
+  orderNumber: string;
+  customerName: string | null;
+  customerEmail: string;
+  details: [string, string][];
+  confirmUrl: string;
+  brand?: EmailBrand;
+}): { subject: string; html: string } {
+  const accent = input.brand?.color ?? "#8b5cf6";
+  const html = emailShell({
+    title: `Bank transfer to confirm — ${input.orderNumber}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A bank transfer payment has been made</h1>
+      <p style="margin:0 0 8px;font-size:32px;font-weight:800;color:#0f172a;letter-spacing:-0.5px;text-align:center;">${esc(input.amountFormatted)}</p>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        <strong>${esc(input.customerName || input.customerEmail)}</strong> placed order <strong>${esc(input.orderNumber)}</strong> on <strong>${esc(input.siteName)}</strong>
+        and says they've sent this amount to your bank account. Check that it has arrived, then confirm it below so the order goes ahead.
+      </p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 28px;background:#f1f5f9;border-radius:10px;padding:16px 20px;text-align:left;">
+        ${detailRows([["Order", input.orderNumber], ["Customer", input.customerEmail], ...input.details])}
+      </table>
+      ${CTA_BUTTON(input.confirmUrl, "Confirm payment received", accent)}
+      <p style="margin:0 0 20px;font-size:13px;color:#64748b;line-height:1.5;text-align:center;">
+        Nothing arrived? Open the same link and choose "I didn't receive it" — the order is cancelled and its stock released.
+      </p>
+      ${FALLBACK_LINK(input.confirmUrl, accent)}
+    `,
+    brand: input.brand,
+  });
+  return { subject: `Confirm bank transfer: ${input.amountFormatted} for ${input.orderNumber} — ${input.siteName}`, html };
+}
+
+/** To the customer: order received, here's exactly where to send the money, and what
+ * happens next. */
+export function buildBankTransferCustomerEmail(input: {
+  siteName: string;
+  amountFormatted: string;
+  orderNumber: string;
+  bankRows: [string, string][];
+  instructions: string | null;
+  orderUrl: string;
+  brand?: EmailBrand;
+}): { subject: string; html: string } {
+  const accent = input.brand?.color ?? "#8b5cf6";
+  const html = emailShell({
+    title: `Order received — ${input.siteName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">Order received</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Thanks! <strong>${esc(input.siteName)}</strong> will confirm order <strong>${esc(input.orderNumber)}</strong> as soon as your bank transfer of
+        <strong>${esc(input.amountFormatted)}</strong> arrives. If you haven't sent it yet, use these details and put your order number as the reference:
+      </p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 20px;background:#f1f5f9;border-radius:10px;padding:16px 20px;text-align:left;">
+        ${detailRows([...input.bankRows, ["Amount", input.amountFormatted], ["Reference", input.orderNumber]])}
+      </table>
+      ${input.instructions ? `<p style="margin:0 0 24px;font-size:13.5px;color:#475569;line-height:1.6;text-align:center;">${esc(input.instructions)}</p>` : ""}
+      ${CTA_BUTTON(input.orderUrl, "View Order", accent)}
+      ${FALLBACK_LINK(input.orderUrl, accent)}
+    `,
+    brand: input.brand,
+  });
+  return { subject: `Order received — awaiting your bank transfer — ${input.siteName}`, html };
+}
+
+/** To the customer: the owner couldn't find the transfer, so the order was cancelled. */
+export function buildBankTransferRejectedEmail(input: {
+  siteName: string;
+  orderNumber: string;
+  amountFormatted: string;
+  reason: string | null;
+  storeUrl: string;
+  brand?: EmailBrand;
+}): { subject: string; html: string } {
+  const accent = input.brand?.color ?? "#8b5cf6";
+  const html = emailShell({
+    title: `Order cancelled — ${input.siteName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">We couldn't confirm your payment</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        <strong>${esc(input.siteName)}</strong> didn't receive a bank transfer of <strong>${esc(input.amountFormatted)}</strong> for order
+        <strong>${esc(input.orderNumber)}</strong>, so the order has been cancelled.${input.reason ? ` Note from the store: “${esc(input.reason)}”` : ""}
+        If you did send the money, reply to the store with your transfer receipt.
+      </p>
+      ${CTA_BUTTON(input.storeUrl, "Visit the store", accent)}
+    `,
+    brand: input.brand,
+  });
+  return { subject: `Order ${input.orderNumber} cancelled — payment not received — ${input.siteName}`, html };
+}
+
 // ── Digital product delivery — the first real customer-facing post-payment emails in
 // Commerce (every other Commerce email today only ever notifies the site owner). One
 // builder per CommerceDigitalDeliveryMethod, all sharing the same CTA_BUTTON/FALLBACK_LINK

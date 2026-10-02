@@ -11,7 +11,10 @@ import { isSlotAvailable } from "@/lib/commerce/availability";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { createCommerceStripeCheckoutSession } from "@/lib/commerce/stripeClient";
 import { createCommerceOrder, failCommerceOrder, OutOfStockError, SlotTakenError, InvalidDiscountError } from "@/lib/commerce/checkoutDynamo";
-import { resolveOrderDeliveryMethod, InvalidDeliveryMethodError } from "@/lib/commerce/delivery";
+import { resolveOrderDeliveryMethod, InvalidDeliveryMethodError, pickupLocationFor } from "@/lib/commerce/delivery";
+import { readCheckoutFields, resolveCheckoutFieldAnswers, CheckoutFieldsError } from "@/lib/commerce/checkoutFields";
+import { chooseCheckoutPaymentMethod } from "@/lib/commerce/checkoutPayment";
+import { isBankTransferReady, generateBankTransferToken, notifyBankTransferPlaced, BANK_TRANSFER_HOLD_MS } from "@/lib/commerce/bankTransfer";
 import { CommerceOrder, CommerceSettings, CommerceProduct, CommerceDiscountCode, CommerceAvailabilityRule, CommerceAvailabilityException, CommerceBooking } from "@/lib/db/commerceEntities";
 
 function generateOrderNumber(): string {
@@ -65,6 +68,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     shippingState,
     shippingAddressLine,
     discountCode: rawDiscountCode,
+    paymentMethod: requestedPaymentMethod,
+    customFields: rawCustomFields,
   } = body;
 
   if (typeof productId !== "string" || !productId) {
@@ -101,11 +106,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         stripeLiveWebhookSecretEncrypted: settings.stripeLiveWebhookSecretEncrypted ?? null,
       })
     : null;
-  if (!isStripeFlow && (!paystackKeys?.secretKeyEncrypted || !paystackKeys.publicKey)) {
-    return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
+  const gatewayReady = isStripeFlow ? Boolean(stripeKeys?.secretKeyEncrypted) : Boolean(paystackKeys?.secretKeyEncrypted && paystackKeys.publicKey);
+  const paymentChoice = chooseCheckoutPaymentMethod(requestedPaymentMethod, gatewayReady, isBankTransferReady(settings));
+  if ("error" in paymentChoice) {
+    return NextResponse.json({ error: paymentChoice.error }, { status: 400 });
   }
-  if (isStripeFlow && !stripeKeys?.secretKeyEncrypted) {
-    return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
+  const isBankTransfer = paymentChoice.method === "BANK_TRANSFER";
+
+  let customFieldAnswers;
+  try {
+    customFieldAnswers = resolveCheckoutFieldAnswers(readCheckoutFields(settings.checkoutFields), rawCustomFields);
+  } catch (err) {
+    if (err instanceof CheckoutFieldsError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
   }
   // Currency is a site-wide setting (Settings > General), not a per-product value — a
   // product's own `currency` attribute is a vestigial per-record default from before that
@@ -171,6 +184,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // DIGITAL/SERVICE product never resolves a method at all.
   let resolvedDeliveryMethod: Awaited<ReturnType<typeof resolveOrderDeliveryMethod>> = null;
   if (product.kind === "PHYSICAL") {
+    if (typeof deliveryMethodId !== "string" || !deliveryMethodId) {
+      return NextResponse.json({ error: "Please choose how you'd like to get your order — delivery or pickup." }, { status: 400 });
+    }
     try {
       resolvedDeliveryMethod = await resolveOrderDeliveryMethod(
         templateId,
@@ -221,8 +237,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // resolveCheckoutPaystackSecret) — paystackMode only means anything for BYO_PAYSTACK.
   // Stripe orders use neither field (see stripeCheckoutSessionId instead, set after this
   // transaction commits).
-  const paystackMode = isStripeFlow || paystackKeys?.isPlatform ? null : settings.paystackMode ?? "TEST";
-  const paystackReference = isStripeFlow ? null : generatePaystackReference();
+  const paystackMode = isBankTransfer || isStripeFlow || paystackKeys?.isPlatform ? null : settings.paystackMode ?? "TEST";
+  const paystackReference = isBankTransfer || isStripeFlow ? null : generatePaystackReference();
 
   let order;
   try {
@@ -246,6 +262,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       paystackMode,
       scheduledStart,
       scheduledEnd,
+      extras: {
+        paymentMethod: paymentChoice.method,
+        bankTransferConfirmToken: isBankTransfer ? generateBankTransferToken() : null,
+        pickupLocationSnapshot: pickupLocationFor(resolvedDeliveryMethod, settings),
+        customFields: customFieldAnswers,
+      },
+      holdMs: isBankTransfer ? BANK_TRANSFER_HOLD_MS : undefined,
     });
   } catch (err) {
     if (err instanceof SlotTakenError) {
@@ -261,6 +284,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const callbackUrl = `${request.nextUrl.origin}/order-confirmation?order=${order.orderNumber}&email=${encodeURIComponent(customerEmail)}`;
+
+  // Bank transfer: the order (and any booking slot) is held until the owner confirms the
+  // money arrived — see lib/commerce/bankTransfer.ts.
+  if (isBankTransfer) {
+    await notifyBankTransferPlaced(order, settings).catch((err) => console.error("Commerce: bank transfer notify failed", err));
+    return NextResponse.json({ orderNumber: order.orderNumber, paymentMethod: "BANK_TRANSFER", redirectUrl: callbackUrl });
+  }
 
   try {
     if (isStripeFlow) {

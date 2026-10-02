@@ -1,4 +1,5 @@
 import { CommerceDeliveryMethod, CommerceSettings } from "@/lib/db/commerceEntities";
+import { resolveFulfillmentOptions } from "@/lib/commerce/delivery";
 import { DeliveryClient, type DeliveryMethodSummary } from "./DeliveryClient";
 
 export default async function CommerceDeliveryPage({ params }: { params: Promise<{ templateId: string }> }) {
@@ -22,5 +23,12 @@ export default async function CommerceDeliveryPage({ params }: { params: Promise
     status: m.status ?? "ACTIVE",
   }));
 
-  return <DeliveryClient templateId={templateId} initialMethods={initialMethods} currency={settings?.currency ?? "NGN"} />;
+  return (
+    <DeliveryClient
+      templateId={templateId}
+      initialMethods={initialMethods}
+      currency={settings?.currency ?? "NGN"}
+      initialFulfillment={resolveFulfillmentOptions(settings)}
+    />
+  );
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
+import { withoutOrderSecrets, orderDeliveryDetails } from "@/lib/commerce/bankTransfer";
 import { CommerceOrder, CommerceOrderItem, CommerceBooking, CommerceDigitalDelivery, CommerceProduct } from "@/lib/db/commerceEntities";
 
 const PAGE_SIZE = 25;
@@ -12,6 +13,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   const { searchParams } = request.nextUrl;
   const status = searchParams.get("status");
   const fulfillmentStatus = searchParams.get("fulfillmentStatus");
+  const paymentMethod = searchParams.get("paymentMethod");
   const q = searchParams.get("q")?.trim().toLowerCase();
   const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
 
@@ -19,6 +21,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   let filtered = allOrders;
   if (status) filtered = filtered.filter((o) => o.status === status);
   if (fulfillmentStatus) filtered = filtered.filter((o) => o.fulfillmentStatus === fulfillmentStatus);
+  if (paymentMethod) filtered = filtered.filter((o) => (o.paymentMethod ?? "ONLINE") === paymentMethod);
   if (q) {
     filtered = filtered.filter(
       (o) =>
@@ -56,10 +59,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
       );
 
       return {
-        ...order,
+        ...withoutOrderSecrets(order),
         items: items.map((i) => ({ nameSnapshot: i.nameSnapshot, quantity: i.quantity ?? 1, unitPriceMinor: i.unitPriceMinor })),
         booking: booking ? { scheduledStart: booking.scheduledStart, status: booking.status } : null,
         digitalDeliveries: deliveriesWithProduct,
+        // The same rows the dashboard's "Delivery info" column shows: delivery/pickup,
+        // address, phone, and the site's own checkout-question answers.
+        deliveryDetails: orderDeliveryDetails(order),
       };
     }),
   );

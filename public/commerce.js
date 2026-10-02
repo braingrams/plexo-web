@@ -58,6 +58,15 @@
     customerEmail: "",
     customerPhone: "",
     discountCode: "",
+    // "delivery" | "pickup" — which kind of option the customer is choosing between (see
+    // renderCheckoutFlow). Pickup never needs an address typed in.
+    fulfillmentMode: null,
+    // "ONLINE" | "BANK_TRANSFER" — picked in the order summary (renderCartSummary), right
+    // next to the total it applies to. null until checkout-config says what's available.
+    paymentMethod: null,
+    // Answers to the site owner's own checkout questions, keyed by question id —
+    // re-validated server-side (lib/commerce/checkoutFields.ts), never trusted.
+    customFields: {},
   };
 
   // ---------------------------------------------------------------------
@@ -386,6 +395,205 @@
     Taraba: ["Jalingo"], Yobe: ["Damaturu"], Zamfara: ["Gusau"], "FCT (Abuja)": ["Abuja"],
   };
   var OTHER_CITY_VALUE = "__other__";
+
+  // ---------------------------------------------------------------------
+  // Checkout config — payment options, extra questions, delivery/pickup switches
+  // ---------------------------------------------------------------------
+
+  // One fetch per page load, shared by checkout_flow, cart_summary and booking — see
+  // app/api/public/commerce/checkout-config/route.ts. Falls back to "card only, no extra
+  // questions" so an older site (or a hiccup) still gets the checkout it always had.
+  var checkoutConfigPromise = null;
+  function fetchCheckoutConfig() {
+    if (!checkoutConfigPromise) {
+      checkoutConfigPromise = api("/api/public/commerce/checkout-config").catch(function () {
+        return { payment: { online: true, gateway: "paystack", bankTransfer: null }, fields: [], fulfillment: { deliveryEnabled: true, pickupEnabled: true, pickupLocation: null } };
+      });
+    }
+    return checkoutConfigPromise;
+  }
+
+  function defaultPaymentMethod(config) {
+    if (checkoutFormState.paymentMethod === "BANK_TRANSFER" && config.payment.bankTransfer) return "BANK_TRANSFER";
+    if (checkoutFormState.paymentMethod === "ONLINE" && config.payment.online) return "ONLINE";
+    return config.payment.online ? "ONLINE" : config.payment.bankTransfer ? "BANK_TRANSFER" : null;
+  }
+
+  // A selectable bordered card with a radio dot — the same look the delivery options
+  // always had, reused for delivery-vs-pickup and card-vs-bank-transfer choices.
+  function optionCard(opts) {
+    var wrap = el(
+      "div",
+      {
+        role: "radio",
+        "aria-checked": opts.selected ? "true" : "false",
+        tabindex: "0",
+        style: {
+          border: "1.5px solid " + (opts.selected ? "#16233F" : "#E4E1D6"),
+          padding: "14px 16px",
+          cursor: "pointer",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: "12px",
+          flex: "1",
+          minWidth: opts.minWidth || "160px",
+          background: "#FFFFFF",
+        },
+        onclick: opts.onSelect,
+        onkeydown: function (e) {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            opts.onSelect();
+          }
+        },
+      },
+      [
+        el("div", { style: { display: "flex", flexDirection: "column", gap: "4px", minWidth: "0" } }, [
+          el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F" } }, [opts.title]),
+          opts.subtitle ? el("span", { class: "pc-muted", style: { fontSize: "12px", lineHeight: "1.5" } }, [opts.subtitle]) : null,
+        ]),
+        el("span", {
+          style: { width: "16px", height: "16px", borderRadius: "50%", border: "1.5px solid #16233F", background: opts.selected ? "#16233F" : "transparent", flexShrink: "0", marginTop: "2px" },
+        }),
+      ]
+    );
+    return wrap;
+  }
+
+  // The site owner's own checkout questions (Settings → Checkout). `values` is the object
+  // answers are written into — checkoutFormState.customFields for the cart checkout, a
+  // local object for a booking.
+  function customFieldsSection(fields, values, heading) {
+    if (!fields || !fields.length) return null;
+    var rows = fields.map(function (f) {
+      var label = f.label + (f.required ? " *" : "");
+      var common = {
+        class: f.type === "select" ? "pc-select" : "pc-input",
+        style: f.type === "select" ? { width: "100%" } : null,
+        placeholder: f.placeholder || null,
+      };
+      var input;
+      if (f.type === "select") {
+        input = el(
+          "select",
+          Object.assign({}, common, {
+            onchange: function (e) {
+              values[f.id] = e.target.value;
+            },
+          }),
+          [el("option", { value: "" }, ["Select…"])].concat(
+            (f.options || []).map(function (o) {
+              return el("option", { value: o, selected: values[f.id] === o ? "selected" : null }, [o]);
+            })
+          )
+        );
+      } else if (f.type === "textarea") {
+        input = el("textarea", Object.assign({}, common, { rows: "3", oninput: function (e) { values[f.id] = e.target.value; } }));
+        input.value = values[f.id] || "";
+      } else {
+        input = el(
+          "input",
+          Object.assign({}, common, {
+            type: f.type === "date" ? "date" : f.type === "phone" ? "tel" : "text",
+            value: values[f.id] || "",
+            oninput: function (e) {
+              values[f.id] = e.target.value;
+            },
+          })
+        );
+      }
+      return el("div", {}, [el("label", { class: "pc-label" }, [label]), input]);
+    });
+    return el("div", {}, [
+      heading ? el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, [heading]) : null,
+      el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, rows),
+    ]);
+  }
+
+  // Client-side mirror of resolveCheckoutFieldAnswers' required check — just for a fast,
+  // friendly message before submitting; the server re-validates everything.
+  function missingRequiredField(fields, values) {
+    for (var i = 0; i < (fields || []).length; i++) {
+      var f = fields[i];
+      if (f.required && !String(values[f.id] || "").trim()) return f.label;
+    }
+    return null;
+  }
+
+  // Where to send the money, shown at checkout and again on the order confirmation page.
+  function bankDetailsCard(bank, amountText, referenceText) {
+    function row(label, value, copyable) {
+      var copyBtn = copyable
+        ? el(
+            "button",
+            {
+              type: "button",
+              style: { border: "1px solid #E4E1D6", background: "#fff", fontSize: "11px", padding: "3px 8px", cursor: "pointer", color: "#16233F" },
+              onclick: function () {
+                try {
+                  navigator.clipboard.writeText(value);
+                  copyBtn.textContent = "Copied";
+                  setTimeout(function () { copyBtn.textContent = "Copy"; }, 1500);
+                } catch (e) {}
+              },
+            },
+            ["Copy"]
+          )
+        : null;
+      return el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", fontSize: "13px", padding: "4px 0" } }, [
+        el("span", { class: "pc-muted" }, [label]),
+        el("span", { style: { display: "flex", alignItems: "center", gap: "8px", fontWeight: "600", color: "#16233F", textAlign: "right", wordBreak: "break-word" } }, [value, copyBtn]),
+      ]);
+    }
+    return el("div", { style: { background: "#F3F1EA", border: "1px solid #E4E1D6", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "2px" } }, [
+      row("Bank", bank.bankName),
+      row("Account name", bank.accountName),
+      row("Account number", bank.accountNumber, true),
+      amountText ? row("Amount", amountText) : null,
+      referenceText ? row("Reference", referenceText) : null,
+      bank.instructions ? el("p", { class: "pc-muted", style: { margin: "8px 0 0", fontSize: "12px", lineHeight: "1.5" } }, [bank.instructions]) : null,
+    ]);
+  }
+
+  // Card vs. bank transfer choice + (for bank transfer) the details to pay into. Returns
+  // null when there's only one way to pay AND it's the card gateway — the checkout then
+  // looks exactly like it always did.
+  function paymentChoiceSection(config, amountText, onChange) {
+    var hasOnline = config.payment.online;
+    var bank = config.payment.bankTransfer;
+    if (!bank) return null;
+    var children = [el("span", { class: "pc-label", style: { marginBottom: "0" } }, ["Payment"])];
+    if (hasOnline) {
+      children.push(
+        el("div", { role: "radiogroup", style: { display: "flex", gap: "10px", flexWrap: "wrap" } }, [
+          optionCard({
+            title: "Pay online",
+            subtitle: "Card, via " + (config.payment.gateway === "stripe" ? "Stripe" : "Paystack"),
+            selected: checkoutFormState.paymentMethod === "ONLINE",
+            minWidth: "130px",
+            onSelect: function () { onChange("ONLINE"); },
+          }),
+          optionCard({
+            title: "Bank transfer",
+            subtitle: "Pay directly into our account",
+            selected: checkoutFormState.paymentMethod === "BANK_TRANSFER",
+            minWidth: "130px",
+            onSelect: function () { onChange("BANK_TRANSFER"); },
+          }),
+        ])
+      );
+    }
+    if (checkoutFormState.paymentMethod === "BANK_TRANSFER") {
+      children.push(
+        el("p", { class: "pc-muted", style: { margin: "0", fontSize: "12.5px", lineHeight: "1.55" } }, [
+          "Transfer the total to the account below, then place your order. We'll email your order number — your order is confirmed as soon as the store sees your payment.",
+        ])
+      );
+      children.push(bankDetailsCard(bank, amountText, "Your full name"));
+    }
+    return el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, children);
+  }
 
   function stockBadge(stockQuantity) {
     if (stockQuantity === null || stockQuantity === undefined) return el("span", { class: "pc-badge pc-badge-ok" }, ["In Stock"]);
@@ -830,22 +1038,45 @@
                 )),
               ]);
 
-        var deliveryRow = el("div", { style: { display: "flex", gap: "28px", paddingTop: "8px", borderTop: "1px solid #E4E1D6", marginTop: "4px", flexWrap: "wrap" } }, [
-          el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
-            el("span", { html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 21h18M5 21V9l7-6 7 6v12M9 21v-6h6v6"></path></svg>' }),
+        // Reflects the store's real delivery/pickup switches (checkout-config), filled in
+        // once that answers — instead of always promising both regardless of whether the
+        // owner actually offers them.
+        var deliveryRow = el("div", { style: { display: "flex", gap: "28px", paddingTop: "8px", borderTop: "1px solid #E4E1D6", marginTop: "4px", flexWrap: "wrap" } });
+        function fulfillmentBadge(iconHtml, title, subtitle) {
+          return el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
+            el("span", { html: iconHtml }),
             el("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } }, [
-              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, ["Pickup available"]),
-              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, ["Choose your delivery method at checkout"]),
+              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, [title]),
+              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, [subtitle]),
             ]),
-          ]),
-          el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
-            el("span", { html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"></path><circle cx="7" cy="19" r="1.6"></circle><circle cx="17.5" cy="19" r="1.6"></circle></svg>' }),
-            el("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } }, [
-              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, ["Courier delivery"]),
-              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, ["Fee calculated at checkout"]),
-            ]),
-          ]),
-        ]);
+          ]);
+        }
+        if (p.kind === "PHYSICAL") {
+          fetchCheckoutConfig().then(function (cfg) {
+            var f = cfg.fulfillment || {};
+            if (f.pickupEnabled !== false) {
+              deliveryRow.appendChild(
+                fulfillmentBadge(
+                  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 21h18M5 21V9l7-6 7 6v12M9 21v-6h6v6"></path></svg>',
+                  "Free store pickup",
+                  f.pickupLocation ? f.pickupLocation : "Choose pickup at checkout"
+                )
+              );
+            }
+            if (f.deliveryEnabled !== false) {
+              deliveryRow.appendChild(
+                fulfillmentBadge(
+                  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"></path><circle cx="7" cy="19" r="1.6"></circle><circle cx="17.5" cy="19" r="1.6"></circle></svg>',
+                  "Delivery",
+                  "Fee calculated at checkout"
+                )
+              );
+            }
+            if (!deliveryRow.childNodes.length) deliveryRow.style.display = "none";
+          });
+        } else {
+          deliveryRow.style.display = "none";
+        }
 
         var infoCol = el("div", { style: { flex: "1 1 380px", minWidth: "280px", display: "flex", flexDirection: "column", gap: "24px" } }, [
           el("div", { style: { display: "flex", flexDirection: "column", gap: "12px" } }, [
@@ -916,10 +1147,27 @@
     if (!serviceId) return;
     showSpinner(node);
 
-    Promise.all([api("/api/public/commerce/products/" + encodeURIComponent(serviceId)), api("/api/public/commerce/availability?productId=" + encodeURIComponent(serviceId))])
+    Promise.all([api("/api/public/commerce/products/" + encodeURIComponent(serviceId)), api("/api/public/commerce/availability?productId=" + encodeURIComponent(serviceId)), fetchCheckoutConfig()])
       .then(function (results) {
         var product = results[0].product;
         var slots = results[1].slots || [];
+        var config = results[2];
+        var answers = {};
+        if (!checkoutFormState.paymentMethod) checkoutFormState.paymentMethod = defaultPaymentMethod(config);
+        var priceText = money(product.priceMinor, product.currency);
+        function confirmLabel() {
+          return checkoutFormState.paymentMethod === "BANK_TRANSFER" ? "I've sent the transfer — Book" : "Confirm & Pay — " + priceText;
+        }
+        var paymentBox = el("div", {});
+        function paintPayment() {
+          clear(paymentBox);
+          var section = paymentChoiceSection(config, priceText, function (method) {
+            checkoutFormState.paymentMethod = method;
+            paintPayment();
+            if (confirmBtn && !confirmBtn.dataset.busy) confirmBtn.textContent = confirmLabel();
+          });
+          if (section) paymentBox.appendChild(section);
+        }
         clear(node);
         prepareNode(node);
 
@@ -1003,7 +1251,14 @@
                 confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
                 return;
               }
+              var missing = missingRequiredField(config.fields, answers);
+              if (missing) {
+                errorBox = el("div", { class: "pc-error" }, ['Please answer "' + missing + '".']);
+                confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
+                return;
+              }
               confirmBtn.disabled = true;
+              confirmBtn.dataset.busy = "1";
               confirmBtn.textContent = "Booking…";
               api("/api/public/commerce/checkout", {
                 method: "POST",
@@ -1013,12 +1268,19 @@
                   customerName: nameInput.value || undefined,
                   customerEmail: emailInput.value,
                   customerPhone: phoneInput.value || undefined,
+                  paymentMethod: checkoutFormState.paymentMethod || undefined,
+                  customFields: answers,
                 }),
               })
                 .then(function (result) {
+                  if (result.redirectUrl) {
+                    window.location.href = result.redirectUrl;
+                    return;
+                  }
                   if (result.checkout && result.checkout.provider === "stripe") {
                     confirmBtn.disabled = false;
-                    confirmBtn.textContent = "Confirm & Pay — " + money(product.priceMinor, product.currency);
+                    delete confirmBtn.dataset.busy;
+                    confirmBtn.textContent = confirmLabel();
                     openStripeEmbeddedCheckout(result.checkout, function (err) {
                       errorBox = el("div", { class: "pc-error" }, [err.message]);
                       confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
@@ -1029,14 +1291,16 @@
                 })
                 .catch(function (err) {
                   confirmBtn.disabled = false;
-                  confirmBtn.textContent = "Confirm & Pay — " + money(product.priceMinor, product.currency);
+                  delete confirmBtn.dataset.busy;
+                  confirmBtn.textContent = confirmLabel();
                   errorBox = el("div", { class: "pc-error" }, [err.message]);
                   confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
                 });
             },
           },
-          ["Confirm & Pay — " + money(product.priceMinor, product.currency)]
+          [confirmLabel()]
         );
+        paintPayment();
 
         node.appendChild(
           el("div", { class: "pc-card", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "20px" } }, [
@@ -1049,6 +1313,8 @@
             nameField.wrap,
             emailField.wrap,
             phoneField.wrap,
+            customFieldsSection(config.fields, answers, null),
+            paymentBox,
             confirmBtn,
           ])
         );
@@ -1465,6 +1731,7 @@
   // since the delivery method and contact fields live in the OTHER marker's DOM.
   function renderCartSummary(node) {
     var latestSnapshot = null;
+    var config = null;
     // Lives at this scope (not inside paint()) deliberately — updateItem/removeItem call
     // paint() synchronously to show a row disabled mid-request, and paint() rebuilds its
     // whole subtree (including re-declaring updateItem/removeItem as closures) on every
@@ -1601,6 +1868,16 @@
       var payBtn;
       var errorBox = null;
 
+      if (config && !checkoutFormState.paymentMethod) checkoutFormState.paymentMethod = defaultPaymentMethod(config);
+      var isBankTransfer = checkoutFormState.paymentMethod === "BANK_TRANSFER";
+      var payLabel = isBankTransfer ? "I've sent the transfer — Place order" : "Continue to Payment →";
+      var paymentSection = config
+        ? paymentChoiceSection(config, money(total, snapshot.currency), function (method) {
+            checkoutFormState.paymentMethod = method;
+            paint(latestSnapshot);
+          })
+        : null;
+
       payBtn = el(
         "button",
         {
@@ -1617,12 +1894,23 @@
               return;
             }
             if (needsDelivery(snapshot) && !checkoutFormState.deliveryMethodId) {
-              errorBox = el("div", { class: "pc-error" }, ["Please choose a delivery method."]);
+              errorBox = el("div", { class: "pc-error" }, [checkoutFormState.fulfillmentMode === "pickup" ? "Please choose a pickup option." : "Please choose how you'd like to get your order."]);
+              payBtn.parentNode.insertBefore(errorBox, payBtn);
+              return;
+            }
+            var missing = config ? missingRequiredField(config.fields, checkoutFormState.customFields) : null;
+            if (missing) {
+              errorBox = el("div", { class: "pc-error" }, ['Please answer "' + missing + '".']);
+              payBtn.parentNode.insertBefore(errorBox, payBtn);
+              return;
+            }
+            if (config && !checkoutFormState.paymentMethod) {
+              errorBox = el("div", { class: "pc-error" }, ["This store isn't accepting payments yet — please check back soon."]);
               payBtn.parentNode.insertBefore(errorBox, payBtn);
               return;
             }
             payBtn.disabled = true;
-            payBtn.textContent = "Starting payment…";
+            payBtn.textContent = isBankTransfer ? "Placing order…" : "Starting payment…";
             api("/api/public/commerce/checkout/cart", {
               method: "POST",
               body: JSON.stringify({
@@ -1638,12 +1926,18 @@
                 shippingAddressLine:
                   [checkoutFormState.shippingAddressLine, checkoutFormState.shippingCity].filter(Boolean).join(", ") || undefined,
                 discountCode: checkoutFormState.discountCode || undefined,
+                paymentMethod: checkoutFormState.paymentMethod || undefined,
+                customFields: checkoutFormState.customFields,
               }),
             })
               .then(function (result) {
+                if (result.redirectUrl) {
+                  window.location.href = result.redirectUrl;
+                  return;
+                }
                 if (result.checkout && result.checkout.provider === "stripe") {
                   payBtn.disabled = false;
-                  payBtn.textContent = "Continue to Payment →";
+                  payBtn.textContent = payLabel;
                   openStripeEmbeddedCheckout(result.checkout, function (err) {
                     errorBox = el("div", { class: "pc-error" }, [err.message]);
                     payBtn.parentNode.insertBefore(errorBox, payBtn);
@@ -1654,13 +1948,13 @@
               })
               .catch(function (err) {
                 payBtn.disabled = false;
-                payBtn.textContent = "Continue to Payment →";
+                payBtn.textContent = payLabel;
                 errorBox = el("div", { class: "pc-error" }, [err.message]);
                 payBtn.parentNode.insertBefore(errorBox, payBtn);
               });
           },
         },
-        ["Continue to Payment →"]
+        [payLabel]
       );
 
       node.appendChild(
@@ -1672,7 +1966,7 @@
             { style: { display: "flex", flexDirection: "column", gap: "8px", paddingTop: "16px", borderTop: "1px solid #E4E1D6" } },
             [totalsRow("Subtotal", money(snapshot.subtotalMinor, snapshot.currency))].concat(
               needsDelivery(snapshot)
-                ? [totalsRow("Delivery", checkoutFormState.deliveryFeeMinor > 0 ? money(checkoutFormState.deliveryFeeMinor, snapshot.currency) : "Free", checkoutFormState.deliveryFeeMinor === 0)]
+                ? [totalsRow(checkoutFormState.fulfillmentMode === "pickup" ? "Pickup" : "Delivery", checkoutFormState.deliveryFeeMinor > 0 ? money(checkoutFormState.deliveryFeeMinor, snapshot.currency) : "Free", checkoutFormState.deliveryFeeMinor === 0)]
                 : []
             )
           ),
@@ -1680,16 +1974,24 @@
             el("span", {}, ["Total"]),
             el("span", {}, [money(total, snapshot.currency)]),
           ]),
+          paymentSection,
           payBtn,
-          el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, ["Secured by " + (snapshot.paymentGateway === "stripe" ? "Stripe" : "Paystack")]),
+          el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, [
+            isBankTransfer ? "Direct bank transfer · confirmed by the store once received" : "Secured by " + (snapshot.paymentGateway === "stripe" ? "Stripe" : "Paystack"),
+          ]),
         ])
       );
     }
 
     showSpinner(node);
-    fetchCart().then(paint).catch(function (err) {
-      showError(node, err.message);
-    });
+    Promise.all([fetchCart(), fetchCheckoutConfig()])
+      .then(function (results) {
+        config = results[1];
+        paint(results[0]);
+      })
+      .catch(function (err) {
+        showError(node, err.message);
+      });
     document.addEventListener(CART_EVENT, function (e) {
       paint(e.detail);
     });
@@ -1711,8 +2013,10 @@
   // on delivery-method changes so the sidebar's total stays in sync.
   function renderCheckoutFlow(node) {
     showSpinner(node);
-    fetchCart()
-      .then(function (cart) {
+    Promise.all([fetchCart(), fetchCheckoutConfig()])
+      .then(function (results) {
+        var cart = results[0];
+        var config = results[1];
         clear(node);
         prepareNode(node);
 
@@ -1725,104 +2029,153 @@
           return i.kind === "PHYSICAL";
         });
 
-        function deliveryOption(method) {
-          var dot;
-          var selected = method.id === checkoutFormState.deliveryMethodId;
-          var feeText = (method.feeMinor > 0 ? money(method.feeMinor, cart.currency) : "Free") + (method.estimatedTimeLabel ? " · " + method.estimatedTimeLabel : "");
-          var wrap = el(
-            "div",
-            {
-              style: {
-                border: "1.5px solid " + (selected ? "#16233F" : "#E4E1D6"),
-                padding: "16px 18px",
-                cursor: "pointer",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: "12px",
-                flex: "1",
-                minWidth: "180px",
-              },
-              onclick: function () {
-                checkoutFormState.deliveryMethodId = method.id;
-                checkoutFormState.deliveryFeeMinor = method.feeMinor || 0;
-                Array.prototype.forEach.call(deliverySection.querySelectorAll("[data-pc-delivery-option]"), function (o) {
-                  o.style.borderColor = "#E4E1D6";
-                  var d = o.querySelector("[data-pc-delivery-dot]");
-                  if (d) d.style.background = "transparent";
-                });
-                wrap.style.borderColor = "#16233F";
-                dot.style.background = "#16233F";
-                document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
-              },
-              "data-pc-delivery-option": "true",
-            },
-            [
-              el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } }, [
-                el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F" } }, [method.name]),
-                el("span", { class: "pc-muted", style: { fontSize: "12px" } }, [feeText]),
-              ]),
-              (dot = el("span", {
-                "data-pc-delivery-dot": "true",
-                style: { width: "16px", height: "16px", borderRadius: "50%", border: "1.5px solid #16233F", background: selected ? "#16233F" : "transparent", flexShrink: "0" },
-              })),
-            ]
-          );
-          return wrap;
-        }
-
-        // Populated once /api/public/commerce/delivery-methods answers — starts as a
-        // loading placeholder since a real fetch has to happen before anything can be
-        // selected. Re-fetched whenever the country/state inputs change so the option list
-        // only ever shows methods that actually cover the typed address.
-        var deliverySection = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
-          el("p", { class: "pc-muted", style: { fontSize: "13px" } }, ["Loading delivery options…"]),
-        ]);
+        // Delivery vs. pickup. Shipping (COURIER) options depend on the address typed in;
+        // pickup options never do (see resolveAvailableDeliveryMethods) — including the
+        // built-in "Store pickup" every store gets by default — so a pickup customer is
+        // never asked for an address at all.
+        var deliveryAllowed = !config.fulfillment || config.fulfillment.deliveryEnabled !== false;
+        var pickupMethods = [];
+        var modeSection = el("div", {});
+        var fulfillmentBody = el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } });
+        var deliverySection = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } });
+        var pickupSection = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } });
+        var addressBlock = null; // built below, once its inputs exist
         var deliveryFetchTimer = null;
 
-        function paintDeliveryOptions(methods) {
-          clear(deliverySection);
-          if (!methods.length) {
-            checkoutFormState.deliveryMethodId = null;
-            checkoutFormState.deliveryFeeMinor = 0;
-            deliverySection.appendChild(
-              el("p", { class: "pc-muted", style: { fontSize: "13px" } }, [
-                "No delivery methods are available for this address yet — try a different country or state, or contact the seller directly.",
-              ])
-            );
-            document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
-            return;
-          }
-          if (checkoutFormState.deliveryMethodId && !methods.some(function (m) { return m.id === checkoutFormState.deliveryMethodId; })) {
-            checkoutFormState.deliveryMethodId = null;
-            checkoutFormState.deliveryFeeMinor = 0;
-          }
-          if (!checkoutFormState.deliveryMethodId && methods.length === 1) {
-            checkoutFormState.deliveryMethodId = methods[0].id;
-            checkoutFormState.deliveryFeeMinor = methods[0].feeMinor || 0;
-          }
-          deliverySection.appendChild(el("div", { style: { display: "flex", gap: "12px", flexWrap: "wrap" } }, methods.map(deliveryOption)));
+        function selectMethod(method) {
+          checkoutFormState.deliveryMethodId = method ? method.id : null;
+          checkoutFormState.deliveryFeeMinor = method ? method.feeMinor || 0 : 0;
           document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
         }
 
-        function loadDeliveryOptions() {
+        function paintOptions(container, methods, emptyText, describe) {
+          clear(container);
+          var stillValid = methods.some(function (m) {
+            return m.id === checkoutFormState.deliveryMethodId;
+          });
+          if (!stillValid && checkoutFormState.deliveryMethodId) selectMethod(null);
+          if (!methods.length) {
+            container.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px", margin: "0" } }, [emptyText]));
+            return;
+          }
+          if (!checkoutFormState.deliveryMethodId && methods.length === 1) selectMethod(methods[0]);
+          container.appendChild(
+            el(
+              "div",
+              { role: "radiogroup", style: { display: "flex", gap: "12px", flexWrap: "wrap" } },
+              methods.map(function (m) {
+                return optionCard({
+                  title: m.name,
+                  subtitle: describe(m),
+                  selected: m.id === checkoutFormState.deliveryMethodId,
+                  minWidth: "180px",
+                  onSelect: function () {
+                    selectMethod(m);
+                    paintOptions(container, methods, emptyText, describe);
+                  },
+                });
+              })
+            )
+          );
+        }
+
+        function feeText(m) {
+          return m.feeMinor > 0 ? money(m.feeMinor, cart.currency) : "Free";
+        }
+        function courierSubtitle(m) {
+          return feeText(m) + (m.estimatedTimeLabel ? " · " + m.estimatedTimeLabel : "");
+        }
+        function pickupSubtitle(m) {
+          return (m.location ? "Pick up at: " + m.location : "The store will send you the pickup address") + " · " + feeText(m);
+        }
+
+        function loadCourierOptions() {
           clear(deliverySection);
-          deliverySection.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px" } }, ["Loading delivery options…"]));
+          deliverySection.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px", margin: "0" } }, ["Loading delivery options…"]));
           var qs = [];
           if (checkoutFormState.shippingCountry) qs.push("country=" + encodeURIComponent(checkoutFormState.shippingCountry));
           if (checkoutFormState.shippingState) qs.push("state=" + encodeURIComponent(checkoutFormState.shippingState));
+          var emptyText = pickupMethods.length
+            ? "No delivery options cover this address yet — try a different country or state, or choose pickup instead."
+            : "No delivery options cover this address yet — try a different country or state, or contact the seller directly.";
           api("/api/public/commerce/delivery-methods" + (qs.length ? "?" + qs.join("&") : ""))
             .then(function (data) {
-              paintDeliveryOptions(data.methods || []);
+              var courier = (data.methods || []).filter(function (m) {
+                return m.type === "COURIER";
+              });
+              paintOptions(deliverySection, courier, emptyText, courierSubtitle);
             })
             .catch(function () {
-              paintDeliveryOptions([]);
+              paintOptions(deliverySection, [], emptyText, courierSubtitle);
             });
         }
 
         function scheduleDeliveryReload() {
+          if (checkoutFormState.fulfillmentMode !== "delivery") return;
           if (deliveryFetchTimer) clearTimeout(deliveryFetchTimer);
-          deliveryFetchTimer = setTimeout(loadDeliveryOptions, 350);
+          deliveryFetchTimer = setTimeout(loadCourierOptions, 350);
+        }
+
+        function setMode(mode) {
+          if (mode !== checkoutFormState.fulfillmentMode) {
+            checkoutFormState.fulfillmentMode = mode;
+            selectMethod(null);
+          }
+          paintMode();
+        }
+
+        function paintMode() {
+          clear(modeSection);
+          clear(fulfillmentBody);
+          var hasPickup = pickupMethods.length > 0;
+          if (!deliveryAllowed && !hasPickup) {
+            checkoutFormState.fulfillmentMode = null;
+            fulfillmentBody.appendChild(
+              el("p", { class: "pc-muted", style: { fontSize: "13px", margin: "0" } }, [
+                "This store isn't offering delivery or pickup right now — please contact the seller to arrange your order.",
+              ])
+            );
+            return;
+          }
+          if (deliveryAllowed && hasPickup) {
+            modeSection.appendChild(
+              el("div", { role: "radiogroup", style: { display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "16px" } }, [
+                optionCard({ title: "Delivery", subtitle: "Ship it to my address", selected: checkoutFormState.fulfillmentMode === "delivery", onSelect: function () { setMode("delivery"); } }),
+                optionCard({ title: "Pickup", subtitle: "I'll collect it from the store", selected: checkoutFormState.fulfillmentMode === "pickup", onSelect: function () { setMode("pickup"); } }),
+              ])
+            );
+          } else {
+            checkoutFormState.fulfillmentMode = deliveryAllowed ? "delivery" : "pickup";
+          }
+          if (checkoutFormState.fulfillmentMode === "delivery") {
+            fulfillmentBody.appendChild(addressBlock);
+            fulfillmentBody.appendChild(deliverySection);
+            loadCourierOptions();
+          } else if (checkoutFormState.fulfillmentMode === "pickup") {
+            fulfillmentBody.appendChild(pickupSection);
+            paintOptions(pickupSection, pickupMethods, "No pickup options are available right now.", pickupSubtitle);
+            fulfillmentBody.appendChild(
+              el("p", { class: "pc-muted", style: { fontSize: "12.5px", lineHeight: "1.55", margin: "0" } }, [
+                "Pickup is free. The store will confirm with you when your order is ready to collect.",
+              ])
+            );
+          }
+          document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
+        }
+
+        function loadFulfillmentOptions() {
+          fulfillmentBody.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px", margin: "0" } }, ["Loading delivery options…"]));
+          api("/api/public/commerce/delivery-methods")
+            .then(function (data) {
+              pickupMethods = (data.methods || []).filter(function (m) {
+                return m.type === "PICKUP";
+              });
+              paintMode();
+            })
+            .catch(function () {
+              pickupMethods = [];
+              paintMode();
+            });
         }
 
         function field(label, type, stateKey) {
@@ -1963,18 +2316,22 @@
             },
           });
 
+          addressBlock = el("div", {}, [
+            el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "14px" } }, [
+              el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["Country"]), countryInput]),
+              el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["State / region"]), stateFieldBox]),
+            ]),
+            el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap" } }, [
+              el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["City"]), cityFieldBox]),
+              el("div", { style: { flex: "2", minWidth: "220px" } }, [el("label", { class: "pc-label" }, ["Street address"]), addressLineInput]),
+            ]),
+          ]);
+
           sections.push(
             el("div", {}, [
-              el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Delivery"]),
-              el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "14px" } }, [
-                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["Country"]), countryInput]),
-                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["State / region"]), stateFieldBox]),
-              ]),
-              el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "16px" } }, [
-                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["City"]), cityFieldBox]),
-                el("div", { style: { flex: "2", minWidth: "220px" } }, [el("label", { class: "pc-label" }, ["Street address"]), addressLineInput]),
-              ]),
-              deliverySection,
+              el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, [deliveryAllowed ? "Delivery or pickup" : "Pickup"]),
+              modeSection,
+              fulfillmentBody,
             ])
           );
         }
@@ -1991,6 +2348,9 @@
             ]),
           ])
         );
+
+        var extraQuestions = customFieldsSection(config.fields, checkoutFormState.customFields, "Additional information");
+        if (extraQuestions) sections.push(extraQuestions);
 
         sections.push(
           el("div", {}, [
@@ -2016,7 +2376,7 @@
 
         node.appendChild(el("div", { style: { display: "flex", flexDirection: "column", gap: "30px" } }, sections));
 
-        if (needsDelivery) loadDeliveryOptions();
+        if (needsDelivery) loadFulfillmentOptions();
       })
       .catch(function (err) {
         showError(node, err.message);
@@ -2041,12 +2401,29 @@
         var order = data.order;
         clear(node);
         prepareNode(node);
+        var awaitingTransfer = order.paymentMethod === "BANK_TRANSFER" && order.status === "PENDING";
         node.appendChild(
           el("div", { class: "pc-card", style: { padding: "28px", display: "flex", flexDirection: "column", gap: "18px" } }, [
             el("div", { style: { display: "flex", alignItems: "center", gap: "10px" } }, [
               el("span", { style: { background: "#16233F", color: "#fff", fontSize: "11px", fontWeight: "700", padding: "5px 10px", borderRadius: "3px", letterSpacing: "0.04em" } }, [order.orderNumber]),
-              el("span", { class: "pc-badge " + (order.status === "PAID" ? "pc-badge-ok" : order.status === "PENDING" ? "pc-badge-low" : "pc-badge-out") }, [order.status]),
+              el("span", { class: "pc-badge " + (order.status === "PAID" ? "pc-badge-ok" : order.status === "PENDING" ? "pc-badge-low" : "pc-badge-out") }, [awaitingTransfer ? "Awaiting payment confirmation" : order.status]),
             ]),
+            awaitingTransfer
+              ? el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
+                  el("p", { style: { margin: "0", fontSize: "14px", lineHeight: "1.6", color: "#16233F" } }, [
+                    "Thanks — your order is placed. The store will confirm it as soon as your bank transfer arrives, and we'll email you when it does.",
+                  ]),
+                  order.bankTransfer
+                    ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "12.5px" } }, ["Haven't sent it yet? Transfer to:"])
+                    : null,
+                  order.bankTransfer ? bankDetailsCard(order.bankTransfer, money(order.amountMinor, order.currency), order.orderNumber) : null,
+                ])
+              : null,
+            order.pickupLocation
+              ? el("div", { style: { fontSize: "13px", color: "#16233F" } }, [el("strong", {}, ["Pickup at: "]), order.pickupLocation])
+              : order.deliveryMethod === "PICKUP"
+                ? el("div", { class: "pc-muted", style: { fontSize: "13px" } }, ["Pickup — the store will send you pickup details when your order is ready."])
+                : null,
             el(
               "div",
               { style: { display: "flex", flexDirection: "column" } },
@@ -2095,8 +2472,16 @@
         .then(function (data) {
           var order = data.order;
           clear(resultBox);
-          if (order.status !== "PAID") {
-            resultBox.appendChild(el("div", { class: "pc-error", style: { background: "#FBEFD8", borderColor: "#fde68a", color: "#92400e" } }, ["This order hasn't been paid for yet."]));
+          if (order.status === "PENDING" && order.paymentMethod === "BANK_TRANSFER") {
+            resultBox.appendChild(
+              el("div", { class: "pc-error", style: { background: "#FBEFD8", borderColor: "#fde68a", color: "#92400e" } }, [
+                "We're waiting for the store to confirm your bank transfer. You'll get an email as soon as it's confirmed.",
+              ])
+            );
+            return;
+          }
+          if (order.status !== "PAID" && order.status !== "REFUNDED") {
+            resultBox.appendChild(el("div", { class: "pc-error", style: { background: "#FBEFD8", borderColor: "#fde68a", color: "#92400e" } }, [order.status === "CANCELLED" ? "This order was cancelled." : "This order hasn't been paid for yet."]));
             return;
           }
           var isCancelled = order.status === "CANCELLED" || order.status === "REFUNDED";

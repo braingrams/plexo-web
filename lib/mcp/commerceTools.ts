@@ -11,6 +11,8 @@ import { resendDigitalDelivery } from "@/lib/commerce/digitalDeliveryDynamo";
 import { sendCommerceStripeAccessRequestNotificationEmail, sendCommerceWithdrawalRequestNotificationEmail } from "@/lib/email";
 import { resolveCommerceCustomers } from "@/lib/commerce/customers";
 import { updateOrderFulfillmentStatus, refundCommerceOrder } from "@/lib/commerce/orderStatusActions";
+import { resolveBankTransferOrder, withoutOrderSecrets } from "@/lib/commerce/bankTransfer";
+import { applyCheckoutSettingsInput, checkoutSettingsView } from "@/lib/commerce/checkoutSettings";
 import { Template } from "@/lib/db/contentEntities";
 import { Organization, User } from "@/lib/db/coreEntities";
 import {
@@ -184,7 +186,7 @@ export const COMMERCE_MCP_TOOLS = [
   },
   {
     name: "get_commerce_settings",
-    description: "Fetches a site's Commerce settings: enabled state, storefront slug/URL, store currency, payment provider, Paystack/Stripe mode/keys (masked), MailDrip config, and notification email.",
+    description: "Fetches a site's Commerce settings: enabled state, storefront slug/URL, store currency, payment provider, Paystack/Stripe mode/keys (masked), bank transfer details, extra checkout questions, delivery/store-pickup switches and pickup location, MailDrip config, and notification email.",
     inputSchema: {
       type: "object",
       properties: { templateId: { type: "string", description: "The site's home page template id." } },
@@ -193,7 +195,7 @@ export const COMMERCE_MCP_TOOLS = [
   },
   {
     name: "update_commerce_settings",
-    description: `Updates a site's Commerce settings. Only the fields provided are changed. paymentProvider: BYO_PAYSTACK (default — the site's own Paystack keys below), PLATFORM_PAYSTACK (Plexo's own Paystack account, no keys needed, proceeds credit the Commerce wallet), BYO_STRIPE (the site's own Stripe keys below), or PLATFORM_STRIPE (Plexo's own Stripe account — requires prior approval, see request_commerce_stripe_access/get_commerce_stripe_access_status). currency can't be changed once the site has any orders. Setting enabled:true auto-provisions a working storefront (shop grid, checkout, order confirmation, order tracking) at /store if one doesn't exist yet — rename its URL any time with storefrontSlug.`,
+    description: `Updates a site's Commerce settings. Only the fields provided are changed. paymentProvider: BYO_PAYSTACK (default — the site's own Paystack keys below), PLATFORM_PAYSTACK (Plexo's own Paystack account, no keys needed, proceeds credit the Commerce wallet), BYO_STRIPE (the site's own Stripe keys below), or PLATFORM_STRIPE (Plexo's own Stripe account — requires prior approval, see request_commerce_stripe_access/get_commerce_stripe_access_status). currency can't be changed once the site has any orders. Bank transfer: set bankTransferEnabled:true together with bankTransferBankName/AccountName/AccountNumber to let customers pay straight into the owner's account — those orders wait for the owner to confirm the money arrived (resolve_bank_transfer_order). Store pickup is on by default (pickupEnabled) — set pickupLocation to the store's address so customers see where to collect; deliveryEnabled:false hides all shipping methods (delivery and pickup can't both be off). checkoutFields replaces the full list of extra checkout questions. Setting enabled:true auto-provisions a working storefront (shop grid, checkout, order confirmation, order tracking) at /store if one doesn't exist yet — rename its URL any time with storefrontSlug.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -225,6 +227,31 @@ export const COMMERCE_MCP_TOOLS = [
         notifyCustomerOnShipped: { type: "boolean", description: "Email the customer when fulfillment status changes to SHIPPED. Default true." },
         notifyCustomerOnCompleted: { type: "boolean", description: "Email the customer when fulfillment status changes to COMPLETED. Default true." },
         notifyCustomerOnRefunded: { type: "boolean", description: "Email the customer when their order is refunded. Default true." },
+        bankTransferEnabled: { type: "boolean", description: "Offer direct bank transfer at checkout. Requires the three bank fields below (already saved or sent in this call)." },
+        bankTransferBankName: { type: "string", description: "e.g. \"GTBank\". Shown to customers at checkout." },
+        bankTransferAccountName: { type: "string", description: "Name on the account. Shown to customers at checkout." },
+        bankTransferAccountNumber: { type: "string", description: "Shown to customers at checkout." },
+        bankTransferInstructions: { type: "string", description: "Optional extra note shown with the bank details (e.g. \"Send a screenshot to 080…\"). Empty string clears it." },
+        deliveryEnabled: { type: "boolean", description: "false hides every shipping (COURIER) method at checkout. Default true." },
+        pickupEnabled: { type: "boolean", description: "The built-in free \"Store pickup\" option at checkout. Default true." },
+        pickupLocation: { type: "string", description: "The store's pickup address, shown to customers at checkout and on their order. Empty string clears it." },
+        pickupInstructions: { type: "string", description: "Optional pickup hours/notes. Empty string clears it." },
+        checkoutFields: {
+          type: "array",
+          description: "REPLACES the site's whole list of extra checkout questions (send [] to remove all). Keep an existing question's id to preserve it; omit id for a new one.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              label: { type: "string", description: "The question, e.g. \"Gift message\"." },
+              type: { type: "string", enum: ["text", "textarea", "select", "date", "phone"] },
+              required: { type: "boolean" },
+              options: { type: "array", items: { type: "string" }, description: "Choices — required (2+) when type is select." },
+              placeholder: { type: "string" },
+            },
+            required: ["label", "type"],
+          },
+        },
       },
       required: ["templateId"],
     },
@@ -393,14 +420,30 @@ export const COMMERCE_MCP_TOOLS = [
   },
   {
     name: "refund_commerce_order",
-    description: "Refunds a PAID order through the Paystack account it was actually paid through. Paystack-only today — a PLATFORM_STRIPE-paid order will error, since that refund path doesn't exist yet. Does not restock inventory or free a booking slot; that's a separate deliberate decision.",
+    description: "Refunds a PAID order. IRREVERSIBLE — only call this when the site owner has explicitly asked to refund THIS specific order in the current conversation; never as a guess or a follow-up suggestion. First show them the order (get_commerce_order) and get their reason. Gateway orders refund through the Paystack account they were paid with (Paystack-only today — a Stripe-paid order will error). A bank-transfer order is recorded as refunded only — the owner must send the money back themselves; say so. Does not restock inventory or free a booking slot.",
     inputSchema: {
       type: "object",
       properties: {
         templateId: { type: "string", description: "The site's home page template id." },
         orderId: { type: "string" },
+        reason: { type: "string", description: "The owner's stated reason (min 5 characters) — stored on the order as an audit trail." },
+        confirmOrderNumber: { type: "string", description: "The order's human-facing number (e.g. ORD-4F2A9C1B), exactly as the owner confirmed it. Must match the order or the refund is refused." },
       },
-      required: ["templateId", "orderId"],
+      required: ["templateId", "orderId", "reason", "confirmOrderNumber"],
+    },
+  },
+  {
+    name: "resolve_bank_transfer_order",
+    description: "Confirms or rejects a bank-transfer order that's waiting for payment (status PENDING, paymentMethod BANK_TRANSFER). action \"confirm\" marks it PAID and runs the normal paid flow (customer confirmation email, digital delivery, booking confirmed) — only use it once the site owner says the money has actually arrived in their account. action \"reject\" cancels it, releases its stock/booking slot, and emails the customer (optional reason is included).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        orderId: { type: "string" },
+        action: { type: "string", enum: ["confirm", "reject"] },
+        reason: { type: "string", description: "Optional note to the customer when rejecting." },
+      },
+      required: ["templateId", "orderId", "action"],
     },
   },
   {
@@ -672,6 +715,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
           notifyCustomerOnShipped: settings?.notifyCustomerOnShipped ?? true,
           notifyCustomerOnCompleted: settings?.notifyCustomerOnCompleted ?? true,
           notifyCustomerOnRefunded: settings?.notifyCustomerOnRefunded ?? true,
+          ...checkoutSettingsView(settings),
         },
       };
     }
@@ -775,6 +819,11 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       if (typeof args.notifyCustomerOnRefunded === "boolean") data.notifyCustomerOnRefunded = args.notifyCustomerOnRefunded;
 
       const { data: existingSettings } = await CommerceSettings.get({ templateId: siteId }).go();
+      // Bank transfer / checkout questions / delivery+pickup — same validation as the
+      // dashboard's settings PUT (lib/commerce/checkoutSettings.ts); throws a readable error.
+      const checkoutInput = applyCheckoutSettingsInput(args, existingSettings);
+      Object.assign(data, checkoutInput.data);
+      toRemove.push(...checkoutInput.toRemove);
       if (existingSettings) {
         let patch = CommerceSettings.patch({ templateId: siteId }).set(data);
         if (toRemove.length) patch = patch.remove(toRemove as any);
@@ -821,6 +870,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
           notifyCustomerOnShipped: settings.notifyCustomerOnShipped ?? true,
           notifyCustomerOnCompleted: settings.notifyCustomerOnCompleted ?? true,
           notifyCustomerOnRefunded: settings.notifyCustomerOnRefunded ?? true,
+          ...checkoutSettingsView(settings),
         },
         ...(currencyWarning || storefrontWarning ? { warning: [currencyWarning, storefrontWarning].filter(Boolean).join(" ") } : {}),
       };
@@ -847,7 +897,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       const orders = await Promise.all(
         pageRows.map(async (order) => {
           const { data: items } = await CommerceOrderItem.query.primary({ templateId: siteId, orderId: order.id }).go();
-          return { ...order, items: items.map((i) => ({ nameSnapshot: i.nameSnapshot, quantity: i.quantity ?? 1, unitPriceMinor: i.unitPriceMinor })) };
+          return { ...withoutOrderSecrets(order), items: items.map((i) => ({ nameSnapshot: i.nameSnapshot, quantity: i.quantity ?? 1, unitPriceMinor: i.unitPriceMinor })) };
         }),
       );
 
@@ -881,7 +931,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         }),
       );
 
-      return { order: { ...order, items, booking: booking ? { scheduledStart: booking.scheduledStart, status: booking.status } : null, digitalDeliveries } };
+      return { order: { ...withoutOrderSecrets(order), items, booking: booking ? { scheduledStart: booking.scheduledStart, status: booking.status } : null, digitalDeliveries } };
     }
 
     case "resend_digital_delivery": {
@@ -1102,15 +1152,34 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
       if (!orderId) throw new Error("orderId is required.");
       const order = await updateOrderFulfillmentStatus(siteId, resolved.organizationId, orderId, args.fulfillmentStatus);
-      return { success: true, order };
+      return { success: true, order: withoutOrderSecrets(order) };
     }
 
     case "refund_commerce_order": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
       const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
       if (!orderId) throw new Error("orderId is required.");
-      const order = await refundCommerceOrder(siteId, resolved.organizationId, orderId);
-      return { success: true, order };
+      const order = await refundCommerceOrder(siteId, resolved.organizationId, orderId, {
+        reason: args.reason,
+        confirmOrderNumber: args.confirmOrderNumber,
+        refundedBy: `mcp:${resolved.userId}`,
+      });
+      return { success: true, order: withoutOrderSecrets(order) };
+    }
+
+    case "resolve_bank_transfer_order": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
+      if (!orderId) throw new Error("orderId is required.");
+      if (args.action !== "confirm" && args.action !== "reject") throw new Error('action must be "confirm" or "reject".');
+      const order = await resolveBankTransferOrder({
+        templateId: siteId,
+        orderId,
+        action: args.action,
+        resolvedBy: `mcp:${resolved.userId}`,
+        reason: typeof args.reason === "string" ? args.reason : null,
+      });
+      return { success: true, order: withoutOrderSecrets(order) };
     }
 
     case "list_commerce_discounts": {

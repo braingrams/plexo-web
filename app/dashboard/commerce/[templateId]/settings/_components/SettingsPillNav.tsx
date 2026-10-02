@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-/** Settings' own sub-nav — General / Payments / Notifications — as horizontal pills,
+/** Settings' own sub-nav — General / Payments / Checkout / Notifications — as horizontal pills,
  * reusing the app's real .dash-pill-nav/.dash-pill-nav-item classes (globals.css) that the
  * main topbar nav already uses, rather than inventing new pill CSS. Deliberately a
  * visually LIGHTER weight than CommerceTabs' underline tabs above it, so the hierarchy
@@ -16,6 +16,7 @@ export function SettingsPillNav({ templateId }: { templateId: string }) {
   const items = [
     { href: `${base}/general`, label: "General" },
     { href: `${base}/payments`, label: "Payments" },
+    { href: `${base}/checkout`, label: "Checkout" },
     { href: `${base}/notifications`, label: "Notifications" },
   ];
 
