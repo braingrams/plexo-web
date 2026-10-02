@@ -49,7 +49,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const cutoff = new Date(Date.now() - STALE_ORDER_AGE_MS).toISOString();
 
-  type OrderRow = { id: string; templateId: string; status?: string; createdAt?: string };
+  type OrderRow = { id: string; templateId: string; status?: string; createdAt?: string; paymentMethod?: string };
   const allOrders: OrderRow[] = [];
   let cursor: string | null = null;
   for (;;) {
@@ -59,14 +59,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!cursor) break;
   }
 
-  const staleOrders = allOrders.filter((o) => (o.status ?? "PENDING") === "PENDING" && (o.createdAt ?? "") < cutoff);
+  // A BANK_TRANSFER order is PENDING by design until the site owner confirms the money
+  // arrived (lib/commerce/bankTransfer.ts) — that can take days, not 15 minutes, so it's
+  // never "abandoned" in this sense. The owner cancels it explicitly instead.
+  const staleOrders = allOrders.filter(
+    (o) => (o.status ?? "PENDING") === "PENDING" && o.paymentMethod !== "BANK_TRANSFER" && (o.createdAt ?? "") < cutoff,
+  );
 
   let expiredCount = 0;
   for (const staleOrder of staleOrders) {
     try {
       await CommerceOrder.patch({ templateId: staleOrder.templateId, id: staleOrder.id })
         .set({ status: "CANCELLED" })
-        .where((attr, op) => op.eq(attr.status, "PENDING"))
+        .where((attr, op) => `${op.eq(attr.status, "PENDING")} AND (${op.notExists(attr.paymentMethod)} OR ${op.ne(attr.paymentMethod, "BANK_TRANSFER")})`)
         .go();
     } catch (err) {
       if (isConditionalCheckFailure(err)) continue; // a webhook confirmed it first — leave it alone

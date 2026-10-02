@@ -197,6 +197,29 @@ export const CommerceOrder = new Entity(
       paystackAuthorizationUrl: { type: "string" },
       stripeCheckoutSessionId: { type: "string" },
       stripePaymentIntentId: { type: "string" },
+      // How the customer chose to pay. Absent on every order placed before bank transfer
+      // existed — read absent as ONLINE (a gateway: Paystack/Stripe). A BANK_TRANSFER order
+      // stays status PENDING until the site owner confirms the money actually arrived (see
+      // lib/commerce/bankTransfer.ts) — it's deliberately NOT a new status value, so every
+      // existing PENDING/PAID consumer (plexo-admin's mirror, reports) keeps working.
+      paymentMethod: { type: ["ONLINE", "BANK_TRANSFER"] as const },
+      // Secret for the owner's one-click "confirm payment received" email link — compared
+      // timing-safely, never returned by any customer-facing endpoint.
+      bankTransferConfirmToken: { type: "string" },
+      bankTransferResolvedAt: { type: "string" },
+      // "dashboard:<userId>", "email-link", or "mcp:<userId>" — who confirmed/rejected it.
+      bankTransferResolvedBy: { type: "string" },
+      bankTransferRejectReason: { type: "string" },
+      // Snapshotted at checkout, same discipline as deliveryMethodNameSnapshot — editing the
+      // store's pickup address later never rewrites where an existing order was told to go.
+      pickupLocationSnapshot: { type: "string" },
+      // Answers to the site's own checkout questions (CommerceSettings.checkoutFields),
+      // snapshotted WITH their label: [{ id, label, value }]. See lib/commerce/checkoutFields.ts.
+      customFields: { type: "any" },
+      // Refund audit trail — every refund requires a stated reason (see refundCommerceOrder).
+      refundReason: { type: "string" },
+      refundedAt: { type: "string" },
+      refundedBy: { type: "string" },
       metadata: { type: "any" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
@@ -552,6 +575,24 @@ export const CommerceSettings = new Entity(
       // widget that matches their brand, not the platform's hardcoded default.
       themeAccentColor: { type: "string" },
       themeButtonRadius: { type: ["sharp", "rounded", "pill"] as const },
+      // Direct bank transfer — offered at checkout alongside (or instead of) the card
+      // gateway above. Not secrets: these are shown to every customer at checkout, so
+      // they're stored in plain text on purpose. See lib/commerce/bankTransfer.ts.
+      bankTransferEnabled: { type: "boolean", default: false },
+      bankTransferBankName: { type: "string" },
+      bankTransferAccountName: { type: "string" },
+      bankTransferAccountNumber: { type: "string" },
+      bankTransferInstructions: { type: "string" },
+      // Extra questions asked at checkout — [{ id, label, type, required, options?,
+      // placeholder? }]. See lib/commerce/checkoutFields.ts for the shape and validation.
+      checkoutFields: { type: "any" },
+      // deliveryEnabled=false hides every shipping (COURIER) method at checkout. Store
+      // pickup is a built-in option on by default — a store with no delivery methods set
+      // up at all can still take physical orders. See lib/commerce/delivery.ts.
+      deliveryEnabled: { type: "boolean", default: true },
+      pickupEnabled: { type: "boolean", default: true },
+      pickupLocation: { type: "string" },
+      pickupInstructions: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },

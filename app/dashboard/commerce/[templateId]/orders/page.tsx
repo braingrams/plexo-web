@@ -1,4 +1,5 @@
 import { CommerceOrder, CommerceOrderItem, CommerceBooking, CommerceDigitalDelivery, CommerceProduct } from "@/lib/db/commerceEntities";
+import { orderDeliveryDetails } from "@/lib/commerce/bankTransfer";
 import { OrdersClient, type OrderSummary } from "./OrdersClient";
 
 export default async function CommerceOrdersPage({ params }: { params: Promise<{ templateId: string }> }) {
@@ -42,6 +43,11 @@ export default async function CommerceOrdersPage({ params }: { params: Promise<{
         items: items.map((i) => ({ nameSnapshot: i.nameSnapshot, quantity: i.quantity ?? 1, unitPriceMinor: i.unitPriceMinor })),
         booking: booking ? { scheduledStart: booking.scheduledStart, status: booking.status ?? "PENDING_PAYMENT" } : null,
         digitalDeliveries,
+        paymentMethod: o.paymentMethod ?? "ONLINE",
+        deliveryDetails: orderDeliveryDetails(o),
+        refundReason: o.refundReason ?? null,
+        refundedAt: o.refundedAt ?? null,
+        bankTransferRejectReason: o.bankTransferRejectReason ?? null,
       };
     }),
   );

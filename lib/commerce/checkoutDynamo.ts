@@ -17,6 +17,24 @@ import {
 type ResolvedDeliveryMethod = EntityItem<typeof CommerceDeliveryMethod>;
 type ShippingAddress = { shippingCountry: string | null; shippingState: string | null; shippingAddressLine: string | null };
 
+/** Fields shared by both order-creation paths that don't affect the transaction's guards —
+ * just snapshotted onto the order. See commerceEntities.ts's CommerceOrder comments. */
+export type OrderExtras = {
+  paymentMethod: "ONLINE" | "BANK_TRANSFER";
+  bankTransferConfirmToken: string | null;
+  pickupLocationSnapshot: string | undefined;
+  customFields: Array<{ id: string; label: string; value: string }>;
+};
+
+function orderExtraAttributes(extras: OrderExtras) {
+  return {
+    paymentMethod: extras.paymentMethod,
+    bankTransferConfirmToken: extras.bankTransferConfirmToken ?? undefined,
+    pickupLocationSnapshot: extras.pickupLocationSnapshot,
+    customFields: extras.customFields.length ? extras.customFields : undefined,
+  };
+}
+
 export class OutOfStockError extends Error {
   constructor(public productName?: string) {
     super();
@@ -65,8 +83,12 @@ export async function createCommerceOrder(params: {
   paystackMode: "TEST" | "LIVE" | null;
   scheduledStart: Date | null;
   scheduledEnd: Date | null;
+  extras: OrderExtras;
+  // How long a SERVICE slot stays held while unpaid — 15 minutes for a card checkout,
+  // much longer for a bank transfer the owner still has to confirm.
+  holdMs?: number;
 }): Promise<EntityItem<typeof CommerceOrder>> {
-  const { templateId, organizationId, product, quantity, orderNumber, paystackReference, customerEmail, customerName, customerPhone, deliveryMethod, shippingAddress, discount, discountAmountMinor, amountMinor, currency, paymentProvider, paystackMode, scheduledStart, scheduledEnd } = params;
+  const { templateId, organizationId, product, quantity, orderNumber, paystackReference, customerEmail, customerName, customerPhone, deliveryMethod, shippingAddress, discount, discountAmountMinor, amountMinor, currency, paymentProvider, paystackMode, scheduledStart, scheduledEnd, extras, holdMs = 15 * 60_000 } = params;
 
   const orderId = randomUUID();
   const orderItemId = randomUUID();
@@ -146,6 +168,7 @@ export async function createCommerceOrder(params: {
       paymentProvider,
       paystackMode: paystackMode ?? undefined,
       paystackReference: paystackReference ?? undefined,
+      ...orderExtraAttributes(extras),
     }).params() as unknown as TransactItem["Put"],
   });
   kinds.push("order");
@@ -173,7 +196,7 @@ export async function createCommerceOrder(params: {
         productId: product.id,
         scheduledStart: scheduledStart!.toISOString(),
         scheduledEnd: scheduledEnd!.toISOString(),
-        holdExpiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+        holdExpiresAt: new Date(Date.now() + holdMs).toISOString(),
       }).params() as unknown as TransactItem["Put"],
     });
     kinds.push("booking");
@@ -263,8 +286,9 @@ export async function createCommerceCartOrder(params: {
   currency: string;
   paymentProvider: CommercePaymentProvider;
   paystackMode: "TEST" | "LIVE" | null;
+  extras: OrderExtras;
 }): Promise<EntityItem<typeof CommerceOrder>> {
-  const { templateId, organizationId, cartId, items: cartItems, orderNumber, paystackReference, customerEmail, customerName, customerPhone, deliveryMethod, shippingAddress, discount, discountAmountMinor, amountMinor, currency, paymentProvider, paystackMode } = params;
+  const { templateId, organizationId, cartId, items: cartItems, orderNumber, paystackReference, customerEmail, customerName, customerPhone, deliveryMethod, shippingAddress, discount, discountAmountMinor, amountMinor, currency, paymentProvider, paystackMode, extras } = params;
 
   const orderId = randomUUID();
   const transactItems: TransactItem[] = [];
@@ -319,6 +343,7 @@ export async function createCommerceCartOrder(params: {
       paymentProvider,
       paystackMode: paystackMode ?? undefined,
       paystackReference: paystackReference ?? undefined,
+      ...orderExtraAttributes(extras),
     }).params() as unknown as TransactItem["Put"],
   });
   kinds.push("order");

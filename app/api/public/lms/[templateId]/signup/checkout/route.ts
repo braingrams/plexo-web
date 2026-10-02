@@ -153,6 +153,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
       paystackMode,
       scheduledStart: null,
       scheduledEnd: null,
+      // A funnel signup is always paid online — its enrollment activates from the gateway
+      // webhook (see this route's own header comment), not a manual bank-transfer confirm.
+      extras: { paymentMethod: "ONLINE", bankTransferConfirmToken: null, pickupLocationSnapshot: undefined, customFields: [] },
     });
   } catch (err) {
     if (err instanceof OutOfStockError || err instanceof SlotTakenError || err instanceof InvalidDiscountError) {
