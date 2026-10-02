@@ -98,14 +98,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   const isBankTransfer = paymentChoice.method === "BANK_TRANSFER";
 
-  let customFieldAnswers;
-  try {
-    customFieldAnswers = resolveCheckoutFieldAnswers(readCheckoutFields(settings.checkoutFields), rawCustomFields);
-  } catch (err) {
-    if (err instanceof CheckoutFieldsError) return NextResponse.json({ error: err.message }, { status: 400 });
-    throw err;
-  }
-
   const { data: cartItemRows } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
   const productRows = await Promise.all(cartItemRows.map((i) => CommerceProduct.get({ templateId, id: i.productId }).go()));
   const activeItems = cartItemRows
@@ -146,6 +138,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
       throw err;
     }
+  }
+
+  // Resolved only now that the delivery method is known: a question limited to certain
+  // countries applies to where the order actually SHIPS — a pickup order has no delivery
+  // country even if the customer typed an address before switching to pickup.
+  const deliveryCountry = resolvedDeliveryMethod?.type === "COURIER" ? shippingAddress.shippingCountry : null;
+  let customFieldAnswers;
+  try {
+    customFieldAnswers = resolveCheckoutFieldAnswers(readCheckoutFields(settings.checkoutFields), rawCustomFields, deliveryCountry);
+  } catch (err) {
+    if (err instanceof CheckoutFieldsError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
   }
 
   // Prices are never trusted from the cart snapshot at this point either — re-read fresh

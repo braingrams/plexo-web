@@ -37,6 +37,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       feeMinor: m.feeMinor ?? 0,
       description: m.description ?? null,
       estimatedTimeLabel: m.estimatedTimeLabel ?? null,
+      // Lets the storefront hold back country-limited options until the customer has
+      // actually picked a country (otherwise they could choose one the server then rejects).
+      countries: m.countries ?? [],
       // Where a PICKUP option is collected from — the built-in store pickup's own
       // pickupLocation setting, or a custom pickup method's description. null when the
       // owner hasn't said yet (the storefront then tells the customer the store will

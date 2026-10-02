@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { checkoutCountryName } from "@/lib/commerce/countries";
 
 /**
  * A site owner's own extra checkout questions (CommerceSettings.checkoutFields) — e.g.
@@ -6,6 +7,12 @@ import { randomUUID } from "node:crypto";
  * public/commerce.js's checkout_flow/booking blocks under "Additional information", and
  * answered values are snapshotted onto CommerceOrder.customFields WITH their label, so
  * renaming or deleting a question later never rewrites what an existing order says.
+ *
+ * `countries` (optional) limits a question to customers whose DELIVERY address is in one of
+ * those countries — e.g. "Tailor's address" only for orders shipping to Nigeria. Same
+ * "empty = everyone" rule as CommerceDeliveryMethod.countries. A pickup, booking or
+ * all-digital order has no delivery country, so a country-limited question is never asked
+ * there; questions without `countries` behave exactly as before.
  */
 export type CheckoutFieldType = "text" | "textarea" | "select" | "date" | "phone";
 
@@ -16,6 +23,7 @@ export type CheckoutField = {
   required: boolean;
   options?: string[];
   placeholder?: string;
+  countries?: string[];
 };
 
 export type CheckoutFieldAnswer = { id: string; label: string; value: string };
@@ -63,19 +71,46 @@ export function normalizeCheckoutFields(raw: unknown): CheckoutField[] {
     if (seen.has(id)) id = randomUUID();
     seen.add(id);
     const placeholder = typeof f.placeholder === "string" && f.placeholder.trim() ? f.placeholder.trim().slice(0, MAX_LABEL) : undefined;
-    return { id, label, type, required: f.required === true, ...(options ? { options } : {}), ...(placeholder ? { placeholder } : {}) };
+    const countries = normalizeQuestionCountries(f.countries, label);
+    return {
+      id, label, type, required: f.required === true,
+      ...(options ? { options } : {}), ...(placeholder ? { placeholder } : {}), ...(countries.length ? { countries } : {}),
+    };
   });
+}
+
+function normalizeQuestionCountries(raw: unknown, label: string): string[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) throw new CheckoutFieldsError(`"${label}": countries must be a list of country codes, like ["NG"].`);
+  const codes = Array.from(new Set(raw.filter((c): c is string => typeof c === "string").map((c) => c.trim().toUpperCase()).filter(Boolean)));
+  const unknown = codes.filter((c) => !checkoutCountryName(c));
+  if (unknown.length) {
+    throw new CheckoutFieldsError(`"${label}" is limited to ${unknown.join(", ")}, which customers can't choose at checkout — use 2-letter country codes like NG or US.`);
+  }
+  return codes;
+}
+
+/** Whether a question is asked for an order delivering to `country` (null when the order
+ * has no delivery address — pickup, booking, digital). Mirrored client-side in
+ * public/commerce.js's isFieldShown. */
+export function isCheckoutFieldShown(field: Pick<CheckoutField, "countries">, country: string | null | undefined): boolean {
+  if (!field.countries?.length) return true;
+  return Boolean(country) && field.countries.includes(country!.toUpperCase());
 }
 
 /**
  * Validates a customer's answers at checkout against the site's CURRENT questions —
  * never trusting a client-supplied label (it's always re-read from the field definition).
- * `raw` is `{ [fieldId]: value }`. Throws CheckoutFieldsError for the storefront to show.
+ * `raw` is `{ [fieldId]: value }`. `deliveryCountry` is the order's real delivery country
+ * (null for pickup/booking/digital) — questions limited to other countries are skipped
+ * entirely: never required, and any stale answer to them is dropped rather than stored.
+ * Throws CheckoutFieldsError for the storefront to show.
  */
-export function resolveCheckoutFieldAnswers(fields: CheckoutField[], raw: unknown): CheckoutFieldAnswer[] {
+export function resolveCheckoutFieldAnswers(fields: CheckoutField[], raw: unknown, deliveryCountry: string | null): CheckoutFieldAnswer[] {
   const input = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const answers: CheckoutFieldAnswer[] = [];
   for (const field of fields) {
+    if (!isCheckoutFieldShown(field, deliveryCountry)) continue;
     const rawValue = input[field.id];
     const value = typeof rawValue === "string" ? rawValue.trim().slice(0, MAX_ANSWER) : "";
     if (!value) {
@@ -93,5 +128,7 @@ export function resolveCheckoutFieldAnswers(fields: CheckoutField[], raw: unknow
 /** The public (storefront-safe) projection — identical today, kept as one function so a
  * future owner-only attribute can't accidentally leak to visitors. */
 export function toPublicCheckoutFields(fields: CheckoutField[]): CheckoutField[] {
-  return fields.map(({ id, label, type, required, options, placeholder }) => ({ id, label, type, required, ...(options ? { options } : {}), ...(placeholder ? { placeholder } : {}) }));
+  return fields.map(({ id, label, type, required, options, placeholder, countries }) => ({
+    id, label, type, required, ...(options ? { options } : {}), ...(placeholder ? { placeholder } : {}), ...(countries?.length ? { countries } : {}),
+  }));
 }

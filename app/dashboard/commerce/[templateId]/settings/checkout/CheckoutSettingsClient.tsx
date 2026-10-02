@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Toggle } from "@/app/dashboard/_components/Toggle";
 import { SettingsActionBar } from "../_components/SettingsActionBar";
 import type { CheckoutField, CheckoutFieldType } from "@/lib/commerce/checkoutFields";
+import { CHECKOUT_COUNTRIES, checkoutCountryName } from "@/lib/commerce/countries";
 
 const MAX_FIELDS = 20;
 
@@ -30,17 +31,20 @@ const inputStyle: React.CSSProperties = {
   outline: "none", fontFamily: "inherit",
 };
 
-type DraftField = CheckoutField & { optionsText: string; key: string };
+// `limited` is the "Only customers delivering to…" choice — kept separate from `countries`
+// so switching it on doesn't immediately count as "limited to nowhere" while the owner is
+// still picking.
+type DraftField = CheckoutField & { optionsText: string; key: string; limited: boolean; countries: string[] };
 
 function toDraft(f: CheckoutField): DraftField {
-  return { ...f, optionsText: (f.options ?? []).join("\n"), key: f.id };
+  return { ...f, optionsText: (f.options ?? []).join("\n"), key: f.id, countries: f.countries ?? [], limited: Boolean(f.countries?.length) };
 }
 
 let draftCounter = 0;
 function newDraft(partial: Partial<CheckoutField> = {}): DraftField {
   draftCounter += 1;
   // No id yet — the server assigns one on save (lib/commerce/checkoutFields.ts).
-  return { id: "", label: "", type: "text", required: false, optionsText: "", key: `new-${Date.now()}-${draftCounter}`, ...partial };
+  return { id: "", label: "", type: "text", required: false, optionsText: "", key: `new-${Date.now()}-${draftCounter}`, limited: false, countries: [], ...partial };
 }
 
 /**
@@ -67,6 +71,11 @@ export function CheckoutSettingsClient({ templateId, initialFields }: { template
   }
 
   async function handleSave() {
+    const unscoped = fields.find((f) => f.limited && f.countries.length === 0);
+    if (unscoped) {
+      setMessage({ kind: "error", text: `Pick at least one country for "${unscoped.label || "your question"}", or set it back to Everyone.` });
+      return;
+    }
     setSaving(true);
     setMessage(null);
     try {
@@ -77,6 +86,7 @@ export function CheckoutSettingsClient({ templateId, initialFields }: { template
         required: f.required,
         placeholder: f.placeholder || undefined,
         options: f.type === "select" ? f.optionsText.split("\n").map((o) => o.trim()).filter(Boolean) : undefined,
+        countries: f.limited ? f.countries : [],
       }));
       const res = await fetch(`/api/v1/commerce/${templateId}/settings`, {
         method: "PUT",
@@ -102,6 +112,7 @@ export function CheckoutSettingsClient({ templateId, initialFields }: { template
         <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>Checkout questions</h2>
         <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 1.1rem", lineHeight: 1.5, maxWidth: 620 }}>
           Ask customers for anything else you need at checkout — name, email, phone and address are already collected.
+          A question can be limited to customers delivering to certain countries.
           Answers show up on each order under <strong style={{ color: "rgba(240,242,255,0.7)" }}>Delivery info</strong>.
         </p>
 
@@ -148,6 +159,7 @@ export function CheckoutSettingsClient({ templateId, initialFields }: { template
                   <input type="text" value={f.placeholder ?? ""} maxLength={80} onChange={(e) => update(f.key, { placeholder: e.target.value })} placeholder="Shown inside the empty box" style={inputStyle} />
                 </label>
               ) : null}
+              <AudiencePicker field={f} onChange={(patch) => update(f.key, patch)} />
             </div>
           ))}
         </div>
@@ -176,6 +188,64 @@ export function CheckoutSettingsClient({ templateId, initialFields }: { template
       </div>
 
       <SettingsActionBar saving={saving} message={message} onSave={() => void handleSave()} />
+    </div>
+  );
+}
+
+/** "Who sees this question?" — everyone, or only customers whose delivery address is in
+ * certain countries (e.g. tailor details only for orders shipping to Nigeria). */
+function AudiencePicker({ field, onChange }: { field: DraftField; onChange: (patch: Partial<DraftField>) => void }) {
+  const available = CHECKOUT_COUNTRIES.filter(([code]) => !field.countries.includes(code));
+  const chip: React.CSSProperties = {
+    display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.25rem 0.35rem 0.25rem 0.65rem", borderRadius: 999,
+    background: "rgba(var(--brand-rgb),0.14)", border: "1px solid rgba(var(--brand-rgb),0.35)", color: "#f0f2ff", fontSize: "0.76rem",
+  };
+  return (
+    <div style={{ marginTop: "0.6rem" }}>
+      <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.3rem" }}>Who sees this question?</span>
+      <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+        <select
+          value={field.limited ? "some" : "all"}
+          onChange={(e) => onChange({ limited: e.target.value === "some" })}
+          style={{ ...inputStyle, width: "auto", minWidth: 230 }}
+          aria-label="Who sees this question"
+        >
+          <option value="all" style={{ background: "#0d0f1a" }}>Everyone</option>
+          <option value="some" style={{ background: "#0d0f1a" }}>Only customers delivering to…</option>
+        </select>
+        {field.limited && (
+          <>
+            {field.countries.map((code) => (
+              <span key={code} style={chip}>
+                {checkoutCountryName(code) ?? code}
+                <button
+                  type="button" aria-label={`Remove ${checkoutCountryName(code) ?? code}`}
+                  onClick={() => onChange({ countries: field.countries.filter((c) => c !== code) })}
+                  style={{ width: 18, height: 18, borderRadius: 999, border: "none", background: "rgba(255,255,255,0.12)", color: "#f0f2ff", cursor: "pointer", fontSize: "0.7rem", lineHeight: 1, fontFamily: "inherit" }}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            <select
+              value=""
+              onChange={(e) => e.target.value && onChange({ countries: [...field.countries, e.target.value] })}
+              style={{ ...inputStyle, width: "auto", minWidth: 170 }}
+              aria-label="Add a country"
+            >
+              <option value="" style={{ background: "#0d0f1a" }}>{field.countries.length ? "+ Add another country" : "Choose a country"}</option>
+              {available.map(([code, name]) => (
+                <option key={code} value={code} style={{ background: "#0d0f1a" }}>{name}</option>
+              ))}
+            </select>
+          </>
+        )}
+      </div>
+      {field.limited && (
+        <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.45)", margin: "0.4rem 0 0" }}>
+          Hidden for everyone else, and never asked for pickup orders.
+        </p>
+      )}
     </div>
   );
 }

@@ -195,7 +195,7 @@ export const COMMERCE_MCP_TOOLS = [
   },
   {
     name: "update_commerce_settings",
-    description: `Updates a site's Commerce settings. Only the fields provided are changed. paymentProvider: BYO_PAYSTACK (default — the site's own Paystack keys below), PLATFORM_PAYSTACK (Plexo's own Paystack account, no keys needed, proceeds credit the Commerce wallet), BYO_STRIPE (the site's own Stripe keys below), or PLATFORM_STRIPE (Plexo's own Stripe account — requires prior approval, see request_commerce_stripe_access/get_commerce_stripe_access_status). currency can't be changed once the site has any orders. Bank transfer: set bankTransferEnabled:true together with bankTransferBankName/AccountName/AccountNumber to let customers pay straight into the owner's account — those orders wait for the owner to confirm the money arrived (resolve_bank_transfer_order). Store pickup is on by default (pickupEnabled) — set pickupLocation to the store's address so customers see where to collect; deliveryEnabled:false hides all shipping methods (delivery and pickup can't both be off). checkoutFields replaces the full list of extra checkout questions. Setting enabled:true auto-provisions a working storefront (shop grid, checkout, order confirmation, order tracking) at /store if one doesn't exist yet — rename its URL any time with storefrontSlug.`,
+    description: `Updates a site's Commerce settings. Only the fields provided are changed. paymentProvider: BYO_PAYSTACK (default — the site's own Paystack keys below), PLATFORM_PAYSTACK (Plexo's own Paystack account, no keys needed, proceeds credit the Commerce wallet), BYO_STRIPE (the site's own Stripe keys below), or PLATFORM_STRIPE (Plexo's own Stripe account — requires prior approval, see request_commerce_stripe_access/get_commerce_stripe_access_status). currency can't be changed once the site has any orders. Bank transfer: set bankTransferEnabled:true together with bankTransferBankName/AccountName/AccountNumber to let customers pay straight into the owner's account — those orders wait for the owner to confirm the money arrived (resolve_bank_transfer_order). Store pickup is on by default (pickupEnabled) — set pickupLocation to the store's address so customers see where to collect; deliveryEnabled:false hides all shipping methods (delivery and pickup can't both be off). checkoutFields replaces the full list of extra checkout questions (a question can be limited to customers delivering to certain countries via its countries list, e.g. tailor details only for Nigeria). Setting enabled:true auto-provisions a working storefront (shop grid, checkout, order confirmation, order tracking) at /store if one doesn't exist yet — rename its URL any time with storefrontSlug.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -248,6 +248,11 @@ export const COMMERCE_MCP_TOOLS = [
               required: { type: "boolean" },
               options: { type: "array", items: { type: "string" }, description: "Choices — required (2+) when type is select." },
               placeholder: { type: "string" },
+              countries: {
+                type: "array",
+                items: { type: "string" },
+                description: "Optional. Only ask this question when the order ships to one of these countries (ISO 2-letter codes, e.g. [\"NG\"]). Omit or [] to ask everyone. Never asked for pickup orders.",
+              },
             },
             required: ["label", "type"],
           },
