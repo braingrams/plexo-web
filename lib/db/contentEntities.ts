@@ -69,6 +69,14 @@ export const Template = new Entity(
       // Domains connect-a-domain picker (same reason isCommerceLayout/isBlogLayout are),
       // unlike isLmsFunnel: this one genuinely shouldn't be browsable as "a site."
       isLmsPageDesign: { type: "boolean", default: false },
+      // Root sites only. True when this site's URLs end in "/" (WordPress's convention) —
+      // the serve route then answers "/about/" directly and 301s "/about" to it, instead of
+      // Plexo's default of the reverse. Set by the WordPress migration (lib/wpMigration) so
+      // every migrated URL keeps working at exactly its old address, with no redirect hop.
+      urlTrailingSlash: { type: "boolean", default: false },
+      // Root sites only: the site this one was migrated from ("https://example.org"), shown
+      // in the dashboard and used by the domain-cutover guidance.
+      migratedFrom: { type: "string" },
       createdAt: {
         type: "string",
         default: () => new Date().toISOString(),

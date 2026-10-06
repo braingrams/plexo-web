@@ -1,0 +1,47 @@
+import { NextRequest, NextResponse } from "next/server";
+import { PublishedDomain } from "@/lib/db/contentEntities";
+import { WpMigrationJob } from "@/lib/db/importEntities";
+import { isValidUuid } from "@/lib/slugUtils";
+import { assertOwnSite, resolveMigrationAccess } from "@/lib/wpMigration/access";
+
+/** GET — a migration's live progress, and its full report once finished. */
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ templateId: string; jobId: string }> },
+): Promise<NextResponse> {
+  const { templateId, jobId } = await context.params;
+  const resolved = await resolveMigrationAccess(request, { permission: "update" });
+  if ("error" in resolved) return resolved.error;
+  const notOwn = await assertOwnSite(resolved.access, templateId);
+  if (notOwn) return notOwn;
+  if (!isValidUuid(jobId)) return NextResponse.json({ error: "Migration not found." }, { status: 404 });
+
+  const [{ data: job }, { data: domains }] = await Promise.all([
+    WpMigrationJob.get({ templateId, id: jobId }).go(),
+    PublishedDomain.query.primary({ templateId }).go(),
+  ]);
+  if (!job) return NextResponse.json({ error: "Migration not found." }, { status: 404 });
+
+  return NextResponse.json({
+    job: {
+      id: job.id,
+      templateId: job.templateId,
+      sourceUrl: job.sourceUrl,
+      phase: job.phase,
+      // Which step a paused migration stopped in, so the progress list can show it.
+      pausedIn: (job.planState as { pausedIn?: string } | undefined)?.pausedIn ?? null,
+      install: job.install,
+      counts: job.counts ?? null,
+      plugins: job.plugins ?? null,
+      report: job.report ?? null,
+      errors: Array.isArray(job.errors) ? (job.errors as string[]).slice(-20) : [],
+      warnings: job.warnings ?? [],
+      lastHeartbeatAt: job.lastHeartbeatAt ?? null,
+      processing: job.processing ?? false,
+      createdAt: job.createdAt,
+      finishedAt: job.finishedAt ?? null,
+    },
+    // Lets the report screen tick off "Preview on Plexo" / "Point your domain" as they happen.
+    domains: domains.map((d) => ({ domain: d.domain, type: d.type, active: d.active ?? true, dnsVerified: d.dnsVerified ?? false, certificateStatus: (d as { certificateStatus?: string }).certificateStatus ?? null })),
+  });
+}

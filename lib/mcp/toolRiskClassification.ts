@@ -19,6 +19,8 @@
 //   - lib/mcp/blogTools.ts        (BLOG_MCP_TOOLS)
 //   - lib/mcp/commerceTools.ts    (COMMERCE_MCP_TOOLS)
 //   - lib/mcp/lmsTools.ts         (LMS_MCP_TOOLS)
+//   - lib/mcp/wpMigrationTools.ts (WP_MIGRATION_MCP_TOOLS) — none destructive: a migration
+//     only ever creates a NEW site and only reads from the WordPress source.
 //
 // Explicitly EXCLUDED, and why (so a future reviewer doesn't "fix" these back in without
 // re-checking the reasoning):

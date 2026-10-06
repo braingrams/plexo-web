@@ -24,6 +24,7 @@ import { BLOG_MCP_TOOLS, BLOG_TOOL_NAMES, handleBlogTool } from "./blogTools";
 import type { RevalidateFn } from "@/lib/blog/savePostCore";
 import { COMMERCE_MCP_TOOLS, COMMERCE_TOOL_NAMES, handleCommerceTool } from "./commerceTools";
 import { LMS_MCP_TOOLS, LMS_TOOL_NAMES, handleLmsTool } from "./lmsTools";
+import { WP_MIGRATION_MCP_TOOLS, WP_MIGRATION_TOOL_NAMES, handleWpMigrationTool } from "./wpMigrationTools";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
 
@@ -898,6 +899,7 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   ...BLOG_MCP_TOOLS,
   ...COMMERCE_MCP_TOOLS,
   ...LMS_MCP_TOOLS,
+  ...WP_MIGRATION_MCP_TOOLS,
 ];
 
 /**
@@ -1768,6 +1770,10 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
       }
       if (LMS_TOOL_NAMES.has(toolName)) {
         toolResult = await handleLmsTool(toolName, args, resolved);
+        break;
+      }
+      if (WP_MIGRATION_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleWpMigrationTool(toolName, args, resolved);
         break;
       }
       throw new Error(`Unknown tool: ${toolName}`);

@@ -17,6 +17,9 @@ export interface WpPost {
 }
 
 /** Ensures a bare host ("example.com") becomes a fetchable absolute URL. */
+// The REST paths below are resolved RELATIVE to the site URL (no leading slash) so a
+// WordPress install in a subdirectory ("https://example.org/blog") is queried at
+// /blog/wp-json/..., not the domain root, where nothing (or a different site) answers.
 export function normalizeSiteUrl(input: string): string {
   const trimmed = input.trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(trimmed)) return `https://${trimmed}`;
@@ -25,7 +28,7 @@ export function normalizeSiteUrl(input: string): string {
 
 export async function checkWordPressReachable(baseUrl: string): Promise<{ reachable: boolean; totalPosts?: number }> {
   try {
-    const url = new URL("/wp-json/wp/v2/posts", normalizeSiteUrl(baseUrl));
+    const url = new URL("wp-json/wp/v2/posts", `${normalizeSiteUrl(baseUrl)}/`);
     url.searchParams.set("per_page", "1");
     const res = await safeFetch(url.toString(), { headers: { Accept: "application/json" } });
     if (!res.ok) return { reachable: false };
@@ -90,7 +93,7 @@ export async function fetchWordPressPostsPage(
   page: number,
   perPage = 20,
 ): Promise<{ posts: WpPost[]; totalPages: number; totalPosts: number }> {
-  const url = new URL("/wp-json/wp/v2/posts", normalizeSiteUrl(baseUrl));
+  const url = new URL("wp-json/wp/v2/posts", `${normalizeSiteUrl(baseUrl)}/`);
   url.searchParams.set("per_page", String(perPage));
   url.searchParams.set("page", String(page));
   url.searchParams.set("_embed", "1");
@@ -121,7 +124,7 @@ export async function fetchWordPressPostsPage(
  * pagination.
  */
 export async function fetchWordPressPostBySlug(baseUrl: string, slug: string): Promise<WpPost | null> {
-  const url = new URL("/wp-json/wp/v2/posts", normalizeSiteUrl(baseUrl));
+  const url = new URL("wp-json/wp/v2/posts", `${normalizeSiteUrl(baseUrl)}/`);
   url.searchParams.set("slug", slug);
   url.searchParams.set("_embed", "1");
 

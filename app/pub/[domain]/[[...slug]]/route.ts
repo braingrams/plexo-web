@@ -12,6 +12,7 @@ import { getStorefrontSlug, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/l
 import { deriveCommerceTheme, type CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
 import { PageView } from "@/lib/db/opsEntities";
 import { recordPageViewRollup } from "@/lib/analyticsRollup";
+import { buildSiteRobotsTxt, buildSiteSitemap } from "@/lib/pub/siteSitemap";
 
 type TemplateItem = EntityItem<typeof Template>;
 
@@ -324,17 +325,29 @@ function safeJsonLd(value: unknown): string {
 // already get all three from lib/blog/seo.ts's generateMetadata path). Applied at serve
 // time, same insertion point as injectFavicon, so it works for BUILDER and RAW_UPLOAD
 // pages alike without needing a compiler/SDK change.
+//
+// A page that already declares its own canonical URL or structured data (a page migrated
+// from WordPress carries Yoast's, an uploaded site may carry its own) is authoritative —
+// adding ours on top would give search engines two conflicting canonicals, and pointing
+// it at the Plexo preview host would hand the original site's rankings to the preview.
 function injectSeoTags(html: string, opts: { canonicalUrl: string; noindex: boolean; siteName: string }): string {
-  let tags = `<link rel="canonical" href="${escapeHtmlAttr(opts.canonicalUrl)}">`;
+  const headEnd = html.search(/<\/head\s*>/i);
+  const head = headEnd === -1 ? html.slice(0, 20000) : html.slice(0, headEnd);
+  const hasOwnCanonical = /<link\b[^>]*\brel=["']?canonical["']?/i.test(head);
+  const hasOwnSchema = /<script\b[^>]*application\/ld\+json/i.test(html);
+  let tags = hasOwnCanonical ? "" : `<link rel="canonical" href="${escapeHtmlAttr(opts.canonicalUrl)}">`;
   if (opts.noindex) {
     tags += `<meta name="robots" content="noindex,nofollow">`;
   }
-  tags += `<script type="application/ld+json">${safeJsonLd({
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: opts.siteName,
-    url: opts.canonicalUrl,
-  })}</script>`;
+  if (!hasOwnSchema) {
+    tags += `<script type="application/ld+json">${safeJsonLd({
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: opts.siteName,
+      url: opts.canonicalUrl,
+    })}</script>`;
+  }
+  if (!tags) return html;
   const headMatch = html.match(/<head[^>]*>/i);
   if (headMatch && headMatch.index !== undefined) {
     const idx = headMatch.index + headMatch[0].length;
@@ -390,9 +403,20 @@ function optimizeImages(html: string): string {
  * (parentId, slug) direct index, only byParent (GSI2, sorted by order), so this fetches the
  * parent's children (small in practice — a site's own page tree) and matches in memory,
  * same discipline as server/slugDynamo.ts's ensureUniqueSlug. */
+function safeDecode(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 async function findChildBySlug(parentId: string, slug: string): Promise<TemplateItem | null> {
   const { data: children } = await Template.query.byParent({ parentId }).go();
-  return children.find((c) => c.slug === slug) ?? null;
+  // Slugs are stored decoded (a migrated WordPress page can be "hope-for-every-heart-❤️");
+  // accept the segment either way it arrives so a percent-encoded request still matches.
+  const decoded = safeDecode(slug);
+  return children.find((c) => c.slug === slug || c.slug === decoded) ?? null;
 }
 
 export async function GET(
@@ -414,6 +438,7 @@ export async function GET(
   }
   const published = siteResult.published;
   const slugSegments = params.slug ?? [];
+  if (isWordPressAjaxPath(slugSegments)) return wordPressAjaxStub();
 
   // WordPress's "Reading Settings: your homepage displays" toggle — when a site has
   // turned this on, its root path serves the blog listing IN PLACE (bare domain stays in
@@ -487,6 +512,35 @@ export async function GET(
   const isIndexAlias = remainingSegments.length === 1 && INDEX_ALIASES.has(remainingSegments[0].toLowerCase());
 
   if (remainingSegments.length === 0 || isIndexAlias) {
+    const requestUrl = new URL(request.url);
+    const pagePathForRedirects = matchedSegments === 0 ? "" : `/${slugSegments.slice(0, matchedSegments).join("/")}`;
+
+    // WordPress shortlinks (?p=123 for posts, ?page_id=45 for pages) work on any page of a
+    // migrated site, not just the root — a WordPress install in a subdirectory prints them
+    // as /blog/?p=123. The importers write exactly "<page path>/?p=<id>" to BlogRedirect.
+    for (const param of ["p", "page_id"]) {
+      const id = requestUrl.searchParams.get(param);
+      if (!id || !/^\d+$/.test(id) || (param === "p" && matchedSegments === 0)) continue; // root ?p= is handled above
+      const redirectTo = await resolveBlogRedirect(published.templateId, `${pagePathForRedirects}/?${param}=${id}`);
+      if (redirectTo) return NextResponse.redirect(new URL(redirectTo, request.url), 301);
+    }
+
+    // One canonical form per page URL. Plexo's default is no trailing slash; a page migrated
+    // from WordPress keeps WordPress's trailing slash (urlTrailingSlash) so its URL — and
+    // every backlink and search ranking pointing at it — stays exactly the same. The other
+    // form permanently redirects, the same way WordPress itself behaves.
+    // (next.config.ts sets skipTrailingSlashRedirect so the slash survives to here.)
+    if (matchedSegments > 0 && !isIndexAlias) {
+      const rawPath = requestUrl.pathname;
+      const hasSlash = rawPath.length > 1 && rawPath.endsWith("/");
+      const wantsSlash = cursor.urlTrailingSlash === true;
+      if (hasSlash !== wantsSlash) {
+        const encodedPath = `/${slugSegments.slice(0, matchedSegments).map((s) => encodeURIComponent(safeDecode(s))).join("/")}${wantsSlash ? "/" : ""}`;
+        const target = new URL(`${encodedPath}${requestUrl.search}`, request.url);
+        return NextResponse.redirect(target, wantsSlash ? 301 : 308);
+      }
+    }
+
     // `cursor` is the requested page itself (the domain root, or a matched descendant) —
     // `pageSegments` is its OWN path, excluding any trailing index.html/index alias segment
     // matched above, which isn't a real subdirectory. A browser resolves a page's relative
@@ -506,7 +560,7 @@ export async function GET(
       ? injectBaseHref(cursor.compiledHtml, `/${pageSegments.join("/")}/`)
       : cursor.compiledHtml;
 
-    const canonicalUrl = `https://${rawDomain}/${pageSegments.join("/")}`;
+    const canonicalUrl = `https://${rawDomain}/${pageSegments.join("/")}${cursor.urlTrailingSlash && pageSegments.length > 0 ? "/" : ""}`;
     html = injectSeoTags(html, {
       canonicalUrl,
       noindex: published.noindex ?? false,
@@ -662,9 +716,31 @@ export async function GET(
   // under literal "/blog" is handled by app/pub/[domain]/blog/[...slug]/page.tsx instead,
   // since that route takes precedence over this catch-all and never reaches here.
   const fullRequestedPath = "/" + slugSegments.join("/");
-  const redirectTo = await resolveBlogRedirect(published.templateId, fullRequestedPath);
+  const decodedFullPath = "/" + slugSegments.map(safeDecode).join("/");
+  const redirectTo =
+    (await resolveBlogRedirect(published.templateId, fullRequestedPath)) ??
+    (decodedFullPath !== fullRequestedPath ? await resolveBlogRedirect(published.templateId, decodedFullPath) : null);
   if (redirectTo) {
     return NextResponse.redirect(new URL(redirectTo, request.url), 301);
+  }
+
+  // /sitemap.xml and /robots.txt for every site — generated from the page tree and blog,
+  // unless the owner uploaded their own file at that path (checked first, so it wins).
+  if (matchedSegments === 0 && remainingSegments.length === 1 && (remainingSegments[0] === "sitemap.xml" || remainingSegments[0] === "robots.txt")) {
+    const own = published.template.sourceType === "RAW_UPLOAD"
+      ? (await TemplateAsset.get({ templateId: published.templateId, path: remainingSegments[0] }).go()).data
+      : null;
+    if (!own) {
+      const body = remainingSegments[0] === "sitemap.xml"
+        ? await buildSiteSitemap(published.template, rawDomain)
+        : buildSiteRobotsTxt(rawDomain, published.noindex ?? false);
+      return new NextResponse(body, {
+        headers: {
+          "Content-Type": remainingSegments[0] === "sitemap.xml" ? "application/xml; charset=utf-8" : "text/plain; charset=utf-8",
+          "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
+        },
+      });
+    }
   }
 
   // Leftover segments after the walk are an asset path under whichever page the walk
@@ -673,11 +749,15 @@ export async function GET(
     return notFoundResponse();
   }
 
+  // Asset paths are stored decoded (a migrated WordPress upload like "Our Team.jpg"), the
+  // same way page slugs are — try the decoded form first, then the raw one.
+  const decodedRequestedPath = remainingSegments.map(safeDecode).join("/");
   const requestedPath = remainingSegments.join("/");
   // Clean-URL fallback: a zip's internal links (or a visitor typing the URL) commonly
   // omit the .html extension — /about should resolve to about.html the same way
   // Netlify/Vercel/GitHub Pages static hosting does, not 404 on an exact-path miss.
   const candidatePaths = [
+    ...(decodedRequestedPath !== requestedPath ? [decodedRequestedPath] : []),
     requestedPath,
     `${requestedPath}.html`,
     `${requestedPath}.htm`,
@@ -720,4 +800,27 @@ export async function GET(
   const lastModified = assetRes.headers.get("last-modified");
   if (lastModified) headers.set("Last-Modified", lastModified);
   return new NextResponse(assetRes.body, { headers });
+}
+
+// Pages migrated from WordPress keep their plugins' front-end scripts, and several of those
+// fire background requests at WordPress's AJAX endpoint (cookie-consent logging, click
+// tracking, "load more"). With no WordPress behind the site, answer the way WordPress
+// itself answers an action nobody handles — a harmless, well-formed "not handled" — so
+// those scripts fail quietly instead of throwing on an HTML error page.
+function isWordPressAjaxPath(slug: string[] | undefined): boolean {
+  const segments = slug ?? [];
+  return segments.length >= 2 && segments[segments.length - 1] === "admin-ajax.php" && segments[segments.length - 2] === "wp-admin";
+}
+
+function wordPressAjaxStub(): NextResponse {
+  return NextResponse.json({ success: false, data: "This site no longer runs WordPress." }, { status: 200, headers: { "Cache-Control": "no-store" } });
+}
+
+export async function POST(
+  _request: NextRequest,
+  context: { params: Promise<{ domain: string; slug?: string[] }> },
+): Promise<NextResponse> {
+  const { slug } = await context.params;
+  if (isWordPressAjaxPath(slug)) return wordPressAjaxStub();
+  return NextResponse.json({ error: "Method not allowed." }, { status: 405 });
 }
