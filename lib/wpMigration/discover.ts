@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 import { normalizeSiteUrl } from "@/lib/blogImport/wpClient";
 import type { WpInstall } from "./types";
 import { fetchJson, migrationFetch } from "./http";
+import { isCatalogedPlugin, pluginSlugForNamespace } from "./pluginCatalog";
 
 // Real WordPress sites rarely sit cleanly at "https://domain/" with /wp-json/ beside it.
 // The case this was built against (lineagecarefoundation.org) is typical of the hard end:
@@ -22,6 +23,23 @@ interface RestIndex {
   url?: string;
   home?: string;
   namespaces?: string[];
+  routes?: Record<string, { namespace?: string; methods?: string[] }>;
+}
+
+const MAX_CUSTOM_ROUTES = 40;
+
+/** Routes belonging to plugins with no catalog entry — the site's custom/unknown plugins. */
+function customRoutesFrom(index: RestIndex): { route: string; methods: string[]; hasParams: boolean }[] {
+  const out: { route: string; methods: string[]; hasParams: boolean }[] = [];
+  for (const [route, info] of Object.entries(index.routes ?? {})) {
+    const ns = info.namespace ?? "";
+    if (!ns || route === `/${ns}`) continue; // the namespace's own index just lists its routes
+    const slug = pluginSlugForNamespace(ns);
+    if (!slug || isCatalogedPlugin(slug)) continue;
+    out.push({ route, methods: info.methods ?? [], hasParams: /\(\?P</.test(route) });
+    if (out.length >= MAX_CUSTOM_ROUTES) break;
+  }
+  return out;
 }
 
 export class WordPressNotFoundError extends Error {
@@ -203,5 +221,6 @@ export async function discoverWordPressInstall(inputUrl: string): Promise<WpInst
     siteDescription: index.description ?? "",
     namespaces: index.namespaces ?? [],
     staticPages: Array.from(new Set(staticPages)),
+    customRoutes: customRoutesFrom(index),
   };
 }

@@ -77,6 +77,10 @@ export const Template = new Entity(
       // Root sites only: the site this one was migrated from ("https://example.org"), shown
       // in the dashboard and used by the domain-cutover guidance.
       migratedFrom: { type: "string" },
+      // Root sites only: paths of a migrated site's custom-plugin API endpoints that accepted
+      // submissions on WordPress (e.g. "/blog/wp-json/my-plugin/v1/contact"). The serve route
+      // captures POSTs to them into Form Submissions so anything still calling them keeps working.
+      migratedApiCaptureRoutes: { type: "any" },
       createdAt: {
         type: "string",
         default: () => new Date().toISOString(),

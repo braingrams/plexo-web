@@ -316,6 +316,8 @@ export const WpMigrationPage = new Entity(
       newFacts: { type: "any" },
       forms: { type: "any" },
       unmigratedForms: { type: "any" },
+      loginForms: { type: "number" },
+      searchForms: { type: "number" },
       internalLinks: { type: "any" },
       pluginSlugs: { type: "any" },
       assetCount: { type: "number" },

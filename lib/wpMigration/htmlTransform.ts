@@ -45,6 +45,8 @@ export interface TransformContext {
   siteTemplateId: string;
   /** Old page path → new path for links whose target moved (WordPress posts → /blog/<slug>). Keys are pageKey()-normalized. */
   movedLinks: Record<string, string>;
+  /** The Plexo dashboard's own origin — login forms send team members here. */
+  appUrl: string;
 }
 
 export interface MigratedForm {
@@ -73,6 +75,10 @@ export interface TransformResult {
   forms: MigratedForm[];
   /** Forms we found but could not reconnect (payment forms) — shown in the report. */
   unmigratedForms: { plugin: string; reason: string }[];
+  /** Login forms pointed at Plexo sign-in (a members/staff area that needs team access set up). */
+  loginForms: number;
+  /** Site-search forms that now search the web scoped to this site. */
+  searchForms: number;
   facts: PageFacts;
 }
 
@@ -175,13 +181,29 @@ function promoteLazyImages($: cheerio.CheerioAPI): void {
   });
 }
 
+function humanizeFieldName(name: string): string {
+  const base = name.replace(/\[\]$/, "").replace(/^.*\[([^\]]+)\]$/, "$1").replace(/[-_]\d+$/, "").replace(/[-_]+/g, " ").trim();
+  return base ? base.charAt(0).toUpperCase() + base.slice(1) : "Field";
+}
+
+function cleanLabel(text: string): string {
+  return text.replace(/\*/g, "").replace(/\s+/g, " ").trim();
+}
+
+/** The visible question a field answers: its <label for>, a wrapping <label>, an adjacent label, or aria/placeholder text. */
 function labelFor(form: cheerio.Cheerio<AnyNode>, field: cheerio.Cheerio<AnyNode>): string | null {
   const id = field.attr("id");
   let text = id ? form.find(`label[for="${id.replace(/"/g, '\\"')}"]`).first().text() : "";
-  if (!text) text = field.closest("label").text();
+  if (!text) {
+    // A wrapping label holds the field itself; take only its own text, not a <select>'s options.
+    const wrap = field.closest("label").clone();
+    wrap.find("select, option, textarea").remove();
+    text = wrap.text();
+  }
+  if (!text) text = field.prevAll("label").first().text();
+  if (!text) text = field.parent().prevAll("label").first().text() || field.parent().children("label").first().text();
   if (!text) text = field.attr("aria-label") || field.attr("placeholder") || "";
-  text = text.replace(/\*/g, "").replace(/\s+/g, " ").trim();
-  return text || null;
+  return cleanLabel(text) || null;
 }
 
 const PLUGIN_FORM_SELECTORS: { plugin: string; selector: string; scriptMarker: RegExp }[] = [
@@ -192,77 +214,207 @@ const PLUGIN_FORM_SELECTORS: { plugin: string; selector: string; scriptMarker: R
 ];
 
 // Hidden plumbing fields every form plugin posts back to WordPress — meaningless to Plexo
-// and noise in the owner's submission inbox.
-const PLUGIN_HIDDEN_FIELD_RE = /^(_wpnonce|_wp_http_referer|forminator_nonce|form_id|page_id|form_type|current_url|render_id|action|referer_title|_wpcf7.*|wpforms\[(id|author|post_id|token)\]|post_id|form_fields\[.*_hp.*\]|queried_id|referrer|g-recaptcha-response)$/i;
+// and noise in the owner's submission inbox. Any hidden field whose name ends in "nonce" is
+// WordPress's CSRF token pattern, whatever plugin printed it.
+const PLUGIN_HIDDEN_FIELD_RE = /^(_wpnonce|.*_nonce|nonce|_wp_http_referer|_wp_original_http_referer|referer_url|form_page|forminator_nonce|form_id|page_id|form_type|current_url|render_id|action|referer_title|redirect_to|_wpcf7.*|wpforms\[(id|author|post_id|token)\]|post_id|form_fields\[.*_hp.*\]|queried_id|referrer|g-recaptcha-response)$/i;
+
+// Where a form posts back to WordPress itself — and so has nothing to post to once the
+// site is on Plexo. Matched against the action's path after origin rewriting.
+const WORDPRESS_ENDPOINT_RE = /\/wp-admin\/admin-(post|ajax)\.php$|\/wp-json\/|\/wp-comments-post\.php$|\/wp-login\.php$|[?&]rest_route=/i;
+
+const PAYMENT_FORM_SELECTOR = "form.wpf_form, form[data-wpf_form_id], form.give-form, form.woocommerce-cart-form, form.checkout.woocommerce-checkout";
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "form";
 }
 
+/** A short owner-facing name for a form: the nearest heading above it on the page, else the page title. */
+function formDisplayName($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>, ctx: TransformContext, index: number): string {
+  let heading = "";
+  let node: cheerio.Cheerio<AnyNode> = form;
+  for (let depth = 0; depth < 6 && !heading; depth++) {
+    heading = node.prevAll("h1, h2, h3, h4").first().text() || node.prevAll().find("h1, h2, h3, h4").last().text();
+    node = node.parent();
+    if (node.length === 0) break;
+  }
+  heading = cleanLabel(heading);
+  if (heading && heading.length <= 60) return heading;
+  return `${ctx.pageTitle || "Website"} form${index > 1 ? ` ${index}` : ""}`;
+}
+
+function isSearchForm($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>): boolean {
+  return form.find('input[name="s"]').length > 0 && (form.attr("method") || "get").toLowerCase() === "get";
+}
+
+function isLoginForm(form: cheerio.Cheerio<AnyNode>): boolean {
+  return form.find('input[type="password"]').length > 0;
+}
+
+function postsToWordPress(form: cheerio.Cheerio<AnyNode>): boolean {
+  const action = (form.attr("action") || "").trim();
+  if (WORDPRESS_ENDPOINT_RE.test(action.split("#")[0])) return true;
+  // WordPress's own convention: a form with no (or a same-page) action and a hidden
+  // "action" field is handled by admin-post/admin-ajax via the plugin's JavaScript.
+  const sameOrEmpty = !action || action === "#" || action.startsWith("?");
+  return sameOrEmpty && form.find('input[type="hidden"][name="action"]').length > 0 && (form.attr("method") || "get").toLowerCase() === "post";
+}
+
 /**
- * Reconnects contact-style form plugins to Plexo's native form endpoint: the same
- * fields, labels and styling, posting to /api/public/forms/<site>/submit, which stores the
- * submission in the owner's dashboard and emails them. Field names become their visible
- * labels ("First Name" rather than Forminator's "name-1") so the submission inbox reads
- * naturally. The plugin's own front-end JS (which would intercept submit and AJAX it to
- * WordPress) is removed; its CSS stays so the form looks identical.
+ * Points one form at Plexo Forms: same fields, labels and styling, posting to
+ * /api/public/forms/<site>/submit, which stores the submission in the owner's dashboard
+ * and emails them. Field names become their visible labels ("Full Name", not "full_name");
+ * a checkbox/radio group is named for its question and keeps every ticked value.
  */
-function rewireForms($: cheerio.CheerioAPI, ctx: TransformContext): { forms: MigratedForm[]; unmigrated: { plugin: string; reason: string }[] } {
+function rewireOneForm($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>, ctx: TransformContext, plugin: string, index: number): MigratedForm {
+  const formId = form.attr("id") || `plexo-form-${index}`;
+  form.attr("id", formId);
+  const name = formDisplayName($, form, ctx, index);
+  const redirect = `${ctx.pagePath}?plexo_form=${encodeURIComponent(slugify(formId))}#${formId}`;
+  form.attr("action", `/api/public/forms/${ctx.siteTemplateId}/submit?form=${encodeURIComponent(name)}&redirect=${encodeURIComponent(redirect)}`);
+  form.attr("method", "post");
+  form.removeAttr("enctype");
+  form.removeAttr("novalidate");
+  form.removeAttr("onsubmit");
+  form.removeAttr("data-forminator-render");
+  form.removeClass("forminator_ajax");
+  const style = (form.attr("style") || "").replace(/display\s*:\s*none\s*;?/gi, "").trim();
+  if (style) form.attr("style", style);
+  else form.removeAttr("style");
+
+  // How many inputs share each name — a shared name means a choice group.
+  const nameCounts = new Map<string, number>();
+  form.find("input[name], select[name], textarea[name]").each((_, el) => {
+    const n = $(el).attr("name") || "";
+    nameCounts.set(n, (nameCounts.get(n) ?? 0) + 1);
+  });
+
+  const used = new Set<string>();
+  const groupNames = new Map<string, string>();
+  const fieldNames: string[] = [];
+  form.find("input, textarea, select").each((__, fieldEl) => {
+    const field = $(fieldEl);
+    const type = (field.attr("type") || "").toLowerCase();
+    const originalName = field.attr("name") || "";
+    if (type === "submit" || type === "button" || type === "image" || type === "reset") return;
+    if (PLUGIN_HIDDEN_FIELD_RE.test(originalName) || (type === "hidden" && !originalName)) {
+      field.remove();
+      return;
+    }
+    if (type === "hidden") return; // a real hidden value the owner set up — keep as-is
+    if (field.attr("aria-required") === "true" || field.attr("data-required") === "true" || field.attr("data-required") === "yes") field.attr("required", "required");
+
+    const isChoice = type === "checkbox" || type === "radio";
+    const isGroup = isChoice && ((nameCounts.get(originalName) ?? 0) > 1 || originalName.endsWith("[]"));
+    let finalName: string;
+    if (isChoice) {
+      // A choice's own label is its option text ("Community Outreach"), not the question —
+      // the group is named for the field, and the stored value is the option itself.
+      if (!groupNames.has(originalName)) {
+        let label = isGroup ? humanizeFieldName(originalName) : labelFor(form, field) ?? humanizeFieldName(originalName);
+        for (let n = 2; used.has(label); n++) label = `${humanizeFieldName(originalName)} (${n})`;
+        used.add(label);
+        groupNames.set(originalName, label);
+      }
+      finalName = groupNames.get(originalName)!;
+      const optionText = labelFor(form, field);
+      const value = field.attr("value");
+      if ((!value || value === "on" || value === "1") && optionText) field.attr("value", optionText);
+    } else {
+      const label = labelFor(form, field) ?? humanizeFieldName(originalName);
+      finalName = label;
+      for (let n = 2; used.has(finalName); n++) finalName = `${label} (${n})`;
+      used.add(finalName);
+    }
+    field.attr("name", finalName);
+    if (!fieldNames.includes(finalName)) fieldNames.push(finalName);
+  });
+
+  form.append(
+    `<div style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true"><input type="text" name="${HONEYPOT_FIELD_NAME}" tabindex="-1" autocomplete="off" value=""></div>`,
+  );
+  // No WordPress to show a success message any more — show one ourselves after the
+  // endpoint's 303 lands the visitor back on this page.
+  form.after(
+    `<script>(function(){try{var p=new URLSearchParams(location.search);if(p.get("plexo_form")!==${JSON.stringify(slugify(formId))})return;var f=document.getElementById(${JSON.stringify(formId)});if(!f)return;var m=document.createElement("div");m.setAttribute("role","status");m.style.cssText="margin:0 0 16px;padding:14px 18px;border-radius:8px;background:#e8f5ee;color:#14532d;font:inherit;font-weight:600";m.textContent="Thank you — your submission has been received. We'll be in touch soon.";f.parentNode.insertBefore(m,f);f.reset&&f.reset();}catch(e){}})();</script>`,
+  );
+  if (plugin === "forminator" && form.attr("data-design") === "material") {
+    // Forminator's "material" style floats each label inside its field until the field is
+    // focused or filled — driven by three state classes its (removed) script toggled. This
+    // reproduces only that, so the form looks exactly as it did.
+    form.after(
+      `<script>(function(){var f=document.getElementById(${JSON.stringify(formId)});if(!f)return;f.querySelectorAll(".forminator-field").forEach(function(w){var l=w.querySelector(".forminator-label"),i=w.querySelector("input.forminator-input,textarea.forminator-textarea");if(!l||!i||i.type==="checkbox"||i.type==="radio")return;var t=i.tagName==="TEXTAREA";l.classList.add(t?"forminator-floating--textarea":"forminator-floating--input");if(!t&&!i.parentNode.classList.contains("forminator-input--wrap")){var d=document.createElement("div");d.className="forminator-input--wrap";i.parentNode.insertBefore(d,i);d.appendChild(i);}function s(){w.classList.toggle("forminator-is_filled",!!i.value);}i.addEventListener("focus",function(){w.classList.add("forminator-is_active");});i.addEventListener("blur",function(){w.classList.remove("forminator-is_active");s();});i.addEventListener("input",s);s();});})();</script>`,
+    );
+  }
+  return { id: formId, name, plugin, fields: fieldNames };
+}
+
+/**
+ * Reconnects every form that used to post back to WordPress:
+ *  - known form plugins (Forminator, CF7, WPForms, Elementor Pro) and ANY other form whose
+ *    target is a WordPress endpoint (a custom plugin's admin-post/admin-ajax/REST form)
+ *    → Plexo Forms;
+ *  - login forms → Plexo sign-in (credentials are never forwarded anywhere);
+ *  - search forms → a web search scoped to the site (WordPress's ?s= search index is gone).
+ * Payment/donation forms are left to the donation adapter and reported if unhandled.
+ */
+function rewireForms($: cheerio.CheerioAPI, ctx: TransformContext): { forms: MigratedForm[]; unmigrated: { plugin: string; reason: string }[]; loginForms: number; searchForms: number } {
   const forms: MigratedForm[] = [];
   const pluginsSeen = new Set<string>();
+  const handled = new Set<AnyNode>();
   let index = 0;
+  let loginForms = 0;
+  let searchForms = 0;
+
+  $(PAYMENT_FORM_SELECTOR).each((_, el) => {
+    handled.add(el);
+  });
 
   for (const { plugin, selector } of PLUGIN_FORM_SELECTORS) {
     $(selector).each((_, el) => {
-      const form = $(el);
+      if (handled.has(el)) return;
+      handled.add(el);
       index += 1;
       pluginsSeen.add(plugin);
-      const formId = form.attr("id") || `plexo-form-${index}`;
-      form.attr("id", formId);
-      const name = `${ctx.pageTitle || "Website"} form${index > 1 ? ` ${index}` : ""}`;
-      const redirect = `${ctx.pagePath}?plexo_form=${encodeURIComponent(slugify(formId))}#${formId}`;
-      form.attr("action", `/api/public/forms/${ctx.siteTemplateId}/submit?form=${encodeURIComponent(name)}&redirect=${encodeURIComponent(redirect)}`);
-      form.attr("method", "post");
-      form.removeAttr("enctype");
-      form.removeAttr("novalidate");
-      form.removeAttr("data-forminator-render");
-      form.removeClass("forminator_ajax");
-      const style = (form.attr("style") || "").replace(/display\s*:\s*none\s*;?/gi, "").trim();
-      if (style) form.attr("style", style);
-      else form.removeAttr("style");
-
-      const used = new Set<string>();
-      const fieldNames: string[] = [];
-      form.find("input, textarea, select").each((__, fieldEl) => {
-        const field = $(fieldEl);
-        const type = (field.attr("type") || "").toLowerCase();
-        const originalName = field.attr("name") || "";
-        if (type === "submit" || type === "button" || type === "image" || type === "reset") return;
-        if (PLUGIN_HIDDEN_FIELD_RE.test(originalName) || (type === "hidden" && !originalName)) {
-          field.remove();
-          return;
-        }
-        if (type === "hidden") return; // a real hidden value the owner set up — keep as-is
-        if (field.attr("aria-required") === "true" || field.attr("data-required") === "true") field.attr("required", "required");
-        const label = labelFor(form, field) ?? (originalName.replace(/[-_]\d+$/, "").replace(/[-_]+/g, " ") || "Field");
-        let unique = label;
-        for (let n = 2; used.has(unique); n++) unique = `${label} (${n})`;
-        if (type !== "radio" && type !== "checkbox") used.add(unique);
-        field.attr("name", unique);
-        if (!fieldNames.includes(unique)) fieldNames.push(unique);
-      });
-
-      form.append(
-        `<div style="position:absolute;left:-10000px;top:auto;width:1px;height:1px;overflow:hidden" aria-hidden="true"><input type="text" name="${HONEYPOT_FIELD_NAME}" tabindex="-1" autocomplete="off" value=""></div>`,
-      );
-      // No WordPress to show a success message any more — show one ourselves after the
-      // endpoint's 303 lands the visitor back on this page.
-      form.after(
-        `<script>(function(){try{var p=new URLSearchParams(location.search);if(p.get("plexo_form")!==${JSON.stringify(slugify(formId))})return;var f=document.getElementById(${JSON.stringify(formId)});if(!f)return;var m=document.createElement("div");m.setAttribute("role","status");m.style.cssText="margin:0 0 16px;padding:14px 18px;border-radius:8px;background:#e8f5ee;color:#14532d;font:inherit;font-weight:600";m.textContent="Thank you — your message has been sent. We'll be in touch soon.";f.parentNode.insertBefore(m,f);f.reset&&f.reset();}catch(e){}})();</script>`,
-      );
-      forms.push({ id: formId, name, plugin, fields: fieldNames });
+      forms.push(rewireOneForm($, $(el), ctx, plugin, index));
     });
   }
+
+  const host = new URL(ctx.origin).host;
+  $("form").each((_, el) => {
+    if (handled.has(el)) return;
+    const form = $(el);
+    if (isSearchForm($, form)) {
+      handled.add(el);
+      searchForms += 1;
+      form.attr("action", "https://duckduckgo.com/");
+      form.attr("method", "get");
+      form.find('input[name="s"]').attr("name", "q");
+      form.find('input[type="hidden"]').remove();
+      form.append(`<input type="hidden" name="sites" value="${host}">`);
+      return;
+    }
+    if (isLoginForm(form) && (postsToWordPress(form) || /wp-login|log-?in|portal/i.test(form.attr("action") || "") || form.find('input[name="log"], input[name="pwd"]').length > 0)) {
+      handled.add(el);
+      loginForms += 1;
+      // Never send typed credentials anywhere: strip every field's name so nothing is
+      // submitted, and point the form at Plexo's sign-in, where the owner's invited team
+      // members log in to their Plexo account instead.
+      form.attr("action", `${ctx.appUrl}/auth/login`);
+      form.attr("method", "get");
+      form.find("input, select, textarea").each((__, f) => {
+        const type = ($(f).attr("type") || "").toLowerCase();
+        if (type === "hidden") $(f).remove();
+        else $(f).removeAttr("name");
+      });
+      form.append(`<input type="hidden" name="redirectTo" value="/dashboard"><p style="margin:12px 0 0;font-size:0.85em;opacity:0.75">Team members sign in with their Plexo account.</p>`);
+      return;
+    }
+    if (postsToWordPress(form)) {
+      handled.add(el);
+      index += 1;
+      forms.push(rewireOneForm($, form, ctx, "custom", index));
+    }
+  });
 
   if (pluginsSeen.size > 0) {
     const markers = PLUGIN_FORM_SELECTORS.filter((p) => pluginsSeen.has(p.plugin)).map((p) => p.scriptMarker);
@@ -275,13 +427,12 @@ function rewireForms($: cheerio.CheerioAPI, ctx: TransformContext): { forms: Mig
     });
   }
 
-  // Payment/donation forms can't be pointed at a contact-form inbox — they need a payment
-  // processor. They're left exactly as they look and reported, never silently "fixed".
   const unmigrated: { plugin: string; reason: string }[] = [];
-  if ($(".wpf_form, form.wpf_form, [data-wpf_form_id], .wppayform_form, .give-form, form.woocommerce-cart-form").length > 0) {
-    unmigrated.push({ plugin: "wp-payment-form", reason: "Payment/donation form — needs Plexo payments connected before it can take payments." });
-  }
-  return { forms, unmigrated };
+  $(PAYMENT_FORM_SELECTOR).each((_, el) => {
+    if ($(el).attr("data-plexo-donation")) return; // converted by the donation adapter
+    unmigrated.push({ plugin: "payments", reason: "Payment/donation form — connect Plexo payments so it can take payments." });
+  });
+  return { forms, unmigrated, loginForms, searchForms };
 }
 
 function collectAssetRefs($: cheerio.CheerioAPI, ctx: TransformContext): { assetRefs: Set<string>; links: Set<string> } {
@@ -442,7 +593,7 @@ export function transformPage(rawHtml: string, ctx: TransformContext): Transform
   removeWordPressCruft($);
   promoteLazyImages($);
   makeRefsRootRelative($, ctx);
-  const { forms, unmigrated } = rewireForms($, ctx);
+  const { forms, unmigrated, loginForms, searchForms } = rewireForms($, ctx);
   rewriteMovedLinks($, ctx);
 
   // 3. Inventory what the finished page references.
@@ -469,6 +620,8 @@ export function transformPage(rawHtml: string, ctx: TransformContext): Transform
     internalLinks: Array.from(links),
     forms,
     unmigratedForms: unmigrated,
+    loginForms,
+    searchForms,
     facts: extractFacts($),
   };
 }

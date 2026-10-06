@@ -71,6 +71,7 @@ export function buildMigrationReport(input: {
   plugins: DetectedPlugin[];
   brokenLinks: { from: string; href: string; reason: string }[];
   counts: { assetsDone: number };
+  customApis?: { frozen: string[]; captured: string[] };
 }): MigrationReport {
   const { install, pages, assets, plugins, brokenLinks } = input;
   const pageRows = pages.filter((p) => p.kind !== "POST");
@@ -164,12 +165,31 @@ export function buildMigrationReport(input: {
       detail: `${paymentPlugins.map((p) => p.name).join(", ") || "A payment plugin"} processed payments on WordPress. Until payments are connected on Plexo, switching your domain would stop donations — so this blocks the switch.`,
     });
   }
+  const loginPages = pageRows.filter((p) => (p.loginForms ?? 0) > 0);
+  if (loginPages.length > 0) {
+    checklist.push({
+      id: "team-access",
+      label: "Give your team access",
+      status: "review",
+      detail: `${loginPages.map((p) => p.newPath ?? p.key).join(", ")} had a login for your staff. It now opens Plexo sign-in: invite the people who used it (Settings → Team) and they'll see form submissions — like applications sent through your site — in Plexo.`,
+    });
+  }
   if (otherAttention.length > 0) {
     checklist.push({
       id: "custom-features",
       label: "Review features that ran on your WordPress server",
       status: "review",
-      detail: `${otherAttention.map((p) => p.name).join(", ")} ran code on your WordPress server. Their pages look the same on Plexo, but anything that saved data or logged people in needs checking.`,
+      detail: [
+        `${otherAttention.map((p) => p.name).join(", ")} ran code on your WordPress server.`,
+        "Their pages look and work the same on Plexo, and their forms now send to Form Submissions.",
+        input.customApis?.frozen.length
+          ? `Their data addresses (${input.customApis.frozen.join(", ")}) still answer with the values they had on migration day — anything outside your website that reads them keeps working.`
+          : "",
+        input.customApis?.captured.length
+          ? `Anything that still sends to ${input.customApis.captured.join(", ")} now arrives in Form Submissions.`
+          : "",
+        "Have a quick look that nothing else depended on them.",
+      ].filter(Boolean).join(" "),
     });
   }
   if (brokenLinks.length > 0) {

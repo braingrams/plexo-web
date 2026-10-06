@@ -206,6 +206,11 @@ const NAMESPACE_TO_SLUG: Record<string, string | null> = {
   "give-api/v2": "give",
 };
 
+/** True when Plexo knows exactly what this plugin is (and so how it's handled) — false for custom/unknown plugins. */
+export function isCatalogedPlugin(slug: string): boolean {
+  return slug in CATALOG;
+}
+
 /** Namespaces that are a versioned sub-route of another (elementor/v1/documents) or core — collapsed to the plugin they belong to. */
 export function pluginSlugForNamespace(namespace: string): string | null {
   if (namespace in NAMESPACE_TO_SLUG) return NAMESPACE_TO_SLUG[namespace];

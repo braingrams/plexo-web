@@ -13,7 +13,7 @@ import { buildInventory } from "./inventory";
 import { extractSourceFacts, transformPage } from "./htmlTransform";
 import { fetchSourceAsset, storeMigratedAsset } from "./assets";
 import { buildPluginReport, pluginSlugsFromHtml } from "./pluginCatalog";
-import { migrationFetch } from "./http";
+import { fetchJson, migrationFetch, restUrl } from "./http";
 import { makeOriginRewriter, pageKey, pageKeyForUrl, pathSegments, resolveAssetOwner } from "./urlSpace";
 import { buildMigrationReport } from "./report";
 import type { DetectedPlugin, WpInstall, WpPostEntry, WpTermEntry } from "./types";
@@ -54,6 +54,10 @@ export interface PlanState {
   soft404Hash: string | null;
   discoveryRounds: number;
   extraPages: number;
+  /** Custom-plugin read endpoints preserved as data at their original URL. */
+  frozenApis?: string[];
+  /** Custom-plugin submission endpoints whose POSTs now land in Form Submissions. */
+  capturedApis?: string[];
 }
 
 export interface MigrationCounts {
@@ -160,6 +164,37 @@ async function ensureNode(
   return id;
 }
 
+const MAX_FROZEN_API_BYTES = 1024 * 1024;
+
+async function adaptCustomApis(job: JobItem, install: WpInstall, nodes: Record<string, string>): Promise<{ frozenApis: string[]; capturedApis: string[] }> {
+  const frozenApis: string[] = [];
+  const capturedApis: string[] = [];
+  // Plain-permalink installs expose the API only via ?rest_route=, which has no path of its
+  // own to preserve — those endpoints are reported, not adapted.
+  if (install.restRoot.includes("rest_route=")) return { frozenApis, capturedApis };
+  const restPath = new URL(install.restRoot).pathname.replace(/\/+$/, "");
+  const pageKeys = new Set(Object.keys(nodes));
+
+  for (const r of install.customRoutes ?? []) {
+    if (r.hasParams) continue;
+    const publicPath = `${restPath}${r.route}`;
+    if (r.methods.includes("POST")) capturedApis.push(publicPath);
+    if (!r.methods.includes("GET")) continue;
+    const res = await fetchJson<unknown>(restUrl(install.restRoot, r.route.slice(1))).catch(() => null);
+    if (!res) continue; // needs a login, or errored — nothing public to preserve
+    const body = Buffer.from(JSON.stringify(res.data), "utf8");
+    if (body.byteLength > MAX_FROZEN_API_BYTES) continue;
+    const owner = resolveAssetOwner(pageKeys, publicPath.split("/").filter(Boolean));
+    if (!owner || !nodes[owner.ownerKey]) continue;
+    await storeMigratedAsset(job.id, nodes[owner.ownerKey], owner.relPath, body, "application/json; charset=utf-8");
+    frozenApis.push(publicPath);
+  }
+  if (capturedApis.length > 0) {
+    await Template.patch({ id: job.templateId }).set({ migratedApiCaptureRoutes: capturedApis }).go();
+  }
+  return { frozenApis, capturedApis };
+}
+
 async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
   const install: WpInstall = (job.install as WpInstall | undefined) ?? (await discoverWordPressInstall(job.sourceUrl));
   const inventory = await buildInventory(install);
@@ -262,6 +297,11 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
   }
   await Promise.all(redirects.map(([from, to]) => limit(() => putRedirect(job.templateId, from, to))));
 
+  // ── Custom plugins' own API endpoints. Readable ones are preserved as data at exactly
+  // the same URL (so an app or widget still reading them keeps working); ones that accepted
+  // submissions are registered so the serve route captures them into Form Submissions.
+  const { frozenApis, capturedApis } = await adaptCustomApis(job, install, nodes);
+
   // ── The full media library, not just what pages reference — nothing in it is lost.
   let mediaQueued = 0;
   await Promise.all(
@@ -295,6 +335,8 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
     soft404Hash,
     discoveryRounds: 0,
     extraPages: 0,
+    frozenApis,
+    capturedApis,
   };
 
   await Template.patch({ id: job.templateId }).set({ migratedFrom: origin, ...(install.siteName ? { name: install.siteName } : {}) }).go();
@@ -414,6 +456,7 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
         pageTitle: row.title || sourceFacts.title.split(/\s[-–|]\s/)[0] || "Website",
         siteTemplateId: job.templateId,
         movedLinks,
+        appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://plexo.charisol.io",
       });
       if (!row.templateId) throw new Error("This page has no place in the site tree.");
       await Template.patch({ id: row.templateId })
@@ -437,6 +480,8 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
           newFacts: result.facts,
           forms: result.forms,
           unmigratedForms: result.unmigratedForms,
+          loginForms: result.loginForms,
+          searchForms: result.searchForms,
           internalLinks: result.internalLinks,
           pluginSlugs: Array.from(pluginSlugsFromHtml(raw)),
           assetCount: result.assetPaths.length,
@@ -631,6 +676,7 @@ async function runFinalizing(job: JobItem): Promise<string> {
     plugins,
     brokenLinks,
     counts: { ...emptyCounts(), ...(job.counts as MigrationCounts) },
+    customApis: { frozen: plan.frozenApis ?? [], captured: plan.capturedApis ?? [] },
   });
 
   await Template.patch({ id: job.templateId }).set({ migratedFrom: plan.origin }).go();

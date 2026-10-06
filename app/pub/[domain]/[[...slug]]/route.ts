@@ -13,6 +13,8 @@ import { deriveCommerceTheme, type CommerceTheme } from "@/lib/commerce/deriveCo
 import { PageView } from "@/lib/db/opsEntities";
 import { recordPageViewRollup } from "@/lib/analyticsRollup";
 import { buildSiteRobotsTxt, buildSiteSitemap } from "@/lib/pub/siteSitemap";
+import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
+import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 
 type TemplateItem = EntityItem<typeof Template>;
 
@@ -816,11 +818,83 @@ function wordPressAjaxStub(): NextResponse {
   return NextResponse.json({ success: false, data: "This site no longer runs WordPress." }, { status: 200, headers: { "Cache-Control": "no-store" } });
 }
 
+// Keys plugins post alongside real answers — never shown in the owner's inbox.
+const WP_PLUMBING_KEY_RE = /^(action|.*nonce|_wp_http_referer|security|nonce|_ajax_nonce|form_id|post_id|page_id|referer|referrer)$/i;
+
+async function readSubmittedFields(request: NextRequest): Promise<Record<string, string>> {
+  const contentType = request.headers.get("content-type") ?? "";
+  let entries: [string, unknown][] = [];
+  try {
+    if (contentType.includes("application/json")) {
+      const body = (await request.json()) as Record<string, unknown>;
+      entries = Object.entries(body ?? {}).flatMap(([k, v]) =>
+        Array.isArray(v) ? v.map((item) => [k, typeof item === "string" ? item : JSON.stringify(item)] as [string, unknown]) : [[k, typeof v === "string" ? v : v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v)] as [string, unknown]],
+      );
+    } else {
+      entries = Array.from((await request.formData()).entries());
+    }
+  } catch {
+    return {};
+  }
+  const fields = collectFormFields(entries);
+  for (const key of Object.keys(fields)) if (WP_PLUMBING_KEY_RE.test(key)) delete fields[key];
+  return fields;
+}
+
+/** An AJAX call carrying what a person typed into a form (an email or a message), rather than a tracking ping. */
+function looksLikeFormSubmission(fields: Record<string, string>): boolean {
+  const keys = Object.keys(fields);
+  if (keys.length < 2) return false;
+  const hasEmail = Object.values(fields).some((v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v));
+  return hasEmail || keys.some((k) => /message|comment|enquiry|inquiry/i.test(k));
+}
+
+function humanizeRoute(path: string): string {
+  const parts = path.split("/").filter((p) => p && p !== "wp-json" && !/^v\d+$/.test(p));
+  const tail = parts.slice(-2).map((p) => p.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+  return tail.join(" — ") || "Website form";
+}
+
+/**
+ * POSTs on a published site. Only WordPress-compatibility endpoints of a site migrated
+ * from WordPress live here:
+ *  - a custom plugin's own submission endpoint (recorded at migration time on
+ *    Template.migratedApiCaptureRoutes) → stored in Form Submissions, so a widget or app
+ *    still sending to it keeps working;
+ *  - admin-ajax.php → a form a plugin submits with JavaScript is captured the same way;
+ *    anything else (consent logging, click tracking) gets the harmless "not handled" reply.
+ */
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ domain: string; slug?: string[] }> },
 ): Promise<NextResponse> {
-  const { slug } = await context.params;
-  if (isWordPressAjaxPath(slug)) return wordPressAjaxStub();
-  return NextResponse.json({ error: "Method not allowed." }, { status: 405 });
+  const { domain, slug } = await context.params;
+  const segments = slug ?? [];
+  const isAjax = isWordPressAjaxPath(segments);
+  const path = "/" + segments.map(safeDecode).join("/");
+
+  const siteResult = await resolveSite(decodeURIComponent(domain));
+  if (siteResult.status !== "ok") return NextResponse.json({ error: "Not found." }, { status: 404 });
+  const root = siteResult.published.template;
+  const captureRoutes = Array.isArray(root.migratedApiCaptureRoutes) ? (root.migratedApiCaptureRoutes as string[]) : [];
+  const isCaptureRoute = captureRoutes.some((r) => path === r || path === `${r}/`);
+  if (!isAjax && !isCaptureRoute) return NextResponse.json({ error: "Method not allowed." }, { status: 405 });
+  if (!root.migratedFrom) return isAjax ? wordPressAjaxStub() : NextResponse.json({ error: "Method not allowed." }, { status: 405 });
+
+  const fields = await readSubmittedFields(request);
+  if (isAjax && !looksLikeFormSubmission(fields)) return wordPressAjaxStub();
+  if (Object.keys(fields).length === 0) return NextResponse.json({ success: false, message: "Nothing was submitted." }, { status: 400 });
+
+  const templateId = siteResult.published.templateId;
+  if (!(await checkCommerceRateLimit(`forms:wp:${templateId}:${clientIp(request)}`, 10))) {
+    return NextResponse.json({ success: false, message: "Too many submissions. Please try again shortly." }, { status: 429 });
+  }
+
+  const action = new URL(request.url).searchParams.get("action");
+  const formName = isCaptureRoute ? humanizeRoute(path) : `Website form${action ? ` (${action.replace(/[-_]+/g, " ")})` : ""}`;
+  await recordFormSubmission({ templateId, organizationId: siteResult.published.organization.id, formName, fields, submitterIp: clientIp(request) });
+
+  const message = "Thank you — your submission has been received.";
+  // Covers the response shapes WordPress plugin JavaScript commonly checks.
+  return NextResponse.json({ success: true, status: "success", message, data: { message } }, { headers: { "Cache-Control": "no-store" } });
 }

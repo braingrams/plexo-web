@@ -25,6 +25,12 @@ export interface WpInstall {
    * see them, so they're part of "the site" whatever generated them.
    */
   staticPages: string[];
+  /**
+   * API routes of plugins Plexo doesn't have a native replacement for (typically a
+   * site-specific custom plugin). Readable ones are preserved as data at the same URL;
+   * ones that accept submissions are captured into Plexo Forms — see runJobDynamo.ts.
+   */
+  customRoutes?: { route: string; methods: string[]; hasParams: boolean }[];
 }
 
 export interface WpSeo {
