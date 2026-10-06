@@ -330,6 +330,200 @@ function PrivateDataCard({ templateId, jobId }: { templateId: string; jobId: str
   );
 }
 
+
+interface CutoverRecord { name: string; type: string; value: string; priority?: number; why: string }
+interface CutoverView {
+  plan: {
+    domain: string;
+    wwwDomain: string;
+    dnsHost: { name: string; tiedToWebHost: boolean; apexHostnameSupport: string; apexRecordType: string };
+    email: { provider: string; onWebHost: boolean } | null;
+    keep: CutoverRecord[];
+    plexo: CutoverRecord[];
+    zoneFile: string;
+    steps: string[];
+    warnings: string[];
+  };
+  connected: { domain: string; ready: boolean }[];
+  verification: {
+    checks: { id: string; label: string; status: "done" | "blocked" | "todo" | "review"; detail: string }[];
+    pages: { ok: number; total: number };
+    safeToCancelWordPress: boolean;
+    checkedAt: string;
+  } | null;
+}
+
+function RecordTable({ records }: { records: CutoverRecord[] }) {
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+        <thead>
+          <tr style={{ textAlign: "left", color: "var(--text-muted)" }}>
+            <th style={{ padding: "4px 8px 4px 0" }}>Type</th><th style={{ padding: "4px 8px" }}>Name</th><th style={{ padding: "4px 8px" }}>Value</th><th style={{ padding: "4px 0 4px 8px" }}>What it does</th>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((r, i) => (
+            <tr key={i} style={{ borderTop: `1px solid ${hairline}`, verticalAlign: "top" }}>
+              <td style={{ padding: "6px 8px 6px 0", fontWeight: 650 }}>{r.type}</td>
+              <td style={{ padding: "6px 8px" }}><code>{r.name}</code></td>
+              <td style={{ padding: "6px 8px", wordBreak: "break-all", maxWidth: 340 }}><code>{r.priority !== undefined ? `${r.priority} ` : ""}{r.value}</code></td>
+              <td style={{ padding: "6px 0 6px 8px", color: "var(--text-muted)" }}>{r.why}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** "Switch your domain" — connect, the exact DNS changes (keeping email safe), then a live check of every URL. */
+function CutoverPanel({ templateId, jobId }: { templateId: string; jobId: string }) {
+  const base = `/api/v1/wp-migration/${templateId}/${jobId}/cutover`;
+  const [view, setView] = useState<CutoverView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    const res = await fetch(base);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) setError(body.error ?? "Couldn't read your domain's settings.");
+    else setView(body);
+  }, [base]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function connect() {
+    if (!view) return;
+    setBusy("connect");
+    setError(null);
+    for (const domain of [view.plan.domain, view.plan.wwwDomain]) {
+      if (view.connected.some((c) => c.domain === domain)) continue;
+      const res = await fetch("/api/v1/domains", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ templateId, type: "CUSTOM", domain }) });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? `Couldn't connect ${domain}.`);
+        break;
+      }
+    }
+    await load();
+    setBusy(null);
+  }
+
+  async function verify() {
+    setBusy("verify");
+    const res = await fetch(`${base}/verify`, { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok && view) setView({ ...view, verification: body.verification });
+    else setError(body.error ?? "Couldn't check your domain.");
+    setBusy(null);
+  }
+
+  function downloadZone() {
+    if (!view) return;
+    const url = URL.createObjectURL(new Blob([view.plan.zoneFile], { type: "text/plain" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${view.plan.domain}.zone.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  if (!view) return <div style={card}><p style={muted}>{error ?? "Reading your domain's current settings…"}</p></div>;
+  const { plan } = view;
+  const bothConnected = [plan.domain, plan.wwwDomain].every((d) => view.connected.some((c) => c.domain === d));
+  const v = view.verification;
+
+  return (
+    <div style={{ ...card, display: "flex", flexDirection: "column", gap: 16 }}>
+      <div>
+        <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: 700 }}>Switch {plan.domain} to Plexo</h3>
+        <p style={{ ...muted, fontSize: "12px" }}>
+          Your WordPress site keeps serving visitors the whole time — the moment DNS switches, visitors start getting the Plexo copy at exactly the same addresses.
+        </p>
+      </div>
+
+      {plan.warnings.map((w) => (
+        <div key={w} style={{ padding: "10px 12px", borderRadius: 9, border: `1px solid ${/stop|deleted|shut/i.test(w) ? "rgba(245,183,74,0.45)" : hairline}`, background: /stop|deleted|shut/i.test(w) ? "rgba(245,183,74,0.07)" : "transparent" }}>
+          <p style={{ ...muted, color: "var(--text-main)", fontSize: "12.5px" }}>{w}</p>
+        </div>
+      ))}
+
+      <div>
+        <p style={{ margin: "0 0 6px", fontSize: "13px", fontWeight: 700 }}>1. Connect your domain in Plexo</p>
+        {bothConnected ? (
+          <p style={{ ...muted, fontSize: "12px" }}>{view.connected.map((c) => `${c.domain} — ${c.ready ? "certificate ready" : "waiting for DNS"}`).join(" · ")}</p>
+        ) : (
+          <button type="button" style={primaryButton(busy !== "connect")} disabled={busy === "connect"} onClick={() => void connect()}>
+            {busy === "connect" ? "Connecting…" : `Connect ${plan.domain} and ${plan.wwwDomain}`}
+          </button>
+        )}
+      </div>
+
+      {bothConnected && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <p style={{ margin: 0, fontSize: "13px", fontWeight: 700 }}>2. Update your DNS {plan.dnsHost.name !== "unknown" ? `(currently at ${plan.dnsHost.name})` : ""}</p>
+          <ol style={{ ...muted, fontSize: "12.5px", paddingLeft: 18, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+            {plan.steps.map((step) => <li key={step}>{step}</li>)}
+          </ol>
+          <div>
+            <p style={{ ...muted, fontWeight: 650, color: "var(--text-main)", marginBottom: 4 }}>Add these (Plexo)</p>
+            <RecordTable records={plan.plexo} />
+            {!plan.plexo.some((r) => /certificate/i.test(r.why)) && <p style={{ ...muted, fontSize: "11.5px", marginTop: 4 }}>The certificate record appears here a few seconds after connecting — refresh if it's missing.</p>}
+          </div>
+          {plan.keep.length > 0 && (
+            <div>
+              <p style={{ ...muted, fontWeight: 650, color: "var(--text-main)", marginBottom: 4 }}>Keep exactly as they are{plan.email ? ` (your ${plan.email.provider} email depends on these)` : ""}</p>
+              <RecordTable records={plan.keep} />
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" style={secondaryButton} onClick={downloadZone}>Download zone file (for Cloudflare import)</button>
+            <button type="button" style={secondaryButton} onClick={() => void load()}>Refresh</button>
+          </div>
+        </div>
+      )}
+
+      {bothConnected && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <p style={{ margin: 0, fontSize: "13px", fontWeight: 700 }}>3. Check it's live — then you can cancel WordPress</p>
+          <div>
+            <button type="button" style={primaryButton(busy !== "verify")} disabled={busy === "verify"} onClick={() => void verify()}>
+              {busy === "verify" ? "Checking every page on your domain…" : "Check my domain"}
+            </button>
+          </div>
+          {v && (
+            <>
+              {v.checks.map((c) => (
+                <div key={c.id} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  <StatusDot status={c.status} />
+                  <div>
+                    <div style={{ fontSize: "12.5px", fontWeight: 650 }}>{c.label}</div>
+                    <p style={{ ...muted, fontSize: "12px" }}>{c.detail}</p>
+                  </div>
+                </div>
+              ))}
+              <div style={{ padding: "12px 14px", borderRadius: 10, background: v.safeToCancelWordPress ? "rgba(110,231,168,0.08)" : "rgba(255,255,255,0.03)", border: `1px solid ${v.safeToCancelWordPress ? "rgba(110,231,168,0.35)" : hairline}` }}>
+                <p style={{ margin: 0, fontSize: "13px", fontWeight: 700 }}>
+                  {v.safeToCancelWordPress ? "It's safe to cancel your WordPress hosting." : "Not yet — keep WordPress running for now."}
+                </p>
+                <p style={{ ...muted, fontSize: "12px", marginTop: 4 }}>
+                  {v.safeToCancelWordPress
+                    ? "Every page is served by Plexo on your domain, email is intact and your DNS no longer depends on the old host. Keep a backup of your WordPress files if your host offers one, then cancel."
+                    : "Finish the items above and check again. Nothing is lost by waiting — visitors are being served the whole time."}
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      {error && <p style={{ ...muted, color: "#f87171" }}>{error}</p>}
+    </div>
+  );
+}
+
 export function WordPressMigrationClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -615,8 +809,8 @@ export function WordPressMigrationClient() {
                 {item.id === "publish" && preview_ && (
                   <a href={`https://${preview_.domain}${new URL(r.source.homeUrl).pathname}`} target="_blank" rel="noreferrer" style={{ ...secondaryButton, marginTop: 10 }}>Open preview ↗</a>
                 )}
-                {item.id === "domain" && !custom?.dnsVerified && (
-                  <Link href={`/dashboard/domains?templateId=${job.templateId}`} style={{ ...secondaryButton, marginTop: 10 }}>Connect {new URL(r.source.origin).host} →</Link>
+                {item.id === "domain" && (
+                  <a href="#switch-domain" style={{ ...secondaryButton, marginTop: 10 }}>See the steps ↓</a>
                 )}
                 {item.id === "payments" && (
                   <Link
@@ -646,6 +840,10 @@ export function WordPressMigrationClient() {
         </div>
 
         <PrivateDataCard templateId={job.templateId} jobId={job.id} />
+
+        <div id="switch-domain">
+          <CutoverPanel templateId={job.templateId} jobId={job.id} />
+        </div>
 
         <div style={card}>
           <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: 700 }}>What happened to each plugin</h3>

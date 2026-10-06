@@ -273,6 +273,8 @@ export const WpMigrationJob = new Entity(
       connector: { type: "any" },
       /** Import of what only the companion plugin can read: { stage, cursor, counts, team, unmoved, done, error }. */
       extras: { type: "any" },
+      /** Domain switch: { plan: CutoverPlan, verification: LiveVerification } (lib/wpMigration/cutover.ts). */
+      cutover: { type: "any" },
       errors: { type: "any" },
       warnings: { type: "any" },
       startedAt: { type: "string" },

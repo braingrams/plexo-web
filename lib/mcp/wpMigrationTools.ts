@@ -8,6 +8,7 @@ import { discoverWordPressInstall } from "@/lib/wpMigration/discover";
 import { previewInstall } from "@/lib/wpMigration/inventory";
 import { startWordPressMigration } from "@/lib/wpMigration/startMigration";
 import { donationPaymentsReady, processWpMigrationStep } from "@/lib/wpMigration/runJobDynamo";
+import { analyzeDomain, plexoRoutingEndpoint, verifyLive, type CutoverPlan } from "@/lib/wpMigration/cutover";
 import { checkConnector, createConnector, revealConnectorCode, runExtrasStep, type ConnectorState } from "@/lib/wpMigration/connector";
 import { refreshReport, type MigrationReport } from "@/lib/wpMigration/report";
 
@@ -67,6 +68,16 @@ Returns templateId + jobId. Then call get_wordpress_migration repeatedly (each c
   {
     name: "import_wordpress_private_data",
     description: `Checks the Plexo Migrator plugin connection and copies the next batch of private data. Call repeatedly until stage is "done". If it returns an error message, relay it to the owner (it says exactly what to do, e.g. "paste the code in Tools → Plexo Migrator"). When done, the result lists the team found on WordPress — offer to invite them.`,
+    inputSchema: { type: "object", properties: { templateId: { type: "string" }, jobId: { type: "string" } }, required: ["templateId", "jobId"] },
+  },
+  {
+    name: "get_domain_switch_plan",
+    description: `For a finished migration: reads the old domain's live DNS and returns exactly how to point it at Plexo — who hosts the DNS (and whether cancelling the WordPress hosting would delete it), the email provider, records to KEEP unchanged (email, verification), records to ADD for Plexo, step-by-step instructions and a zone file. Connect the domain first with publish_existing_landing_page (CUSTOM, both apex and www) so the certificate records are included. Always relay the warnings to the owner.`,
+    inputSchema: { type: "object", properties: { templateId: { type: "string" }, jobId: { type: "string" } }, required: ["templateId", "jobId"] },
+  },
+  {
+    name: "verify_domain_switch",
+    description: `Checks on the real domain that Plexo now serves every migrated URL, email records are intact, DNS no longer depends on the old host, and nothing in the migration is blocking. Only tell the owner it's safe to cancel WordPress hosting when safeToCancelWordPress is true. Call get_domain_switch_plan first.`,
     inputSchema: { type: "object", properties: { templateId: { type: "string" }, jobId: { type: "string" } }, required: ["templateId", "jobId"] },
   },
 ];
@@ -170,6 +181,32 @@ export async function handleWpMigrationTool(toolName: string, args: any, resolve
         lastError: job.phase === "PAUSED_ERROR" && Array.isArray(job.errors) ? (job.errors as string[]).slice(-1)[0] : undefined,
         next: job.phase === "PAUSED_ERROR" ? "Call get_wordpress_migration again to retry from where it stopped." : "Call get_wordpress_migration again to continue.",
       };
+    }
+
+    case "get_domain_switch_plan":
+    case "verify_domain_switch": {
+      const access = accessFor(resolved, "update");
+      const { data: site } = await Template.get({ id: String(args.templateId ?? "") }).go();
+      if (!site || site.organizationId !== access.organizationId) throw new Error("Migration not found.");
+      const { data: job } = await WpMigrationJob.get({ templateId: site.id, id: String(args.jobId ?? "") }).go();
+      if (!job?.report) throw new Error("Finish the migration first (get_wordpress_migration until COMPLETED).");
+      if (toolName === "get_domain_switch_plan") {
+        const host = new URL((job.install as { origin: string }).origin).host.replace(/^www\./, "");
+        const { data: domains } = await PublishedDomain.query.primary({ templateId: site.id }).go();
+        const validations = domains
+          .filter((d) => d.type === "CUSTOM" && (d.domain === host || d.domain === `www.${host}`))
+          .map((d) => d as { certificateValidationName?: string; certificateValidationValue?: string })
+          .filter((d) => d.certificateValidationName && d.certificateValidationValue)
+          .map((d) => ({ name: d.certificateValidationName!, value: d.certificateValidationValue! }));
+        const plan = await analyzeDomain((job.install as { origin: string }).origin, { routingEndpoint: plexoRoutingEndpoint(), validations });
+        await WpMigrationJob.patch({ templateId: site.id, id: job.id }).set({ cutover: { ...((job.cutover as object | undefined) ?? {}), plan } }).go();
+        return { ...plan, connectedDomains: domains.filter((d) => d.type === "CUSTOM").map((d) => d.domain) };
+      }
+      const plan = (job.cutover as { plan?: CutoverPlan } | undefined)?.plan;
+      if (!plan) throw new Error("Call get_domain_switch_plan first.");
+      const verification = await verifyLive(job, plan, refreshReport(job.report as MigrationReport, await donationPaymentsReady(site.id)));
+      await WpMigrationJob.patch({ templateId: site.id, id: job.id }).set({ cutover: { ...(job.cutover as object), verification } }).go();
+      return verification;
     }
 
     case "connect_wordpress_migrator_plugin":

@@ -6,7 +6,7 @@ import { resolveHideBranding, canWhiteLabel } from "@/lib/subscription";
 import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
-import { Template, TemplateAsset, BlogSite } from "@/lib/db/contentEntities";
+import { Template, TemplateAsset, BlogSite, PublishedDomain } from "@/lib/db/contentEntities";
 import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
 import { getStorefrontSlug, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
 import { deriveCommerceTheme, type CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
@@ -405,6 +405,14 @@ function optimizeImages(html: string): string {
  * (parentId, slug) direct index, only byParent (GSI2, sorted by order), so this fetches the
  * parent's children (small in practice — a site's own page tree) and matches in memory,
  * same discipline as server/slugDynamo.ts's ensureUniqueSlug. */
+function safeHost(url: string): string | null {
+  try {
+    return new URL(url).host;
+  } catch {
+    return null;
+  }
+}
+
 function safeDecode(segment: string): string {
   try {
     return decodeURIComponent(segment);
@@ -441,6 +449,19 @@ export async function GET(
   const published = siteResult.published;
   const slugSegments = params.slug ?? [];
   if (isWordPressAjaxPath(slugSegments)) return wordPressAjaxStub();
+
+  // A site migrated from WordPress keeps ONE canonical host, as WordPress did: with both
+  // "example.org" and "www.example.org" connected, the one the old site didn't use
+  // permanently redirects to the one it did — no duplicate-content split, every old link
+  // lands on the canonical address.
+  const canonicalHost = published.template.migratedFrom ? safeHost(published.template.migratedFrom) : null;
+  if (canonicalHost && rawDomain !== canonicalHost && (rawDomain === `www.${canonicalHost}` || `www.${rawDomain}` === canonicalHost)) {
+    const { data: canonicalRows } = await PublishedDomain.query.byDomain({ domain: canonicalHost }).go();
+    if (canonicalRows.some((d) => d.templateId === published.templateId && (d.active ?? true))) {
+      const target = new URL(request.url);
+      return NextResponse.redirect(`https://${canonicalHost}${target.pathname}${target.search}`, 301);
+    }
+  }
 
   // WordPress's "Reading Settings: your homepage displays" toggle — when a site has
   // turned this on, its root path serves the blog listing IN PLACE (bare domain stays in
@@ -656,6 +677,9 @@ export async function GET(
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "X-Content-Type-Options": "nosniff",
+        // Lets the WordPress migration's live check prove a URL on the owner's real domain
+        // is now served by Plexo (and by this site), not still by the old host.
+        "X-Plexo-Site": published.templateId,
       },
     });
   }
