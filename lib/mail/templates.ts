@@ -662,3 +662,47 @@ export function buildDomainRenewalFailedEmail(input: {
     brand: input.brand,
   });
 }
+
+// ── Donations (lib/commerce/donations.ts) — the donor's thank-you receipt. Donor-typed
+// values (their name) and the owner's own thank-you text are escaped like every other
+// visitor-supplied string in this file.
+export function buildDonationReceiptEmail(input: {
+  siteName: string;
+  donorName: string | null;
+  amountFormatted: string;
+  monthly: boolean;
+  campaignName: string | null;
+  receiptNumber: string;
+  dateIso: string;
+  thankYouMessage: string | null;
+  /** Monthly gifts only — the donor's private link to stop their gift. */
+  manageUrl: string | null;
+  brand?: EmailBrand;
+}): { subject: string; html: string } {
+  const accent = input.brand?.color ?? "#8b5cf6";
+  const greeting = input.donorName ? `Dear ${esc(input.donorName.split(" ")[0])},` : "Thank you,";
+  const date = new Date(input.dateIso).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const message = input.thankYouMessage
+    ? esc(input.thankYouMessage)
+    : `Your generosity makes our work possible. Thank you for supporting ${esc(input.siteName)}.`;
+  const rows: [string, string][] = [
+    ["Amount", `${input.amountFormatted}${input.monthly ? " / month" : ""}`],
+    ...(input.campaignName ? ([["For", input.campaignName]] as [string, string][]) : []),
+    ["Date", date],
+    ["Receipt", input.receiptNumber],
+  ];
+  const html = emailShell({
+    title: `Thank you for your donation — ${input.siteName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">Thank you for your ${input.monthly ? "monthly " : ""}gift</h1>
+      <p style="margin:0 0 6px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">${greeting}</p>
+      <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">${message}</p>
+      <p style="margin:0 0 24px;font-size:30px;font-weight:800;color:#16a34a;letter-spacing:-0.5px;text-align:center;">${esc(input.amountFormatted)}${input.monthly ? '<span style="font-size:15px;color:#64748b;font-weight:600"> / month</span>' : ""}</p>
+      <table cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">${detailRows(rows)}</table>
+      <p style="margin:0 0 ${input.manageUrl ? "20px" : "0"};font-size:12.5px;color:#94a3b8;line-height:1.6;text-align:center;">Please keep this email as your donation receipt.</p>
+      ${input.manageUrl ? `${CTA_BUTTON(input.manageUrl, "Manage your monthly gift", accent)}${FALLBACK_LINK(input.manageUrl, accent)}` : ""}
+    `,
+    brand: input.brand,
+  });
+  return { subject: `Thank you for your ${input.monthly ? "monthly " : ""}donation to ${input.siteName}`, html };
+}

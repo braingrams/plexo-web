@@ -435,7 +435,18 @@ export function WordPressMigrationClient() {
                   <Link href={`/dashboard/domains?templateId=${job.templateId}`} style={{ ...secondaryButton, marginTop: 10 }}>Connect {new URL(r.source.origin).host} →</Link>
                 )}
                 {item.id === "payments" && (
-                  <Link href={`/dashboard/templates/${job.templateId}`} style={{ ...secondaryButton, marginTop: 10 }}>Open the donation page</Link>
+                  <Link
+                    href={item.status === "done" ? `/dashboard/commerce/${job.templateId}/donations` : `/dashboard/commerce/${job.templateId}/settings/payments`}
+                    style={{ ...secondaryButton, marginTop: 10 }}
+                  >
+                    {item.status === "done" ? "Open Donations →" : "Connect payments →"}
+                  </Link>
+                )}
+                {item.id === "payments-other" && (
+                  <Link href={`/dashboard/commerce/${job.templateId}`} style={{ ...secondaryButton, marginTop: 10 }}>Open Commerce →</Link>
+                )}
+                {item.id === "team-access" && (
+                  <Link href="/dashboard/settings/team" style={{ ...secondaryButton, marginTop: 10 }}>Invite your team →</Link>
                 )}
               </div>
             </div>

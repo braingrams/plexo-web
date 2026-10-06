@@ -509,7 +509,8 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
                 <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>Stripe keys</h2>
                 <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 1rem" }}>
                   Create a webhook endpoint in your own Stripe Dashboard → Developers → Webhooks, pointing at the URL below,
-                  subscribed to <code>checkout.session.completed</code>. Do this once for Test mode and once for Live mode —
+                  subscribed to <code>checkout.session.completed</code>, <code>invoice.paid</code>, <code>invoice.payment_failed</code> and{" "}
+                  <code>customer.subscription.deleted</code> (the last three keep monthly donations recorded). Do this once for Test mode and once for Live mode —
                   Stripe shows a signing secret starting with <code>whsec_</code> for each; paste it into the matching field below.
                 </p>
                 <ModeToggle mode={stripeMode} onChange={setStripeMode} activeColor="#8f89ff" />

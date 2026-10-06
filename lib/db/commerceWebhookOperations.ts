@@ -12,6 +12,7 @@ import {
 import { NotificationPreferences } from "./coreEntities";
 import { Template, LmsFunnel } from "./contentEntities";
 import { activateLmsEnrollmentFromOrder } from "@/lib/lms/enrollment";
+import { handleDonationPaid, isDonationOrder } from "@/lib/commerce/donations";
 import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
 import { notifyMaildripOfPaidOrder, resolveMaildripApiKey, sendCommerceEmail } from "@/lib/commerce/maildripNotify";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
@@ -108,6 +109,14 @@ export async function handleOrderPaid(
       .set({ status: "CONFIRMED" })
       .remove(["holdExpiresAt"])
       .go();
+  }
+
+  // A donation gets a thank-you receipt (and moves its campaign total / activates a
+  // monthly gift) instead of an "order confirmed" email — nothing to fulfil or deliver.
+  if (isDonationOrder(order)) {
+    await handleDonationPaid(order, settings).catch((err) => console.error("Commerce: donation paid handling failed", err));
+    if (options.notifyOwner !== false) notifyPaymentReceived(order).catch((err) => console.error("[mail] payment received notification failed:", err));
+    return;
   }
 
   try {

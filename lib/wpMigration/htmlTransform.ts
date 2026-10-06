@@ -56,6 +56,22 @@ export interface MigratedForm {
   fields: string[];
 }
 
+/** A WordPress payment/donation form converted to a native Plexo donation campaign. */
+export interface DetectedDonationForm {
+  /** Stable id of the source form, e.g. "wp-payment-form:3453" — the campaign's `source`. */
+  source: string;
+  /** Placeholder written into data-plexo-donation; the job swaps in the real campaign id. */
+  token: string;
+  name: string;
+  presets: { label?: string; amountMinor: number }[];
+  defaultPresetIndex: number;
+  allowCustomAmount: boolean;
+  minAmountMinor: number;
+  allowMonthly: boolean;
+  currency: string | null;
+  buttonLabel: string | null;
+}
+
 export interface PageFacts {
   title: string;
   metaDescription: string | null;
@@ -79,6 +95,8 @@ export interface TransformResult {
   loginForms: number;
   /** Site-search forms that now search the web scoped to this site. */
   searchForms: number;
+  /** Donation forms converted to Plexo Donations (the job creates their campaigns). */
+  donationForms: DetectedDonationForm[];
   facts: PageFacts;
 }
 
@@ -335,7 +353,7 @@ function rewireOneForm($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>, ct
   // No WordPress to show a success message any more — show one ourselves after the
   // endpoint's 303 lands the visitor back on this page.
   form.after(
-    `<script>(function(){try{var p=new URLSearchParams(location.search);if(p.get("plexo_form")!==${JSON.stringify(slugify(formId))})return;var f=document.getElementById(${JSON.stringify(formId)});if(!f)return;var m=document.createElement("div");m.setAttribute("role","status");m.style.cssText="margin:0 0 16px;padding:14px 18px;border-radius:8px;background:#e8f5ee;color:#14532d;font:inherit;font-weight:600";m.textContent="Thank you — your submission has been received. We'll be in touch soon.";f.parentNode.insertBefore(m,f);f.reset&&f.reset();}catch(e){}})();</script>`,
+    `<script>(function(){try{var p=new URLSearchParams(location.search);if(p.get("plexo_form")!==${JSON.stringify(slugify(formId))})return;var f=document.getElementById(${JSON.stringify(formId)});if(!f)return;var m=document.createElement("div");m.setAttribute("role","status");m.textContent="Thank you — your submission has been received. We'll be in touch soon.";function show(){var hidden=!f.offsetParent||f.getBoundingClientRect().height===0;if(hidden){m.style.cssText="position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:2147483000;max-width:92vw;padding:14px 22px;border-radius:10px;background:#14532d;color:#fff;font:600 15px/1.4 system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.25)";document.body.appendChild(m);setTimeout(function(){m.remove()},8000);}else{m.style.cssText="margin:0 0 16px;padding:14px 18px;border-radius:8px;background:#e8f5ee;color:#14532d;font:inherit;font-weight:600";f.parentNode.insertBefore(m,f);}}document.readyState==="complete"?show():window.addEventListener("load",show);f.reset&&f.reset();}catch(e){}})();</script>`,
   );
   if (plugin === "forminator" && form.attr("data-design") === "material") {
     // Forminator's "material" style floats each label inside its field until the field is
@@ -346,6 +364,108 @@ function rewireOneForm($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>, ct
     );
   }
   return { id: formId, name, plugin, fields: fieldNames };
+}
+
+export function donationToken(source: string): string {
+  return `__PLEXO_DONATION__${source}__`;
+}
+
+/** Paymattic prints the store currency into its page config: "currency_settings":{"currency":"USD". */
+function paymatticCurrency(html: string): string | null {
+  const m = html.match(/"currency_settings"\s*:\s*\{\s*"currency"\s*:\s*"([A-Z]{3})"/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Paymattic (WPPayForm) donation forms → Plexo Donations. Reads the form's own definition
+ * (suggested amounts with their names, the pre-selected one, custom amount, the monthly
+ * option, the donor fields) and annotates the SAME markup with the data-plexo-* hooks
+ * public/commerce.js's donation adapter drives — so the form looks exactly as it did and
+ * takes payments through Plexo. Paymattic's own scripts and page config (which also
+ * exposes the plugin's API keys in page source) are removed.
+ */
+function convertPaymatticForms($: cheerio.CheerioAPI, rawHtml: string): DetectedDonationForm[] {
+  const found: DetectedDonationForm[] = [];
+  const currency = paymatticCurrency(rawHtml);
+  $("form[data-wpf_form_id], form.wpf_form").each((_, el) => {
+    const form = $(el);
+    const formId = form.attr("data-wpf_form_id") || form.attr("id") || String(found.length + 1);
+    const source = `wp-payment-form:${formId}`;
+    const presets: { label?: string; amountMinor: number }[] = [];
+    let defaultPresetIndex = 0;
+    let allowCustomAmount = false;
+    form.find('input[type="radio"]').each((__, r) => {
+      const radio = $(r);
+      if (radio.attr("value") === "custom") {
+        allowCustomAmount = true;
+        radio.attr("data-plexo-amount-custom", "1");
+        return;
+      }
+      const price = Number(radio.attr("data-price"));
+      if (!Number.isFinite(price) || price <= 0) return;
+      const label = cleanLabel(form.find(`label[for="${radio.attr("id")}"]`).first().text() || radio.closest("label").text());
+      if (radio.attr("checked") !== undefined) defaultPresetIndex = presets.length;
+      presets.push({ amountMinor: Math.round(price), ...(label ? { label } : {}) });
+      radio.attr("data-plexo-amount-minor", String(Math.round(price)));
+    });
+    const custom = form.find('input.wpf_donation_custom_amount, input[data-is_custom_price="yes"], input[name$="_custom"][type="number"]').first();
+    if (custom.length) {
+      allowCustomAmount = true;
+      custom.attr("data-plexo-custom-amount", "1");
+      // A single fixed-price or custom-only form has no radios — the custom field IS the amount.
+    }
+    const monthly = form.find('input[type="checkbox"][name*="recurring"]').first();
+    if (monthly.length) monthly.attr("data-plexo-monthly", "1");
+    // The block revealed when monthly is ticked ("Debit me: every month").
+    form.find(".wpf_donation_recurring_infos").attr("data-plexo-monthly-options", "1");
+    form.find('input[name$="[first_name]"]').attr("data-plexo-donor-first", "1");
+    form.find('input[name$="[last_name]"]').attr("data-plexo-donor-last", "1");
+    form.find('input[name="customer_name"], input[name$="[full_name]"]').attr("data-plexo-donor-name", "1");
+    form.find('input[type="email"]').first().attr("data-plexo-donor-email", "1");
+    const button = form.find('button[type="submit"], button.wpf_submit_button, input[type="submit"]').first();
+    // Paymattic keeps a hidden "Please Wait…" loading label inside the button.
+    const buttonText = button.clone();
+    buttonText.find('[style*="none"], [class*="loading"], [class*="loader"], .wpf_loading_svg').remove();
+    // Paymattic renders its submit button disabled and enables it from its own script —
+    // which is gone now, so the button must be usable straight from the markup.
+    form.find("button, input[type=submit]").removeAttr("disabled");
+    const token = donationToken(source);
+    form.attr("data-plexo-donation", token);
+    form.attr("data-plexo-donation-adapter", "wp-payment-form");
+    form.removeAttr("action");
+    found.push({
+      source,
+      token,
+      name: formDisplayNameForDonation($, form) || "Donation",
+      presets,
+      defaultPresetIndex,
+      allowCustomAmount: allowCustomAmount || presets.length === 0,
+      // A custom-amount field with min="0" would accept a 1-cent gift; 1.00 is the floor.
+      minAmountMinor: Math.max(100, Math.round(Number(custom.attr("min") || 1) * 100)),
+      allowMonthly: monthly.length > 0,
+      currency,
+      buttonLabel: cleanLabel((buttonText.text() || button.attr("value") || "").replace(/please wait…?\.*/i, "")) || null,
+    });
+  });
+  if (found.length > 0) {
+    $("script").each((_, el) => {
+      const src = $(el).attr("src") || "";
+      const code = src ? "" : $(el).text();
+      if (/\/plugins\/wp-payment-form\//.test(src) || /wp_payform_general|wpf_form_vars|window\.wpf_|paymattic/i.test(code)) $(el).remove();
+    });
+  }
+  return found;
+}
+
+function formDisplayNameForDonation($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>): string {
+  let node: cheerio.Cheerio<AnyNode> = form;
+  for (let depth = 0; depth < 8; depth++) {
+    const heading = cleanLabel(node.prevAll("h1, h2, h3, h4").first().text() || node.prevAll().find("h1, h2, h3, h4").last().text());
+    if (heading && heading.length <= 80) return heading;
+    node = node.parent();
+    if (node.length === 0) break;
+  }
+  return "";
 }
 
 /**
@@ -593,6 +713,7 @@ export function transformPage(rawHtml: string, ctx: TransformContext): Transform
   removeWordPressCruft($);
   promoteLazyImages($);
   makeRefsRootRelative($, ctx);
+  const donationForms = convertPaymatticForms($, rawHtml);
   const { forms, unmigrated, loginForms, searchForms } = rewireForms($, ctx);
   rewriteMovedLinks($, ctx);
 
@@ -622,6 +743,7 @@ export function transformPage(rawHtml: string, ctx: TransformContext): Transform
     unmigratedForms: unmigrated,
     loginForms,
     searchForms,
+    donationForms,
     facts: extractFacts($),
   };
 }

@@ -275,3 +275,28 @@ export async function renameStorefrontSlug(templateId: string, newSlugInput: str
   await Template.patch({ id: page.id }).set({ slug: candidate }).go();
   return candidate;
 }
+
+/**
+ * Just the order-confirmation page, for a site that takes donations but doesn't sell
+ * anything — a bank-transfer donor lands there to see the account details, and a
+ * donations-only nonprofit shouldn't get a shop, checkout and order-tracking page it never
+ * asked for. Idempotent, same rules as ensureStorefrontLayout (respects an existing page).
+ */
+export async function ensureOrderConfirmationPage(templateId: string, organizationId: string, userId: string): Promise<void> {
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  if (settings?.orderConfirmationTemplateId) return;
+  const existing = await findChildBySlug(templateId, "order-confirmation");
+  const orderConfirmationTemplateId = existing
+    ? existing.id
+    : await createChildPage({
+        parentId: templateId,
+        rootId: templateId,
+        userId,
+        organizationId,
+        name: "Order Confirmation",
+        slug: "order-confirmation",
+        designJson: buildOrderConfirmationDesignJson(),
+      });
+  if (settings) await CommerceSettings.patch({ templateId }).set({ orderConfirmationTemplateId }).go();
+  else await CommerceSettings.create({ id: randomUUID(), templateId, organizationId, orderConfirmationTemplateId }).go();
+}

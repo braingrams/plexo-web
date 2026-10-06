@@ -317,6 +317,8 @@ export const WpMigrationPage = new Entity(
       forms: { type: "any" },
       unmigratedForms: { type: "any" },
       loginForms: { type: "number" },
+      /** [{ campaignId, name }] — donation forms converted to Plexo Donations on this page. */
+      donationCampaigns: { type: "any" },
       searchForms: { type: "number" },
       internalLinks: { type: "any" },
       pluginSlugs: { type: "any" },

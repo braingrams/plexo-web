@@ -2587,6 +2587,265 @@
       .catch(function () {});
   }
 
+  // ---------------------------------------------------------------------
+  // Donations (lib/commerce/donations.ts). Two modes, one payment path:
+  //  - a native donate form, rendered into any [data-plexo-donation="<campaignId>"] block;
+  //  - an existing form (a donation form migrated from WordPress, kept pixel-identical)
+  //    marked <form data-plexo-donation="<campaignId>" data-plexo-donation-adapter>, whose
+  //    own fields are annotated with data-plexo-amount-minor / data-plexo-amount-custom /
+  //    data-plexo-custom-amount / data-plexo-monthly / data-plexo-donor-* — this just
+  //    takes over its submit.
+  // Both finish payment exactly like storefront checkout (embedded Stripe, Paystack
+  // redirect, or bank transfer), and both thank the donor when they come back.
+  // ---------------------------------------------------------------------
+  function donationReturnPath() {
+    var params = new URLSearchParams(location.search);
+    params.delete("plexo_donation");
+    params.delete("order");
+    var q = params.toString();
+    return location.pathname + (q ? "?" + q : "");
+  }
+
+  function isDonationThanks() {
+    return new URLSearchParams(location.search).get("plexo_donation") === "thanks";
+  }
+
+  function donationThanksBanner(campaign) {
+    return el("div", { role: "status", style: { padding: "16px 18px", margin: "0 0 18px", borderRadius: "10px", background: "#E4F0E7", color: "#1F5C3C", fontWeight: "600", lineHeight: "1.5" } }, [
+      (campaign && campaign.thankYouMessage) || "Thank you for your gift! A receipt is on its way to your inbox.",
+    ]);
+  }
+
+  function submitDonation(payload, onError, onBusy) {
+    onBusy(true);
+    payload.returnPath = donationReturnPath();
+    return api("/api/public/commerce/donate", { method: "POST", body: JSON.stringify(payload) })
+      .then(function (result) {
+        if (result.checkout && result.checkout.provider === "stripe") {
+          onBusy(false);
+          openStripeEmbeddedCheckout(result.checkout, function (err) {
+            onError(err.message);
+          });
+          return;
+        }
+        if (result.authorizationUrl) {
+          window.location.href = result.authorizationUrl;
+          return;
+        }
+        if (result.redirectUrl) {
+          window.location.href = result.redirectUrl;
+          return;
+        }
+        onBusy(false);
+      })
+      .catch(function (err) {
+        onBusy(false);
+        onError(err.message);
+      });
+  }
+
+  function fetchDonationCampaign(id) {
+    return api("/api/public/commerce/donations/" + encodeURIComponent(id)).then(function (d) {
+      return d.campaign;
+    });
+  }
+
+  function renderDonation(node) {
+    var campaignId = node.getAttribute("data-plexo-donation");
+    if (!campaignId) return;
+    if (node.tagName === "FORM") return adaptDonationForm(node, campaignId);
+    showSpinner(node);
+    fetchDonationCampaign(campaignId)
+      .then(function (c) {
+        clear(node);
+        prepareNode(node);
+        if (isDonationThanks()) node.appendChild(donationThanksBanner(c));
+        if (!c.accepting) {
+          node.appendChild(el("div", { class: "pc-muted", style: { padding: "12px 0" } }, ["Online donations are being set up — please check back soon."]));
+          return;
+        }
+        var presets = c.presetAmounts || [];
+        var state = {
+          amountMinor: presets.length ? presets[Math.min(c.defaultPresetIndex || 0, presets.length - 1)].amountMinor : null,
+          custom: !presets.length,
+          frequency: c.allowMonthly ? c.defaultFrequency || "ONCE" : "ONCE",
+        };
+        var card = el("div", { class: "pc-card", style: { padding: "22px" } });
+        if (c.goalAmountMinor) {
+          var pct = Math.min(100, Math.round(((c.raisedMinor || 0) / c.goalAmountMinor) * 100));
+          card.appendChild(el("div", { style: { marginBottom: "18px" } }, [
+            el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "13px", marginBottom: "6px" } }, [
+              el("strong", {}, [money(c.raisedMinor || 0, c.currency) + " raised"]),
+              el("span", { class: "pc-muted" }, ["of " + money(c.goalAmountMinor, c.currency)]),
+            ]),
+            el("div", { style: { height: "8px", background: "#EEECE4", borderRadius: "99px", overflow: "hidden" } }, [
+              el("div", { class: "pc-btn-gold", style: { height: "100%", width: pct + "%", padding: "0", borderRadius: "99px" } }),
+            ]),
+          ]));
+        }
+        var freqRow = null;
+        function paintFreq() {
+          if (!freqRow) return;
+          Array.prototype.forEach.call(freqRow.children, function (b) {
+            var on = b.getAttribute("data-f") === state.frequency;
+            b.className = on ? "pc-btn" : "pc-btn pc-btn-outline";
+          });
+        }
+        if (c.allowMonthly) {
+          freqRow = el("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "14px" } }, [
+            el("button", { type: "button", "data-f": "ONCE", onclick: function () { state.frequency = "ONCE"; paintFreq(); } }, ["Give once"]),
+            el("button", { type: "button", "data-f": "MONTHLY", onclick: function () { state.frequency = "MONTHLY"; paintFreq(); } }, ["Monthly"]),
+          ]);
+          card.appendChild(freqRow);
+          paintFreq();
+        }
+        var amountGrid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: "8px", marginBottom: "12px" } });
+        var customInput = el("input", { class: "pc-input", type: "number", min: String((c.minAmountMinor || 100) / 100), step: "any", placeholder: "Other amount", style: { display: state.custom ? "block" : "none", marginBottom: "12px" } });
+        function paintAmounts() {
+          Array.prototype.forEach.call(amountGrid.children, function (b) {
+            var on = b.getAttribute("data-custom") ? state.custom : !state.custom && Number(b.getAttribute("data-amount")) === state.amountMinor;
+            b.className = on ? "pc-btn" : "pc-btn pc-btn-outline";
+          });
+          customInput.style.display = state.custom ? "block" : "none";
+        }
+        presets.forEach(function (p) {
+          amountGrid.appendChild(el("button", { type: "button", "data-amount": String(p.amountMinor), style: { flexDirection: "column", gap: "2px" }, onclick: function () { state.custom = false; state.amountMinor = p.amountMinor; paintAmounts(); } }, [
+            el("span", {}, [money(p.amountMinor, c.currency)]),
+            p.label ? el("span", { style: { fontSize: "11.5px", fontWeight: "500", opacity: "0.8" } }, [p.label]) : null,
+          ].filter(Boolean)));
+        });
+        if (c.allowCustomAmount) {
+          amountGrid.appendChild(el("button", { type: "button", "data-custom": "1", onclick: function () { state.custom = true; paintAmounts(); customInput.focus(); } }, ["Other"]));
+        }
+        card.appendChild(amountGrid);
+        card.appendChild(customInput);
+        paintAmounts();
+        var nameInput = el("input", { class: "pc-input", type: "text", placeholder: "Your name", autocomplete: "name", style: { marginBottom: "10px" } });
+        var emailInput = el("input", { class: "pc-input", type: "email", placeholder: "Email for your receipt", autocomplete: "email", required: "required", style: { marginBottom: "14px" } });
+        card.appendChild(nameInput);
+        card.appendChild(emailInput);
+        var errorBox = el("div", { class: "pc-error", style: { display: "none" } });
+        var button = el("button", { type: "button", class: "pc-btn", style: { width: "100%" } }, [c.buttonLabel || "Donate"]);
+        card.appendChild(errorBox);
+        card.appendChild(button);
+        node.appendChild(card);
+        button.addEventListener("click", function () {
+          errorBox.style.display = "none";
+          var amount = state.custom ? Math.round(parseFloat(customInput.value || "0") * 100) : state.amountMinor;
+          if (!amount || amount <= 0) {
+            errorBox.textContent = "Please choose or enter an amount.";
+            errorBox.style.display = "block";
+            return;
+          }
+          submitDonation(
+            { campaignId: campaignId, amountMinor: amount, frequency: state.frequency, donorName: nameInput.value, donorEmail: emailInput.value },
+            function (msg) { errorBox.textContent = msg; errorBox.style.display = "block"; },
+            function (busy) { button.disabled = busy; button.textContent = busy ? "Starting payment…" : c.buttonLabel || "Donate"; }
+          );
+        });
+      })
+      .catch(function (err) {
+        showError(node, err.message);
+      });
+  }
+
+  // A migrated donation form: keep its markup and styling exactly, just route its submit.
+  function adaptDonationForm(form, campaignId) {
+    if (form.getAttribute("data-plexo-adapted")) return;
+    form.setAttribute("data-plexo-adapted", "1");
+    form.removeAttribute("action");
+    fetchDonationCampaign(campaignId)
+      .then(function (c) {
+        if (isDonationThanks()) {
+          var banner = donationThanksBanner(c);
+          // A form inside a closed pop-up isn't visible on return — show the thanks on top instead.
+          if (!form.offsetParent || form.getBoundingClientRect().height === 0) {
+            banner.style.position = "fixed";
+            banner.style.top = "16px";
+            banner.style.left = "50%";
+            banner.style.transform = "translateX(-50%)";
+            banner.style.zIndex = "2147483000";
+            banner.style.maxWidth = "92vw";
+            banner.style.boxShadow = "0 8px 30px rgba(0,0,0,.25)";
+            document.body.appendChild(banner);
+            setTimeout(function () { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 8000);
+          } else {
+            form.parentNode.insertBefore(banner, form);
+          }
+        }
+        if (!c.accepting) {
+          form.parentNode.insertBefore(el("div", { class: "pc-error" }, ["Online donations are being set up — please check back soon."]), form);
+        }
+      })
+      .catch(function () {});
+    var submitBtn = form.querySelector("button[type=submit], input[type=submit], button:not([type])");
+    // Form plugins often ship their button disabled until their own script initializes it.
+    if (submitBtn) submitBtn.disabled = false;
+    var originalLabel = submitBtn ? submitBtn.innerHTML : "";
+    // Keep the form's controls in step the way its original plugin script did: picking a
+    // suggested amount fills the amount box, typing an amount selects "custom", ticking
+    // monthly reveals its options.
+    var amountBox = form.querySelector("[data-plexo-custom-amount]");
+    var customChoice = form.querySelector("[data-plexo-amount-custom]");
+    Array.prototype.forEach.call(form.querySelectorAll("[data-plexo-amount-minor]"), function (radio) {
+      radio.addEventListener("change", function () {
+        if (radio.checked && amountBox) amountBox.value = String(Number(radio.getAttribute("data-plexo-amount-minor")) / 100);
+      });
+    });
+    if (amountBox && customChoice) {
+      amountBox.addEventListener("input", function () {
+        customChoice.checked = true;
+      });
+    }
+    var monthlyBox = form.querySelector("[data-plexo-monthly]");
+    var monthlyOptions = form.querySelector("[data-plexo-monthly-options]");
+    if (monthlyBox && monthlyOptions) {
+      var syncMonthly = function () {
+        monthlyOptions.style.display = monthlyBox.checked ? "flex" : "none";
+      };
+      monthlyBox.addEventListener("change", syncMonthly);
+      syncMonthly();
+    }
+    var preset = form.querySelector("[data-plexo-amount-minor]:checked");
+    if (preset && amountBox) amountBox.value = String(Number(preset.getAttribute("data-plexo-amount-minor")) / 100);
+
+    function errorHere(msg) {
+      var box = form.querySelector(".pc-donation-error");
+      if (!box) {
+        box = el("div", { class: "pc-error pc-donation-error" });
+        form.appendChild(box);
+      }
+      box.textContent = msg;
+    }
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      var chosen = form.querySelector("[data-plexo-amount-minor]:checked, [data-plexo-amount-custom]:checked");
+      var amount = 0;
+      var customField = form.querySelector("[data-plexo-custom-amount]");
+      if (chosen && chosen.hasAttribute("data-plexo-amount-minor")) amount = Number(chosen.getAttribute("data-plexo-amount-minor"));
+      else if (customField) amount = Math.round(parseFloat(customField.value || "0") * 100);
+      if (!amount || amount <= 0) return errorHere("Please choose or enter an amount.");
+      var monthly = form.querySelector("[data-plexo-monthly]");
+      var first = form.querySelector("[data-plexo-donor-first]");
+      var last = form.querySelector("[data-plexo-donor-last]");
+      var full = form.querySelector("[data-plexo-donor-name]");
+      var email = form.querySelector("[data-plexo-donor-email]");
+      var name = full ? full.value : [first && first.value, last && last.value].filter(Boolean).join(" ");
+      if (!email || !email.value) return errorHere("Please enter your email address for your receipt.");
+      submitDonation(
+        { campaignId: campaignId, amountMinor: amount, frequency: monthly && monthly.checked ? "MONTHLY" : "ONCE", donorName: name, donorEmail: email.value },
+        errorHere,
+        function (busy) {
+          if (!submitBtn) return;
+          submitBtn.disabled = busy;
+          if (busy) submitBtn.textContent = "Starting payment…";
+          else submitBtn.innerHTML = originalLabel;
+        }
+      );
+    }, true);
+  }
+
   function init() {
     injectStyles();
     document.querySelectorAll("[data-plexo-commerce-product]").forEach(renderProduct);
@@ -2597,6 +2856,7 @@
     document.querySelectorAll("[data-plexo-commerce-orderConfirmation]").forEach(renderOrderConfirmation);
     document.querySelectorAll("[data-plexo-commerce-orderTracking]").forEach(renderOrderTracking);
     document.querySelectorAll("[data-plexo-newsletter-signup]").forEach(renderNewsletterSignup);
+    document.querySelectorAll("[data-plexo-donation]").forEach(renderDonation);
     renderProductCounts();
     fetchCart().then(broadcastCart).catch(function () {});
   }

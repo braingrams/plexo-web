@@ -136,10 +136,11 @@ const CATALOG: Record<string, CatalogEntry> = {
   // ── Server-side features Plexo has to rebuild before they work again.
   "wp-payment-form": {
     name: "Paymattic (WPPayForm)",
-    outcome: "NEEDS_ATTENTION",
+    outcome: "NATIVE",
     explanation:
-      "Your donation/payment forms were copied, but payments are processed by WordPress. Connect payments in Plexo before switching your domain so donations keep coming in.",
+      "Your donation forms now run on Plexo Donations — same look, same amounts, custom amounts and monthly giving included, with receipts and a dashboard. Connect Stripe or Paystack (ideally the same account WordPress used, so existing monthly donors carry straight over) before switching your domain.",
   },
+
   woocommerce: {
     name: "WooCommerce",
     outcome: "NEEDS_ATTENTION",

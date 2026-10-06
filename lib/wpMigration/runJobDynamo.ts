@@ -10,7 +10,9 @@ import { extractImageUrls, rehostMediaUrls, rewriteImageUrls } from "@/lib/blogI
 import { convertWordPressHtmlToTiptapJson, tiptapJsonToHtml } from "@/lib/blogImport/htmlToTiptap";
 import { discoverWordPressInstall } from "./discover";
 import { buildInventory } from "./inventory";
-import { extractSourceFacts, transformPage } from "./htmlTransform";
+import { extractSourceFacts, transformPage, type DetectedDonationForm } from "./htmlTransform";
+import { CommerceDonationCampaign, CommerceSettings } from "@/lib/db/commerceEntities";
+import { ensureDonationsReady, resolveDonationGateway } from "@/lib/commerce/donations";
 import { fetchSourceAsset, storeMigratedAsset } from "./assets";
 import { buildPluginReport, pluginSlugsFromHtml } from "./pluginCatalog";
 import { fetchJson, migrationFetch, restUrl } from "./http";
@@ -433,6 +435,35 @@ async function runPostsStep(job: JobItem, errors: string[]): Promise<string> {
   return next;
 }
 
+function friendlyName(name: string): string {
+  // Headings are often styled in capitals in the source markup ("BECOME A PARTNER"); a
+  // campaign name reads better in the dashboard and receipts in title case.
+  return name === name.toUpperCase() ? name.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : name;
+}
+
+async function ensureMigratedCampaign(job: JobItem, form: DetectedDonationForm): Promise<{ campaignId: string; name: string }> {
+  const { data: campaigns } = await CommerceDonationCampaign.query.primary({ templateId: job.templateId }).go({ pages: "all" });
+  const existing = campaigns.find((c) => c.source === form.source);
+  if (existing) return { campaignId: existing.id, name: existing.name };
+  await ensureDonationsReady(job.templateId, job.organizationId, job.createdBy, { currency: form.currency });
+  const id = randomUUID();
+  const name = friendlyName(form.name).slice(0, 120);
+  await CommerceDonationCampaign.create({
+    id,
+    templateId: job.templateId,
+    organizationId: job.organizationId,
+    name,
+    presetAmounts: form.presets,
+    defaultPresetIndex: form.defaultPresetIndex,
+    allowCustomAmount: form.allowCustomAmount,
+    minAmountMinor: form.minAmountMinor,
+    allowMonthly: form.allowMonthly,
+    buttonLabel: form.buttonLabel ?? undefined,
+    source: form.source,
+  }).go();
+  return { campaignId: id, name };
+}
+
 async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
   const pages = await allPages(job.id);
   const pending = pages.filter((p) => p.kind !== "POST" && p.status === "PENDING").slice(0, PAGES_PER_STEP);
@@ -459,9 +490,17 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
         appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://plexo.charisol.io",
       });
       if (!row.templateId) throw new Error("This page has no place in the site tree.");
+      // Donation forms become native Plexo Donations campaigns (created once per source form).
+      let html = result.html;
+      const donationCampaigns: { campaignId: string; name: string }[] = [];
+      for (const form of result.donationForms) {
+        const campaign = await ensureMigratedCampaign(job, form);
+        html = html.split(form.token).join(campaign.campaignId);
+        donationCampaigns.push(campaign);
+      }
       await Template.patch({ id: row.templateId })
         .set({
-          compiledHtml: result.html,
+          compiledHtml: html,
           sourceType: "RAW_UPLOAD",
           urlTrailingSlash: path.endsWith("/") && path !== "/",
           ...(row.title || sourceFacts.title ? { name: row.title || sourceFacts.title } : {}),
@@ -481,6 +520,7 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
           forms: result.forms,
           unmigratedForms: result.unmigratedForms,
           loginForms: result.loginForms,
+          donationCampaigns,
           searchForms: result.searchForms,
           internalLinks: result.internalLinks,
           pluginSlugs: Array.from(pluginSlugsFromHtml(raw)),
@@ -677,6 +717,7 @@ async function runFinalizing(job: JobItem): Promise<string> {
     brokenLinks,
     counts: { ...emptyCounts(), ...(job.counts as MigrationCounts) },
     customApis: { frozen: plan.frozenApis ?? [], captured: plan.capturedApis ?? [] },
+    paymentsReady: await donationPaymentsReady(job.templateId),
   });
 
   await Template.patch({ id: job.templateId }).set({ migratedFrom: plan.origin }).go();
@@ -684,6 +725,12 @@ async function runFinalizing(job: JobItem): Promise<string> {
     .set({ plugins, report, phase: "COMPLETED", finishedAt: new Date().toISOString() })
     .go();
   return "COMPLETED";
+}
+
+/** Whether the migrated site can take card payments now (monthly giving needs a card gateway). */
+export async function donationPaymentsReady(templateId: string): Promise<boolean> {
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  return resolveDonationGateway(settings).gatewayReady;
 }
 
 /**

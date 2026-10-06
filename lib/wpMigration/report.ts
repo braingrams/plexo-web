@@ -56,6 +56,8 @@ export interface MigrationReport {
   missingOnSource: { path: string; from: string | null }[];
   plugins: DetectedPlugin[];
   checklist: ChecklistItem[];
+  /** Donation campaigns created from the site's donation forms. */
+  donationCampaigns?: { campaignId: string; name: string }[];
   /** True when nothing blocks switching the domain. "review" items don't block — they need a look, not a fix. */
   readyForCutover: boolean;
 }
@@ -72,6 +74,8 @@ export function buildMigrationReport(input: {
   brokenLinks: { from: string; href: string; reason: string }[];
   counts: { assetsDone: number };
   customApis?: { frozen: string[]; captured: string[] };
+  /** Whether Stripe/Paystack is connected on the new site right now. */
+  paymentsReady?: boolean;
 }): MigrationReport {
   const { install, pages, assets, plugins, brokenLinks } = input;
   const pageRows = pages.filter((p) => p.kind !== "POST");
@@ -157,12 +161,15 @@ export function buildMigrationReport(input: {
       detail: `${forms.length} form(s) now send submissions to your Plexo dashboard and your email. Send yourself a test message to see it arrive.`,
     });
   }
+  const donationCampaigns = pageRows.flatMap((p) => ((p.donationCampaigns as { campaignId: string; name: string }[] | undefined) ?? []));
+  const uniqueCampaigns = Array.from(new Map(donationCampaigns.map((c) => [c.campaignId, c])).values());
+  if (uniqueCampaigns.length > 0) checklist.push(donationPaymentsItem(uniqueCampaigns, input.paymentsReady ?? false));
   if (paymentPlugins.length > 0 || paymentForms.length > 0) {
     checklist.push({
-      id: "payments",
-      label: "Connect payments for your donation/payment forms",
+      id: "payments-other",
+      label: "Set up payments for your shop or other payment forms",
       status: "blocked",
-      detail: `${paymentPlugins.map((p) => p.name).join(", ") || "A payment plugin"} processed payments on WordPress. Until payments are connected on Plexo, switching your domain would stop donations — so this blocks the switch.`,
+      detail: `${paymentPlugins.map((p) => p.name).join(", ") || "A payment form"} took payments on WordPress and couldn't be converted automatically. Recreate it with Plexo Commerce (products) or Plexo Donations (Commerce → Donations → copy the embed code onto that page) — switching your domain before then would stop those payments.`,
     });
   }
   const loginPages = pageRows.filter((p) => (p.loginForms ?? 0) > 0);
@@ -236,6 +243,32 @@ export function buildMigrationReport(input: {
     missingOnSource,
     plugins,
     checklist,
+    donationCampaigns: uniqueCampaigns,
     readyForCutover: !checklist.some((c) => c.status === "blocked"),
   };
+}
+
+/** The "donations need a payment account" checklist item — rebuilt live whenever the report is viewed. */
+export function donationPaymentsItem(campaigns: { name: string }[], paymentsReady: boolean): ChecklistItem {
+  const names = campaigns.map((c) => `“${c.name}”`).join(", ");
+  return paymentsReady
+    ? {
+        id: "payments",
+        label: "Donations are live on Plexo",
+        status: "done",
+        detail: `${names} now takes one-time and monthly gifts through your connected payment account. If your WordPress donors give monthly, open Commerce → Donations and click “Bring over existing monthly donors” so their gifts keep being recorded.`,
+      }
+    : {
+        id: "payments",
+        label: "Connect payments so your donation forms can take gifts",
+        status: "blocked",
+        detail: `${names} moved to Plexo Donations with the same amounts and monthly option. Connect Stripe or Paystack in Commerce → Settings → Payments — use the same account WordPress used and your existing monthly donors carry straight over. Switching your domain before this would stop donations, so it blocks the switch.`,
+      };
+}
+
+/** Re-evaluates the parts of a stored report that depend on things the owner may have done since (connecting payments). */
+export function refreshReport(report: MigrationReport, paymentsReady: boolean): MigrationReport {
+  if (!report.donationCampaigns?.length) return report;
+  const checklist = report.checklist.map((item) => (item.id === "payments" ? donationPaymentsItem(report.donationCampaigns!, paymentsReady) : item));
+  return { ...report, checklist, readyForCutover: !checklist.some((c) => c.status === "blocked") };
 }

@@ -55,7 +55,7 @@ function sameSitePathsFromCss(css: string, cssUrl: string, origin: string): stri
   const consider = (ref: string) => {
     const trimmed = ref.trim();
     // url(#id) / url(./#id) reference an SVG filter or gradient inside the document, not a file.
-    if (!trimmed || /^(data|blob|about):/i.test(trimmed) || /^(\.\/)?#/.test(trimmed)) return;
+    if (!trimmed || /^(data|blob|about):/i.test(trimmed) || /^(\.\/)?(#|%23)/i.test(trimmed)) return;
     try {
       const u = new URL(trimmed, cssUrl);
       if (!hosts.has(u.host)) return;

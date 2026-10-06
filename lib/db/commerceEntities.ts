@@ -869,6 +869,107 @@ export const PlatformPaystackWebhookEvent = new Entity(
   { table, client: docClient },
 );
 
+// ── Donations ───────────────────────────────────────────────────────────────────
+// A donation is a Commerce payment like any other: every gift (and every monthly charge)
+// becomes a CommerceOrder with metadata.kind = "DONATION", so Orders, Customers, the
+// Wallet, refunds and receipts all work unchanged. These two entities hold what's
+// donation-specific: the campaign a donate form takes payments for, and each donor's
+// recurring monthly gift. See lib/commerce/donations.ts.
+
+export const CommerceDonationCampaign = new Entity(
+  {
+    model: { entity: "commerceDonationCampaign", version: "1", service: "plexoCommerce" },
+    attributes: {
+      id: { type: "string", required: true },
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      name: { type: "string", required: true },
+      description: { type: "string" },
+      /** [{ label?: string, amountMinor: number }] — the suggested amounts, in display order. */
+      presetAmounts: { type: "any", required: true },
+      defaultPresetIndex: { type: "number", default: 0 },
+      allowCustomAmount: { type: "boolean", default: true },
+      minAmountMinor: { type: "number", default: 100 },
+      allowMonthly: { type: "boolean", default: true },
+      defaultFrequency: { type: ["ONCE", "MONTHLY"] as const, default: "ONCE" },
+      goalAmountMinor: { type: "number" },
+      /** Running totals across PAID donations (one-time + every monthly charge). */
+      raisedMinor: { type: "number", default: 0 },
+      donationCount: { type: "number", default: 0 },
+      thankYouMessage: { type: "string" },
+      buttonLabel: { type: "string" },
+      active: { type: "boolean", default: true },
+      /** Where it came from when created by a migration, e.g. "wp-payment-form:3453". */
+      source: { type: "string" },
+      /** Paystack plan codes created for monthly amounts, keyed "<amountMinor>:<currency>:<mode>". */
+      paystackPlans: { type: "any" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["id"], template: "DONATIONCAMPAIGN#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+export const CommerceDonationSubscription = new Entity(
+  {
+    model: { entity: "commerceDonationSubscription", version: "1", service: "plexoCommerce" },
+    attributes: {
+      id: { type: "string", required: true },
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      campaignId: { type: "string", required: true },
+      donorEmail: { type: "string", required: true },
+      donorName: { type: "string" },
+      amountMinor: { type: "number", required: true },
+      currency: { type: "string", required: true },
+      interval: { type: ["MONTH"] as const, default: "MONTH" },
+      paymentProvider: { type: ["BYO_PAYSTACK", "PLATFORM_PAYSTACK", "PLATFORM_STRIPE", "BYO_STRIPE"] as const, required: true },
+      /** PENDING until the first payment clears; ACTIVE while billing; CANCELLED when stopped (by donor, owner or the gateway). */
+      status: { type: ["PENDING", "ACTIVE", "PAST_DUE", "CANCELLED"] as const, default: "PENDING" },
+      /** Stripe subscription id or Paystack subscription code — set once the gateway confirms it. */
+      providerRef: { type: "string" },
+      paystackPlanCode: { type: "string" },
+      paystackEmailToken: { type: "string" },
+      /** Secret in the donor's receipt link that lets them stop their own gift — never shown elsewhere. */
+      manageToken: { type: "string", required: true },
+      firstOrderId: { type: "string" },
+      chargesCount: { type: "number", default: 0 },
+      lastChargedAt: { type: "string" },
+      cancelledAt: { type: "string" },
+      cancelledBy: { type: "string" },
+      /** "plexo" for gifts started on Plexo; "imported" for a monthly gift adopted from the old site's gateway. */
+      source: { type: "string", default: "plexo" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["id"], template: "DONATIONSUB#${id}" },
+      },
+      // A renewal webhook arrives with only the gateway's subscription id.
+      byProviderRef: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["providerRef"], template: "DONATIONSUBREF#${providerRef}" },
+        sk: { field: "GSI1SK", composite: ["id"], template: "DONATIONSUB#${id}" },
+      },
+      // The donor's "manage my monthly gift" link arrives with only its token.
+      byManageToken: {
+        index: "GSI2",
+        pk: { field: "GSI2PK", composite: ["manageToken"], template: "DONATIONMANAGE#${manageToken}" },
+        sk: { field: "GSI2SK", composite: ["id"], template: "DONATIONSUB#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoCommerceService = new Service(
   {
     CommerceCategory,
@@ -893,6 +994,8 @@ export const plexoCommerceService = new Service(
     CommerceStripeAccessRequest,
     StripeCommerceEvent,
     PlatformPaystackWebhookEvent,
+    CommerceDonationCampaign,
+    CommerceDonationSubscription,
   },
   { table, client: docClient },
 );

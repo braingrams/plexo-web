@@ -3,6 +3,8 @@ import { PublishedDomain } from "@/lib/db/contentEntities";
 import { WpMigrationJob } from "@/lib/db/importEntities";
 import { isValidUuid } from "@/lib/slugUtils";
 import { assertOwnSite, resolveMigrationAccess } from "@/lib/wpMigration/access";
+import { refreshReport, type MigrationReport } from "@/lib/wpMigration/report";
+import { donationPaymentsReady } from "@/lib/wpMigration/runJobDynamo";
 
 /** GET — a migration's live progress, and its full report once finished. */
 export async function GET(
@@ -33,7 +35,7 @@ export async function GET(
       install: job.install,
       counts: job.counts ?? null,
       plugins: job.plugins ?? null,
-      report: job.report ?? null,
+      report: job.report ? refreshReport(job.report as MigrationReport, await donationPaymentsReady(templateId)) : null,
       errors: Array.isArray(job.errors) ? (job.errors as string[]).slice(-20) : [],
       warnings: job.warnings ?? [],
       lastHeartbeatAt: job.lastHeartbeatAt ?? null,

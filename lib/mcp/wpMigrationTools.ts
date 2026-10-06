@@ -7,8 +7,8 @@ import { MIGRATION_PLAN_MESSAGE, type MigrationAccess } from "@/lib/wpMigration/
 import { discoverWordPressInstall } from "@/lib/wpMigration/discover";
 import { previewInstall } from "@/lib/wpMigration/inventory";
 import { startWordPressMigration } from "@/lib/wpMigration/startMigration";
-import { processWpMigrationStep } from "@/lib/wpMigration/runJobDynamo";
-import type { MigrationReport } from "@/lib/wpMigration/report";
+import { donationPaymentsReady, processWpMigrationStep } from "@/lib/wpMigration/runJobDynamo";
+import { refreshReport, type MigrationReport } from "@/lib/wpMigration/report";
 
 type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
 
@@ -144,7 +144,7 @@ export async function handleWpMigrationTool(toolName: string, args: any, resolve
           jobId,
           dashboardUrl,
           publishedDomains: domains.map((d) => d.domain),
-          report: summarizeReport(job.report as MigrationReport),
+          report: summarizeReport(refreshReport(job.report as MigrationReport, await donationPaymentsReady(templateId))),
           next: domains.length === 0
             ? "Offer to publish a preview with publish_existing_landing_page (subdomain), then have the owner connect their own domain in Plexo's Domains page. Keep WordPress running until the domain shows the Plexo site."
             : "Have the owner connect their own domain in Plexo's Domains page once nothing in the checklist is blocked.",
