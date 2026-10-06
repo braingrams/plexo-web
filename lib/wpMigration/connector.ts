@@ -6,7 +6,8 @@ import { BlogComment, BlogRedirect } from "@/lib/db/contentEntities";
 import { CommerceDonationCampaign, CommerceOrder, CommerceOrderItem } from "@/lib/db/commerceEntities";
 import { WpMigrationJob, WpMigrationPage } from "@/lib/db/importEntities";
 import { normalizeRedirectPath } from "@/lib/blog/redirectsDynamo";
-import { createBlogPost, findPostByExternalId } from "@/lib/blog/savePostDynamo";
+// savePostCore (not savePostDynamo) for the same SOL-Lambda bundling reason as runJobDynamo.ts.
+import { createBlogPost, findPostByExternalId, type RevalidateFn } from "@/lib/blog/savePostCore";
 import { convertWordPressHtmlToTiptapJson, tiptapJsonToHtml } from "@/lib/blogImport/htmlToTiptap";
 import { migrationFetch, restUrl } from "./http";
 import { hostVariants, makeOriginRewriter } from "./urlSpace";
@@ -168,7 +169,7 @@ function formNameForTable(table: string, prefix: string, forms: MigratedForm[]):
  * One bounded step of the private-data import. Returns the updated state; `stage: "done"`
  * when everything is in. Safe to call repeatedly (dashboard loop or MCP polling).
  */
-export async function runExtrasStep(job: JobItem): Promise<ExtrasState> {
+export async function runExtrasStep(job: JobItem, revalidate: RevalidateFn = async () => {}): Promise<ExtrasState> {
   const install = job.install as WpInstall;
   const code = codeFor(job);
   const connector = job.connector as ConnectorState;
@@ -332,7 +333,7 @@ export async function runExtrasStep(job: JobItem): Promise<ExtrasState> {
             contentHtml: tiptapJsonToHtml(contentJson),
             status: "DRAFT",
             externalId: `wp:${d.id}`,
-          });
+          }, revalidate);
           state.counts.drafts += 1;
         }
         if (drafts.length < 50) advance(); else state.offset += 50;

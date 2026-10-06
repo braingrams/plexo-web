@@ -1775,7 +1775,7 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
         break;
       }
       if (WP_MIGRATION_TOOL_NAMES.has(toolName)) {
-        toolResult = await handleWpMigrationTool(toolName, args, resolved);
+        toolResult = await handleWpMigrationTool(toolName, args, resolved, revalidateBlogPost);
         break;
       }
       if (DONATION_TOOL_NAMES.has(toolName)) {

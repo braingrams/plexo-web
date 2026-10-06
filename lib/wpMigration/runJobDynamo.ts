@@ -3,7 +3,10 @@ import pLimit from "p-limit";
 import type { EntityItem } from "electrodb";
 import { Template, BlogSite, BlogCategory, BlogTag, BlogRedirect, BlogComment } from "@/lib/db/contentEntities";
 import { WpMigrationJob, WpMigrationPage, WpMigrationAsset } from "@/lib/db/importEntities";
-import { createBlogPost, updateBlogPost, findPostByExternalId } from "@/lib/blog/savePostDynamo";
+// savePostCore, NOT savePostDynamo: this module is reachable from the MCP dispatcher, which
+// is also bundled into the standalone SOL Lambda, where savePostDynamo's next/cache import
+// can't resolve. Callers inside Next.js pass the real revalidateBlogPost in.
+import { createBlogPost, updateBlogPost, findPostByExternalId, type RevalidateFn } from "@/lib/blog/savePostCore";
 import { normalizeRedirectPath } from "@/lib/blog/redirectsDynamo";
 import { findOrCreateAuthor, findOrCreateCategory, findOrCreateTag } from "@/lib/blogImport/taxonomyDynamo";
 import { extractImageUrls, rehostMediaUrls, rewriteImageUrls } from "@/lib/blogImport/mediaRehostDynamo";
@@ -387,7 +390,9 @@ async function importApprovedComments(restRoot: string, wpPostId: number, plexoP
   return imported;
 }
 
-async function runPostsStep(job: JobItem, errors: string[]): Promise<string> {
+const NOOP_REVALIDATE: RevalidateFn = async () => {};
+
+async function runPostsStep(job: JobItem, errors: string[], revalidate: RevalidateFn): Promise<string> {
   const pages = await allPages(job.id);
   const pending = pages.filter((p) => p.kind === "POST" && p.status === "PENDING").slice(0, POSTS_PER_STEP);
   const plan = job.planState as PlanState;
@@ -436,7 +441,7 @@ async function runPostsStep(job: JobItem, errors: string[]): Promise<string> {
         noindex: post.seo.robots?.index === "noindex",
       };
       const existing = await findPostByExternalId(job.templateId, `wp:${post.id}`);
-      const saved = existing ? await updateBlogPost(job.templateId, existing.id, payload) : await createBlogPost(job.templateId, payload);
+      const saved = existing ? await updateBlogPost(job.templateId, existing.id, payload, revalidate) : await createBlogPost(job.templateId, payload, revalidate);
       if (!saved) throw new Error("Plexo couldn't save this post.");
 
       const commentsImported = await importApprovedComments((job.install as WpInstall).restRoot, post.id, saved.id).catch(() => 0);
@@ -778,7 +783,7 @@ export async function donationPaymentsReady(templateId: string): Promise<boolean
  * Processes exactly one bounded step of a migration and returns the resulting phase —
  * same atomic-claim contract as lib/siteImport/runJobDynamo.ts's processSiteImportStep.
  */
-export async function processWpMigrationStep(templateId: string, jobId: string): Promise<{ done: boolean; phase: string }> {
+export async function processWpMigrationStep(templateId: string, jobId: string, revalidate: RevalidateFn = NOOP_REVALIDATE): Promise<{ done: boolean; phase: string }> {
   const { data: existing } = await WpMigrationJob.get({ templateId, id: jobId }).go();
   if (!existing) return { done: true, phase: "CANCELLED" };
   const existingPhase = existing.phase ?? "PENDING";
@@ -812,7 +817,7 @@ export async function processWpMigrationStep(templateId: string, jobId: string):
       await runPlanning(job, warnings);
       next = "POSTS";
     } else if (phase === "POSTS") {
-      next = await runPostsStep(job, errors);
+      next = await runPostsStep(job, errors, revalidate);
     } else if (phase === "PAGES") {
       next = await runPagesStep(job, errors);
     } else if (phase === "ASSETS") {

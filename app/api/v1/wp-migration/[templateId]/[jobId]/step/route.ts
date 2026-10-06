@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateBlogPost } from "@/lib/blog/revalidateDynamo";
 import { WpMigrationJob } from "@/lib/db/importEntities";
 import { isValidUuid } from "@/lib/slugUtils";
 import { assertOwnSite, resolveMigrationAccess } from "@/lib/wpMigration/access";
@@ -26,6 +27,6 @@ export async function POST(
   const { data: job } = await WpMigrationJob.get({ templateId, id: jobId }).go();
   if (!job) return NextResponse.json({ error: "Migration not found." }, { status: 404 });
 
-  const result = await processWpMigrationStep(templateId, jobId);
+  const result = await processWpMigrationStep(templateId, jobId, revalidateBlogPost);
   return NextResponse.json(result);
 }

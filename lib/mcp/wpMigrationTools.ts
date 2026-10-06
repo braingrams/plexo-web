@@ -1,4 +1,5 @@
 import type { resolveUser } from "@/lib/auth/resolveUser";
+import type { RevalidateFn } from "@/lib/blog/savePostCore";
 import { getTierFeatures } from "@/lib/subscription";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
@@ -104,7 +105,7 @@ function summarizeReport(report: MigrationReport) {
   };
 }
 
-export async function handleWpMigrationTool(toolName: string, args: any, resolved: ResolvedUser): Promise<any> {
+export async function handleWpMigrationTool(toolName: string, args: any, resolved: ResolvedUser, revalidate?: RevalidateFn): Promise<any> {
   const baseAppUrl = process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io";
 
   switch (toolName) {
@@ -151,7 +152,7 @@ export async function handleWpMigrationTool(toolName: string, args: any, resolve
       const { data: before } = await WpMigrationJob.get({ templateId, id: jobId }).go();
       if (!before) throw new Error("Migration not found.");
       if (!["COMPLETED", "FAILED", "CANCELLED"].includes(before.phase ?? "PENDING")) {
-        await processWpMigrationStep(templateId, jobId);
+        await processWpMigrationStep(templateId, jobId, revalidate);
       }
       const [{ data: job }, { data: domains }] = await Promise.all([
         WpMigrationJob.get({ templateId, id: jobId }).go(),
@@ -226,7 +227,7 @@ export async function handleWpMigrationTool(toolName: string, args: any, resolve
         if (state.status !== "CONNECTED") return { connected: false, message: state.error };
         current = (await WpMigrationJob.get({ templateId: site.id, id: job.id }).go()).data ?? job;
       }
-      const extras = await runExtrasStep(current);
+      const extras = await runExtrasStep(current, revalidate);
       return { connected: true, stage: extras.stage, counts: extras.counts, team: extras.stage === "done" ? extras.team : undefined, error: extras.error, next: extras.stage === "done" ? "Done. Offer to invite the team (admins as admin, others as editor of this site)." : "Call import_wordpress_private_data again to continue." };
     }
   }

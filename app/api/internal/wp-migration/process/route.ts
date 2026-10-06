@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateBlogPost } from "@/lib/blog/revalidateDynamo";
 import { isAuthorizedAdmin } from "@/server/adminAuth";
 import { isCronRequest } from "@/lib/cronAuth";
 import { processWpMigrationStep } from "@/lib/wpMigration/runJobDynamo";
@@ -18,9 +19,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "jobId and templateId are required." }, { status: 400 });
   }
   const deadline = Date.now() + STEP_LOOP_BUDGET_MS;
-  let result = await processWpMigrationStep(body.templateId, body.jobId);
+  let result = await processWpMigrationStep(body.templateId, body.jobId, revalidateBlogPost);
   while (!result.done && result.phase !== "PAUSED_ERROR" && Date.now() < deadline) {
-    result = await processWpMigrationStep(body.templateId, body.jobId);
+    result = await processWpMigrationStep(body.templateId, body.jobId, revalidateBlogPost);
   }
   return NextResponse.json(result);
 }
