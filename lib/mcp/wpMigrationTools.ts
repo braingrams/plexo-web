@@ -8,6 +8,7 @@ import { discoverWordPressInstall } from "@/lib/wpMigration/discover";
 import { previewInstall } from "@/lib/wpMigration/inventory";
 import { startWordPressMigration } from "@/lib/wpMigration/startMigration";
 import { donationPaymentsReady, processWpMigrationStep } from "@/lib/wpMigration/runJobDynamo";
+import { checkConnector, createConnector, revealConnectorCode, runExtrasStep, type ConnectorState } from "@/lib/wpMigration/connector";
 import { refreshReport, type MigrationReport } from "@/lib/wpMigration/report";
 
 type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
@@ -57,6 +58,16 @@ Returns templateId + jobId. Then call get_wordpress_migration repeatedly (each c
         jobId: { type: "string", description: "The migration id returned by start_wordpress_migration." },
       },
     },
+  },
+  {
+    name: "connect_wordpress_migrator_plugin",
+    description: `Starts copying what WordPress keeps private (past form entries and applications, donation history, drafts, redirect rules, the team list) for a finished migration. Returns a download link for the read-only "Plexo Migrator" WordPress plugin and a connection code. Tell the owner: install and activate the plugin (Plugins → Add New → Upload Plugin), then paste the code in WordPress under Tools → Plexo Migrator. Then call import_wordpress_private_data.`,
+    inputSchema: { type: "object", properties: { templateId: { type: "string" }, jobId: { type: "string" } }, required: ["templateId", "jobId"] },
+  },
+  {
+    name: "import_wordpress_private_data",
+    description: `Checks the Plexo Migrator plugin connection and copies the next batch of private data. Call repeatedly until stage is "done". If it returns an error message, relay it to the owner (it says exactly what to do, e.g. "paste the code in Tools → Plexo Migrator"). When done, the result lists the team found on WordPress — offer to invite them.`,
+    inputSchema: { type: "object", properties: { templateId: { type: "string" }, jobId: { type: "string" } }, required: ["templateId", "jobId"] },
   },
 ];
 
@@ -159,6 +170,27 @@ export async function handleWpMigrationTool(toolName: string, args: any, resolve
         lastError: job.phase === "PAUSED_ERROR" && Array.isArray(job.errors) ? (job.errors as string[]).slice(-1)[0] : undefined,
         next: job.phase === "PAUSED_ERROR" ? "Call get_wordpress_migration again to retry from where it stopped." : "Call get_wordpress_migration again to continue.",
       };
+    }
+
+    case "connect_wordpress_migrator_plugin":
+    case "import_wordpress_private_data": {
+      const access = accessFor(resolved, "update");
+      const { data: site } = await Template.get({ id: String(args.templateId ?? "") }).go();
+      if (!site || site.organizationId !== access.organizationId) throw new Error("Migration not found.");
+      const { data: job } = await WpMigrationJob.get({ templateId: site.id, id: String(args.jobId ?? "") }).go();
+      if (!job) throw new Error("Migration not found.");
+      if (toolName === "connect_wordpress_migrator_plugin") {
+        const code = revealConnectorCode(job) ?? (await createConnector(job));
+        return { pluginDownloadUrl: `${baseAppUrl}/api/v1/wp-migration/plugin`, connectionCode: code, steps: ["Install and activate the plugin (Plugins → Add New → Upload Plugin).", "In WordPress, go to Tools → Plexo Migrator and paste the connection code.", "Then call import_wordpress_private_data."] };
+      }
+      let current = job;
+      if ((job.connector as ConnectorState | undefined)?.status !== "CONNECTED") {
+        const state = await checkConnector(job);
+        if (state.status !== "CONNECTED") return { connected: false, message: state.error };
+        current = (await WpMigrationJob.get({ templateId: site.id, id: job.id }).go()).data ?? job;
+      }
+      const extras = await runExtrasStep(current);
+      return { connected: true, stage: extras.stage, counts: extras.counts, team: extras.stage === "done" ? extras.team : undefined, error: extras.error, next: extras.stage === "done" ? "Done. Offer to invite the team (admins as admin, others as editor of this site)." : "Call import_wordpress_private_data again to continue." };
     }
   }
   throw new Error(`Unknown tool: ${toolName}`);

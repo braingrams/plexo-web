@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import pLimit from "p-limit";
 import type { EntityItem } from "electrodb";
-import { Template, BlogSite, BlogCategory, BlogTag, BlogRedirect } from "@/lib/db/contentEntities";
+import { Template, BlogSite, BlogCategory, BlogTag, BlogRedirect, BlogComment } from "@/lib/db/contentEntities";
 import { WpMigrationJob, WpMigrationPage, WpMigrationAsset } from "@/lib/db/importEntities";
 import { createBlogPost, updateBlogPost, findPostByExternalId } from "@/lib/blog/savePostDynamo";
 import { normalizeRedirectPath } from "@/lib/blog/redirectsDynamo";
@@ -347,6 +347,46 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
     .go();
 }
 
+/** Email used for imported comments until the companion plugin supplies the real one (WordPress never publishes commenter emails). */
+export const IMPORTED_COMMENT_EMAIL = "commenter@wordpress-import.invalid";
+
+/**
+ * A post's approved comments, with replies kept threaded. WordPress publishes approved
+ * comments through its public API, so this needs no plugin. Ids are derived from the
+ * WordPress comment id, so a retried step never duplicates a comment.
+ */
+async function importApprovedComments(restRoot: string, wpPostId: number, plexoPostId: string): Promise<number> {
+  type RawComment = { id: number; parent: number; author_name?: string; date_gmt?: string; content?: { rendered?: string } };
+  const all: RawComment[] = [];
+  for (let page = 1; page <= 20; page++) {
+    const res = await fetchJson<RawComment[]>(restUrl(restRoot, "wp/v2/comments", { post: wpPostId, per_page: 100, page, orderby: "id", order: "asc", _fields: "id,parent,author_name,date_gmt,content" }));
+    if (!res || !Array.isArray(res.data) || res.data.length === 0) break;
+    all.push(...res.data);
+    if (res.data.length < 100) break;
+  }
+  let imported = 0;
+  for (const c of all) {
+    const body = (c.content?.rendered ?? "").replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>\s*<p>/gi, "\n\n").replace(/<[^>]+>/g, "").trim();
+    if (!body) continue;
+    try {
+      await BlogComment.create({
+        id: `wp-${c.id}`,
+        postId: plexoPostId,
+        ...(c.parent ? { parentId: `wp-${c.parent}` } : {}),
+        authorName: (c.author_name || "Anonymous").slice(0, 120),
+        authorEmail: IMPORTED_COMMENT_EMAIL,
+        body: body.slice(0, 5000),
+        status: "APPROVED",
+        ...(c.date_gmt ? { createdAt: `${c.date_gmt}Z` } : {}),
+      }).go();
+      imported += 1;
+    } catch (err) {
+      if (!isConditionalCheckFailure(err)) throw err;
+    }
+  }
+  return imported;
+}
+
 async function runPostsStep(job: JobItem, errors: string[]): Promise<string> {
   const pages = await allPages(job.id);
   const pending = pages.filter((p) => p.kind === "POST" && p.status === "PENDING").slice(0, POSTS_PER_STEP);
@@ -399,12 +439,13 @@ async function runPostsStep(job: JobItem, errors: string[]): Promise<string> {
       const saved = existing ? await updateBlogPost(job.templateId, existing.id, payload) : await createBlogPost(job.templateId, payload);
       if (!saved) throw new Error("Plexo couldn't save this post.");
 
+      const commentsImported = await importApprovedComments((job.install as WpInstall).restRoot, post.id, saved.id).catch(() => 0);
       const newPath = `/blog/${saved.slug}`;
       movedLinks[pageKeyForUrl(post.link)] = newPath;
       await putRedirect(job.templateId, pageKeyForUrl(post.link), newPath);
       await putRedirect(job.templateId, `${plan.homeKey === "/" ? "" : plan.homeKey}/?p=${post.id}`, newPath);
       await WpMigrationPage.patch({ jobId: job.id, key: row.key })
-        .set({ status: "DONE", newPath, blogPostId: saved.id, sourceFacts: { title: post.seo.title ?? post.title, metaDescription: post.seo.description, canonical: post.seo.canonical } })
+        .set({ status: "DONE", newPath, blogPostId: saved.id, commentCount: commentsImported, sourceFacts: { title: post.seo.title ?? post.title, metaDescription: post.seo.description, canonical: post.seo.canonical } })
         .go();
       counts.postsDone += 1;
     } catch (err) {

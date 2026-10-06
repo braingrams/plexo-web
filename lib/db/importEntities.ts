@@ -269,6 +269,10 @@ export const WpMigrationJob = new Entity(
       plugins: { type: "any" },
       /** Final verification report, written by the FINALIZING phase. */
       report: { type: "any" },
+      /** Plexo Migrator companion plugin pairing: { keyEncrypted, status, summary, error, checkedAt }. */
+      connector: { type: "any" },
+      /** Import of what only the companion plugin can read: { stage, cursor, counts, team, unmoved, done, error }. */
+      extras: { type: "any" },
       errors: { type: "any" },
       warnings: { type: "any" },
       startedAt: { type: "string" },
@@ -323,6 +327,8 @@ export const WpMigrationPage = new Entity(
       internalLinks: { type: "any" },
       pluginSlugs: { type: "any" },
       assetCount: { type: "number" },
+      /** Posts only: approved comments brought over. */
+      commentCount: { type: "number" },
       error: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },

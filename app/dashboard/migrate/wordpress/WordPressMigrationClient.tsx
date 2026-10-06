@@ -146,6 +146,190 @@ function PluginGroups({ plugins }: { plugins: Plugin[] }) {
   );
 }
 
+
+interface ConnectorView {
+  status: "WAITING" | "CONNECTED" | "ERROR";
+  summary: { tables: { name: string; rows: number; columns: string[] }[]; forminator_forms: { id: number; title: string; entries: number }[]; payform: { paid: number } | null; drafts: number; redirects: number; team: number } | null;
+  error: string | null;
+  code: string | null;
+}
+interface ExtrasView {
+  stage: string;
+  counts: { formEntries: number; records: number; donations: number; redirects: number; drafts: number; commentEmails: number };
+  team: { name: string; email: string; roles: string[] }[];
+  unmoved: { table: string; rows: number }[];
+  error?: string;
+}
+
+function plexoRoleFor(roles: string[]): "admin" | "editor" | "blogger" {
+  if (roles.includes("administrator")) return "admin";
+  if (roles.some((r) => r === "author" || r === "contributor")) return "blogger";
+  return "editor";
+}
+
+/**
+ * "Copy what WordPress keeps private" — past form entries, records custom plugins keep,
+ * donation history, drafts, redirects and the team, via the Plexo Migrator plugin.
+ */
+function PrivateDataCard({ templateId, jobId }: { templateId: string; jobId: string }) {
+  const base = `/api/v1/wp-migration/${templateId}/${jobId}/connector`;
+  const [connector, setConnector] = useState<ConnectorView | null>(null);
+  const [extras, setExtras] = useState<ExtrasView | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [invited, setInvited] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    void fetch(base).then((r) => (r.ok ? r.json() : null)).then((d) => {
+      if (!d) return;
+      setConnector(d.connector);
+      setExtras(d.extras);
+    });
+  }, [base]);
+
+  async function start() {
+    setBusy("start");
+    const res = await fetch(base, { method: "POST" });
+    if (res.ok) setConnector((await res.json()).connector);
+    setBusy(null);
+  }
+  async function check() {
+    setBusy("check");
+    const res = await fetch(`${base}?check=1`);
+    if (res.ok) setConnector((await res.json()).connector);
+    setBusy(null);
+  }
+  async function importAll() {
+    setBusy("import");
+    for (let i = 0; i < 200; i++) {
+      const res = await fetch(`${base}/import`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setExtras((prev) => ({ ...(prev ?? { stage: "error", counts: { formEntries: 0, records: 0, donations: 0, redirects: 0, drafts: 0, commentEmails: 0 }, team: [], unmoved: [] }), error: body.error ?? "Import stopped." }));
+        break;
+      }
+      setExtras(body.extras);
+      if (body.extras.stage === "done" || body.extras.error) break;
+    }
+    setBusy(null);
+  }
+  async function invite(person: { email: string; roles: string[] }) {
+    setInvited((m) => ({ ...m, [person.email]: "sending" }));
+    const role = plexoRoleFor(person.roles);
+    const res = await fetch("/api/org/invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: person.email, role, scopedTemplateIds: role === "editor" ? [templateId] : [] }),
+    });
+    const body = await res.json().catch(() => ({}));
+    setInvited((m) => ({ ...m, [person.email]: res.ok ? "sent" : body.error ?? "failed" }));
+  }
+
+  const s = connector?.summary;
+  const found = s
+    ? [
+        s.forminator_forms.reduce((n, f) => n + f.entries, 0) > 0 ? `${s.forminator_forms.reduce((n, f) => n + f.entries, 0)} past form entries` : null,
+        ...s.tables.filter((t) => t.rows > 0 && t.columns.some((c) => /e-?mail/i.test(c))).map((t) => `${t.rows} records in “${t.name}”`),
+        s.payform?.paid ? `${s.payform.paid} past donations` : null,
+        s.drafts ? `${s.drafts} drafts` : null,
+        s.redirects ? `${s.redirects} redirect rules` : null,
+        s.team ? `${s.team} team members` : null,
+      ].filter(Boolean)
+    : [];
+  const done = extras?.stage === "done";
+
+  return (
+    <div style={card}>
+      <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: 700 }}>Copy what WordPress keeps private</h3>
+      <p style={{ ...muted, fontSize: "12px", marginBottom: 12 }}>
+        Everything visitors see is already on Plexo. A small, read-only WordPress plugin lets Plexo also copy what only lives in your WordPress database:
+        past form entries and applications, donation history, drafts, redirect rules and your team. It never changes your WordPress site.
+      </p>
+
+      {!connector && (
+        <button type="button" style={primaryButton(busy !== "start")} disabled={busy === "start"} onClick={() => void start()}>
+          {busy === "start" ? "Preparing…" : "Get the plugin and a connection code"}
+        </button>
+      )}
+
+      {connector && connector.status !== "CONNECTED" && (
+        <ol style={{ ...muted, fontSize: "12.5px", paddingLeft: 18, display: "flex", flexDirection: "column", gap: 10, margin: 0 }}>
+          <li>
+            <a href="/api/v1/wp-migration/plugin" style={{ color: "var(--brand)", fontWeight: 650 }}>Download the Plexo Migrator plugin</a>, then in WordPress go to <strong>Plugins → Add New → Upload Plugin</strong>, upload it and click <strong>Activate</strong>.
+          </li>
+          <li>
+            In WordPress go to <strong>Tools → Plexo Migrator</strong> and paste this code:
+            <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+              <code style={{ ...inputStyle, flex: "1 1 260px", fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{connector.code}</code>
+              <button type="button" style={secondaryButton} onClick={() => { void navigator.clipboard.writeText(connector.code ?? ""); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
+                {copied ? "Copied ✓" : "Copy"}
+              </button>
+            </div>
+          </li>
+          <li>
+            <button type="button" style={primaryButton(busy !== "check")} disabled={busy === "check"} onClick={() => void check()}>
+              {busy === "check" ? "Checking…" : "Check connection"}
+            </button>
+            {connector.error && <p style={{ ...muted, color: "#f5b74a", marginTop: 8 }}>{connector.error}</p>}
+          </li>
+        </ol>
+      )}
+
+      {connector?.status === "CONNECTED" && !done && (
+        <div>
+          <p style={{ ...muted, color: "#6ee7a8", fontWeight: 650 }}>Connected to your WordPress site.</p>
+          <p style={{ ...muted, marginBottom: 10 }}>{found.length ? `Found ${found.join(", ")}.` : "Nothing private to copy was found — you're all set."}</p>
+          {found.length > 0 && (
+            <button type="button" style={primaryButton(busy !== "import")} disabled={busy === "import"} onClick={() => void importAll()}>
+              {busy === "import" ? `Copying… ${extras ? Object.values(extras.counts).reduce((a, b) => a + b, 0) : 0} items so far` : "Copy it all to Plexo"}
+            </button>
+          )}
+          {extras?.error && <p style={{ ...muted, color: "#f87171", marginTop: 8 }}>{extras.error} — click again to continue where it stopped.</p>}
+        </div>
+      )}
+
+      {done && extras && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <p style={{ ...muted, color: "#f0f2ff" }}>
+            Copied {[
+              extras.counts.formEntries && `${extras.counts.formEntries} form entries`,
+              extras.counts.records && `${extras.counts.records} application/sign-up records`,
+              extras.counts.donations && `${extras.counts.donations} past donations`,
+              extras.counts.drafts && `${extras.counts.drafts} drafts`,
+              extras.counts.redirects && `${extras.counts.redirects} redirects`,
+              extras.counts.commentEmails && `${extras.counts.commentEmails} commenter emails`,
+            ].filter(Boolean).join(", ") || "everything"}. Form history is in Form Submissions, donations in Commerce → Donations.
+          </p>
+          {extras.team.length > 0 && (
+            <div>
+              <p style={{ ...muted, fontWeight: 650, color: "#f0f2ff", marginBottom: 6 }}>Invite your team to Plexo</p>
+              {extras.team.map((t) => (
+                <div key={t.email} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderTop: `1px solid ${hairline}`, flexWrap: "wrap" }}>
+                  <span style={{ flex: "1 1 220px", fontSize: "12.5px" }}>{t.name} <span style={muted}>{t.email}</span></span>
+                  <span style={{ ...muted, fontSize: "11.5px", minWidth: 120 }}>{plexoRoleFor(t.roles) === "editor" ? "Editor (this site)" : plexoRoleFor(t.roles) === "admin" ? "Admin" : "Blogger"}</span>
+                  {invited[t.email] === "sent" ? (
+                    <span style={{ fontSize: "12px", color: "#6ee7a8", fontWeight: 650 }}>Invited ✓</span>
+                  ) : (
+                    <button type="button" style={{ ...secondaryButton, padding: "5px 12px" }} disabled={invited[t.email] === "sending"} onClick={() => void invite(t)}>
+                      {invited[t.email] === "sending" ? "Sending…" : "Invite"}
+                    </button>
+                  )}
+                  {invited[t.email] && !["sent", "sending"].includes(invited[t.email]) && <span style={{ ...muted, color: "#f87171", fontSize: "11.5px" }}>{invited[t.email]}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          {extras.unmoved.length > 0 && (
+            <p style={{ ...muted, fontSize: "11.5px" }}>
+              Left on WordPress (plugin settings and internal data, not visitor submissions): {extras.unmoved.map((u) => `${u.table} (${u.rows})`).join(", ")}.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function WordPressMigrationClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -460,6 +644,8 @@ export function WordPressMigrationClient() {
           <Stat value={`${r.seo.titles}/${r.seo.pagesChecked}`} label="pages with identical SEO" />
           {r.summary.formsReconnected > 0 && <Stat value={r.summary.formsReconnected} label="forms reconnected" />}
         </div>
+
+        <PrivateDataCard templateId={job.templateId} jobId={job.id} />
 
         <div style={card}>
           <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: 700 }}>What happened to each plugin</h3>
