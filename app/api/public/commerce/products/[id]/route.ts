@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { listingPriceAndStock, publicVariantView } from "@/lib/commerce/variants";
 import { EntityItem } from "electrodb";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { CommerceProduct, CommerceCategory, CommerceProductRelation } from "@/lib/db/commerceEntities";
@@ -51,15 +52,18 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       imageUrl: product.imageUrl ?? null,
       galleryImageUrls: product.galleryImageUrls ?? [],
       kind: product.kind ?? "PHYSICAL",
-      priceMinor: product.priceMinor,
+      ...listingPriceAndStock(product),
+      sku: product.sku ?? null,
+      // Options (Size, Colour…) and each combination's price/sale price/stock/photo —
+      // public/commerce.js's product page turns these into pickers.
+      ...publicVariantView(product),
       currency: product.currency ?? "NGN",
-      stockQuantity: product.stockQuantity ?? null,
       durationMinutes: product.durationMinutes ?? null,
       category: category ? { name: category.name, slug: category.slug } : null,
     },
     relatedProducts: relatedProducts
       .map((r) => r.data)
       .filter((p): p is NonNullable<typeof p> => p !== null)
-      .map((p) => ({ id: p.id, name: p.name, slug: p.slug, imageUrl: p.imageUrl ?? null, priceMinor: p.priceMinor, currency: p.currency ?? "NGN", kind: p.kind ?? "PHYSICAL" })),
+      .map((p) => ({ id: p.id, name: p.name, slug: p.slug, imageUrl: p.imageUrl ?? null, ...listingPriceAndStock(p), currency: p.currency ?? "NGN", kind: p.kind ?? "PHYSICAL" })),
   });
 }

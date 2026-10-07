@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { catalogFieldsFromInput, VariantInputError } from "@/lib/commerce/variants";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
@@ -72,6 +73,7 @@ export async function PATCH(
   const body = await request.json().catch(() => ({}));
   const {
     name, description, priceMinor, stockQuantity, durationMinutes, imageUrl, galleryImageUrls, category, active, relatedProductIds,
+    compareAtPriceMinor, sku, options, variants,
     digitalDeliveryMethod, digitalFileUrl, digitalFileName, digitalExternalUrl, digitalAccessInstructions, digitalAccessPassword,
     digitalMaxDownloads, digitalLinkExpiryDays,
   } = body;
@@ -147,6 +149,20 @@ export async function PATCH(
     else if (digitalMaxDownloads === null) toRemove.push("digitalMaxDownloads");
     if (typeof digitalLinkExpiryDays === "number") data.digitalLinkExpiryDays = Math.max(1, Math.trunc(digitalLinkExpiryDays));
     else if (digitalLinkExpiryDays === null) toRemove.push("digitalLinkExpiryDays");
+  }
+
+  // Sale price, SKU, and options/variants — only the ones sent are touched.
+  try {
+    const catalog = catalogFieldsFromInput(
+      { compareAtPriceMinor, sku, options, variants },
+      { kind: existing.kind ?? "PHYSICAL", priceMinor: typeof data.priceMinor === "number" ? data.priceMinor : existing.priceMinor },
+    );
+    Object.assign(data, catalog.set);
+    toRemove.push(...catalog.remove);
+    if (catalog.set.variants) delete data.stockQuantity;
+  } catch (err) {
+    if (err instanceof VariantInputError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
   }
 
   let patch = CommerceProduct.patch({ templateId, id }).set(data);

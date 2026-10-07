@@ -59,8 +59,16 @@ export const CommerceProduct = new Entity(
       galleryImageUrls: { type: "any" },
       kind: { type: ["PHYSICAL", "SERVICE", "DIGITAL"] as const, default: "PHYSICAL" },
       priceMinor: { type: "number", required: true },
+      // The "was" price shown struck through when the product is on sale (above priceMinor).
+      compareAtPriceMinor: { type: "number" },
+      sku: { type: "string" },
       currency: { type: "string", default: "NGN" },
       stockQuantity: { type: "number" },
+      // Options (e.g. Size, Colour) and their variants — each combination with its own
+      // price/sale price/SKU/stock/photo. Shapes and rules: lib/commerce/variants.ts. When a
+      // product has variants, theirs are the prices and stock that count, not the fields above.
+      options: { type: "any" },
+      variants: { type: "any" },
       durationMinutes: { type: "number" },
       digitalDeliveryMethod: { type: ["FILE_DOWNLOAD", "EXTERNAL_LINK", "ACCESS_LIST"] as const },
       digitalFileUrl: { type: "string" },
@@ -134,6 +142,8 @@ export const CommerceCartItem = new Entity(
       templateId: { type: "string", required: true },
       cartId: { type: "string", required: true },
       productId: { type: "string", required: true },
+      /** Which variant of the product (lib/commerce/variants.ts), for products that have them. */
+      variantId: { type: "string" },
       quantity: { type: "number", default: 1 },
       unitPriceMinorSnapshot: { type: "number", required: true },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
@@ -266,6 +276,11 @@ export const CommerceOrderItem = new Entity(
       templateId: { type: "string", required: true },
       orderId: { type: "string", required: true },
       productId: { type: "string", required: true },
+      // nameSnapshot already includes the variant ("Classic Tee — Size: M"), so every order
+      // view and email shows it; these keep the variant as data (restock, reporting).
+      variantId: { type: "string" },
+      variantLabel: { type: "string" },
+      sku: { type: "string" },
       nameSnapshot: { type: "string", required: true },
       unitPriceMinor: { type: "number", required: true },
       quantity: { type: "number", default: 1 },

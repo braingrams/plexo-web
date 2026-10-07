@@ -631,6 +631,32 @@
     return el("span", { class: "pc-badge pc-badge-ok" }, ["In Stock"]);
   }
 
+  // ── Products with options (Size, Colour…) ─────────────────────────────
+  // A product with variants is bought as one specific variant, chosen on its own page —
+  // so from a card or product block its button reads "Choose options" and opens that page
+  // (lib/commerce/variants.ts). `__variantId` is set by the product page's pickers.
+  function needsOptions(p) {
+    return !!(p && p.hasVariants && !p.__variantId);
+  }
+  function productHref(p) {
+    return "/shop/" + encodeURIComponent(p.slug || p.id);
+  }
+  function cartLabel(p, text) {
+    if (p.stockQuantity === 0) return "Out of Stock";
+    if (needsOptions(p)) return "Choose options";
+    return text;
+  }
+  // "From ₦5,000" when options are priced differently; the "was" price struck through on sale.
+  function priceChildren(p) {
+    var parts = [];
+    if (p.compareAtPriceMinor && p.compareAtPriceMinor > p.priceMinor) {
+      parts.push(el("s", { style: { opacity: "0.55", marginRight: "8px", fontWeight: "400" } }, [money(p.compareAtPriceMinor, p.currency)]));
+    }
+    var ranged = p.priceRange && p.priceRange.maxMinor > p.priceRange.minMinor && !p.__variantId;
+    parts.push((ranged ? "From " : "") + money(p.priceMinor, p.currency));
+    return parts;
+  }
+
   function broadcastCart(snapshot) {
     document.dispatchEvent(new CustomEvent(CART_EVENT, { detail: snapshot }));
     document.querySelectorAll("[data-plexo-cart-count]").forEach(function (badge) {
@@ -647,7 +673,14 @@
   // already has the full product object in scope at their call site.
   function addToCart(product, quantity) {
     var qty = quantity || 1;
-    return api("/api/public/commerce/cart/items", { method: "POST", body: JSON.stringify({ productId: product.id, quantity: qty }) }).then(function (snapshot) {
+    if (needsOptions(product)) {
+      // Never guess a size — let the shopper choose on the product page.
+      window.location.href = productHref(product);
+      return new Promise(function () {});
+    }
+    var body = { productId: product.id, quantity: qty };
+    if (product.__variantId) body.variantId = product.__variantId;
+    return api("/api/public/commerce/cart/items", { method: "POST", body: JSON.stringify(body) }).then(function (snapshot) {
       broadcastCart(snapshot);
       showAddedToCartFlyout(product, qty);
       return snapshot;
@@ -871,12 +904,12 @@
                       });
                   },
                 },
-                [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart — " + money(p.priceMinor, p.currency)]
+                [cartLabel(p, "Add to Cart — " + money(p.priceMinor, p.currency))]
               )),
             ])
           );
           getCartProductIds().then(function (ids) {
-            if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+            if (ids[p.id] && p.stockQuantity !== 0 && !p.hasVariants) addBtn.textContent = "Added ✓";
           });
           return;
         }
@@ -898,7 +931,7 @@
               media,
               el("div", { style: { padding: "20px", display: "flex", flexDirection: "column", gap: "8px" } }, [
                 el("span", { style: { fontSize: "14.5px", fontWeight: "600", color: "#FBFAF6" } }, [p.name]),
-                el("span", { class: "pc-mono", style: { fontSize: "13px", color: "#E3B23C" } }, [money(p.priceMinor, p.currency)]),
+                el("span", { class: "pc-mono", style: { fontSize: "13px", color: "#E3B23C" } }, priceChildren(p)),
                 (addBtn = el(
                   "button",
                   {
@@ -920,7 +953,7 @@
                         });
                     },
                   },
-                  [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart"]
+                  [cartLabel(p, "Add to Cart")]
                 )),
               ]),
             ]
@@ -932,7 +965,7 @@
                   stockBadge(p.stockQuantity),
                 ]),
                 p.description ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13.5px", lineHeight: "1.55" } }, [p.description]) : null,
-                el("div", { class: "pc-mono", style: { fontSize: "16px", color: "#16233F" } }, [money(p.priceMinor, p.currency)]),
+                el("div", { class: "pc-mono", style: { fontSize: "16px", color: "#16233F" } }, priceChildren(p)),
                 el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
                   buildQtyRow(),
                   (addBtn = el(
@@ -955,7 +988,7 @@
                           });
                       },
                     },
-                    ["Add to Cart"]
+                    [cartLabel(p, "Add to Cart")]
                   )),
                 ]),
               ]),
@@ -964,7 +997,7 @@
           el("div", { style: Object.assign({ height: "100%", overflow: "hidden" }, teaser ? { background: "#1E2F52", border: "1px solid rgba(227,178,60,0.16)" } : { background: "#fff", border: "1px solid #E4E1D6" }) }, body)
         );
         getCartProductIds().then(function (ids) {
-          if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+          if (ids[p.id] && p.stockQuantity !== 0 && !p.hasVariants) addBtn.textContent = "Added ✓";
         });
       })
       .catch(function (err) {
@@ -991,12 +1024,46 @@
         var qty = 1;
         var qtyLabel, addBtn;
 
+        // Options (Size, Colour…): the shopper picks one value per option; the matching
+        // variant decides the price, sale price, stock and photo shown, and what's added.
+        var hasOptions = !!(p.hasVariants && p.options && p.options.length && p.variants && p.variants.length);
+        var selected = {};
+        if (hasOptions) {
+          var startVariant = p.variants.filter(function (v) { return v.stockQuantity === null || v.stockQuantity > 0; })[0] || p.variants[0];
+          p.options.forEach(function (o) { selected[o.name] = startVariant.options[o.name]; });
+        }
+        function variantFor(choice) {
+          return p.variants.filter(function (v) {
+            return p.options.every(function (o) { return v.options[o.name] === choice[o.name]; });
+          })[0] || null;
+        }
+        function chosen() {
+          if (!hasOptions) return p;
+          var v = variantFor(selected);
+          if (!v) return Object.assign({}, p, { __variantId: null, stockQuantity: 0, hasVariants: true });
+          var label = p.options.map(function (o) { return o.name + ": " + selected[o.name]; }).join(" / ");
+          return Object.assign({}, p, {
+            __variantId: v.id,
+            name: p.name + " — " + label,
+            priceMinor: v.priceMinor,
+            compareAtPriceMinor: v.compareAtPriceMinor,
+            stockQuantity: v.stockQuantity,
+            imageUrl: v.imageUrl || p.imageUrl,
+          });
+        }
+        function buyText(view) {
+          if (hasOptions && !view.__variantId) return "Not available";
+          if (view.stockQuantity === 0) return "Out of Stock";
+          return "Add to Cart — " + money(view.priceMinor * qty, view.currency);
+        }
+
         clear(node);
         prepareNode(node);
         node.style.padding = "0";
 
+        var mediaImg = null;
         var media = p.imageUrl
-          ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } })
+          ? (mediaImg = el("img", { src: chosen().imageUrl || p.imageUrl, alt: p.name, style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }))
           : el("div", { style: { width: "100%", height: "100%", background: "linear-gradient(155deg,#1F3B2A,#2E7D52)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px", textAlign: "center" } }, [
               el("span", { class: "pc-serif", style: { fontSize: "20px", color: "#D7F0DF" } }, [p.name]),
             ]);
@@ -1037,33 +1104,99 @@
           ]);
         }
 
+        // One row of value buttons per option; a value that can't be bought with the
+        // other current choices is faded (still clickable, so the shopper sees why).
+        var priceEl, badgeEl;
+        var pickers = null;
+        var valueButtons = [];
+        function refresh() {
+          var view = chosen();
+          clear(priceEl);
+          priceChildren(view).forEach(function (c) { priceEl.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+          var badge = stockBadge(view.stockQuantity);
+          badgeEl.replaceWith(badge);
+          badgeEl = badge;
+          if (mediaImg && view.imageUrl) mediaImg.src = view.imageUrl;
+          if (addBtn) {
+            addBtn.textContent = buyText(view);
+            addBtn.disabled = (hasOptions && !view.__variantId) || view.stockQuantity === 0;
+          }
+          valueButtons.forEach(function (b) {
+            var isOn = selected[b.option] === b.value;
+            var trial = Object.assign({}, selected);
+            trial[b.option] = b.value;
+            var v = variantFor(trial);
+            var buyable = !!v && (v.stockQuantity === null || v.stockQuantity > 0);
+            b.node.style.borderColor = isOn ? "#16233F" : "#E4E1D6";
+            b.node.style.background = isOn ? "#16233F" : "#fff";
+            b.node.style.color = isOn ? "#fff" : "#16233F";
+            b.node.style.opacity = buyable ? "1" : "0.45";
+            b.node.style.textDecoration = buyable ? "none" : "line-through";
+            b.node.setAttribute("aria-pressed", isOn ? "true" : "false");
+          });
+        }
+        if (hasOptions) {
+          pickers = el(
+            "div",
+            { style: { display: "flex", flexDirection: "column", gap: "14px" } },
+            p.options.map(function (o) {
+              return el("div", { style: { display: "flex", flexDirection: "column", gap: "8px" } }, [
+                el("span", { class: "pc-mono", style: { fontSize: "11.5px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#565F72" } }, [o.name]),
+                el(
+                  "div",
+                  { style: { display: "flex", flexWrap: "wrap", gap: "8px" } },
+                  o.values.map(function (value) {
+                    var b = el(
+                      "button",
+                      {
+                        type: "button",
+                        class: "pc-btn-outline",
+                        style: { padding: "9px 16px", fontSize: "13.5px", border: "1px solid #E4E1D6", cursor: "pointer" },
+                        onclick: function () {
+                          selected[o.name] = value;
+                          refresh();
+                        },
+                      },
+                      [value]
+                    );
+                    valueButtons.push({ option: o.name, value: value, node: b });
+                    return b;
+                  })
+                ),
+              ]);
+            })
+          );
+        }
+
         var buyControl =
           p.kind === "SERVICE"
             ? el("a", { class: "pc-btn pc-btn-gold", href: "#", style: { width: "fit-content" }, onclick: function (e) { e.preventDefault(); var target = document.querySelector('[data-plexo-commerce-booking][data-plexo-service-id="' + p.id + '"]'); if (target) target.scrollIntoView({ behavior: "smooth", block: "center" }); } }, ["Book this service"])
             : el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, [
                 buildQtyRow(),
+                pickers,
                 (addBtn = el(
                   "button",
                   {
                     class: "pc-btn",
                     style: { width: "fit-content", padding: "17px 26px", fontSize: "15px" },
-                    disabled: p.stockQuantity === 0 ? "disabled" : null,
+                    disabled: chosen().stockQuantity === 0 ? "disabled" : null,
                     onclick: function () {
+                      var view = chosen();
                       addBtn.disabled = true;
                       addBtn.textContent = "Adding…";
-                      addToCart(p, qty)
+                      addToCart(view, qty)
                         .then(function () {
                           addBtn.textContent = "Added ✓";
                           addBtn.disabled = false;
                         })
                         .catch(function (err) {
-                          addBtn.textContent = "Add to Cart — " + money(p.priceMinor * qty, p.currency);
+                          addBtn.textContent = buyText(chosen());
                           addBtn.disabled = false;
                           alert(err.message);
                         });
                     },
                   },
-                  [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart — " + money(p.priceMinor, p.currency)]
+                  [buyText(chosen())]
                 )),
               ]);
 
@@ -1112,16 +1245,11 @@
             el("span", { class: "pc-mono", style: { fontSize: "11.5px", letterSpacing: "0.16em", textTransform: "uppercase", color: "#2E7D52" } }, [p.category ? p.category.name : "Shop"]),
             el("h1", { class: "pc-serif", style: { margin: "0", fontWeight: "500", fontSize: "38px", color: "#16233F" } }, [p.name]),
             el("div", { style: { display: "flex", alignItems: "center", gap: "14px" } }, [
-              el("span", { class: "pc-mono", style: { fontSize: "22px", color: "#16233F" } }, [money(p.priceMinor, p.currency)]),
-              stockBadge(p.stockQuantity),
+              (priceEl = el("span", { class: "pc-mono", style: { fontSize: "22px", color: "#16233F" } }, priceChildren(chosen()))),
+              (badgeEl = stockBadge(chosen().stockQuantity)),
             ]),
           ]),
           p.description ? el("p", { style: { margin: "0", fontSize: "15.5px", lineHeight: "1.75", color: "#3C4356" } }, [p.description]) : null,
-          el("div", { style: { background: "#F3F1EA", borderLeft: "3px solid #E3B23C", padding: "16px 20px" } }, [
-            el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13px", lineHeight: "1.6" } }, [
-              "Natural food and wellness item, not a replacement for prescribed medical treatment. Always tell your doctor about any herbal products you're using.",
-            ]),
-          ]),
           buyControl,
           deliveryRow,
         ]);
@@ -1134,9 +1262,10 @@
           ]),
         ]);
         node.appendChild(heroWrap);
+        if (hasOptions) refresh();
         if (addBtn) {
           getCartProductIds().then(function (ids) {
-            if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+            if (ids[p.id] && p.stockQuantity !== 0 && !p.hasVariants) addBtn.textContent = "Added ✓";
           });
         }
 
@@ -1385,7 +1514,7 @@
         ]),
       ]),
       el("div", { style: { padding: "8px 14px 14px", display: "flex", flexDirection: "column", gap: "8px", flex: "1" } }, [
-        el("div", { class: "pc-mono", style: { fontSize: "14.5px", fontWeight: dark ? "500" : "700", color: priceColor, marginTop: "auto" } }, [money(p.priceMinor, p.currency)]),
+        el("div", { class: "pc-mono", style: { fontSize: "14.5px", fontWeight: dark ? "500" : "700", color: priceColor, marginTop: "auto" } }, priceChildren(p)),
         (addBtn = el(
           "button",
           {
@@ -1407,12 +1536,12 @@
                 });
             },
           },
-          [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart"]
+          [cartLabel(p, "Add to Cart")]
         )),
       ]),
     ]);
     getCartProductIds().then(function (ids) {
-      if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+      if (ids[p.id] && p.stockQuantity !== 0 && !p.hasVariants) addBtn.textContent = "Added ✓";
     });
     return card;
   }

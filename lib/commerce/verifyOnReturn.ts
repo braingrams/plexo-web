@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { adjustStockForOrderItems } from "@/lib/commerce/stock";
 import type { EntityItem } from "electrodb";
 import { decryptPaystackKey } from "@/lib/crypto";
 import { resolvePaystackKeysForMode } from "@/lib/commerce/paystack";
@@ -118,13 +119,7 @@ export async function verifyOrderOnReturn(order: OrderItem): Promise<string> {
       // The expiry put this order's stock back on the shelf — take it again (it may go
       // negative if it sold out meanwhile; the owner is told below either way).
       const { data: items } = await CommerceOrderItem.query.primary({ templateId: paid.templateId, orderId: paid.id }).go();
-      for (const item of items) {
-        if (item.productId.startsWith("donation:")) continue;
-        const { data: product } = await CommerceProduct.get({ templateId: paid.templateId, id: item.productId }).go();
-        if (product && product.stockQuantity != null) {
-          await CommerceProduct.patch({ templateId: paid.templateId, id: item.productId }).add({ stockQuantity: -(item.quantity ?? 1) }).go();
-        }
-      }
+      await adjustStockForOrderItems(paid.templateId, items, -1);
       console.info(`Commerce: reinstated expired order ${paid.orderNumber} — payment completed after the checkout hold expired`);
     }
     if (paid) {

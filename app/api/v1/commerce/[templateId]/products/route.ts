@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { catalogFieldsFromInput, VariantInputError } from "@/lib/commerce/variants";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   const body = await request.json().catch(() => ({}));
   const {
     name, description, kind, priceMinor, stockQuantity, durationMinutes, imageUrl, galleryImageUrls, category, relatedProductIds,
+    compareAtPriceMinor, sku, options, variants,
     digitalDeliveryMethod, digitalFileUrl, digitalFileName, digitalExternalUrl, digitalAccessInstructions, digitalAccessPassword,
     digitalMaxDownloads, digitalLinkExpiryDays,
   } = body;
@@ -109,6 +111,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
     }
   }
 
+  // Sale price, SKU, and options/variants (Size, Colour…) — lib/commerce/variants.ts.
+  let catalog: ReturnType<typeof catalogFieldsFromInput>;
+  try {
+    catalog = catalogFieldsFromInput({ compareAtPriceMinor, sku, options, variants }, { kind, priceMinor });
+  } catch (err) {
+    if (err instanceof VariantInputError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
+  }
+
   const slug = await ensureUniqueProductSlug(templateId, name);
   const categoryId = await resolveCategoryId(templateId, organizationId, category);
 
@@ -123,7 +134,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
     description: typeof description === "string" ? description : undefined,
     kind,
     priceMinor,
-    stockQuantity: kind === "PHYSICAL" && typeof stockQuantity === "number" ? Math.max(0, Math.trunc(stockQuantity)) : undefined,
+    stockQuantity: kind === "PHYSICAL" && typeof stockQuantity === "number" && !catalog.set.variants ? Math.max(0, Math.trunc(stockQuantity)) : undefined,
+    ...(catalog.set as Record<string, never>),
     durationMinutes: kind === "SERVICE" && typeof durationMinutes === "number" ? Math.max(5, Math.trunc(durationMinutes)) : undefined,
     imageUrl: typeof imageUrl === "string" && imageUrl ? imageUrl : undefined,
     galleryImageUrls: Array.isArray(galleryImageUrls) ? galleryImageUrls.filter((u) => typeof u === "string") : undefined,
