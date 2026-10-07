@@ -1372,7 +1372,7 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
       }
 
       const slug = await ensureUniqueSlug(parentTemplateId, (typeof args.slug === "string" && args.slug.trim()) || name);
-      const { data: siblings } = await Template.query.byParent({ parentId: parentTemplateId }).go();
+      const { data: siblings } = await Template.query.byParent({ parentId: parentTemplateId }).go({ pages: "all" });
       const nextOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
 
       const newPageId = randomUUID();
@@ -1499,7 +1499,7 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
       // constraint equivalent — checked explicitly here, same as the REST PATCH route
       // (app/api/templates/[id]/route.ts).
       if (data.slug !== undefined && effectiveParentId) {
-        const { data: siblings } = await Template.query.byParent({ parentId: effectiveParentId }).go();
+        const { data: siblings } = await Template.query.byParent({ parentId: effectiveParentId }).go({ pages: "all" });
         if (siblings.some((s) => s.id !== existing.id && s.slug === data.slug)) {
           throw new Error("A page with this URL already exists here.");
         }
@@ -1614,7 +1614,7 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
         throw new Error("The home page can't be duplicated from here.");
       }
 
-      const { data: siblings } = await Template.query.byParent({ parentId: existing.parentId }).go();
+      const { data: siblings } = await Template.query.byParent({ parentId: existing.parentId }).go({ pages: "all" });
       const nextOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
 
       const name = `${existing.name} copy`;

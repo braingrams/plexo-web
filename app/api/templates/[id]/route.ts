@@ -143,7 +143,7 @@ export async function PATCH(
   // P2002 catch) — checked explicitly here since a plain .patch() has no equivalent
   // built-in constraint to catch a violation of.
   if (data.slug !== undefined && nextParentId) {
-    const { data: siblings } = await Template.query.byParent({ parentId: nextParentId }).go();
+    const { data: siblings } = await Template.query.byParent({ parentId: nextParentId }).go({ pages: "all" });
     if (siblings.some((s) => s.id !== existing.id && s.slug === data.slug)) {
       return NextResponse.json({ error: "A page with this URL already exists here." }, { status: 409 });
     }

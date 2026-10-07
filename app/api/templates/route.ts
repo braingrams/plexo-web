@@ -82,7 +82,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const templates = await Promise.all(
     roots.map(async (t) => {
-      const { data: children } = await Template.query.byParent({ parentId: t.id }).go();
+      const { data: children } = await Template.query.byParent({ parentId: t.id }).go({ pages: "all" });
       return serializeTemplate(t as { id: string; name: string; kind: TemplateKind; createdAt?: string; updatedAt?: string }, children.length);
     }),
   );
@@ -168,7 +168,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let order = 0;
   if (parentId) {
     slug = await ensureUniqueSlug(parentId, body.slug?.trim() || name);
-    const { data: siblings } = await Template.query.byParent({ parentId }).go();
+    const { data: siblings } = await Template.query.byParent({ parentId }).go({ pages: "all" });
     const lastOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1);
     order = lastOrder + 1;
   }

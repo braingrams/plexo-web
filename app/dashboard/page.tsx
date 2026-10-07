@@ -123,7 +123,7 @@ export default async function OverviewPage() {
     })
     .slice(0, 6);
   const recentTemplatePageCounts = await Promise.all(
-    recentTemplateRecords.map((t) => Template.query.byParent({ parentId: t.id }).go()),
+    recentTemplateRecords.map((t) => Template.query.byParent({ parentId: t.id }).go({ pages: "all" })),
   );
 
   const recentDomainActivity = [...allDomains]

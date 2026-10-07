@@ -124,7 +124,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Only landing pages can have sub-pages." }, { status: 400 });
     }
     slug = await ensureUniqueSlug(parentIdInput, name);
-    const { data: siblings } = await Template.query.byParent({ parentId: parentIdInput }).go();
+    const { data: siblings } = await Template.query.byParent({ parentId: parentIdInput }).go({ pages: "all" });
     order = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
   } else {
     // The plan's landing-page limit counts root/home pages only, matching /api/templates.

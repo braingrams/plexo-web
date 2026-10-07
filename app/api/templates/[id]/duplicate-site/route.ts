@@ -91,7 +91,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const descendants: SourceTemplate[] = [];
   let frontier = [existing.id];
   while (frontier.length > 0) {
-    const childBatches = await Promise.all(frontier.map((parentId) => Template.query.byParent({ parentId }).go()));
+    const childBatches = await Promise.all(frontier.map((parentId) => Template.query.byParent({ parentId }).go({ pages: "all" })));
     const children = childBatches.flatMap((b) => b.data).filter((c) => c.organizationId === resolved.organizationId);
     for (const child of children) idMap.set(child.id, randomUUID());
     descendants.push(...children);

@@ -422,11 +422,18 @@ function safeDecode(segment: string): string {
 }
 
 async function findChildBySlug(parentId: string, slug: string): Promise<TemplateItem | null> {
-  const { data: children } = await Template.query.byParent({ parentId }).go();
+  // Every child, not just the first DynamoDB page (1 MB): a site whose subpages are large
+  // (a migrated Elementor page is 100-300 KB of HTML) otherwise 404s every page past the
+  // first few. Only id/slug are projected here — the matched page is then read in full —
+  // so this per-request lookup doesn't drag every sibling's HTML along with it.
+  const { data: children } = await Template.query.byParent({ parentId }).go({ pages: "all", attributes: ["id", "slug", "parentId", "order"] });
   // Slugs are stored decoded (a migrated WordPress page can be "hope-for-every-heart-❤️");
   // accept the segment either way it arrives so a percent-encoded request still matches.
   const decoded = safeDecode(slug);
-  return children.find((c) => c.slug === slug || c.slug === decoded) ?? null;
+  const match = children.find((c) => c.slug === slug || c.slug === decoded);
+  if (!match) return null;
+  const { data: full } = await Template.get({ id: match.id }).go();
+  return full ?? null;
 }
 
 export async function GET(

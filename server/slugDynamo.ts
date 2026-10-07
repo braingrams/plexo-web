@@ -31,7 +31,7 @@ export async function ensureUniqueSlug(parentId: string, baseSlugInput: string):
   let candidate = startReserved ? `${base}-2` : base;
   let suffix = startReserved ? 3 : 2;
 
-  const { data: siblings } = await Template.query.byParent({ parentId }).go();
+  const { data: siblings } = await Template.query.byParent({ parentId }).go({ pages: "all" });
   const siblingSlugs = new Set(siblings.map((s) => s.slug));
   while (siblingSlugs.has(candidate)) {
     candidate = `${base}-${suffix}`;
@@ -120,7 +120,7 @@ export async function getPageTree(organizationId: string, anyPageId: string): Pr
   const pages: PageTreeNode[] = [toNode(root)];
   let frontier = [rootId];
   while (frontier.length > 0) {
-    const childBatches = await Promise.all(frontier.map((parentId) => Template.query.byParent({ parentId }).go()));
+    const childBatches = await Promise.all(frontier.map((parentId) => Template.query.byParent({ parentId }).go({ pages: "all" })));
     const children = childBatches.flatMap((b) => b.data).filter((c) => c.organizationId === organizationId);
     pages.push(...children.map(toNode));
     frontier = children.map((c) => c.id);
@@ -144,7 +144,7 @@ export async function getDescendantIds(organizationId: string, pageId: string): 
   const result: string[] = [];
   let frontier = [pageId];
   while (frontier.length > 0) {
-    const childBatches = await Promise.all(frontier.map((parentId) => Template.query.byParent({ parentId }).go()));
+    const childBatches = await Promise.all(frontier.map((parentId) => Template.query.byParent({ parentId }).go({ pages: "all" })));
     const children = childBatches.flatMap((b) => b.data).filter((c) => c.organizationId === organizationId);
     result.push(...children.map((c) => c.id));
     frontier = children.map((c) => c.id);

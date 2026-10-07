@@ -133,7 +133,7 @@ export async function recompileSiteLayoutDependents(rootTemplateId: string): Pro
 
   let frontier = [rootTemplateId];
   while (frontier.length > 0) {
-    const childBatches = await Promise.all(frontier.map((parentId) => Template.query.byParent({ parentId }).go()));
+    const childBatches = await Promise.all(frontier.map((parentId) => Template.query.byParent({ parentId }).go({ pages: "all" })));
     const children = childBatches.flatMap((b) => b.data);
     pages.push(
       ...children
