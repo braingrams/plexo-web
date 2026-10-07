@@ -43,7 +43,9 @@ import { notifyMigrationDone, notifyMigrationPaused } from "./notify";
 //
 // Each step is bounded by STEP_BUDGET_MS so it fits inside a single serverless invocation.
 
-const STEP_BUDGET_MS = 40_000;
+// No new work starts after this; what's in flight finishes (~10s), and the background
+// hand-off (lib/wpMigration/background.ts, up to 10s) must still fit in the server's 60s.
+const STEP_BUDGET_MS = 35_000;
 const STALE_LOCK_MS = 5 * 60 * 1000;
 const PAGES_PER_STEP = 4;
 // Posts copied per step, a few at a time; the step's time budget is the real limit.

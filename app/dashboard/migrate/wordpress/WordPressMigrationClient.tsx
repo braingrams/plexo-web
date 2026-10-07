@@ -689,7 +689,7 @@ export function WordPressMigrationClient() {
       const res = await fetch("/api/v1/wp-migration", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceUrl: preview.homeUrl, ownershipAttested: true, acceptAup: aup || undefined }),
+        body: JSON.stringify({ sourceUrl: preview.homeUrl, ownershipAttested: true, acceptAup: aup || undefined, drivenByDashboard: true }),
       });
       const data = await res.json();
       if (res.status === 403 && data.requiresAupAcceptance) {

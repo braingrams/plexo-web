@@ -35,3 +35,17 @@ describe("how long a migration takes", () => {
     expect(formatDuration(30 * 3600)).toBe("about 30 hours");
   });
 });
+
+describe("post SEO from any plugin", () => {
+  it("reads Rank Math / AIOSEO / SEOPress tags from the published page", async () => {
+    const { seoFromHtml } = await import("@/lib/wpMigration/inventory");
+    const html = `<html><head><title>How To Build Your Personal Brand - MailDrip</title><meta name="description" content="Your personal brand matters."><meta name="robots" content="noindex, follow"><link rel="canonical" href="https://maildrip.io/brand/"><meta property="og:image" content="https://maildrip.io/a.webp"></head><body></body></html>`;
+    expect(seoFromHtml(html)).toEqual({
+      title: "How To Build Your Personal Brand - MailDrip",
+      description: "Your personal brand matters.",
+      canonical: "https://maildrip.io/brand/",
+      robots: { index: "noindex", follow: "follow" },
+      ogImage: "https://maildrip.io/a.webp",
+    });
+  });
+});

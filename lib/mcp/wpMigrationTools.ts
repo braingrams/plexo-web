@@ -8,6 +8,7 @@ import { MIGRATION_PLAN_MESSAGE, type MigrationAccess } from "@/lib/wpMigration/
 import { discoverWordPressInstall } from "@/lib/wpMigration/discover";
 import { previewInstall } from "@/lib/wpMigration/inventory";
 import { startWordPressMigration } from "@/lib/wpMigration/startMigration";
+import { continueInBackground } from "@/lib/wpMigration/background";
 import { donationPaymentIssue, donationPaymentsReady, processWpMigrationStep } from "@/lib/wpMigration/runJobDynamo";
 import { analyzeDomain, plexoRoutingEndpoint, verifyLive, type CutoverPlan } from "@/lib/wpMigration/cutover";
 import { checkConnector, createConnector, revealConnectorCode, runExtrasStep, type ConnectorState } from "@/lib/wpMigration/connector";
@@ -128,6 +129,8 @@ export async function handleWpMigrationTool(toolName: string, args: any, resolve
       if (!result.ok) {
         return { started: false, error: result.error, requiresAupAcceptance: result.requiresAupAcceptance ?? false, existingMigration: result.existing ?? null };
       }
+      // Runs on the server from here — an assistant doesn't drive it step by step.
+      await continueInBackground(result.templateId, result.jobId);
       return {
         started: true,
         templateId: result.templateId,

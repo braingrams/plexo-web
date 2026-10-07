@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WpMigrationJob } from "@/lib/db/importEntities";
 import { resolveMigrationAccess } from "@/lib/wpMigration/access";
+import { continueInBackground } from "@/lib/wpMigration/background";
 import { startWordPressMigration } from "@/lib/wpMigration/startMigration";
 
 export const maxDuration = 60;
@@ -27,12 +28,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
  * POST /api/v1/wp-migration — start moving a WordPress site to Plexo.
  *
  * Creates a brand-new Plexo site for it (never overwrites an existing one) and the job that
- * fills it. Body: { sourceUrl, ownershipAttested: true, acceptAup?: true }
+ * fills it. Body: { sourceUrl, ownershipAttested: true, acceptAup?: true, drivenByDashboard?: true }
+ *
+ * It then runs on the server by itself; the dashboard (drivenByDashboard) drives it while
+ * open instead and hands it over when the tab closes, so its start stays instant.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const resolved = await resolveMigrationAccess(request, { permission: "create" });
   if ("error" in resolved) return resolved.error;
-  const body = (await request.json().catch(() => ({}))) as { sourceUrl?: string; ownershipAttested?: boolean; acceptAup?: boolean };
+  const body = (await request.json().catch(() => ({}))) as { sourceUrl?: string; ownershipAttested?: boolean; acceptAup?: boolean; drivenByDashboard?: boolean };
   const result = await startWordPressMigration(resolved.access, body);
   if (!result.ok) {
     return NextResponse.json(
@@ -47,5 +51,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: result.status },
     );
   }
+  if (body.drivenByDashboard !== true) await continueInBackground(result.templateId, result.jobId);
   return NextResponse.json({ jobId: result.jobId, templateId: result.templateId }, { status: 201 });
 }

@@ -1,6 +1,8 @@
 import type { WpInstall, WpInventory, WpMediaEntry, WpPageEntry, WpPostEntry, WpPostStub, WpSeo, WpTermEntry } from "./types";
 import { fetchJson, migrationFetch, restUrl } from "./http";
 import { buildPluginReport, pluginSlugsFromHtml, themeSlugsFromHtml } from "./pluginCatalog";
+import * as cheerio from "cheerio";
+import pLimit from "p-limit";
 
 // Everything here reads only what WordPress already publishes to anonymous visitors via
 // its REST API — the same data any visitor's browser could fetch. Drafts, private pages,
@@ -144,7 +146,34 @@ export async function fetchPostsByIds(restRoot: string, ids: number[]): Promise<
   if (ids.length === 0) return [];
   const res = await fetchJson<RawPost[]>(restUrl(restRoot, "wp/v2/posts", { include: ids.join(","), per_page: ids.length, _embed: 1 }));
   if (!res || !Array.isArray(res.data)) throw new Error("WordPress didn't return these posts.");
-  return res.data.map(mapPost);
+  const posts = res.data.map(mapPost);
+  // Only Yoast puts its SEO tags in the API. With Rank Math, All in One SEO, SEOPress or
+  // none, the post's own published page is the source of truth — read the tags from it.
+  const limit = pLimit(4);
+  await Promise.all(
+    posts.map((post) =>
+      limit(async () => {
+        if (post.seo.title || post.seo.description) return;
+        const page = await migrationFetch(post.link, { headers: { Accept: "text/html" } }).catch(() => null);
+        if (page?.ok) post.seo = seoFromHtml(await page.text());
+      }),
+    ),
+  );
+  return posts;
+}
+
+/** A page's SEO tags, whichever plugin wrote them. */
+export function seoFromHtml(html: string): WpSeo {
+  const $ = cheerio.load(html);
+  const meta = (selector: string) => $(selector).first().attr("content")?.trim() || null;
+  const robots = meta('meta[name="robots"]');
+  return {
+    title: $("head > title").first().text().trim() || null,
+    description: meta('meta[name="description"]'),
+    canonical: $('link[rel="canonical"]').first().attr("href")?.trim() || null,
+    robots: robots ? { index: /noindex/i.test(robots) ? "noindex" : "index", follow: /nofollow/i.test(robots) ? "nofollow" : "follow" } : null,
+    ogImage: meta('meta[property="og:image"]'),
+  };
 }
 
 export async function fetchTermsPage(restRoot: string, taxonomy: "category" | "post_tag", page: number): Promise<ApiPage<WpTermEntry>> {
