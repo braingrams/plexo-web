@@ -5,7 +5,7 @@ import { resolvePaystackKeysForMode } from "@/lib/commerce/paystack";
 import { attachStripeSubscriptionToDonation, resolveDonationGateway } from "@/lib/commerce/donations";
 import { creditCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { handleOrderPaid } from "@/lib/db/commerceWebhookOperations";
-import { CommerceBooking, CommerceOrder, CommerceSettings } from "@/lib/db/commerceEntities";
+import { CommerceBooking, CommerceOrder, CommerceOrderItem, CommerceProduct, CommerceSettings } from "@/lib/db/commerceEntities";
 
 // Webhooks are how Plexo normally learns a payment succeeded — but an owner who connected
 // their own Paystack/Stripe keys and never pasted Plexo's webhook URL into their gateway
@@ -45,10 +45,13 @@ async function paystackSucceeded(order: OrderItem, settings: EntityItem<typeof C
   const res = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(order.paystackReference)}`, {
     headers: { Authorization: `Bearer ${secret}` },
   });
-  const body = (await res.json().catch(() => null)) as { status?: boolean; data?: { status?: string; amount?: number; currency?: string } } | null;
+  const body = (await res.json().catch(() => null)) as { status?: boolean; data?: { status?: string; amount?: number; requested_amount?: number; currency?: string } } | null;
   const tx = body?.data;
-  // The amount and currency must match what Plexo asked for — never trust a mismatched charge.
-  return Boolean(body?.status && tx?.status === "success" && tx.amount === order.amountMinor && (!tx.currency || tx.currency.toUpperCase() === (order.currency ?? "NGN").toUpperCase()));
+  // The amount and currency must match what Plexo asked for — never trust a mismatched
+  // charge. requested_amount, not amount: a merchant who passes Paystack's fees on to the
+  // customer gets amount = requested + fees (confirmed on a real test charge: 517767 vs 500000).
+  const charged = tx?.requested_amount ?? tx?.amount;
+  return Boolean(body?.status && tx?.status === "success" && charged === order.amountMinor && (!tx.currency || tx.currency.toUpperCase() === (order.currency ?? "NGN").toUpperCase()));
 }
 
 async function stripeSucceeded(order: OrderItem, settings: EntityItem<typeof CommerceSettings>): Promise<{ paymentIntentId: string | null; subscriptionId: string | null } | null> {
@@ -69,8 +72,21 @@ async function stripeSucceeded(order: OrderItem, settings: EntityItem<typeof Com
  * Confirms a still-PENDING online order with its gateway. Returns the order's status
  * afterwards. Never throws for gateway hiccups — the webhook remains the backstop.
  */
+/**
+ * An order that was cancelled only because its checkout window expired (not refunded, not
+ * cancelled by the owner) can still turn out to be paid — a customer who took longer than
+ * the hold to finish paying. Donations reserve nothing and are only ever cancelled that way;
+ * product orders carry metadata.expiredHoldAt from the expiry job.
+ */
+export function isExpiredButPayable(order: OrderItem): boolean {
+  if (order.status !== "CANCELLED" || order.paymentMethod === "BANK_TRANSFER" || order.refundedAt) return false;
+  const meta = (order.metadata ?? {}) as { kind?: string; expiredHoldAt?: string };
+  return meta.kind === "DONATION" || Boolean(meta.expiredHoldAt);
+}
+
 export async function verifyOrderOnReturn(order: OrderItem): Promise<string> {
-  if (order.status !== "PENDING" || order.paymentMethod === "BANK_TRANSFER") return order.status ?? "PENDING";
+  const reinstating = isExpiredButPayable(order);
+  if ((order.status !== "PENDING" && !reinstating) || order.paymentMethod === "BANK_TRANSFER") return order.status ?? "PENDING";
   const { data: settings } = await CommerceSettings.get({ templateId: order.templateId }).go();
   if (!settings) return "PENDING";
   try {
@@ -83,10 +99,11 @@ export async function verifyOrderOnReturn(order: OrderItem): Promise<string> {
       return "PENDING";
     }
 
+    const fromStatus = order.status ?? "PENDING";
     try {
       await CommerceOrder.patch({ templateId: order.templateId, id: order.id })
         .set({ status: "PAID", ...(stripeRefs?.paymentIntentId ? { stripePaymentIntentId: stripeRefs.paymentIntentId } : {}) })
-        .where((attr, op) => op.eq(attr.status, "PENDING"))
+        .where((attr, op) => op.eq(attr.status, fromStatus))
         .go();
     } catch (err) {
       if (isConditionalCheckFailure(err)) return "PAID"; // the webhook got there first
@@ -97,6 +114,19 @@ export async function verifyOrderOnReturn(order: OrderItem): Promise<string> {
       CommerceOrder.get({ templateId: order.templateId, id: order.id }).go(),
       CommerceBooking.get({ templateId: order.templateId, orderId: order.id }).go(),
     ]);
+    if (paid && reinstating) {
+      // The expiry put this order's stock back on the shelf — take it again (it may go
+      // negative if it sold out meanwhile; the owner is told below either way).
+      const { data: items } = await CommerceOrderItem.query.primary({ templateId: paid.templateId, orderId: paid.id }).go();
+      for (const item of items) {
+        if (item.productId.startsWith("donation:")) continue;
+        const { data: product } = await CommerceProduct.get({ templateId: paid.templateId, id: item.productId }).go();
+        if (product && product.stockQuantity != null) {
+          await CommerceProduct.patch({ templateId: paid.templateId, id: item.productId }).add({ stockQuantity: -(item.quantity ?? 1) }).go();
+        }
+      }
+      console.info(`Commerce: reinstated expired order ${paid.orderNumber} — payment completed after the checkout hold expired`);
+    }
     if (paid) {
       if (stripeRefs?.subscriptionId) await attachStripeSubscriptionToDonation(paid, stripeRefs.subscriptionId);
       await handleOrderPaid(paid, booking, settings);

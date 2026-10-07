@@ -1,3 +1,4 @@
+import { isExpiredButPayable, verifyOrderOnReturn } from "@/lib/commerce/verifyOnReturn";
 import { findTemplateForPaystackEvent, processPaystackDonationEvent } from "@/lib/commerce/donations";
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -75,6 +76,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           .go();
       } catch (err) {
         if (!isConditionalCheckFailure(err)) throw err; // already moved past PENDING — not our event to process
+        // …unless it was only cancelled because its checkout hold expired: reinstate it.
+        const { data: current } = await CommerceOrder.get({ templateId: orderRef.templateId, id: orderRef.id }).go();
+        if (current && isExpiredButPayable(current)) await verifyOrderOnReturn(current);
         return NextResponse.json({ received: true });
       }
 
