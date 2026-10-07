@@ -104,12 +104,22 @@ export interface DetectedPlugin {
   evidence: string[];
 }
 
+/** What planning keeps per post: enough to place and link it. The full post is read when it's copied. */
+export interface WpPostStub {
+  id: number;
+  link: string;
+  slug: string;
+  title: string;
+}
+
+/**
+ * The site-wide inventory read in the first planning step. Posts, terms and media can run
+ * to tens of thousands of items, so they're listed a page at a time in later planning
+ * steps instead (lib/wpMigration/inventory.ts's fetch*Page helpers).
+ */
 export interface WpInventory {
   install: WpInstall;
   pages: WpPageEntry[];
-  posts: WpPostEntry[];
-  terms: WpTermEntry[];
-  media: WpMediaEntry[];
   plugins: DetectedPlugin[];
   theme: { slug: string; parentSlug: string | null } | null;
   /** The page WordPress serves at its home URL, if the front page is a static page. */

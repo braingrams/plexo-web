@@ -4,9 +4,12 @@ import { isCronRequest } from "@/lib/cronAuth";
 import { WpMigrationJob } from "@/lib/db/importEntities";
 
 const STALL_THRESHOLD_MS = 3 * 60 * 1000;
-// A migration still unfinished after this long (the source site went offline mid-way) is
-// given up on so it stops holding the org's one-active-migration slot.
+// A migration that has made no progress for this long (the source site went offline
+// mid-way) is given up on so it stops holding the org's one-active-migration slot. Measured
+// from its last step, not its start: a very big site can legitimately take a day or more.
 const GIVEUP_THRESHOLD_MS = 72 * 60 * 60 * 1000;
+// …and however much progress it's making, nothing should run longer than this.
+const MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 const TERMINAL = new Set(["COMPLETED", "FAILED", "CANCELLED"]);
 
 /**
@@ -23,6 +26,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const now = Date.now();
   const stalledBefore = new Date(now - STALL_THRESHOLD_MS).toISOString();
   const giveUpBefore = new Date(now - GIVEUP_THRESHOLD_MS).toISOString();
+  const tooOldBefore = new Date(now - MAX_AGE_MS).toISOString();
 
   type Row = { id: string; templateId: string; phase?: string; createdAt?: string; lastHeartbeatAt?: string };
   const rows: Row[] = [];
@@ -35,7 +39,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   const active = rows.filter((j) => !TERMINAL.has(j.phase ?? "PENDING") && j.phase !== "PAUSED_ERROR");
 
-  const giveUp = active.filter((j) => (j.createdAt ?? "") < giveUpBefore);
+  const giveUp = active.filter((j) => (j.lastHeartbeatAt ?? j.createdAt ?? "") < giveUpBefore || (j.createdAt ?? "") < tooOldBefore);
   await Promise.all(
     giveUp.map((j) =>
       WpMigrationJob.patch({ templateId: j.templateId, id: j.id }).set({ phase: "FAILED", processing: false, finishedAt: new Date().toISOString() }).go(),

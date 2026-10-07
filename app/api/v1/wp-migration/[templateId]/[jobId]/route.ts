@@ -3,6 +3,7 @@ import { PublishedDomain } from "@/lib/db/contentEntities";
 import { WpMigrationJob } from "@/lib/db/importEntities";
 import { isValidUuid } from "@/lib/slugUtils";
 import { assertOwnSite, resolveMigrationAccess } from "@/lib/wpMigration/access";
+import { estimateSecondsLeft, type EstimateCounts } from "@/lib/wpMigration/estimate";
 import { refreshReport, type MigrationReport } from "@/lib/wpMigration/report";
 import { donationPaymentIssue, donationPaymentsReady } from "@/lib/wpMigration/runJobDynamo";
 
@@ -34,6 +35,8 @@ export async function GET(
       pausedIn: (job.planState as { pausedIn?: string } | undefined)?.pausedIn ?? null,
       install: job.install,
       counts: job.counts ?? null,
+      // Shown as "about 2 hours left"; null while the site's size is still being worked out.
+      estimatedSecondsLeft: estimateSecondsLeft({ phase: job.phase ?? "PENDING", counts: (job.counts as EstimateCounts | undefined) ?? null, startedAt: job.startedAt }),
       plugins: job.plugins ?? null,
       report: job.report ? refreshReport(job.report as MigrationReport, await donationPaymentsReady(templateId), await donationPaymentIssue(templateId)) : null,
       errors: Array.isArray(job.errors) ? (job.errors as string[]).slice(-20) : [],

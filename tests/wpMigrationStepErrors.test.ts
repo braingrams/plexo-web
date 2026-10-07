@@ -9,8 +9,9 @@ vi.mock("@/lib/blogImport/taxonomyDynamo", () => ({}));
 vi.mock("@/lib/blogImport/mediaRehostDynamo", () => ({}));
 vi.mock("@/lib/commerce/donations", () => ({}));
 vi.mock("@/lib/wpMigration/storeImport", () => ({}));
+vi.mock("@/lib/wpMigration/notify", () => ({}));
 
-import { isTransientAwsError, stepErrorMessage } from "@/lib/wpMigration/runJobDynamo";
+import { isTransientAwsError, rewritePostLinks, stepErrorMessage } from "@/lib/wpMigration/runJobDynamo";
 
 // What ElectroDB actually threw on maildrip.io's 542-post planning step.
 const throttled = Object.assign(
@@ -31,5 +32,24 @@ describe("migration step errors", () => {
       "The posts step stopped because Plexo couldn't save part of your site.",
     );
     expect(stepErrorMessage("PAGES", new Error("Your WordPress site didn't respond"))).toBe("The pages step stopped: Your WordPress site didn't respond");
+  });
+});
+
+describe("links to moved posts", () => {
+  it("are rewritten in one pass, keeping anchors, whatever the trailing slash or encoding", () => {
+    const moved = { "/2021/05/welcome": "/blog/welcome", "/café-tips": "/blog/cafe-tips" };
+    const html = `<a href="/2021/05/welcome/">a</a> <a href='/2021/05/welcome#top'>b</a> <a href="/caf%C3%A9-tips/">c</a> <a href="/about/">d</a> <a href="https://x.org/2021/05/welcome/">e</a>`;
+    expect(rewritePostLinks(html, moved)).toBe(
+      `<a href="/blog/welcome">a</a> <a href='/blog/welcome#top'>b</a> <a href="/blog/cafe-tips">c</a> <a href="/about/">d</a> <a href="https://x.org/2021/05/welcome/">e</a>`,
+    );
+  });
+
+  it("stays fast on a 9,000-post blog", () => {
+    const moved = Object.fromEntries(Array.from({ length: 9000 }, (_, i) => [`/post-${i}`, `/blog/post-${i}`]));
+    const html = Array.from({ length: 200 }, (_, i) => `<p><a href="/post-${i * 7}/">link</a></p>`).join("");
+    const started = performance.now();
+    const out = rewritePostLinks(html, moved);
+    expect(performance.now() - started).toBeLessThan(50);
+    expect(out).toContain('href="/blog/post-7"');
   });
 });

@@ -706,3 +706,51 @@ export function buildDonationReceiptEmail(input: {
   });
   return { subject: `Thank you for your ${input.monthly ? "monthly " : ""}donation to ${input.siteName}`, html };
 }
+
+/** To the site owner when their WordPress site has finished moving to Plexo (lib/wpMigration/notify.ts). */
+export function buildWpMigrationDoneEmail(input: {
+  siteName: string;
+  pagesCopied: number;
+  postsCopied: number;
+  productsMoved?: number;
+  thingsToCheck: number;
+  reportUrl: string;
+}): string {
+  const plural = (n: number, word: string) => `${n.toLocaleString("en-US")} ${word}${n === 1 ? "" : "s"}`;
+  const moved = [plural(input.pagesCopied, "page"), plural(input.postsCopied, "blog post"), ...(input.productsMoved ? [plural(input.productsMoved, "product")] : [])].join(", ");
+  return emailShell({
+    title: `${input.siteName} has moved to Plexo`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">Your site has moved to Plexo</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        <strong>${input.siteName}</strong> is now on Plexo: ${moved}, with its images, design and SEO.
+      </p>
+      <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        ${input.thingsToCheck > 0
+          ? `Your report lists <strong>${plural(input.thingsToCheck, "thing")}</strong> to look at, then you can preview the site and connect your domain.`
+          : "Nothing needs fixing. Preview the site, then connect your domain when you're happy."}
+      </p>
+      ${CTA_BUTTON(input.reportUrl, "See your site")}
+      ${FALLBACK_LINK(input.reportUrl)}
+    `,
+    footerHtml: "Your WordPress site hasn't been changed — it keeps running until you switch your domain to Plexo.<br/>",
+  });
+}
+
+/** To the site owner when their migration paused on something that needs them (lib/wpMigration/notify.ts). */
+export function buildWpMigrationPausedEmail(input: { siteName: string; reason: string; resumeUrl: string }): string {
+  return emailShell({
+    title: `Moving ${input.siteName} to Plexo has paused`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">Your move has paused</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Moving <strong>${input.siteName}</strong> to Plexo stopped partway: ${input.reason}
+      </p>
+      <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        This is usually temporary — your WordPress host was slow or briefly offline. Press <strong>Try again</strong> and it carries on exactly where it stopped; nothing already moved is lost.
+      </p>
+      ${CTA_BUTTON(input.resumeUrl, "Continue the move")}
+      ${FALLBACK_LINK(input.resumeUrl)}
+    `,
+  });
+}

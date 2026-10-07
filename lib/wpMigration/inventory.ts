@@ -1,4 +1,4 @@
-import type { WpInstall, WpInventory, WpMediaEntry, WpPageEntry, WpPostEntry, WpSeo, WpTermEntry } from "./types";
+import type { WpInstall, WpInventory, WpMediaEntry, WpPageEntry, WpPostEntry, WpPostStub, WpSeo, WpTermEntry } from "./types";
 import { fetchJson, migrationFetch, restUrl } from "./http";
 import { buildPluginReport, pluginSlugsFromHtml, themeSlugsFromHtml } from "./pluginCatalog";
 
@@ -8,10 +8,9 @@ import { buildPluginReport, pluginSlugsFromHtml, themeSlugsFromHtml } from "./pl
 // phase); this inventory is complete for everything a visitor can actually see.
 
 const PER_PAGE = 100;
-// A real bound, not "until done": 50 × 100 = 5,000 items per type is far beyond any site
-// this migration is designed for, and stops a misbehaving API (X-WP-TotalPages lying)
-// from looping forever.
-const MAX_API_PAGES = 50;
+// A real bound, not "until done" — it stops a misbehaving API (X-WP-TotalPages lying)
+// from looping forever — but far past any real site: 2,000 × 100 = 200,000 items.
+const MAX_API_PAGES = 2000;
 
 type Rendered = { rendered?: string };
 
@@ -118,15 +117,51 @@ function mapPost(p: RawPost): WpPostEntry {
   };
 }
 
-/** Reads the complete public inventory of a discovered WordPress install. */
+/** One page (100 items) of a WordPress list, and how many pages there are in all. */
+export interface ApiPage<T> {
+  items: T[];
+  totalPages: number;
+}
+
+async function fetchApiPage<T>(restRoot: string, route: string, page: number, params: Record<string, string | number>): Promise<ApiPage<T>> {
+  const res = await fetchJson<T[]>(restUrl(restRoot, route, { per_page: PER_PAGE, page, ...params }));
+  // WordPress 400s past the last page — a normal "done", same as an empty page.
+  if (!res || !Array.isArray(res.data)) return { items: [], totalPages: 0 };
+  return { items: res.data, totalPages: Number.parseInt(res.headers.get("x-wp-totalpages") || "1", 10) || 1 };
+}
+
+/** One page of the post index — just enough to place and link each post (not its content). */
+export async function fetchPostIndexPage(restRoot: string, page: number): Promise<ApiPage<WpPostStub>> {
+  const res = await fetchApiPage<RawPost>(restRoot, "wp/v2/posts", page, { _fields: "id,link,slug,title", orderby: "id", order: "asc" });
+  return {
+    totalPages: res.totalPages,
+    items: res.items.map((p) => ({ id: p.id, link: p.link, slug: decodeURIComponent(p.slug), title: decodeEntities(p.title?.rendered ?? "") })),
+  };
+}
+
+/** The full posts (content, author, featured image, terms, SEO) for these ids — at most 100. */
+export async function fetchPostsByIds(restRoot: string, ids: number[]): Promise<WpPostEntry[]> {
+  if (ids.length === 0) return [];
+  const res = await fetchJson<RawPost[]>(restUrl(restRoot, "wp/v2/posts", { include: ids.join(","), per_page: ids.length, _embed: 1 }));
+  if (!res || !Array.isArray(res.data)) throw new Error("WordPress didn't return these posts.");
+  return res.data.map(mapPost);
+}
+
+export async function fetchTermsPage(restRoot: string, taxonomy: "category" | "post_tag", page: number): Promise<ApiPage<WpTermEntry>> {
+  const res = await fetchApiPage<RawTerm>(restRoot, taxonomy === "category" ? "wp/v2/categories" : "wp/v2/tags", page, { _fields: "slug,name,link", hide_empty: "true" });
+  return { totalPages: res.totalPages, items: res.items.map((t) => ({ taxonomy, slug: decodeURIComponent(t.slug), name: decodeEntities(t.name), link: t.link })) };
+}
+
+export async function fetchMediaPage(restRoot: string, page: number): Promise<ApiPage<WpMediaEntry>> {
+  const res = await fetchApiPage<RawMedia>(restRoot, "wp/v2/media", page, { _fields: "id,source_url,mime_type,link", orderby: "id", order: "asc" });
+  return { totalPages: res.totalPages, items: res.items.map((m) => ({ id: m.id, sourceUrl: m.source_url, mimeType: m.mime_type, link: m.link ?? null })) };
+}
+
+/** Reads the site-wide public inventory of a discovered WordPress install (posts, terms and media are listed separately, page by page). */
 export async function buildInventory(install: WpInstall): Promise<WpInventory> {
   const { restRoot } = install;
-  const [rawPages, rawPosts, rawCategories, rawTags, rawMedia, homeHtml] = await Promise.all([
+  const [rawPages, homeHtml] = await Promise.all([
     fetchAll<RawPage>(restRoot, "wp/v2/pages", { _fields: "id,link,title,parent,menu_order,modified_gmt,yoast_head_json" }),
-    fetchAll<RawPost>(restRoot, "wp/v2/posts", { _embed: 1 }),
-    fetchAll<RawTerm>(restRoot, "wp/v2/categories", { _fields: "slug,name,link", hide_empty: "true" }),
-    fetchAll<RawTerm>(restRoot, "wp/v2/tags", { _fields: "slug,name,link", hide_empty: "true" }),
-    fetchAll<RawMedia>(restRoot, "wp/v2/media", { _fields: "id,source_url,mime_type,link" }),
     migrationFetch(`${install.homeUrl}/`, { headers: { Accept: "text/html" } })
       .then((r) => (r.ok ? r.text() : ""))
       .catch(() => ""),
@@ -142,13 +177,6 @@ export async function buildInventory(install: WpInstall): Promise<WpInventory> {
     seo: seoFrom(p.yoast_head_json),
   }));
 
-  const terms: WpTermEntry[] = [
-    ...rawCategories.map((t) => ({ taxonomy: "category" as const, slug: decodeURIComponent(t.slug), name: decodeEntities(t.name), link: t.link })),
-    ...rawTags.map((t) => ({ taxonomy: "post_tag" as const, slug: decodeURIComponent(t.slug), name: decodeEntities(t.name), link: t.link })),
-  ];
-
-  const media: WpMediaEntry[] = rawMedia.map((m) => ({ id: m.id, sourceUrl: m.source_url, mimeType: m.mime_type, link: m.link ?? null }));
-
   const homeKey = install.homeUrl.replace(/\/+$/, "");
   const frontPage = pages.find((p) => p.link.replace(/\/+$/, "") === homeKey);
 
@@ -156,9 +184,6 @@ export async function buildInventory(install: WpInstall): Promise<WpInventory> {
   return {
     install,
     pages,
-    posts: rawPosts.map(mapPost),
-    terms,
-    media,
     plugins: buildPluginReport(install.namespaces, pluginSlugsFromHtml(homeHtml)),
     // Child theme assets load after the parent's, but either order is fine for the report —
     // a two-theme hit is reported as child-of-parent, which is the WordPress convention.

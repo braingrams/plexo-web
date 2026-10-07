@@ -267,6 +267,8 @@ export const WpMigrationJob = new Entity(
       planState: { type: "any" },
       /** Steps in a row that hit a temporary AWS error (throttling, a timeout) and were retried rather than paused. */
       transientRetries: { type: "number" },
+      /** When the owner was last emailed that this migration paused (at most every few hours). */
+      pauseEmailedAt: { type: "string" },
       /** DetectedPlugin[] — what happened to each WordPress plugin. */
       plugins: { type: "any" },
       /** Final verification report, written by the FINALIZING phase. */
