@@ -181,22 +181,21 @@ function recordUsageEventBestEffort(input: Parameters<typeof recordSolUsageEvent
   void recordSolUsageEvent(input).catch((err) => console.error("Failed to record SOL usage event:", err));
 }
 
-/** Bedrock/Anthropic content blocks for the new user message: plain text plus any
- * attachments. Anthropic's Messages API supports a `source: {type: "url", url}` form for
- * both image and document content blocks, letting the model fetch the file itself instead of
- * downloading/base64-encoding it here — the simplest correct option given attachments here
- * are already-hosted URLs (from app/api/v1/sol/upload/route.ts's presigned-POST flow), not
- * raw bytes in the request body. Anything that isn't an image/document (e.g. a voice-note
- * attachment, transcribed to plain text client-side before it's ever sent here) is skipped
- * with a warning rather than guessed at. */
-function buildUserMessageContent(text: string, attachments: Array<{ type?: string; url?: string }> | undefined): unknown[] {
-  const blocks: unknown[] = [{ type: "text", text }];
+/** Content blocks for the new user message as STORED in the transcript: the text plus a
+ * URL-sourced block per attachment (with its filename, for the chat UI). These private URLs
+ * aren't model-readable as-is — lib/ai/solAttachments.ts swaps them for inline bytes/text
+ * right before each model call. A message can be attachments only (an image with no
+ * caption), in which case there's no text block: the API rejects empty text blocks.
+ * Voice notes never arrive here (they're transcribed to text client-side first). */
+function buildUserMessageContent(text: string, attachments: Array<{ type?: string; url?: string; filename?: string }> | undefined): unknown[] {
+  const blocks: unknown[] = text ? [{ type: "text", text }] : [];
   for (const attachment of attachments ?? []) {
     if (!attachment?.url) continue;
+    const filename = typeof attachment.filename === "string" ? attachment.filename.slice(0, 200) : undefined;
     if (attachment.type === "image") {
-      blocks.push({ type: "image", source: { type: "url", url: attachment.url } });
+      blocks.push({ type: "image", source: { type: "url", url: attachment.url }, filename });
     } else if (attachment.type === "pdf" || attachment.type === "document") {
-      blocks.push({ type: "document", source: { type: "url", url: attachment.url } });
+      blocks.push({ type: "document", source: { type: "url", url: attachment.url }, filename });
     } else {
       console.warn(`buildUserMessageContent: skipping attachment of unsupported type "${attachment.type}"`);
     }
@@ -452,12 +451,14 @@ export async function prepareMessagesTurn(
   resolved: ResolvedUser,
   body: unknown,
 ): Promise<PreparedTurn> {
-  const parsed = body as { text?: string; attachments?: Array<{ type?: string; url?: string }>; modelTier?: string };
+  const parsed = body as { text?: string; attachments?: Array<{ type?: string; url?: string; filename?: string }>; modelTier?: string };
   const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
   const modelTier = parsed.modelTier as ModelTier;
+  const hasAttachments = Array.isArray(parsed.attachments) && parsed.attachments.some((a) => a?.url);
 
-  if (!text || !VALID_TIERS.has(modelTier)) {
-    return { ok: false, status: 400, body: { error: "A non-empty `text` and a valid `modelTier` (BASIC|MEDIUM|HIGH) are required." } };
+  // An image sent with no caption is a perfectly normal message ("what do you think of this?").
+  if ((!text && !hasAttachments) || !VALID_TIERS.has(modelTier)) {
+    return { ok: false, status: 400, body: { error: "Type a message or attach a file, and pick a valid `modelTier` (BASIC|MEDIUM|HIGH)." } };
   }
 
   const conversation = await loadOwnedConversation(resolved.userId, conversationId);
@@ -488,7 +489,7 @@ export async function prepareMessagesTurn(
   const titlePromise = conversation.title ? null : maybeGenerateConversationTitle({
     userId: resolved.userId,
     conversationId,
-    userText: text,
+    userText: text || "Shared a file for SOL to look at",
     assistantText: "",
   });
 

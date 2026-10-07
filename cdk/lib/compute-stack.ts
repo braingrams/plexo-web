@@ -612,6 +612,15 @@ export class ComputeStack extends cdk.Stack {
     // staging: "AWSKMSException: ... SolChatFnServiceRole ... is not authorized to
     // perform: kms:Decrypt" the moment a real SOL turn tried to charge usage.
     solChatFn.addToRolePolicy(ledgerKmsPolicy);
+    // Chat attachments: the user's uploaded images/PDFs/docs live in the private half of the
+    // user-content bucket and SOL reads their bytes server-side to hand them to the model
+    // (lib/ai/solAttachments.ts) — read-only, and only under the SOL attachments prefix.
+    solChatFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject"],
+        resources: ["arn:aws:s3:::plexo-user-content*/private/sol-attachments/*"],
+      }),
+    );
     // Bedrock — tightened to the exact three models SOL actually uses (see
     // lib/ai/modelRegistry.ts's bedrock_claude row: Claude Haiku 4.5 / Sonnet 5 / Opus 5),
     // verified against both AWS's own Bedrock model-card docs AND the real Plexo AWS

@@ -6,8 +6,10 @@ import { StepCard } from "./StepCard";
 /** Status-only card for an attachment SOL is reading (image/document content blocks in a
  * user message) — no confirm/cancel, no result payload, just "here's a file, and here's
  * whether it's an image or a document." */
-export function FileReadCard({ kind, url, filename }: { kind: "image" | "document"; url?: string; filename?: string }) {
-  const name = filename || (url ? url.split("/").pop() : undefined) || (kind === "image" ? "Image attachment" : "Document attachment");
+export function FileReadCard({ kind, url: storedUrl, filename }: { kind: "image" | "document"; url?: string; filename?: string }) {
+  const name = filename || (storedUrl ? storedUrl.split("/").pop() : undefined) || (kind === "image" ? "Image attachment" : "Document attachment");
+  // Attachments are private uploads — view them through the owner-checked signed redirect.
+  const url = storedUrl ? `/api/v1/sol/attachments/view?url=${encodeURIComponent(storedUrl)}` : undefined;
 
   if (kind === "image" && url) {
     return (

@@ -14,6 +14,7 @@ import { MAX_TOKENS } from "@/lib/ai/generate";
 import { MAX_TOOL_ITERATIONS } from "@/lib/credits/agentTurnEstimate";
 import type { AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { SolMessage } from "@/lib/db/solEntities";
+import { createAttachmentResolver } from "@/lib/ai/solAttachments";
 
 // Which provider actually serves a turn's model calls — resolved once per turn by the
 // caller (solChatHandler.ts) from the account's AI Access Mode: BYOK accounts route to
@@ -231,6 +232,8 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
   const generateWithTools = TOOL_CAPABLE_PROVIDERS[ctx.provider];
   const systemPrompt = buildSolSystemPrompt(ctx.memoryFacts);
 
+  // Stored attachment blocks point at private uploads; the model needs their bytes inline.
+  const resolveAttachments = createAttachmentResolver(ctx.resolvedUser.userId);
   const totals = { inputTokens: 0, outputTokens: 0 };
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
@@ -242,7 +245,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       model,
       apiKey: ctx.apiKey,
       systemPrompt,
-      conversationHistory: ctx.history,
+      conversationHistory: await resolveAttachments(ctx.history),
       tools,
       maxTokens: MAX_TOKENS.agent_chat,
       onTextDelta: ctx.onTextDelta,
