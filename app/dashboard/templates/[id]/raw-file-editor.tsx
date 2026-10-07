@@ -10,6 +10,7 @@ import { javascript } from "@codemirror/lang-javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
 import type { FileEntry } from "@/app/api/v1/templates/[id]/files/route";
 import { buildPreviewHtml } from "./preview-utils";
+import { injectBaseHref } from "@/lib/wpMigration/injectBaseHref";
 import { PagesPanel } from "./PagesPanel";
 import { RawTextContentEditor, type RawTextContentEditorHandle, type RawTextContentSaveStatus } from "./RawTextContentEditor";
 import { RawAiEditPanel } from "./RawAiEditPanel";
@@ -23,6 +24,8 @@ type Props = {
   useAi: boolean;
   aiProvider: string;
   aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
+  /** A migrated WordPress page's live URL — its theme/media files load from there (see lib/wpMigration/previewBase.ts). */
+  previewBaseHref?: string | null;
 };
 
 function IconEye() {
@@ -148,7 +151,7 @@ const editorTheme = EditorView.theme(
   { dark: true }
 );
 
-export function RawFileEditor({ templateId, templateName, templateKind, subscriptionPlan, useAi, aiProvider, aiTier }: Props) {
+export function RawFileEditor({ templateId, templateName, templateKind, subscriptionPlan, useAi, aiProvider, aiTier, previewBaseHref }: Props) {
   const router = useRouter();
   // Text Content is the friendlier, non-technical default for a freshly-opened raw page —
   // Code is a step down into the file tree for people who actually want to touch markup.
@@ -314,7 +317,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
     const rootPath = isHtmlFile ? activePath : "index.html";
     const { html, cleanup } = buildPreviewHtml(files, edits, rootPath);
     previewCleanupRef.current = cleanup;
-    setPreviewHtml(html);
+    setPreviewHtml(injectBaseHref(html, previewBaseHref));
     setPreviewRootPath(rootPath);
     setPreviewOpen(true);
   }

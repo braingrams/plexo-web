@@ -1,3 +1,4 @@
+import { injectBaseHref, migratedPreviewBase } from "@/lib/wpMigration/previewBase";
 import { NextRequest, NextResponse } from "next/server";
 import { uploadObject, StorageError } from "@/lib/storage";
 
@@ -87,7 +88,7 @@ export async function GET(
       externalStylesheets,
     ),
   );
-  return NextResponse.json({ nodes, imageNodes, colorNodes, previewHtml });
+  return NextResponse.json({ nodes, imageNodes, colorNodes, previewHtml: injectBaseHref(previewHtml, await migratedPreviewBase(template)) });
 }
 
 /**
