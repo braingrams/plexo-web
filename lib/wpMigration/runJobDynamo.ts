@@ -164,6 +164,7 @@ async function ensureNode(
     parentId,
     slug,
     order,
+    migratedFrom: (job.install as WpInstall | undefined)?.origin,
   }).go();
   nodes[key] = id;
   return id;

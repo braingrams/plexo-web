@@ -147,7 +147,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data: orgTemplatesForRateLimit } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const recentUploadCount = orgTemplatesForRateLimit.filter(
-    (t) => t.userId === resolved.userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
+    // Pages a WordPress migration created for the owner don't count — only HTML they uploaded themselves.
+    (t) => t.userId === resolved.userId && t.sourceType === "RAW_UPLOAD" && !t.migratedFrom && (t.createdAt ?? "") >= since,
   ).length;
   if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
     return NextResponse.json({
