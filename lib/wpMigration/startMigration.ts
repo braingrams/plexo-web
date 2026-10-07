@@ -5,6 +5,7 @@ import { WpMigrationJob } from "@/lib/db/importEntities";
 import { checkUrlsForThreats } from "@/lib/safeBrowsing";
 import { discoverWordPressInstall, WordPressNotFoundError } from "./discover";
 import type { MigrationAccess } from "./access";
+import { continueInBackground } from "./background";
 
 // The one place a migration is started — shared by the dashboard's REST route and the MCP
 // tool so an AI assistant gets exactly the same checks, limits and owner-readable errors a
@@ -92,6 +93,10 @@ export async function startWordPressMigration(
     phase: "PENDING",
     ownershipAttestedAt: new Date().toISOString(),
   }).go();
+
+  // It runs on the server from the start — an open dashboard just watches (and helps), and
+  // an AI assistant or API caller doesn't have to drive it step by step.
+  await continueInBackground(templateId, jobId);
 
   return { ok: true, jobId, templateId, siteName };
 }

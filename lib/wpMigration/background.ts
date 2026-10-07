@@ -17,7 +17,7 @@ export async function continueInBackground(templateId: string, jobId: string, ho
     method: "POST",
     headers: { "Content-Type": "application/json", "x-cron-secret": process.env.CRON_SECRET ?? "" },
     body: JSON.stringify({ jobId, templateId, hop }),
-    signal: AbortSignal.timeout(3000),
+    signal: AbortSignal.timeout(2000),
   }).catch(() => {
     // timing out here is the normal hand-off; a real failure is picked up by the cron
   });

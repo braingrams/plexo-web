@@ -4,6 +4,7 @@ import { checkUrlsForThreats } from "@/lib/safeBrowsing";
 import { resolveMigrationAccess } from "@/lib/wpMigration/access";
 import { discoverWordPressInstall, WordPressNotFoundError } from "@/lib/wpMigration/discover";
 import { previewInstall } from "@/lib/wpMigration/inventory";
+import { estimateMigrationSeconds, formatDuration } from "@/lib/wpMigration/estimate";
 
 export const maxDuration = 60;
 
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "That site was flagged as unsafe (malware or phishing), so it can't be moved." }, { status: 400 });
     }
     const preview = await previewInstall(install);
-    return NextResponse.json({ install, preview });
+    return NextResponse.json({ install, preview, estimatedDuration: formatDuration(estimateMigrationSeconds(preview.counts)) });
   } catch (err) {
     if (err instanceof WordPressNotFoundError) return NextResponse.json({ error: err.message, notWordPress: true }, { status: 422 });
     if (err instanceof Error && err.name === "SsrfBlockedError") {
