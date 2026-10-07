@@ -718,7 +718,10 @@ export const BlogPost = new Entity(
         type: ["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"] as const,
         default: "DRAFT",
       },
-      publishedAt: { type: "string" },
+      // Part of the byStatus sort key, so it can never be missing when status is written —
+      // a never-published draft stores "" here as a key placeholder (see savePostCore.ts).
+      // The getter hands readers back "no date" for it, exactly as before.
+      publishedAt: { type: "string", get: (value?: string) => (value ? value : undefined) },
       scheduledAt: { type: "string" },
       metaTitle: { type: "string" },
       metaDescription: { type: "string" },

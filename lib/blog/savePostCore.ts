@@ -72,6 +72,9 @@ export interface SavePostInput {
 // same "small in practice" fetch-and-find-in-memory pattern used throughout this
 // migration for entities with no id-based index.
 
+/** Key placeholder for a post that has never been published — read back as "no date" by the entity's getter. */
+const NO_PUBLISH_DATE = "";
+
 function computePublishedAt(
   status: PostStatus,
   scheduledAt: Date | null,
@@ -165,7 +168,9 @@ export async function createBlogPost(templateId: string, input: SavePostInput, r
     featuredImageAlt: input.featuredImageAlt || undefined,
     status: input.status,
     scheduledAt: scheduledAt?.toISOString(),
-    publishedAt: publishedAt ?? undefined,
+    // "" for a never-published draft: publishedAt is part of the byStatus index key, and
+    // ElectroDB rejects writing status without it (new drafts returned 500 before this).
+    publishedAt: publishedAt ?? NO_PUBLISH_DATE,
     metaTitle: input.metaTitle || undefined,
     metaDescription: input.metaDescription || undefined,
     ogImageUrl: input.ogImageUrl || undefined,
@@ -203,8 +208,7 @@ export async function updateBlogPost(templateId: string, postId: string, input: 
     | "metaDescription"
     | "ogImageUrl"
     | "authorId"
-    | "scheduledAt"
-    | "publishedAt";
+    | "scheduledAt";
   const toRemove: RemovableField[] = [];
 
   if (input.title !== undefined) data.title = input.title.trim();
@@ -261,14 +265,16 @@ export async function updateBlogPost(templateId: string, postId: string, input: 
     if (scheduledAt) data.scheduledAt = scheduledAt.toISOString();
     else toRemove.push("scheduledAt");
     const publishedAt = computePublishedAt(input.status, scheduledAt, existing.publishedAt ?? null);
-    if (publishedAt) data.publishedAt = publishedAt;
-    else toRemove.push("publishedAt");
+    // Never removed: it's part of the byStatus key (see createBlogPost).
+    data.publishedAt = publishedAt ?? NO_PUBLISH_DATE;
   } else if (input.scheduledAt !== undefined) {
     if (input.scheduledAt) data.scheduledAt = new Date(input.scheduledAt).toISOString();
     else toRemove.push("scheduledAt");
   }
 
   let patch = BlogPost.patch({ templateId, slug: existing.slug }).set(data);
+  // Writing status rebuilds the byStatus sort key (status#publishedAt#id) — supply id for it.
+  if (data.status !== undefined) patch = patch.composite({ id: existing.id });
   if (toRemove.length) patch = patch.remove(toRemove);
   await patch.go();
 
@@ -280,7 +286,7 @@ export async function updateBlogPost(templateId: string, postId: string, input: 
   if (nextSlug !== existing.slug) {
     const { data: updated } = await BlogPost.get({ templateId, slug: existing.slug }).go();
     if (updated) {
-      await BlogPost.create({ ...updated, slug: nextSlug }).go();
+      await BlogPost.create({ ...updated, publishedAt: updated.publishedAt ?? NO_PUBLISH_DATE, slug: nextSlug }).go();
       await BlogPost.remove({ templateId, slug: existing.slug }).go();
       finalSlug = nextSlug;
     }
