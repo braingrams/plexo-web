@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { triggerCharisolSignIn } from "@/lib/charisolAuth";
+import { triggerGoogleSignIn } from "@/lib/charisolAuth";
 
 function GoogleIcon() {
   return (
@@ -20,7 +20,7 @@ export function GoogleAuthButton({ callbackURL }: { callbackURL: string }) {
   async function onClick(): Promise<void> {
     setLoading(true);
     try {
-      await triggerCharisolSignIn(callbackURL);
+      await triggerGoogleSignIn(callbackURL);
     } catch {
       setLoading(false);
     }

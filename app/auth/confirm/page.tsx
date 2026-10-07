@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CharisolSignInButton } from "@/app/auth/CharisolSignInButton";
 
 export default async function ConfirmPage({
   searchParams,
@@ -23,12 +22,6 @@ export default async function ConfirmPage({
         <p className="auth-subtitle">
           We sent a verification link to your inbox. Open it to activate your account.
         </p>
-
-        {/* Sign-in now goes through Charisol. Verify the email first (a Charisol token for an
-            unverified address is refused), then continue here or from the verified-email link. */}
-        <div className="mt-6">
-          <CharisolSignInButton callbackURL="/dashboard" label="I've verified — continue to sign in" />
-        </div>
 
         <p className="auth-meta">
           Need a fresh attempt?{" "}
