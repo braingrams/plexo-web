@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { listingPriceAndStock } from "@/lib/commerce/variants";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { CommerceProduct, CommerceCategory, CommerceOrder, CommerceOrderItem } from "@/lib/db/commerceEntities";
 
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const pageSize = Number.isFinite(pageSizeParam) && pageSizeParam > 0 ? Math.min(Math.floor(pageSizeParam), 100) : null;
 
   const [{ data: allProducts }, { data: categories }] = await Promise.all([
-    CommerceProduct.query.primary({ templateId }).go(),
+    CommerceProduct.query.primary({ templateId }).go({ pages: "all" }),
     CommerceCategory.query.primary({ templateId }).go(),
   ]);
   const categoryBySlug = new Map(categories.map((c) => [c.slug, c]));
@@ -75,9 +76,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     description: p.description ?? null,
     imageUrl: p.imageUrl ?? null,
     kind: p.kind ?? "PHYSICAL",
-    priceMinor: p.priceMinor,
+    ...listingPriceAndStock(p),
     currency: p.currency ?? "NGN",
-    stockQuantity: p.stockQuantity ?? null,
     durationMinutes: p.durationMinutes ?? null,
     createdAt: p.createdAt,
     category: p.categoryId && categoryById.has(p.categoryId) ? { name: categoryById.get(p.categoryId)!.name, slug: categoryById.get(p.categoryId)!.slug } : null,

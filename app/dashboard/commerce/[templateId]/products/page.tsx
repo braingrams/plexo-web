@@ -5,7 +5,7 @@ export default async function CommerceProductsPage({ params }: { params: Promise
   const { templateId } = await params;
 
   const [{ data: products }, { data: categories }, { data: settings }] = await Promise.all([
-    CommerceProduct.query.primary({ templateId }).go(),
+    CommerceProduct.query.primary({ templateId }).go({ pages: "all" }),
     CommerceCategory.query.primary({ templateId }).go(),
     CommerceSettings.get({ templateId }).go(),
   ]);
@@ -23,6 +23,10 @@ export default async function CommerceProductsPage({ params }: { params: Promise
     description: p.description ?? null,
     kind: p.kind ?? "PHYSICAL",
     priceMinor: p.priceMinor,
+    compareAtPriceMinor: p.compareAtPriceMinor ?? null,
+    sku: p.sku ?? null,
+    options: p.options ?? null,
+    variants: p.variants ?? null,
     currency,
     stockQuantity: p.stockQuantity ?? null,
     durationMinutes: p.durationMinutes ?? null,

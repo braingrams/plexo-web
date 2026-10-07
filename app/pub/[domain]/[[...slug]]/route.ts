@@ -716,7 +716,7 @@ export async function GET(
         // CommerceProduct is id-keyed, not slug-keyed (see commerceEntities.ts's own
         // comment) — fans out over the site's own product list in memory, same bound as
         // every other slug/name lookup this migration uses for that entity.
-        const { data: products } = await CommerceProduct.query.primary({ templateId: published.templateId }).go();
+        const { data: products } = await CommerceProduct.query.primary({ templateId: published.templateId }).go({ pages: "all" });
         const product = products.find((p) => p.slug === candidateSlug && p.active && p.kind === "PHYSICAL");
         if (product) {
           let html = injectProductSeo(productDetailTemplate.compiledHtml, {

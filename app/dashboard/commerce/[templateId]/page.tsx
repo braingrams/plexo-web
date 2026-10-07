@@ -41,7 +41,7 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
 
   const [{ data: settings }, { data: products }, { data: orders }] = await Promise.all([
     CommerceSettings.get({ templateId }).go(),
-    CommerceProduct.query.primary({ templateId }).go(),
+    CommerceProduct.query.primary({ templateId }).go({ pages: "all" }),
     CommerceOrder.query.primary({ templateId }).go(),
   ]);
 

@@ -10,7 +10,8 @@ import { resolveCheckoutStripeSecret } from "@/lib/commerce/stripe";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { readCartToken, findOpenCart, clearCartCookie } from "@/lib/commerce/cartDynamo";
 import { createCommerceStripeCheckoutSession } from "@/lib/commerce/stripeClient";
-import { createCommerceCartOrder, failCommerceCartOrder, OutOfStockError, InvalidDiscountError, CartAlreadyCheckedOutError } from "@/lib/commerce/checkoutDynamo";
+import { createCommerceCartOrder, failCommerceCartOrder, OutOfStockError, InvalidDiscountError, CartAlreadyCheckedOutError, VariantUnavailableError } from "@/lib/commerce/checkoutDynamo";
+import { lineName, resolvePurchasable } from "@/lib/commerce/variants";
 import { resolveOrderDeliveryMethod, InvalidDeliveryMethodError, pickupLocationFor } from "@/lib/commerce/delivery";
 import { readCheckoutFields, resolveCheckoutFieldAnswers, CheckoutFieldsError } from "@/lib/commerce/checkoutFields";
 import { chooseCheckoutPaymentMethod } from "@/lib/commerce/checkoutPayment";
@@ -101,11 +102,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { data: cartItemRows } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
   const productRows = await Promise.all(cartItemRows.map((i) => CommerceProduct.get({ templateId, id: i.productId }).go()));
   const activeItems = cartItemRows
-    .map((i, idx) => ({ product: productRows[idx].data, quantity: i.quantity ?? 1 }))
-    .filter((i): i is { product: EntityItem<typeof CommerceProduct>; quantity: number } => Boolean(i.product) && (i.product!.active ?? true));
+    .map((i, idx) => ({ product: productRows[idx].data, quantity: i.quantity ?? 1, variantId: i.variantId ?? null }))
+    .filter((i): i is { product: EntityItem<typeof CommerceProduct>; quantity: number; variantId: string | null } => Boolean(i.product) && (i.product!.active ?? true));
   if (activeItems.length === 0) {
     return NextResponse.json({ error: "Your cart is empty." }, { status: 400 });
   }
+  // Each line's real price is its variant's (Size M may cost more than Size S).
+  const purchases = activeItems.map((i) => resolvePurchasable(i.product, i.variantId));
+  const unavailable = purchases.find((p): p is { ok: false; error: string } => !p.ok);
+  if (unavailable) return NextResponse.json({ error: unavailable.error }, { status: 409 });
+  const unitPrice = (index: number) => (purchases[index] as { unitPriceMinor: number }).unitPriceMinor;
   // Currency is a site-wide setting (Settings > General), not a per-product value —
   // reading it from settings instead of the first cart item's own `currency` attribute
   // also fixes what used to be a real bug: a cart mixing items would silently charge
@@ -155,7 +161,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Prices are never trusted from the cart snapshot at this point either — re-read fresh
   // right before charging, same "server always re-derives the amount" rule the single-
   // product checkout follows.
-  const subtotalMinor = activeItems.reduce((sum, item) => sum + item.product.priceMinor * item.quantity, 0);
+  const subtotalMinor = activeItems.reduce((sum, item, index) => sum + unitPrice(index) * item.quantity, 0);
 
   let discount: EntityItem<typeof CommerceDiscountCode> | null = null;
   const normalizedDiscountCode = typeof rawDiscountCode === "string" ? rawDiscountCode.trim().toUpperCase() : "";
@@ -218,6 +224,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (err instanceof OutOfStockError) {
       return NextResponse.json({ error: `"${err.productName}" just sold out — remove it from your cart to continue.` }, { status: 409 });
     }
+    if (err instanceof VariantUnavailableError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     if (err instanceof InvalidDiscountError) {
       return NextResponse.json({ error: "That discount code isn't valid." }, { status: 400 });
     }
@@ -249,7 +258,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         amountMinor,
         currency,
         customerEmail,
-        productName: activeItems.length === 1 ? activeItems[0].product.name : `${activeItems.length} items`,
+        productName: activeItems.length === 1 ? lineName(activeItems[0].product.name, (purchases[0] as { label: string | null }).label) : `${activeItems.length} items`,
         returnUrl: callbackUrl,
       });
       await CommerceOrder.patch({ templateId: order.templateId, id: order.id }).set({ stripeCheckoutSessionId: session.id }).go();

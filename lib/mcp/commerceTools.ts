@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { catalogFieldsFromInput } from "@/lib/commerce/variants";
 import type { resolveUser } from "@/lib/auth/resolveUser";
 import { slugify } from "@/server/slugDynamo";
 import { encryptDigitalAccessSecret, encryptBankDetail, encryptPaystackKey, encryptMaildripKey, encryptStripeKey, decryptPaystackKey, decryptMaildripKey, decryptStripeKey, tryDecrypt } from "@/lib/crypto";
@@ -61,7 +62,7 @@ function normalizeStringList(value: unknown): string[] | undefined {
 
 async function ensureUniqueProductSlug(templateId: string, baseInput: string): Promise<string> {
   const base = slugify(baseInput) || "product";
-  const { data: products } = await CommerceProduct.query.primary({ templateId }).go();
+  const { data: products } = await CommerceProduct.query.primary({ templateId }).go({ pages: "all" });
   const slugs = new Set(products.map((p) => p.slug));
   let candidate = base;
   let suffix = 2;
@@ -131,6 +132,31 @@ export const COMMERCE_MCP_TOOLS = [
         imageUrl: { type: "string", description: "Optional cover/main image URL." },
         category: { type: "string", description: "Optional category name — reused if it exists, created otherwise." },
         stockQuantity: { type: "number", description: "PHYSICAL only — starting stock. Omit for untracked stock." },
+        compareAtPriceMinor: { type: "number", description: "Optional sale \"was\" price (smallest currency unit), shown crossed out next to the price. Must be higher than the price; omit or null for no sale." },
+        sku: { type: "string", description: "Optional SKU / stock code." },
+        options: {
+          type: "array",
+          description: "PHYSICAL/DIGITAL — options the product comes in, e.g. [{name:\"Size\",values:[\"S\",\"M\",\"L\"]},{name:\"Colour\",values:[\"Red\",\"Blue\"]}]. Up to 3. Requires variants. Send [] (with variants: []) to remove options.",
+          items: { type: "object", properties: { name: { type: "string" }, values: { type: "array", items: { type: "string" } } }, required: ["name", "values"] },
+        },
+        variants: {
+          type: "array",
+          description: "One entry per purchasable combination of the options, each with its own price. stockQuantity omitted = unlimited. Pass back an existing variant's id when updating so carts/orders pointing at it stay linked. With variants, the product's own price follows its cheapest variant and its own stockQuantity is ignored.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              options: { type: "object", description: "Option name → value, e.g. {\"Size\":\"M\",\"Colour\":\"Red\"}." },
+              priceMinor: { type: "number" },
+              compareAtPriceMinor: { type: "number" },
+              sku: { type: "string" },
+              stockQuantity: { type: "number" },
+              imageUrl: { type: "string" },
+              active: { type: "boolean", description: "false hides a combination you don't sell." },
+            },
+            required: ["options", "priceMinor"],
+          },
+        },
         durationMinutes: { type: "number", description: "SERVICE only — booking duration in minutes." },
         digitalDeliveryMethod: { type: "string", enum: ["FILE_DOWNLOAD", "EXTERNAL_LINK", "ACCESS_LIST"], description: "DIGITAL only — see this tool's description." },
         digitalFileUrl: { type: "string", description: "DIGITAL/FILE_DOWNLOAD — the uploaded file's URL (upload via the dashboard first)." },
@@ -159,6 +185,31 @@ export const COMMERCE_MCP_TOOLS = [
         category: { type: "string", description: "Category name — reused/created as needed. Empty string clears it." },
         active: { type: "boolean" },
         stockQuantity: { type: "number", description: "PHYSICAL only." },
+        compareAtPriceMinor: { type: "number", description: "Optional sale \"was\" price (smallest currency unit), shown crossed out next to the price. Must be higher than the price; omit or null for no sale." },
+        sku: { type: "string", description: "Optional SKU / stock code." },
+        options: {
+          type: "array",
+          description: "PHYSICAL/DIGITAL — options the product comes in, e.g. [{name:\"Size\",values:[\"S\",\"M\",\"L\"]},{name:\"Colour\",values:[\"Red\",\"Blue\"]}]. Up to 3. Requires variants. Send [] (with variants: []) to remove options.",
+          items: { type: "object", properties: { name: { type: "string" }, values: { type: "array", items: { type: "string" } } }, required: ["name", "values"] },
+        },
+        variants: {
+          type: "array",
+          description: "One entry per purchasable combination of the options, each with its own price. stockQuantity omitted = unlimited. Pass back an existing variant's id when updating so carts/orders pointing at it stay linked. With variants, the product's own price follows its cheapest variant and its own stockQuantity is ignored.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              options: { type: "object", description: "Option name → value, e.g. {\"Size\":\"M\",\"Colour\":\"Red\"}." },
+              priceMinor: { type: "number" },
+              compareAtPriceMinor: { type: "number" },
+              sku: { type: "string" },
+              stockQuantity: { type: "number" },
+              imageUrl: { type: "string" },
+              active: { type: "boolean", description: "false hides a combination you don't sell." },
+            },
+            required: ["options", "priceMinor"],
+          },
+        },
         durationMinutes: { type: "number", description: "SERVICE only." },
         digitalDeliveryMethod: { type: "string", enum: ["FILE_DOWNLOAD", "EXTERNAL_LINK", "ACCESS_LIST"], description: "DIGITAL only — switches the delivery method, clearing the other methods' fields." },
         digitalFileUrl: { type: "string" },
@@ -523,7 +574,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
   switch (toolName) {
     case "list_commerce_products": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const { data: allProducts } = await CommerceProduct.query.primary({ templateId: siteId }).go();
+      const { data: allProducts } = await CommerceProduct.query.primary({ templateId: siteId }).go({ pages: "all" });
       let products = allProducts;
       if (typeof args.kind === "string" && ["PHYSICAL", "SERVICE", "DIGITAL"].includes(args.kind)) products = products.filter((p) => p.kind === args.kind);
       if (args.activeOnly) products = products.filter((p) => p.active ?? true);
@@ -560,6 +611,12 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         if (args.digitalDeliveryMethod === "ACCESS_LIST" && !args.digitalAccessInstructions) throw new Error("digitalAccessInstructions is required for ACCESS_LIST.");
       }
 
+      // Sale price, SKU, options/variants — same rules as the dashboard (lib/commerce/variants.ts).
+      const catalog = catalogFieldsFromInput(
+        { compareAtPriceMinor: args.compareAtPriceMinor, sku: args.sku, options: args.options, variants: args.variants },
+        { kind, priceMinor },
+      );
+
       const slug = await ensureUniqueProductSlug(siteId, name);
       const categoryId = (await resolveCategoryId(siteId, resolved.organizationId, args.category)) ?? undefined;
 
@@ -575,7 +632,8 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         kind,
         priceMinor,
         imageUrl: typeof args.imageUrl === "string" && args.imageUrl ? args.imageUrl : undefined,
-        stockQuantity: kind === "PHYSICAL" && typeof args.stockQuantity === "number" ? Math.max(0, Math.trunc(args.stockQuantity)) : undefined,
+        stockQuantity: kind === "PHYSICAL" && typeof args.stockQuantity === "number" && !catalog.set.variants ? Math.max(0, Math.trunc(args.stockQuantity)) : undefined,
+        ...(catalog.set as Record<string, never>),
         durationMinutes: kind === "SERVICE" && typeof args.durationMinutes === "number" ? Math.max(5, Math.trunc(args.durationMinutes)) : undefined,
         digitalDeliveryMethod: kind === "DIGITAL" ? args.digitalDeliveryMethod : undefined,
         digitalFileUrl: kind === "DIGITAL" && args.digitalDeliveryMethod === "FILE_DOWNLOAD" ? String(args.digitalFileUrl) : undefined,
@@ -664,6 +722,14 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         if (typeof args.digitalMaxDownloads === "number") data.digitalMaxDownloads = Math.max(1, Math.trunc(args.digitalMaxDownloads));
         if (typeof args.digitalLinkExpiryDays === "number") data.digitalLinkExpiryDays = Math.max(1, Math.trunc(args.digitalLinkExpiryDays));
       }
+
+      const catalog = catalogFieldsFromInput(
+        { compareAtPriceMinor: args.compareAtPriceMinor, sku: args.sku, options: args.options, variants: args.variants },
+        { kind: existing.kind ?? "PHYSICAL", priceMinor: typeof data.priceMinor === "number" ? data.priceMinor : existing.priceMinor },
+      );
+      Object.assign(data, catalog.set);
+      toRemove.push(...catalog.remove);
+      if (catalog.set.variants) delete data.stockQuantity;
 
       let patch = CommerceProduct.patch({ templateId: siteId, id: productId }).set(data);
       const uniqueRemove = [...new Set(toRemove)].filter((f) => !(f in data));

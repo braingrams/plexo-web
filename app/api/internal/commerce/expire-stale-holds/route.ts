@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adjustStockForOrderItems } from "@/lib/commerce/stock";
 import { isAuthorizedAdmin } from "@/server/adminAuth";
 import { isCronRequest } from "@/lib/cronAuth";
 import { CommerceOrder, CommerceOrderItem, CommerceProduct, CommerceBooking, CommerceBookingSlotLock } from "@/lib/db/commerceEntities";
@@ -90,14 +91,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     const { data: items } = await CommerceOrderItem.query.primary({ templateId: staleOrder.templateId, orderId: staleOrder.id }).go();
-    await Promise.all(
-      items.map(async (item) => {
-        const { data: product } = await CommerceProduct.get({ templateId: staleOrder.templateId, id: item.productId }).go();
-        if (product && product.stockQuantity != null) {
-          await CommerceProduct.patch({ templateId: staleOrder.templateId, id: item.productId }).add({ stockQuantity: item.quantity ?? 1 }).go();
-        }
-      }),
-    );
+    await adjustStockForOrderItems(staleOrder.templateId, items, 1);
 
     const { data: booking } = await CommerceBooking.get({ templateId: staleOrder.templateId, orderId: staleOrder.id }).go();
     if (booking && booking.status === "PENDING_PAYMENT") {

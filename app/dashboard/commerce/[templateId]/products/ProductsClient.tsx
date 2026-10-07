@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { VariantsEditor, draftsFromProduct, variantPayload, type OptionDraft, type VariantDraft } from "./VariantsEditor";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { SUPPORTED_STORE_CURRENCIES } from "@/lib/commerce/currency";
 import { CsvImportDialog } from "./CsvImportDialog";
@@ -13,6 +14,12 @@ export type ProductSummary = {
   description: string | null;
   kind: "PHYSICAL" | "SERVICE" | "DIGITAL";
   priceMinor: number;
+  /** Sale "was" price, shown crossed out. */
+  compareAtPriceMinor: number | null;
+  sku: string | null;
+  /** Options (Size, Colour…) and their variants — see VariantsEditor.tsx. */
+  options: unknown;
+  variants: unknown;
   currency: string;
   stockQuantity: number | null;
   durationMinutes: number | null;
@@ -43,7 +50,21 @@ function kindLabel(kind: ProductSummary["kind"]): string {
       : "Digital";
 }
 
+/** Stock across a product's variants (null = some option has unlimited stock), else its own. */
+function effectiveStock(product: ProductSummary): number | null {
+  if (Array.isArray(product.variants) && product.variants.length > 0) {
+    const active = (product.variants as { stockQuantity?: number | null; active?: boolean }[]).filter((v) => v.active !== false);
+    if (active.some((v) => v.stockQuantity == null)) return null;
+    return active.reduce((sum, v) => sum + Math.max(0, v.stockQuantity ?? 0), 0);
+  }
+  return product.stockQuantity ?? 0;
+}
+
 function kindMetaText(product: ProductSummary): string {
+  if (Array.isArray(product.variants) && product.variants.length > 0) {
+    const n = product.variants.length;
+    return `${n} variant${n === 1 ? "" : "s"}`;
+  }
   if (product.kind === "PHYSICAL")
     return `${product.stockQuantity ?? 0} in stock`;
   if (product.kind === "SERVICE") return `${product.durationMinutes ?? 0} min`;
@@ -60,6 +81,11 @@ type FormState = {
   description: string;
   kind: "PHYSICAL" | "SERVICE" | "DIGITAL";
   priceNaira: string;
+  compareAtNaira: string;
+  sku: string;
+  hasOptions: boolean;
+  options: OptionDraft[];
+  variantRows: VariantDraft[];
   stockQuantity: string;
   durationMinutes: string;
   imageUrl: string;
@@ -86,6 +112,11 @@ const EMPTY_FORM: FormState = {
   description: "",
   kind: "PHYSICAL",
   priceNaira: "",
+  compareAtNaira: "",
+  sku: "",
+  hasOptions: false,
+  options: [],
+  variantRows: [],
   stockQuantity: "",
   durationMinutes: "60",
   imageUrl: "",
@@ -153,6 +184,12 @@ export function ProductsClient({
       description: product.description ?? "",
       kind: product.kind,
       priceNaira: String(product.priceMinor / 100),
+      compareAtNaira: product.compareAtPriceMinor != null ? String(product.compareAtPriceMinor / 100) : "",
+      sku: product.sku ?? "",
+      ...(() => {
+        const drafts = draftsFromProduct(product);
+        return { hasOptions: drafts.rows.length > 0, options: drafts.options, variantRows: drafts.rows };
+      })(),
       stockQuantity:
         product.stockQuantity !== null ? String(product.stockQuantity) : "",
       durationMinutes:
@@ -264,16 +301,33 @@ export function ProductsClient({
       setError("Name is required.");
       return;
     }
-    const priceNaira = Number(form.priceNaira);
+    // With options, each variant has its own price — the product's own follows the cheapest.
+    const variantPrices = form.hasOptions ? form.variantRows.map((r) => Number(r.price)).filter((n) => Number.isFinite(n) && n >= 0) : [];
+    const priceNaira = form.hasOptions && variantPrices.length > 0 ? Math.min(...variantPrices) : Number(form.priceNaira);
     if (!Number.isFinite(priceNaira) || priceNaira < 0) {
-      setError("Enter a valid price.");
+      setError(form.hasOptions ? "Enter a price for each variant." : "Enter a valid price.");
       return;
     }
+
+    // Options & variants (Size, Colour…): prices/stock/SKU per combination.
+    let variantFields: Record<string, unknown> = { options: null, variants: null };
+    if (form.hasOptions && form.kind !== "SERVICE") {
+      const built = variantPayload(form.options, form.variantRows);
+      if (typeof built === "string") {
+        setError(built);
+        return;
+      }
+      variantFields = built;
+    }
+    const compareAtNaira = form.compareAtNaira === "" ? null : Number(form.compareAtNaira);
 
     setSaving(true);
     setError(null);
 
     const payload = {
+      ...variantFields,
+      compareAtPriceMinor: compareAtNaira !== null && Number.isFinite(compareAtNaira) ? Math.round(compareAtNaira * 100) : null,
+      sku: form.sku.trim() || null,
       name: form.name,
       description: form.description || null,
       kind: form.kind,
@@ -341,6 +395,10 @@ export function ProductsClient({
         description: saved.description,
         kind: saved.kind,
         priceMinor: saved.priceMinor,
+        compareAtPriceMinor: saved.compareAtPriceMinor ?? null,
+        sku: saved.sku ?? null,
+        options: saved.options ?? null,
+        variants: saved.variants ?? null,
         // Deliberately the site's currency prop, not saved.currency — currency is a
         // site-wide setting now (see Settings > General), not a per-product value, so
         // every product on this page always displays in the same currency regardless of
@@ -444,12 +502,11 @@ export function ProductsClient({
     const term = searchTerm.trim().toLowerCase();
     return products.filter((p) => {
       const matchesSearch = !term || p.name.toLowerCase().includes(term);
+      const stock = effectiveStock(p);
       const matchesStock =
         stockFilter === "all" ||
         (p.kind === "PHYSICAL" &&
-          (stockFilter === "out"
-            ? (p.stockQuantity ?? 0) <= 0
-            : (p.stockQuantity ?? 0) > 0));
+          (stockFilter === "out" ? stock !== null && stock <= 0 : stock === null || stock > 0));
       return matchesSearch && matchesStock;
     });
   }, [products, searchTerm, stockFilter]);
@@ -1382,14 +1439,20 @@ export function ProductsClient({
                   gap: "0.75rem",
                 }}
               >
-                <FieldLabel label={`Price (${currencySymbol})`}>
-                  <TextInput
-                    value={form.priceNaira}
-                    onChange={(v) => setForm((p) => ({ ...p, priceNaira: v }))}
-                    placeholder="5000"
-                    type="number"
-                  />
-                </FieldLabel>
+                {form.hasOptions && form.kind !== "SERVICE" ? (
+                  <FieldLabel label={`Price (${currencySymbol})`}>
+                    <span style={{ display: "block", fontSize: "0.78rem", color: "#8a92b6", paddingTop: "0.5rem" }}>Set per option below</span>
+                  </FieldLabel>
+                ) : (
+                  <FieldLabel label={`Price (${currencySymbol})`}>
+                    <TextInput
+                      value={form.priceNaira}
+                      onChange={(v) => setForm((p) => ({ ...p, priceNaira: v }))}
+                      placeholder="5000"
+                      type="number"
+                    />
+                  </FieldLabel>
+                )}
                 <FieldLabel label="Category">
                   <TextInput
                     value={form.category}
@@ -1399,7 +1462,36 @@ export function ProductsClient({
                 </FieldLabel>
               </div>
 
-              {form.kind === "PHYSICAL" ? (
+              {!(form.hasOptions && form.kind !== "SERVICE") && (
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.75rem" }}>
+                  <FieldLabel label={`Sale "was" price (${currencySymbol}, optional)`}>
+                    <TextInput value={form.compareAtNaira} onChange={(v) => setForm((p) => ({ ...p, compareAtNaira: v }))} placeholder="Shown crossed out" type="number" />
+                  </FieldLabel>
+                  <FieldLabel label="SKU (optional)">
+                    <TextInput value={form.sku} onChange={(v) => setForm((p) => ({ ...p, sku: v }))} placeholder="TEE-001" />
+                  </FieldLabel>
+                </div>
+              )}
+
+              {form.kind !== "SERVICE" && (
+                <VariantsEditor
+                  enabled={form.hasOptions}
+                  onToggle={(on) =>
+                    setForm((p) => ({
+                      ...p,
+                      hasOptions: on,
+                      options: on && p.options.length === 0 ? [{ name: "Size", values: "" }] : p.options,
+                    }))
+                  }
+                  options={form.options}
+                  rows={form.variantRows}
+                  currencySymbol={currencySymbol}
+                  defaultPrice={form.priceNaira}
+                  onChange={(options, variantRows) => setForm((p) => ({ ...p, options, variantRows }))}
+                />
+              )}
+
+              {form.kind === "PHYSICAL" && form.hasOptions ? null : form.kind === "PHYSICAL" ? (
                 <FieldLabel label="Stock quantity">
                   <TextInput
                     value={form.stockQuantity}
