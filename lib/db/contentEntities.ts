@@ -79,6 +79,11 @@ export const Template = new Entity(
       // migration created — which is how the raw-upload daily limit tells pages Plexo made
       // for the owner apart from HTML they uploaded themselves.
       migratedFrom: { type: "string" },
+      // When set, this page's own URL permanently redirects here (its sub-pages and files
+      // still resolve normally, and it's left out of the sitemap). Used for a WordPress
+      // "posts page" (e.g. /news/) whose job the live Plexo blog at /blog now does — a frozen
+      // copy of the old post list would never show a new post.
+      redirectTo: { type: "string" },
       // Root sites only: paths of a migrated site's custom-plugin API endpoints that accepted
       // submissions on WordPress (e.g. "/blog/wp-json/my-plugin/v1/contact"). The serve route
       // captures POSTs to them into Form Submissions so anything still calling them keeps working.

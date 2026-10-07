@@ -329,6 +329,12 @@ export const WpMigrationPage = new Entity(
       internalLinks: { type: "any" },
       pluginSlugs: { type: "any" },
       assetCount: { type: "number" },
+      /** What WordPress's <body class> said this page is — its posts page and/or front page. */
+      isPostsIndex: { type: "boolean" },
+      isFront: { type: "boolean" },
+      /** Post lists on this page turned into live lists (lib/wpMigration/livePostLists.ts), and the largest one's size. */
+      livePostLists: { type: "number" },
+      livePostListMax: { type: "number" },
       /** Posts only: approved comments brought over. */
       commentCount: { type: "number" },
       error: { type: "string" },

@@ -4,6 +4,7 @@ import { listPublishedPosts, getCategoryBySlug, getTagBySlug, getAuthorBySlug } 
 import { archiveMetadata, archiveJsonLd } from "@/lib/blog/seo";
 import { BlogStyles, SiteHeader, SiteFooter, PostCard, Pagination, EmptyState, Breadcrumbs, JsonLd } from "@/lib/pub/blogTheme";
 import type { Metadata } from "next";
+import { ListingInLayout, loadListingLayoutHtml } from "@/lib/pub/blogListingLayout";
 
 export type ArchiveKind = "category" | "tag" | "author";
 
@@ -54,6 +55,24 @@ export async function BlogArchivePage({
 
   const heading = kind === "author" ? `Posts by ${target.name}` : target.name;
   const basePath = `/blog/${kind}/${slug}`;
+
+  const layoutHtml = await loadListingLayoutHtml(site.blogSite);
+  if (layoutHtml) {
+    return (
+      <ListingInLayout
+        layoutHtml={layoutHtml}
+        blogSite={site.blogSite}
+        siteTemplateId={site.published.templateId}
+        posts={result.posts}
+        options={{
+          heading,
+          emptyMessage: "No posts here yet.",
+          pagination: { page: result.page, totalPages: result.totalPages, buildHref: (p) => (p === 1 ? basePath : `${basePath}/page/${p}`) },
+        }}
+        jsonLd={archiveJsonLd(domain, basePath, heading, result.posts)}
+      />
+    );
+  }
 
   return (
     <div className="plexo-blog">
