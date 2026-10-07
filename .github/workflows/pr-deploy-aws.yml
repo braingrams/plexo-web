@@ -4,6 +4,16 @@ on:
   pull_request:
     types: [opened, reopened, synchronize]
 
+# One CloudFormation operation per PR stack at a time. Without this, pushing commits in
+# quick succession (or merging while a deploy is still running) started overlapping runs
+# against the same stack, and every one after the first failed with "is in
+# UPDATE_IN_PROGRESS state" — including the PR-close teardown (PR #50). Shared with
+# pr-destroy-aws.yml; queued, never cancelled mid-deploy (a cancelled CloudFormation update
+# rolls back slowly and blocks the next run anyway).
+concurrency:
+  group: pr-preview-stack-${{ github.event.number }}
+  cancel-in-progress: false
+
 permissions:
   id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
   contents: read
