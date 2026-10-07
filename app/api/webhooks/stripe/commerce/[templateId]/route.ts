@@ -1,3 +1,4 @@
+import { isExpiredButPayable, verifyOrderOnReturn } from "@/lib/commerce/verifyOnReturn";
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
@@ -100,6 +101,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
           .go();
       } catch (err) {
         if (!isConditionalCheckFailure(err)) throw err;
+        // …unless it was only cancelled because its checkout hold expired: reinstate it.
+        const { data: current } = await CommerceOrder.get({ templateId: templateId, id: orderRef.id }).go();
+        if (current && isExpiredButPayable(current)) await verifyOrderOnReturn(current);
         return NextResponse.json({ received: true }); // already moved past PENDING
       }
 

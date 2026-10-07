@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isAuthorizedAdmin } from "@/server/adminAuth";
 import { isCronRequest } from "@/lib/cronAuth";
 import { CommerceOrder, CommerceOrderItem, CommerceProduct, CommerceBooking, CommerceBookingSlotLock } from "@/lib/db/commerceEntities";
+import { verifyOrderOnReturn } from "@/lib/commerce/verifyOnReturn";
 
 // Matches the hold window checkout sets on a new booking (see
 // lib/commerce/checkoutDynamo.ts) — an order still PENDING this long after creation means
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const cutoff = new Date(Date.now() - STALE_ORDER_AGE_MS).toISOString();
 
-  type OrderRow = { id: string; templateId: string; status?: string; createdAt?: string; paymentMethod?: string };
+  type OrderRow = { id: string; templateId: string; status?: string; createdAt?: string; paymentMethod?: string; metadata?: unknown };
   const allOrders: OrderRow[] = [];
   let cursor: string | null = null;
   for (;;) {
@@ -62,15 +63,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // A BANK_TRANSFER order is PENDING by design until the site owner confirms the money
   // arrived (lib/commerce/bankTransfer.ts) — that can take days, not 15 minutes, so it's
   // never "abandoned" in this sense. The owner cancels it explicitly instead.
+  // A donation reserves nothing (no stock, no booking slot), so there's nothing to release —
+  // and cancelling one only risks ignoring a gift the donor finishes paying late.
   const staleOrders = allOrders.filter(
-    (o) => (o.status ?? "PENDING") === "PENDING" && o.paymentMethod !== "BANK_TRANSFER" && (o.createdAt ?? "") < cutoff,
+    (o) =>
+      (o.status ?? "PENDING") === "PENDING" &&
+      o.paymentMethod !== "BANK_TRANSFER" &&
+      (o.metadata as { kind?: string } | undefined)?.kind !== "DONATION" &&
+      (o.createdAt ?? "") < cutoff,
   );
 
   let expiredCount = 0;
   for (const staleOrder of staleOrders) {
+    // Ask the gateway first: a customer who simply took longer than the hold to pay must
+    // get their order confirmed, not cancelled (see lib/commerce/verifyOnReturn.ts).
+    const { data: fullOrder } = await CommerceOrder.get({ templateId: staleOrder.templateId, id: staleOrder.id }).go();
+    if (fullOrder && (await verifyOrderOnReturn(fullOrder)) === "PAID") continue;
     try {
       await CommerceOrder.patch({ templateId: staleOrder.templateId, id: staleOrder.id })
-        .set({ status: "CANCELLED" })
+        .set({ status: "CANCELLED", metadata: { ...((fullOrder?.metadata as object | undefined) ?? {}), expiredHoldAt: new Date().toISOString() } })
         .where((attr, op) => `${op.eq(attr.status, "PENDING")} AND (${op.notExists(attr.paymentMethod)} OR ${op.ne(attr.paymentMethod, "BANK_TRANSFER")})`)
         .go();
     } catch (err) {

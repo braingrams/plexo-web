@@ -1,4 +1,6 @@
+import { isExpiredButPayable, verifyOrderOnReturn } from "@/lib/commerce/verifyOnReturn";
 import { processPaystackDonationEvent } from "@/lib/commerce/donations";
+import { CommerceOrder } from "@/lib/db/commerceEntities";
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
@@ -88,6 +90,15 @@ export async function POST(
     confirmed = await confirmPaystackPayment(event.data.reference, templateId);
     if (confirmed) {
       await handleOrderPaid(confirmed.order, confirmed.booking, settings);
+    }
+  }
+  // A payment completed after its checkout hold expired: reinstate rather than ignore it.
+  if (!confirmed && event.event === "charge.success" && event.data?.reference) {
+    const { data: refs } = await CommerceOrder.query.byPaymentRef({ paystackReference: event.data.reference }).go();
+    const late = refs.find((o) => o.templateId === templateId);
+    if (late && isExpiredButPayable(late)) {
+      await verifyOrderOnReturn(late);
+      return NextResponse.json({ received: true });
     }
   }
   // Monthly donations: a renewal charge (no Plexo reference), subscription start/stop.
