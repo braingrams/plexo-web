@@ -13,6 +13,12 @@ permissions:
   id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
   contents: read
 
+# Same group as pr-deploy-aws.yml, so a teardown waits for a still-running preview deploy
+# instead of failing on "cannot be deleted while in status UPDATE_IN_PROGRESS".
+concurrency:
+  group: pr-preview-stack-${{ inputs.pr_number || github.event.number }}
+  cancel-in-progress: false
+
 jobs:
   destroy:
     if: github.repository == 'Challaris/plexo-web'
@@ -96,6 +102,20 @@ jobs:
           # directory — a missing directory entry doesn't satisfy that, unlike every
           # fromAsset()/Source.asset() call above, so it needs its own placeholder here too.
           echo "// placeholder — this stack is being destroyed" > .open-next/assets/commerce.js
+
+      - name: Wait for any in-flight stack operation to finish
+        # Belt and braces alongside the concurrency group: a deploy started outside this
+        # workflow pair (or a rollback still settling) would otherwise make the destroy
+        # below fail with "cannot be deleted while in status *_IN_PROGRESS".
+        run: |
+          FULL_STACK="${STACK_ID}-compute-stack"
+          for attempt in $(seq 1 60); do
+            STATUS=$(aws cloudformation describe-stacks --stack-name "$FULL_STACK" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+            case "$STATUS" in
+              *_IN_PROGRESS) echo "Stack is $STATUS — waiting ($attempt/60)…"; sleep 30 ;;
+              *) echo "Stack status: $STATUS"; break ;;
+            esac
+          done
 
       - name: Destroy the PR's compute stack only — never --all, never the data stack
         working-directory: ./cdk
