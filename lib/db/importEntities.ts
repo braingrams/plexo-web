@@ -230,7 +230,154 @@ export const SiteTransferRequest = new Entity(
 // documented gap for the same reason as several others: real, but a GSI2 candidate for
 // when it's actually implemented, not spent speculatively now.
 
+// ── WordPress migration (lib/wpMigration) ────────────────────────────────────────
+// A migration's report is what the owner checks before deleting their WordPress site, so
+// it outlives the 90-day job TTL above — a year covers "migrated, sat on it, came back to
+// switch the domain" comfortably.
+const ONE_YEAR_SECONDS = 365 * 24 * 60 * 60;
+const migrationTtl = (): number => Math.floor(Date.now() / 1000) + ONE_YEAR_SECONDS;
+
+export const WP_MIGRATION_PHASES = [
+  "PENDING", "PLANNING", "PAGES", "POSTS", "ASSETS", "FINALIZING", "COMPLETED", "PAUSED_ERROR", "FAILED", "CANCELLED",
+] as const;
+
+export const WpMigrationJob = new Entity(
+  {
+    model: { entity: "wpMigrationJob", version: "1", service: "plexoImport" },
+    attributes: {
+      id: { type: "string", required: true },
+      /** The Plexo site (root Template) being built from the WordPress site. */
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      createdBy: { type: "string", required: true },
+      sourceUrl: { type: "string", required: true },
+      /** WpInstall (lib/wpMigration/types.ts) — where WordPress was found. */
+      install: { type: "any" },
+      phase: { type: WP_MIGRATION_PHASES, default: "PENDING" },
+      processing: { type: "boolean", default: false },
+      lastHeartbeatAt: { type: "string" },
+      ownershipAttestedAt: { type: "string" },
+      /** pageKey → Template id for every node of the migrated page tree. */
+      nodes: { type: "any" },
+      /** Old path → new path for content whose URL moved (posts → /blog/<slug>). */
+      movedLinks: { type: "any" },
+      /** { pages, pagesDone, posts, postsDone, assets, assetsDone, assetsFailed } */
+      counts: { type: "any" },
+      /** Working state carried between phases — see lib/wpMigration/runJobDynamo.ts's PlanState. */
+      planState: { type: "any" },
+      /** DetectedPlugin[] — what happened to each WordPress plugin. */
+      plugins: { type: "any" },
+      /** Final verification report, written by the FINALIZING phase. */
+      report: { type: "any" },
+      /** Plexo Migrator companion plugin pairing: { keyEncrypted, status, summary, error, checkedAt }. */
+      connector: { type: "any" },
+      /** Import of what only the companion plugin can read: { stage, cursor, counts, team, unmoved, done, error }. */
+      extras: { type: "any" },
+      /** Domain switch: { plan: CutoverPlan, verification: LiveVerification } (lib/wpMigration/cutover.ts). */
+      cutover: { type: "any" },
+      errors: { type: "any" },
+      warnings: { type: "any" },
+      startedAt: { type: "string" },
+      finishedAt: { type: "string" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      ttl: { type: "number", default: migrationTtl },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["id"], template: "WPMIGRATION#${id}" },
+      },
+      byOrg: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["organizationId"], template: "ORG#${organizationId}" },
+        sk: { field: "GSI1SK", composite: ["createdAt", "id"], template: "WPMIGRATION#${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+/** One migrated URL — a WordPress page, a static page in front of WordPress, or a blog post. */
+export const WpMigrationPage = new Entity(
+  {
+    model: { entity: "wpMigrationPage", version: "1", service: "plexoImport" },
+    attributes: {
+      id: { type: "string", required: true },
+      jobId: { type: "string", required: true },
+      /** pageKey() of the source URL for pages, "post:<wpId>" for posts. */
+      key: { type: "string", required: true },
+      kind: { type: ["WP_PAGE", "STATIC_PAGE", "POST"] as const, required: true },
+      sourceUrl: { type: "string", required: true },
+      title: { type: "string" },
+      wpId: { type: "number" },
+      status: { type: ["PENDING", "DONE", "FAILED"] as const, default: "PENDING" },
+      /** Where it lives on Plexo now. */
+      newPath: { type: "string" },
+      templateId: { type: "string" },
+      blogPostId: { type: "string" },
+      /** Post payload (WpPostEntry) carried from PLANNING to POSTS so the API isn't read twice. */
+      data: { type: "any" },
+      sourceFacts: { type: "any" },
+      newFacts: { type: "any" },
+      forms: { type: "any" },
+      unmigratedForms: { type: "any" },
+      loginForms: { type: "number" },
+      /** [{ campaignId, name }] — donation forms converted to Plexo Donations on this page. */
+      donationCampaigns: { type: "any" },
+      searchForms: { type: "number" },
+      internalLinks: { type: "any" },
+      pluginSlugs: { type: "any" },
+      assetCount: { type: "number" },
+      /** Posts only: approved comments brought over. */
+      commentCount: { type: "number" },
+      error: { type: "string" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      ttl: { type: "number", default: migrationTtl },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["jobId"], template: "WPMIGRATION#${jobId}" },
+        sk: { field: "sk", composite: ["key"], template: "PAGE#${key}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+/** One file in the mirrored URL space (theme/plugin CSS/JS/fonts, media) and where it was stored. */
+export const WpMigrationAsset = new Entity(
+  {
+    model: { entity: "wpMigrationAsset", version: "1", service: "plexoImport" },
+    attributes: {
+      id: { type: "string", required: true },
+      jobId: { type: "string", required: true },
+      /** Decoded site-relative path without leading slash ("lineagecare/wp-content/uploads/a.jpg"). */
+      path: { type: "string", required: true },
+      status: { type: ["PENDING", "DONE", "FAILED", "SKIPPED"] as const, default: "PENDING" },
+      /** Where it was first referenced — a page key, a stylesheet path, or "media-library". */
+      discoveredFrom: { type: "string" },
+      ownerTemplateId: { type: "string" },
+      relPath: { type: "string" },
+      contentType: { type: "string" },
+      size: { type: "number" },
+      error: { type: "string" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      ttl: { type: "number", default: migrationTtl },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["jobId"], template: "WPMIGRATION#${jobId}" },
+        sk: { field: "sk", composite: ["path"], template: "ASSET#${path}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoImportService = new Service(
-  { ImportJob, ImportMediaMap, SiteImportJob, SiteImportPage, SiteImportAssetBlob, SiteTransferRequest },
+  { ImportJob, ImportMediaMap, SiteImportJob, SiteImportPage, SiteImportAssetBlob, SiteTransferRequest, WpMigrationJob, WpMigrationPage, WpMigrationAsset },
   { table, client: docClient },
 );

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
+import { attachStripeSubscriptionToDonation, processStripeDonationEvent } from "@/lib/commerce/donations";
 import { handleOrderPaid } from "@/lib/db/commerceWebhookOperations";
 import { creditCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { CommerceOrder, CommerceBooking, CommerceSettings, StripeCommerceEvent } from "@/lib/db/commerceEntities";
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       ]);
 
       if (order && settings) {
+        await attachStripeSubscriptionToDonation(order, typeof session.subscription === "string" ? session.subscription : session.subscription?.id);
         await handleOrderPaid(order, booking, settings);
         try {
           await creditCommerceWallet(order);
@@ -89,6 +91,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           console.error("Commerce: platform Stripe wallet credit failed", err);
         }
       }
+    }
+  }
+
+  // Monthly donations: renewals, cancellations, failed charges.
+  for (const order of await processStripeDonationEvent(event, null)) {
+    if (order.paymentProvider !== "PLATFORM_STRIPE") continue;
+    const { data: settings } = await CommerceSettings.get({ templateId: order.templateId }).go();
+    if (!settings) continue;
+    await handleOrderPaid(order, null, settings);
+    try {
+      await creditCommerceWallet(order);
+    } catch (err) {
+      console.error("Commerce: platform Stripe wallet credit failed (donation renewal)", err);
     }
   }
 

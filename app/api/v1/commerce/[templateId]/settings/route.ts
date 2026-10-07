@@ -14,7 +14,10 @@ import {
 import { isKnownCurrency, isPaystackCompatibleCurrency } from "@/lib/commerce/currency";
 import { ensureProductDetailLayout } from "@/lib/commerce/productDetailLayout";
 import { ensureStorefrontLayout, getStorefrontSlug, renameStorefrontSlug } from "@/lib/commerce/storefrontLayout";
+import { deriveCommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
+import { applyCheckoutSettingsInput, checkoutSettingsView, CheckoutSettingsError } from "@/lib/commerce/checkoutSettings";
 import { CommerceSettings, CommerceStripeAccessRequest, CommerceOrder } from "@/lib/db/commerceEntities";
+import { Template } from "@/lib/db/contentEntities";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
   const { templateId } = await context.params;
@@ -23,9 +26,17 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
 
   const { data: settings } = await CommerceSettings.get({ templateId }).go();
   const storefrontSlug = await getStorefrontSlug(templateId);
+  const { data: rootTemplate } = await Template.get({ id: templateId }).go();
+  const autoTheme = deriveCommerceTheme(rootTemplate?.designJson);
 
   return NextResponse.json({
     settings: {
+      // Manual override (null = "use automatic"), plus the live auto-detected value so the
+      // dashboard can show what "automatic" actually resolves to right now — see
+      // lib/commerce/deriveCommerceTheme.ts.
+      themeAccentColor: settings?.themeAccentColor ?? null,
+      themeButtonRadius: settings?.themeButtonRadius ?? null,
+      autoDetectedTheme: autoTheme,
       enabled: settings?.enabled ?? false,
       storefrontSlug,
       currency: settings?.currency ?? "NGN",
@@ -67,6 +78,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
       notifyCustomerOnShipped: settings?.notifyCustomerOnShipped ?? true,
       notifyCustomerOnCompleted: settings?.notifyCustomerOnCompleted ?? true,
       notifyCustomerOnRefunded: settings?.notifyCustomerOnRefunded ?? true,
+      ...checkoutSettingsView(settings),
       webhookUrl: `${request.nextUrl.origin}/api/webhooks/paystack/${templateId}`,
       stripeWebhookUrl: `${request.nextUrl.origin}/api/webhooks/stripe/commerce/${templateId}`,
     },
@@ -111,6 +123,8 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     notifyCustomerOnShipped,
     notifyCustomerOnCompleted,
     notifyCustomerOnRefunded,
+    themeAccentColor,
+    themeButtonRadius,
   } = body;
 
   if (storefrontSlug !== undefined && typeof storefrontSlug !== "string") {
@@ -192,7 +206,10 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     | "stripeLivePublishableKey"
     | "maildripPaidGroupId"
     | "maildripNewsletterGroupId"
-    | "notificationEmail";
+    | "notificationEmail"
+    | "themeAccentColor"
+    | "themeButtonRadius"
+    | ReturnType<typeof applyCheckoutSettingsInput>["toRemove"][number];
   const toRemove: RemovableField[] = [];
 
   if (typeof enabled === "boolean") data.enabled = enabled;
@@ -259,8 +276,28 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
   if (typeof notifyCustomerOnShipped === "boolean") data.notifyCustomerOnShipped = notifyCustomerOnShipped;
   if (typeof notifyCustomerOnCompleted === "boolean") data.notifyCustomerOnCompleted = notifyCustomerOnCompleted;
   if (typeof notifyCustomerOnRefunded === "boolean") data.notifyCustomerOnRefunded = notifyCustomerOnRefunded;
+  if (typeof themeAccentColor === "string") {
+    if (themeAccentColor) data.themeAccentColor = themeAccentColor;
+    else toRemove.push("themeAccentColor");
+  }
+  if (typeof themeButtonRadius === "string") {
+    if (themeButtonRadius) data.themeButtonRadius = themeButtonRadius;
+    else toRemove.push("themeButtonRadius");
+  }
 
   const { data: existing } = await CommerceSettings.get({ templateId }).go();
+
+  // Bank transfer, checkout questions, delivery/pickup — shared validation with the MCP
+  // tool (lib/commerce/checkoutSettings.ts).
+  try {
+    const checkoutInput = applyCheckoutSettingsInput(body, existing);
+    Object.assign(data, checkoutInput.data);
+    toRemove.push(...checkoutInput.toRemove);
+  } catch (err) {
+    if (err instanceof CheckoutSettingsError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
+  }
+
   if (existing) {
     let patch = CommerceSettings.patch({ templateId }).set(data);
     if (toRemove.length) patch = patch.remove(toRemove);
@@ -323,6 +360,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
       notifyCustomerOnShipped: settings.notifyCustomerOnShipped ?? true,
       notifyCustomerOnCompleted: settings.notifyCustomerOnCompleted ?? true,
       notifyCustomerOnRefunded: settings.notifyCustomerOnRefunded ?? true,
+      ...checkoutSettingsView(settings),
       webhookUrl: `${request.nextUrl.origin}/api/webhooks/paystack/${templateId}`,
       stripeWebhookUrl: `${request.nextUrl.origin}/api/webhooks/stripe/commerce/${templateId}`,
     },

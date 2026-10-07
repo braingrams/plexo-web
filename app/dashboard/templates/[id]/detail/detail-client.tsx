@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { PageContainer } from "../../../_components/PageContainer";
 import { Card } from "../../../_components/Card";
 import { CustomSelect } from "../../../../_components/CustomSelect";
+import { SiteAppearancePanel } from "./SiteAppearancePanel";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
@@ -1242,6 +1243,8 @@ export function DetailClient({
             minWidth: 0,
           }}
         >
+          {siteData && <SiteAppearancePanel templateId={templateId} />}
+
           {/* View Source — collapsed by default; a debugging/inspection aid, not something
               most visits to this page need open. */}
           <Card padded={false}>

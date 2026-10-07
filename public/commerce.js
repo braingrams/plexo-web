@@ -9,10 +9,14 @@
  * — sanitizeCompiledHtml.ts strips <script> tags from the compiled body itself, so this
  * file is the ONLY place Commerce's client behavior can live.
  *
- * Styling is deliberately neutral (not Helimax-specific, or any other single site's
- * brand) — this runs on every Commerce-enabled Plexo site. A site-level "Commerce
- * appearance" setting (accent color, font) would be a reasonable fast-follow, mirroring
- * BlogSite.accentColor/fontPreset, but isn't built yet.
+ * Styling defaults to a neutral navy/gold look (not tied to any one site's brand), but is
+ * now theme-aware: window.__PLEXO_COMMERCE__.theme (set by injectCommerceScript, resolved
+ * by an explicit CommerceSettings override or, failing that, auto-detected from the site's
+ * own button choices — see lib/commerce/deriveCommerceTheme.ts) drives the primary button's
+ * accent color and the shared corner radius. `theme` is absent/null whenever neither exists
+ * (a brand-new site with no filled buttons yet), in which case every value below falls back
+ * to these exact literals — a site with nothing to detect renders identically to before
+ * theming existed.
  */
 (function () {
   "use strict";
@@ -23,6 +27,14 @@
   // injectCommerceScript in app/pub/[domain]/[[...slug]]/route.ts). "/shop" is only a
   // last-resort fallback for a page that somehow loads this script without that config.
   var STOREFRONT_PATH = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.storefrontPath) || "/shop";
+  // The checkout page's own REAL resolved path (see getCheckoutPath in
+  // lib/commerce/storefrontLayout.ts) — NOT assumed to be "{STOREFRONT_PATH}/checkout"
+  // anymore. That assumption only held for the auto-provisioned flow (checkout genuinely a
+  // child of the storefront page); a hand-built site can have its checkout page anywhere
+  // in the tree, including a sibling of the storefront rather than a child — confirmed
+  // live: a real site's checkout 404ed under that assumption. Falls back to the old
+  // concatenation only if the config predates this (null), never as the normal case.
+  var CHECKOUT_PATH = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.checkoutPath) || (STOREFRONT_PATH + "/checkout");
   var CART_EVENT = "plexo:cart-updated";
   var CHECKOUT_STATE_EVENT = "plexo:checkout-state-changed";
   // Shared between the checkout page's two independent marker blocks — checkout_flow
@@ -39,11 +51,22 @@
     deliveryFeeMinor: 0,
     shippingCountry: "",
     shippingState: "",
+    shippingCity: "",
+    shippingCityIsOther: false,
     shippingAddressLine: "",
     customerName: "",
     customerEmail: "",
     customerPhone: "",
     discountCode: "",
+    // "delivery" | "pickup" — which kind of option the customer is choosing between (see
+    // renderCheckoutFlow). Pickup never needs an address typed in.
+    fulfillmentMode: null,
+    // "ONLINE" | "BANK_TRANSFER" — picked in the order summary (renderCartSummary), right
+    // next to the total it applies to. null until checkout-config says what's available.
+    paymentMethod: null,
+    // Answers to the site owner's own checkout questions, keyed by question id —
+    // re-validated server-side (lib/commerce/checkoutFields.ts), never trusted.
+    customFields: {},
   };
 
   // ---------------------------------------------------------------------
@@ -52,30 +75,57 @@
 
   function injectStyles() {
     if (document.getElementById(STYLE_ID)) return;
+    var theme = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.theme) || null;
+    var accent = (theme && theme.accentColor) || "#16233F";
+    var radius = { sharp: "2px", rounded: "10px", pill: "100px" }[theme && theme.buttonRadius] || "2px";
+    // Large rectangular containers (cards, inputs, selects) use a capped radius even when
+    // the site's own button style is "pill" — a 100px corner radius reads fine on a small
+    // button (the whole point of a pill shape) but turns a tall card into a stretched oval/
+    // stadium blob, confirmed live on the checkout page's order-summary card. "Pill" here
+    // means "generously rounded," not "literally capsule-shaped," for anything taller than
+    // a button.
+    var containerRadius = { sharp: "2px", rounded: "10px", pill: "16px" }[theme && theme.buttonRadius] || "2px";
+    // Any derived/configured accent could be light or dark — picking the on-accent text
+    // color unconditionally (the old hardcoded #FBFAF6) only happened to work because
+    // #16233F is dark. Relative luminance (WCAG's simplified sRGB formula) keeps button
+    // text legible regardless of what accent a given site resolves to.
+    var accentTextColor = (function () {
+      var hex = accent.replace("#", "");
+      if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+      if (!/^[0-9a-fA-F]{6}$/.test(hex)) return "#FBFAF6";
+      var r = parseInt(hex.slice(0, 2), 16) / 255;
+      var g = parseInt(hex.slice(2, 4), 16) / 255;
+      var b = parseInt(hex.slice(4, 6), 16) / 255;
+      var luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      return luminance > 0.6 ? "#16233F" : "#FBFAF6";
+    })();
     var css = [
       ".pc-root{font-family:'Public Sans',system-ui,sans-serif;box-sizing:border-box;color:#1B2333;}",
       ".pc-root *{box-sizing:border-box;}",
       ".pc-mono{font-family:'IBM Plex Mono',monospace;}",
       ".pc-serif{font-family:'Fraunces',serif;}",
       ".pc-muted{color:#565F72;}",
-      ".pc-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#16233F;color:#FBFAF6;border:none;padding:14px 22px;font-size:14.5px;font-weight:600;cursor:pointer;border-radius:2px;font-family:'Public Sans',sans-serif;line-height:1.2;}",
-      ".pc-btn:hover{background:#1E2F52;}",
+      ".pc-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:" + accent + ";color:" + accentTextColor + ";border:none;padding:14px 22px;font-size:14.5px;font-weight:600;cursor:pointer;border-radius:" + radius + ";font-family:'Public Sans',sans-serif;line-height:1.2;}",
+      ".pc-btn:hover{filter:brightness(1.12);}",
       ".pc-btn:disabled{opacity:0.5;cursor:not-allowed;}",
-      ".pc-btn-gold{background:#E3B23C;color:#16233F;}",
-      ".pc-btn-gold:hover{background:#F6E7C3;}",
+      // Historically a fixed gold variant; now just the theme's accent again — kept as a
+      // separate class (rather than folded into .pc-btn) since call sites combine it with
+      // .pc-btn for layout/sizing overrides while relying on this rule for color/radius.
+      ".pc-btn-gold{background:" + accent + ";color:" + accentTextColor + ";border-radius:" + radius + ";}",
+      ".pc-btn-gold:hover{filter:brightness(1.12);}",
       ".pc-btn-outline{background:transparent;color:#16233F;border:1.5px solid #E4E1D6;}",
       ".pc-btn-outline:hover{background:#F3F1EA;}",
-      ".pc-input{width:100%;padding:14px 16px;font-size:14px;border:1px solid #E4E1D6;border-radius:0;font-family:'Public Sans',sans-serif;color:#1B2333;background:#FFFFFF;}",
+      ".pc-input{width:100%;padding:14px 16px;font-size:14px;border:1px solid #E4E1D6;border-radius:" + containerRadius + ";font-family:'Public Sans',sans-serif;color:#1B2333;background:#FFFFFF;}",
       ".pc-input:focus{outline:1.5px solid #16233F;outline-offset:-1px;}",
       ".pc-label{display:block;font-size:12.5px;font-weight:600;color:#16233F;margin-bottom:8px;}",
-      ".pc-card{background:#FFFFFF;border:1px solid #E4E1D6;border-radius:0;overflow:hidden;}",
+      ".pc-card{background:#FFFFFF;border:1px solid #E4E1D6;border-radius:" + containerRadius + ";overflow:hidden;}",
       ".pc-error{background:#F3E4E1;border:1px solid #E3B8AE;color:#8C3A2E;padding:10px 14px;border-radius:2px;font-size:13.5px;margin:10px 0;}",
       ".pc-badge{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9.5px;font-weight:500;letter-spacing:0.05em;text-transform:uppercase;padding:4px 8px;border-radius:0;}",
       ".pc-badge-ok{background:#E4F0E7;color:#1F5C3C;}",
       ".pc-badge-low{background:#FBEFD8;color:#8A5A22;}",
       ".pc-badge-out{background:#F3E4E1;color:#8C3A2E;}",
       ".pc-grid{display:grid;gap:24px;}",
-      ".pc-select{padding:12px 32px 12px 14px;font-size:13.5px;border:1px solid #E4E1D6;border-radius:0;font-family:'Public Sans',sans-serif;color:#1B2333;background-color:#FFFFFF;appearance:none;-webkit-appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23565F72' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 12px center;}",
+      ".pc-select{padding:12px 32px 12px 14px;font-size:13.5px;border:1px solid #E4E1D6;border-radius:" + containerRadius + ";font-family:'Public Sans',sans-serif;color:#1B2333;background-color:#FFFFFF;appearance:none;-webkit-appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23565F72' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 12px center;}",
       ".pc-newsletter-input::placeholder{color:#8FA0C4;}",
       ".pc-spin{width:22px;height:22px;border-radius:50%;border:2.5px solid #E4E1D6;border-top-color:#16233F;animation:pc-spin 0.7s linear infinite;}",
       "@keyframes pc-spin{to{transform:rotate(360deg);}}",
@@ -281,6 +331,299 @@
     node.appendChild(el("div", { class: "pc-error" }, [message]));
   }
 
+  // Delivery methods are configured with ISO-3166-1 alpha-2 codes and free-text state names
+  // (lib/commerce/delivery.ts matches address.country/state against exactly those, case-
+  // insensitively) — a free-text field expecting a customer to already know a country's ISO
+  // code, or to spell a state exactly as the merchant typed it, is a real dead end (confirmed
+  // live: "Nigeria" typed into a plain text box silently failed to match a method scoped to
+  // "NG"). COUNTRIES is a standard ISO-3166-1 list for the dropdown; STATES_BY_COUNTRY gives
+  // a proper state dropdown for countries this covers (currently Nigeria, the common case for
+  // this platform's merchants) — any other country falls back to a plain text state input,
+  // same as before, rather than pretending to have every country's subdivisions memorized.
+  var COUNTRIES = [
+    ["NG", "Nigeria"], ["GH", "Ghana"], ["KE", "Kenya"], ["ZA", "South Africa"], ["EG", "Egypt"],
+    ["MA", "Morocco"], ["ET", "Ethiopia"], ["TZ", "Tanzania"], ["UG", "Uganda"], ["CI", "Côte d'Ivoire"],
+    ["SN", "Senegal"], ["CM", "Cameroon"], ["ZW", "Zimbabwe"], ["ZM", "Zambia"], ["RW", "Rwanda"],
+    ["BJ", "Benin"], ["TG", "Togo"], ["SL", "Sierra Leone"], ["LR", "Liberia"], ["NE", "Niger"],
+    ["ML", "Mali"], ["BF", "Burkina Faso"], ["GM", "Gambia"], ["GW", "Guinea-Bissau"], ["GN", "Guinea"],
+    ["MR", "Mauritania"], ["TD", "Chad"], ["CD", "DR Congo"], ["CG", "Congo"], ["GA", "Gabon"],
+    ["GQ", "Equatorial Guinea"], ["AO", "Angola"], ["NA", "Namibia"], ["BW", "Botswana"], ["MZ", "Mozambique"],
+    ["MW", "Malawi"], ["MG", "Madagascar"], ["SS", "South Sudan"], ["SD", "Sudan"], ["SO", "Somalia"],
+    ["DJ", "Djibouti"], ["ER", "Eritrea"], ["LY", "Libya"], ["TN", "Tunisia"], ["DZ", "Algeria"],
+    ["CV", "Cabo Verde"], ["ST", "São Tomé and Príncipe"], ["SC", "Seychelles"], ["MU", "Mauritius"],
+    ["KM", "Comoros"], ["SZ", "Eswatini"], ["LS", "Lesotho"], ["BI", "Burundi"], ["US", "United States"],
+    ["GB", "United Kingdom"], ["CA", "Canada"], ["AU", "Australia"], ["NZ", "New Zealand"], ["IE", "Ireland"],
+    ["DE", "Germany"], ["FR", "France"], ["ES", "Spain"], ["PT", "Portugal"], ["IT", "Italy"],
+    ["NL", "Netherlands"], ["BE", "Belgium"], ["CH", "Switzerland"], ["AT", "Austria"], ["SE", "Sweden"],
+    ["NO", "Norway"], ["DK", "Denmark"], ["FI", "Finland"], ["PL", "Poland"], ["GR", "Greece"],
+    ["TR", "Türkiye"], ["RU", "Russia"], ["UA", "Ukraine"], ["AE", "United Arab Emirates"],
+    ["SA", "Saudi Arabia"], ["QA", "Qatar"], ["KW", "Kuwait"], ["BH", "Bahrain"], ["OM", "Oman"],
+    ["JO", "Jordan"], ["LB", "Lebanon"], ["IL", "Israel"], ["IN", "India"], ["PK", "Pakistan"],
+    ["BD", "Bangladesh"], ["CN", "China"], ["JP", "Japan"], ["KR", "South Korea"], ["SG", "Singapore"],
+    ["MY", "Malaysia"], ["ID", "Indonesia"], ["PH", "Philippines"], ["TH", "Thailand"], ["VN", "Vietnam"],
+    ["BR", "Brazil"], ["MX", "Mexico"], ["AR", "Argentina"], ["CO", "Colombia"], ["CL", "Chile"],
+    ["PE", "Peru"], ["JM", "Jamaica"], ["TT", "Trinidad and Tobago"],
+  ];
+
+  var STATES_BY_COUNTRY = {
+    NG: [
+      "Abia", "Adamawa", "Akwa Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno",
+      "Cross River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "Gombe", "Imo", "Jigawa",
+      "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara", "Lagos", "Nasarawa", "Niger",
+      "Ogun", "Ondo", "Osun", "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe",
+      "Zamfara", "FCT (Abuja)",
+    ],
+  };
+
+  // City is informational only — captured as part of the shipping address, never used to
+  // gate delivery-method eligibility (that stays country/state, same as
+  // lib/commerce/delivery.ts's isMethodApplicable always has). Each state's own capital
+  // plus a small number of other well-known major cities — not an exhaustive LGA list
+  // (Nigeria has 774 of those, too large and too easy to get subtly wrong to hardcode here
+  // with confidence) — "Other" always falls back to free text for anywhere not listed.
+  var MAJOR_CITIES_BY_STATE = {
+    Abia: ["Umuahia", "Aba"], Adamawa: ["Yola", "Mubi"], "Akwa Ibom": ["Uyo"],
+    Anambra: ["Awka", "Onitsha", "Nnewi"], Bauchi: ["Bauchi"], Bayelsa: ["Yenagoa"],
+    Benue: ["Makurdi"], Borno: ["Maiduguri"], "Cross River": ["Calabar"],
+    Delta: ["Asaba", "Warri"], Ebonyi: ["Abakaliki"], Edo: ["Benin City"],
+    Ekiti: ["Ado-Ekiti"], Enugu: ["Enugu"], Gombe: ["Gombe"], Imo: ["Owerri"],
+    Jigawa: ["Dutse"], Kaduna: ["Kaduna", "Zaria"], Kano: ["Kano"], Katsina: ["Katsina"],
+    Kebbi: ["Birnin Kebbi"], Kogi: ["Lokoja"], Kwara: ["Ilorin"],
+    Lagos: ["Ikeja", "Lagos Island", "Lekki", "Surulere"], Nasarawa: ["Lafia"],
+    Niger: ["Minna"], Ogun: ["Abeokuta"], Ondo: ["Akure"], Osun: ["Osogbo"],
+    Oyo: ["Ibadan"], Plateau: ["Jos"], Rivers: ["Port Harcourt"], Sokoto: ["Sokoto"],
+    Taraba: ["Jalingo"], Yobe: ["Damaturu"], Zamfara: ["Gusau"], "FCT (Abuja)": ["Abuja"],
+  };
+  var OTHER_CITY_VALUE = "__other__";
+
+  // ---------------------------------------------------------------------
+  // Checkout config — payment options, extra questions, delivery/pickup switches
+  // ---------------------------------------------------------------------
+
+  // One fetch per page load, shared by checkout_flow, cart_summary and booking — see
+  // app/api/public/commerce/checkout-config/route.ts. Falls back to "card only, no extra
+  // questions" so an older site (or a hiccup) still gets the checkout it always had.
+  var checkoutConfigPromise = null;
+  function fetchCheckoutConfig() {
+    if (!checkoutConfigPromise) {
+      checkoutConfigPromise = api("/api/public/commerce/checkout-config").catch(function () {
+        return { payment: { online: true, gateway: "paystack", bankTransfer: null }, fields: [], fulfillment: { deliveryEnabled: true, pickupEnabled: true, pickupLocation: null } };
+      });
+    }
+    return checkoutConfigPromise;
+  }
+
+  function defaultPaymentMethod(config) {
+    if (checkoutFormState.paymentMethod === "BANK_TRANSFER" && config.payment.bankTransfer) return "BANK_TRANSFER";
+    if (checkoutFormState.paymentMethod === "ONLINE" && config.payment.online) return "ONLINE";
+    return config.payment.online ? "ONLINE" : config.payment.bankTransfer ? "BANK_TRANSFER" : null;
+  }
+
+  // A selectable bordered card with a radio dot — the same look the delivery options
+  // always had, reused for delivery-vs-pickup and card-vs-bank-transfer choices.
+  function optionCard(opts) {
+    var wrap = el(
+      "div",
+      {
+        role: "radio",
+        "aria-checked": opts.selected ? "true" : "false",
+        tabindex: "0",
+        style: {
+          border: "1.5px solid " + (opts.selected ? "#16233F" : "#E4E1D6"),
+          padding: "14px 16px",
+          cursor: "pointer",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: "12px",
+          flex: "1",
+          minWidth: opts.minWidth || "160px",
+          background: "#FFFFFF",
+        },
+        onclick: opts.onSelect,
+        onkeydown: function (e) {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            opts.onSelect();
+          }
+        },
+      },
+      [
+        el("div", { style: { display: "flex", flexDirection: "column", gap: "4px", minWidth: "0" } }, [
+          el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F" } }, [opts.title]),
+          opts.subtitle ? el("span", { class: "pc-muted", style: { fontSize: "12px", lineHeight: "1.5" } }, [opts.subtitle]) : null,
+        ]),
+        el("span", {
+          style: { width: "16px", height: "16px", borderRadius: "50%", border: "1.5px solid #16233F", background: opts.selected ? "#16233F" : "transparent", flexShrink: "0", marginTop: "2px" },
+        }),
+      ]
+    );
+    return wrap;
+  }
+
+  // A question with `countries` is only asked when the order ships to one of them (mirrors
+  // isCheckoutFieldShown in lib/commerce/checkoutFields.ts — the server re-checks). `country`
+  // is null whenever there's no delivery address: pickup, bookings.
+  function isFieldShown(f, country) {
+    if (!f.countries || !f.countries.length) return true;
+    return Boolean(country) && f.countries.indexOf(String(country).toUpperCase()) !== -1;
+  }
+
+  // The cart checkout's current delivery country — only while the customer is actually
+  // choosing delivery, never a leftover from before they switched to pickup.
+  function checkoutDeliveryCountry() {
+    return checkoutFormState.fulfillmentMode === "delivery" ? checkoutFormState.shippingCountry || null : null;
+  }
+
+  // The site owner's own checkout questions (Settings → Checkout). `values` is the object
+  // answers are written into — checkoutFormState.customFields for the cart checkout, a
+  // local object for a booking. `getCountry` (optional) returns the current delivery country;
+  // call the returned node's refresh() whenever it may have changed, so country-limited
+  // questions appear/disappear in place without losing anything already typed.
+  function customFieldsSection(fields, values, heading, getCountry) {
+    if (!fields || !fields.length) return null;
+    var rows = fields.map(function (f) {
+      var label = f.label + (f.required ? " *" : "");
+      var common = {
+        class: f.type === "select" ? "pc-select" : "pc-input",
+        style: f.type === "select" ? { width: "100%" } : null,
+        placeholder: f.placeholder || null,
+      };
+      var input;
+      if (f.type === "select") {
+        input = el(
+          "select",
+          Object.assign({}, common, {
+            onchange: function (e) {
+              values[f.id] = e.target.value;
+            },
+          }),
+          [el("option", { value: "" }, ["Select…"])].concat(
+            (f.options || []).map(function (o) {
+              return el("option", { value: o, selected: values[f.id] === o ? "selected" : null }, [o]);
+            })
+          )
+        );
+      } else if (f.type === "textarea") {
+        input = el("textarea", Object.assign({}, common, { rows: "3", oninput: function (e) { values[f.id] = e.target.value; } }));
+        input.value = values[f.id] || "";
+      } else {
+        input = el(
+          "input",
+          Object.assign({}, common, {
+            type: f.type === "date" ? "date" : f.type === "phone" ? "tel" : "text",
+            value: values[f.id] || "",
+            oninput: function (e) {
+              values[f.id] = e.target.value;
+            },
+          })
+        );
+      }
+      return el("div", {}, [el("label", { class: "pc-label" }, [label]), input]);
+    });
+    var section = el("div", {}, [
+      heading ? el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, [heading]) : null,
+      el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, rows),
+    ]);
+    section.refresh = function () {
+      var country = getCountry ? getCountry() : null;
+      var anyShown = false;
+      fields.forEach(function (f, i) {
+        var shown = isFieldShown(f, country);
+        rows[i].style.display = shown ? "" : "none";
+        if (shown) anyShown = true;
+      });
+      section.style.display = anyShown ? "" : "none";
+    };
+    section.refresh();
+    return section;
+  }
+
+  // Client-side mirror of resolveCheckoutFieldAnswers' required check — just for a fast,
+  // friendly message before submitting; the server re-validates everything.
+  function missingRequiredField(fields, values, country) {
+    for (var i = 0; i < (fields || []).length; i++) {
+      var f = fields[i];
+      if (!isFieldShown(f, country)) continue;
+      if (f.required && !String(values[f.id] || "").trim()) return f.label;
+    }
+    return null;
+  }
+
+  // Where to send the money, shown at checkout and again on the order confirmation page.
+  function bankDetailsCard(bank, amountText, referenceText) {
+    function row(label, value, copyable) {
+      var copyBtn = copyable
+        ? el(
+            "button",
+            {
+              type: "button",
+              style: { border: "1px solid #E4E1D6", background: "#fff", fontSize: "11px", padding: "3px 8px", cursor: "pointer", color: "#16233F" },
+              onclick: function () {
+                try {
+                  navigator.clipboard.writeText(value);
+                  copyBtn.textContent = "Copied";
+                  setTimeout(function () { copyBtn.textContent = "Copy"; }, 1500);
+                } catch (e) {}
+              },
+            },
+            ["Copy"]
+          )
+        : null;
+      return el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", fontSize: "13px", padding: "4px 0" } }, [
+        el("span", { class: "pc-muted" }, [label]),
+        el("span", { style: { display: "flex", alignItems: "center", gap: "8px", fontWeight: "600", color: "#16233F", textAlign: "right", wordBreak: "break-word" } }, [value, copyBtn]),
+      ]);
+    }
+    return el("div", { style: { background: "#F3F1EA", border: "1px solid #E4E1D6", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "2px" } }, [
+      row("Pay via", bank.bankName),
+      row("Account name", bank.accountName),
+      row("Account number", bank.accountNumber, true),
+      amountText ? row("Amount", amountText) : null,
+      referenceText ? row("Reference", referenceText) : null,
+      bank.instructions ? el("p", { class: "pc-muted", style: { margin: "8px 0 0", fontSize: "12px", lineHeight: "1.5" } }, [bank.instructions]) : null,
+    ]);
+  }
+
+  // Card vs. bank transfer choice + (for bank transfer) the details to pay into. Returns
+  // null when there's only one way to pay AND it's the card gateway — the checkout then
+  // looks exactly like it always did.
+  function paymentChoiceSection(config, amountText, onChange) {
+    var hasOnline = config.payment.online;
+    var bank = config.payment.bankTransfer;
+    if (!bank) return null;
+    var children = [el("span", { class: "pc-label", style: { marginBottom: "0" } }, ["Payment"])];
+    if (hasOnline) {
+      children.push(
+        el("div", { role: "radiogroup", style: { display: "flex", gap: "10px", flexWrap: "wrap" } }, [
+          optionCard({
+            title: "Pay online",
+            subtitle: "Card, via " + (config.payment.gateway === "stripe" ? "Stripe" : "Paystack"),
+            selected: checkoutFormState.paymentMethod === "ONLINE",
+            minWidth: "130px",
+            onSelect: function () { onChange("ONLINE"); },
+          }),
+          optionCard({
+            title: "Bank transfer",
+            subtitle: "Pay directly into our account",
+            selected: checkoutFormState.paymentMethod === "BANK_TRANSFER",
+            minWidth: "130px",
+            onSelect: function () { onChange("BANK_TRANSFER"); },
+          }),
+        ])
+      );
+    }
+    if (checkoutFormState.paymentMethod === "BANK_TRANSFER") {
+      children.push(
+        el("p", { class: "pc-muted", style: { margin: "0", fontSize: "12.5px", lineHeight: "1.55" } }, [
+          "Transfer the total to the account below, then place your order. We'll email your order number — your order is confirmed as soon as the store sees your payment.",
+        ])
+      );
+      children.push(bankDetailsCard(bank, amountText, "Your full name"));
+    }
+    return el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, children);
+  }
+
   function stockBadge(stockQuantity) {
     if (stockQuantity === null || stockQuantity === undefined) return el("span", { class: "pc-badge pc-badge-ok" }, ["In Stock"]);
     if (stockQuantity <= 0) return el("span", { class: "pc-badge pc-badge-out" }, ["Out of Stock"]);
@@ -314,6 +657,37 @@
   function fetchCart() {
     return api("/api/public/commerce/cart");
   }
+
+  // Lets shopCard/renderProduct/renderProductDetail mark a product's Add-to-Cart button
+  // as already "Added ✓" on initial paint, not only right after a fresh in-page click —
+  // the cart itself already persists across reloads (CART_COOKIE), but until now nothing
+  // re-checked it when a button was first built, so the button silently forgot its own
+  // product was already in the cart the moment the page reloaded or was navigated to.
+  // Memoized per page load (one fetch shared by every card) and kept in sync by
+  // broadcastCart's own CART_EVENT, which every add/update/remove already dispatches.
+  var cartProductIdsPromise = null;
+  function cartItemsToIdSet(items) {
+    var ids = {};
+    (items || []).forEach(function (item) {
+      ids[item.productId] = true;
+    });
+    return ids;
+  }
+  function getCartProductIds() {
+    if (!cartProductIdsPromise) {
+      cartProductIdsPromise = fetchCart()
+        .then(function (snapshot) {
+          return cartItemsToIdSet(snapshot.items);
+        })
+        .catch(function () {
+          return {};
+        });
+    }
+    return cartProductIdsPromise;
+  }
+  document.addEventListener(CART_EVENT, function (e) {
+    cartProductIdsPromise = Promise.resolve(cartItemsToIdSet(e.detail.items));
+  });
 
   // ---------------------------------------------------------------------
   // Added-to-cart flyout — appears immediately on a successful add, showing what was
@@ -384,7 +758,7 @@
         ]),
         el(
           "a",
-          { class: "pc-btn", href: STOREFRONT_PATH + "/checkout", style: { textDecoration: "none", width: "100%", marginTop: "14px" } },
+          { class: "pc-btn", href: CHECKOUT_PATH, style: { textDecoration: "none", width: "100%", marginTop: "14px" } },
           ["View Cart"]
         ),
       ]
@@ -501,6 +875,9 @@
               )),
             ])
           );
+          getCartProductIds().then(function (ids) {
+            if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+          });
           return;
         }
 
@@ -586,6 +963,9 @@
         node.appendChild(
           el("div", { style: Object.assign({ height: "100%", overflow: "hidden" }, teaser ? { background: "#1E2F52", border: "1px solid rgba(227,178,60,0.16)" } : { background: "#fff", border: "1px solid #E4E1D6" }) }, body)
         );
+        getCartProductIds().then(function (ids) {
+          if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+        });
       })
       .catch(function (err) {
         showError(node, err.message);
@@ -687,22 +1067,45 @@
                 )),
               ]);
 
-        var deliveryRow = el("div", { style: { display: "flex", gap: "28px", paddingTop: "8px", borderTop: "1px solid #E4E1D6", marginTop: "4px", flexWrap: "wrap" } }, [
-          el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
-            el("span", { html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 21h18M5 21V9l7-6 7 6v12M9 21v-6h6v6"></path></svg>' }),
+        // Reflects the store's real delivery/pickup switches (checkout-config), filled in
+        // once that answers — instead of always promising both regardless of whether the
+        // owner actually offers them.
+        var deliveryRow = el("div", { style: { display: "flex", gap: "28px", paddingTop: "8px", borderTop: "1px solid #E4E1D6", marginTop: "4px", flexWrap: "wrap" } });
+        function fulfillmentBadge(iconHtml, title, subtitle) {
+          return el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
+            el("span", { html: iconHtml }),
             el("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } }, [
-              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, ["Pickup available"]),
-              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, ["Choose your delivery method at checkout"]),
+              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, [title]),
+              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, [subtitle]),
             ]),
-          ]),
-          el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
-            el("span", { html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"></path><circle cx="7" cy="19" r="1.6"></circle><circle cx="17.5" cy="19" r="1.6"></circle></svg>' }),
-            el("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } }, [
-              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, ["Courier delivery"]),
-              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, ["Fee calculated at checkout"]),
-            ]),
-          ]),
-        ]);
+          ]);
+        }
+        if (p.kind === "PHYSICAL") {
+          fetchCheckoutConfig().then(function (cfg) {
+            var f = cfg.fulfillment || {};
+            if (f.pickupEnabled !== false) {
+              deliveryRow.appendChild(
+                fulfillmentBadge(
+                  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 21h18M5 21V9l7-6 7 6v12M9 21v-6h6v6"></path></svg>',
+                  "Free store pickup",
+                  f.pickupLocation ? f.pickupLocation : "Choose pickup at checkout"
+                )
+              );
+            }
+            if (f.deliveryEnabled !== false) {
+              deliveryRow.appendChild(
+                fulfillmentBadge(
+                  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"></path><circle cx="7" cy="19" r="1.6"></circle><circle cx="17.5" cy="19" r="1.6"></circle></svg>',
+                  "Delivery",
+                  "Fee calculated at checkout"
+                )
+              );
+            }
+            if (!deliveryRow.childNodes.length) deliveryRow.style.display = "none";
+          });
+        } else {
+          deliveryRow.style.display = "none";
+        }
 
         var infoCol = el("div", { style: { flex: "1 1 380px", minWidth: "280px", display: "flex", flexDirection: "column", gap: "24px" } }, [
           el("div", { style: { display: "flex", flexDirection: "column", gap: "12px" } }, [
@@ -731,6 +1134,11 @@
           ]),
         ]);
         node.appendChild(heroWrap);
+        if (addBtn) {
+          getCartProductIds().then(function (ids) {
+            if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+          });
+        }
 
         // Staff-curated only (CommerceProductRelation, set from the product's own admin
         // edit form) — never a guessed/automatic pick, and the whole section simply
@@ -768,10 +1176,27 @@
     if (!serviceId) return;
     showSpinner(node);
 
-    Promise.all([api("/api/public/commerce/products/" + encodeURIComponent(serviceId)), api("/api/public/commerce/availability?productId=" + encodeURIComponent(serviceId))])
+    Promise.all([api("/api/public/commerce/products/" + encodeURIComponent(serviceId)), api("/api/public/commerce/availability?productId=" + encodeURIComponent(serviceId)), fetchCheckoutConfig()])
       .then(function (results) {
         var product = results[0].product;
         var slots = results[1].slots || [];
+        var config = results[2];
+        var answers = {};
+        if (!checkoutFormState.paymentMethod) checkoutFormState.paymentMethod = defaultPaymentMethod(config);
+        var priceText = money(product.priceMinor, product.currency);
+        function confirmLabel() {
+          return checkoutFormState.paymentMethod === "BANK_TRANSFER" ? "I've sent the transfer — Book" : "Confirm & Pay — " + priceText;
+        }
+        var paymentBox = el("div", {});
+        function paintPayment() {
+          clear(paymentBox);
+          var section = paymentChoiceSection(config, priceText, function (method) {
+            checkoutFormState.paymentMethod = method;
+            paintPayment();
+            if (confirmBtn && !confirmBtn.dataset.busy) confirmBtn.textContent = confirmLabel();
+          });
+          if (section) paymentBox.appendChild(section);
+        }
         clear(node);
         prepareNode(node);
 
@@ -855,7 +1280,14 @@
                 confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
                 return;
               }
+              var missing = missingRequiredField(config.fields, answers, null);
+              if (missing) {
+                errorBox = el("div", { class: "pc-error" }, ['Please answer "' + missing + '".']);
+                confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
+                return;
+              }
               confirmBtn.disabled = true;
+              confirmBtn.dataset.busy = "1";
               confirmBtn.textContent = "Booking…";
               api("/api/public/commerce/checkout", {
                 method: "POST",
@@ -865,12 +1297,19 @@
                   customerName: nameInput.value || undefined,
                   customerEmail: emailInput.value,
                   customerPhone: phoneInput.value || undefined,
+                  paymentMethod: checkoutFormState.paymentMethod || undefined,
+                  customFields: answers,
                 }),
               })
                 .then(function (result) {
+                  if (result.redirectUrl) {
+                    window.location.href = result.redirectUrl;
+                    return;
+                  }
                   if (result.checkout && result.checkout.provider === "stripe") {
                     confirmBtn.disabled = false;
-                    confirmBtn.textContent = "Confirm & Pay — " + money(product.priceMinor, product.currency);
+                    delete confirmBtn.dataset.busy;
+                    confirmBtn.textContent = confirmLabel();
                     openStripeEmbeddedCheckout(result.checkout, function (err) {
                       errorBox = el("div", { class: "pc-error" }, [err.message]);
                       confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
@@ -881,14 +1320,16 @@
                 })
                 .catch(function (err) {
                   confirmBtn.disabled = false;
-                  confirmBtn.textContent = "Confirm & Pay — " + money(product.priceMinor, product.currency);
+                  delete confirmBtn.dataset.busy;
+                  confirmBtn.textContent = confirmLabel();
                   errorBox = el("div", { class: "pc-error" }, [err.message]);
                   confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
                 });
             },
           },
-          ["Confirm & Pay — " + money(product.priceMinor, product.currency)]
+          [confirmLabel()]
         );
+        paintPayment();
 
         node.appendChild(
           el("div", { class: "pc-card", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "20px" } }, [
@@ -901,6 +1342,8 @@
             nameField.wrap,
             emailField.wrap,
             phoneField.wrap,
+            customFieldsSection(config.fields, answers, null),
+            paymentBox,
             confirmBtn,
           ])
         );
@@ -931,7 +1374,7 @@
     // price and Add to Cart sit OUTSIDE that link (a nested interactive button inside
     // an <a> is invalid HTML and unreliable to click) so adding to cart from the grid
     // still works without navigating away.
-    return el("div", { style: { display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: dark ? "#1E2F52" : "#fff", border: dark ? "1px solid rgba(227,178,60,0.16)" : "1px solid #E4E1D6" } }, [
+    var card = el("div", { style: { display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", background: dark ? "#1E2F52" : "#fff", border: dark ? "1px solid rgba(227,178,60,0.16)" : "1px solid #E4E1D6" } }, [
       el("a", { href: href, style: { display: "block", textDecoration: "none", color: "inherit" } }, [
         media,
         el("div", { style: { padding: "14px 14px 0" } }, [
@@ -968,6 +1411,10 @@
         )),
       ]),
     ]);
+    getCartProductIds().then(function (ids) {
+      if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+    });
+    return card;
   }
 
   // A card for a slot the curated grid couldn't fill (a brand-new catalog with nothing
@@ -1313,6 +1760,7 @@
   // since the delivery method and contact fields live in the OTHER marker's DOM.
   function renderCartSummary(node) {
     var latestSnapshot = null;
+    var config = null;
     // Lives at this scope (not inside paint()) deliberately — updateItem/removeItem call
     // paint() synchronously to show a row disabled mid-request, and paint() rebuilds its
     // whole subtree (including re-declaring updateItem/removeItem as closures) on every
@@ -1449,6 +1897,16 @@
       var payBtn;
       var errorBox = null;
 
+      if (config && !checkoutFormState.paymentMethod) checkoutFormState.paymentMethod = defaultPaymentMethod(config);
+      var isBankTransfer = checkoutFormState.paymentMethod === "BANK_TRANSFER";
+      var payLabel = isBankTransfer ? "I've sent the transfer — Place order" : "Continue to Payment →";
+      var paymentSection = config
+        ? paymentChoiceSection(config, money(total, snapshot.currency), function (method) {
+            checkoutFormState.paymentMethod = method;
+            paint(latestSnapshot);
+          })
+        : null;
+
       payBtn = el(
         "button",
         {
@@ -1465,12 +1923,23 @@
               return;
             }
             if (needsDelivery(snapshot) && !checkoutFormState.deliveryMethodId) {
-              errorBox = el("div", { class: "pc-error" }, ["Please choose a delivery method."]);
+              errorBox = el("div", { class: "pc-error" }, [checkoutFormState.fulfillmentMode === "pickup" ? "Please choose a pickup option." : "Please choose how you'd like to get your order."]);
+              payBtn.parentNode.insertBefore(errorBox, payBtn);
+              return;
+            }
+            var missing = config ? missingRequiredField(config.fields, checkoutFormState.customFields, checkoutDeliveryCountry()) : null;
+            if (missing) {
+              errorBox = el("div", { class: "pc-error" }, ['Please answer "' + missing + '".']);
+              payBtn.parentNode.insertBefore(errorBox, payBtn);
+              return;
+            }
+            if (config && !checkoutFormState.paymentMethod) {
+              errorBox = el("div", { class: "pc-error" }, ["This store isn't accepting payments yet — please check back soon."]);
               payBtn.parentNode.insertBefore(errorBox, payBtn);
               return;
             }
             payBtn.disabled = true;
-            payBtn.textContent = "Starting payment…";
+            payBtn.textContent = isBankTransfer ? "Placing order…" : "Starting payment…";
             api("/api/public/commerce/checkout/cart", {
               method: "POST",
               body: JSON.stringify({
@@ -1480,14 +1949,24 @@
                 deliveryMethodId: checkoutFormState.deliveryMethodId || undefined,
                 shippingCountry: checkoutFormState.shippingCountry || undefined,
                 shippingState: checkoutFormState.shippingState || undefined,
-                shippingAddressLine: checkoutFormState.shippingAddressLine || undefined,
+                // City is informational only (see MAJOR_CITIES_BY_STATE's own comment) — no
+                // dedicated column for it, so it rides along as part of the address line
+                // rather than needing a backend/schema change for a non-eligibility field.
+                shippingAddressLine:
+                  [checkoutFormState.shippingAddressLine, checkoutFormState.shippingCity].filter(Boolean).join(", ") || undefined,
                 discountCode: checkoutFormState.discountCode || undefined,
+                paymentMethod: checkoutFormState.paymentMethod || undefined,
+                customFields: checkoutFormState.customFields,
               }),
             })
               .then(function (result) {
+                if (result.redirectUrl) {
+                  window.location.href = result.redirectUrl;
+                  return;
+                }
                 if (result.checkout && result.checkout.provider === "stripe") {
                   payBtn.disabled = false;
-                  payBtn.textContent = "Continue to Payment →";
+                  payBtn.textContent = payLabel;
                   openStripeEmbeddedCheckout(result.checkout, function (err) {
                     errorBox = el("div", { class: "pc-error" }, [err.message]);
                     payBtn.parentNode.insertBefore(errorBox, payBtn);
@@ -1498,13 +1977,13 @@
               })
               .catch(function (err) {
                 payBtn.disabled = false;
-                payBtn.textContent = "Continue to Payment →";
+                payBtn.textContent = payLabel;
                 errorBox = el("div", { class: "pc-error" }, [err.message]);
                 payBtn.parentNode.insertBefore(errorBox, payBtn);
               });
           },
         },
-        ["Continue to Payment →"]
+        [payLabel]
       );
 
       node.appendChild(
@@ -1516,7 +1995,7 @@
             { style: { display: "flex", flexDirection: "column", gap: "8px", paddingTop: "16px", borderTop: "1px solid #E4E1D6" } },
             [totalsRow("Subtotal", money(snapshot.subtotalMinor, snapshot.currency))].concat(
               needsDelivery(snapshot)
-                ? [totalsRow("Delivery", checkoutFormState.deliveryFeeMinor > 0 ? money(checkoutFormState.deliveryFeeMinor, snapshot.currency) : "Free", checkoutFormState.deliveryFeeMinor === 0)]
+                ? [totalsRow(checkoutFormState.fulfillmentMode === "pickup" ? "Pickup" : "Delivery", checkoutFormState.deliveryFeeMinor > 0 ? money(checkoutFormState.deliveryFeeMinor, snapshot.currency) : "Free", checkoutFormState.deliveryFeeMinor === 0)]
                 : []
             )
           ),
@@ -1524,16 +2003,24 @@
             el("span", {}, ["Total"]),
             el("span", {}, [money(total, snapshot.currency)]),
           ]),
+          paymentSection,
           payBtn,
-          el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, ["Secured by " + (snapshot.paymentGateway === "stripe" ? "Stripe" : "Paystack")]),
+          el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, [
+            isBankTransfer ? "Direct bank transfer · confirmed by the store once received" : "Secured by " + (snapshot.paymentGateway === "stripe" ? "Stripe" : "Paystack"),
+          ]),
         ])
       );
     }
 
     showSpinner(node);
-    fetchCart().then(paint).catch(function (err) {
-      showError(node, err.message);
-    });
+    Promise.all([fetchCart(), fetchCheckoutConfig()])
+      .then(function (results) {
+        config = results[1];
+        paint(results[0]);
+      })
+      .catch(function (err) {
+        showError(node, err.message);
+      });
     document.addEventListener(CART_EVENT, function (e) {
       paint(e.detail);
     });
@@ -1555,8 +2042,10 @@
   // on delivery-method changes so the sidebar's total stays in sync.
   function renderCheckoutFlow(node) {
     showSpinner(node);
-    fetchCart()
-      .then(function (cart) {
+    Promise.all([fetchCart(), fetchCheckoutConfig()])
+      .then(function (results) {
+        var cart = results[0];
+        var config = results[1];
         clear(node);
         prepareNode(node);
 
@@ -1569,104 +2058,161 @@
           return i.kind === "PHYSICAL";
         });
 
-        function deliveryOption(method) {
-          var dot;
-          var selected = method.id === checkoutFormState.deliveryMethodId;
-          var feeText = (method.feeMinor > 0 ? money(method.feeMinor, cart.currency) : "Free") + (method.estimatedTimeLabel ? " · " + method.estimatedTimeLabel : "");
-          var wrap = el(
-            "div",
-            {
-              style: {
-                border: "1.5px solid " + (selected ? "#16233F" : "#E4E1D6"),
-                padding: "16px 18px",
-                cursor: "pointer",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: "12px",
-                flex: "1",
-                minWidth: "180px",
-              },
-              onclick: function () {
-                checkoutFormState.deliveryMethodId = method.id;
-                checkoutFormState.deliveryFeeMinor = method.feeMinor || 0;
-                Array.prototype.forEach.call(deliverySection.querySelectorAll("[data-pc-delivery-option]"), function (o) {
-                  o.style.borderColor = "#E4E1D6";
-                  var d = o.querySelector("[data-pc-delivery-dot]");
-                  if (d) d.style.background = "transparent";
-                });
-                wrap.style.borderColor = "#16233F";
-                dot.style.background = "#16233F";
-                document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
-              },
-              "data-pc-delivery-option": "true",
-            },
-            [
-              el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } }, [
-                el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F" } }, [method.name]),
-                el("span", { class: "pc-muted", style: { fontSize: "12px" } }, [feeText]),
-              ]),
-              (dot = el("span", {
-                "data-pc-delivery-dot": "true",
-                style: { width: "16px", height: "16px", borderRadius: "50%", border: "1.5px solid #16233F", background: selected ? "#16233F" : "transparent", flexShrink: "0" },
-              })),
-            ]
-          );
-          return wrap;
-        }
-
-        // Populated once /api/public/commerce/delivery-methods answers — starts as a
-        // loading placeholder since a real fetch has to happen before anything can be
-        // selected. Re-fetched whenever the country/state inputs change so the option list
-        // only ever shows methods that actually cover the typed address.
-        var deliverySection = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
-          el("p", { class: "pc-muted", style: { fontSize: "13px" } }, ["Loading delivery options…"]),
-        ]);
+        // Delivery vs. pickup. Shipping (COURIER) options depend on the address typed in;
+        // pickup options never do (see resolveAvailableDeliveryMethods) — including the
+        // built-in "Store pickup" every store gets by default — so a pickup customer is
+        // never asked for an address at all.
+        var deliveryAllowed = !config.fulfillment || config.fulfillment.deliveryEnabled !== false;
+        var pickupMethods = [];
+        var modeSection = el("div", {});
+        var fulfillmentBody = el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } });
+        var deliverySection = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } });
+        var pickupSection = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } });
+        var addressBlock = null; // built below, once its inputs exist
+        // Says what's actually on offer once pickup options have loaded — "Delivery or
+        // pickup" only when both genuinely exist.
+        var fulfillmentHeading = el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, [deliveryAllowed ? "Delivery" : "Pickup"]);
         var deliveryFetchTimer = null;
 
-        function paintDeliveryOptions(methods) {
-          clear(deliverySection);
-          if (!methods.length) {
-            checkoutFormState.deliveryMethodId = null;
-            checkoutFormState.deliveryFeeMinor = 0;
-            deliverySection.appendChild(
-              el("p", { class: "pc-muted", style: { fontSize: "13px" } }, [
-                "No delivery methods are available for this address yet — try a different country or state, or contact the seller directly.",
-              ])
-            );
-            document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
-            return;
-          }
-          if (checkoutFormState.deliveryMethodId && !methods.some(function (m) { return m.id === checkoutFormState.deliveryMethodId; })) {
-            checkoutFormState.deliveryMethodId = null;
-            checkoutFormState.deliveryFeeMinor = 0;
-          }
-          if (!checkoutFormState.deliveryMethodId && methods.length === 1) {
-            checkoutFormState.deliveryMethodId = methods[0].id;
-            checkoutFormState.deliveryFeeMinor = methods[0].feeMinor || 0;
-          }
-          deliverySection.appendChild(el("div", { style: { display: "flex", gap: "12px", flexWrap: "wrap" } }, methods.map(deliveryOption)));
+        function selectMethod(method) {
+          checkoutFormState.deliveryMethodId = method ? method.id : null;
+          checkoutFormState.deliveryFeeMinor = method ? method.feeMinor || 0 : 0;
           document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
         }
 
-        function loadDeliveryOptions() {
+        function paintOptions(container, methods, emptyText, describe) {
+          clear(container);
+          var stillValid = methods.some(function (m) {
+            return m.id === checkoutFormState.deliveryMethodId;
+          });
+          if (!stillValid && checkoutFormState.deliveryMethodId) selectMethod(null);
+          if (!methods.length) {
+            container.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px", margin: "0" } }, [emptyText]));
+            return;
+          }
+          if (!checkoutFormState.deliveryMethodId && methods.length === 1) selectMethod(methods[0]);
+          container.appendChild(
+            el(
+              "div",
+              { role: "radiogroup", style: { display: "flex", gap: "12px", flexWrap: "wrap" } },
+              methods.map(function (m) {
+                return optionCard({
+                  title: m.name,
+                  subtitle: describe(m),
+                  selected: m.id === checkoutFormState.deliveryMethodId,
+                  minWidth: "180px",
+                  onSelect: function () {
+                    selectMethod(m);
+                    paintOptions(container, methods, emptyText, describe);
+                  },
+                });
+              })
+            )
+          );
+        }
+
+        function feeText(m) {
+          return m.feeMinor > 0 ? money(m.feeMinor, cart.currency) : "Free";
+        }
+        function courierSubtitle(m) {
+          return feeText(m) + (m.estimatedTimeLabel ? " · " + m.estimatedTimeLabel : "");
+        }
+        function pickupSubtitle(m) {
+          return (m.location ? "Pick up at: " + m.location : "The store will send you the pickup address") + " · " + feeText(m);
+        }
+
+        function loadCourierOptions() {
           clear(deliverySection);
-          deliverySection.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px" } }, ["Loading delivery options…"]));
+          deliverySection.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px", margin: "0" } }, ["Loading delivery options…"]));
           var qs = [];
           if (checkoutFormState.shippingCountry) qs.push("country=" + encodeURIComponent(checkoutFormState.shippingCountry));
           if (checkoutFormState.shippingState) qs.push("state=" + encodeURIComponent(checkoutFormState.shippingState));
+          var emptyText = !checkoutFormState.shippingCountry
+            ? "Choose your country to see delivery options."
+            : pickupMethods.length
+              ? "No delivery options cover this address yet — try a different country or state, or choose pickup instead."
+              : "No delivery options cover this address yet — try a different country or state, or contact the seller directly.";
           api("/api/public/commerce/delivery-methods" + (qs.length ? "?" + qs.join("&") : ""))
             .then(function (data) {
-              paintDeliveryOptions(data.methods || []);
+              var courier = (data.methods || []).filter(function (m) {
+                // A country-limited option only makes sense once a country is chosen —
+                // offering it earlier lets a customer pick one the server then rejects.
+                return m.type === "COURIER" && (checkoutFormState.shippingCountry || !(m.countries && m.countries.length));
+              });
+              paintOptions(deliverySection, courier, emptyText, courierSubtitle);
             })
             .catch(function () {
-              paintDeliveryOptions([]);
+              paintOptions(deliverySection, [], emptyText, courierSubtitle);
             });
         }
 
         function scheduleDeliveryReload() {
+          if (checkoutFormState.fulfillmentMode !== "delivery") return;
           if (deliveryFetchTimer) clearTimeout(deliveryFetchTimer);
-          deliveryFetchTimer = setTimeout(loadDeliveryOptions, 350);
+          deliveryFetchTimer = setTimeout(loadCourierOptions, 350);
+        }
+
+        function setMode(mode) {
+          if (mode !== checkoutFormState.fulfillmentMode) {
+            checkoutFormState.fulfillmentMode = mode;
+            selectMethod(null);
+          }
+          paintMode();
+        }
+
+        function paintMode() {
+          clear(modeSection);
+          clear(fulfillmentBody);
+          var hasPickup = pickupMethods.length > 0;
+          if (!deliveryAllowed && !hasPickup) {
+            checkoutFormState.fulfillmentMode = null;
+            fulfillmentBody.appendChild(
+              el("p", { class: "pc-muted", style: { fontSize: "13px", margin: "0" } }, [
+                "This store isn't offering delivery or pickup right now — please contact the seller to arrange your order.",
+              ])
+            );
+            return;
+          }
+          fulfillmentHeading.textContent = deliveryAllowed && hasPickup ? "Delivery or pickup" : deliveryAllowed ? "Delivery" : "Pickup";
+          if (deliveryAllowed && hasPickup) {
+            modeSection.appendChild(
+              el("div", { role: "radiogroup", style: { display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "16px" } }, [
+                optionCard({ title: "Delivery", subtitle: "Ship it to my address", selected: checkoutFormState.fulfillmentMode === "delivery", onSelect: function () { setMode("delivery"); } }),
+                optionCard({ title: "Pickup", subtitle: "I'll collect it from the store", selected: checkoutFormState.fulfillmentMode === "pickup", onSelect: function () { setMode("pickup"); } }),
+              ])
+            );
+          } else {
+            checkoutFormState.fulfillmentMode = deliveryAllowed ? "delivery" : "pickup";
+          }
+          if (checkoutFormState.fulfillmentMode === "delivery") {
+            fulfillmentBody.appendChild(addressBlock);
+            fulfillmentBody.appendChild(deliverySection);
+            loadCourierOptions();
+          } else if (checkoutFormState.fulfillmentMode === "pickup") {
+            fulfillmentBody.appendChild(pickupSection);
+            paintOptions(pickupSection, pickupMethods, "No pickup options are available right now.", pickupSubtitle);
+            fulfillmentBody.appendChild(
+              el("p", { class: "pc-muted", style: { fontSize: "12.5px", lineHeight: "1.55", margin: "0" } }, [
+                "Pickup is free. The store will confirm with you when your order is ready to collect.",
+              ])
+            );
+          }
+          document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
+        }
+
+        function loadFulfillmentOptions() {
+          fulfillmentBody.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px", margin: "0" } }, ["Loading delivery options…"]));
+          api("/api/public/commerce/delivery-methods")
+            .then(function (data) {
+              pickupMethods = (data.methods || []).filter(function (m) {
+                return m.type === "PICKUP";
+              });
+              paintMode();
+            })
+            .catch(function () {
+              pickupMethods = [];
+              paintMode();
+            });
         }
 
         function field(label, type, stateKey) {
@@ -1687,24 +2233,118 @@
         var sections = [];
 
         if (needsDelivery) {
-          var countryInput = el("input", {
-            class: "pc-input",
-            value: checkoutFormState.shippingCountry,
-            placeholder: "e.g. NG",
-            oninput: function (e) {
-              checkoutFormState.shippingCountry = e.target.value.trim().toUpperCase();
-              scheduleDeliveryReload();
+          var stateFieldBox = el("div", {});
+          var cityFieldBox = el("div", {});
+
+          function buildCityField() {
+            clear(cityFieldBox);
+            var cities = MAJOR_CITIES_BY_STATE[checkoutFormState.shippingState];
+            var field;
+            if (cities && !checkoutFormState.shippingCityIsOther) {
+              if (checkoutFormState.shippingCity && cities.indexOf(checkoutFormState.shippingCity) === -1) {
+                checkoutFormState.shippingCity = "";
+              }
+              field = el(
+                "select",
+                {
+                  class: "pc-select",
+                  style: { width: "100%" },
+                  onchange: function (e) {
+                    if (e.target.value === OTHER_CITY_VALUE) {
+                      checkoutFormState.shippingCityIsOther = true;
+                      checkoutFormState.shippingCity = "";
+                      buildCityField();
+                      return;
+                    }
+                    checkoutFormState.shippingCity = e.target.value;
+                  },
+                },
+                [el("option", { value: "" }, ["Select city"])]
+                  .concat(
+                    cities.map(function (name) {
+                      return el("option", { value: name, selected: checkoutFormState.shippingCity === name ? "selected" : null }, [name]);
+                    })
+                  )
+                  .concat([el("option", { value: OTHER_CITY_VALUE }, ["Other (type below)"])])
+              );
+            } else {
+              field = el("input", {
+                class: "pc-input",
+                value: checkoutFormState.shippingCity,
+                placeholder: "City / town",
+                oninput: function (e) {
+                  checkoutFormState.shippingCity = e.target.value;
+                },
+              });
+            }
+            cityFieldBox.appendChild(field);
+          }
+
+          function buildStateField() {
+            clear(stateFieldBox);
+            var options = STATES_BY_COUNTRY[checkoutFormState.shippingCountry];
+            var field;
+            if (options) {
+              // A state chosen under one country, then the country changed, is no longer
+              // meaningful — cleared rather than left stale so a leftover value can't
+              // silently mismatch the new country in the delivery-method lookup.
+              if (checkoutFormState.shippingState && options.indexOf(checkoutFormState.shippingState) === -1) {
+                checkoutFormState.shippingState = "";
+              }
+              field = el(
+                "select",
+                {
+                  class: "pc-select",
+                  style: { width: "100%" },
+                  onchange: function (e) {
+                    checkoutFormState.shippingState = e.target.value;
+                    checkoutFormState.shippingCity = "";
+                    checkoutFormState.shippingCityIsOther = false;
+                    buildCityField();
+                    scheduleDeliveryReload();
+                  },
+                },
+                [el("option", { value: "" }, ["Select state"])].concat(
+                  options.map(function (name) {
+                    return el("option", { value: name, selected: checkoutFormState.shippingState === name ? "selected" : null }, [name]);
+                  })
+                )
+              );
+            } else {
+              field = el("input", {
+                class: "pc-input",
+                value: checkoutFormState.shippingState,
+                placeholder: "State / region",
+                oninput: function (e) {
+                  checkoutFormState.shippingState = e.target.value.trim();
+                  scheduleDeliveryReload();
+                },
+              });
+            }
+            stateFieldBox.appendChild(field);
+            buildCityField();
+          }
+
+          var countryInput = el(
+            "select",
+            {
+              class: "pc-select",
+              style: { width: "100%" },
+              onchange: function (e) {
+                checkoutFormState.shippingCountry = e.target.value;
+                buildStateField();
+                scheduleDeliveryReload();
+                document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
+              },
             },
-          });
-          var stateInput = el("input", {
-            class: "pc-input",
-            value: checkoutFormState.shippingState,
-            placeholder: "e.g. Lagos",
-            oninput: function (e) {
-              checkoutFormState.shippingState = e.target.value.trim();
-              scheduleDeliveryReload();
-            },
-          });
+            [el("option", { value: "" }, ["Select country"])].concat(
+              COUNTRIES.map(function (c) {
+                return el("option", { value: c[0], selected: checkoutFormState.shippingCountry === c[0] ? "selected" : null }, [c[1]]);
+              })
+            )
+          );
+          buildStateField();
+
           var addressLineInput = el("input", {
             class: "pc-input",
             value: checkoutFormState.shippingAddressLine,
@@ -1714,15 +2354,22 @@
             },
           });
 
+          addressBlock = el("div", {}, [
+            el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "14px" } }, [
+              el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["Country"]), countryInput]),
+              el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["State / region"]), stateFieldBox]),
+            ]),
+            el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap" } }, [
+              el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["City"]), cityFieldBox]),
+              el("div", { style: { flex: "2", minWidth: "220px" } }, [el("label", { class: "pc-label" }, ["Street address"]), addressLineInput]),
+            ]),
+          ]);
+
           sections.push(
             el("div", {}, [
-              el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Delivery"]),
-              el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "14px" } }, [
-                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["Country"]), countryInput]),
-                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["State / region"]), stateInput]),
-              ]),
-              el("div", { style: { marginBottom: "16px" } }, [el("label", { class: "pc-label" }, ["Street address"]), addressLineInput]),
-              deliverySection,
+              fulfillmentHeading,
+              modeSection,
+              fulfillmentBody,
             ])
           );
         }
@@ -1740,7 +2387,13 @@
           ])
         );
 
-        sections.push(
+        var extraQuestions = customFieldsSection(config.fields, checkoutFormState.customFields, "Additional information", checkoutDeliveryCountry);
+        if (extraQuestions) {
+          sections.push(extraQuestions);
+          document.addEventListener(CHECKOUT_STATE_EVENT, extraQuestions.refresh);
+        }
+
+        if (config.discounts !== false) sections.push(
           el("div", {}, [
             el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Discount code"]),
             el("div", { style: { display: "flex", gap: "10px" } }, [
@@ -1764,7 +2417,7 @@
 
         node.appendChild(el("div", { style: { display: "flex", flexDirection: "column", gap: "30px" } }, sections));
 
-        if (needsDelivery) loadDeliveryOptions();
+        if (needsDelivery) loadFulfillmentOptions();
       })
       .catch(function (err) {
         showError(node, err.message);
@@ -1789,12 +2442,29 @@
         var order = data.order;
         clear(node);
         prepareNode(node);
+        var awaitingTransfer = order.paymentMethod === "BANK_TRANSFER" && order.status === "PENDING";
         node.appendChild(
           el("div", { class: "pc-card", style: { padding: "28px", display: "flex", flexDirection: "column", gap: "18px" } }, [
             el("div", { style: { display: "flex", alignItems: "center", gap: "10px" } }, [
               el("span", { style: { background: "#16233F", color: "#fff", fontSize: "11px", fontWeight: "700", padding: "5px 10px", borderRadius: "3px", letterSpacing: "0.04em" } }, [order.orderNumber]),
-              el("span", { class: "pc-badge " + (order.status === "PAID" ? "pc-badge-ok" : order.status === "PENDING" ? "pc-badge-low" : "pc-badge-out") }, [order.status]),
+              el("span", { class: "pc-badge " + (order.status === "PAID" ? "pc-badge-ok" : order.status === "PENDING" ? "pc-badge-low" : "pc-badge-out") }, [awaitingTransfer ? "Awaiting payment confirmation" : order.status]),
             ]),
+            awaitingTransfer
+              ? el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
+                  el("p", { style: { margin: "0", fontSize: "14px", lineHeight: "1.6", color: "#16233F" } }, [
+                    "Thanks — your order is placed. The store will confirm it as soon as your bank transfer arrives, and we'll email you when it does.",
+                  ]),
+                  order.bankTransfer
+                    ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "12.5px" } }, ["Haven't sent it yet? Transfer to:"])
+                    : null,
+                  order.bankTransfer ? bankDetailsCard(order.bankTransfer, money(order.amountMinor, order.currency), order.orderNumber) : null,
+                ])
+              : null,
+            order.pickupLocation
+              ? el("div", { style: { fontSize: "13px", color: "#16233F" } }, [el("strong", {}, ["Pickup at: "]), order.pickupLocation])
+              : order.deliveryMethod === "PICKUP"
+                ? el("div", { class: "pc-muted", style: { fontSize: "13px" } }, ["Pickup — the store will send you pickup details when your order is ready."])
+                : null,
             el(
               "div",
               { style: { display: "flex", flexDirection: "column" } },
@@ -1843,8 +2513,16 @@
         .then(function (data) {
           var order = data.order;
           clear(resultBox);
-          if (order.status !== "PAID") {
-            resultBox.appendChild(el("div", { class: "pc-error", style: { background: "#FBEFD8", borderColor: "#fde68a", color: "#92400e" } }, ["This order hasn't been paid for yet."]));
+          if (order.status === "PENDING" && order.paymentMethod === "BANK_TRANSFER") {
+            resultBox.appendChild(
+              el("div", { class: "pc-error", style: { background: "#FBEFD8", borderColor: "#fde68a", color: "#92400e" } }, [
+                "We're waiting for the store to confirm your bank transfer. You'll get an email as soon as it's confirmed.",
+              ])
+            );
+            return;
+          }
+          if (order.status !== "PAID" && order.status !== "REFUNDED") {
+            resultBox.appendChild(el("div", { class: "pc-error", style: { background: "#FBEFD8", borderColor: "#fde68a", color: "#92400e" } }, [order.status === "CANCELLED" ? "This order was cancelled." : "This order hasn't been paid for yet."]));
             return;
           }
           var isCancelled = order.status === "CANCELLED" || order.status === "REFUNDED";
@@ -1909,6 +2587,265 @@
       .catch(function () {});
   }
 
+  // ---------------------------------------------------------------------
+  // Donations (lib/commerce/donations.ts). Two modes, one payment path:
+  //  - a native donate form, rendered into any [data-plexo-donation="<campaignId>"] block;
+  //  - an existing form (a donation form migrated from WordPress, kept pixel-identical)
+  //    marked <form data-plexo-donation="<campaignId>" data-plexo-donation-adapter>, whose
+  //    own fields are annotated with data-plexo-amount-minor / data-plexo-amount-custom /
+  //    data-plexo-custom-amount / data-plexo-monthly / data-plexo-donor-* — this just
+  //    takes over its submit.
+  // Both finish payment exactly like storefront checkout (embedded Stripe, Paystack
+  // redirect, or bank transfer), and both thank the donor when they come back.
+  // ---------------------------------------------------------------------
+  function donationReturnPath() {
+    var params = new URLSearchParams(location.search);
+    params.delete("plexo_donation");
+    params.delete("order");
+    var q = params.toString();
+    return location.pathname + (q ? "?" + q : "");
+  }
+
+  function isDonationThanks() {
+    return new URLSearchParams(location.search).get("plexo_donation") === "thanks";
+  }
+
+  function donationThanksBanner(campaign) {
+    return el("div", { role: "status", style: { padding: "16px 18px", margin: "0 0 18px", borderRadius: "10px", background: "#E4F0E7", color: "#1F5C3C", fontWeight: "600", lineHeight: "1.5" } }, [
+      (campaign && campaign.thankYouMessage) || "Thank you for your gift! A receipt is on its way to your inbox.",
+    ]);
+  }
+
+  function submitDonation(payload, onError, onBusy) {
+    onBusy(true);
+    payload.returnPath = donationReturnPath();
+    return api("/api/public/commerce/donate", { method: "POST", body: JSON.stringify(payload) })
+      .then(function (result) {
+        if (result.checkout && result.checkout.provider === "stripe") {
+          onBusy(false);
+          openStripeEmbeddedCheckout(result.checkout, function (err) {
+            onError(err.message);
+          });
+          return;
+        }
+        if (result.authorizationUrl) {
+          window.location.href = result.authorizationUrl;
+          return;
+        }
+        if (result.redirectUrl) {
+          window.location.href = result.redirectUrl;
+          return;
+        }
+        onBusy(false);
+      })
+      .catch(function (err) {
+        onBusy(false);
+        onError(err.message);
+      });
+  }
+
+  function fetchDonationCampaign(id) {
+    return api("/api/public/commerce/donations/" + encodeURIComponent(id)).then(function (d) {
+      return d.campaign;
+    });
+  }
+
+  function renderDonation(node) {
+    var campaignId = node.getAttribute("data-plexo-donation");
+    if (!campaignId) return;
+    if (node.tagName === "FORM") return adaptDonationForm(node, campaignId);
+    showSpinner(node);
+    fetchDonationCampaign(campaignId)
+      .then(function (c) {
+        clear(node);
+        prepareNode(node);
+        if (isDonationThanks()) node.appendChild(donationThanksBanner(c));
+        if (!c.accepting) {
+          node.appendChild(el("div", { class: "pc-muted", style: { padding: "12px 0" } }, ["Online donations are being set up — please check back soon."]));
+          return;
+        }
+        var presets = c.presetAmounts || [];
+        var state = {
+          amountMinor: presets.length ? presets[Math.min(c.defaultPresetIndex || 0, presets.length - 1)].amountMinor : null,
+          custom: !presets.length,
+          frequency: c.allowMonthly ? c.defaultFrequency || "ONCE" : "ONCE",
+        };
+        var card = el("div", { class: "pc-card", style: { padding: "22px" } });
+        if (c.goalAmountMinor) {
+          var pct = Math.min(100, Math.round(((c.raisedMinor || 0) / c.goalAmountMinor) * 100));
+          card.appendChild(el("div", { style: { marginBottom: "18px" } }, [
+            el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "13px", marginBottom: "6px" } }, [
+              el("strong", {}, [money(c.raisedMinor || 0, c.currency) + " raised"]),
+              el("span", { class: "pc-muted" }, ["of " + money(c.goalAmountMinor, c.currency)]),
+            ]),
+            el("div", { style: { height: "8px", background: "#EEECE4", borderRadius: "99px", overflow: "hidden" } }, [
+              el("div", { class: "pc-btn-gold", style: { height: "100%", width: pct + "%", padding: "0", borderRadius: "99px" } }),
+            ]),
+          ]));
+        }
+        var freqRow = null;
+        function paintFreq() {
+          if (!freqRow) return;
+          Array.prototype.forEach.call(freqRow.children, function (b) {
+            var on = b.getAttribute("data-f") === state.frequency;
+            b.className = on ? "pc-btn" : "pc-btn pc-btn-outline";
+          });
+        }
+        if (c.allowMonthly) {
+          freqRow = el("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "14px" } }, [
+            el("button", { type: "button", "data-f": "ONCE", onclick: function () { state.frequency = "ONCE"; paintFreq(); } }, ["Give once"]),
+            el("button", { type: "button", "data-f": "MONTHLY", onclick: function () { state.frequency = "MONTHLY"; paintFreq(); } }, ["Monthly"]),
+          ]);
+          card.appendChild(freqRow);
+          paintFreq();
+        }
+        var amountGrid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: "8px", marginBottom: "12px" } });
+        var customInput = el("input", { class: "pc-input", type: "number", min: String((c.minAmountMinor || 100) / 100), step: "any", placeholder: "Other amount", style: { display: state.custom ? "block" : "none", marginBottom: "12px" } });
+        function paintAmounts() {
+          Array.prototype.forEach.call(amountGrid.children, function (b) {
+            var on = b.getAttribute("data-custom") ? state.custom : !state.custom && Number(b.getAttribute("data-amount")) === state.amountMinor;
+            b.className = on ? "pc-btn" : "pc-btn pc-btn-outline";
+          });
+          customInput.style.display = state.custom ? "block" : "none";
+        }
+        presets.forEach(function (p) {
+          amountGrid.appendChild(el("button", { type: "button", "data-amount": String(p.amountMinor), style: { flexDirection: "column", gap: "2px" }, onclick: function () { state.custom = false; state.amountMinor = p.amountMinor; paintAmounts(); } }, [
+            el("span", {}, [money(p.amountMinor, c.currency)]),
+            p.label ? el("span", { style: { fontSize: "11.5px", fontWeight: "500", opacity: "0.8" } }, [p.label]) : null,
+          ].filter(Boolean)));
+        });
+        if (c.allowCustomAmount) {
+          amountGrid.appendChild(el("button", { type: "button", "data-custom": "1", onclick: function () { state.custom = true; paintAmounts(); customInput.focus(); } }, ["Other"]));
+        }
+        card.appendChild(amountGrid);
+        card.appendChild(customInput);
+        paintAmounts();
+        var nameInput = el("input", { class: "pc-input", type: "text", placeholder: "Your name", autocomplete: "name", style: { marginBottom: "10px" } });
+        var emailInput = el("input", { class: "pc-input", type: "email", placeholder: "Email for your receipt", autocomplete: "email", required: "required", style: { marginBottom: "14px" } });
+        card.appendChild(nameInput);
+        card.appendChild(emailInput);
+        var errorBox = el("div", { class: "pc-error", style: { display: "none" } });
+        var button = el("button", { type: "button", class: "pc-btn", style: { width: "100%" } }, [c.buttonLabel || "Donate"]);
+        card.appendChild(errorBox);
+        card.appendChild(button);
+        node.appendChild(card);
+        button.addEventListener("click", function () {
+          errorBox.style.display = "none";
+          var amount = state.custom ? Math.round(parseFloat(customInput.value || "0") * 100) : state.amountMinor;
+          if (!amount || amount <= 0) {
+            errorBox.textContent = "Please choose or enter an amount.";
+            errorBox.style.display = "block";
+            return;
+          }
+          submitDonation(
+            { campaignId: campaignId, amountMinor: amount, frequency: state.frequency, donorName: nameInput.value, donorEmail: emailInput.value },
+            function (msg) { errorBox.textContent = msg; errorBox.style.display = "block"; },
+            function (busy) { button.disabled = busy; button.textContent = busy ? "Starting payment…" : c.buttonLabel || "Donate"; }
+          );
+        });
+      })
+      .catch(function (err) {
+        showError(node, err.message);
+      });
+  }
+
+  // A migrated donation form: keep its markup and styling exactly, just route its submit.
+  function adaptDonationForm(form, campaignId) {
+    if (form.getAttribute("data-plexo-adapted")) return;
+    form.setAttribute("data-plexo-adapted", "1");
+    form.removeAttribute("action");
+    fetchDonationCampaign(campaignId)
+      .then(function (c) {
+        if (isDonationThanks()) {
+          var banner = donationThanksBanner(c);
+          // A form inside a closed pop-up isn't visible on return — show the thanks on top instead.
+          if (!form.offsetParent || form.getBoundingClientRect().height === 0) {
+            banner.style.position = "fixed";
+            banner.style.top = "16px";
+            banner.style.left = "50%";
+            banner.style.transform = "translateX(-50%)";
+            banner.style.zIndex = "2147483000";
+            banner.style.maxWidth = "92vw";
+            banner.style.boxShadow = "0 8px 30px rgba(0,0,0,.25)";
+            document.body.appendChild(banner);
+            setTimeout(function () { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 8000);
+          } else {
+            form.parentNode.insertBefore(banner, form);
+          }
+        }
+        if (!c.accepting) {
+          form.parentNode.insertBefore(el("div", { class: "pc-error" }, ["Online donations are being set up — please check back soon."]), form);
+        }
+      })
+      .catch(function () {});
+    var submitBtn = form.querySelector("button[type=submit], input[type=submit], button:not([type])");
+    // Form plugins often ship their button disabled until their own script initializes it.
+    if (submitBtn) submitBtn.disabled = false;
+    var originalLabel = submitBtn ? submitBtn.innerHTML : "";
+    // Keep the form's controls in step the way its original plugin script did: picking a
+    // suggested amount fills the amount box, typing an amount selects "custom", ticking
+    // monthly reveals its options.
+    var amountBox = form.querySelector("[data-plexo-custom-amount]");
+    var customChoice = form.querySelector("[data-plexo-amount-custom]");
+    Array.prototype.forEach.call(form.querySelectorAll("[data-plexo-amount-minor]"), function (radio) {
+      radio.addEventListener("change", function () {
+        if (radio.checked && amountBox) amountBox.value = String(Number(radio.getAttribute("data-plexo-amount-minor")) / 100);
+      });
+    });
+    if (amountBox && customChoice) {
+      amountBox.addEventListener("input", function () {
+        customChoice.checked = true;
+      });
+    }
+    var monthlyBox = form.querySelector("[data-plexo-monthly]");
+    var monthlyOptions = form.querySelector("[data-plexo-monthly-options]");
+    if (monthlyBox && monthlyOptions) {
+      var syncMonthly = function () {
+        monthlyOptions.style.display = monthlyBox.checked ? "flex" : "none";
+      };
+      monthlyBox.addEventListener("change", syncMonthly);
+      syncMonthly();
+    }
+    var preset = form.querySelector("[data-plexo-amount-minor]:checked");
+    if (preset && amountBox) amountBox.value = String(Number(preset.getAttribute("data-plexo-amount-minor")) / 100);
+
+    function errorHere(msg) {
+      var box = form.querySelector(".pc-donation-error");
+      if (!box) {
+        box = el("div", { class: "pc-error pc-donation-error" });
+        form.appendChild(box);
+      }
+      box.textContent = msg;
+    }
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      var chosen = form.querySelector("[data-plexo-amount-minor]:checked, [data-plexo-amount-custom]:checked");
+      var amount = 0;
+      var customField = form.querySelector("[data-plexo-custom-amount]");
+      if (chosen && chosen.hasAttribute("data-plexo-amount-minor")) amount = Number(chosen.getAttribute("data-plexo-amount-minor"));
+      else if (customField) amount = Math.round(parseFloat(customField.value || "0") * 100);
+      if (!amount || amount <= 0) return errorHere("Please choose or enter an amount.");
+      var monthly = form.querySelector("[data-plexo-monthly]");
+      var first = form.querySelector("[data-plexo-donor-first]");
+      var last = form.querySelector("[data-plexo-donor-last]");
+      var full = form.querySelector("[data-plexo-donor-name]");
+      var email = form.querySelector("[data-plexo-donor-email]");
+      var name = full ? full.value : [first && first.value, last && last.value].filter(Boolean).join(" ");
+      if (!email || !email.value) return errorHere("Please enter your email address for your receipt.");
+      submitDonation(
+        { campaignId: campaignId, amountMinor: amount, frequency: monthly && monthly.checked ? "MONTHLY" : "ONCE", donorName: name, donorEmail: email.value },
+        errorHere,
+        function (busy) {
+          if (!submitBtn) return;
+          submitBtn.disabled = busy;
+          if (busy) submitBtn.textContent = "Starting payment…";
+          else submitBtn.innerHTML = originalLabel;
+        }
+      );
+    }, true);
+  }
+
   function init() {
     injectStyles();
     document.querySelectorAll("[data-plexo-commerce-product]").forEach(renderProduct);
@@ -1919,6 +2856,7 @@
     document.querySelectorAll("[data-plexo-commerce-orderConfirmation]").forEach(renderOrderConfirmation);
     document.querySelectorAll("[data-plexo-commerce-orderTracking]").forEach(renderOrderTracking);
     document.querySelectorAll("[data-plexo-newsletter-signup]").forEach(renderNewsletterSignup);
+    document.querySelectorAll("[data-plexo-donation]").forEach(renderDonation);
     renderProductCounts();
     fetchCart().then(broadcastCart).catch(function () {});
   }

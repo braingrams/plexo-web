@@ -144,6 +144,7 @@ export class PublishedSitesStack extends cdk.Stack {
     });
 
     const CACHING_OPTIMIZED = cloudfront.CachePolicy.CACHING_OPTIMIZED.cachePolicyId;
+    const CACHING_DISABLED = cloudfront.CachePolicy.CACHING_DISABLED.cachePolicyId;
     const ALL_VIEWER_EXCEPT_HOST = cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER.originRequestPolicyId;
     const ALLOW_ALL_METHODS = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"];
     const CACHED_METHODS = ["GET", "HEAD"];
@@ -199,6 +200,30 @@ export class PublishedSitesStack extends cdk.Stack {
       cookieBehavior: cloudfront.CacheCookieBehavior.none(),
       queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("p"),
       headerBehavior: cloudfront.CacheHeaderBehavior.allowList("x-forwarded-host"),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    });
+
+    // The "_next/image*" behavior below used CACHING_OPTIMIZED (a managed policy with no
+    // query-string forwarding/cache-keying at all) with no originRequestPolicyId — the
+    // ImageFn origin's own Lambda never received "url"/"w"/"q" at all, so every image ever
+    // requested through this distribution's optimizer 400ed with "\"url\" parameter is
+    // required" (confirmed live on a real published site). compute-stack.ts's own
+    // Distribution (the dashboard app, a completely separate CloudFront distribution from
+    // this one — this stack is what actually serves published customer sites) had the
+    // identical bug, independently duplicated when these behaviors were ported; fixed
+    // there first in a separate PR before this file's copy was found. Unlike the
+    // 2026-09-04 outage documented on pageCachePolicy above (a cache policy HEADER
+    // allow-list on the DEFAULT behavior's ServerFn origin corrupting the Host header),
+    // this only touches the ImageFn origin's own isolated behavior, and reuses
+    // ALL_VIEWER_EXCEPT_HOST — the same origin request policy already safely in use on the
+    // default behavior above — rather than introducing a new one.
+    const imageOptimizerCachePolicy = new cloudfront.CachePolicy(this, "ImageOptimizerCachePolicy", {
+      cachePolicyName: `${this.stackName}-image-optimizer`,
+      comment: "Query-string-aware cache policy for the Next.js image optimizer — see this resource's own comment",
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("url", "w", "q"),
+      headerBehavior: cloudfront.CacheHeaderBehavior.none(),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
       enableAcceptEncodingGzip: true,
       enableAcceptEncodingBrotli: true,
     });
@@ -287,7 +312,21 @@ export class PublishedSitesStack extends cdk.Stack {
           functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }],
         },
         cacheBehaviors: [
-          { pathPattern: "_next/image*", targetOriginId: "ImageFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
+          // Every route under app/api/public/commerce/* (cart, checkout, etc.) is
+          // per-visitor dynamic state read from a cookie (CART_COOKIE) — but with no
+          // dedicated behavior here, these fell through to defaultCacheBehavior below,
+          // which uses pageCachePolicy (cookieBehavior: none, 10s/60s TTL). CloudFront
+          // doesn't vary that cache key by cookie at all, so it cached ONE visitor's cart
+          // response and served it to every other visitor hitting the same URL within the
+          // TTL window — confirmed live: two back-to-back curls to
+          // /api/public/commerce/cart returned "X-Cache: Miss" then "X-Cache: Hit from
+          // cloudfront" on the second, meaning a real visitor's own cart request could
+          // (and did) return someone else's cached snapshot, explaining "add to cart, go
+          // to checkout, cart shows empty/stale until reload" — the reload just happened
+          // to land after the cached entry expired. CACHING_DISABLED is CloudFront's own
+          // managed zero-TTL policy — every request here always reaches ServerFn fresh.
+          { pathPattern: "api/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_DISABLED, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: ALLOW_ALL_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
+          { pathPattern: "_next/image*", targetOriginId: "ImageFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: imageOptimizerCachePolicy.cachePolicyId, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "_next/*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "commerce.js", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "uploads/*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
@@ -435,6 +474,10 @@ export class PublishedSitesStack extends cdk.Stack {
     // up to a day before this catches it.
     scheduledRoute("BlogImportResumeStalled", "/api/internal/blog-import/resume-stalled", events.Schedule.cron({ minute: "0", hour: "12" }));
     scheduledRoute("SiteImportResumeStalled", "/api/internal/site-import/resume-stalled", events.Schedule.cron({ minute: "0", hour: "13" }));
+    // Every 10 minutes, unlike the daily import backstops above: the WordPress migration
+    // screen tells the owner they can close the tab, so a closed tab must not mean a
+    // migration sits half-done for a day.
+    scheduledRoute("WpMigrationResumeStalled", "/api/internal/wp-migration/resume-stalled", events.Schedule.rate(cdk.Duration.minutes(10)));
 
     // Every 15 minutes, NOT once a day like the other backstops above — see that route's
     // own doc comment on why: its 15-minute hold window means a once-daily sweep would

@@ -83,6 +83,9 @@ export function LandingNav() {
             <Link href="/mcp" style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--brand)", textDecoration: "none" }}>
               MCP
             </Link>
+            <Link href="/blog" style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text-muted)", textDecoration: "none" }}>
+              Blog
+            </Link>
             <Link href="/releases" style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text-muted)", textDecoration: "none" }}>
               Releases
             </Link>
@@ -142,6 +145,9 @@ export function LandingNav() {
           </Link>
           <Link href="/mcp" onClick={() => setIsMenuOpen(false)} style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--brand)", textDecoration: "none" }}>
             MCP
+          </Link>
+          <Link href="/blog" onClick={() => setIsMenuOpen(false)} style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--text-main)", textDecoration: "none" }}>
+            Blog
           </Link>
           <Link href="/releases" onClick={() => setIsMenuOpen(false)} style={{ fontSize: "1.3rem", fontWeight: 700, color: "var(--text-main)", textDecoration: "none" }}>
             Releases

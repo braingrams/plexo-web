@@ -2,13 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
-import { resolveNotificationRecipient } from "@/lib/notificationPreferencesDynamo";
-import { sendMaildripEmail } from "@/lib/mail/maildrip";
-import { buildFormSubmissionEmail } from "@/lib/mail/templates";
-import { FormSubmission } from "@/lib/db/opsEntities";
-import { logEmailDelivery } from "@/lib/mail/logEmail";
-import { Template } from "@/lib/db/contentEntities";
-import { User } from "@/lib/db/coreEntities";
+import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
 
 /**
  * Receives a real, no-JS browser form submission from a form_container's own <form
@@ -48,6 +42,29 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Too many submissions. Please try again shortly." }, { status: 429 });
   }
 
+  // A real visitor's browser sends Referer/Origin for a same-origin form POST (default
+  // under every standard referrer-policy); a script posting straight to this URL from
+  // outside a real page load either omits both or sends one pointing somewhere else
+  // entirely. Only rejects on an actual MISMATCH, never on absence — some real visitors
+  // do have Referer stripped by a privacy setting/extension, and that alone shouldn't cost
+  // them their message. Same silent-success response as the honeypot below: a rejected bot
+  // gets no signal to detect and route around.
+  const originHeader = request.headers.get("origin") ?? request.headers.get("referer");
+  if (originHeader) {
+    let originHost: string | null = null;
+    try {
+      originHost = new URL(originHeader).hostname;
+    } catch {
+      originHost = null;
+    }
+    if (originHost && originHost !== hostname) {
+      console.info(`[forms] origin mismatch: templateId=${templateId} origin=${originHost} expected=${hostname}`);
+      const redirectParam = new URL(request.url).searchParams.get("redirect") || "/";
+      const redirectPath = redirectParam.startsWith("/") ? redirectParam : "/";
+      return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
+    }
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -55,10 +72,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Invalid form submission." }, { status: 400 });
   }
 
-  const fields: Record<string, string> = {};
-  for (const [key, value] of formData.entries()) {
-    if (typeof value === "string" && value.trim()) fields[key] = value.trim().slice(0, 5000);
-  }
+  const fields = collectFormFields(formData.entries());
   if (Object.keys(fields).length === 0) {
     return NextResponse.json({ error: "Empty submission." }, { status: 400 });
   }
@@ -84,52 +98,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
   }
 
-  await FormSubmission.create({
-    id: crypto.randomUUID(),
-    templateId,
-    organizationId: organization.id,
-    formName,
-    fields,
-    submitterIp: clientIp(request),
-  }).go();
-
-  void notifyFormSubmission(templateId, organization.id, formName, fields).catch((err) =>
-    console.error("[mail] form submission notification failed:", err),
-  );
+  await recordFormSubmission({ templateId, organizationId: organization.id, formName, fields, submitterIp: clientIp(request) });
 
   return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
 }
 
-async function notifyFormSubmission(
-  templateId: string,
-  organizationId: string,
-  formName: string,
-  fields: Record<string, string>,
-): Promise<void> {
-  const { data: template } = await Template.get({ id: templateId }).go();
-  if (!template) return;
-  const { data: owner } = await User.get({ id: template.userId }).go();
-
-  const to = await resolveNotificationRecipient(organizationId, "formSubmissions", owner?.email);
-  if (!to) return;
-
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const html = buildFormSubmissionEmail({
-    siteName: template.name,
-    formName,
-    fieldsPreview: Object.entries(fields).slice(0, 8) as [string, string][],
-    submissionsUrl: `${base}/dashboard/templates/${templateId}/form-submissions`,
-  });
-  const subject = `New ${formName} submission on ${template.name}`;
-  try {
-    await sendMaildripEmail({ to, subject, html });
-    logEmailDelivery({ kind: "maildrip", to, subject, status: "sent", context: "form_submission", organizationId, templateId });
-  } catch (err) {
-    logEmailDelivery({
-      kind: "maildrip", to, subject, status: "failed",
-      errorMessage: err instanceof Error ? err.message : String(err),
-      context: "form_submission", organizationId, templateId,
-    });
-    throw err;
-  }
-}

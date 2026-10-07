@@ -7,8 +7,10 @@ import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { getOrgBrandDynamo } from "@/server/orgDynamo";
 import { buildOrderStatusEmail, type OrderStatusEvent } from "@/lib/mail/templates";
+import { refundStripePayment } from "@/lib/commerce/stripeClient";
+import { isDonationOrder, resolveDonationGateway } from "@/lib/commerce/donations";
 import { Template } from "@/lib/db/contentEntities";
-import { CommerceOrder, CommerceOrderItem, CommerceSettings } from "@/lib/db/commerceEntities";
+import { CommerceDonationCampaign, CommerceOrder, CommerceOrderItem, CommerceSettings } from "@/lib/db/commerceEntities";
 
 export const FULFILLMENT_STATUSES = new Set(["UNFULFILLED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "COMPLETED"]);
 
@@ -113,47 +115,93 @@ export async function updateOrderFulfillmentStatus(
   return order;
 }
 
+/** Every refund — dashboard, REST or MCP — has to clear the same deliberate bar: a stated
+ * reason (kept on the order as an audit trail) and the order number typed back exactly,
+ * so a refund can never be issued by a stray click or an AI assistant guessing an id. */
+export type RefundRequest = { reason: unknown; confirmOrderNumber: unknown; refundedBy: string };
+
+export const MIN_REFUND_REASON_LENGTH = 5;
+
 /**
- * Shared by the refund REST route and the refund_commerce_order MCP tool — Paystack-only
- * today (see this repo's own PLATFORM_STRIPE refund gap), refunding through whichever
- * mode's keys the order was actually paid with, never the site's current active mode.
+ * Shared by the refund REST route and the refund_commerce_order MCP tool. Gateway orders
+ * refund through Paystack (Paystack-only today — see this repo's own PLATFORM_STRIPE refund
+ * gap), using whichever mode's keys the order was actually paid with, never the site's
+ * current active mode. A BANK_TRANSFER order has no gateway to refund through — the owner
+ * sends the money back themselves, and this records that it happened.
  */
 export async function refundCommerceOrder(
   templateId: string,
   organizationId: string,
   orderId: string,
+  request: RefundRequest,
 ): Promise<CommerceOrderRecord> {
   const { data: order } = await CommerceOrder.get({ templateId, id: orderId }).go();
   if (!order) throw new OrderActionError("Order not found.", 404);
   if (order.status !== "PAID") throw new OrderActionError(`Only a PAID order can be refunded (this one is ${order.status}).`, 400);
-  if (!order.paystackMode || !order.paystackReference) {
-    throw new OrderActionError("This order wasn't paid via Paystack — refunding it isn't supported yet.", 400);
+
+  const reason = typeof request.reason === "string" ? request.reason.trim().slice(0, 500) : "";
+  if (reason.length < MIN_REFUND_REASON_LENGTH) {
+    throw new OrderActionError("Give a short reason for this refund (at least 5 characters) — it's kept on the order for your records.", 400);
+  }
+  const typed = typeof request.confirmOrderNumber === "string" ? request.confirmOrderNumber.trim().toUpperCase() : "";
+  if (typed !== order.orderNumber.toUpperCase()) {
+    throw new OrderActionError(`To confirm, type the order number exactly: ${order.orderNumber}.`, 400);
   }
 
-  const { data: settings } = await CommerceSettings.get({ templateId }).go();
-  const orderModeKeys = settings
-    ? resolvePaystackKeysForMode(
-        {
-          paystackTestPublicKey: settings.paystackTestPublicKey ?? null,
-          paystackTestSecretKeyEncrypted: settings.paystackTestSecretKeyEncrypted ?? null,
-          paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
-          paystackLiveSecretKeyEncrypted: settings.paystackLiveSecretKeyEncrypted ?? null,
-        },
-        order.paystackMode,
-      )
-    : null;
-  if (!orderModeKeys?.secretKeyEncrypted) {
-    throw new OrderActionError(`This site has no ${order.paystackMode.toLowerCase()}-mode Paystack key configured to refund through.`, 400);
+  const isBankTransfer = order.paymentMethod === "BANK_TRANSFER";
+  const isOwnStripe = !isBankTransfer && order.paymentProvider === "BYO_STRIPE";
+  if (isOwnStripe) {
+    // The site's own Stripe account: refund straight through it.
+    if (!order.stripePaymentIntentId) {
+      throw new OrderActionError("Stripe didn't give this payment a refundable reference — refund it from your Stripe dashboard (Payments), then mark it here.", 400);
+    }
+    const { data: settings } = await CommerceSettings.get({ templateId }).go();
+    const stripe = resolveDonationGateway(settings).stripe;
+    if (!stripe) throw new OrderActionError("Your Stripe keys aren't connected any more — reconnect them in Settings → Payments to refund.", 400);
+    try {
+      await refundStripePayment(stripe.secretKey, order.stripePaymentIntentId);
+    } catch (err) {
+      throw new OrderActionError(err instanceof Error ? err.message : "Refund failed.", 502);
+    }
+  } else if (!isBankTransfer) {
+    if (!order.paystackMode || !order.paystackReference) {
+      throw new OrderActionError("This order wasn't paid via Paystack — refunding it isn't supported yet.", 400);
+    }
+    const { data: settings } = await CommerceSettings.get({ templateId }).go();
+    const orderModeKeys = settings
+      ? resolvePaystackKeysForMode(
+          {
+            paystackTestPublicKey: settings.paystackTestPublicKey ?? null,
+            paystackTestSecretKeyEncrypted: settings.paystackTestSecretKeyEncrypted ?? null,
+            paystackLivePublicKey: settings.paystackLivePublicKey ?? null,
+            paystackLiveSecretKeyEncrypted: settings.paystackLiveSecretKeyEncrypted ?? null,
+          },
+          order.paystackMode,
+        )
+      : null;
+    if (!orderModeKeys?.secretKeyEncrypted) {
+      throw new OrderActionError(`This site has no ${order.paystackMode.toLowerCase()}-mode Paystack key configured to refund through.`, 400);
+    }
+    try {
+      await refundPaystackTransaction({ secretKey: decryptPaystackKey(orderModeKeys.secretKeyEncrypted), reference: order.paystackReference });
+    } catch (err) {
+      throw new OrderActionError(err instanceof Error ? err.message : "Refund failed.", 502);
+    }
   }
 
-  try {
-    await refundPaystackTransaction({ secretKey: decryptPaystackKey(orderModeKeys.secretKeyEncrypted), reference: order.paystackReference });
-  } catch (err) {
-    throw new OrderActionError(err instanceof Error ? err.message : "Refund failed.", 502);
-  }
-  await CommerceOrder.patch({ templateId, id: orderId }).set({ status: "REFUNDED" }).go();
+  await CommerceOrder.patch({ templateId, id: orderId })
+    .set({ status: "REFUNDED", refundReason: reason, refundedAt: new Date().toISOString(), refundedBy: request.refundedBy })
+    .go();
   const { data: updated } = await CommerceOrder.get({ templateId, id: orderId }).go();
   if (!updated) throw new Error(`Order ${orderId} vanished immediately after being refunded`);
+  // A refunded gift no longer counts toward its campaign's progress.
+  const campaignId = isDonationOrder(updated) ? (updated.metadata as { campaignId?: string }).campaignId : undefined;
+  if (campaignId) {
+    await CommerceDonationCampaign.patch({ templateId, id: campaignId })
+      .add({ raisedMinor: -updated.amountMinor, donationCount: -1 })
+      .go()
+      .catch((err) => console.error("Donations: campaign total adjust on refund failed", err));
+  }
 
   await sendOrderStatusEmail(templateId, organizationId, orderId, "REFUNDED");
   return updated;

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
-import { resolveAvailableDeliveryMethods } from "@/lib/commerce/delivery";
+import { resolveAvailableDeliveryMethods, pickupLocationFor } from "@/lib/commerce/delivery";
 
 /**
  * The storefront checkout flow's real delivery options for a given address — replaces
@@ -9,7 +9,8 @@ import { resolveAvailableDeliveryMethods } from "@/lib/commerce/delivery";
  * location. `country`/`state` are optional: with neither, this returns every method with
  * no country/state restriction (i.e. what's eligible before the customer has typed an
  * address); the storefront re-calls this once they have, to narrow to what actually
- * covers them.
+ * covers them. Pickup options (including the built-in "Store pickup") are never
+ * address-scoped — see resolveAvailableDeliveryMethods.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
@@ -36,6 +37,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       feeMinor: m.feeMinor ?? 0,
       description: m.description ?? null,
       estimatedTimeLabel: m.estimatedTimeLabel ?? null,
+      // Lets the storefront hold back country-limited options until the customer has
+      // actually picked a country (otherwise they could choose one the server then rejects).
+      countries: m.countries ?? [],
+      // Where a PICKUP option is collected from — the built-in store pickup's own
+      // pickupLocation setting, or a custom pickup method's description. null when the
+      // owner hasn't said yet (the storefront then tells the customer the store will
+      // follow up with pickup details).
+      location: pickupLocationFor(m, settings) ?? null,
     })),
   });
 }

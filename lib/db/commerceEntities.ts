@@ -197,6 +197,29 @@ export const CommerceOrder = new Entity(
       paystackAuthorizationUrl: { type: "string" },
       stripeCheckoutSessionId: { type: "string" },
       stripePaymentIntentId: { type: "string" },
+      // How the customer chose to pay. Absent on every order placed before bank transfer
+      // existed — read absent as ONLINE (a gateway: Paystack/Stripe). A BANK_TRANSFER order
+      // stays status PENDING until the site owner confirms the money actually arrived (see
+      // lib/commerce/bankTransfer.ts) — it's deliberately NOT a new status value, so every
+      // existing PENDING/PAID consumer (plexo-admin's mirror, reports) keeps working.
+      paymentMethod: { type: ["ONLINE", "BANK_TRANSFER"] as const },
+      // Secret for the owner's one-click "confirm payment received" email link — compared
+      // timing-safely, never returned by any customer-facing endpoint.
+      bankTransferConfirmToken: { type: "string" },
+      bankTransferResolvedAt: { type: "string" },
+      // "dashboard:<userId>", "email-link", or "mcp:<userId>" — who confirmed/rejected it.
+      bankTransferResolvedBy: { type: "string" },
+      bankTransferRejectReason: { type: "string" },
+      // Snapshotted at checkout, same discipline as deliveryMethodNameSnapshot — editing the
+      // store's pickup address later never rewrites where an existing order was told to go.
+      pickupLocationSnapshot: { type: "string" },
+      // Answers to the site's own checkout questions (CommerceSettings.checkoutFields),
+      // snapshotted WITH their label: [{ id, label, value }]. See lib/commerce/checkoutFields.ts.
+      customFields: { type: "any" },
+      // Refund audit trail — every refund requires a stated reason (see refundCommerceOrder).
+      refundReason: { type: "string" },
+      refundedAt: { type: "string" },
+      refundedBy: { type: "string" },
       metadata: { type: "any" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
@@ -545,6 +568,31 @@ export const CommerceSettings = new Entity(
       notifyCustomerOnShipped: { type: "boolean", default: true },
       notifyCustomerOnCompleted: { type: "boolean", default: true },
       notifyCustomerOnRefunded: { type: "boolean", default: true },
+      // Optional manual override for the shared commerce widget's (public/commerce.js) look
+      // — "Add to Cart" cards, cart/checkout controls, the newsletter signup button. Absent
+      // means "automatic": lib/commerce/deriveCommerceTheme.ts derives both from the site's
+      // own real button choices instead, so a merchant who never touches this still gets a
+      // widget that matches their brand, not the platform's hardcoded default.
+      themeAccentColor: { type: "string" },
+      themeButtonRadius: { type: ["sharp", "rounded", "pill"] as const },
+      // Direct bank transfer — offered at checkout alongside (or instead of) the card
+      // gateway above. Not secrets: these are shown to every customer at checkout, so
+      // they're stored in plain text on purpose. See lib/commerce/bankTransfer.ts.
+      bankTransferEnabled: { type: "boolean", default: false },
+      bankTransferBankName: { type: "string" },
+      bankTransferAccountName: { type: "string" },
+      bankTransferAccountNumber: { type: "string" },
+      bankTransferInstructions: { type: "string" },
+      // Extra questions asked at checkout — [{ id, label, type, required, options?,
+      // placeholder? }]. See lib/commerce/checkoutFields.ts for the shape and validation.
+      checkoutFields: { type: "any" },
+      // deliveryEnabled=false hides every shipping (COURIER) method at checkout. Store
+      // pickup is a built-in option on by default — a store with no delivery methods set
+      // up at all can still take physical orders. See lib/commerce/delivery.ts.
+      deliveryEnabled: { type: "boolean", default: true },
+      pickupEnabled: { type: "boolean", default: true },
+      pickupLocation: { type: "string" },
+      pickupInstructions: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },
@@ -821,6 +869,107 @@ export const PlatformPaystackWebhookEvent = new Entity(
   { table, client: docClient },
 );
 
+// ── Donations ───────────────────────────────────────────────────────────────────
+// A donation is a Commerce payment like any other: every gift (and every monthly charge)
+// becomes a CommerceOrder with metadata.kind = "DONATION", so Orders, Customers, the
+// Wallet, refunds and receipts all work unchanged. These two entities hold what's
+// donation-specific: the campaign a donate form takes payments for, and each donor's
+// recurring monthly gift. See lib/commerce/donations.ts.
+
+export const CommerceDonationCampaign = new Entity(
+  {
+    model: { entity: "commerceDonationCampaign", version: "1", service: "plexoCommerce" },
+    attributes: {
+      id: { type: "string", required: true },
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      name: { type: "string", required: true },
+      description: { type: "string" },
+      /** [{ label?: string, amountMinor: number }] — the suggested amounts, in display order. */
+      presetAmounts: { type: "any", required: true },
+      defaultPresetIndex: { type: "number", default: 0 },
+      allowCustomAmount: { type: "boolean", default: true },
+      minAmountMinor: { type: "number", default: 100 },
+      allowMonthly: { type: "boolean", default: true },
+      defaultFrequency: { type: ["ONCE", "MONTHLY"] as const, default: "ONCE" },
+      goalAmountMinor: { type: "number" },
+      /** Running totals across PAID donations (one-time + every monthly charge). */
+      raisedMinor: { type: "number", default: 0 },
+      donationCount: { type: "number", default: 0 },
+      thankYouMessage: { type: "string" },
+      buttonLabel: { type: "string" },
+      active: { type: "boolean", default: true },
+      /** Where it came from when created by a migration, e.g. "wp-payment-form:3453". */
+      source: { type: "string" },
+      /** Paystack plan codes created for monthly amounts, keyed "<amountMinor>:<currency>:<mode>". */
+      paystackPlans: { type: "any" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["id"], template: "DONATIONCAMPAIGN#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+export const CommerceDonationSubscription = new Entity(
+  {
+    model: { entity: "commerceDonationSubscription", version: "1", service: "plexoCommerce" },
+    attributes: {
+      id: { type: "string", required: true },
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      campaignId: { type: "string", required: true },
+      donorEmail: { type: "string", required: true },
+      donorName: { type: "string" },
+      amountMinor: { type: "number", required: true },
+      currency: { type: "string", required: true },
+      interval: { type: ["MONTH"] as const, default: "MONTH" },
+      paymentProvider: { type: ["BYO_PAYSTACK", "PLATFORM_PAYSTACK", "PLATFORM_STRIPE", "BYO_STRIPE"] as const, required: true },
+      /** PENDING until the first payment clears; ACTIVE while billing; CANCELLED when stopped (by donor, owner or the gateway). */
+      status: { type: ["PENDING", "ACTIVE", "PAST_DUE", "CANCELLED"] as const, default: "PENDING" },
+      /** Stripe subscription id or Paystack subscription code — set once the gateway confirms it. */
+      providerRef: { type: "string" },
+      paystackPlanCode: { type: "string" },
+      paystackEmailToken: { type: "string" },
+      /** Secret in the donor's receipt link that lets them stop their own gift — never shown elsewhere. */
+      manageToken: { type: "string", required: true },
+      firstOrderId: { type: "string" },
+      chargesCount: { type: "number", default: 0 },
+      lastChargedAt: { type: "string" },
+      cancelledAt: { type: "string" },
+      cancelledBy: { type: "string" },
+      /** "plexo" for gifts started on Plexo; "imported" for a monthly gift adopted from the old site's gateway. */
+      source: { type: "string", default: "plexo" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["id"], template: "DONATIONSUB#${id}" },
+      },
+      // A renewal webhook arrives with only the gateway's subscription id.
+      byProviderRef: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["providerRef"], template: "DONATIONSUBREF#${providerRef}" },
+        sk: { field: "GSI1SK", composite: ["id"], template: "DONATIONSUB#${id}" },
+      },
+      // The donor's "manage my monthly gift" link arrives with only its token.
+      byManageToken: {
+        index: "GSI2",
+        pk: { field: "GSI2PK", composite: ["manageToken"], template: "DONATIONMANAGE#${manageToken}" },
+        sk: { field: "GSI2SK", composite: ["id"], template: "DONATIONSUB#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoCommerceService = new Service(
   {
     CommerceCategory,
@@ -845,6 +994,8 @@ export const plexoCommerceService = new Service(
     CommerceStripeAccessRequest,
     StripeCommerceEvent,
     PlatformPaystackWebhookEvent,
+    CommerceDonationCampaign,
+    CommerceDonationSubscription,
   },
   { table, client: docClient },
 );

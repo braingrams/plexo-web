@@ -1,10 +1,13 @@
 import { randomUUID } from "node:crypto";
+import type { EntityItem } from "electrodb";
 import { compileToHTML } from "@/lib/compiler";
 import { sanitizeHtml } from "@/server/sanitizer";
 import { getEnabledSiteLayoutRows, spliceLayoutRows } from "@/lib/siteLayoutCore";
 import { ensureUniqueSlug } from "@/server/slugDynamo";
 import { Template } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
+
+type TemplateItem = EntityItem<typeof Template>;
 
 /**
  * The four "system" pages a working storefront needs, auto-provisioned the moment Commerce
@@ -223,6 +226,33 @@ export async function getStorefrontSlug(templateId: string): Promise<string | nu
   return page?.slug ?? null;
 }
 
+/**
+ * The checkout page's REAL served path — not assumed to be "{storefrontSlug}/checkout".
+ * That assumption holds for the auto-provisioned flow (ensureStorefrontLayout creates
+ * checkout as a genuine child of the storefront page), but a hand-built site can freely
+ * have its own checkout page anywhere in the tree, including as a sibling of the
+ * storefront rather than a child (confirmed live: a site with storefrontCheckoutTemplateId
+ * pointing at a top-level page, not nested under storefrontTemplateId at all — the old
+ * "{storefrontPath}/checkout" concatenation in commerce.js produced a 404 for exactly this
+ * site). Walks the checkout page's own parentId chain up to (but excluding) the root —
+ * same "root contributes no path segment" convention app/pub/[domain]/[[...slug]]/route.ts
+ * itself relies on — joining every slug in between.
+ */
+export async function getCheckoutPath(templateId: string): Promise<string | null> {
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  if (!settings?.storefrontCheckoutTemplateId) return null;
+
+  const segments: string[] = [];
+  let currentId: string | null = settings.storefrontCheckoutTemplateId;
+  while (currentId) {
+    const page: TemplateItem | null = (await Template.get({ id: currentId }).go()).data;
+    if (!page) return null;
+    if (page.parentId) segments.unshift(page.slug ?? "");
+    currentId = page.parentId ?? null;
+  }
+  return segments.length ? `/${segments.join("/")}` : null;
+}
+
 /** Renames the storefront's own slug (the checkout sub-page moves with it automatically,
  * since its parentId doesn't change). order-confirmation/track-order are never renameable —
  * see this file's top-of-file comment and the checkout/refund routes that hardcode them. */
@@ -244,4 +274,29 @@ export async function renameStorefrontSlug(templateId: string, newSlugInput: str
   const candidate = await ensureUniqueSlug(templateId, base);
   await Template.patch({ id: page.id }).set({ slug: candidate }).go();
   return candidate;
+}
+
+/**
+ * Just the order-confirmation page, for a site that takes donations but doesn't sell
+ * anything — a bank-transfer donor lands there to see the account details, and a
+ * donations-only nonprofit shouldn't get a shop, checkout and order-tracking page it never
+ * asked for. Idempotent, same rules as ensureStorefrontLayout (respects an existing page).
+ */
+export async function ensureOrderConfirmationPage(templateId: string, organizationId: string, userId: string): Promise<void> {
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  if (settings?.orderConfirmationTemplateId) return;
+  const existing = await findChildBySlug(templateId, "order-confirmation");
+  const orderConfirmationTemplateId = existing
+    ? existing.id
+    : await createChildPage({
+        parentId: templateId,
+        rootId: templateId,
+        userId,
+        organizationId,
+        name: "Order Confirmation",
+        slug: "order-confirmation",
+        designJson: buildOrderConfirmationDesignJson(),
+      });
+  if (settings) await CommerceSettings.patch({ templateId }).set({ orderConfirmationTemplateId }).go();
+  else await CommerceSettings.create({ id: randomUUID(), templateId, organizationId, orderConfirmationTemplateId }).go();
 }

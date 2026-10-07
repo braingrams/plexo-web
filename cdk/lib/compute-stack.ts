@@ -751,18 +751,25 @@ export class ComputeStack extends cdk.Stack {
     // CloudFront sends the viewer, including error-classified ones — confirmed this one
     // isn't skipped the same way. Scoped to its own behavior below (api/v1/mcp*) rather
     // than the whole distribution, since the header's only meaningful on that route.
+    // ResponseHeadersPolicy resources are only created in production. The AWS account has
+    // a hard limit of 100 ResponseHeadersPolicy resources shared across ALL CloudFormation
+    // stacks — creating one per PR preview stack exhausts the quota quickly. PR previews
+    // are short-lived test environments where security headers have no practical value, so
+    // skipping them there is safe. Production retains them in full.
     const mcpBaseUrl = appDomain ? `https://${appDomain}` : "https://plexo.charisol.io";
-    const mcpResponseHeadersPolicy = new cloudfront.ResponseHeadersPolicy(this, "McpResponseHeadersPolicy", {
-      customHeadersBehavior: {
-        customHeaders: [
-          {
-            header: "WWW-Authenticate",
-            value: `Bearer resource_metadata="${mcpBaseUrl}/.well-known/oauth-protected-resource"`,
-            override: true,
+    const mcpResponseHeadersPolicy = isProd
+      ? new cloudfront.ResponseHeadersPolicy(this, "McpResponseHeadersPolicy", {
+          customHeadersBehavior: {
+            customHeaders: [
+              {
+                header: "WWW-Authenticate",
+                value: `Bearer resource_metadata="${mcpBaseUrl}/.well-known/oauth-protected-resource"`,
+                override: true,
+              },
+            ],
           },
-        ],
-      },
-    });
+        })
+      : undefined;
 
     // Baseline security headers for the dashboard/app distribution — closes a real,
     // confirmed gap (no CSP/HSTS/X-Frame-Options/X-Content-Type-Options were set anywhere
@@ -777,13 +784,36 @@ export class ComputeStack extends cdk.Stack {
     // (which stays scoped to api/v1/mcp* only, for the WWW-Authenticate reason explained
     // there) — a CloudFront behavior accepts only one responseHeadersPolicy, so this is a
     // second, independent policy applied to the other behaviors below.
-    const securityHeadersPolicy = new cloudfront.ResponseHeadersPolicy(this, "SecurityHeadersPolicy", {
-      securityHeadersBehavior: {
-        contentTypeOptions: { override: true },
-        frameOptions: { frameOption: cloudfront.HeadersFrameOption.SAMEORIGIN, override: true },
-        referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
-        strictTransportSecurity: { accessControlMaxAge: cdk.Duration.days(365), includeSubdomains: true, preload: true, override: true },
-      },
+    // Not created in non-prod — same account-limit reason as mcpResponseHeadersPolicy above.
+    const securityHeadersPolicy = isProd
+      ? new cloudfront.ResponseHeadersPolicy(this, "SecurityHeadersPolicy", {
+          securityHeadersBehavior: {
+            contentTypeOptions: { override: true },
+            frameOptions: { frameOption: cloudfront.HeadersFrameOption.SAMEORIGIN, override: true },
+            referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
+            strictTransportSecurity: { accessControlMaxAge: cdk.Duration.days(365), includeSubdomains: true, preload: true, override: true },
+          },
+        })
+      : undefined;
+
+    // The managed CACHING_OPTIMIZED policy the "_next/image*" behavior below uses doesn't
+    // include the query string in its cache key OR forward it to the origin at all — Next's
+    // own image-optimizer Lambda needs "url"/"w"/"q" to know what to fetch/resize, so every
+    // request to it 400ed with "\"url\" parameter is required" (confirmed live: the origin
+    // never even received the query string, regardless of its value). Every OTHER
+    // Lambda-backed behavior in this stack sets ALL_VIEWER_EXCEPT_HOST_HEADER for exactly
+    // this reason; this one was simply missed when these behaviors were ported from
+    // open-next.output.json (whose manifest only specifies origin routing, not cache/
+    // origin-request policy). This custom cache policy is the origin-request fix's
+    // necessary pair: without it, CloudFront would still forward the query string
+    // correctly but cache every w/q variant under one shared key, serving one arbitrarily-
+    // sized image for every request at a given "url".
+    const imageOptimizerCachePolicy = new cloudfront.CachePolicy(this, "ImageOptimizerCachePolicy", {
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("url", "w", "q"),
+      headerBehavior: cloudfront.CacheHeaderBehavior.none(),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
     });
 
     // DNS-validated via a manual CNAME (see appDomain's own comment above) — `cdk deploy`
@@ -871,7 +901,8 @@ export class ComputeStack extends cdk.Stack {
         "_next/image*": {
           origin: origins.FunctionUrlOrigin.withOriginAccessControl(imageFnUrl),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          cachePolicy: imageOptimizerCachePolicy,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
           responseHeadersPolicy: securityHeadersPolicy,
         },
         "_next/*": {

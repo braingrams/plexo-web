@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
 import { updateOrderFulfillmentStatus, FULFILLMENT_STATUSES } from "@/lib/commerce/orderStatusActions";
+import { withoutOrderSecrets } from "@/lib/commerce/bankTransfer";
 import { CommerceOrder, CommerceOrderItem, CommerceBooking } from "@/lib/db/commerceEntities";
 
 export async function GET(
@@ -20,7 +21,7 @@ export async function GET(
     CommerceBooking.get({ templateId, orderId: id }).go(),
   ]);
 
-  return NextResponse.json({ order: { ...order, items, booking: booking ?? null } });
+  return NextResponse.json({ order: { ...withoutOrderSecrets(order), items, booking: booking ?? null } });
 }
 
 // Fulfillment status only — payment status (CommerceOrder.status) is only ever changed by
@@ -47,5 +48,5 @@ export async function PATCH(
   }
 
   const order = await updateOrderFulfillmentStatus(templateId, organizationId, id, fulfillmentStatus);
-  return NextResponse.json({ order });
+  return NextResponse.json({ order: withoutOrderSecrets(order) });
 }

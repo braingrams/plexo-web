@@ -19,6 +19,9 @@
 //   - lib/mcp/blogTools.ts        (BLOG_MCP_TOOLS)
 //   - lib/mcp/commerceTools.ts    (COMMERCE_MCP_TOOLS)
 //   - lib/mcp/lmsTools.ts         (LMS_MCP_TOOLS)
+//   - lib/mcp/donationTools.ts    (DONATION_MCP_TOOLS)
+//   - lib/mcp/wpMigrationTools.ts (WP_MIGRATION_MCP_TOOLS) — none destructive: a migration
+//     only ever creates a NEW site and only reads from the WordPress source.
 //
 // Explicitly EXCLUDED, and why (so a future reviewer doesn't "fix" these back in without
 // re-checking the reasoning):
@@ -38,6 +41,9 @@ export const DESTRUCTIVE_TOOL_NAMES: ReadonlySet<string> = new Set([
 
   // --- lib/mcp/blogTools.ts ---
   "delete_blog_post", // "Permanently deletes... Cannot be undone" per its own tool description
+
+  // --- lib/mcp/donationTools.ts ---
+  "cancel_monthly_donation", // stops a donor's recurring gift at the payment gateway — money stops flowing
   "delete_blog_category", // permanently deletes the category
   "delete_blog_tag", // permanently deletes the tag
   "delete_blog_author", // permanently deletes the author/byline
