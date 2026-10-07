@@ -49,7 +49,8 @@ beforeEach(async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn((url: string, init?: RequestInit) => {
-      if (url.startsWith("/api/public/commerce/products/")) return respond({ product, relatedProducts: [] });
+      if (url.startsWith("/api/public/commerce/products/"))
+        return respond({ product, relatedProducts: [], reviews: { count: 2, average: 4.5, items: [{ name: "Ada", rating: 5, body: "Lovely fit.", date: "2026-09-01T00:00:00Z" }, { name: "Tunde", rating: 4, body: "Good.", date: null }] } });
       if (url === "/api/public/commerce/cart/items" && init?.method === "POST") {
         posted.push(JSON.parse(String(init.body)));
         return respond({ cartToken: "t", items: [], subtotalMinor: 0, currency: "NGN" });
@@ -98,5 +99,12 @@ describe("product page with options", () => {
     button("Blue").click(); // S + Blue isn't a variant
     expect(addButton().textContent).toBe("Not available");
     expect(addButton().disabled).toBe(true);
+  });
+
+  it("shows customer reviews with the average rating", () => {
+    expect(node().textContent).toContain("Customer reviews");
+    expect(node().textContent).toContain("4.5 out of 5 · 2 reviews");
+    expect(node().textContent).toContain("Lovely fit.");
+    expect(node().textContent).toContain("Ada");
   });
 });

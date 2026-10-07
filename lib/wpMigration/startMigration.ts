@@ -10,7 +10,7 @@ import type { MigrationAccess } from "./access";
 // tool so an AI assistant gets exactly the same checks, limits and owner-readable errors a
 // person clicking through the dashboard does.
 
-const ACTIVE_PHASES = new Set(["PENDING", "PLANNING", "POSTS", "PAGES", "ASSETS", "FINALIZING", "PAUSED_ERROR"]);
+const ACTIVE_PHASES = new Set(["PENDING", "PLANNING", "POSTS", "PRODUCTS", "PAGES", "ASSETS", "FINALIZING", "PAUSED_ERROR"]);
 // The heaviest job Plexo runs (a whole site's pages, media and theme files) — generous for
 // real use (re-running after fixing something on WordPress), tight enough that it can't be
 // used to mirror arbitrary sites in bulk.

@@ -227,6 +227,28 @@ export async function getStorefrontSlug(templateId: string): Promise<string | nu
 }
 
 /**
+ * The storefront page's REAL served path, e.g. "/store" or "/lineagecare/shop" — a migrated
+ * store's shop page can sit under a parent page, which the bare slug can't express.
+ */
+export async function getStorefrontPath(templateId: string): Promise<string | null> {
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  return settings?.storefrontTemplateId ? pagePath(settings.storefrontTemplateId) : null;
+}
+
+/** "/a/b" for a page in the site tree (the root contributes no segment), or null if it's gone. */
+async function pagePath(pageId: string): Promise<string | null> {
+  const segments: string[] = [];
+  let currentId: string | null = pageId;
+  while (currentId) {
+    const page: TemplateItem | null = (await Template.get({ id: currentId }).go()).data;
+    if (!page) return null;
+    if (page.parentId) segments.unshift(page.slug ?? "");
+    currentId = page.parentId ?? null;
+  }
+  return segments.length ? `/${segments.join("/")}` : null;
+}
+
+/**
  * The checkout page's REAL served path — not assumed to be "{storefrontSlug}/checkout".
  * That assumption holds for the auto-provisioned flow (ensureStorefrontLayout creates
  * checkout as a genuine child of the storefront page), but a hand-built site can freely

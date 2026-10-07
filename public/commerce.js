@@ -35,6 +35,10 @@
   // live: a real site's checkout 404ed under that assumption. Falls back to the old
   // concatenation only if the config predates this (null), never as the normal case.
   var CHECKOUT_PATH = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.checkoutPath) || (STOREFRONT_PATH + "/checkout");
+  // Where product pages live: the store's own product base (a migrated WooCommerce store
+  // keeps /product/<slug>/), else under the storefront page (/store/<slug>) — which is
+  // where the server serves them; links used to hardcode /shop/<slug> and 404ed.
+  var PRODUCT_BASE = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.productBase) || STOREFRONT_PATH;
   var CART_EVENT = "plexo:cart-updated";
   var CHECKOUT_STATE_EVENT = "plexo:checkout-state-changed";
   // Shared between the checkout page's two independent marker blocks — checkout_flow
@@ -639,7 +643,7 @@
     return !!(p && p.hasVariants && !p.__variantId);
   }
   function productHref(p) {
-    return "/shop/" + encodeURIComponent(p.slug || p.id);
+    return PRODUCT_BASE.replace(/\/+$/, "") + "/" + encodeURIComponent(p.slug || p.id);
   }
   function cartLabel(p, text) {
     if (p.stockQuantity === 0) return "Out of Stock";
@@ -1269,6 +1273,38 @@
           });
         }
 
+        // Approved customer reviews (e.g. carried over from a WooCommerce store).
+        var reviews = data.reviews;
+        if (reviews && reviews.count > 0) {
+          var stars = function (n) {
+            var r = Math.round(n || 0);
+            return "★★★★★".slice(0, r) + "☆☆☆☆☆".slice(0, 5 - r);
+          };
+          node.appendChild(
+            el("div", { style: { maxWidth: "1440px", margin: "0 auto", padding: "8px clamp(20px, 6vw, 56px) 72px", boxSizing: "border-box" } }, [
+              el("h2", { class: "pc-serif", style: { margin: "0 0 8px", fontWeight: "500", fontSize: "26px", color: "#16233F" } }, ["Customer reviews"]),
+              el("div", { style: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "24px" } }, [
+                el("span", { style: { color: "#E3B23C", fontSize: "18px", letterSpacing: "2px" }, "aria-hidden": "true" }, [stars(reviews.average)]),
+                el("span", { class: "pc-muted", style: { fontSize: "14px" } }, [reviews.average + " out of 5 · " + reviews.count + (reviews.count === 1 ? " review" : " reviews")]),
+              ]),
+              el(
+                "div",
+                { style: { display: "flex", flexDirection: "column", gap: "18px" } },
+                reviews.items.map(function (r) {
+                  return el("div", { style: { borderTop: "1px solid #E4E1D6", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "6px" } }, [
+                    el("div", { style: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" } }, [
+                      el("span", { style: { fontWeight: "600", fontSize: "14px", color: "#16233F" } }, [r.name]),
+                      el("span", { style: { color: "#E3B23C", letterSpacing: "1px" }, "aria-label": r.rating + " out of 5" }, [stars(r.rating)]),
+                      r.date ? el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, [new Date(r.date).toLocaleDateString()]) : null,
+                    ]),
+                    r.body ? el("p", { style: { margin: "0", fontSize: "14.5px", lineHeight: "1.7", color: "#3C4356", whiteSpace: "pre-line" } }, [r.body]) : null,
+                  ]);
+                })
+              ),
+            ])
+          );
+        }
+
         // Staff-curated only (CommerceProductRelation, set from the product's own admin
         // edit form) — never a guessed/automatic pick, and the whole section simply
         // doesn't render when nothing has been curated for this product yet.
@@ -1495,7 +1531,7 @@
     var addBtn;
     var textColor = dark ? "#FBFAF6" : "#16233F";
     var priceColor = dark ? "#E3B23C" : "#16233F";
-    var href = "/shop/" + encodeURIComponent(p.slug || p.id);
+    var href = productHref(p);
     var media = p.imageUrl
       ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "160px", objectFit: "cover", display: "block" } })
       : el("div", { style: { width: "100%", height: "160px", background: dark ? "linear-gradient(155deg,#1F3B2A,#2E7D52)" : "#F3F1EA", display: "flex", alignItems: "center", justifyContent: "center", color: dark ? "#D7F0DF" : "#8A93A6", fontSize: "13px" } }, [p.name]);
@@ -1594,7 +1630,9 @@
         });
         var catalogEmpty = allProducts.length === 0;
         var categories = data.categories || [];
-        var activeCategory = null;
+        // ?category=<slug> opens the shop already filtered (e.g. an old category link).
+        var requestedCategory = new URLSearchParams(window.location.search).get("category");
+        var activeCategory = requestedCategory && categories.some(function (c) { return c.slug === requestedCategory; }) ? requestedCategory : null;
         var searchTerm = "";
         var stockFilter = "all";
         var page = 1;

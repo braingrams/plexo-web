@@ -9,7 +9,7 @@ import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
 import { fillLatestPostLists } from "@/lib/pub/livePostQueries";
 import { Template, TemplateAsset, BlogSite, PublishedDomain } from "@/lib/db/contentEntities";
 import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
-import { getStorefrontSlug, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
+import { getStorefrontPath, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
 import { deriveCommerceTheme, type CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
 import { PageView } from "@/lib/db/opsEntities";
 import { recordPageViewRollup } from "@/lib/analyticsRollup";
@@ -154,7 +154,7 @@ function resolveCommerceTheme(
 // injected outside that sanitized body, the same way as injectBrandingBar below — a
 // Commerce-disabled site never gets this tag at all, see the call site's CommerceSettings
 // gate.
-function injectCommerceScript(html: string, storefrontPath: string, checkoutPath: string | null, theme: CommerceTheme | null): string {
+function injectCommerceScript(html: string, storefrontPath: string, checkoutPath: string | null, theme: CommerceTheme | null, productBase: string | null = null): string {
   // ?v=<deploy sha> busts both CloudFront and any visitor's browser cache on every
   // deploy — see cdk/lib/compute-stack.ts's assetVersion comment for why the origin's
   // own shorter Cache-Control on commerce.js isn't enough by itself (a browser that
@@ -171,7 +171,9 @@ function injectCommerceScript(html: string, storefrontPath: string, checkoutPath
   // call site) — commerce.js falls back to its own hardcoded look in that case, unchanged
   // from before theming existed. JSON.stringify already escapes quotes; the "</" replace
   // is defense in depth against a slug somehow containing it.
-  const configTag = `<script>window.__PLEXO_COMMERCE__=${JSON.stringify({ storefrontPath, checkoutPath, theme }).replace(/<\//g, "<\\/")};</script>`;
+  // productBase: where product pages live (CommerceSettings.productUrlBase, e.g. a migrated
+  // WooCommerce store's "/product"); null = under the storefront page.
+  const configTag = `<script>window.__PLEXO_COMMERCE__=${JSON.stringify({ storefrontPath, checkoutPath, theme, productBase }).replace(/<\//g, "<\\/")};</script>`;
   const scriptTag = `${configTag}<script src="/commerce.js?v=${process.env.ASSET_VERSION ?? "dev"}" defer></script>`;
   const maskedHtml = html.replace(
     /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
@@ -642,9 +644,10 @@ export async function GET(
     if (commerceSettings?.enabled) {
       html = injectCommerceScript(
         html,
-        `/${(await getStorefrontSlug(published.templateId)) ?? DEFAULT_STOREFRONT_SLUG}`,
+        (await getStorefrontPath(published.templateId)) ?? `/${DEFAULT_STOREFRONT_SLUG}`,
         await getCheckoutPath(published.templateId),
         resolveCommerceTheme(commerceSettings, published.template.designJson),
+        commerceSettings.productUrlBase ?? null,
       );
     }
     if (html.includes(LMS_SIGNUP_MARKER_ATTR)) {
@@ -707,16 +710,27 @@ export async function GET(
   // renderProductDetail reading which one off this same visited URL client-side — so a
   // product added in the dashboard gets a working page immediately, with nothing to
   // create or regenerate here.
-  if (remainingSegments.length === 1) {
-    const { data: commerceSettings } = await CommerceSettings.get({ templateId: published.templateId }).go();
+  // Also "<productUrlBase>/<slug>" — a store whose product pages live at their own base
+  // (a migrated WooCommerce store's /product/<slug>/ keeps working, no redirects).
+  const productCommerceSettings = remainingSegments.length >= 1 && remainingSegments.length <= 3
+    ? (await CommerceSettings.get({ templateId: published.templateId }).go()).data
+    : null;
+  const productBase = productCommerceSettings?.productUrlBase?.replace(/\/+$/, "") ?? null;
+  const requestedPagePath = "/" + slugSegments.map(safeDecode).join("/");
+  const slugUnderBase =
+    productBase && requestedPagePath.startsWith(`${productBase}/`) && !requestedPagePath.slice(productBase.length + 1).includes("/")
+      ? requestedPagePath.slice(productBase.length + 1)
+      : null;
+  if (remainingSegments.length === 1 || slugUnderBase) {
+    const commerceSettings = productCommerceSettings;
     if (commerceSettings?.enabled && commerceSettings.productDetailTemplateId) {
       const { data: productDetailTemplate } = await Template.get({ id: commerceSettings.productDetailTemplateId }).go();
       if (productDetailTemplate) {
-        const candidateSlug = remainingSegments[0];
+        const candidateSlug = slugUnderBase ?? safeDecode(remainingSegments[0]);
         // CommerceProduct is id-keyed, not slug-keyed (see commerceEntities.ts's own
         // comment) — fans out over the site's own product list in memory, same bound as
         // every other slug/name lookup this migration uses for that entity.
-        const { data: products } = await CommerceProduct.query.primary({ templateId: published.templateId }).go();
+        const { data: products } = await CommerceProduct.query.primary({ templateId: published.templateId }).go({ pages: "all" });
         const product = products.find((p) => p.slug === candidateSlug && p.active && p.kind === "PHYSICAL");
         if (product) {
           let html = injectProductSeo(productDetailTemplate.compiledHtml, {
@@ -725,16 +739,18 @@ export async function GET(
             imageUrl: product.imageUrl ?? null,
           });
           html = injectSeoTags(html, {
-            canonicalUrl: `https://${rawDomain}/${candidateSlug}`,
+            // The product's own address — it was "/<slug>", which pointed search engines at a 404.
+            canonicalUrl: `https://${rawDomain}${requestedPagePath}${new URL(request.url).pathname.endsWith("/") ? "/" : ""}`,
             noindex: published.noindex ?? false,
             siteName: published.template.name || rawDomain,
           });
           html = optimizeImages(html);
           html = injectCommerceScript(
             html,
-            `/${(await getStorefrontSlug(published.templateId)) ?? DEFAULT_STOREFRONT_SLUG}`,
+            (await getStorefrontPath(published.templateId)) ?? `/${DEFAULT_STOREFRONT_SLUG}`,
             await getCheckoutPath(published.templateId),
             resolveCommerceTheme(commerceSettings, published.template.designJson),
+            commerceSettings.productUrlBase ?? null,
           );
           if (commerceSettings.newsletterPopupEnabled && commerceSettings.maildripNewsletterGroupId) {
             html = injectNewsletterPopupScript(html);

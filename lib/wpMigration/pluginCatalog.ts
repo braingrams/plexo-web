@@ -143,8 +143,9 @@ const CATALOG: Record<string, CatalogEntry> = {
 
   woocommerce: {
     name: "WooCommerce",
-    outcome: "NEEDS_ATTENTION",
-    explanation: "Your shop pages were copied. Products, cart and checkout move to Plexo Commerce — finish that step before switching your domain.",
+    outcome: "NATIVE",
+    explanation:
+      "Your shop moved to Plexo Commerce: products (with their options, sale prices, SKUs and photos), categories and reviews, at the same web addresses. The shop, cart, checkout and account pages keep their design with Plexo's checkout inside. Connect Stripe or Paystack to start taking orders.",
   },
   "give": {
     name: "GiveWP",

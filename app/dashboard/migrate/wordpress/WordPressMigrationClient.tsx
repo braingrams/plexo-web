@@ -25,12 +25,12 @@ interface Preview {
   theme: { slug: string; parentSlug: string | null } | null;
   plugins: Plugin[];
 }
-interface Counts { pages: number; pagesDone: number; pagesFailed: number; posts: number; postsDone: number; postsFailed: number; assets: number; assetsDone: number; assetsFailed: number; assetsSkipped: number }
+interface Counts { pages: number; pagesDone: number; pagesFailed: number; posts: number; postsDone: number; postsFailed: number; assets: number; assetsDone: number; assetsFailed: number; assetsSkipped: number; products?: number; productsDone?: number; productsSkipped?: number; productsFailed?: number }
 interface ChecklistItem { id: string; label: string; status: "done" | "blocked" | "review" | "todo"; detail: string }
 interface PageRow { key: string; kind: string; title: string; sourceUrl: string; newPath: string | null; status: string; error: string | null; seo: Record<string, boolean> | null }
 interface Report {
   source: { origin: string; homeUrl: string; siteName: string };
-  summary: { pagesCopied: number; pagesFailed: number; postsCopied: number; postsFailed: number; filesCopied: number; filesFailed: number; filesAlreadyMissing: number; bytesCopied: number; formsReconnected: number };
+  summary: { pagesCopied: number; pagesFailed: number; postsCopied: number; postsFailed: number; filesCopied: number; filesFailed: number; filesAlreadyMissing: number; bytesCopied: number; formsReconnected: number; productsMoved?: number };
   seo: { pagesChecked: number; titles: number; descriptions: number; canonicals: number; structuredData: number; robots: number };
   pages: PageRow[];
   forms: { page: string; name: string; fields: string[] }[];
@@ -64,6 +64,7 @@ const OUTCOME_GROUPS: { outcome: Outcome; title: string; tone: string }[] = [
 const PHASE_STEPS: { phase: string; label: string }[] = [
   { phase: "PLANNING", label: "Reading your WordPress site" },
   { phase: "POSTS", label: "Moving blog posts" },
+  { phase: "PRODUCTS", label: "Moving your shop's products" },
   { phase: "PAGES", label: "Copying pages and your theme" },
   { phase: "ASSETS", label: "Copying images, fonts and files" },
   { phase: "FINALIZING", label: "Checking every link and SEO tag" },
@@ -700,8 +701,11 @@ export function WordPressMigrationClient() {
           </div>
           <div style={{ ...card, display: "flex", flexDirection: "column", gap: 12 }}>
             {PHASE_STEPS.map((s, i) => {
+              // The products step only exists for a site with a WooCommerce shop.
+              if (s.phase === "PRODUCTS" && !(c?.products && c.products > 0)) return null;
               const state = i < idx ? "done" : i === idx && !paused && !failed ? "active" : "todo";
               let detail = "";
+              if (c && s.phase === "PRODUCTS" && c.products) detail = `${(c.productsDone ?? 0) + (c.productsSkipped ?? 0) + (c.productsFailed ?? 0)} of ${c.products}`;
               if (c && s.phase === "POSTS" && c.posts > 0) detail = `${c.postsDone} of ${c.posts}`;
               if (c && s.phase === "PAGES" && c.pages > 0) detail = `${c.pagesDone} of ${c.pages}`;
               if (c && s.phase === "ASSETS" && c.assets > 0) detail = `${c.assetsDone + c.assetsFailed + c.assetsSkipped} of ${c.assets}`;
@@ -834,6 +838,7 @@ export function WordPressMigrationClient() {
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
           <Stat value={r.summary.pagesCopied} label="pages copied" />
           <Stat value={r.summary.postsCopied} label="blog posts moved" />
+          {r.summary.productsMoved != null && <Stat value={r.summary.productsMoved} label="products moved" />}
           <Stat value={r.summary.filesCopied} label={`files (${mb(r.summary.bytesCopied)})`} />
           <Stat value={`${r.seo.titles}/${r.seo.pagesChecked}`} label="pages with identical SEO" />
           {r.summary.formsReconnected > 0 && <Stat value={r.summary.formsReconnected} label="forms reconnected" />}
