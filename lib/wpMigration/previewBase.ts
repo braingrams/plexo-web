@@ -8,17 +8,23 @@ import { PublishedDomain, Template } from "@/lib/db/contentEntities";
 // even though the published page is fine. Pointing the preview's <base> at the page's live
 // address makes every reference load exactly what visitors get.
 
+type TreeNode = { id: string; parentId?: string | null; slug?: string | null; migratedFrom?: string | null };
+
 /** The live URL of a migrated page (directory-style, so relative refs resolve as on WordPress), or null. */
-export async function migratedPreviewBase(template: { id: string; parentId?: string | null; slug?: string | null; migratedFrom?: string | null }): Promise<string | null> {
-  if (!template.migratedFrom) return null;
+export async function migratedPreviewBase(template: TreeNode): Promise<string | null> {
+  // Walk up to the site's root first: the "moved from WordPress" marker is reliably on the
+  // root, not on every page under it — checking only the page being edited missed every
+  // sub-page (i.e. nearly all of a migrated site).
   const segments: string[] = [];
-  let cursor: { id: string; parentId?: string | null; slug?: string | null } | null = template;
+  let migrated = Boolean(template.migratedFrom);
+  let cursor: TreeNode | null = template;
   for (let depth = 0; cursor?.parentId && depth < 32; depth++) {
     if (cursor.slug) segments.unshift(cursor.slug);
-    const { data: parent }: { data: { id: string; parentId?: string | null; slug?: string | null } | null } = await Template.get({ id: cursor.parentId }).go();
+    const { data: parent }: { data: TreeNode | null } = await Template.get({ id: cursor.parentId }).go();
     cursor = parent;
+    if (cursor?.migratedFrom) migrated = true;
   }
-  if (!cursor) return null;
+  if (!cursor || !migrated) return null;
   const { data: domains } = await PublishedDomain.query.primary({ templateId: cursor.id }).go();
   const domain = domains[0]?.domain;
   if (!domain) return null;
