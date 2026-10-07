@@ -773,6 +773,12 @@ async function runFinalizing(job: JobItem): Promise<string> {
   return "COMPLETED";
 }
 
+/** The most recent payment-setup problem a real donation hit on this site, if any (see donations.ts). */
+export async function donationPaymentIssue(templateId: string): Promise<string | null> {
+  const { data } = await CommerceDonationCampaign.query.primary({ templateId }).go({ pages: "all" });
+  return data.find((c) => c.paymentIssue)?.paymentIssue ?? null;
+}
+
 /** Whether the migrated site can take card payments now (monthly giving needs a card gateway). */
 export async function donationPaymentsReady(templateId: string): Promise<boolean> {
   const { data: settings } = await CommerceSettings.get({ templateId }).go();

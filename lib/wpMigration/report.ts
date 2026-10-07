@@ -249,8 +249,11 @@ export function buildMigrationReport(input: {
 }
 
 /** The "donations need a payment account" checklist item — rebuilt live whenever the report is viewed. */
-export function donationPaymentsItem(campaigns: { name: string }[], paymentsReady: boolean): ChecklistItem {
+export function donationPaymentsItem(campaigns: { name: string }[], paymentsReady: boolean, paymentIssue?: string | null): ChecklistItem {
   const names = campaigns.map((c) => `“${c.name}”`).join(", ");
+  if (paymentIssue) {
+    return { id: "payments", label: "Fix your payment account so donations go through", status: "blocked", detail: paymentIssue };
+  }
   return paymentsReady
     ? {
         id: "payments",
@@ -267,8 +270,8 @@ export function donationPaymentsItem(campaigns: { name: string }[], paymentsRead
 }
 
 /** Re-evaluates the parts of a stored report that depend on things the owner may have done since (connecting payments). */
-export function refreshReport(report: MigrationReport, paymentsReady: boolean): MigrationReport {
+export function refreshReport(report: MigrationReport, paymentsReady: boolean, paymentIssue?: string | null): MigrationReport {
   if (!report.donationCampaigns?.length) return report;
-  const checklist = report.checklist.map((item) => (item.id === "payments" ? donationPaymentsItem(report.donationCampaigns!, paymentsReady) : item));
+  const checklist = report.checklist.map((item) => (item.id === "payments" ? donationPaymentsItem(report.donationCampaigns!, paymentsReady, paymentIssue) : item));
   return { ...report, checklist, readyForCutover: !checklist.some((c) => c.status === "blocked") };
 }

@@ -8,7 +8,7 @@ import { MIGRATION_PLAN_MESSAGE, type MigrationAccess } from "@/lib/wpMigration/
 import { discoverWordPressInstall } from "@/lib/wpMigration/discover";
 import { previewInstall } from "@/lib/wpMigration/inventory";
 import { startWordPressMigration } from "@/lib/wpMigration/startMigration";
-import { donationPaymentsReady, processWpMigrationStep } from "@/lib/wpMigration/runJobDynamo";
+import { donationPaymentIssue, donationPaymentsReady, processWpMigrationStep } from "@/lib/wpMigration/runJobDynamo";
 import { analyzeDomain, plexoRoutingEndpoint, verifyLive, type CutoverPlan } from "@/lib/wpMigration/cutover";
 import { checkConnector, createConnector, revealConnectorCode, runExtrasStep, type ConnectorState } from "@/lib/wpMigration/connector";
 import { refreshReport, type MigrationReport } from "@/lib/wpMigration/report";
@@ -167,7 +167,7 @@ export async function handleWpMigrationTool(toolName: string, args: any, resolve
           jobId,
           dashboardUrl,
           publishedDomains: domains.map((d) => d.domain),
-          report: summarizeReport(refreshReport(job.report as MigrationReport, await donationPaymentsReady(templateId))),
+          report: summarizeReport(refreshReport(job.report as MigrationReport, await donationPaymentsReady(templateId), await donationPaymentIssue(templateId))),
           next: domains.length === 0
             ? "Offer to publish a preview with publish_existing_landing_page (subdomain), then have the owner connect their own domain in Plexo's Domains page. Keep WordPress running until the domain shows the Plexo site."
             : "Have the owner connect their own domain in Plexo's Domains page once nothing in the checklist is blocked.",
@@ -205,7 +205,7 @@ export async function handleWpMigrationTool(toolName: string, args: any, resolve
       }
       const plan = (job.cutover as { plan?: CutoverPlan } | undefined)?.plan;
       if (!plan) throw new Error("Call get_domain_switch_plan first.");
-      const verification = await verifyLive(job, plan, refreshReport(job.report as MigrationReport, await donationPaymentsReady(site.id)));
+      const verification = await verifyLive(job, plan, refreshReport(job.report as MigrationReport, await donationPaymentsReady(site.id), await donationPaymentIssue(site.id)));
       await WpMigrationJob.patch({ templateId: site.id, id: job.id }).set({ cutover: { ...(job.cutover as object), verification } }).go();
       return verification;
     }

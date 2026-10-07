@@ -4,7 +4,7 @@ import { isValidUuid } from "@/lib/slugUtils";
 import { assertOwnSite, resolveMigrationAccess } from "@/lib/wpMigration/access";
 import { verifyLive, type CutoverPlan } from "@/lib/wpMigration/cutover";
 import { refreshReport, type MigrationReport } from "@/lib/wpMigration/report";
-import { donationPaymentsReady } from "@/lib/wpMigration/runJobDynamo";
+import { donationPaymentIssue, donationPaymentsReady } from "@/lib/wpMigration/runJobDynamo";
 
 export const maxDuration = 60;
 
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   if (!job?.report) return NextResponse.json({ error: "Finish the migration first." }, { status: 400 });
   const plan = (job.cutover as { plan?: CutoverPlan } | undefined)?.plan;
   if (!plan) return NextResponse.json({ error: "Open the domain switch steps first." }, { status: 400 });
-  const report = refreshReport(job.report as MigrationReport, await donationPaymentsReady(templateId));
+  const report = refreshReport(job.report as MigrationReport, await donationPaymentsReady(templateId), await donationPaymentIssue(templateId));
   const verification = await verifyLive(job, plan, report);
   await WpMigrationJob.patch({ templateId, id: jobId }).set({ cutover: { ...(job.cutover as object), verification } }).go();
   return NextResponse.json({ verification });
