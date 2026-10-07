@@ -77,3 +77,31 @@ export function formatDuration(seconds: number): string {
   if (hours < 36) return `about ${Math.round(hours)} hours`;
   return `about ${Math.round(hours / 24)} days`;
 }
+
+/** How far along a migration is, 0–1, for a progress bar (weighted by how long each kind of item takes). */
+export function migrationProgress(phase: string, counts: EstimateCounts | null): number {
+  if (phase === "COMPLETED") return 1;
+  if (!counts || phase === "PENDING" || phase === "PLANNING") return 0.02;
+  if (phase === "FINALIZING") return 0.97;
+  const total = weighted({ posts: counts.posts, pages: counts.pages, assets: counts.assets, products: counts.products ?? 0 });
+  const done = weighted({
+    posts: counts.postsDone + counts.postsFailed,
+    pages: counts.pagesDone + counts.pagesFailed,
+    assets: counts.assetsDone + counts.assetsFailed + counts.assetsSkipped,
+    products: (counts.productsDone ?? 0) + (counts.productsSkipped ?? 0) + (counts.productsFailed ?? 0),
+  });
+  return total > 0 ? Math.min(0.96, Math.max(0.03, done / total)) : 0.03;
+}
+
+/** What's happening right now, in a few words: "312 of 542 blog posts". */
+export function migrationActivity(phase: string, counts: EstimateCounts | null): string {
+  const c = counts;
+  const of = (done: number, total: number, what: string) => `${done.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${what}`;
+  if (phase === "PENDING" || phase === "PLANNING" || !c) return "Reading your WordPress site";
+  if (phase === "POSTS") return of(c.postsDone + c.postsFailed, c.posts, "blog posts");
+  if (phase === "PRODUCTS") return of((c.productsDone ?? 0) + (c.productsSkipped ?? 0) + (c.productsFailed ?? 0), c.products ?? 0, "products");
+  if (phase === "PAGES") return of(c.pagesDone + c.pagesFailed, c.pages, "pages");
+  if (phase === "ASSETS") return of(c.assetsDone + c.assetsFailed + c.assetsSkipped, c.assets, "images and files");
+  if (phase === "FINALIZING") return "Checking every link and SEO tag";
+  return "";
+}

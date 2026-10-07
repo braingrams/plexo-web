@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { WpMigrationJob } from "@/lib/db/importEntities";
 import { resolveMigrationAccess } from "@/lib/wpMigration/access";
 import { continueInBackground } from "@/lib/wpMigration/background";
+import { estimateSecondsLeft, type EstimateCounts } from "@/lib/wpMigration/estimate";
 import { startWordPressMigration } from "@/lib/wpMigration/startMigration";
 
 export const maxDuration = 60;
@@ -20,6 +21,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       siteName: (j.install as { siteName?: string } | undefined)?.siteName ?? null,
       createdAt: j.createdAt,
       finishedAt: j.finishedAt ?? null,
+      // For the dashboard-wide progress banner and the site card's badge.
+      counts: j.counts ?? null,
+      estimatedSecondsLeft: estimateSecondsLeft({ phase: j.phase ?? "PENDING", counts: (j.counts as EstimateCounts | undefined) ?? null, startedAt: j.startedAt }),
+      pausedReason: j.phase === "PAUSED_ERROR" && Array.isArray(j.errors) ? ((j.errors as string[]).slice(-1)[0] ?? null) : null,
     })),
   });
 }

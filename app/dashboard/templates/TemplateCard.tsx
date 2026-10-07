@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { migrationProgress } from "@/lib/wpMigration/estimate";
+import { isRunning, migrationForSite, migrationHref, useMigrations } from "../migrate/wordpress/useMigrations";
 
 export type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
@@ -116,6 +118,9 @@ export function TemplateCard({ template, onDelete, onDuplicate, duplicating }: P
   const [imageError, setImageError] = useState(false);
   const isEmail = template.kind === "EMAIL";
   const isFunnel = template.isLmsFunnel;
+  // A site still moving from WordPress opens its progress, not a half-copied editor.
+  const migration = migrationForSite(useMigrations(), template.id);
+  const moving = migration && (isRunning(migration) || migration.phase === "PAUSED_ERROR") ? migration : null;
 
   return (
     <article
@@ -177,6 +182,19 @@ export function TemplateCard({ template, onDelete, onDuplicate, duplicating }: P
             {isEmail ? <IconMail /> : <IconLayout />}
           </div>
 
+        {moving && (
+          <span style={{
+            position: "absolute", left: "0.75rem", bottom: "0.75rem", zIndex: 2,
+            padding: "0.3rem 0.7rem", borderRadius: 999, fontSize: "0.7rem", fontWeight: 700,
+            background: moving.phase === "PAUSED_ERROR" ? "rgba(245,183,74,0.95)" : "rgba(11,15,25,0.9)",
+            color: moving.phase === "PAUSED_ERROR" ? "#1a1205" : "#f0f2ff",
+            border: moving.phase === "PAUSED_ERROR" ? "none" : "1px solid rgba(var(--brand-rgb),0.5)",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+          }}>
+            {moving.phase === "PAUSED_ERROR" ? "Move from WordPress paused" : `Moving from WordPress… ${Math.round(migrationProgress(moving.phase, moving.counts) * 100)}%`}
+          </span>
+        )}
+
         {/* Overlay Badge */}
         <span style={{
           position: "absolute",
@@ -227,7 +245,7 @@ export function TemplateCard({ template, onDelete, onDuplicate, duplicating }: P
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           <button
             type="button"
-            onClick={() => router.push(`/dashboard/templates/${template.id}`)}
+            onClick={() => router.push(moving ? migrationHref(moving) : `/dashboard/templates/${template.id}`)}
             style={{
               flex: 1,
               display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
@@ -242,7 +260,7 @@ export function TemplateCard({ template, onDelete, onDuplicate, duplicating }: P
             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(var(--brand-rgb),0.25)"; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(var(--brand-rgb),0.15)"; }}
           >
-            Open Editor
+            {moving ? (moving.phase === "PAUSED_ERROR" ? "Continue the move" : "View progress") : "Open Editor"}
             <IconArrow />
           </button>
           <button
