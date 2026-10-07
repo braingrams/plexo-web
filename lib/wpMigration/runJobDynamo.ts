@@ -29,6 +29,7 @@ import { convertWcPage, hasWcChrome, isWooCommerce, rewriteWcChrome, storePagesF
 import { buildStorePresentation, finishProductImport, importProductBatch, planWooCommerce, type WcPlanState } from "./storeImport";
 import { convertGiveForms } from "./givewp";
 import { notifyMigrationDone, notifyMigrationPaused } from "./notify";
+import { slimForStorage } from "./slimHtml";
 
 // The WordPress migration as a resumable, step-at-a-time job — same execution model as
 // lib/siteImport/runJobDynamo.ts (the dashboard tab drives it step by step; a daily cron
@@ -163,6 +164,22 @@ function servedPath(key: string, sourceUrl: string): string {
 async function allPages(jobId: string): Promise<PageItem[]> {
   const { data } = await WpMigrationPage.query.primary({ jobId }).go({ pages: "all" });
   return data;
+}
+
+/** Saves files moved out of an oversized page (lib/wpMigration/slimHtml.ts) under the site's root page, served at /plexo-inline/… */
+function inlineFileSaver(job: JobItem) {
+  return async (relPath: string, body: Buffer, contentType: string) => {
+    await storeMigratedAsset(job.id, job.templateId, relPath, body, contentType);
+  };
+}
+
+/** A page's address on WordPress — what relative URLs inside it were relative to. */
+function pathOf(url: string, fallback = "/"): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return fallback;
+  }
 }
 
 /**
@@ -767,6 +784,7 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
         }
       }
       const role = wpPageRole(raw);
+      html = await slimForStorage(html, pathOf(row.sourceUrl, path), inlineFileSaver(job));
       await Template.patch({ id: row.templateId })
         .set({
           compiledHtml: html,
@@ -867,7 +885,8 @@ async function fetchTransformedPage(job: JobItem, url: string, path: string, mov
   for (const form of result.donationForms) html = html.split(form.token).join((await ensureMigratedCampaign(job, form)).campaignId);
   const limit = pLimit(10);
   await Promise.all(result.assetPaths.map((segs) => limit(() => enqueueAsset(job.id, segs.join("/"), path))));
-  return html;
+  // Store layouts are saved as their own records — same size limit as a page.
+  return slimForStorage(html, pathOf(url, path), inlineFileSaver(job));
 }
 
 /** The site's migrated posts, newest first, in the shape the live-list matcher needs. */
@@ -989,7 +1008,8 @@ async function buildBlogPresentation(job: JobItem, knownPosts: KnownPost[], erro
   }
   if (!postHtml && frontHtml) postHtml = shellLayout(frontHtml, "post", blogSite.title ?? "Blog");
 
-  const createLayout = async (name: string, compiledHtml: string) => {
+  const createLayout = async (name: string, html: string, pagePath: string) => {
+    const compiledHtml = await slimForStorage(html, pagePath, inlineFileSaver(job));
     const id = randomUUID();
     await Template.create({
       id,
@@ -1006,8 +1026,8 @@ async function buildBlogPresentation(job: JobItem, knownPosts: KnownPost[], erro
     return id;
   };
   const changes: Record<string, unknown> = {};
-  if (listingHtml && !blogSite.listingLayoutTemplateId) changes.listingLayoutTemplateId = await createLayout("Blog listing (from WordPress)", listingHtml);
-  if (postHtml && !blogSite.postLayoutTemplateId) changes.postLayoutTemplateId = await createLayout("Blog post (from WordPress)", postHtml);
+  if (listingHtml && !blogSite.listingLayoutTemplateId) changes.listingLayoutTemplateId = await createLayout("Blog listing (from WordPress)", listingHtml, "/blog/");
+  if (postHtml && !blogSite.postLayoutTemplateId) changes.postLayoutTemplateId = await createLayout("Blog post (from WordPress)", postHtml, "/blog/post/");
   if (blogTitle && (!blogSite.title || blogSite.title === "Blog")) changes.title = blogTitle.slice(0, 120);
   if (postsPerPage && postsPerPage >= 1 && postsPerPage <= 50 && (blogSite.postsPerPage ?? 10) === 10) changes.postsPerPage = postsPerPage;
   if (hasComments !== null) changes.commentsEnabled = hasComments;
