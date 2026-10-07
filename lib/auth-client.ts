@@ -41,17 +41,15 @@ export const authClient = {
         // Only `code` is useful for branching — mapped to 403 to match the UX every
         // caller already checks for (app/auth/login/page.tsx's `status === 403` branch).
         const code = (result as { code?: string }).code;
-        const unverified = code === "unverified_email";
-        const tooManyAttempts = code === "too_many_attempts";
-        const googleAccountOnly = code === "google_account_only";
-        const status = unverified ? 403 : tooManyAttempts ? 429 : googleAccountOnly ? 409 : 401;
-        const message = unverified
-          ? "This account is not verified yet. Check your email for the verification link."
-          : tooManyAttempts
-            ? "Too many login attempts for this account. Please wait 15 minutes and try again."
-            : googleAccountOnly
-              ? "This account uses Google sign-in — there's no password to check."
-              : "Invalid credentials.";
+        const known: Record<string, { status: number; message: string }> = {
+          unverified_email: { status: 403, message: "This account is not verified yet. Check your email for the verification link." },
+          too_many_attempts: { status: 429, message: "Too many login attempts for this account. Please wait 15 minutes and try again." },
+          google_account_only: { status: 409, message: "This account uses Google sign-in — there's no password to check." },
+          // server/passwordSignIn.ts: Charisol Auth needs a new password; a code has been emailed.
+          password_reset_required: { status: 428, message: "For your security, please choose a new password. We've emailed you a code." },
+          sign_in_unavailable: { status: 503, message: "Sign-in is temporarily unavailable. Please try again in a few minutes." },
+        };
+        const { status, message } = (code && known[code]) || { status: 401, message: "Incorrect email or password." };
         return { error: { status, message, code } };
       }
       return { data: {} };
@@ -91,10 +89,14 @@ export const authClient = {
     // would outlive Plexo's and the user would land back on Maildrip/etc. still signed in.
     await CharisolAuth.signOut();
   },
-  forgetPassword(input: { email: string; redirectTo?: string }): Promise<AuthResult<{ ok: boolean }>> {
+  /** `mode: "code"` — the account's password is held by Charisol Auth, which has emailed a
+   *  6-digit code (continue on /auth/reset-password?mode=code); otherwise a reset link was sent. */
+  forgetPassword(input: { email: string; redirectTo?: string }): Promise<AuthResult<{ ok: boolean; mode?: "link" | "code" }>> {
     return postJson("/api/auth/forgot-password", input);
   },
-  resetPassword(input: { token: string; email: string; newPassword: string }): Promise<AuthResult<{ ok: boolean }>> {
+  resetPassword(
+    input: { token: string; email: string; newPassword: string } | { code: string; email: string; newPassword: string },
+  ): Promise<AuthResult<{ ok: boolean }>> {
     return postJson("/api/auth/reset-password", input);
   },
   organization: {

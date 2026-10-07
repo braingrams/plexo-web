@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { ArrowLeft, Sparkles, ShieldCheck, CheckCircle2, Eye, EyeOff, Zap } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
+import { PASSWORD_MIN_LENGTH, PASSWORD_RULES_TEXT, passwordProblem } from "@/lib/passwordPolicy";
 import { Mulish } from "next/font/google";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
@@ -44,6 +45,11 @@ function RegisterForm() {
 
     if (password !== confirmPassword) {
       setError("Passwords do not match.");
+      return;
+    }
+    const problem = passwordProblem(password, email);
+    if (problem) {
+      setError(problem);
       return;
     }
 
@@ -167,7 +173,7 @@ function RegisterForm() {
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
+              placeholder={`At least ${PASSWORD_MIN_LENGTH} characters`}
               className="w-full bg-[#090d16] border border-slate-800 focus:border-purple-500 rounded-2xl px-4 py-3.5 pr-12 text-sm text-white placeholder-slate-600 focus:outline-none transition-all"
             />
             <button
@@ -179,6 +185,7 @@ function RegisterForm() {
               {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
+          <p className="text-[11px] font-medium text-slate-500">{PASSWORD_RULES_TEXT}</p>
         </div>
 
         {/* Confirm Password */}
