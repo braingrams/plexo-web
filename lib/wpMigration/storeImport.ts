@@ -111,7 +111,8 @@ export async function importProductBatch(job: JobItem, rows: PageItem[], errors:
         await WpMigrationPage.patch({ jobId: job.id, key: row.key }).set({ status: "SKIPPED", error: mapped.reason }).go();
         continue;
       }
-      if (p.type === "variable" && variations.some((v) => v.variations?.length === 0) && mapped.variants.some((v) => /-\d+$/.test(v.id) && v.stockQuantity !== null)) {
+      // An "any size" variation was expanded into one variant per value (ids wc-<variation>-<n>).
+      if (mapped.variants.some((v) => /^wc-\d+-\d+$/.test(v.id) && v.stockQuantity !== null)) {
         wc.expandedStock.push(mapped.name);
       }
 
