@@ -3,6 +3,7 @@ import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { CommerceOrder, CommerceOrderItem, CommerceBooking, CommerceSettings } from "@/lib/db/commerceEntities";
 import { publicBankDetails } from "@/lib/commerce/bankTransfer";
+import { verifyOrderOnReturn } from "@/lib/commerce/verifyOnReturn";
 
 /** Powers order_confirmation and order_tracking. Requires an exact match on BOTH
  * orderNumber and email — deliberately, so nobody can browse another customer's order by
@@ -30,6 +31,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const order = matches.find((o) => o.templateId === templateId && o.customerEmail.toLowerCase() === email);
   if (!order) {
     return NextResponse.json({ error: "No order found with that number and email." }, { status: 404 });
+  }
+
+  // Landing back from checkout: confirm with the gateway directly instead of waiting on a
+  // webhook the owner may never have configured (see lib/commerce/verifyOnReturn.ts).
+  if (order.status === "PENDING" && order.paymentMethod !== "BANK_TRANSFER") {
+    order.status = (await verifyOrderOnReturn(order)) as typeof order.status;
   }
 
   const awaitingTransfer = order.paymentMethod === "BANK_TRANSFER" && order.status === "PENDING";
