@@ -192,6 +192,10 @@ add_action('rest_api_init', function () {
             'drafts' => intval($drafts->found_posts),
             'redirects' => count(plexo_migrator_redirects()),
             'team' => count(plexo_migrator_team()),
+            'givewp' => function_exists('give_get_meta') ? array(
+                'forms' => intval(wp_count_posts('give_forms')->publish),
+                'donations' => intval(wp_count_posts('give_payment')->publish) + intval(isset(wp_count_posts('give_payment')->give_subscription) ? wp_count_posts('give_payment')->give_subscription : 0),
+            ) : null,
             'woocommerce' => function_exists('wc_get_products') ? array(
                 'products' => count(wc_get_products(array('limit' => -1, 'return' => 'ids', 'status' => array('publish', 'private')))),
                 'downloadable' => count(wc_get_products(array('limit' => -1, 'return' => 'ids', 'downloadable' => true))),
@@ -436,6 +440,46 @@ add_action('rest_api_init', function () {
             $out[] = array('id' => intval($z['id']), 'name' => $z['zone_name'], 'locations' => $locations, 'methods' => $methods);
         }
         return array('zones' => $out, 'store_address' => trim(implode(', ', array_filter(array(get_option('woocommerce_store_address'), get_option('woocommerce_store_city'))))));
+    }));
+
+    /* ---- GiveWP: goals and past donations (read-only; give_get_meta works on every GiveWP version) ---- */
+
+    register_rest_route($ns, '/give/forms', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function () {
+        if (!function_exists('give_get_meta')) return array('forms' => array());
+        $out = array();
+        foreach (get_posts(array('post_type' => 'give_forms', 'post_status' => 'publish', 'numberposts' => 500, 'fields' => 'ids')) as $id) {
+            $goal = 0;
+            if (give_get_meta($id, '_give_goal_option', true) === 'enabled') $goal = (float) give_get_meta($id, '_give_set_goal', true);
+            // GiveWP 4 campaigns hold the goal for their forms.
+            if (!$goal && class_exists('Give\\Campaigns\\Models\\Campaign') && method_exists('Give\\Campaigns\\Models\\Campaign', 'findByFormId')) {
+                $campaign = \Give\Campaigns\Models\Campaign::findByFormId($id);
+                if ($campaign && $campaign->goalType && $campaign->goalType->getValue() === 'amount') $goal = (float) $campaign->goal;
+            }
+            $out[] = array('id' => $id, 'title' => get_the_title($id), 'goal' => $goal);
+        }
+        return array('forms' => $out);
+    }));
+
+    register_rest_route($ns, '/give/donations', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function (WP_REST_Request $request) {
+        if (!function_exists('give_get_meta')) return array('donations' => array());
+        list($offset, $limit) = plexo_migrator_paging($request);
+        $ids = get_posts(array('post_type' => 'give_payment', 'post_status' => array('publish', 'give_subscription'), 'numberposts' => $limit, 'offset' => $offset, 'orderby' => 'ID', 'order' => 'ASC', 'fields' => 'ids'));
+        $out = array();
+        foreach ($ids as $id) {
+            $out[] = array(
+                'id' => $id,
+                'form_id' => intval(give_get_meta($id, '_give_payment_form_id', true)),
+                'amount' => (float) give_get_meta($id, '_give_payment_total', true),
+                'currency' => give_get_meta($id, '_give_payment_currency', true),
+                'email' => give_get_meta($id, '_give_payment_donor_email', true),
+                'first_name' => give_get_meta($id, '_give_donor_billing_first_name', true),
+                'last_name' => give_get_meta($id, '_give_donor_billing_last_name', true),
+                'gateway' => give_get_meta($id, '_give_payment_gateway', true),
+                'recurring' => get_post_status($id) === 'give_subscription' || (bool) give_get_meta($id, '_give_is_donation_recurring', true),
+                'date' => get_post_time('c', true, $id),
+            );
+        }
+        return array('donations' => $out);
     }));
 
     // Past orders (wc_get_orders works with both of WooCommerce's order storage modes).

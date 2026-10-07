@@ -27,6 +27,7 @@ import { imageStem, makePostListsLive, type KnownPost } from "./livePostLists";
 import { listingLayoutFromWpHtml, postLayoutFromWpHtml, shellLayout, wpPageRole } from "./blogLayout";
 import { convertWcPage, hasWcChrome, isWooCommerce, rewriteWcChrome, storePagesFromHtml, wcPageRole } from "./woocommerce";
 import { buildStorePresentation, finishProductImport, importProductBatch, planWooCommerce, type WcPlanState } from "./storeImport";
+import { convertGiveForms } from "./givewp";
 
 // The WordPress migration as a resumable, step-at-a-time job — same execution model as
 // lib/siteImport/runJobDynamo.ts (the dashboard tab drives it step by step; a daily cron
@@ -507,7 +508,7 @@ function friendlyName(name: string): string {
   return name === name.toUpperCase() ? name.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : name;
 }
 
-async function ensureMigratedCampaign(job: JobItem, form: DetectedDonationForm): Promise<{ campaignId: string; name: string }> {
+async function ensureMigratedCampaign(job: JobItem, form: DetectedDonationForm & { goalMinor?: number | null }): Promise<{ campaignId: string; name: string }> {
   const { data: campaigns } = await CommerceDonationCampaign.query.primary({ templateId: job.templateId }).go({ pages: "all" });
   const existing = campaigns.find((c) => c.source === form.source);
   if (existing) return { campaignId: existing.id, name: existing.name };
@@ -526,6 +527,7 @@ async function ensureMigratedCampaign(job: JobItem, form: DetectedDonationForm):
     allowMonthly: form.allowMonthly,
     buttonLabel: form.buttonLabel ?? undefined,
     source: form.source,
+    ...(form.goalMinor ? { goalAmountMinor: form.goalMinor } : {}),
   }).go();
   return { campaignId: id, name };
 }
@@ -577,8 +579,15 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
       if (!row.templateId) throw new Error("This page has no place in the site tree.");
       // Donation forms become native Plexo Donations campaigns (created once per source form).
       let html = result.html;
+      // GiveWP forms (classic markup, or a visual-builder form's iframe — fetched, same site only).
+      const give = await convertGiveForms(html, async (url) => {
+        if (new URL(url, row.sourceUrl).origin !== new URL(plan.origin).origin) return null;
+        const res = await migrationFetch(new URL(url, row.sourceUrl).toString(), { headers: { Accept: "text/html" } });
+        return res.ok ? res.text() : null;
+      });
+      html = give.html;
       const donationCampaigns: { campaignId: string; name: string }[] = [];
-      for (const form of result.donationForms) {
+      for (const form of [...result.donationForms, ...give.forms]) {
         const campaign = await ensureMigratedCampaign(job, form);
         html = html.split(form.token).join(campaign.campaignId);
         donationCampaigns.push(campaign);

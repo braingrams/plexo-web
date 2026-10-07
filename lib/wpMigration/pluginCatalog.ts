@@ -149,8 +149,9 @@ const CATALOG: Record<string, CatalogEntry> = {
   },
   "give": {
     name: "GiveWP",
-    outcome: "NEEDS_ATTENTION",
-    explanation: "Your donation forms were copied, but payments are processed by WordPress. Connect payments in Plexo before switching your domain.",
+    outcome: "NATIVE",
+    explanation:
+      "Your GiveWP donation forms are now Plexo Donations campaigns — same amounts, custom-amount option, minimum and monthly giving — with Plexo's donate form in their place. Past donations come across with the Plexo Migrator plugin, and monthly donors carry over once you connect the same Stripe or Paystack account.",
   },
 
   // ── WordPress infrastructure / admin tooling — nothing a visitor ever sees.
