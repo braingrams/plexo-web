@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
@@ -17,6 +18,7 @@ function PlexoLogoMark() {
 }
 
 export default function ForgotPasswordPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +40,12 @@ export default function ForgotPasswordPage() {
 
       if (result?.error) {
         setError(result.error.message ?? "Unable to request password reset.");
+        return;
+      }
+
+      // Accounts whose password is held by Charisol Auth get a 6-digit code instead of a link.
+      if (result.data?.mode === "code") {
+        router.push(`/auth/reset-password?mode=code&email=${encodeURIComponent(email.trim().toLowerCase())}`);
         return;
       }
 

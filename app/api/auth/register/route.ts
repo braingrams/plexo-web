@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { passwordProblem } from "@/lib/passwordPolicy";
 import { hashPassword } from "@better-auth/utils/password";
 
 import { dynamoAdapter } from "@/server/authDynamo";
@@ -41,12 +42,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: { message: "Enter a valid email address." } }, { status: 400 });
   }
-  if (password.length < 8) {
-    return NextResponse.json({ error: { message: "Password must be at least 8 characters." } }, { status: 400 });
-  }
-
-  if (password.trim().toLowerCase() === email) {
-    return NextResponse.json({ error: { message: "Password can't be the same as your email address." } }, { status: 400 });
+  const problem = passwordProblem(password, email);
+  if (problem) {
+    return NextResponse.json({ error: { message: problem } }, { status: 400 });
   }
 
   const { data: existing } = await User.query.byEmail({ email }).go();

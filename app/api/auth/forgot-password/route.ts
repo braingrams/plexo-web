@@ -7,6 +7,7 @@ import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildPasswordResetEmail } from "@/lib/mail/templates";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { logEmailDelivery } from "@/lib/mail/logEmail";
+import { sendResetCode } from "@/server/charisolCognito";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
@@ -33,6 +34,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const { data: matches } = await User.query.byEmail({ email }).go();
   const user = matches[0];
+
+  // Once someone has signed in with a Charisol password, Charisol holds it — reset it there
+  // (Charisol emails a 6-digit code; the reset page asks for it). Everyone else keeps
+  // Plexo's own reset link, and their next sign-in moves the new password to Charisol.
+  if (user?.charisolPasswordAt) {
+    const sent = await sendResetCode(email);
+    if (sent.kind === "rate_limited") {
+      return NextResponse.json({ error: { message: "Too many reset requests for this email. Please wait a few minutes and try again." } }, { status: 429 });
+    }
+    if (sent.kind === "unavailable") {
+      return NextResponse.json({ error: { message: "Password reset is temporarily unavailable. Please try again in a few minutes." } }, { status: 503 });
+    }
+    return NextResponse.json({ data: { ok: true, mode: "code" } });
+  }
 
   if (user && user.passwordHash) {
     const token = randomUUID();
@@ -66,5 +81,5 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  return NextResponse.json({ data: { ok: true } });
+  return NextResponse.json({ data: { ok: true, mode: "link" } });
 }

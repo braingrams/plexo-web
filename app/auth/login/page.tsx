@@ -20,7 +20,9 @@ const mulish = Mulish({
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const [email, setEmail] = useState("");
+  // Arriving from the reset-password page: their email is pre-filled and a banner confirms it.
+  const passwordReset = params.get("passwordReset") === "1";
+  const [email, setEmail] = useState(() => params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -78,6 +80,14 @@ function LoginForm() {
         return;
       }
 
+      // Charisol Auth needs this account to pick a new password first (usually an older
+      // password that's shorter than today's rules, moved across on this sign-in). A code
+      // has already been emailed — go straight to entering it.
+      if (result?.error?.code === "password_reset_required") {
+        router.push(`/auth/reset-password?mode=code&reason=security&email=${encodeURIComponent(email.trim().toLowerCase())}`);
+        return;
+      }
+
       const status = result?.error?.status;
       if (status === 403) {
         setError("This account is not verified yet. Check your email for the verification link.");
@@ -130,6 +140,11 @@ function LoginForm() {
 
       {/* Form */}
       <form onSubmit={onSubmit} className="space-y-5" noValidate>
+        {passwordReset && !error && (
+          <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-semibold">
+            Password updated. Sign in with your new password.
+          </div>
+        )}
         {error && (
           <div className="p-4 rounded-2xl bg-red-950/80 border border-red-800 text-red-300 text-xs font-semibold">
             {error}

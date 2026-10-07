@@ -6,6 +6,8 @@ export interface FakeUser {
   passwordHash?: string;
   isConfirmed?: boolean;
   suspendedAt?: string;
+  charisolSub?: string;
+  charisolPasswordAt?: string;
 }
 
 /** In-memory stand-in for the ElectroDB `User` entity — only the calls the auth code makes. */

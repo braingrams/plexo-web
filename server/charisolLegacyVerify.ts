@@ -136,15 +136,17 @@ export async function handleLegacyVerify(request: Request, rawBody: string): Pro
 
   if (!user) return INVALID;
   if (user.suspendedAt) return INVALID;
-  // Never registered a password AND never proved the email: nothing to migrate or reset.
-  if (!user.isConfirmed && !user.passwordHash) return INVALID;
+  // Only accounts whose owner has confirmed their email move to Charisol. An unconfirmed
+  // account proves nothing about who owns the address (anyone can register any email), and
+  // Charisol would create it as an unverified account that Plexo then refuses to sign in
+  // forever. Plexo's own sign-in already tells an unconfirmed user to click their
+  // confirmation link first; their next sign-in after that moves them across.
+  if (!user.isConfirmed) return INVALID;
 
   const response: Record<string, unknown> = {
     valid: true,
     email: user.email.toLowerCase(),
-    // Only Plexo's own confirmed flag counts. An unconfirmed account can still have its
-    // password checked, but Charisol must not treat the address as verified.
-    emailVerified: user.isConfirmed === true,
+    emailVerified: true,
     userId: user.id,
   };
   if (user.name) response.name = user.name;

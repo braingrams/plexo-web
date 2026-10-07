@@ -36,8 +36,16 @@ export function isEmailVerifiedClaim(value: unknown): boolean {
  *   2. the verified, lowercased `email`.
  *   3. otherwise create a new user (verified email, no usable password).
  * Returns null for: unverified email, missing email, or a suspended account.
+ *
+ * Records the Charisol account (`charisolSub`) on the Plexo user. `viaPassword` — this
+ * sign-in was Plexo's own email+password form checked by Charisol — also records that
+ * Charisol now holds this person's password (`charisolPasswordAt`), after which the local
+ * password hash is never accepted again (server/authDynamo.ts).
  */
-export async function resolveCharisolUser(claims: CharisolClaims): Promise<CharisolLocalUser | null> {
+export async function resolveCharisolUser(
+  claims: CharisolClaims,
+  opts: { viaPassword?: boolean } = {},
+): Promise<CharisolLocalUser | null> {
   if (!isEmailVerifiedClaim(claims.email_verified)) return null;
   const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
   if (!email) return null;
@@ -51,7 +59,8 @@ export async function resolveCharisolUser(claims: CharisolClaims): Promise<Chari
   }
   if (!existing) existing = await loadByEmail(email);
 
-  if (existing) return signInExisting(existing, email);
+  const link = { sub: typeof claims.sub === "string" ? claims.sub : undefined, viaPassword: opts.viaPassword === true };
+  if (existing) return signInExisting(existing, email, link);
 
   const id = randomUUID();
   const name = typeof claims.name === "string" && claims.name ? claims.name : email.split("@")[0];
@@ -67,22 +76,40 @@ export async function resolveCharisolUser(claims: CharisolClaims): Promise<Chari
     // account (suspended → refused; unconfirmed → confirmed and password rotated).
     const winner = await loadByEmail(email);
     if (!winner) throw err;
-    return signInExisting(winner, email);
+    return signInExisting(winner, email, link);
   }
+  await recordCharisolLink(id, {}, link);
   return { id, email, name, image: image ?? null };
 }
 
-async function signInExisting(existing: UserRecord, email: string): Promise<CharisolLocalUser | null> {
+type CharisolLink = { sub?: string; viaPassword: boolean };
+
+function linkChanges(existing: { charisolSub?: string; charisolPasswordAt?: string }, link: CharisolLink): Record<string, string> {
+  const changes: Record<string, string> = {};
+  if (link.sub && existing.charisolSub !== link.sub) changes.charisolSub = link.sub;
+  if (link.viaPassword && !existing.charisolPasswordAt) changes.charisolPasswordAt = new Date().toISOString();
+  return changes;
+}
+
+async function recordCharisolLink(id: string, existing: { charisolSub?: string; charisolPasswordAt?: string }, link: CharisolLink): Promise<void> {
+  const changes = linkChanges(existing, link);
+  if (Object.keys(changes).length > 0) await User.patch({ id }).set(changes).go();
+}
+
+async function signInExisting(existing: UserRecord, email: string, link: CharisolLink): Promise<CharisolLocalUser | null> {
   if (existing.suspendedAt) return null;
 
+  const changes: Record<string, unknown> = linkChanges(existing, link);
   // Pre-registration takeover fix: /api/auth/register lets anyone create an UNCONFIRMED
   // account with a password of their choosing for any email. A Charisol login (with
   // email_verified) proves the real owner controls the address, so confirm the account
   // AND rotate the password hash — otherwise the squatter's password keeps working on
   // the now-confirmed account.
   if (!existing.isConfirmed) {
-    await User.patch({ id: existing.id }).set({ isConfirmed: true, passwordHash: await unusablePasswordHash() }).go();
+    changes.isConfirmed = true;
+    changes.passwordHash = await unusablePasswordHash();
   }
+  if (Object.keys(changes).length > 0) await User.patch({ id: existing.id }).set(changes).go();
   return { id: existing.id, email: existing.email, name: existing.name ?? email.split("@")[0], image: existing.image ?? null };
 }
 

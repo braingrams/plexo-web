@@ -1,0 +1,148 @@
+import type { EntityItem } from "electrodb";
+import { CredentialsSignin } from "next-auth";
+import { verifyPassword } from "@better-auth/utils/password";
+
+import { User } from "@/lib/db/coreEntities";
+import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
+import { isEmailVerifiedClaim, resolveCharisolUser, type CharisolClaims, type CharisolLocalUser } from "@/server/charisolAccount";
+import { passwordSignIn, sendResetCode, type PasswordSignInResult } from "@/server/charisolCognito";
+
+// Plexo's email + password sign-in. The person always types into PLEXO's own form; the
+// password is checked by Charisol Auth first (so one password works across every Charisol
+// product), and Plexo's own stored password only where Charisol doesn't hold it yet:
+//
+//   Charisol says…        | Plexo user's password held by Charisol? | outcome
+//   ----------------------|-----------------------------------------|-----------------------------
+//   correct               | (either)                                | signed in; now held by Charisol
+//   wrong                 | yes                                     | wrong password
+//   wrong                 | no  (not moved across yet)              | Plexo's own password decides
+//   not switched on yet   | (either)                                | Plexo's own password decides
+//   unavailable           | yes                                     | "try again shortly"
+//   unavailable           | no                                      | Plexo's own password decides
+//   must choose a new one | —                                       | code emailed → reset page
+//
+// Existing users move across on their first sign-in: Charisol doesn't know them, so it asks
+// Plexo's /api/charisol/legacy-verify whether the password is right, and if so creates their
+// Charisol account with it. Until that endpoint is registered and approved in Charisol's
+// Developer Portal, Charisol answers "wrong" for them and Plexo's own password keeps working —
+// nobody is locked out at any point of the rollout.
+
+// Thrown from authorize() — NextAuth surfaces `code` as `result.code` from next-auth/react's
+// signIn(), which lib/auth-client.ts's signIn.email() maps for the login page.
+export class UnverifiedEmailError extends CredentialsSignin {
+  code = "unverified_email";
+}
+
+// Too many failed/attempted password logins for one email in the current window. Per-email
+// rather than per-IP: the useful protection against guessing a specific account's password,
+// whichever IPs an attacker spreads attempts across. Reuses the fixed-window limiter
+// Commerce/forms/blog-comments rely on (see lib/commerceRateLimitDynamo.ts).
+export class TooManyLoginAttemptsError extends CredentialsSignin {
+  code = "too_many_attempts";
+}
+
+// A real account with no password at all (created via "Continue with Google"): lets the login
+// page send them to Google instead of a dead-end "Invalid credentials." A narrow, deliberate
+// enumeration signal — capped per IP (GOOGLE_REVEAL_LIMIT) so it can't be farmed at volume.
+export class GoogleAccountOnlyError extends CredentialsSignin {
+  code = "google_account_only";
+}
+
+// Charisol requires this account to choose a new password before signing in (typically an
+// existing Plexo password that's weaker than the password rules, moved across on this very
+// sign-in). A reset code has already been emailed; the login page goes to the code form.
+export class PasswordResetRequiredError extends CredentialsSignin {
+  code = "password_reset_required";
+}
+
+// Charisol holds this person's password but couldn't be reached — there's nothing else that
+// could safely check it, so say so rather than "wrong password".
+export class SignInUnavailableError extends CredentialsSignin {
+  code = "sign_in_unavailable";
+}
+
+const GOOGLE_REVEAL_LIMIT = 5;
+
+export interface PasswordSignInDeps {
+  passwordSignIn: (email: string, password: string) => Promise<PasswordSignInResult>;
+  sendResetCode: (email: string) => Promise<unknown>;
+  /** Verifies a Charisol ID token's signature/issuer/audience and returns its claims. */
+  verifyIdToken: (idToken: string) => Promise<CharisolClaims>;
+}
+
+export async function authorizePassword(
+  rawEmail: unknown,
+  rawPassword: unknown,
+  request: Request,
+  deps: Pick<PasswordSignInDeps, "verifyIdToken"> & Partial<PasswordSignInDeps>,
+): Promise<CharisolLocalUser | null> {
+  const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
+  const password = typeof rawPassword === "string" ? rawPassword : "";
+  if (!email || !password) return null;
+
+  // 10 attempts / 15 minutes per email — checked before anything else, so a lockout can't be
+  // raced by hammering just under the window.
+  const allowed = await checkCommerceRateLimit(`login:${email}`, 10, 15 * 60_000);
+  if (!allowed) throw new TooManyLoginAttemptsError();
+
+  const { data: matches } = await User.query.byEmail({ email }).go();
+  const user = matches[0];
+  const heldByCharisol = Boolean(user?.charisolPasswordAt);
+
+  const charisol = await (deps.passwordSignIn ?? passwordSignIn)(email, password);
+  switch (charisol.kind) {
+    case "ok": {
+      let claims: CharisolClaims;
+      try {
+        claims = await deps.verifyIdToken(charisol.idToken);
+      } catch {
+        return null;
+      }
+      if (!isEmailVerifiedClaim(claims.email_verified)) throw new UnverifiedEmailError();
+      return resolveCharisolUser(claims, { viaPassword: true });
+    }
+    case "reset_required":
+      await (deps.sendResetCode ?? sendResetCode)(email).catch(() => undefined);
+      throw new PasswordResetRequiredError();
+    case "unconfirmed":
+      throw new UnverifiedEmailError();
+    case "rate_limited":
+      throw new TooManyLoginAttemptsError();
+    case "wrong_password":
+      if (heldByCharisol) return null;
+      break;
+    case "unavailable":
+      if (heldByCharisol) throw new SignInUnavailableError();
+      break;
+    case "not_enabled":
+      break;
+  }
+
+  return localPasswordCheck(user, password, request);
+}
+
+/** Plexo's own stored password — for accounts Charisol doesn't hold a password for yet. */
+async function localPasswordCheck(
+  user: EntityItem<typeof User> | undefined,
+  password: string,
+  request: Request,
+): Promise<CharisolLocalUser | null> {
+  if (!user) return null; // no account at all — stays generic
+  if (!user.passwordHash) {
+    // Capped per IP: how many DISTINCT accounts one source can learn are Google-only. Once
+    // exhausted, degrade to the generic null a wrong password gets.
+    const revealAllowed = await checkCommerceRateLimit(`login-google-reveal:${clientIp(request)}`, GOOGLE_REVEAL_LIMIT, 15 * 60_000);
+    if (!revealAllowed) return null;
+    throw new GoogleAccountOnlyError();
+  }
+
+  const valid = await verifyPassword(user.passwordHash, password);
+  if (!valid) return null;
+  // A password equal to the account's own email is derivable by anyone — refuse it.
+  if (password.trim().toLowerCase() === user.email.toLowerCase()) return null;
+
+  if (!user.isConfirmed) throw new UnverifiedEmailError();
+  if (user.suspendedAt) return null;
+
+  return { id: user.id, email: user.email, name: user.name ?? user.email.split("@")[0], image: user.image ?? null };
+}

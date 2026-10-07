@@ -133,10 +133,10 @@ describe("legacy-verify: credentials", () => {
     expect((await call(signedRequest({ mode: "password", email: "g@example.com", password: "anything" }))).json).toEqual({ valid: false });
   });
 
-  it("unconfirmed account WITH a password is valid but emailVerified:false", async () => {
+  it("unconfirmed account is denied even with the right password (anyone can register any email)", async () => {
     store.set("un", { id: "un", email: "un@example.com", name: "Un", passwordHash: await hashPassword("pw-12345678"), isConfirmed: false });
     const { json } = await call(signedRequest({ mode: "password", email: "un@example.com", password: "pw-12345678" }));
-    expect(json).toMatchObject({ valid: true, emailVerified: false, userId: "un" });
+    expect(json).toEqual({ valid: false });
   });
 
   it("unconfirmed account with no password is denied, even in lookup mode", async () => {
