@@ -54,7 +54,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const pageSize = Number.isFinite(pageSizeParam) && pageSizeParam > 0 ? Math.min(Math.floor(pageSizeParam), 100) : null;
 
   const [{ data: allProducts }, { data: categories }] = await Promise.all([
-    CommerceProduct.query.primary({ templateId }).go(),
+    CommerceProduct.query.primary({ templateId }).go({ pages: "all" }),
     CommerceCategory.query.primary({ templateId }).go(),
   ]);
   const categoryBySlug = new Map(categories.map((c) => [c.slug, c]));

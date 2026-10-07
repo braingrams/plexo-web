@@ -177,7 +177,7 @@ export async function PATCH(
     // here too, not just in the dashboard form, since this is a real API contract another
     // caller could hit directly.
     const capped = relatedProductIds.slice(0, 3).filter((rid: unknown) => typeof rid === "string" && rid !== id);
-    const { data: candidateProducts } = await CommerceProduct.query.primary({ templateId }).go();
+    const { data: candidateProducts } = await CommerceProduct.query.primary({ templateId }).go({ pages: "all" });
     const validIds = candidateProducts.filter((p) => capped.includes(p.id)).map((p) => p.id);
 
     const { data: existingRelations } = await CommerceProductRelation.query.primary({ productId: id }).go();

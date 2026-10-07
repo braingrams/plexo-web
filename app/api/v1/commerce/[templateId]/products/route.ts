@@ -21,7 +21,7 @@ function toPublicProduct<T extends { digitalAccessPasswordEncrypted?: string }>(
 // list in memory rather than a direct .get(). Small in practice (one site's catalog).
 async function ensureUniqueProductSlug(templateId: string, baseInput: string): Promise<string> {
   const base = slugify(baseInput) || "product";
-  const { data: products } = await CommerceProduct.query.primary({ templateId }).go();
+  const { data: products } = await CommerceProduct.query.primary({ templateId }).go({ pages: "all" });
   const slugs = new Set(products.map((p) => p.slug));
   let candidate = base;
   let suffix = 2;
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   if (resolved.error) return resolved.error;
 
   const [{ data: products }, { data: categories }] = await Promise.all([
-    CommerceProduct.query.primary({ templateId }).go(),
+    CommerceProduct.query.primary({ templateId }).go({ pages: "all" }),
     CommerceCategory.query.primary({ templateId }).go(),
   ]);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
@@ -155,7 +155,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   if (!product) throw new Error(`CommerceProduct ${productId} vanished immediately after being created`);
 
   if (Array.isArray(relatedProductIds) && relatedProductIds.length > 0) {
-    const { data: candidateProducts } = await CommerceProduct.query.primary({ templateId }).go();
+    const { data: candidateProducts } = await CommerceProduct.query.primary({ templateId }).go({ pages: "all" });
     const validIds = candidateProducts.filter((p) => relatedProductIds.includes(p.id)).map((p) => p.id);
     await Promise.all(
       validIds.map((relatedProductId) =>

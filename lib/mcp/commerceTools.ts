@@ -62,7 +62,7 @@ function normalizeStringList(value: unknown): string[] | undefined {
 
 async function ensureUniqueProductSlug(templateId: string, baseInput: string): Promise<string> {
   const base = slugify(baseInput) || "product";
-  const { data: products } = await CommerceProduct.query.primary({ templateId }).go();
+  const { data: products } = await CommerceProduct.query.primary({ templateId }).go({ pages: "all" });
   const slugs = new Set(products.map((p) => p.slug));
   let candidate = base;
   let suffix = 2;
@@ -574,7 +574,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
   switch (toolName) {
     case "list_commerce_products": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const { data: allProducts } = await CommerceProduct.query.primary({ templateId: siteId }).go();
+      const { data: allProducts } = await CommerceProduct.query.primary({ templateId: siteId }).go({ pages: "all" });
       let products = allProducts;
       if (typeof args.kind === "string" && ["PHYSICAL", "SERVICE", "DIGITAL"].includes(args.kind)) products = products.filter((p) => p.kind === args.kind);
       if (args.activeOnly) products = products.filter((p) => p.active ?? true);

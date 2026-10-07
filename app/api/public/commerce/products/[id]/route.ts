@@ -28,7 +28,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     ({ data: product } = await CommerceProduct.get({ templateId, id }).go());
   }
   if (!product) {
-    const { data: products } = await CommerceProduct.query.primary({ templateId }).go();
+    const { data: products } = await CommerceProduct.query.primary({ templateId }).go({ pages: "all" });
     product = products.find((p) => p.slug === id) ?? null;
   }
   if (!product || !(product.active ?? true)) {

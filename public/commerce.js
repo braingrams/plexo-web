@@ -35,6 +35,9 @@
   // live: a real site's checkout 404ed under that assumption. Falls back to the old
   // concatenation only if the config predates this (null), never as the normal case.
   var CHECKOUT_PATH = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.checkoutPath) || (STOREFRONT_PATH + "/checkout");
+  // Product pages are served under the storefront page (/store/<slug>) — links used to
+  // hardcode /shop/<slug> and 404ed on every store.
+  var PRODUCT_BASE = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.productBase) || STOREFRONT_PATH;
   var CART_EVENT = "plexo:cart-updated";
   var CHECKOUT_STATE_EVENT = "plexo:checkout-state-changed";
   // Shared between the checkout page's two independent marker blocks — checkout_flow
@@ -639,7 +642,7 @@
     return !!(p && p.hasVariants && !p.__variantId);
   }
   function productHref(p) {
-    return "/shop/" + encodeURIComponent(p.slug || p.id);
+    return PRODUCT_BASE.replace(/\/+$/, "") + "/" + encodeURIComponent(p.slug || p.id);
   }
   function cartLabel(p, text) {
     if (p.stockQuantity === 0) return "Out of Stock";
@@ -1495,7 +1498,7 @@
     var addBtn;
     var textColor = dark ? "#FBFAF6" : "#16233F";
     var priceColor = dark ? "#E3B23C" : "#16233F";
-    var href = "/shop/" + encodeURIComponent(p.slug || p.id);
+    var href = productHref(p);
     var media = p.imageUrl
       ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "160px", objectFit: "cover", display: "block" } })
       : el("div", { style: { width: "100%", height: "160px", background: dark ? "linear-gradient(155deg,#1F3B2A,#2E7D52)" : "#F3F1EA", display: "flex", alignItems: "center", justifyContent: "center", color: dark ? "#D7F0DF" : "#8A93A6", fontSize: "13px" } }, [p.name]);
