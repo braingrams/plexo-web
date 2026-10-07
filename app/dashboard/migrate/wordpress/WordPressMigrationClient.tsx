@@ -158,6 +158,7 @@ interface ConnectorView {
     redirects: number;
     team: number;
     woocommerce?: { products: number; downloadable: number; coupons: number; orders: number; shipping_zones: number } | null;
+    givewp?: { forms: number; donations: number } | null;
   } | null;
   error: string | null;
   code: string | null;
@@ -256,6 +257,7 @@ function PrivateDataCard({ templateId, jobId }: { templateId: string; jobId: str
         s.drafts ? `${s.drafts} drafts` : null,
         s.redirects ? `${s.redirects} redirect rules` : null,
         s.team ? `${s.team} team members` : null,
+        s.givewp?.donations ? `${s.givewp.donations} past GiveWP donations` : null,
         s.woocommerce?.orders ? `${s.woocommerce.orders} past shop orders` : null,
         s.woocommerce?.coupons ? `${s.woocommerce.coupons} coupons` : null,
         s.woocommerce?.shipping_zones ? `${s.woocommerce.shipping_zones} shipping zones` : null,

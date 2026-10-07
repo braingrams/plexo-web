@@ -42,10 +42,12 @@ export interface ConnectorSummary {
   team: number;
   /** A WooCommerce store's private data (plugin 1.1+). */
   woocommerce?: { products: number; downloadable: number; coupons: number; orders: number; shipping_zones: number } | null;
+  /** GiveWP forms and past donations (plugin 1.1+). */
+  givewp?: { forms: number; donations: number } | null;
 }
 
 export interface ExtrasState {
-  stage: "forminator" | "tables" | "payform" | "redirects" | "team" | "drafts" | "comments" | "wc_products" | "wc_coupons" | "wc_shipping" | "wc_orders" | "done";
+  stage: "forminator" | "tables" | "payform" | "redirects" | "team" | "drafts" | "comments" | "give_forms" | "give_donations" | "wc_products" | "wc_coupons" | "wc_shipping" | "wc_orders" | "done";
   /** Position inside the current stage: which item, how far into it. */
   index: number;
   offset: number;
@@ -72,7 +74,7 @@ export interface ExtrasState {
   finishedAt?: string;
 }
 
-const STAGES: ExtrasState["stage"][] = ["forminator", "tables", "payform", "redirects", "team", "drafts", "comments", "wc_products", "wc_coupons", "wc_shipping", "wc_orders", "done"];
+const STAGES: ExtrasState["stage"][] = ["forminator", "tables", "payform", "redirects", "team", "drafts", "comments", "give_forms", "give_donations", "wc_products", "wc_coupons", "wc_shipping", "wc_orders", "done"];
 const PAGE_SIZE = 200;
 const STEP_BUDGET_MS = 35_000;
 
@@ -392,6 +394,61 @@ export async function runExtrasStep(job: JobItem, revalidate: RevalidateFn = asy
           }
         }
         if (comments.length < PAGE_SIZE) advance(); else state.offset += PAGE_SIZE;
+        continue;
+      }
+
+      // ── GiveWP: campaign goals, then past donations (as Plexo donation history)
+      if (state.stage.startsWith("give_") && !summary.givewp) {
+        advance();
+        continue;
+      }
+      if (state.stage === "give_forms") {
+        const { forms } = await connectorGet<{ forms: { id: number; title: string; goal: number }[] }>(install, code, "give/forms");
+        const { data: campaigns } = await CommerceDonationCampaign.query.primary({ templateId: job.templateId }).go({ pages: "all" });
+        for (const f of forms) {
+          const campaign = campaigns.find((c) => c.source === `givewp:${f.id}`);
+          if (campaign && f.goal > 0 && !campaign.goalAmountMinor) {
+            await CommerceDonationCampaign.patch({ templateId: job.templateId, id: campaign.id }).set({ goalAmountMinor: Math.round(f.goal * 100) }).go();
+          }
+        }
+        advance();
+        continue;
+      }
+      if (state.stage === "give_donations") {
+        const { donations } = await connectorGet<{ donations: { id: number; form_id: number; amount: number; currency: string; email: string; first_name: string; last_name: string; gateway: string; recurring: boolean; date: string }[] }>(install, code, "give/donations", { offset: state.offset, limit: PAGE_SIZE });
+        const { data: campaigns } = await CommerceDonationCampaign.query.primary({ templateId: job.templateId }).go({ pages: "all" });
+        for (const d of donations) {
+          const amount = Math.round(Number(d.amount) * 100);
+          if (!d.email || !Number.isFinite(amount) || amount <= 0) continue;
+          const campaign = campaigns.find((c) => c.source === `givewp:${d.form_id}`) ?? null;
+          const orderId = `wp-give-${d.id}`;
+          const name = `${d.first_name ?? ""} ${d.last_name ?? ""}`.trim();
+          try {
+            await CommerceOrder.create({
+              id: orderId,
+              templateId: job.templateId,
+              organizationId: job.organizationId,
+              orderNumber: `GIVE-${d.id}`,
+              customerEmail: d.email.toLowerCase(),
+              ...(name ? { customerName: name } : {}),
+              amountMinor: amount,
+              currency: (d.currency || "USD").toUpperCase(),
+              status: "PAID",
+              fulfillmentStatus: "COMPLETED",
+              paymentProvider: /stripe/i.test(d.gateway ?? "") ? "BYO_STRIPE" : "BYO_PAYSTACK",
+              paymentMethod: "ONLINE",
+              metadata: { kind: "DONATION", campaignId: campaign?.id ?? null, campaignName: campaign?.name ?? "Donation", frequency: d.recurring ? "MONTHLY" : "ONCE", imported: true, source: "givewp" },
+              ...(d.date ? { createdAt: new Date(d.date).toISOString() } : {}),
+            }).go();
+          } catch (err) {
+            if (isDuplicate(err)) continue;
+            throw err;
+          }
+          await CommerceOrderItem.create({ id: randomUUID(), templateId: job.templateId, orderId, productId: `donation:${campaign?.id ?? "imported"}`, nameSnapshot: `Donation — ${campaign?.name ?? "WordPress"}`, unitPriceMinor: amount, quantity: 1 }).go();
+          if (campaign) await CommerceDonationCampaign.patch({ templateId: job.templateId, id: campaign.id }).add({ raisedMinor: amount, donationCount: 1 }).go();
+          state.counts.donations += 1;
+        }
+        if (donations.length < PAGE_SIZE) advance(); else state.offset += PAGE_SIZE;
         continue;
       }
 
