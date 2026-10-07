@@ -12,7 +12,7 @@ import { findOrCreateAuthor, findOrCreateCategory, findOrCreateTag } from "@/lib
 import { extractImageUrls, rehostMediaUrls, rewriteImageUrls } from "@/lib/blogImport/mediaRehostDynamo";
 import { convertWordPressHtmlToTiptapJson, tiptapJsonToHtml } from "@/lib/blogImport/htmlToTiptap";
 import { discoverWordPressInstall } from "./discover";
-import { buildInventory } from "./inventory";
+import { buildInventory, decodeEntities } from "./inventory";
 import { extractSourceFacts, transformPage, type DetectedDonationForm } from "./htmlTransform";
 import { CommerceDonationCampaign, CommerceSettings } from "@/lib/db/commerceEntities";
 import { ensureDonationsReady, resolveDonationGateway } from "@/lib/commerce/donations";
@@ -22,6 +22,9 @@ import { fetchJson, migrationFetch, restUrl } from "./http";
 import { makeOriginRewriter, pageKey, pageKeyForUrl, pathSegments, resolveAssetOwner } from "./urlSpace";
 import { buildMigrationReport } from "./report";
 import type { DetectedPlugin, WpInstall, WpPostEntry, WpTermEntry } from "./types";
+import * as cheerio from "cheerio";
+import { imageStem, makePostListsLive, type KnownPost } from "./livePostLists";
+import { listingLayoutFromWpHtml, postLayoutFromWpHtml, shellLayout, wpPageRole } from "./blogLayout";
 
 // The WordPress migration as a resumable, step-at-a-time job — same execution model as
 // lib/siteImport/runJobDynamo.ts (the dashboard tab drives it step by step; a daily cron
@@ -63,6 +66,8 @@ export interface PlanState {
   frozenApis?: string[];
   /** Custom-plugin submission endpoints whose POSTs now land in Form Submissions. */
   capturedApis?: string[];
+  /** The blog's layouts/settings were derived from the WordPress theme (runs once). */
+  blogPresentationDone?: boolean;
 }
 
 export interface MigrationCounts {
@@ -515,6 +520,7 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
   const pages = await allPages(job.id);
   const pending = pages.filter((p) => p.kind !== "POST" && p.status === "PENDING").slice(0, PAGES_PER_STEP);
   const plan = job.planState as PlanState;
+  const knownPosts = await loadKnownPosts(job, pages);
   const counts = { ...emptyCounts(), ...(job.counts as MigrationCounts) };
   const movedLinks = (job.movedLinks as Record<string, string>) ?? {};
   const started = Date.now();
@@ -545,6 +551,21 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
         html = html.split(form.token).join(campaign.campaignId);
         donationCampaigns.push(campaign);
       }
+      // Post lists ("Latest news", a /blog/ page's grid) show the blog's live posts in the
+      // site's own card design instead of a frozen copy — lib/wpMigration/livePostLists.ts.
+      let livePostLists = 0;
+      let livePostListMax = 0;
+      if (knownPosts.length > 0) {
+        const $page = cheerio.load(html);
+        livePostLists = makePostListsLive($page, knownPosts);
+        if (livePostLists > 0) {
+          $page('[data-plexo-blog-postlist="true"]').each((_, el) => {
+            livePostListMax = Math.max(livePostListMax, Number($page(el).attr("data-plexo-blog-count") ?? 0));
+          });
+          html = $page.html();
+        }
+      }
+      const role = wpPageRole(raw);
       await Template.patch({ id: row.templateId })
         .set({
           compiledHtml: html,
@@ -572,6 +593,10 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
           internalLinks: result.internalLinks,
           pluginSlugs: Array.from(pluginSlugsFromHtml(raw)),
           assetCount: result.assetPaths.length,
+          isPostsIndex: role.isPostsIndex,
+          isFront: role.isFront,
+          livePostLists,
+          livePostListMax,
         })
         .go();
       counts.pagesDone += 1;
@@ -585,8 +610,167 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
 
   const stillPending = pages.filter((p) => p.kind !== "POST" && p.status === "PENDING").length - pending.length;
   const next = stillPending <= 0 ? "ASSETS" : "PAGES";
+  // Before the files step, so any theme file only the blog's pages use gets copied too.
+  if (next === "ASSETS" && !plan.blogPresentationDone) {
+    await buildBlogPresentation(job, knownPosts, errors).catch((err) => {
+      errors.push(`Your blog keeps Plexo's standard look — we couldn't copy the WordPress blog design: ${err instanceof Error ? err.message : String(err)}`);
+    });
+    await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ planState: { ...plan, blogPresentationDone: true } }).go();
+  }
   await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ counts, phase: next as "PAGES" }).go();
   return next;
+}
+
+/** The site's migrated posts, newest first, in the shape the live-list matcher needs. */
+async function loadKnownPosts(job: JobItem, pages: PageItem[]): Promise<KnownPost[]> {
+  const rows = pages.filter((p) => p.kind === "POST" && p.status === "DONE" && p.data);
+  if (rows.length === 0) return [];
+  const { data: categories } = await BlogCategory.query.primary({ templateId: job.templateId }).go({ pages: "all" });
+  const slugOf = (name: string) => categories.find((c) => c.name.toLowerCase() === name.toLowerCase())?.slug;
+  const strip = (html: string) => decodeEntities(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+  return rows
+    .map((row) => {
+      const post = row.data as WpPostEntry;
+      const path = pageKeyForUrl(post.link);
+      return {
+        wpId: post.id,
+        urls: [post.link, path, `${path}/`, ...(row.newPath ? [row.newPath, `${row.newPath}/`] : [])],
+        title: decodeEntities(post.title),
+        excerpt: post.excerptHtml ? strip(post.excerptHtml) : null,
+        imageStem: imageStem(post.featuredImageUrl),
+        dateGmt: post.dateGmt,
+        authorName: post.authorName,
+        categories: post.categoryNames.flatMap((name) => {
+          const slug = slugOf(name);
+          return slug ? [{ name, slug }] : [];
+        }),
+      } satisfies KnownPost;
+    })
+    .sort((a, b) => (b.dateGmt ?? "").localeCompare(a.dateGmt ?? ""));
+}
+
+const BLOG_PAGE_WORDS = /\b(blog|news|insights?|articles?|stories|updates|journal|posts|press)\b/i;
+
+/**
+ * Gives the migrated blog the WordPress site's own look and settings (once, at the end of
+ * the pages step): its listing layout comes from the site's blog page, its post layout from
+ * a real post page, and the blog's name, posts per page, homepage and comments follow how
+ * WordPress behaved. Never overrides a layout or setting the owner already set up.
+ */
+async function buildBlogPresentation(job: JobItem, knownPosts: KnownPost[], errors: string[]): Promise<void> {
+  if (knownPosts.length === 0) return;
+  const plan = job.planState as PlanState;
+  const install = job.install as WpInstall;
+  const { data: blogSite } = await BlogSite.get({ templateId: job.templateId }).go();
+  if (!blogSite) return;
+  const pages = await allPages(job.id);
+  const sitePages = pages.filter((p) => p.kind !== "POST" && p.status === "DONE" && p.templateId);
+  const front = sitePages.find((p) => p.key === plan.homeKey) ?? sitePages.find((p) => p.isFront);
+
+  // WordPress's Reading settings (exposed publicly on WP 6.x; <body class> on older installs).
+  const index = await fetchJson<{ page_for_posts?: number; show_on_front?: string }>(install.restRoot).catch(() => null);
+  const postsOnFront = index?.data.show_on_front === "posts" || Boolean(front?.isFront && front.isPostsIndex);
+  const pageForPosts = index?.data.page_for_posts ?? 0;
+
+  // Which page is the blog? WordPress's own posts page, a front page showing posts, a page
+  // named like a blog that lists posts, or (as a design source only) the biggest post list.
+  const named = sitePages
+    .filter((p) => (p.livePostLists ?? 0) > 0 && (BLOG_PAGE_WORDS.test(p.key.split("/").pop() ?? "") || BLOG_PAGE_WORDS.test(p.title ?? "")))
+    .sort((a, b) => (b.livePostListMax ?? 0) - (a.livePostListMax ?? 0))[0];
+  const biggest = sitePages.filter((p) => (p.livePostListMax ?? 0) >= 3).sort((a, b) => (b.livePostListMax ?? 0) - (a.livePostListMax ?? 0))[0];
+  const postsPage =
+    sitePages.find((p) => pageForPosts > 0 && p.wpId === pageForPosts) ??
+    sitePages.find((p) => p.isPostsIndex && !p.isFront) ??
+    (postsOnFront ? front : undefined) ??
+    named;
+  const listingSource = postsPage ?? biggest;
+
+  const loadHtml = async (row: PageItem) => (await Template.get({ id: row.templateId! }).go()).data?.compiledHtml ?? "";
+  const frontHtml = front ? await loadHtml(front) : "";
+
+  // ── Listing layout
+  let listingHtml: string | null = null;
+  let postsPerPage: number | null = null;
+  let blogTitle: string | null = null;
+  if (listingSource) {
+    const listing = listingLayoutFromWpHtml(await loadHtml(listingSource), knownPosts);
+    if (listing) {
+      listingHtml = listing.html;
+      postsPerPage = listing.postsShown;
+      blogTitle = listing.title || (postsPage && postsPage !== front ? postsPage.title ?? null : null);
+    }
+  }
+  if (!listingHtml && frontHtml) listingHtml = shellLayout(frontHtml, "listing", blogSite.title ?? "Blog");
+
+  // ── Post layout, from the newest post's own page
+  let postHtml: string | null = null;
+  let hasComments: boolean | null = null;
+  const sample = knownPosts[0];
+  const sampleRow = pages.find((p) => p.kind === "POST" && p.wpId === sample.wpId);
+  if (sampleRow) {
+    try {
+      const res = await migrationFetch(sampleRow.sourceUrl, { headers: { Accept: "text/html" } });
+      if (res.ok) {
+        const raw = await res.text();
+        const result = transformPage(raw, {
+          origin: plan.origin,
+          pageUrl: sampleRow.sourceUrl,
+          pagePath: sampleRow.newPath ?? "/blog",
+          pageTitle: sample.title,
+          siteTemplateId: job.templateId,
+          movedLinks: (job.movedLinks as Record<string, string>) ?? {},
+          appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://plexo.charisol.io",
+        });
+        let html = result.html;
+        for (const form of result.donationForms) html = html.split(form.token).join((await ensureMigratedCampaign(job, form)).campaignId);
+        const layout = postLayoutFromWpHtml(html, sample);
+        if (layout) {
+          // A sidebar's "Recent posts" stays current too.
+          const $post = cheerio.load(layout.html);
+          if (makePostListsLive($post, knownPosts) > 0) layout.html = $post.html();
+          postHtml = layout.html;
+          hasComments = layout.hasComments;
+        }
+        const limit = pLimit(10);
+        await Promise.all(result.assetPaths.map((segs) => limit(() => enqueueAsset(job.id, segs.join("/"), sampleRow.key))));
+      }
+    } catch (err) {
+      errors.push(`We couldn't read a blog post page for the blog design (${err instanceof Error ? err.message : String(err)}) — using the site's header and footer instead.`);
+    }
+  }
+  if (!postHtml && frontHtml) postHtml = shellLayout(frontHtml, "post", blogSite.title ?? "Blog");
+
+  const createLayout = async (name: string, compiledHtml: string) => {
+    const id = randomUUID();
+    await Template.create({
+      id,
+      userId: job.createdBy,
+      organizationId: job.organizationId,
+      name,
+      kind: "LANDING_PAGE",
+      sourceType: "RAW_UPLOAD",
+      isBlogLayout: true,
+      designJson: {},
+      compiledHtml,
+      migratedFrom: plan.origin,
+    }).go();
+    return id;
+  };
+  const changes: Record<string, unknown> = {};
+  if (listingHtml && !blogSite.listingLayoutTemplateId) changes.listingLayoutTemplateId = await createLayout("Blog listing (from WordPress)", listingHtml);
+  if (postHtml && !blogSite.postLayoutTemplateId) changes.postLayoutTemplateId = await createLayout("Blog post (from WordPress)", postHtml);
+  if (blogTitle && (!blogSite.title || blogSite.title === "Blog")) changes.title = blogTitle.slice(0, 120);
+  if (postsPerPage && postsPerPage >= 1 && postsPerPage <= 50 && (blogSite.postsPerPage ?? 10) === 10) changes.postsPerPage = postsPerPage;
+  if (hasComments !== null) changes.commentsEnabled = hasComments;
+  // "Your homepage displays: latest posts" — the domain root serves the live blog.
+  if (postsOnFront && plan.homeKey === "/") changes.showOnHomepage = true;
+  if (Object.keys(changes).length > 0) await BlogSite.patch({ templateId: job.templateId }).set(changes).go();
+
+  // The old posts page's job is now /blog's (with every post, paginated) — send its URL there
+  // permanently. Never the front page, and never a page only borrowed for its design.
+  if (postsPage && postsPage !== front && postsPage.templateId && pageKeyForUrl(postsPage.sourceUrl) !== "/blog") {
+    await Template.patch({ id: postsPage.templateId }).set({ redirectTo: "/blog" }).go();
+  }
 }
 
 async function runAssetsStep(job: JobItem): Promise<string> {

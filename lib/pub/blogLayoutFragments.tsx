@@ -82,10 +82,27 @@ export function buildPostFragments(post: BlogPostDetail, basePath: string, comme
   };
 }
 
+export interface PostListOptions {
+  /** Shown above the grid on archive pages ("Travel", "Posts by Ada") — the layout itself is shared by every listing. */
+  heading?: string;
+  /** Newer/older links, mirroring blogTheme.tsx's <Pagination> markup (styled by BlogStyles). */
+  pagination?: { page: number; totalPages: number; buildHref: (page: number) => string };
+  emptyMessage?: string;
+}
+
+export function paginationHtml({ page, totalPages, buildHref }: NonNullable<PostListOptions["pagination"]>): string {
+  if (totalPages <= 1) return "";
+  const newer = page > 1 ? `<a href="${escapeHtml(buildHref(page - 1))}">&larr; Newer posts</a>` : `<span class="disabled">&larr; Newer posts</span>`;
+  const older = page < totalPages ? `<a href="${escapeHtml(buildHref(page + 1))}">Older posts &rarr;</a>` : `<span class="disabled">Older posts &rarr;</span>`;
+  return `<nav class="plexo-pagination">${newer}<span>Page ${page} of ${totalPages}</span>${older}</nav>`;
+}
+
 /** Same idea for the listing page's single "Post List" slot — the whole grid rendered once. */
-export function buildPostListFragment(posts: BlogPostCard[], basePath: string): string {
-  if (posts.length === 0) {
-    return `<p style="color:#6b7280;">No posts published yet.</p>`;
-  }
-  return `<div class="plexo-blog__grid">${posts.map((post) => postCardHtml(post, basePath)).join("")}</div>`;
+export function buildPostListFragment(posts: BlogPostCard[], basePath: string, opts: PostListOptions = {}): string {
+  const heading = opts.heading ? `<h1 class="plexo-listing__heading" style="margin:0 0 24px;">${escapeHtml(opts.heading)}</h1>` : "";
+  const body =
+    posts.length === 0
+      ? `<p style="color:#6b7280;">${escapeHtml(opts.emptyMessage ?? "No posts published yet.")}</p>`
+      : `<div class="plexo-blog__grid">${posts.map((post) => postCardHtml(post, basePath)).join("")}</div>`;
+  return `${heading}${body}${opts.pagination ? paginationHtml(opts.pagination) : ""}`;
 }

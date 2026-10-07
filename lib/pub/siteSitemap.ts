@@ -38,7 +38,7 @@ async function listSitePages(root: TemplateItem, host: string): Promise<{ loc: s
       if (!child.slug || child.isSiteLayoutFragment || child.isBlogLayout || child.isLmsPageDesign) continue;
       const childSegments = [...segments, child.slug];
       queue.push({ node: child, segments: childSegments });
-      if (isNoindex(child.compiledHtml)) continue;
+      if (child.redirectTo || isNoindex(child.compiledHtml)) continue;
       out.push({ loc: `https://${host}/${encodeSegments(childSegments)}${child.urlTrailingSlash ? "/" : ""}`, lastmod: child.updatedAt });
     }
   }
