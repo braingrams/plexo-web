@@ -148,3 +148,15 @@ describe("store pages", () => {
     expect(button.hasClass("ajax_add_to_cart")).toBe(false);
   });
 });
+
+describe("plugin namespaces", () => {
+  it("WooCommerce's and GiveWP's many API namespaces are each one known plugin; Plexo's own helper is recognised", async () => {
+    const { pluginSlugForNamespace } = await import("@/lib/wpMigration/pluginCatalog");
+    for (const ns of ["wc/v1", "wc/v3", "wc/store/v1", "wc-admin", "wc-analytics", "wc-telemetry", "wc-admin-email", "wccom-site/v3", "woocommerce/v1"]) {
+      expect(pluginSlugForNamespace(ns)).toBe("woocommerce");
+    }
+    for (const ns of ["give-api/v2", "givewp/v3", "give/v1"]) expect(pluginSlugForNamespace(ns)).toBe("give");
+    expect(pluginSlugForNamespace("plexo-migrator/v1")).toBe("plexo-migrator");
+    expect(pluginSlugForNamespace("lceap/v1")).toBe("lceap"); // a site's own custom plugin is still flagged
+  });
+});

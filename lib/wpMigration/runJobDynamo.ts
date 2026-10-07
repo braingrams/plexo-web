@@ -690,6 +690,15 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
     const freshPlan = ((await WpMigrationJob.get({ templateId: job.templateId, id: job.id }).go()).data?.planState as PlanState) ?? plan;
     await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ planState: { ...freshPlan, wc: { ...(freshPlan.wc ?? plan.wc), storeDone: true } } }).go();
   }
+  if (next === "ASSETS") {
+    // The blog and store layouts queue their own theme files — count them in the total the
+    // owner sees ("305 of 265" otherwise).
+    const { data: queued } = await WpMigrationAsset.query.primary({ jobId: job.id }).go({ pages: "all", attributes: ["path"] });
+    if (queued.length > counts.assets) {
+      counts.assets = queued.length;
+      await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ counts }).go();
+    }
+  }
   await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ counts, phase: next as "PAGES" }).go();
   return next;
 }
