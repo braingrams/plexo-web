@@ -48,7 +48,7 @@ export default async function PagesOverviewPage() {
     return !(site?.enabled && site?.showOnHomepage);
   });
 
-  const childBatches = await Promise.all(notBlogHomepages.map((t) => Template.query.byParent({ parentId: t.id }).go()));
+  const childBatches = await Promise.all(notBlogHomepages.map((t) => Template.query.byParent({ parentId: t.id }).go({ pages: "all" })));
   const withChildren = notBlogHomepages
     .map((t, i) => ({ template: t, children: childBatches[i].data }))
     .filter((r) => r.children.length > 0);

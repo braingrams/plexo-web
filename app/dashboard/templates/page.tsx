@@ -63,7 +63,7 @@ export default async function TemplatesDashboardPage() {
 
   const templates: TemplateSummary[] = await Promise.all(
     roots.map(async (t) => {
-      const { data: children } = await Template.query.byParent({ parentId: t.id }).go();
+      const { data: children } = await Template.query.byParent({ parentId: t.id }).go({ pages: "all" });
       return {
         id: t.id,
         name: t.name,

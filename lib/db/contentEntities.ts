@@ -74,8 +74,10 @@ export const Template = new Entity(
       // Plexo's default of the reverse. Set by the WordPress migration (lib/wpMigration) so
       // every migrated URL keeps working at exactly its old address, with no redirect hop.
       urlTrailingSlash: { type: "boolean", default: false },
-      // Root sites only: the site this one was migrated from ("https://example.org"), shown
-      // in the dashboard and used by the domain-cutover guidance.
+      // The site this one was migrated from ("https://example.org"). Set on the root site
+      // (shown in the dashboard, used by the domain-cutover guidance) and on every page the
+      // migration created — which is how the raw-upload daily limit tells pages Plexo made
+      // for the owner apart from HTML they uploaded themselves.
       migratedFrom: { type: "string" },
       // Root sites only: paths of a migrated site's custom-plugin API endpoints that accepted
       // submissions on WordPress (e.g. "/blog/wp-json/my-plugin/v1/contact"). The serve route
@@ -718,7 +720,10 @@ export const BlogPost = new Entity(
         type: ["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"] as const,
         default: "DRAFT",
       },
-      publishedAt: { type: "string" },
+      // Part of the byStatus sort key, so it can never be missing when status is written —
+      // a never-published draft stores "" here as a key placeholder (see savePostCore.ts).
+      // The getter hands readers back "no date" for it, exactly as before.
+      publishedAt: { type: "string", get: (value?: string) => (value ? value : undefined) },
       scheduledAt: { type: "string" },
       metaTitle: { type: "string" },
       metaDescription: { type: "string" },

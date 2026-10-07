@@ -2606,8 +2606,17 @@
     return location.pathname + (q ? "?" + q : "");
   }
 
+  var donationConfirmSent = false;
   function isDonationThanks() {
-    return new URLSearchParams(location.search).get("plexo_donation") === "thanks";
+    var params = new URLSearchParams(location.search);
+    var thanks = params.get("plexo_donation") === "thanks";
+    // Back from checkout: have Plexo confirm the gift with the gateway right away, so it's
+    // recorded (and the receipt sent) even if the site's webhook isn't set up yet.
+    if (thanks && !donationConfirmSent && params.get("order")) {
+      donationConfirmSent = true;
+      api("/api/public/commerce/donations/confirm", { method: "POST", body: JSON.stringify({ order: params.get("order") }) }).catch(function () {});
+    }
+    return thanks;
   }
 
   function donationThanksBanner(campaign) {

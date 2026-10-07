@@ -352,8 +352,30 @@ export async function startDonation(input: StartDonationInput): Promise<StartDon
   } catch (err) {
     await CommerceOrder.patch({ templateId: input.templateId, id: orderId }).set({ status: "FAILED" }).go();
     if (subscriptionId) await CommerceDonationSubscription.patch({ templateId: input.templateId, id: subscriptionId }).set({ status: "CANCELLED", cancelledBy: "payment-start-failed" }).go();
-    throw new DonationError(err instanceof Error ? err.message : "Couldn't start the payment. Please try again.", 502);
+    const raw = err instanceof Error ? err.message : String(err);
+    // A setup problem on the owner's payment account (not the donor's card): tell the
+    // owner exactly what to fix, and give the donor a calm message instead of gateway jargon.
+    const setupIssue = describePaymentSetupIssue(raw, currency, gateway.isStripe ? "Stripe" : "Paystack");
+    if (setupIssue) {
+      await CommerceDonationCampaign.patch({ templateId: input.templateId, id: campaign.id })
+        .set({ paymentIssue: setupIssue, paymentIssueAt: new Date().toISOString() })
+        .go()
+        .catch(() => {});
+      throw new DonationError(`Online donations in ${currency} aren't available here just yet — please try again soon, or contact the organization directly.`, 503);
+    }
+    throw new DonationError(raw || "Couldn't start the payment. Please try again.", 502);
   }
+}
+
+/** Recognizes gateway errors that mean the OWNER's account needs a change, and says what. */
+export function describePaymentSetupIssue(message: string, currency: string, gatewayName: string): string | null {
+  if (/currency/i.test(message) && /(not supported|unsupported|not enabled|invalid)/i.test(message)) {
+    return `${gatewayName} refused a ${currency} donation: your ${gatewayName} account isn't set up to accept ${currency}. Either ask ${gatewayName} to enable ${currency} on your account, or connect a payment account that accepts it (Stripe accepts USD, EUR, GBP and more) in Commerce → Settings → Payments.`;
+  }
+  if (/invalid key|invalid api key|api key provided|authentication/i.test(message)) {
+    return `${gatewayName} rejected your API keys. Re-copy them from your ${gatewayName} dashboard into Commerce → Settings → Payments.`;
+  }
+  return null;
 }
 
 /** Paystack plans are fixed-amount, so each distinct monthly amount gets one, created once and reused. */
@@ -377,8 +399,10 @@ export async function handleDonationPaid(order: OrderItem, settings: SettingsIte
   if (meta.campaignId) {
     const { data: campaign } = await CommerceDonationCampaign.get({ templateId: order.templateId, id: meta.campaignId }).go();
     if (campaign) {
-      await CommerceDonationCampaign.patch({ templateId: order.templateId, id: campaign.id })
-        .add({ raisedMinor: order.amountMinor, donationCount: 1 })
+      let patch = CommerceDonationCampaign.patch({ templateId: order.templateId, id: campaign.id }).add({ raisedMinor: order.amountMinor, donationCount: 1 });
+      // A gift went through, so any earlier payment-setup problem is resolved.
+      if (campaign.paymentIssue) patch = patch.remove(["paymentIssue", "paymentIssueAt"]);
+      await patch
         .go()
         .catch((err) => console.error("Donations: campaign totals update failed", err));
     }
@@ -793,6 +817,7 @@ export async function listDonationsOverview(templateId: string) {
         buttonLabel: c.buttonLabel ?? null,
         active: c.active ?? true,
         source: c.source ?? null,
+        paymentIssue: c.paymentIssue ?? null,
         monthlyDonors: activeSubs.filter((s) => s.campaignId === c.id).length,
       })),
     monthlyDonors: subs

@@ -98,12 +98,12 @@ async function compileForSite(rootTemplateId: string, designJson: any): Promise<
 }
 
 async function findChildBySlug(parentId: string, slug: string): Promise<{ id: string } | null> {
-  const { data: siblings } = await Template.query.byParent({ parentId }).go();
+  const { data: siblings } = await Template.query.byParent({ parentId }).go({ pages: "all" });
   return siblings.find((s) => s.slug === slug) ?? null;
 }
 
 async function nextOrder(parentId: string): Promise<number> {
-  const { data: siblings } = await Template.query.byParent({ parentId }).go();
+  const { data: siblings } = await Template.query.byParent({ parentId }).go({ pages: "all" });
   return siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
 }
 

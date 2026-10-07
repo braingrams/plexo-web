@@ -18,7 +18,7 @@ export async function isTemplateNameTaken(params: {
   const normalized = name.toLowerCase();
 
   const candidates = parentId
-    ? (await Template.query.byParent({ parentId }).go()).data
+    ? (await Template.query.byParent({ parentId }).go({ pages: "all" })).data
     : (await Template.query.byOrg({ organizationId }).go()).data.filter((t) => !t.parentId);
 
   return candidates.some(

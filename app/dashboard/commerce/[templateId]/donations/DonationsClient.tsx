@@ -207,6 +207,14 @@ export function DonationsClient({ templateId, initial }: { templateId: string; i
                     {money(c.raisedMinor)}{c.goalAmountMinor ? ` of ${money(c.goalAmountMinor)}` : ""} · {c.donationCount} gifts · {c.monthlyDonors} monthly
                   </span>
                 </div>
+                {c.paymentIssue && (
+                  <div style={{ margin: "8px 0", padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(248,113,113,0.4)", background: "rgba(248,113,113,0.07)" }}>
+                    <p style={{ ...muted, color: "#f0f2ff" }}>
+                      <strong>Donations are failing:</strong> {c.paymentIssue}{" "}
+                      <Link href={`/dashboard/commerce/${templateId}/settings/payments`} style={{ color: "var(--brand)" }}>Payment settings →</Link>
+                    </p>
+                  </div>
+                )}
                 <p style={{ ...muted, margin: "4px 0 10px" }}>
                   {c.presetAmounts.map((p) => `${p.label ? `${p.label} ` : ""}${money(p.amountMinor)}`).join(" · ")}
                   {c.allowCustomAmount ? " · any amount" : ""}

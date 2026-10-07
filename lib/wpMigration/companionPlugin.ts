@@ -220,10 +220,16 @@ add_action('rest_api_init', function () {
         list($offset, $limit) = plexo_migrator_paging($request);
         $labels = array();
         foreach ((array) Forminator_API::get_form_fields($form_id) as $field) {
-            $raw = is_object($field) && isset($field->raw) ? (array) $field->raw : array();
-            $slug = isset($raw['element_id']) ? $raw['element_id'] : (isset($field->slug) ? $field->slug : '');
+            // Forminator keeps a field's settings in a protected property; to_array() is the
+            // public way to read them (verified on Forminator 1.57).
+            $data = is_object($field) && method_exists($field, 'to_array') ? (array) $field->to_array() : array();
+            $slug = isset($data['element_id']) ? $data['element_id'] : (isset($field->slug) ? $field->slug : '');
             if ($slug) {
-                $labels[$slug] = isset($raw['field_label']) && $raw['field_label'] !== '' ? $raw['field_label'] : $slug;
+                $label = isset($data['field_label']) ? $data['field_label'] : '';
+                if ($label === '' && is_object($field) && method_exists($field, '__get')) {
+                    $label = (string) $field->__get('field_label');
+                }
+                $labels[$slug] = $label !== '' ? $label : $slug;
             }
         }
         $entries = array_slice((array) Forminator_API::get_entries($form_id), $offset, $limit);

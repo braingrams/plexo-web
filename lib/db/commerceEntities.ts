@@ -901,6 +901,9 @@ export const CommerceDonationCampaign = new Entity(
       active: { type: "boolean", default: true },
       /** Where it came from when created by a migration, e.g. "wp-payment-form:3453". */
       source: { type: "string" },
+      /** The last payment-setup problem a real donation hit (e.g. the gateway refusing the currency) — shown to the owner until a gift succeeds. */
+      paymentIssue: { type: "string" },
+      paymentIssueAt: { type: "string" },
       /** Paystack plan codes created for monthly amounts, keyed "<amountMinor>:<currency>:<mode>". */
       paystackPlans: { type: "any" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },

@@ -164,6 +164,7 @@ async function ensureNode(
     parentId,
     slug,
     order,
+    migratedFrom: (job.install as WpInstall | undefined)?.origin,
   }).go();
   nodes[key] = id;
   return id;
@@ -771,6 +772,12 @@ async function runFinalizing(job: JobItem): Promise<string> {
     .set({ plugins, report, phase: "COMPLETED", finishedAt: new Date().toISOString() })
     .go();
   return "COMPLETED";
+}
+
+/** The most recent payment-setup problem a real donation hit on this site, if any (see donations.ts). */
+export async function donationPaymentIssue(templateId: string): Promise<string | null> {
+  const { data } = await CommerceDonationCampaign.query.primary({ templateId }).go({ pages: "all" });
+  return data.find((c) => c.paymentIssue)?.paymentIssue ?? null;
 }
 
 /** Whether the migrated site can take card payments now (monthly giving needs a card gateway). */

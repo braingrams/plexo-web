@@ -59,7 +59,7 @@ export async function POST(
     return NextResponse.json({ error: "The home page can't be duplicated from here." }, { status: 400 });
   }
 
-  const { data: siblings } = await Template.query.byParent({ parentId: existing.parentId }).go();
+  const { data: siblings } = await Template.query.byParent({ parentId: existing.parentId }).go({ pages: "all" });
   const lastOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1);
 
   const name = await ensureUniqueTemplateName({ organizationId: resolved.organizationId, parentId: existing.parentId, kind: existing.kind, base: `${existing.name} copy` });

@@ -52,7 +52,7 @@ export default async function TemplateDetailPage(props: {
   const [{ data: assets }, { data: children }, { data: submissions }] =
     await Promise.all([
       TemplateAsset.query.primary({ templateId: template.id }).go(),
-      Template.query.byParent({ parentId: template.id }).go(),
+      Template.query.byParent({ parentId: template.id }).go({ pages: "all" }),
       FormSubmission.query.primary({ templateId: template.id }).go(),
     ]);
 
