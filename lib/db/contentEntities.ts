@@ -516,6 +516,8 @@ export const BlogSite = new Entity(
       enabled: { type: "boolean", default: false },
       title: { type: "string", default: "Blog" },
       description: { type: "string" },
+      /** The listing page's own <title> for search engines, when it differs from the heading (a migrated site keeps its WordPress posts page's SEO title). */
+      metaTitle: { type: "string" },
       postsPerPage: { type: "number", default: 10 },
       defaultCategoryId: { type: "string" },
       showOnHomepage: { type: "boolean", default: false },

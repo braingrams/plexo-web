@@ -66,3 +66,18 @@ describe("re-hosted post images", () => {
     expect(isCollidedMapping(a, `https://bucket/public/${mediaKey("site", a, "png")}`)).toBe(false);
   });
 });
+
+describe("a WordPress firewall blocking the move", () => {
+  it("is recognised from its block page, and the owner is told exactly what to do", async () => {
+    const { firewallBlockOf, FirewallBlockedError } = await import("@/lib/wpMigration/http");
+    // maildrip.io's real response once MalCare decided the migration was an attack.
+    const malcare = `<div style='height: 98vh;'><div style='text-align: center; padding: 10% 0;'><div><p>MalCare Firewall</p></div><p>Blocked because of Malicious Activities</p><p>Reference ID: 15148550356ac698e2ab3e0</p></div></div>`;
+    expect(firewallBlockOf(403, malcare)).toBe("MalCare");
+    expect(firewallBlockOf(403, "<h1>Forbidden</h1>")).toBeNull(); // an ordinary 403 isn't a firewall
+    expect(firewallBlockOf(200, malcare)).toBeNull();
+    const message = stepErrorMessage("PAGES", new FirewallBlockedError("MalCare"));
+    expect(message).toMatch(/MalCare firewall started blocking Plexo/);
+    expect(message).toMatch(/allow Plexo or pause the firewall/);
+    expect(message).toMatch(/Try again/);
+  });
+});

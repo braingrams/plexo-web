@@ -83,3 +83,33 @@ export async function wordpressRedirectTarget(url: string): Promise<{ target: st
   if (comparable(target) === comparable(new URL(url))) return null;
   return { target: target.toString(), status: res.status };
 }
+
+// Security plugins and services that answer an "attack" with their own block page. A busy
+// migration can look like one, and then every following request is refused.
+const FIREWALLS: [RegExp, string][] = [
+  [/MalCare Firewall/i, "MalCare"],
+  [/Wordfence/i, "Wordfence"],
+  [/Sucuri/i, "Sucuri"],
+  [/iThemes Security|Solid Security/i, "Solid Security"],
+  [/All In One WP Security|aiowps/i, "All In One WP Security"],
+  [/cf-error-details|Cloudflare Ray ID|Attention Required! \| Cloudflare/i, "Cloudflare"],
+  [/BulletProof Security/i, "BulletProof Security"],
+  [/Shield Security/i, "Shield Security"],
+];
+
+/** The WordPress site's firewall refused Plexo — retrying won't help until the owner allows it. */
+export class FirewallBlockedError extends Error {
+  constructor(public readonly firewall: string) {
+    super(
+      `Your site's ${firewall} firewall started blocking Plexo while it copied your site (it can mistake a migration for an attack). ` +
+        `In ${firewall}, allow Plexo or pause the firewall until the move is done, then press Try again — it carries on where it stopped.`,
+    );
+    this.name = "FirewallBlockedError";
+  }
+}
+
+/** Which firewall served this refusal, if it's one of the known block pages. */
+export function firewallBlockOf(status: number, body: string): string | null {
+  if (status !== 403 && status !== 406 && status !== 429 && status !== 503) return null;
+  return FIREWALLS.find(([re]) => re.test(body))?.[1] ?? null;
+}

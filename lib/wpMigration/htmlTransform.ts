@@ -502,6 +502,9 @@ function rewireForms($: cheerio.CheerioAPI, ctx: TransformContext): { forms: Mig
   for (const { plugin, selector } of PLUGIN_FORM_SELECTORS) {
     $(selector).each((_, el) => {
       if (handled.has(el)) return;
+      // A password field means a login form (Elementor's login widget is also a
+      // .elementor-form) — never a form whose answers get stored and emailed. Handled below.
+      if (isLoginForm($(el))) return;
       handled.add(el);
       index += 1;
       pluginsSeen.add(plugin);
@@ -523,7 +526,8 @@ function rewireForms($: cheerio.CheerioAPI, ctx: TransformContext): { forms: Mig
       form.append(`<input type="hidden" name="sites" value="${host}">`);
       return;
     }
-    if (isLoginForm(form) && (postsToWordPress(form) || /wp-login|log-?in|portal/i.test(form.attr("action") || "") || form.find('input[name="log"], input[name="pwd"]').length > 0)) {
+    // Any form asking for a password: typed credentials must never be submitted anywhere.
+    if (isLoginForm(form)) {
       handled.add(el);
       loginForms += 1;
       // Never send typed credentials anywhere: strip every field's name so nothing is

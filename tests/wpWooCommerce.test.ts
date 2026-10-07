@@ -160,3 +160,16 @@ describe("plugin namespaces", () => {
     expect(pluginSlugForNamespace("lceap/v1")).toBe("lceap"); // a site's own custom plugin is still flagged
   });
 });
+
+describe("maildrip.io's plugins", () => {
+  it("every one is recognised — no false 'needs your attention'", async () => {
+    const { buildPluginReport } = await import("@/lib/wpMigration/pluginCatalog");
+    // Exactly what maildrip.io/wp-json/ lists, and the plugin folders its pages load from.
+    const namespaces = ["aam/v2", "akismet/v1", "cky/v1", "cptui/v1", "elementor-ai/v1", "elementor-hello-elementor/v1", "elementor-one/v1", "elementor-pro/v1", "elementor/v1", "elementor/v1/documents", "elementor/v1/feedback", "maspik/v1", "mcp", "oembed/1.0", "pys-facebook/v1", "pys-openai/v1", "pys-profile/v1", "pys/v1", "rankmath/v1", "rankmath/v1/ai-visibility", "rankmath/v1/an", "rankmath/v1/ca", "rankmath/v1/in", "rankmath/v1/setupWizard", "rankmath/v1/status", "redirection/v1", "wordfence/v1", "wp-abilities/v1", "wp-block-editor/v1", "wp-rocket/v1", "wp-site-health/v1", "wp/v2", "wpe/cache-plugin/v1", "wpe_sign_on_plugin/v1"];
+    const report = buildPluginReport(namespaces, new Set(["cookie-law-info", "elementor-pro", "pixelyoursite", "elementor", "wp-rocket", "contact-forms-anti-spam"]));
+    expect(report.filter((p) => p.outcome === "NEEDS_ATTENTION").map((p) => p.slug)).toEqual([]);
+    expect(report.find((p) => p.slug === "seo-by-rank-math")?.outcome).toBe("NATIVE");
+    expect(report.find((p) => p.slug === "cookie-law-info")?.outcome).toBe("PRESERVED");
+    expect(report.filter((p) => p.slug === "pixelyoursite")).toHaveLength(1); // four namespaces, one plugin
+  });
+});

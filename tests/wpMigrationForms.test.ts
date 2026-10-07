@@ -29,3 +29,19 @@ describe("maildrip's Elementor newsletter form", () => {
     expect(result.html).toContain('name="_hp_field"');
   });
 });
+
+describe("maildrip's Elementor login widget (/guest-login/)", () => {
+  const page = `<html><head><title>Guest Login</title></head><body><form class="elementor-login elementor-form" method="post" action="https://maildrip.io/dripaxxex/?wpe-login=true" aria-label="Login form"> <input type="hidden" name="redirect_to" value="https://maildrip.io/wp-admin/edit.php"> <div class="elementor-form-fields-wrapper"> <div class="elementor-field-type-text elementor-field-group"> <label for="user-cb2a6d5" class="elementor-field-label">Email Address</label> <input size="1" type="text" name="log" id="user-cb2a6d5"> </div> <div class="elementor-field-type-text elementor-field-group"> <label for="password-cb2a6d5" class="elementor-field-label">Password</label> <input size="1" type="password" name="pwd" id="password-cb2a6d5"> </div> <button type="submit" class="elementor-button" name="wp-submit"><span class="elementor-button-text">Log In</span></button> </div> </form></body></html>`;
+  const result = transformPage(page, { origin: "https://maildrip.io", pageUrl: "https://maildrip.io/guest-login/", pagePath: "/guest-login/", pageTitle: "Guest Login", siteTemplateId: "site1", movedLinks: {}, appUrl: "https://plexo.charisol.io" });
+
+  it("is never turned into a form whose answers (a password!) are stored and emailed", () => {
+    expect(result.forms).toEqual([]);
+    expect(result.html).not.toContain("/api/public/forms/");
+    expect(result.loginForms).toBe(1);
+  });
+
+  it("sends nothing typed anywhere and points team members to Plexo sign-in", () => {
+    expect(result.html).toContain('action="https://plexo.charisol.io/auth/login"');
+    expect(result.html).not.toMatch(/name="(log|pwd|redirect_to)"/);
+  });
+});

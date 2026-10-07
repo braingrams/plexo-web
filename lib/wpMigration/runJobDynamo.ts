@@ -18,7 +18,7 @@ import { CommerceDonationCampaign, CommerceSettings } from "@/lib/db/commerceEnt
 import { ensureDonationsReady, resolveDonationGateway } from "@/lib/commerce/donations";
 import { fetchSourceAsset, storeMigratedAsset } from "./assets";
 import { buildPluginReport, pluginSlugsFromHtml } from "./pluginCatalog";
-import { fetchJson, migrationFetch, restUrl, wordpressRedirectTarget } from "./http";
+import { FirewallBlockedError, fetchJson, firewallBlockOf, migrationFetch, restUrl, wordpressRedirectTarget } from "./http";
 import { makeOriginRewriter, pageKey, pageKeyForUrl, pathSegments, resolveAssetOwner } from "./urlSpace";
 import { buildMigrationReport } from "./report";
 import type { DetectedPlugin, WpInstall, WpMediaEntry, WpPostEntry, WpPostStub, WpTermEntry } from "./types";
@@ -146,6 +146,7 @@ const PAUSE_EMAIL_EVERY_MS = 6 * 60 * 60 * 1000;
 export function stepErrorMessage(phase: string, err: unknown): string {
   const where = phase === "PLANNING" || phase === "PENDING" ? "Reading your WordPress site" : `The ${phase.toLowerCase()} step`;
   if (isTransientAwsError(err)) return `${where} paused because Plexo was briefly busy saving your site.`;
+  if (err instanceof FirewallBlockedError) return err.message;
   const message = err instanceof Error ? err.message : String(err);
   if (/DynamoDB|electrodb/i.test(message)) return `${where} stopped because Plexo couldn't save part of your site.`;
   return `${where} stopped: ${message}`;
@@ -750,7 +751,11 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
         continue;
       }
       const res = await migrationFetch(row.sourceUrl, { headers: { Accept: "text/html" } });
-      if (!res.ok) throw new Error(`WordPress answered ${res.status} for this page.`);
+      if (!res.ok) {
+        const firewall = firewallBlockOf(res.status, await res.text().catch(() => ""));
+        if (firewall) throw new FirewallBlockedError(firewall);
+        throw new Error(`WordPress answered ${res.status} for this page.`);
+      }
       const raw = await res.text();
       const path = servedPath(row.key, row.sourceUrl);
       const sourceFacts = extractSourceFacts(raw);
@@ -855,6 +860,8 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
         .go();
       counts.pagesDone += 1;
     } catch (err) {
+      // Every following page would be refused too: pause and tell the owner what to do.
+      if (err instanceof FirewallBlockedError || isTransientAwsError(err)) throw err;
       const message = err instanceof Error ? err.message : String(err);
       errors.push(`${row.sourceUrl} couldn't be copied: ${message}`);
       await WpMigrationPage.patch({ jobId: job.id, key: row.key }).set({ status: "FAILED", error: message }).go();
@@ -1063,6 +1070,11 @@ async function buildBlogPresentation(job: JobItem, knownPosts: KnownPost[], erro
   if (listingHtml && !blogSite.listingLayoutTemplateId) changes.listingLayoutTemplateId = await createLayout("Blog listing (from WordPress)", listingHtml, "/blog/");
   if (postHtml && !blogSite.postLayoutTemplateId) changes.postLayoutTemplateId = await createLayout("Blog post (from WordPress)", postHtml, "/blog/post/");
   if (blogTitle && (!blogSite.title || blogSite.title === "Blog")) changes.title = blogTitle.slice(0, 120);
+  // The posts page's SEO title and description (Yoast, Rank Math…) become /blog's, so the
+  // blog keeps how it appeared in search results.
+  const postsFacts = postsPage && postsPage !== front ? (postsPage.sourceFacts as { title?: string; metaDescription?: string | null } | undefined) : undefined;
+  if (postsFacts?.title && !blogSite.metaTitle) changes.metaTitle = postsFacts.title.slice(0, 200);
+  if (postsFacts?.metaDescription && !blogSite.description) changes.description = postsFacts.metaDescription.slice(0, 500);
   if (postsPerPage && postsPerPage >= 1 && postsPerPage <= 50 && (blogSite.postsPerPage ?? 10) === 10) changes.postsPerPage = postsPerPage;
   if (hasComments !== null) changes.commentsEnabled = hasComments;
   // "Your homepage displays: latest posts" — the domain root serves the live blog.

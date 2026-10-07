@@ -3,7 +3,7 @@ import { uploadObject } from "@/lib/storage";
 import { contentTypeFor, extensionOf } from "@/server/rawUpload";
 import { TemplateAsset } from "@/lib/db/contentEntities";
 import { SiteImportAssetBlob } from "@/lib/db/importEntities";
-import { migrationFetch } from "./http";
+import { FirewallBlockedError, firewallBlockOf, migrationFetch } from "./http";
 import { assetPathFromRef, hostVariants, makeOriginRewriter } from "./urlSpace";
 import { harvestLazyAssets } from "./lazyAssets";
 
@@ -90,6 +90,10 @@ export async function fetchSourceAsset(origin: string, segments: string[]): Prom
   }
   if (res.status === 404 || res.status === 410) {
     return { ok: false, skipped: true, reason: "Referenced by your site but missing on WordPress too (already broken there)" };
+  }
+  if (!res.ok) {
+    const firewall = firewallBlockOf(res.status, await res.text().catch(() => ""));
+    if (firewall) throw new FirewallBlockedError(firewall); // pauses the migration with what to do
   }
   if (res.status === 429 || res.status >= 500) return { ok: false, skipped: false, retryable: true, reason: `WordPress was too busy to send it (${res.status})` };
   if (!res.ok) return { ok: false, skipped: false, reason: `WordPress answered ${res.status}` };
