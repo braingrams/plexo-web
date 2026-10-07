@@ -281,3 +281,303 @@ export async function buildStorePresentation(
   wc.storeDone = true;
   void errors;
 }
+
+// ── Private store data, through the Plexo Migrator plugin ───────────────────
+// What WooCommerce's public API doesn't show. Read-only on WordPress; on Plexo, imported
+// orders are history only — they never move stock, credit the wallet or send emails.
+
+export interface WcPluginProduct {
+  id: number;
+  manage_stock: boolean;
+  stock_quantity: number | null;
+  stock_status: string;
+  virtual: boolean;
+  downloadable: boolean;
+  downloads: { id: string; name: string; file: string }[];
+  download_limit: number;
+  download_expiry: number;
+  variations: { id: number; manage_stock: boolean; stock_quantity: number | null; stock_status: string }[];
+}
+
+export interface WcPluginCoupon {
+  id: number;
+  code: string;
+  discount_type: string;
+  amount: number;
+  date_expires: string | null;
+  usage_limit: number | null;
+  usage_count: number;
+  minimum_amount: number;
+  maximum_amount: number;
+  free_shipping: boolean;
+  product_ids: number[];
+  product_categories: number[];
+  email_restrictions: string[];
+  usage_limit_per_user: number | null;
+}
+
+export interface WcPluginZone {
+  id: number;
+  name: string;
+  locations: { type: string; code: string; country?: string; state_name?: string }[];
+  methods: { type: string; title: string; enabled: boolean; cost: string; min_amount: string; requires: string }[];
+}
+
+export interface WcPluginOrder {
+  id: number;
+  number: string;
+  status: string;
+  created: string | null;
+  currency: string;
+  total: number;
+  discount_total: number;
+  shipping_total: number;
+  shipping_method: string;
+  payment_method_title: string;
+  email: string;
+  name: string;
+  phone: string;
+  country: string;
+  state: string;
+  state_name?: string;
+  address: string;
+  note: string;
+  items: { name: string; product_id: number; variation_id: number; quantity: number; total: number; sku: string }[];
+}
+
+/** Store amounts from WooCommerce (decimal, e.g. 15.5) → Plexo minor units. */
+const minorOf = (value: number | string | null | undefined) => Math.round(Number(value || 0) * 100);
+
+/** Plexo product id per WooCommerce product id, from the migration's product rows. */
+export function productIdsByWcId(rows: PageItem[]): Map<number, string> {
+  return new Map(rows.filter((r) => r.kind === "PRODUCT" && r.commerceProductId && r.wpId).map((r) => [r.wpId!, r.commerceProductId!]));
+}
+
+/**
+ * Exact stock (per product and per variation) and downloads. A downloadable product
+ * becomes a Plexo DIGITAL product: its file is copied privately through the plugin (or
+ * linked, when it's hosted elsewhere) with the same download limit/expiry.
+ */
+export async function applyWcProductExtras(
+  job: JobItem,
+  products: WcPluginProduct[],
+  productIds: Map<number, string>,
+  fetchDownload: (productId: number, downloadId: string) => Promise<{ body: Buffer; name: string } | { externalUrl: string } | null>,
+  notes: string[],
+): Promise<{ stock: number; digital: number }> {
+  let stock = 0;
+  let digital = 0;
+  for (const wp of products) {
+    const id = productIds.get(wp.id);
+    if (!id) continue;
+    const { data: product } = await CommerceProduct.get({ templateId: job.templateId, id }).go();
+    if (!product) continue;
+    const set: Record<string, unknown> = {};
+
+    const variants = Array.isArray(product.variants) ? (product.variants as { id: string; stockQuantity?: number | null }[]) : [];
+    if (variants.length > 0) {
+      let changed = false;
+      const next = variants.map((v) => {
+        const wcVariation = wp.variations.find((x) => v.id === `wc-${x.id}` || v.id.startsWith(`wc-${x.id}-`));
+        if (!wcVariation) return v;
+        const qty = wcVariation.manage_stock ? Math.max(0, wcVariation.stock_quantity ?? 0) : wcVariation.stock_status === "outofstock" ? 0 : null;
+        if (qty === (v.stockQuantity ?? null)) return v;
+        changed = true;
+        return { ...v, stockQuantity: qty };
+      });
+      if (changed) {
+        set.variants = next;
+        stock++;
+      }
+    } else if (wp.manage_stock && wp.stock_quantity !== null) {
+      set.stockQuantity = Math.max(0, wp.stock_quantity);
+      stock++;
+    }
+
+    if (wp.downloadable && wp.downloads.length > 0) {
+      const first = wp.downloads[0];
+      const file = await fetchDownload(wp.id, first.id).catch(() => null);
+      if (file && "body" in file) {
+        const { uploadObject } = await import("@/lib/storage");
+        const { url } = await uploadObject(`commerce/${job.templateId}/digital/${id}/${file.name}`, file.body, { access: "private", contentType: "application/octet-stream" });
+        Object.assign(set, { kind: "DIGITAL", digitalDeliveryMethod: "FILE_DOWNLOAD", digitalFileUrl: url, digitalFileName: first.name || file.name, digitalFileSizeBytes: file.body.length });
+      } else if (file && "externalUrl" in file) {
+        Object.assign(set, { kind: "DIGITAL", digitalDeliveryMethod: "EXTERNAL_LINK", digitalExternalUrl: file.externalUrl });
+      }
+      if (set.kind) {
+        if (wp.download_limit > 0) set.digitalMaxDownloads = wp.download_limit;
+        if (wp.download_expiry > 0) set.digitalLinkExpiryDays = wp.download_expiry;
+        digital++;
+        if (wp.downloads.length > 1) notes.push(`“${product.name}” had ${wp.downloads.length} download files — Plexo delivers one per product, so only “${first.name}” moved. Zip them together and upload it in Commerce → Products.`);
+      } else {
+        notes.push(`“${product.name}” is a download, but its file couldn't be copied — upload it in Commerce → Products.`);
+      }
+    } else if (wp.virtual && !wp.downloadable) {
+      notes.push(`“${product.name}” didn't ship on WooCommerce (a “virtual” product). It's a shipped product on Plexo for now — change how it's delivered in Commerce → Products.`);
+    }
+    if (Object.keys(set).length > 0) await CommerceProduct.patch({ templateId: job.templateId, id }).set(set).go();
+  }
+  return { stock, digital };
+}
+
+/** Coupons → discount codes. Conditions Plexo doesn't have are named so the owner can check them. */
+export async function importWcCoupons(job: JobItem, coupons: WcPluginCoupon[], notes: string[]): Promise<number> {
+  const { CommerceDiscountCode } = await import("@/lib/db/commerceEntities");
+  let count = 0;
+  for (const c of coupons) {
+    const code = c.code.trim().toUpperCase();
+    if (!code) continue;
+    const percent = c.discount_type === "percent";
+    const value = percent ? Math.min(100, Math.round(c.amount)) : minorOf(c.amount);
+    if (!value) continue;
+    const limits: string[] = [];
+    if (c.minimum_amount > 0) limits.push(`a minimum spend of ${c.minimum_amount}`);
+    if (c.maximum_amount > 0) limits.push(`a maximum spend of ${c.maximum_amount}`);
+    if (c.product_ids.length || c.product_categories.length) limits.push("only certain products");
+    if (c.email_restrictions.length) limits.push("only certain customers");
+    if (c.usage_limit_per_user) limits.push(`${c.usage_limit_per_user} use(s) per customer`);
+    if (c.free_shipping) limits.push("free shipping");
+    if (c.discount_type === "fixed_product") limits.push("an amount off each product (now off the whole order)");
+    if (limits.length) notes.push(`Coupon ${code} had ${limits.join(", ")} on WooCommerce — on Plexo it applies to any order.`);
+    await CommerceDiscountCode.put({
+      id: `wc-${c.id}`,
+      templateId: job.templateId,
+      organizationId: job.organizationId,
+      code,
+      type: percent ? "PERCENT" : "FIXED",
+      value,
+      active: true,
+      ...(c.date_expires ? { expiresAt: new Date(c.date_expires).toISOString() } : {}),
+      ...(c.usage_limit ? { usageLimit: c.usage_limit } : {}),
+      usedCount: c.usage_count ?? 0,
+    }).go();
+    count++;
+  }
+  return count;
+}
+
+/** Shipping zones → delivery methods: flat rates and free shipping per area, local pickup. */
+export async function importWcShipping(job: JobItem, zones: WcPluginZone[], storeAddress: string, notes: string[]): Promise<number> {
+  const { CommerceDeliveryMethod } = await import("@/lib/db/commerceEntities");
+  let count = 0;
+  let order = 0;
+  let pickupMade = false;
+  for (const z of zones) {
+    const countries = new Set<string>();
+    const states = new Set<string>();
+    for (const loc of z.locations) {
+      if (loc.type === "country") countries.add(loc.code.toUpperCase());
+      else if (loc.type === "state" && loc.country) {
+        countries.add(loc.country.toUpperCase());
+        states.add((loc.state_name ?? loc.code).toUpperCase());
+      } else if (loc.type === "postcode" || loc.type === "continent") {
+        notes.push(`Shipping zone “${z.name}” used ${loc.type === "postcode" ? "postcodes" : "a continent"} — set the countries/states it covers in Commerce → Delivery.`);
+      }
+    }
+    for (const m of z.methods.filter((x) => x.enabled)) {
+      let type: "COURIER" | "PICKUP";
+      let feeMinor = 0;
+      if (m.type === "local_pickup" || m.type === "pickup_location") {
+        if (pickupMade) continue;
+        type = "PICKUP";
+        pickupMade = true;
+      } else if (m.type === "flat_rate") {
+        type = "COURIER";
+        const cost = Number(m.cost);
+        if (Number.isFinite(cost)) feeMinor = minorOf(cost);
+        else notes.push(`“${m.title}” worked out its price with a formula (${m.cost}) — set its fee in Commerce → Delivery.`);
+      } else if (m.type === "free_shipping") {
+        type = "COURIER";
+        if (m.requires && m.min_amount) notes.push(`“${m.title}” was free only on orders over ${m.min_amount} — on Plexo it's free on every order in that area.`);
+      } else {
+        notes.push(`“${m.title}” (a ${m.type} shipping method) needs setting up in Commerce → Delivery.`);
+        continue;
+      }
+      await CommerceDeliveryMethod.put({
+        id: `wc-${z.id}-${m.type}-${order}`,
+        templateId: job.templateId,
+        organizationId: job.organizationId,
+        name: m.title || (type === "PICKUP" ? "Pickup" : "Delivery"),
+        type,
+        feeMinor,
+        ...(type === "COURIER" && countries.size ? { countries: Array.from(countries) } : {}),
+        ...(type === "COURIER" && states.size ? { states: Array.from(states) } : {}),
+        ...(type === "PICKUP" && storeAddress ? { description: storeAddress } : {}),
+        status: "ACTIVE",
+        sortOrder: order++,
+      }).go();
+      count++;
+    }
+  }
+  if (count > 0) {
+    const { data: settings } = await CommerceSettings.get({ templateId: job.templateId }).go();
+    const patch = { deliveryEnabled: true, ...(pickupMade ? { pickupEnabled: true, ...(storeAddress && !settings?.pickupLocation ? { pickupLocation: storeAddress } : {}) } : {}) };
+    if (settings) await CommerceSettings.patch({ templateId: job.templateId }).set(patch).go();
+  }
+  return count;
+}
+
+const ORDER_STATUS: Record<string, { status: "PENDING" | "PAID" | "FAILED" | "REFUNDED" | "CANCELLED"; fulfillment: "UNFULFILLED" | "PROCESSING" | "COMPLETED" }> = {
+  completed: { status: "PAID", fulfillment: "COMPLETED" },
+  processing: { status: "PAID", fulfillment: "PROCESSING" },
+  refunded: { status: "REFUNDED", fulfillment: "UNFULFILLED" },
+  cancelled: { status: "CANCELLED", fulfillment: "UNFULFILLED" },
+  failed: { status: "FAILED", fulfillment: "UNFULFILLED" },
+  pending: { status: "PENDING", fulfillment: "UNFULFILLED" },
+  "on-hold": { status: "PENDING", fulfillment: "UNFULFILLED" },
+};
+
+/** Past orders → Plexo order history (and so its customer list). Idempotent per WooCommerce order. */
+export async function importWcOrders(job: JobItem, orders: WcPluginOrder[], productIds: Map<number, string>): Promise<number> {
+  const { CommerceOrder, CommerceOrderItem } = await import("@/lib/db/commerceEntities");
+  let count = 0;
+  for (const o of orders) {
+    if (!o.email) continue;
+    const id = `wc-order-${o.id}`;
+    const mapped = ORDER_STATUS[o.status] ?? { status: "PENDING" as const, fulfillment: "UNFULFILLED" as const };
+    try {
+      await CommerceOrder.create({
+        id,
+        templateId: job.templateId,
+        organizationId: job.organizationId,
+        orderNumber: `WC-${o.number}`,
+        customerEmail: o.email.toLowerCase(),
+        ...(o.name ? { customerName: o.name } : {}),
+        ...(o.phone ? { customerPhone: o.phone } : {}),
+        ...(o.country ? { shippingCountry: o.country } : {}),
+        ...(o.state_name || o.state ? { shippingState: (o.state_name || o.state).toUpperCase() } : {}),
+        ...(o.address ? { shippingAddressLine: o.address } : {}),
+        amountMinor: minorOf(o.total),
+        discountAmountMinor: minorOf(o.discount_total),
+        deliveryFeeMinor: minorOf(o.shipping_total),
+        ...(o.shipping_method ? { deliveryMethodNameSnapshot: o.shipping_method } : {}),
+        currency: (o.currency || "USD").toUpperCase(),
+        status: mapped.status,
+        fulfillmentStatus: mapped.fulfillment,
+        paymentMethod: "ONLINE",
+        metadata: { imported: true, source: "woocommerce", wcOrderId: o.id, paymentMethodTitle: o.payment_method_title, note: o.note || undefined },
+        ...(o.created ? { createdAt: new Date(o.created).toISOString() } : {}),
+      }).go();
+    } catch (err) {
+      // Already imported (a re-run) — leave it as it is.
+      if ((err as { name?: string; message?: string }).message?.includes("conditional")) continue;
+      throw err;
+    }
+    for (const [i, item] of o.items.entries()) {
+      const productId = productIds.get(item.product_id) ?? `wc-product:${item.product_id}`;
+      await CommerceOrderItem.create({
+        id: `${id}-${i}`,
+        templateId: job.templateId,
+        orderId: id,
+        productId,
+        ...(item.variation_id ? { variantId: `wc-${item.variation_id}` } : {}),
+        ...(item.sku ? { sku: item.sku } : {}),
+        nameSnapshot: item.name,
+        unitPriceMinor: item.quantity ? Math.round(minorOf(item.total) / item.quantity) : minorOf(item.total),
+        quantity: item.quantity || 1,
+      }).go();
+    }
+    count++;
+  }
+  return count;
+}

@@ -150,13 +150,34 @@ function PluginGroups({ plugins }: { plugins: Plugin[] }) {
 
 interface ConnectorView {
   status: "WAITING" | "CONNECTED" | "ERROR";
-  summary: { tables: { name: string; rows: number; columns: string[] }[]; forminator_forms: { id: number; title: string; entries: number }[]; payform: { paid: number } | null; drafts: number; redirects: number; team: number } | null;
+  summary: {
+    tables: { name: string; rows: number; columns: string[] }[];
+    forminator_forms: { id: number; title: string; entries: number }[];
+    payform: { paid: number } | null;
+    drafts: number;
+    redirects: number;
+    team: number;
+    woocommerce?: { products: number; downloadable: number; coupons: number; orders: number; shipping_zones: number } | null;
+  } | null;
   error: string | null;
   code: string | null;
 }
 interface ExtrasView {
   stage: string;
-  counts: { formEntries: number; records: number; donations: number; redirects: number; drafts: number; commentEmails: number };
+  counts: {
+    formEntries: number;
+    records: number;
+    donations: number;
+    redirects: number;
+    drafts: number;
+    commentEmails: number;
+    stockUpdated?: number;
+    digitalProducts?: number;
+    coupons?: number;
+    deliveryMethods?: number;
+    orders?: number;
+  };
+  storeNotes?: string[];
   team: { name: string; email: string; roles: string[] }[];
   unmoved: { table: string; rows: number }[];
   error?: string;
@@ -235,6 +256,11 @@ function PrivateDataCard({ templateId, jobId }: { templateId: string; jobId: str
         s.drafts ? `${s.drafts} drafts` : null,
         s.redirects ? `${s.redirects} redirect rules` : null,
         s.team ? `${s.team} team members` : null,
+        s.woocommerce?.orders ? `${s.woocommerce.orders} past shop orders` : null,
+        s.woocommerce?.coupons ? `${s.woocommerce.coupons} coupons` : null,
+        s.woocommerce?.shipping_zones ? `${s.woocommerce.shipping_zones} shipping zones` : null,
+        s.woocommerce?.downloadable ? `${s.woocommerce.downloadable} downloadable products` : null,
+        s.woocommerce?.products ? "exact stock levels" : null,
       ].filter(Boolean)
     : [];
   const done = extras?.stage === "done";
@@ -299,8 +325,23 @@ function PrivateDataCard({ templateId, jobId }: { templateId: string; jobId: str
               extras.counts.drafts && `${extras.counts.drafts} drafts`,
               extras.counts.redirects && `${extras.counts.redirects} redirects`,
               extras.counts.commentEmails && `${extras.counts.commentEmails} commenter emails`,
-            ].filter(Boolean).join(", ") || "everything"}. Form history is in Form Submissions, donations in Commerce → Donations.
+              extras.counts.orders && `${extras.counts.orders} past shop orders`,
+              extras.counts.coupons && `${extras.counts.coupons} coupons`,
+              extras.counts.deliveryMethods && `${extras.counts.deliveryMethods} delivery options`,
+              extras.counts.digitalProducts && `${extras.counts.digitalProducts} downloads`,
+              extras.counts.stockUpdated && `exact stock for ${extras.counts.stockUpdated} products`,
+            ].filter(Boolean).join(", ") || "everything"}. Form history is in Form Submissions; donations, orders, coupons and delivery are in Commerce.
           </p>
+          {extras.storeNotes && extras.storeNotes.length > 0 && (
+            <div>
+              <p style={{ ...muted, fontWeight: 650, color: "#f0f2ff", marginBottom: 6 }}>Worth a look in your shop</p>
+              <ul style={{ ...muted, margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+                {extras.storeNotes.map((n) => (
+                  <li key={n}>{n}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           {extras.team.length > 0 && (
             <div>
               <p style={{ ...muted, fontWeight: 650, color: "#f0f2ff", marginBottom: 6 }}>Invite your team to Plexo</p>

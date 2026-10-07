@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { applyWcProductExtras, importWcCoupons, importWcOrders, importWcShipping, productIdsByWcId, type WcPluginCoupon, type WcPluginOrder, type WcPluginProduct, type WcPluginZone } from "./storeImport";
 import type { EntityItem } from "electrodb";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { FormSubmission } from "@/lib/db/opsEntities";
@@ -39,14 +40,31 @@ export interface ConnectorSummary {
   drafts: number;
   redirects: number;
   team: number;
+  /** A WooCommerce store's private data (plugin 1.1+). */
+  woocommerce?: { products: number; downloadable: number; coupons: number; orders: number; shipping_zones: number } | null;
 }
 
 export interface ExtrasState {
-  stage: "forminator" | "tables" | "payform" | "redirects" | "team" | "drafts" | "comments" | "done";
+  stage: "forminator" | "tables" | "payform" | "redirects" | "team" | "drafts" | "comments" | "wc_products" | "wc_coupons" | "wc_shipping" | "wc_orders" | "done";
   /** Position inside the current stage: which item, how far into it. */
   index: number;
   offset: number;
-  counts: { formEntries: number; records: number; donations: number; redirects: number; drafts: number; commentEmails: number };
+  counts: {
+    formEntries: number;
+    records: number;
+    donations: number;
+    redirects: number;
+    drafts: number;
+    commentEmails: number;
+    /** WooCommerce (lib/wpMigration/storeImport.ts). */
+    stockUpdated?: number;
+    digitalProducts?: number;
+    coupons?: number;
+    deliveryMethods?: number;
+    orders?: number;
+  };
+  /** Things about the store the owner should check, in plain words (coupon conditions, shipping formulas…). */
+  storeNotes?: string[];
   team: { name: string; email: string; roles: string[] }[];
   /** Plugin tables that hold something other than submissions — listed, not moved. */
   unmoved: { table: string; rows: number }[];
@@ -54,7 +72,7 @@ export interface ExtrasState {
   finishedAt?: string;
 }
 
-const STAGES: ExtrasState["stage"][] = ["forminator", "tables", "payform", "redirects", "team", "drafts", "comments", "done"];
+const STAGES: ExtrasState["stage"][] = ["forminator", "tables", "payform", "redirects", "team", "drafts", "comments", "wc_products", "wc_coupons", "wc_shipping", "wc_orders", "done"];
 const PAGE_SIZE = 200;
 const STEP_BUDGET_MS = 35_000;
 
@@ -86,6 +104,20 @@ export async function connectorGet<T>(install: WpInstall, code: string, route: s
   if (code_ === "plexo_not_connected") throw new ConnectorError("The plugin is active but not connected yet — in WordPress go to Tools → Plexo Migrator and paste your connection code.");
   if (code_ === "plexo_wrong_code") throw new ConnectorError("The code in WordPress doesn't match this migration — copy the code shown here again and paste it in Tools → Plexo Migrator.");
   throw new ConnectorError(`Your WordPress site answered with an error (${res.status}). Try again in a minute.`);
+}
+
+/** A WooCommerce download file through the plugin (private files), or the link when it's hosted elsewhere. */
+async function fetchWcDownload(install: WpInstall, code: string, productId: number, downloadId: string): Promise<{ body: Buffer; name: string } | { externalUrl: string } | null> {
+  const url = restUrl(install.restRoot, "plexo-migrator/v1/wc/download", { product_id: productId, download_id: downloadId, plexo_key: code });
+  const res = await migrationFetch(url, { headers: { "X-Plexo-Migrator-Key": code } });
+  if (res.status === 409) {
+    const body = (await res.json().catch(() => null)) as { data?: { url?: string } } | null;
+    return body?.data?.url ? { externalUrl: body.data.url } : null;
+  }
+  if (!res.ok) return null;
+  const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "download";
+  const body = Buffer.from(await res.arrayBuffer());
+  return body.length > 0 && body.length <= 200 * 1024 * 1024 ? { body, name } : null;
 }
 
 function codeFor(job: JobItem): string {
@@ -360,6 +392,41 @@ export async function runExtrasStep(job: JobItem, revalidate: RevalidateFn = asy
           }
         }
         if (comments.length < PAGE_SIZE) advance(); else state.offset += PAGE_SIZE;
+        continue;
+      }
+
+      // ── WooCommerce: stock, downloads, coupons, shipping, past orders
+      if (state.stage.startsWith("wc_") && !summary.woocommerce) {
+        advance();
+        continue;
+      }
+      if (state.stage === "wc_products") {
+        const { products } = await connectorGet<{ products: WcPluginProduct[] }>(install, code, "wc/products", { offset: state.offset, limit: 50 });
+        const rows = await WpMigrationPage.query.primary({ jobId: job.id }).go({ pages: "all" });
+        const notes = (state.storeNotes ??= []);
+        const done = await applyWcProductExtras(job, products, productIdsByWcId(rows.data), (productId, downloadId) => fetchWcDownload(install, code, productId, downloadId), notes);
+        state.counts.stockUpdated = (state.counts.stockUpdated ?? 0) + done.stock;
+        state.counts.digitalProducts = (state.counts.digitalProducts ?? 0) + done.digital;
+        if (products.length < 50) advance(); else state.offset += 50;
+        continue;
+      }
+      if (state.stage === "wc_coupons") {
+        const { coupons } = await connectorGet<{ coupons: WcPluginCoupon[] }>(install, code, "wc/coupons", { offset: state.offset, limit: PAGE_SIZE });
+        state.counts.coupons = (state.counts.coupons ?? 0) + (await importWcCoupons(job, coupons, (state.storeNotes ??= [])));
+        if (coupons.length < PAGE_SIZE) advance(); else state.offset += PAGE_SIZE;
+        continue;
+      }
+      if (state.stage === "wc_shipping") {
+        const { zones, store_address } = await connectorGet<{ zones: WcPluginZone[]; store_address?: string }>(install, code, "wc/shipping");
+        state.counts.deliveryMethods = await importWcShipping(job, zones, store_address ?? "", (state.storeNotes ??= []));
+        advance();
+        continue;
+      }
+      if (state.stage === "wc_orders") {
+        const { orders } = await connectorGet<{ orders: WcPluginOrder[] }>(install, code, "wc/orders", { offset: state.offset, limit: 100 });
+        const rows = await WpMigrationPage.query.primary({ jobId: job.id }).go({ pages: "all" });
+        state.counts.orders = (state.counts.orders ?? 0) + (await importWcOrders(job, orders, productIdsByWcId(rows.data)));
+        if (orders.length < 100) advance(); else state.offset += 100;
         continue;
       }
     }

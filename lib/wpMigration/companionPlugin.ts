@@ -16,7 +16,7 @@
 //  - columns that look like secrets (passwords, tokens, keys, card data) are never sent;
 //  - user export is name + email + role only — never password hashes.
 
-export const COMPANION_PLUGIN_VERSION = "1.0.0";
+export const COMPANION_PLUGIN_VERSION = "1.1.0";
 
 export const COMPANION_PLUGIN_PHP = String.raw`<?php
 /**
@@ -192,6 +192,13 @@ add_action('rest_api_init', function () {
             'drafts' => intval($drafts->found_posts),
             'redirects' => count(plexo_migrator_redirects()),
             'team' => count(plexo_migrator_team()),
+            'woocommerce' => function_exists('wc_get_products') ? array(
+                'products' => count(wc_get_products(array('limit' => -1, 'return' => 'ids', 'status' => array('publish', 'private')))),
+                'downloadable' => count(wc_get_products(array('limit' => -1, 'return' => 'ids', 'downloadable' => true))),
+                'coupons' => intval(wp_count_posts('shop_coupon')->publish),
+                'orders' => count(wc_get_orders(array('limit' => -1, 'return' => 'ids', 'type' => 'shop_order'))),
+                'shipping_zones' => class_exists('WC_Shipping_Zones') ? count(WC_Shipping_Zones::get_zones()) : 0,
+            ) : null,
         );
     }));
 
@@ -303,6 +310,181 @@ add_action('rest_api_init', function () {
             }
         }
         return array('comments' => $out);
+    }));
+
+    /* ---- WooCommerce: what its public Store API doesn't show (read-only, via WooCommerce's own APIs) ---- */
+
+    // Exact stock, and which products are downloads (with their files), per product and variation.
+    register_rest_route($ns, '/wc/products', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function (WP_REST_Request $request) {
+        if (!function_exists('wc_get_products')) return array('products' => array());
+        list($offset, $limit) = plexo_migrator_paging($request);
+        $out = array();
+        foreach (wc_get_products(array('limit' => $limit, 'offset' => $offset, 'orderby' => 'ID', 'order' => 'ASC', 'status' => array('publish', 'private'))) as $p) {
+            $row = array(
+                'id' => $p->get_id(),
+                'manage_stock' => (bool) $p->get_manage_stock(),
+                'stock_quantity' => $p->get_stock_quantity(),
+                'stock_status' => $p->get_stock_status(),
+                'virtual' => (bool) $p->get_virtual(),
+                'downloadable' => (bool) $p->get_downloadable(),
+                'downloads' => array(),
+                'download_limit' => $p->get_download_limit(),
+                'download_expiry' => $p->get_download_expiry(),
+                'variations' => array(),
+            );
+            foreach ($p->get_downloads() as $download_id => $d) {
+                $row['downloads'][] = array('id' => (string) $download_id, 'name' => $d->get_name(), 'file' => $d->get_file());
+            }
+            if ($p->is_type('variable')) {
+                foreach ($p->get_children() as $child_id) {
+                    $v = wc_get_product($child_id);
+                    if (!$v) continue;
+                    $row['variations'][] = array('id' => $v->get_id(), 'manage_stock' => $v->get_manage_stock() === true, 'stock_quantity' => $v->get_stock_quantity(), 'stock_status' => $v->get_stock_status());
+                }
+            }
+            $out[] = $row;
+        }
+        return array('products' => $out);
+    }));
+
+    // A product's download file, streamed to the migration only (WooCommerce keeps these
+    // out of public reach). Only files attached to that product, only from this site.
+    register_rest_route($ns, '/wc/download', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function (WP_REST_Request $request) {
+        $product = function_exists('wc_get_product') ? wc_get_product(intval($request->get_param('product_id'))) : null;
+        if (!$product) return new WP_Error('not_found', 'No such product', array('status' => 404));
+        $downloads = $product->get_downloads();
+        $download_id = (string) $request->get_param('download_id');
+        if (!isset($downloads[$download_id])) return new WP_Error('not_found', 'No such download', array('status' => 404));
+        $file = $downloads[$download_id]->get_file();
+        $uploads = wp_get_upload_dir();
+        $path = '';
+        if (strpos($file, $uploads['baseurl']) === 0) {
+            $path = $uploads['basedir'] . substr($file, strlen($uploads['baseurl']));
+        } elseif (strpos($file, ABSPATH) === 0) {
+            $path = $file;
+        }
+        $real = $path ? realpath($path) : false;
+        if (!$real || strpos($real, realpath(ABSPATH)) !== 0 || !is_file($real)) {
+            return new WP_Error('external', 'This download is hosted elsewhere', array('status' => 409, 'url' => $file));
+        }
+        nocache_headers();
+        header('Content-Type: application/octet-stream');
+        header('Content-Length: ' . filesize($real));
+        header('Content-Disposition: attachment; filename="' . basename($real) . '"');
+        readfile($real);
+        exit;
+    }));
+
+    register_rest_route($ns, '/wc/coupons', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function (WP_REST_Request $request) {
+        if (!class_exists('WC_Coupon')) return array('coupons' => array());
+        list($offset, $limit) = plexo_migrator_paging($request);
+        $ids = get_posts(array('post_type' => 'shop_coupon', 'post_status' => 'publish', 'numberposts' => $limit, 'offset' => $offset, 'orderby' => 'ID', 'order' => 'ASC', 'fields' => 'ids'));
+        $out = array();
+        foreach ($ids as $id) {
+            $c = new WC_Coupon($id);
+            $expires = $c->get_date_expires();
+            $out[] = array(
+                'id' => $id,
+                'code' => $c->get_code(),
+                'discount_type' => $c->get_discount_type(),
+                'amount' => (float) $c->get_amount(),
+                'date_expires' => $expires ? $expires->date('c') : null,
+                'usage_limit' => $c->get_usage_limit(),
+                'usage_count' => $c->get_usage_count(),
+                'minimum_amount' => (float) $c->get_minimum_amount(),
+                'maximum_amount' => (float) $c->get_maximum_amount(),
+                'free_shipping' => (bool) $c->get_free_shipping(),
+                'product_ids' => $c->get_product_ids(),
+                'product_categories' => $c->get_product_categories(),
+                'email_restrictions' => $c->get_email_restrictions(),
+                'usage_limit_per_user' => $c->get_usage_limit_per_user(),
+            );
+        }
+        return array('coupons' => $out);
+    }));
+
+    // Shipping zones with readable places ("Lagos", not "NG:LA") and their methods.
+    register_rest_route($ns, '/wc/shipping', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function () {
+        if (!class_exists('WC_Shipping_Zones')) return array('zones' => array());
+        $zones = WC_Shipping_Zones::get_zones();
+        $zones[] = array('id' => 0, 'zone_name' => 'Everywhere else', 'zone_locations' => array(), 'shipping_methods' => (new WC_Shipping_Zone(0))->get_shipping_methods());
+        $out = array();
+        foreach ($zones as $z) {
+            $locations = array();
+            foreach ($z['zone_locations'] as $loc) {
+                $loc = (object) $loc;
+                $entry = array('type' => $loc->type, 'code' => $loc->code);
+                if ($loc->type === 'state' && strpos($loc->code, ':') !== false) {
+                    list($country, $state) = explode(':', $loc->code, 2);
+                    $states = WC()->countries->get_states($country);
+                    $entry['country'] = $country;
+                    $entry['state_name'] = isset($states[$state]) ? html_entity_decode($states[$state]) : $state;
+                }
+                $locations[] = $entry;
+            }
+            $methods = array();
+            foreach ($z['shipping_methods'] as $m) {
+                $methods[] = array(
+                    'type' => $m->id,
+                    'title' => $m->get_title(),
+                    'enabled' => $m->is_enabled(),
+                    'cost' => $m->get_option('cost'),
+                    'min_amount' => $m->get_option('min_amount'),
+                    'requires' => $m->get_option('requires'),
+                );
+            }
+            $out[] = array('id' => intval($z['id']), 'name' => $z['zone_name'], 'locations' => $locations, 'methods' => $methods);
+        }
+        return array('zones' => $out, 'store_address' => trim(implode(', ', array_filter(array(get_option('woocommerce_store_address'), get_option('woocommerce_store_city'))))));
+    }));
+
+    // Past orders (wc_get_orders works with both of WooCommerce's order storage modes).
+    register_rest_route($ns, '/wc/orders', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function (WP_REST_Request $request) {
+        if (!function_exists('wc_get_orders')) return array('orders' => array());
+        list($offset, $limit) = plexo_migrator_paging($request);
+        $out = array();
+        foreach (wc_get_orders(array('limit' => $limit, 'offset' => $offset, 'orderby' => 'ID', 'order' => 'ASC', 'type' => 'shop_order')) as $o) {
+            $items = array();
+            foreach ($o->get_items() as $item) {
+                $product = $item->get_product();
+                $items[] = array(
+                    'name' => $item->get_name(),
+                    'product_id' => $item->get_product_id(),
+                    'variation_id' => $item->get_variation_id(),
+                    'quantity' => $item->get_quantity(),
+                    'total' => (float) $item->get_total(),
+                    'sku' => $product ? $product->get_sku() : '',
+                );
+            }
+            $created = $o->get_date_created();
+            $out[] = array(
+                'id' => $o->get_id(),
+                'number' => $o->get_order_number(),
+                'status' => $o->get_status(),
+                'created' => $created ? $created->date('c') : null,
+                'currency' => $o->get_currency(),
+                'total' => (float) $o->get_total(),
+                'discount_total' => (float) $o->get_discount_total(),
+                'shipping_total' => (float) $o->get_shipping_total(),
+                'shipping_method' => $o->get_shipping_method(),
+                'payment_method_title' => $o->get_payment_method_title(),
+                'email' => $o->get_billing_email(),
+                'name' => trim($o->get_billing_first_name() . ' ' . $o->get_billing_last_name()),
+                'phone' => $o->get_billing_phone(),
+                'country' => $o->get_shipping_country() ?: $o->get_billing_country(),
+                'state' => $o->get_shipping_state() ?: $o->get_billing_state(),
+                'state_name' => (function () use ($o) {
+                    $country = $o->get_shipping_country() ?: $o->get_billing_country();
+                    $state = $o->get_shipping_state() ?: $o->get_billing_state();
+                    $states = $country ? WC()->countries->get_states($country) : array();
+                    return ($state && isset($states[$state])) ? html_entity_decode($states[$state]) : $state;
+                })(),
+                'address' => trim(implode(', ', array_filter(array($o->get_shipping_address_1() ?: $o->get_billing_address_1(), $o->get_shipping_address_2(), $o->get_shipping_city() ?: $o->get_billing_city(), $o->get_shipping_postcode() ?: $o->get_billing_postcode())))),
+                'note' => $o->get_customer_note(),
+                'items' => $items,
+            );
+        }
+        return array('orders' => $out);
     }));
 });
 
