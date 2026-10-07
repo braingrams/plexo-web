@@ -6,7 +6,7 @@ vi.mock("@/lib/db/commerceEntities", () => ({}));
 vi.mock("@/lib/blog/savePostCore", () => ({}));
 vi.mock("@/lib/blog/redirectsDynamo", () => ({}));
 vi.mock("@/lib/blogImport/taxonomyDynamo", () => ({}));
-vi.mock("@/lib/blogImport/mediaRehostDynamo", () => ({}));
+
 vi.mock("@/lib/commerce/donations", () => ({}));
 vi.mock("@/lib/wpMigration/storeImport", () => ({}));
 vi.mock("@/lib/wpMigration/notify", () => ({}));
@@ -51,5 +51,18 @@ describe("links to moved posts", () => {
     const out = rewritePostLinks(html, moved);
     expect(performance.now() - started).toBeLessThan(50);
     expect(out).toContain('href="/blog/post-7"');
+  });
+});
+
+describe("re-hosted post images", () => {
+  it("each image gets its own file (the old key was the same for every image on a site)", async () => {
+    const { mediaKey, isCollidedMapping } = await import("@/lib/blogImport/mediaRehostDynamo");
+    const a = "https://maildrip.io/wp-content/uploads/2025/09/image-1-1024x468.png";
+    const b = "https://maildrip.io/wp-content/uploads/2024/11/best-tools.png";
+    expect(mediaKey("site", a, "png")).not.toBe(mediaKey("site", b, "png"));
+    expect(mediaKey("site", a, "png")).toBe(mediaKey("site", a, "png"));
+    // An old mapping is spotted so a re-run re-uploads it.
+    expect(isCollidedMapping(a, "https://bucket/public/blog-import/site/aHR0cHM6Ly9tYWlsZHJpcC5pby93cC1jb250ZW50L3VwbG9h.png")).toBe(true);
+    expect(isCollidedMapping(a, `https://bucket/public/${mediaKey("site", a, "png")}`)).toBe(false);
   });
 });

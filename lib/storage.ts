@@ -10,7 +10,9 @@ import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 const REGION = process.env.AWS_REGION || "us-east-1";
 let client: S3Client | null = null;
 function s3(): S3Client {
-  if (!client) client = new S3Client({ region: REGION });
+  // Adaptive retries: a migration uploads thousands of files in bursts, and S3 answers a
+  // burst with SlowDown ("Please reduce your request rate") — retry with back-off.
+  if (!client) client = new S3Client({ region: REGION, maxAttempts: 10, retryMode: "adaptive" });
   return client;
 }
 
