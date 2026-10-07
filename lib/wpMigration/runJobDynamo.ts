@@ -25,6 +25,8 @@ import type { DetectedPlugin, WpInstall, WpPostEntry, WpTermEntry } from "./type
 import * as cheerio from "cheerio";
 import { imageStem, makePostListsLive, type KnownPost } from "./livePostLists";
 import { listingLayoutFromWpHtml, postLayoutFromWpHtml, shellLayout, wpPageRole } from "./blogLayout";
+import { convertWcPage, hasWcChrome, isWooCommerce, rewriteWcChrome, storePagesFromHtml, wcPageRole } from "./woocommerce";
+import { buildStorePresentation, finishProductImport, importProductBatch, planWooCommerce, type WcPlanState } from "./storeImport";
 
 // The WordPress migration as a resumable, step-at-a-time job — same execution model as
 // lib/siteImport/runJobDynamo.ts (the dashboard tab drives it step by step; a daily cron
@@ -68,6 +70,8 @@ export interface PlanState {
   capturedApis?: string[];
   /** The blog's layouts/settings were derived from the WordPress theme (runs once). */
   blogPresentationDone?: boolean;
+  /** A WooCommerce store being moved to Plexo Commerce (lib/wpMigration/storeImport.ts). */
+  wc?: WcPlanState;
 }
 
 export interface MigrationCounts {
@@ -81,6 +85,10 @@ export interface MigrationCounts {
   assetsDone: number;
   assetsFailed: number;
   assetsSkipped: number;
+  products?: number;
+  productsDone?: number;
+  productsSkipped?: number;
+  productsFailed?: number;
 }
 
 type JobItem = EntityItem<typeof WpMigrationJob>;
@@ -285,6 +293,9 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
     else if (!blogSite.enabled) await BlogSite.patch({ templateId: job.templateId }).set({ enabled: true }).go();
   }
 
+  // ── A WooCommerce store: list its products (they move in their own step, after posts).
+  const store = isWooCommerce(install) ? await planWooCommerce(job, install.restRoot).catch(() => null) : null;
+
   // ── Redirects for every WordPress URL that doesn't map 1:1 onto a page.
   const redirects: [string, string][] = [];
   const homePrefix = homeKey === "/" ? "" : homeKey;
@@ -337,6 +348,7 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
   counts.pages = planned.size;
   counts.posts = inventory.posts.length;
   counts.assets = mediaQueued;
+  if (store) counts.products = store.count;
 
   const planState: PlanState = {
     origin,
@@ -348,6 +360,7 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
     extraPages: 0,
     frozenApis,
     capturedApis,
+    ...(store ? { wc: store.wc } : {}),
   };
 
   await Template.patch({ id: job.templateId }).set({ migratedFrom: origin, ...(install.siteName ? { name: install.siteName } : {}) }).go();
@@ -481,7 +494,8 @@ async function runPostsStep(job: JobItem, errors: string[], revalidate: Revalida
       const base = term.taxonomy === "category" ? "/blog/category" : "/blog/tag";
       await putRedirect(job.templateId, pageKeyForUrl(term.link), match ? `${base}/${match.slug}` : "/blog");
     }
-    next = "PAGES";
+    // A store's products move next (before pages, so product links resolve while copying).
+    next = plan.wc && !plan.wc.productsFinished ? "PRODUCTS" : "PAGES";
   }
   await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ counts, movedLinks, phase: next as "POSTS" }).go();
   return next;
@@ -514,6 +528,24 @@ async function ensureMigratedCampaign(job: JobItem, form: DetectedDonationForm):
     source: form.source,
   }).go();
   return { campaignId: id, name };
+}
+
+async function runProductsStep(job: JobItem, errors: string[]): Promise<string> {
+  const plan = job.planState as PlanState;
+  if (!plan.wc) return "PAGES";
+  const rows = await allPages(job.id);
+  const done = await importProductBatch(job, rows, errors);
+  const after = await allPages(job.id);
+  const products = after.filter((r) => r.kind === "PRODUCT");
+  const counts = { ...emptyCounts(), ...(job.counts as MigrationCounts) };
+  counts.productsDone = products.filter((r) => r.status === "DONE").length;
+  counts.productsSkipped = products.filter((r) => r.status === "SKIPPED").length;
+  counts.productsFailed = products.filter((r) => r.status === "FAILED").length;
+  if (done) await finishProductImport(job, after, errors);
+  await WpMigrationJob.patch({ templateId: job.templateId, id: job.id })
+    .set({ counts, planState: { ...plan, wc: plan.wc }, phase: (done ? "PAGES" : "PRODUCTS") as "PAGES" })
+    .go();
+  return done ? "PAGES" : "PRODUCTS";
 }
 
 async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
@@ -551,6 +583,30 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
         html = html.split(form.token).join(campaign.campaignId);
         donationCampaigns.push(campaign);
       }
+      // A WooCommerce store's pages keep the theme with Plexo Commerce's widgets in place
+      // of WooCommerce's (shop grid, cart, checkout, order tracking); every page's header
+      // cart icon shows Plexo's live cart.
+      let storeRole: string | null = null;
+      if (plan.wc) {
+        if (!plan.wc.storePages) {
+          const found = storePagesFromHtml(raw);
+          if (found) {
+            plan.wc.storePages = found;
+            await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ planState: { ...plan } }).go();
+          }
+        }
+        const role = wcPageRole(raw, row.sourceUrl, plan.wc.storePages ?? null);
+        const converted = role && role !== "product" ? convertWcPage(html, role) : null;
+        if (converted) {
+          html = converted;
+          storeRole = role;
+        } else if (hasWcChrome(html)) {
+          const $wc = cheerio.load(html);
+          rewriteWcChrome($wc, plan.wc.storePages?.cart ? pageKeyForUrl(plan.wc.storePages.cart) : undefined);
+          html = $wc.html();
+        }
+      }
+
       // Post lists ("Latest news", a /blog/ page's grid) show the blog's live posts in the
       // site's own card design instead of a frozen copy — lib/wpMigration/livePostLists.ts.
       let livePostLists = 0;
@@ -597,6 +653,7 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
           isFront: role.isFront,
           livePostLists,
           livePostListMax,
+          ...(storeRole ? { storeRole } : {}),
         })
         .go();
       counts.pagesDone += 1;
@@ -617,8 +674,55 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
     });
     await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ planState: { ...plan, blogPresentationDone: true } }).go();
   }
+  if (next === "ASSETS" && plan.wc && !plan.wc.storeDone) {
+    const fresh = (await WpMigrationJob.get({ templateId: job.templateId, id: job.id }).go()).data ?? job;
+    await buildStorePresentation(
+      fresh,
+      await allPages(job.id),
+      {
+        fetchTransformed: (url, path) => fetchTransformedPage(fresh, url, path),
+        putRedirect: (fromPath, toPath) => putRedirect(job.templateId, fromPath, toPath),
+      },
+      errors,
+    ).catch((err) => {
+      errors.push(`Your shop works, but its pages use Plexo's standard design — we couldn't copy the WooCommerce page design: ${err instanceof Error ? err.message : String(err)}`);
+    });
+    const freshPlan = ((await WpMigrationJob.get({ templateId: job.templateId, id: job.id }).go()).data?.planState as PlanState) ?? plan;
+    await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ planState: { ...freshPlan, wc: { ...(freshPlan.wc ?? plan.wc), storeDone: true } } }).go();
+  }
+  if (next === "ASSETS") {
+    // The blog and store layouts queue their own theme files — count them in the total the
+    // owner sees ("305 of 265" otherwise).
+    const { data: queued } = await WpMigrationAsset.query.primary({ jobId: job.id }).go({ pages: "all", attributes: ["path"] });
+    if (queued.length > counts.assets) {
+      counts.assets = queued.length;
+      await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ counts }).go();
+    }
+  }
   await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ counts, phase: next as "PAGES" }).go();
   return next;
+}
+
+/** Fetches one WordPress page and runs it through the migration's transform (links, forms, donation forms); its files are queued for copying. */
+async function fetchTransformedPage(job: JobItem, url: string, path: string): Promise<string | null> {
+  const plan = job.planState as PlanState;
+  const res = await migrationFetch(url, { headers: { Accept: "text/html" } });
+  if (!res.ok) return null;
+  const raw = await res.text();
+  const result = transformPage(raw, {
+    origin: plan.origin,
+    pageUrl: url,
+    pagePath: path,
+    pageTitle: "",
+    siteTemplateId: job.templateId,
+    movedLinks: (job.movedLinks as Record<string, string>) ?? {},
+    appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://plexo.charisol.io",
+  });
+  let html = result.html;
+  for (const form of result.donationForms) html = html.split(form.token).join((await ensureMigratedCampaign(job, form)).campaignId);
+  const limit = pLimit(10);
+  await Promise.all(result.assetPaths.map((segs) => limit(() => enqueueAsset(job.id, segs.join("/"), path))));
+  return html;
 }
 
 /** The site's migrated posts, newest first, in the shape the live-list matcher needs. */
@@ -868,6 +972,8 @@ async function runFinalizing(job: JobItem): Promise<string> {
     for (const href of ((page.internalLinks as string[] | undefined) ?? [])) {
       const key = linkKey(href);
       if (nodes[key] || assetPaths.has(key) || blogPaths.has(key) || key.startsWith("/blog") || key.startsWith("/api/")) continue;
+      // A product's page is served by Plexo Commerce at the same URL (CommerceSettings.productUrlBase).
+      if (plan.wc?.productBase && key.startsWith(`${plan.wc.productBase}/`)) continue;
       if (!unresolved.has(key)) unresolved.set(key, page.key);
     }
   }
@@ -949,6 +1055,16 @@ async function runFinalizing(job: JobItem): Promise<string> {
     counts: { ...emptyCounts(), ...(job.counts as MigrationCounts) },
     customApis: { frozen: plan.frozenApis ?? [], captured: plan.capturedApis ?? [] },
     paymentsReady: await donationPaymentsReady(job.templateId),
+    ...(plan.wc
+      ? {
+          store: {
+            productBase: plan.wc.productBase,
+            skipped: plan.wc.skipped,
+            expandedStock: plan.wc.expandedStock,
+            reviewsImported: (plan.wc as { reviewsImported?: number }).reviewsImported,
+          },
+        }
+      : {}),
   });
 
   await Template.patch({ id: job.templateId }).set({ migratedFrom: plan.origin }).go();
@@ -1009,6 +1125,8 @@ export async function processWpMigrationStep(templateId: string, jobId: string, 
       next = "POSTS";
     } else if (phase === "POSTS") {
       next = await runPostsStep(job, errors, revalidate);
+    } else if (phase === "PRODUCTS") {
+      next = await runProductsStep(job, errors);
     } else if (phase === "PAGES") {
       next = await runPagesStep(job, errors);
     } else if (phase === "ASSETS") {

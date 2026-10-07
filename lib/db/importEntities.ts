@@ -238,7 +238,7 @@ const ONE_YEAR_SECONDS = 365 * 24 * 60 * 60;
 const migrationTtl = (): number => Math.floor(Date.now() / 1000) + ONE_YEAR_SECONDS;
 
 export const WP_MIGRATION_PHASES = [
-  "PENDING", "PLANNING", "PAGES", "POSTS", "ASSETS", "FINALIZING", "COMPLETED", "PAUSED_ERROR", "FAILED", "CANCELLED",
+  "PENDING", "PLANNING", "PAGES", "POSTS", "PRODUCTS", "ASSETS", "FINALIZING", "COMPLETED", "PAUSED_ERROR", "FAILED", "CANCELLED",
 ] as const;
 
 export const WpMigrationJob = new Entity(
@@ -307,11 +307,12 @@ export const WpMigrationPage = new Entity(
       jobId: { type: "string", required: true },
       /** pageKey() of the source URL for pages, "post:<wpId>" for posts. */
       key: { type: "string", required: true },
-      kind: { type: ["WP_PAGE", "STATIC_PAGE", "POST"] as const, required: true },
+      // PRODUCT: a WooCommerce product moving to Plexo Commerce (lib/wpMigration/storeImport.ts).
+      kind: { type: ["WP_PAGE", "STATIC_PAGE", "POST", "PRODUCT"] as const, required: true },
       sourceUrl: { type: "string", required: true },
       title: { type: "string" },
       wpId: { type: "number" },
-      status: { type: ["PENDING", "DONE", "FAILED"] as const, default: "PENDING" },
+      status: { type: ["PENDING", "DONE", "FAILED", "SKIPPED"] as const, default: "PENDING" },
       /** Where it lives on Plexo now. */
       newPath: { type: "string" },
       templateId: { type: "string" },
@@ -335,6 +336,10 @@ export const WpMigrationPage = new Entity(
       /** Post lists on this page turned into live lists (lib/wpMigration/livePostLists.ts), and the largest one's size. */
       livePostLists: { type: "number" },
       livePostListMax: { type: "number" },
+      /** WooCommerce store pages: which one this is (shop, cart, checkout, account). */
+      storeRole: { type: "string" },
+      /** Products only: the Plexo Commerce product it became. */
+      commerceProductId: { type: "string" },
       /** Posts only: approved comments brought over. */
       commentCount: { type: "number" },
       error: { type: "string" },

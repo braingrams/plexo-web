@@ -143,8 +143,9 @@ const CATALOG: Record<string, CatalogEntry> = {
 
   woocommerce: {
     name: "WooCommerce",
-    outcome: "NEEDS_ATTENTION",
-    explanation: "Your shop pages were copied. Products, cart and checkout move to Plexo Commerce — finish that step before switching your domain.",
+    outcome: "NATIVE",
+    explanation:
+      "Your shop moved to Plexo Commerce: products (with their options, sale prices, SKUs and photos), categories and reviews, at the same web addresses. The shop, cart, checkout and account pages keep their design with Plexo's checkout inside. Connect Stripe or Paystack to start taking orders.",
   },
   "give": {
     name: "GiveWP",
@@ -159,6 +160,7 @@ const CATALOG: Record<string, CatalogEntry> = {
   "wpmudev-hub-connector": { name: "WPMU DEV Hub", outcome: "NOT_NEEDED", explanation: "WordPress hosting dashboard connector — nothing to move." },
   "wpmudev-pcs": { name: "WPMU DEV", outcome: "NOT_NEEDED", explanation: "WordPress hosting tool — nothing to move." },
   "nps-survey": { name: "NPS Survey", outcome: "NOT_NEEDED", explanation: "Plugin-feedback popup shown only to WordPress admins — nothing to move." },
+  "plexo-migrator": { name: "Plexo Migrator", outcome: "NOT_NEEDED", explanation: "Plexo's own helper for moving your site — delete it from WordPress once the move is done." },
   "mcp-adapter": { name: "WordPress MCP Adapter", outcome: "NOT_NEEDED", explanation: "WordPress AI-tooling bridge — Plexo has its own MCP connector." },
   jetpack: {
     name: "Jetpack",
@@ -217,6 +219,13 @@ export function pluginSlugForNamespace(namespace: string): string | null {
   if (namespace in NAMESPACE_TO_SLUG) return NAMESPACE_TO_SLUG[namespace];
   if (namespace.startsWith("wp/") || namespace.startsWith("wp-")) return null;
   if (namespace.startsWith("elementor-mcp-composer")) return "elementor-mcp-composer";
+  // WooCommerce registers many namespaces (wc/v1–v3, wc/store, wc-admin, wc-analytics,
+  // wc-telemetry, wccom-site, …) and GiveWP several (give-api, givewp, give/v1): each is
+  // the one plugin, not a separate unknown one.
+  if (/^(wc|wc-[a-z-]+|wccom-site|woocommerce)(\/|$)/.test(namespace)) return "woocommerce";
+  if (/^(give|give-api|givewp)(\/|$)/.test(namespace)) return "give";
+  // Plexo's own Migrator plugin — installed only to move the site.
+  if (namespace.startsWith("plexo-migrator")) return "plexo-migrator";
   // Unknown namespace: its first segment is almost always the plugin's own prefix.
   return namespace.split("/")[0] || null;
 }

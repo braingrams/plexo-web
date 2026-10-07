@@ -495,6 +495,8 @@ export const CommerceProductReview = new Entity(
       organizationId: { type: "string", required: true },
       productId: { type: "string", required: true },
       customerEmail: { type: "string", required: true },
+      /** Shown with the review. Reviews imported from WooCommerce have the reviewer's name but no email. */
+      customerName: { type: "string" },
       rating: { type: "number", required: true },
       body: { type: "string" },
       status: { type: ["PENDING", "APPROVED", "REJECTED"] as const, default: "PENDING" },
@@ -565,6 +567,9 @@ export const CommerceSettings = new Entity(
       // accepts and lib/paystack.ts for where this replaces a hardcoded "NGN" literal.
       currency: { type: "string", default: "NGN" },
       productDetailTemplateId: { type: "string" },
+      // Where product pages live, e.g. "/product" → /product/<slug> (a migrated WooCommerce
+      // store keeps its exact product URLs). Unset = under the storefront page (/store/<slug>).
+      productUrlBase: { type: "string" },
       // The 4 auto-provisioned storefront pages (lib/commerce/storefrontLayout.ts) — real
       // page-tree Templates (unlike productDetailTemplateId's parentId-less fragment), so the
       // slug itself always lives on the Template row, never duplicated here.

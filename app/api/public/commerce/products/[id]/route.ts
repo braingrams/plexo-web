@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { listingPriceAndStock, publicVariantView } from "@/lib/commerce/variants";
 import { EntityItem } from "electrodb";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
-import { CommerceProduct, CommerceCategory, CommerceProductRelation } from "@/lib/db/commerceEntities";
+import { CommerceProduct, CommerceCategory, CommerceProductRelation, CommerceProductReview } from "@/lib/db/commerceEntities";
 
 /** Powers the product/booking marker blocks and the product detail page — a single
  * product/service by id OR slug (the native block stores the id; a hand-authored page
@@ -35,10 +35,18 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     return NextResponse.json({ error: "Product not found." }, { status: 404 });
   }
 
-  const [{ data: category }, { data: relations }] = await Promise.all([
+  const [{ data: category }, { data: relations }, { data: reviewRows }] = await Promise.all([
     product.categoryId ? CommerceCategory.get({ templateId, id: product.categoryId }).go() : Promise.resolve({ data: null }),
     CommerceProductRelation.query.primary({ productId: product.id }).go(),
+    CommerceProductReview.query.byProduct({ productId: product.id }).go({ pages: "all" }),
   ]);
+  // Approved reviews only, newest first — name (never the email), stars, words, date.
+  const approved = reviewRows.filter((r) => r.status === "APPROVED" && r.templateId === templateId).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  const reviews = {
+    count: approved.length,
+    average: approved.length ? Math.round((approved.reduce((sum, r) => sum + (r.rating ?? 0), 0) / approved.length) * 10) / 10 : null,
+    items: approved.slice(0, 20).map((r) => ({ name: r.customerName || "Customer", rating: r.rating, body: r.body ?? "", date: r.createdAt ?? null })),
+  };
 
   const relatedIds = relations.slice(0, 4).map((r) => r.relatedProductId);
   const relatedProducts = await Promise.all(relatedIds.map((relatedId) => CommerceProduct.get({ templateId, id: relatedId }).go()));
@@ -61,6 +69,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       durationMinutes: product.durationMinutes ?? null,
       category: category ? { name: category.name, slug: category.slug } : null,
     },
+    reviews,
     relatedProducts: relatedProducts
       .map((r) => r.data)
       .filter((p): p is NonNullable<typeof p> => p !== null)

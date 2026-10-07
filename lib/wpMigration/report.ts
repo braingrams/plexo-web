@@ -46,6 +46,8 @@ export interface MigrationReport {
     filesAlreadyMissing: number;
     bytesCopied: number;
     formsReconnected: number;
+    /** WooCommerce products moved to Plexo Commerce. */
+    productsMoved?: number;
   };
   seo: { pagesChecked: number; titles: number; descriptions: number; canonicals: number; structuredData: number; robots: number };
   pages: PageReportRow[];
@@ -58,6 +60,8 @@ export interface MigrationReport {
   checklist: ChecklistItem[];
   /** Donation campaigns created from the site's donation forms. */
   donationCampaigns?: { campaignId: string; name: string }[];
+  /** A WooCommerce store moved to Plexo Commerce. */
+  store?: { productsMoved: number; productBase: string | null };
   /** True when nothing blocks switching the domain. "review" items don't block — they need a look, not a fix. */
   readyForCutover: boolean;
 }
@@ -76,8 +80,17 @@ export function buildMigrationReport(input: {
   customApis?: { frozen: string[]; captured: string[] };
   /** Whether Stripe/Paystack is connected on the new site right now. */
   paymentsReady?: boolean;
+  /** A WooCommerce store's products (lib/wpMigration/storeImport.ts). */
+  store?: {
+    productBase: string | null;
+    skipped: { name: string; reason: string; url: string | null }[];
+    expandedStock: string[];
+    reviewsImported?: number;
+  };
 }): MigrationReport {
-  const { install, pages, assets, plugins, brokenLinks } = input;
+  const { install, assets, plugins, brokenLinks } = input;
+  const productRows = input.pages.filter((p) => p.kind === "PRODUCT");
+  const pages = input.pages.filter((p) => p.kind !== "PRODUCT");
   const pageRows = pages.filter((p) => p.kind !== "POST");
   const postRows = pages.filter((p) => p.kind === "POST");
 
@@ -207,6 +220,36 @@ export function buildMigrationReport(input: {
       detail: `${brokenLinks.length} link(s) point to pages that don't exist — most were already broken on WordPress.`,
     });
   }
+  if (input.store) {
+    const moved = productRows.filter((p) => p.status === "DONE").length;
+    const failed = productRows.filter((p) => p.status === "FAILED");
+    checklist.push({
+      id: "store",
+      label: failed.length ? `${moved} products moved to your Plexo shop — ${failed.length} need another try` : `${moved} products moved to your Plexo shop`,
+      status: failed.length ? "review" : "done",
+      detail:
+        `Same addresses${input.store.productBase ? ` (${input.store.productBase}/…)` : ""}, prices, sale prices, options and variations, SKUs, photos and categories` +
+        `${input.store.reviewsImported ? `, plus ${input.store.reviewsImported} customer reviews` : ""}. Your shop, cart, checkout and account pages keep their design with Plexo's checkout inside.` +
+        (failed.length ? ` Couldn't move: ${failed.map((f) => `“${f.title}”`).join(", ")} — run the migration again or add them in Commerce → Products.` : ""),
+    });
+    checklist.push(shopPaymentsItem(input.paymentsReady === true));
+    if (input.store.skipped.length > 0) {
+      checklist.push({
+        id: "store-skipped",
+        label: `${input.store.skipped.length} product${input.store.skipped.length === 1 ? "" : "s"} weren't moved`,
+        status: "review",
+        detail: input.store.skipped.map((p) => `“${p.name}” is ${p.reason}`).join(". ") + ".",
+      });
+    }
+    if (input.store.expandedStock.length > 0) {
+      checklist.push({
+        id: "store-stock",
+        label: "Check stock for products sold in “any” size or colour",
+        status: "review",
+        detail: `On WooCommerce, ${input.store.expandedStock.map((n) => `“${n}”`).join(", ")} shared one stock count across every size or colour; on Plexo each option has its own. Set each option's stock in Commerce → Products.`,
+      });
+    }
+  }
   checklist.push({
     id: "publish",
     label: "Preview your site on Plexo",
@@ -233,6 +276,7 @@ export function buildMigrationReport(input: {
       filesAlreadyMissing: missingOnSource.length,
       bytesCopied,
       formsReconnected: forms.length,
+      ...(input.store ? { productsMoved: productRows.filter((p) => p.status === "DONE").length } : {}),
     },
     seo,
     pages: rows,
@@ -244,6 +288,7 @@ export function buildMigrationReport(input: {
     plugins,
     checklist,
     donationCampaigns: uniqueCampaigns,
+    ...(input.store ? { store: { productsMoved: productRows.filter((p) => p.status === "DONE").length, productBase: input.store.productBase } } : {}),
     readyForCutover: !checklist.some((c) => c.status === "blocked"),
   };
 }
@@ -269,9 +314,25 @@ export function donationPaymentsItem(campaigns: { name: string }[], paymentsRead
       };
 }
 
+/** The "your shop needs a payment account" checklist item — rebuilt live whenever the report is viewed. */
+export function shopPaymentsItem(paymentsReady: boolean): ChecklistItem {
+  return paymentsReady
+    ? { id: "shop-payments", label: "Your shop takes payments on Plexo", status: "done", detail: "Orders are paid through your connected payment account and show up in Commerce → Orders." }
+    : {
+        id: "shop-payments",
+        label: "Connect payments so your shop can take orders",
+        status: "blocked",
+        detail: "Connect Stripe or Paystack in Commerce → Settings → Payments. Until then shoppers can browse and fill their cart but not pay — so switching your domain waits for this.",
+      };
+}
+
 /** Re-evaluates the parts of a stored report that depend on things the owner may have done since (connecting payments). */
 export function refreshReport(report: MigrationReport, paymentsReady: boolean, paymentIssue?: string | null): MigrationReport {
-  if (!report.donationCampaigns?.length) return report;
-  const checklist = report.checklist.map((item) => (item.id === "payments" ? donationPaymentsItem(report.donationCampaigns!, paymentsReady, paymentIssue) : item));
+  if (!report.donationCampaigns?.length && !report.store) return report;
+  const checklist = report.checklist.map((item) => {
+    if (item.id === "payments" && report.donationCampaigns?.length) return donationPaymentsItem(report.donationCampaigns, paymentsReady, paymentIssue);
+    if (item.id === "shop-payments") return shopPaymentsItem(paymentsReady);
+    return item;
+  });
   return { ...report, checklist, readyForCutover: !checklist.some((c) => c.status === "blocked") };
 }
