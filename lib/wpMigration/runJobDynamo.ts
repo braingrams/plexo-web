@@ -18,7 +18,7 @@ import { CommerceDonationCampaign, CommerceSettings } from "@/lib/db/commerceEnt
 import { ensureDonationsReady, resolveDonationGateway } from "@/lib/commerce/donations";
 import { fetchSourceAsset, storeMigratedAsset } from "./assets";
 import { buildPluginReport, pluginSlugsFromHtml } from "./pluginCatalog";
-import { fetchJson, migrationFetch, restUrl } from "./http";
+import { fetchJson, migrationFetch, restUrl, wordpressRedirectTarget } from "./http";
 import { makeOriginRewriter, pageKey, pageKeyForUrl, pathSegments, resolveAssetOwner } from "./urlSpace";
 import { buildMigrationReport } from "./report";
 import type { DetectedPlugin, WpInstall, WpMediaEntry, WpPostEntry, WpPostStub, WpTermEntry } from "./types";
@@ -171,6 +171,24 @@ function inlineFileSaver(job: JobItem) {
   return async (relPath: string, body: Buffer, contentType: string) => {
     await storeMigratedAsset(job.id, job.templateId, relPath, body, contentType);
   };
+}
+
+/** A redirect target on the WordPress site itself becomes a path (it moves with the site); anything else stays absolute. */
+function sameSiteTarget(target: string, origin: string): string {
+  try {
+    const url = new URL(target);
+    const site = new URL(origin);
+    if (url.hostname.replace(/^www\./, "") === site.hostname.replace(/^www\./, "")) return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    // leave as-is
+  }
+  return target;
+}
+
+/** What a redirecting page holds (the serve route redirects before using it — this is only a fallback). */
+function redirectPageHtml(target: string): string {
+  const safe = target.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0;url=${safe}"><title>Redirecting…</title></head><body><a href="${safe}">Continue</a></body></html>`;
 }
 
 /** A page's address on WordPress — what relative URLs inside it were relative to. */
@@ -715,6 +733,18 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
   for (const row of pending) {
     if (Date.now() - started > STEP_BUDGET_MS) break;
     try {
+      // A page WordPress redirects elsewhere (Redirection, Rank Math…) stays a redirect —
+      // copying wherever it lands would put another site's page at this address.
+      const redirect = row.key === "/" || !row.templateId ? null : await wordpressRedirectTarget(row.sourceUrl);
+      if (redirect) {
+        const target = sameSiteTarget(redirect.target, plan.origin);
+        await Template.patch({ id: row.templateId! })
+          .set({ redirectTo: target, sourceType: "RAW_UPLOAD", compiledHtml: redirectPageHtml(target) })
+          .go();
+        await WpMigrationPage.patch({ jobId: job.id, key: row.key }).set({ status: "DONE", newPath: servedPath(row.key, row.sourceUrl), sourceFacts: { redirect: target } }).go();
+        counts.pagesDone += 1;
+        continue;
+      }
       const res = await migrationFetch(row.sourceUrl, { headers: { Accept: "text/html" } });
       if (!res.ok) throw new Error(`WordPress answered ${res.status} for this page.`);
       const raw = await res.text();
@@ -1167,6 +1197,13 @@ async function runFinalizing(job: JobItem): Promise<string> {
       const url = `${plan.origin}${key === "/" ? "/" : `${encodeURI(key)}/`}`;
       let ok = false;
       let finalUrl = url;
+      // A link WordPress only redirects (a moved page, a shortcut like /help → WhatsApp)
+      // becomes the same redirect on Plexo, not a copy of wherever it lands.
+      const redirect = await wordpressRedirectTarget(url).catch(() => null);
+      if (redirect) {
+        await putRedirect(job.templateId, key, sameSiteTarget(redirect.target, plan.origin));
+        continue;
+      }
       try {
         let res = await migrationFetch(url, { headers: { Accept: "text/html" } });
         if (res.status === 404) {

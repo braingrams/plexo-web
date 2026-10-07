@@ -61,3 +61,25 @@ export async function fetchJson<T>(url: string): Promise<{ data: T; headers: Hea
     return null;
   }
 }
+
+/**
+ * Where WordPress sends a visitor who opens this URL, when that's somewhere else — a
+ * redirect set up with Redirection, Rank Math, Yoast Premium or the server config. Null
+ * when the page is served normally, or the only "redirect" is cosmetic (adding a trailing
+ * slash, http → https, www).
+ */
+export async function wordpressRedirectTarget(url: string): Promise<{ target: string; status: number } | null> {
+  const res = await migrationFetch(url, { headers: { Accept: "text/html" }, returnRedirects: true });
+  if (res.status < 300 || res.status >= 400) return null;
+  const location = res.headers.get("location");
+  if (!location) return null;
+  let target: URL;
+  try {
+    target = new URL(location, url);
+  } catch {
+    return null;
+  }
+  const comparable = (u: URL) => `${u.hostname.replace(/^www\./, "")}${decodeURIComponent(u.pathname).replace(/\/+$/, "")}${u.search}`;
+  if (comparable(target) === comparable(new URL(url))) return null;
+  return { target: target.toString(), status: res.status };
+}
