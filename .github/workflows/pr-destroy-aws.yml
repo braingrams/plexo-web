@@ -126,24 +126,15 @@ jobs:
           # fromAsset()/Source.asset() call above, so it needs its own placeholder here too.
           echo "// placeholder — this stack is being destroyed" > .open-next/assets/commerce.js
 
-      - name: Stop any in-flight stack operation
-        # Cancelling the GitHub run above kills `cdk deploy`, but CloudFormation keeps
-        # applying the update on its own. Stop it rather than wait it out: an update is
-        # cancelled (rolls back), a first-time create is deleted outright (DeleteStack is
-        # allowed mid-create and is the quickest way out). Anything else in progress (a
-        # rollback already settling) is waited for, since a destroy would otherwise fail
-        # with "cannot be deleted while in status *_IN_PROGRESS".
+      - name: Wait for any in-flight stack operation to finish
+        # Cancelling the GitHub run above kills `cdk deploy`, but CloudFormation carries on
+        # with the create/update by itself — and a destroy fails while the stack is in any
+        # *_IN_PROGRESS status. So wait for it to settle. (This workflow's role is
+        # deliberately read-only on CloudFormation — every stack change goes through
+        # `cdk destroy` below — so it can't cancel or delete the stack itself; an earlier
+        # version tried and failed with AccessDenied on cloudformation:DeleteStack.)
         run: |
           FULL_STACK="${STACK_ID}-compute-stack"
-          STATUS=$(aws cloudformation describe-stacks --stack-name "$FULL_STACK" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
-          case "$STATUS" in
-            UPDATE_IN_PROGRESS)
-              echo "Cancelling the in-flight update on $FULL_STACK"
-              aws cloudformation cancel-update-stack --stack-name "$FULL_STACK" || true ;;
-            CREATE_IN_PROGRESS)
-              echo "Stack was still being created — deleting it directly"
-              aws cloudformation delete-stack --stack-name "$FULL_STACK" ;;
-          esac
           for attempt in $(seq 1 60); do
             STATUS=$(aws cloudformation describe-stacks --stack-name "$FULL_STACK" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
             case "$STATUS" in
