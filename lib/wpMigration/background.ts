@@ -12,7 +12,8 @@ export const MAX_BACKGROUND_HOPS = 2000;
  * disconnecting).
  */
 export async function continueInBackground(templateId: string, jobId: string, hop = 0): Promise<void> {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  // This deployment's own address (a PR preview must hand off to itself, not to staging).
+  const base = process.env.PLEXO_SELF_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   await fetch(`${base}/api/internal/wp-migration/process`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-cron-secret": process.env.CRON_SECRET ?? "" },
