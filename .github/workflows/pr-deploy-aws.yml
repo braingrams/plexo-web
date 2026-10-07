@@ -7,9 +7,10 @@ on:
 # One CloudFormation operation per PR stack at a time. Without this, pushing commits in
 # quick succession (or merging while a deploy is still running) started overlapping runs
 # against the same stack, and every one after the first failed with "is in
-# UPDATE_IN_PROGRESS state" — including the PR-close teardown (PR #50). Shared with
-# pr-destroy-aws.yml; queued, never cancelled mid-deploy (a cancelled CloudFormation update
-# rolls back slowly and blocks the next run anyway).
+# UPDATE_IN_PROGRESS state" (PR #50). Pushes queue rather than cancel each other (a
+# cancelled CloudFormation update rolls back slowly and blocks the next run anyway). When
+# the PR is merged/closed, pr-destroy-aws.yml cancels whatever is still running here and
+# tears the stack down instead of waiting for a deploy nobody will use.
 concurrency:
   group: pr-preview-stack-${{ github.event.number }}
   cancel-in-progress: false
