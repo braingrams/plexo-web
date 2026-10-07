@@ -265,6 +265,8 @@ export const WpMigrationJob = new Entity(
       counts: { type: "any" },
       /** Working state carried between phases — see lib/wpMigration/runJobDynamo.ts's PlanState. */
       planState: { type: "any" },
+      /** Steps in a row that hit a temporary AWS error (throttling, a timeout) and were retried rather than paused. */
+      transientRetries: { type: "number" },
       /** DetectedPlugin[] — what happened to each WordPress plugin. */
       plugins: { type: "any" },
       /** Final verification report, written by the FINALIZING phase. */

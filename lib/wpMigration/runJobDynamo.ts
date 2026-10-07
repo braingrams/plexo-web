@@ -102,6 +102,35 @@ function isConditionalCheckFailure(err: unknown): boolean {
   return anyErr?.name === "ConditionalCheckFailedException" || anyErr?.cause?.name === "ConditionalCheckFailedException";
 }
 
+const TRANSIENT_AWS_ERRORS = new Set([
+  "ProvisionedThroughputExceededException",
+  "ThrottlingException",
+  "RequestLimitExceeded",
+  "InternalServerError",
+  "ServiceUnavailable",
+  "TransactionConflictException",
+  "TimeoutError",
+]);
+
+/** A temporary AWS hiccup (throttling, a blip) rather than something wrong with the site — worth simply retrying. */
+export function isTransientAwsError(err: unknown): boolean {
+  const e = err as { name?: string; message?: string; cause?: { name?: string } } | null;
+  if (!e) return false;
+  if (TRANSIENT_AWS_ERRORS.has(e.name ?? "") || TRANSIENT_AWS_ERRORS.has(e.cause?.name ?? "")) return true;
+  return /Throughput exceeds|Rate exceeded|throttl/i.test(e.message ?? "");
+}
+
+const MAX_TRANSIENT_RETRIES = 5;
+
+/** What the owner reads when a step stops — never a raw database error. */
+export function stepErrorMessage(phase: string, err: unknown): string {
+  const where = phase === "PLANNING" || phase === "PENDING" ? "Reading your WordPress site" : `The ${phase.toLowerCase()} step`;
+  if (isTransientAwsError(err)) return `${where} paused because Plexo was briefly busy saving your site.`;
+  const message = err instanceof Error ? err.message : String(err);
+  if (/DynamoDB|electrodb/i.test(message)) return `${where} stopped because Plexo couldn't save part of your site.`;
+  return `${where} stopped: ${message}`;
+}
+
 function emptyCounts(): MigrationCounts {
   return { pages: 0, pagesDone: 0, pagesFailed: 0, posts: 0, postsDone: 0, postsFailed: 0, assets: 0, assetsDone: 0, assetsFailed: 0, assetsSkipped: 0 };
 }
@@ -232,6 +261,8 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
     // unreachable probe just means no fingerprint
   }
 
+  const pageLimit = pLimit(8);
+
   // ── Page tree: static pages + WordPress pages, keyed by their exact path.
   type Planned = { key: string; url: string; title: string; kind: "WP_PAGE" | "STATIC_PAGE"; wpId?: number; order: number };
   const planned = new Map<string, Planned>();
@@ -273,16 +304,19 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
 
   await Promise.all(
     Array.from(planned.values()).map((p) =>
-      WpMigrationPage.put({ id: randomUUID(), jobId: job.id, key: p.key, kind: p.kind, sourceUrl: p.url, title: p.title, wpId: p.wpId, templateId: nodes[p.key], status: "PENDING" }).go(),
+      pageLimit(() => WpMigrationPage.put({ id: randomUUID(), jobId: job.id, key: p.key, kind: p.kind, sourceUrl: p.url, title: p.title, wpId: p.wpId, templateId: nodes[p.key], status: "PENDING" }).go()),
     ),
   );
 
   // ── Posts become Plexo Blog posts; their old URLs are remembered so pages link straight to the new ones.
   const movedLinks: Record<string, string> = {};
   const limit = pLimit(8);
+  // Each post row carries the whole post (~20 KB on a typical blog) and they all share this
+  // job's partition, which DynamoDB caps at ~1 MB/s — a few at a time, or a big blog throttles.
+  const postLimit = pLimit(3);
   await Promise.all(
     inventory.posts.map((post) =>
-      limit(async () => {
+      postLimit(async () => {
         movedLinks[pageKeyForUrl(post.link)] = `/blog/${post.slug}`;
         await WpMigrationPage.put({ id: randomUUID(), jobId: job.id, key: `post:${post.id}`, kind: "POST", sourceUrl: post.link, title: post.title, wpId: post.id, status: "PENDING", data: post }).go();
       }),
@@ -330,13 +364,16 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
   await Promise.all(
     inventory.media.map((m) =>
       limit(async () => {
+        let segments: string[];
         try {
-          const segments = pathSegments(m.sourceUrl);
+          segments = pathSegments(m.sourceUrl);
           if (new URL(m.sourceUrl).origin !== origin || segments.length === 0) return;
-          if (await enqueueAsset(job.id, segments.join("/"), "media-library")) mediaQueued += 1;
         } catch {
-          // a media URL on another host (offloaded to a CDN) is left where it is
+          return; // a malformed media URL
         }
+        // a media URL on another host (offloaded to a CDN) was left where it is above; a
+        // failed save here is a real error, not a file to drop silently
+        if (await enqueueAsset(job.id, segments.join("/"), "media-library")) mediaQueued += 1;
       }),
     ),
   );
@@ -1145,14 +1182,25 @@ export async function processWpMigrationStep(templateId: string, jobId: string, 
     } else {
       next = phase;
     }
-    await WpMigrationJob.patch({ templateId, id: jobId }).set({ processing: false, lastHeartbeatAt: new Date().toISOString(), errors: errors.slice(-200) }).go();
+    await WpMigrationJob.patch({ templateId, id: jobId })
+      .set({ processing: false, lastHeartbeatAt: new Date().toISOString(), errors: errors.slice(-200), ...(job.transientRetries ? { transientRetries: 0 } : {}) })
+      .go();
     return { done: TERMINAL.has(next), phase: next };
   } catch (err) {
-    errors.push(`${phase === "PLANNING" || phase === "PENDING" ? "Reading your WordPress site" : `The ${phase.toLowerCase()} step`} stopped: ${err instanceof Error ? err.message : String(err)}`);
+    // A throttle or blip: every step is safe to re-run, so try again (after a short
+    // back-off) instead of stopping the owner's migration on something that isn't theirs.
+    const retries = job.transientRetries ?? 0;
+    if (isTransientAwsError(err) && retries < MAX_TRANSIENT_RETRIES) {
+      await new Promise((r) => setTimeout(r, 2000 * (retries + 1)));
+      await WpMigrationJob.patch({ templateId, id: jobId }).set({ processing: false, lastHeartbeatAt: new Date().toISOString(), transientRetries: retries + 1 }).go();
+      return { done: false, phase };
+    }
+    errors.push(stepErrorMessage(phase, err));
     await WpMigrationJob.patch({ templateId, id: jobId })
       .set({
         phase: "PAUSED_ERROR",
         processing: false,
+        transientRetries: 0,
         errors: errors.slice(-200),
         lastHeartbeatAt: new Date().toISOString(),
         planState: { ...((job.planState as object | undefined) ?? {}), pausedIn: phase === "PENDING" ? "PLANNING" : phase },
