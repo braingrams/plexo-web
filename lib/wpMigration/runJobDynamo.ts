@@ -54,6 +54,10 @@ const POSTS_PER_STEP = 40;
 const POST_CONCURRENCY = 4;
 const ASSET_CONCURRENCY = 6;
 const ASSETS_PER_STEP = 150;
+/** A file WordPress keeps throttling is retried in later steps this many times before it's reported. */
+const MAX_ASSET_ATTEMPTS = 6;
+/** After the host throttles, the step stops starting downloads and pauses this long before handing on. */
+const THROTTLE_BACKOFF_MS = 10_000;
 // Pages found by following links that the REST inventory didn't list (custom post types,
 // archives a plugin generates). Bounded so a site with an unbounded URL space (faceted
 // search, calendars) can't keep a job alive forever.
@@ -1079,6 +1083,7 @@ async function runAssetsStep(job: JobItem): Promise<string> {
   const counts = { ...emptyCounts(), ...(job.counts as MigrationCounts) };
   const started = Date.now();
   const limit = pLimit(ASSET_CONCURRENCY);
+  let throttled = false;
 
   const { data: pending } = await WpMigrationAsset.query
     .primary({ jobId: job.id })
@@ -1089,7 +1094,7 @@ async function runAssetsStep(job: JobItem): Promise<string> {
   await Promise.all(
     batch.map((asset) =>
       limit(async () => {
-        if (Date.now() - started > STEP_BUDGET_MS) return;
+        if (Date.now() - started > STEP_BUDGET_MS || throttled) return;
         const segments = asset.path.split("/");
         const owner = resolveAssetOwner(pageKeys, segments);
         if (!owner || !nodes[owner.ownerKey]) {
@@ -1099,6 +1104,13 @@ async function runAssetsStep(job: JobItem): Promise<string> {
         }
         const fetched = await fetchSourceAsset(plan.origin, segments);
         const optional = (asset.discoveredFrom ?? "").startsWith(OPTIONAL_PREFIX);
+        if (!fetched.ok && fetched.retryable && (asset.attempts ?? 0) + 1 < MAX_ASSET_ATTEMPTS) {
+          // The host is rate-limiting (WP Engine, Wordfence, a busy shared host): leave it
+          // queued for a later step and ease off for the rest of this one.
+          throttled = true;
+          await WpMigrationAsset.patch({ jobId: job.id, path: asset.path }).set({ attempts: (asset.attempts ?? 0) + 1, error: fetched.reason }).go();
+          return;
+        }
         if (!fetched.ok) {
           // An optional lazy-load candidate that doesn't exist simply isn't part of this site.
           if (optional) {
@@ -1132,6 +1144,8 @@ async function runAssetsStep(job: JobItem): Promise<string> {
       }),
     ),
   );
+
+  if (throttled) await new Promise((r) => setTimeout(r, THROTTLE_BACKOFF_MS));
 
   const { data: remaining } = await WpMigrationAsset.query
     .primary({ jobId: job.id })

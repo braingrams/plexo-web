@@ -373,6 +373,8 @@ export const WpMigrationAsset = new Entity(
       status: { type: ["PENDING", "DONE", "FAILED", "SKIPPED"] as const, default: "PENDING" },
       /** Where it was first referenced — a page key, a stylesheet path, or "media-library". */
       discoveredFrom: { type: "string" },
+      /** Downloads tried while WordPress was throttling or busy; the file stays queued until MAX_ASSET_ATTEMPTS. */
+      attempts: { type: "number" },
       ownerTemplateId: { type: "string" },
       relPath: { type: "string" },
       contentType: { type: "string" },
