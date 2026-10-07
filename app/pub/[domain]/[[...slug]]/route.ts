@@ -6,6 +6,7 @@ import { resolveHideBranding, canWhiteLabel } from "@/lib/subscription";
 import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
+import { fillLatestPostLists } from "@/lib/pub/livePostQueries";
 import { Template, TemplateAsset, BlogSite, PublishedDomain } from "@/lib/db/contentEntities";
 import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
 import { getStorefrontSlug, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
@@ -543,6 +544,11 @@ export async function GET(
 
   if (remainingSegments.length === 0 || isIndexAlias) {
     const requestUrl = new URL(request.url);
+
+    // A page whose job moved elsewhere (a migrated WordPress "posts page" → the live blog).
+    if (cursor.redirectTo && matchedSegments > 0) {
+      return NextResponse.redirect(new URL(cursor.redirectTo, request.url), 301);
+    }
     const pagePathForRedirects = matchedSegments === 0 ? "" : `/${slugSegments.slice(0, matchedSegments).join("/")}`;
 
     // WordPress shortlinks (?p=123 for posts, ?page_id=45 for pages) work on any page of a
@@ -589,6 +595,9 @@ export async function GET(
     let html = isNestedRawPage
       ? injectBaseHref(cursor.compiledHtml, `/${pageSegments.join("/")}/`)
       : cursor.compiledHtml;
+    // Post lists carried over from WordPress ("Latest news", a posts grid) show the blog's
+    // current posts in the site's own card design — see lib/pub/blogLivePostLists.ts.
+    html = await fillLatestPostLists(html, published.templateId);
 
     const canonicalUrl = `https://${rawDomain}/${pageSegments.join("/")}${cursor.urlTrailingSlash && pageSegments.length > 0 ? "/" : ""}`;
     html = injectSeoTags(html, {

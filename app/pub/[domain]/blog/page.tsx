@@ -2,11 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
 import { listPublishedPosts } from "@/lib/blog/queriesDynamo";
-import { Template } from "@/lib/db/contentEntities";
 import { listingMetadata, listingJsonLd } from "@/lib/blog/seo";
 import { BlogStyles, SiteHeader, SiteFooter, PostCard, Pagination, EmptyState, JsonLd } from "@/lib/pub/blogTheme";
-import { hasBlogMarker, substituteBlogMarkers } from "@/lib/pub/blogLayoutRender";
-import { buildPostListFragment } from "@/lib/pub/blogLayoutFragments";
+import { ListingInLayout, loadListingLayoutHtml } from "@/lib/pub/blogListingLayout";
 
 export const revalidate = 60;
 
@@ -39,25 +37,19 @@ export default async function BlogIndexPage({ params }: { params: Promise<Params
   // prisma/schema.prisma's Template.isBlogLayout comment. Scoped to this page (page 1)
   // only; paginated/category/tag/author archive pages still use the default theme, same
   // as any site that hasn't designed a listing layout at all.
-  const layoutTemplate = site.blogSite.listingLayoutTemplateId
-    ? (await Template.get({ id: site.blogSite.listingLayoutTemplateId }).go()).data
-    : null;
-
   const blogSiteView = { title: site.blogSite.title ?? "Blog", description: site.blogSite.description ?? null };
 
-  if (layoutTemplate && hasBlogMarker(layoutTemplate.compiledHtml, "postList")) {
-    const html = substituteBlogMarkers(layoutTemplate.compiledHtml, { postList: buildPostListFragment(result.posts, "/blog") });
+  const layoutHtml = await loadListingLayoutHtml(site.blogSite);
+  if (layoutHtml) {
     return (
-      <>
-        {/* The substituted post-card fragments are styled entirely by BlogStyles'
-            plexo-post-card__* classes — they carry no styling of their own. Its selectors
-            are all namespaced so they don't collide with the custom layout's own
-            builder-generated markup. */}
-        <BlogStyles appearance={site.blogSite} />
-        {/* eslint-disable-next-line react/no-danger */}
-        <div dangerouslySetInnerHTML={{ __html: html }} />
-        <JsonLd items={listingJsonLd(domain, blogSiteView, result.posts)} />
-      </>
+      <ListingInLayout
+        layoutHtml={layoutHtml}
+        blogSite={site.blogSite}
+        siteTemplateId={site.published.templateId}
+        posts={result.posts}
+        options={{ pagination: { page: result.page, totalPages: result.totalPages, buildHref: (p) => (p === 1 ? "/blog" : `/blog/page/${p}`) } }}
+        jsonLd={listingJsonLd(domain, blogSiteView, result.posts)}
+      />
     );
   }
 
