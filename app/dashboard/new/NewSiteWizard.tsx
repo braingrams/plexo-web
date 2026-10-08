@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AI_UNREACHABLE } from "@/lib/ai/requestErrors";
+import { checkAiCredits, generateWithProgress, type AiRequestBody } from "@/lib/ai/clientGenerate";
 import type { DragEvent, FormEvent } from "react";
 import Link from "next/link";
 import { CustomSelect } from "../../_components/CustomSelect";
@@ -276,6 +278,10 @@ export function NewSiteWizard() {
   // the same framing SOL's own ask_user_question uses for this exact choice).
   const [pageType, setPageType] = useState<"html" | "builder">("html");
   const [aiGenerating, setAiGenerating] = useState(false);
+  // Streamed while the AI writes the page (lib/ai/clientGenerate.ts): how much so far, and
+  // whether it's on a second pass after a first draft came back cut off.
+  const [aiProgress, setAiProgress] = useState<{ characters: number; attempt: number } | null>(null);
+  const [aiStage, setAiStage] = useState<"checking" | "writing" | "saving" | null>(null);
   // AI is a per-ApiKey setting (Settings → AI), not a single account-wide flag — "enabled"
   // means at least one active key has useAi:true. Checked once, the first time the AI tab
   // is opened, so a first-time user is asked to turn it on right here instead of hitting a
@@ -289,6 +295,12 @@ export function NewSiteWizard() {
   const [uploading, setUploading] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+  // The card is tall and the action buttons sit low in it: bring a new error into view,
+  // or it appears off-screen above the button that caused it and looks like nothing happened.
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [error]);
   const [template, setTemplate] = useState<CreatedTemplate | null>(null);
 
   const [baseDomain, setBaseDomain] = useState("plexo.site");
@@ -411,26 +423,33 @@ export function NewSiteWizard() {
     }
     setError(null);
     setAiGenerating(true);
+    setAiProgress(null);
     try {
-      const genRes = await fetch("/api/v1/ai/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": "workspace-internal" },
-        body: JSON.stringify(
-          pageType === "html"
-            ? { mode: "generate_raw_html", prompt: aiPrompt.trim(), templateKind: "LANDING_PAGE", context: null, tier: aiTier }
-            : { mode: "generate_layout", prompt: aiPrompt.trim(), templateKind: "LANDING_PAGE", context: BLANK_DESIGN_JSON, tier: aiTier },
-        ),
-      });
-      const genData = await genRes.json().catch(() => ({}));
-      if (!genRes.ok) {
-        // "AI is not enabled for this account" is the one error here a first-time user is
-        // actually likely to hit (AI access is opt-in per account, set up in Settings —
-        // same requirement every other in-dashboard AI feature already has) — point them
-        // at the fix instead of leaving a bare permission error on their very first action.
-        const hint = genRes.status === 403 ? " Enable AI for your account in Settings, then try again." : "";
-        setError((genData.error ?? "Failed to generate your site.") + hint);
+      const request: AiRequestBody =
+        pageType === "html"
+          ? { mode: "generate_raw_html", prompt: aiPrompt.trim(), templateKind: "LANDING_PAGE", context: null, tier: aiTier }
+          : { mode: "generate_layout", prompt: aiPrompt.trim(), templateKind: "LANDING_PAGE", context: BLANK_DESIGN_JSON, tier: aiTier };
+
+      // Confirm the account can afford it before anything runs.
+      setAiStage("checking");
+      const credits = await checkAiCredits(request);
+      if (credits && !credits.enough) {
+        setError(credits.message ?? "You don't have enough AI credits for this.");
         return;
       }
+
+      setAiStage("writing");
+      let genData: { summary: string; result: unknown };
+      try {
+        genData = await generateWithProgress(request, setAiProgress);
+      } catch (err) {
+        // "AI is not enabled for this account" is the one error a first-time user is likely
+        // to hit — point them at the fix instead of leaving a bare permission error.
+        const message = err instanceof Error ? err.message : "Failed to generate your site.";
+        setError(/not enabled/i.test(message) ? `${message} Enable AI for your account in Settings, then try again.` : message);
+        return;
+      }
+      setAiStage("saving");
 
       const name = aiPrompt.trim().slice(0, 60);
       const publishRes = await fetch(pageType === "html" ? "/api/v1/templates/upload-raw" : "/api/v1/publish", {
@@ -448,8 +467,13 @@ export function NewSiteWizard() {
         return;
       }
       advanceToConnect({ id: publishData.templateId, name: publishData.name });
+    } catch {
+      // The request never got an answer (connection dropped, or the browser gave up).
+      setError(AI_UNREACHABLE);
     } finally {
       setAiGenerating(false);
+      setAiStage(null);
+      setAiProgress(null);
     }
   }
 
@@ -550,9 +574,18 @@ export function NewSiteWizard() {
           }}
         >
           {error && (
-            <p style={{ fontSize: "12.5px", color: "var(--danger)", margin: "0 0 18px" }} role="alert">
-              {error}
-            </p>
+            <div
+              ref={errorRef}
+              role="alert"
+              style={{
+                display: "flex", gap: 10, alignItems: "flex-start", margin: "0 0 18px", padding: "12px 14px", borderRadius: 10,
+                border: "1px solid rgba(248,113,113,0.45)", background: "rgba(248,113,113,0.08)", color: "#fca5a5", fontSize: "13px", lineHeight: 1.5,
+              }}
+            >
+              <span aria-hidden="true" style={{ fontWeight: 800 }}>!</span>
+              <span style={{ flex: 1 }}>{error}</span>
+              <button type="button" onClick={() => setError(null)} aria-label="Dismiss" style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+            </div>
           )}
 
           {/* Step 1 — Start */}
@@ -794,12 +827,23 @@ export function NewSiteWizard() {
                         disabled={aiGenerating || !aiPrompt.trim() || (pageType === "html" && !agreed)}
                         style={{ ...primaryButtonStyle(!aiGenerating && !!aiPrompt.trim() && (pageType !== "html" || agreed)), alignSelf: "flex-start", cursor: aiGenerating ? "wait" : "pointer" }}
                       >
-                        {aiGenerating ? "Generating your site…" : "Generate my site"}
+                        {aiGenerating ? (aiStage === "checking" ? "Checking your AI credits…" : aiStage === "saving" ? "Saving your site…" : "Writing your site…") : "Generate my site"}
                       </button>
-                      {aiGenerating && (
-                        <p style={{ fontSize: "11.5px", color: "var(--text-faint)", margin: 0 }}>
-                          This can take up to a minute for a full layout.
-                        </p>
+                      {aiGenerating && aiStage === "writing" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 420 }} aria-live="polite">
+                          <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                            <div className="plexo-ai-progress" style={{ height: "100%", width: "40%", borderRadius: 999, background: "var(--brand)" }} />
+                          </div>
+                          <p style={{ fontSize: "11.5px", color: "var(--text-faint)", margin: 0 }}>
+                            {!aiProgress || aiProgress.characters === 0
+                              ? "Planning your page…"
+                              : aiProgress.attempt > 1
+                                ? `The first draft ran long — writing the full version (${aiProgress.characters.toLocaleString()} characters so far)…`
+                                : `Writing your page — ${aiProgress.characters.toLocaleString()} characters so far…`}
+                            {" "}A full page usually takes one to three minutes; you can watch it come together here.
+                          </p>
+                          <style>{`@keyframes plexoAiSlide{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}.plexo-ai-progress{animation:plexoAiSlide 1.4s ease-in-out infinite}`}</style>
+                        </div>
                       )}
                     </>
                   )}

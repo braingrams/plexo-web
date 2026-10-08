@@ -1,7 +1,21 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
 import { prepareMessagesTurn, prepareConfirmTurn, type StreamFrame, type TurnEmitter } from "@/lib/ai/solChatHandler";
+import { prepareStreamedGeneration, type GenerationFrame } from "@/lib/ai/streamGeneration";
+import { loadSecretsFromSsm } from "@/lib/ssmEnv";
 import { resolveSessionUser, parseCookies } from "./sessionAuth";
+
+// App secrets (e.g. the key that decrypts an account's own stored AI provider key) come
+// from SSM, loaded once per cold start — the same backfill instrumentation.ts runs for the
+// main server. Only the page-generation route needs them.
+let secretsLoaded: Promise<void> | null = null;
+function ensureSecrets(): Promise<void> {
+  secretsLoaded ??= loadSecretsFromSsm().catch((err) => {
+    secretsLoaded = null; // retry on the next request rather than staying broken
+    throw err;
+  });
+  return secretsLoaded;
+}
 
 // SOL chat-turn Lambda handler, behind a Function URL with `invokeMode: RESPONSE_STREAM`
 // (cdk/lib/compute-stack.ts's `solChatFn.addFunctionUrl`). A plain `handler: async (event)
@@ -100,6 +114,9 @@ function parseEvent(event: APIGatewayProxyEventV2): ParsedRequest {
 // exactly that subtree here and leave the rest of `api/v1/sol/*` on the default (serverFn)
 // behavior, with no path collision. See compute-stack.ts's matching CloudFront behavior.
 const MESSAGES_RE = /^\/api\/v1\/sol\/chat\/conversations\/([^/]+)\/messages\/?$/;
+// AI page generation, streamed (lib/ai/streamGeneration.ts) — its own CloudFront path
+// (api/v1/ai/stream/*) pointed at this same streaming Lambda.
+const AI_GENERATE_RE = /^\/api\/v1\/ai\/stream\/generate\/?$/;
 const CONFIRM_RE = /^\/api\/v1\/sol\/chat\/conversations\/([^/]+)\/messages\/([^/]+)\/confirm\/?$/;
 
 export const handler = awslambda.streamifyResponse(async (event: APIGatewayProxyEventV2, responseStream: awslambda.HttpResponseStream) => {
@@ -118,6 +135,11 @@ export const handler = awslambda.streamifyResponse(async (event: APIGatewayProxy
 
   if (request.method !== "POST") {
     sendJson(responseStream, 404, { error: "Not found." });
+    return;
+  }
+
+  if (AI_GENERATE_RE.test(request.path)) {
+    await handleAiGenerate(request, responseStream);
     return;
   }
 
@@ -154,3 +176,34 @@ export const handler = awslambda.streamifyResponse(async (event: APIGatewayProxy
     sendJson(responseStream, 500, { error: "Internal error." });
   }
 });
+
+async function handleAiGenerate(request: ParsedRequest, responseStream: awslambda.HttpResponseStream): Promise<void> {
+  try {
+    await ensureSecrets();
+    // The dashboard sends "workspace-internal" and its session cookie; API callers send their key.
+    const xApiKey = request.headers["x-api-key"]?.trim();
+    let caller: { userId: string } | { rawKey: string };
+    if (xApiKey && xApiKey !== "workspace-internal") {
+      caller = { rawKey: xApiKey };
+    } else {
+      const user = await resolveSessionUser(request.cookies);
+      if (!user) {
+        sendJson(responseStream, 401, { error: "You're signed out. Sign in again, then try once more." });
+        return;
+      }
+      caller = { userId: user.userId };
+    }
+    const prepared = await prepareStreamedGeneration(caller, request.body);
+    if ("refused" in prepared) {
+      sendJson(responseStream, prepared.refused.status, { error: prepared.refused.error });
+      return;
+    }
+    const httpStream = openNdjsonStream(responseStream);
+    await prepared.run((frame: GenerationFrame) => httpStream.write(`${JSON.stringify(frame)}\n`));
+    httpStream.end();
+  } catch (err) {
+    // Only reachable before the stream opened (run() reports its own failures as frames).
+    console.error("AI generation failed before streaming began:", err);
+    sendJson(responseStream, 500, { error: "Something went wrong starting the AI. Try again." });
+  }
+}

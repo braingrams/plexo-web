@@ -156,9 +156,11 @@ export function estimateWorstCaseCost(
   tier: ConcreteTier,
   mode: AiActionMode,
   approxInputChars: number,
+  /** A specific call's output budget (e.g. the bigger retry after a cut-off answer); defaults to the mode's. */
+  maxOutputTokensOverride?: number,
 ): number {
   const conservativeInputTokens = Math.ceil(approxInputChars / 3);
-  const maxOutputTokens = MAX_TOKENS[mode];
+  const maxOutputTokens = maxOutputTokensOverride ?? MAX_TOKENS[mode];
   const usd = computeCostUsd(provider, tier, {
     inputTokens: conservativeInputTokens,
     outputTokens: maxOutputTokens,

@@ -9,10 +9,10 @@ import { WpMigrationJob, WpMigrationPage, WpMigrationAsset } from "@/lib/db/impo
 import { createBlogPost, updateBlogPost, findPostByExternalId, type RevalidateFn } from "@/lib/blog/savePostCore";
 import { normalizeRedirectPath } from "@/lib/blog/redirectsDynamo";
 import { ensureCategory, ensureTag, findOrCreateAuthor, findOrCreateCategory, findOrCreateTag } from "@/lib/blogImport/taxonomyDynamo";
-import { extractImageUrls, rehostMediaUrls, rewriteImageUrls } from "@/lib/blogImport/mediaRehostDynamo";
+import { MediaOutOfTimeError, extractImageUrls, rehostMediaUrls, rewriteImageUrls } from "@/lib/blogImport/mediaRehostDynamo";
 import { convertWordPressHtmlToTiptapJson, tiptapJsonToHtml } from "@/lib/blogImport/htmlToTiptap";
 import { discoverWordPressInstall } from "./discover";
-import { buildInventory, decodeEntities, fetchMediaPage, fetchPostIndexPage, fetchPostsByIds, fetchTermsPage, type ApiPage } from "./inventory";
+import { buildInventory, decodeEntities, fetchMediaPage, fetchPostIndexPage, fetchPostsByIds, fillSeoFromPage, fetchTermsPage, type ApiPage } from "./inventory";
 import { extractSourceFacts, transformPage, type DetectedDonationForm } from "./htmlTransform";
 import { CommerceDonationCampaign, CommerceSettings } from "@/lib/db/commerceEntities";
 import { ensureDonationsReady, resolveDonationGateway } from "@/lib/commerce/donations";
@@ -50,7 +50,11 @@ const STEP_BUDGET_MS = 35_000;
 const STALE_LOCK_MS = 5 * 60 * 1000;
 const PAGES_PER_STEP = 4;
 // Posts copied per step, a few at a time; the step's time budget is the real limit.
-const POSTS_PER_STEP = 40;
+const POSTS_PER_STEP = 12;
+/** No new post starts after this point in a step (see runPostsStep). */
+const POST_START_BUDGET_MS = 25_000;
+/** A post still moving images after this point is left for the next step (it's picked up where it stopped). */
+const POST_FINISH_BUDGET_MS = 40_000;
 const POST_CONCURRENCY = 4;
 const ASSET_CONCURRENCY = 6;
 const ASSETS_PER_STEP = 150;
@@ -576,6 +580,10 @@ async function runPostsStep(job: JobItem, errors: string[], revalidate: Revalida
   const pending = pages.filter((p) => p.kind === "POST" && p.status === "PENDING").slice(0, POSTS_PER_STEP);
   const plan = job.planState as PlanState;
   const counts = { ...emptyCounts(), ...(job.counts as MigrationCounts) };
+  // Counted from the posts themselves, so a step cut off part-way can't leave the progress wrong.
+  const posts = pages.filter((p) => p.kind === "POST");
+  counts.postsDone = posts.filter((p) => p.status === "DONE").length;
+  counts.postsFailed = posts.filter((p) => p.status === "FAILED" || p.status === "SKIPPED").length;
   const movedLinks = movedLinksFor(job, pages);
   const rewriteOrigin = makeOriginRewriter(plan.origin);
   const started = Date.now();
@@ -590,7 +598,9 @@ async function runPostsStep(job: JobItem, errors: string[], revalidate: Revalida
   let processed = 0;
   const postLimit = pLimit(POST_CONCURRENCY);
   await Promise.all(pending.map((row) => postLimit(async () => {
-    if (Date.now() - started > STEP_BUDGET_MS) return;
+    // Posts start only in the first part of the step: one already started still reads its
+    // page, images and comments, and must finish inside the server's 60s limit.
+    if (Date.now() - started > POST_START_BUDGET_MS) return;
     processed += 1;
     const post = isFull(row.data) ? row.data : fetched.get(row.wpId ?? -1);
     if (!post) {
@@ -601,6 +611,7 @@ async function runPostsStep(job: JobItem, errors: string[], revalidate: Revalida
       return;
     }
     try {
+      await fillSeoFromPage(post);
       const [categoryIds, tagIds, authorId] = await Promise.all([
         Promise.all(post.categoryNames.map((n) => findOrCreateCategory(job.templateId, n))),
         Promise.all(post.tagNames.map((n) => findOrCreateTag(job.templateId, n))),
@@ -609,7 +620,7 @@ async function runPostsStep(job: JobItem, errors: string[], revalidate: Revalida
       // Post images move to durable Plexo storage (and get Plexo's image optimization);
       // links inside the post follow the site to its new host.
       const imageUrls = [post.featuredImageUrl, post.seo.ogImage, ...extractImageUrls(post.contentHtml)].filter((u): u is string => Boolean(u));
-      const mediaMap = await rehostMediaUrls(job.templateId, imageUrls, errors);
+      const mediaMap = await rehostMediaUrls(job.templateId, imageUrls, errors, { deadline: started + POST_FINISH_BUDGET_MS });
       const html = rewritePostLinks(rewriteOrigin(rewriteImageUrls(post.contentHtml, mediaMap)), movedLinks);
       const contentJson = convertWordPressHtmlToTiptapJson(html);
       const contentHtml = tiptapJsonToHtml(contentJson);
@@ -651,6 +662,10 @@ async function runPostsStep(job: JobItem, errors: string[], revalidate: Revalida
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (isTransientAwsError(err)) throw err; // retried as a whole step, not marked failed
+      if (err instanceof MediaOutOfTimeError) {
+        processed -= 1; // still PENDING — the next step finishes it
+        return;
+      }
       errors.push(`Post "${post.title}" couldn't be copied: ${message}`);
       await WpMigrationPage.patch({ jobId: job.id, key: row.key }).set({ status: "FAILED", error: message }).go();
       counts.postsFailed += 1;

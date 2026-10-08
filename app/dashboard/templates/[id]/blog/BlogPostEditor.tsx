@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { aiErrorMessage } from "@/lib/ai/requestErrors";
 import { useRouter } from "next/navigation";
 import { BlogRichTextEditor } from "./BlogRichTextEditor";
 import { AiWriteAssistant, type AiBlogPostResult } from "./AiWriteAssistant";
@@ -458,7 +459,7 @@ export function BlogPostEditor({
         throw new Error(
           "Insufficient AI credits — top up or configure your own API key in Settings.",
         );
-      throw new Error(body.error ?? "AI generation failed.");
+      throw new Error(aiErrorMessage(res.status, body, "AI generation failed."));
     }
     const { result } = (await res.json()) as { result: AiBlogPostResult };
     return result;
