@@ -143,9 +143,6 @@ for (const key of ["NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_PAGES_DOMAIN"]) {
   const value = process.env[key];
   if (value) publicUrlEnv[key] = value;
 }
-if (isProd && !publicUrlEnv.NEXT_PUBLIC_PAGES_DOMAIN) {
-  throw new Error("NEXT_PUBLIC_PAGES_DOMAIN is required to deploy production (SOL publishes pages under it).");
-}
 
 const systemAiEnv: Record<string, string> = {};
 for (const key of ["SYSTEM_AI_PROVIDER", "SYSTEM_AI_KEY_ANTHROPIC_CLAUDE", "SYSTEM_AI_KEY_OPENAI", "SYSTEM_AI_KEY_GOOGLE_GEMINI"]) {
@@ -535,6 +532,11 @@ export class ComputeStack extends cdk.Stack {
     // neither fits serverFn's 30s timeout or its buffered (non-streaming) Function URL
     // invoke mode, so this follows imageFn's "second Lambda + own Function URL + own
     // CloudFront behavior" precedent above rather than trying to extend serverFn itself.
+    // Checked here, not when this file loads: bin/app.ts imports it for every STACK_KIND,
+    // and the published-sites deploy step doesn't (and needn't) carry these values.
+    if (isProd && !publicUrlEnv.NEXT_PUBLIC_PAGES_DOMAIN) {
+      throw new Error("NEXT_PUBLIC_PAGES_DOMAIN is required to deploy production's compute stack (SOL publishes pages under it).");
+    }
     const solChatFn = new NodejsFunction(this, "SolChatFn", {
       runtime: lambda.Runtime.NODEJS_24_X,
       entry: SOL_CHAT_ENTRY,
