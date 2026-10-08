@@ -15,7 +15,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   const resolved = await resolveCommerceAdmin(request, templateId);
   if (resolved.error) return resolved.error;
 
-  const { data: methods } = await CommerceDeliveryMethod.query.primary({ templateId }).go();
+  const { data: methods } = await CommerceDeliveryMethod.query.primary({ templateId }).go({ pages: "all" });
   methods.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
   return NextResponse.json({ methods });
 }

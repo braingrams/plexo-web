@@ -21,7 +21,7 @@ async function resolveOwnedItem(request: NextRequest, itemId: string): Promise<O
   // guessed/enumerated id could edit a stranger's cart.
   if (!cart) return { error: NextResponse.json({ error: "No cart found." }, { status: 404 }) };
 
-  const { data: items } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
+  const { data: items } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go({ pages: "all" });
   const item = items.find((i) => i.id === itemId);
   if (!item) return { error: NextResponse.json({ error: "Item not found in your cart." }, { status: 404 }) };
 

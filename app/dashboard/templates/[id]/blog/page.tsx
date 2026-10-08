@@ -21,10 +21,10 @@ export default async function BlogListPage({
       // byStatus's SK starts with status, so a plain query doesn't give "every post sorted
       // by updatedAt" directly — fetch the partition (byStatus's PK is already
       // templateId-scoped) and sort in memory.
-      BlogPost.query.byStatus({ templateId: access.templateId }).go(),
+      BlogPost.query.byStatus({ templateId: access.templateId }).go({ pages: "all" }),
       // No byId index on BlogAuthor (slug is its SK) — small per-site set, fetch all and
       // build a lookup map.
-      BlogAuthor.query.primary({ templateId: access.templateId }).go(),
+      BlogAuthor.query.primary({ templateId: access.templateId }).go({ pages: "all" }),
       getPublishedBlogPostQuotaStatus(
         access.templateId,
         access.subscriptionPlan,

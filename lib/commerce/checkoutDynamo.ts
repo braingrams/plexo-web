@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { TransactWriteCommand, type TransactWriteCommandInput } from "@aws-sdk/lib-dynamodb";
+import { lineName, resolvePurchasable } from "@/lib/commerce/variants";
+import { adjustStock, takeStockTransactItem } from "@/lib/commerce/stock";
 import { EntityItem } from "electrodb";
 import { docClient } from "@/lib/db/client";
 import {
@@ -46,6 +48,9 @@ export class CartAlreadyCheckedOutError extends Error {}
 
 type TransactItem = NonNullable<TransactWriteCommandInput["TransactItems"]>[number];
 
+/** A variant was missing, removed or switched off between choosing it and paying — the message is shopper-facing. */
+export class VariantUnavailableError extends Error {}
+
 function isTransactionCancelled(err: unknown): err is { name: string; CancellationReasons?: Array<{ Code?: string }> } {
   return (err as { name?: string })?.name === "TransactionCanceledException";
 }
@@ -67,6 +72,8 @@ export async function createCommerceOrder(params: {
   templateId: string;
   organizationId: string;
   product: EntityItem<typeof CommerceProduct>;
+  /** Which variant, for a product with options (lib/commerce/variants.ts). */
+  variantId?: string | null;
   quantity: number;
   orderNumber: string;
   paystackReference: string | null;
@@ -88,8 +95,10 @@ export async function createCommerceOrder(params: {
   // much longer for a bank transfer the owner still has to confirm.
   holdMs?: number;
 }): Promise<EntityItem<typeof CommerceOrder>> {
-  const { templateId, organizationId, product, quantity, orderNumber, paystackReference, customerEmail, customerName, customerPhone, deliveryMethod, shippingAddress, discount, discountAmountMinor, amountMinor, currency, paymentProvider, paystackMode, scheduledStart, scheduledEnd, extras, holdMs = 15 * 60_000 } = params;
+  const { templateId, organizationId, product, variantId, quantity, orderNumber, paystackReference, customerEmail, customerName, customerPhone, deliveryMethod, shippingAddress, discount, discountAmountMinor, amountMinor, currency, paymentProvider, paystackMode, scheduledStart, scheduledEnd, extras, holdMs = 15 * 60_000 } = params;
 
+  const purchase = resolvePurchasable(product, variantId);
+  if (!purchase.ok) throw new VariantUnavailableError(purchase.error);
   const orderId = randomUUID();
   const orderItemId = randomUUID();
   const bookingId = randomUUID();
@@ -122,13 +131,9 @@ export async function createCommerceOrder(params: {
     }
   }
 
-  if (product.kind === "PHYSICAL" && product.stockQuantity != null) {
-    items.push({
-      Update: CommerceProduct.patch({ templateId, id: product.id })
-        .add({ stockQuantity: -quantity })
-        .where((attr, op) => op.gte(attr.stockQuantity, quantity))
-        .params() as unknown as TransactItem["Update"],
-    });
+  const stockStep = product.kind === "PHYSICAL" ? takeStockTransactItem(product, purchase.variant?.id, quantity) : null;
+  if (stockStep) {
+    items.push(stockStep);
     kinds.push("stock");
   }
 
@@ -179,9 +184,11 @@ export async function createCommerceOrder(params: {
       templateId,
       orderId,
       productId: product.id,
-      nameSnapshot: product.name,
-      unitPriceMinor: product.priceMinor,
+      nameSnapshot: lineName(product.name, purchase.label),
+      unitPriceMinor: purchase.unitPriceMinor,
       quantity,
+      ...(purchase.variant ? { variantId: purchase.variant.id, variantLabel: purchase.label ?? undefined } : {}),
+      ...(purchase.sku ? { sku: purchase.sku } : {}),
     }).params() as unknown as TransactItem["Put"],
   });
   kinds.push("orderItem");
@@ -224,7 +231,7 @@ export async function createCommerceOrder(params: {
     throw err;
   }
 
-  const { data: order } = await CommerceOrder.get({ templateId, id: orderId }).go();
+  const { data: order } = await CommerceOrder.get({ templateId, id: orderId }).go({ consistent: true });
   if (!order) throw new Error(`CommerceOrder ${orderId} vanished immediately after being created`);
   return order;
 }
@@ -241,12 +248,11 @@ export async function failCommerceOrder(
   product: EntityItem<typeof CommerceProduct>,
   quantity: number,
   discount: EntityItem<typeof CommerceDiscountCode> | null,
+  variantId?: string | null,
 ): Promise<void> {
   await CommerceOrder.patch({ templateId: order.templateId, id: order.id }).set({ status: "FAILED" }).go();
 
-  if (product.kind === "PHYSICAL" && product.stockQuantity != null) {
-    await CommerceProduct.patch({ templateId: order.templateId, id: product.id }).add({ stockQuantity: quantity }).go().catch(() => undefined);
-  }
+  if (product.kind === "PHYSICAL") await adjustStock(order.templateId, product.id, variantId, quantity);
   if (product.kind === "SERVICE") {
     const { data: booking } = await CommerceBooking.get({ templateId: order.templateId, orderId: order.id }).go();
     if (booking) {
@@ -272,7 +278,7 @@ export async function createCommerceCartOrder(params: {
   templateId: string;
   organizationId: string;
   cartId: string;
-  items: Array<{ product: EntityItem<typeof CommerceProduct>; quantity: number }>;
+  items: Array<{ product: EntityItem<typeof CommerceProduct>; quantity: number; variantId?: string | null }>;
   orderNumber: string;
   paystackReference: string | null;
   customerEmail: string;
@@ -294,17 +300,18 @@ export async function createCommerceCartOrder(params: {
   const transactItems: TransactItem[] = [];
   const kinds: (string | { productName: string })[] = [];
 
-  for (const { product, quantity } of cartItems) {
-    if (product.stockQuantity != null) {
-      transactItems.push({
-        Update: CommerceProduct.patch({ templateId, id: product.id })
-          .add({ stockQuantity: -quantity })
-          .where((attr, op) => op.gte(attr.stockQuantity, quantity))
-          .params() as unknown as TransactItem["Update"],
-      });
-      kinds.push({ productName: product.name });
+  const purchases = cartItems.map(({ product, variantId }) => {
+    const purchase = resolvePurchasable(product, variantId);
+    if (!purchase.ok) throw new VariantUnavailableError(purchase.error);
+    return purchase;
+  });
+  cartItems.forEach(({ product, quantity }, i) => {
+    const stockStep = takeStockTransactItem(product, purchases[i].variant?.id, quantity);
+    if (stockStep) {
+      transactItems.push(stockStep);
+      kinds.push({ productName: lineName(product.name, purchases[i].label) });
     }
-  }
+  });
 
   if (discount) {
     transactItems.push({
@@ -348,16 +355,18 @@ export async function createCommerceCartOrder(params: {
   });
   kinds.push("order");
 
-  for (const { product, quantity } of cartItems) {
+  for (const [index, { product, quantity }] of cartItems.entries()) {
     transactItems.push({
       Put: CommerceOrderItem.create({
         id: randomUUID(),
         templateId,
         orderId,
         productId: product.id,
-        nameSnapshot: product.name,
-        unitPriceMinor: product.priceMinor,
+        nameSnapshot: lineName(product.name, purchases[index].label),
+        unitPriceMinor: purchases[index].unitPriceMinor,
         quantity,
+        ...(purchases[index].variant ? { variantId: purchases[index].variant!.id, variantLabel: purchases[index].label ?? undefined } : {}),
+        ...(purchases[index].sku ? { sku: purchases[index].sku! } : {}),
       }).params() as unknown as TransactItem["Put"],
     });
     kinds.push("orderItem");
@@ -384,7 +393,7 @@ export async function createCommerceCartOrder(params: {
     throw err;
   }
 
-  const { data: order } = await CommerceOrder.get({ templateId, id: orderId }).go();
+  const { data: order } = await CommerceOrder.get({ templateId, id: orderId }).go({ consistent: true });
   if (!order) throw new Error(`CommerceOrder ${orderId} vanished immediately after being created`);
   return order;
 }
@@ -394,16 +403,12 @@ export async function createCommerceCartOrder(params: {
  * reopening the cart so the visitor doesn't lose their items over a payment-provider hiccup. */
 export async function failCommerceCartOrder(
   order: EntityItem<typeof CommerceOrder>,
-  items: Array<{ product: EntityItem<typeof CommerceProduct>; quantity: number }>,
+  items: Array<{ product: EntityItem<typeof CommerceProduct>; quantity: number; variantId?: string | null }>,
   discount: EntityItem<typeof CommerceDiscountCode> | null,
 ): Promise<void> {
   await CommerceOrder.patch({ templateId: order.templateId, id: order.id }).set({ status: "FAILED" }).remove(["cartId"]).go();
 
-  await Promise.all(
-    items
-      .filter(({ product }) => product.stockQuantity != null)
-      .map(({ product, quantity }) => CommerceProduct.patch({ templateId: order.templateId, id: product.id }).add({ stockQuantity: quantity }).go().catch(() => undefined)),
-  );
+  await Promise.all(items.map(({ product, quantity, variantId }) => adjustStock(order.templateId, product.id, variantId, quantity)));
   if (discount) {
     await CommerceDiscountCode.patch({ templateId: order.templateId, id: discount.id }).add({ usedCount: -1 }).go().catch(() => undefined);
   }

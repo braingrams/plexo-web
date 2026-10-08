@@ -53,7 +53,7 @@ export async function PATCH(
     const slug = slugify(typeof rawSlug === "string" ? rawSlug : "");
     if (!slug) return NextResponse.json({ error: "slug can't be empty." }, { status: 400 });
     if (slug !== existing.slug) {
-      const { data: siblings } = await CustomContentType.query.primary({ templateId }).go();
+      const { data: siblings } = await CustomContentType.query.primary({ templateId }).go({ pages: "all" });
       if (siblings.some((ct) => ct.id !== typeId && ct.slug === slug)) {
         return NextResponse.json({ error: `A content type with slug "${slug}" already exists for this site.` }, { status: 409 });
       }
@@ -106,7 +106,7 @@ export async function DELETE(
   const { data: existing } = await CustomContentType.get({ templateId, id: typeId }).go();
   if (!existing) return NextResponse.json({ error: "Content type not found." }, { status: 404 });
 
-  const { data: entries } = await CustomContentEntry.query.primary({ contentTypeId: typeId }).go();
+  const { data: entries } = await CustomContentEntry.query.primary({ contentTypeId: typeId }).go({ pages: "all" });
   await Promise.all(entries.map((entry) => CustomContentEntry.remove({ contentTypeId: typeId, id: entry.id }).go()));
 
   await CustomContentType.remove({ templateId, id: typeId }).go();

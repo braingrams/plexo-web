@@ -1,3 +1,5 @@
+import { isExpiredButPayable, verifyOrderOnReturn } from "@/lib/commerce/verifyOnReturn";
+import { findTemplateForPaystackEvent, processPaystackDonationEvent } from "@/lib/commerce/donations";
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
@@ -37,14 +39,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }
 
-  let event: { event?: string; data?: { id?: number | string; reference?: string } };
+  let event: { event?: string; data?: { id?: number | string; reference?: string; subscription_code?: string; plan?: { plan_code?: string } | null } };
   try {
     event = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  const eventId = event.data?.id !== undefined ? String(event.data.id) : null;
+  const eventId = event.data?.id !== undefined ? String(event.data.id) : event.data?.subscription_code ? `${event.event}:${event.data.subscription_code}` : null;
   if (!eventId) {
     return NextResponse.json({ received: true });
   }
@@ -59,11 +61,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     throw err;
   }
 
+  let handledAsOrder = false;
   if (event.event === "charge.success" && event.data?.reference) {
     const reference = event.data.reference;
 
     const { data: matches } = await CommerceOrder.query.byPaymentRef({ paystackReference: reference }).go();
     const orderRef = matches[0];
+    handledAsOrder = Boolean(orderRef);
     if (orderRef && orderRef.paymentProvider === "PLATFORM_PAYSTACK") {
       try {
         await CommerceOrder.patch({ templateId: orderRef.templateId, id: orderRef.id })
@@ -72,6 +76,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           .go();
       } catch (err) {
         if (!isConditionalCheckFailure(err)) throw err; // already moved past PENDING — not our event to process
+        // …unless it was only cancelled because its checkout hold expired: reinstate it.
+        const { data: current } = await CommerceOrder.get({ templateId: orderRef.templateId, id: orderRef.id }).go();
+        if (current && isExpiredButPayable(current)) await verifyOrderOnReturn(current);
         return NextResponse.json({ received: true });
       }
 
@@ -87,6 +94,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           await creditCommerceWallet(order);
         } catch (err) {
           console.error("Commerce: platform Paystack wallet credit failed", err);
+        }
+      }
+    }
+  }
+
+  // Monthly donations on Plexo-managed Paystack: tie the event back to its site by plan/subscription.
+  if (!handledAsOrder && event.data) {
+    const templateId = await findTemplateForPaystackEvent(event.data);
+    if (templateId) {
+      const { data: settings } = await CommerceSettings.get({ templateId }).go();
+      for (const order of await processPaystackDonationEvent(templateId, event as { event?: string; data?: Record<string, unknown> })) {
+        if (!settings || order.paymentProvider !== "PLATFORM_PAYSTACK") continue;
+        await handleOrderPaid(order, null, settings);
+        try {
+          await creditCommerceWallet(order);
+        } catch (err) {
+          console.error("Commerce: platform Paystack wallet credit failed (donation renewal)", err);
         }
       }
     }

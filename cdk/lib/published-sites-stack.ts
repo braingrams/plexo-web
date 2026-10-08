@@ -191,6 +191,9 @@ export class PublishedSitesStack extends cdk.Stack {
     // cached first for "/" get served to every other visitor of "/", including ones with no
     // `p` at all. Allow-listing just "p" keeps that one param in the cache key without
     // fragmenting the cache on ordinary marketing querystrings (utm_source, fbclid, etc).
+    // "page_id" for the same reason: a site migrated from WordPress answers its page
+    // shortlinks (/blog/?page_id=45) with a 301 to the page — without it in the cache key,
+    // CloudFront served the cached plain page instead (confirmed live on staging).
     const pageCachePolicy = new cloudfront.CachePolicy(this, "PublishedPageCachePolicy", {
       cachePolicyName: `${this.stackName}-page`,
       comment: "Short-TTL cache for published page HTML — see published-sites-stack.ts's own comment at this resource",
@@ -198,7 +201,7 @@ export class PublishedSitesStack extends cdk.Stack {
       minTtl: cdk.Duration.seconds(0),
       maxTtl: cdk.Duration.seconds(60),
       cookieBehavior: cloudfront.CacheCookieBehavior.none(),
-      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("p"),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("p", "page_id"),
       headerBehavior: cloudfront.CacheHeaderBehavior.allowList("x-forwarded-host"),
       enableAcceptEncodingGzip: true,
       enableAcceptEncodingBrotli: true,
@@ -474,6 +477,10 @@ export class PublishedSitesStack extends cdk.Stack {
     // up to a day before this catches it.
     scheduledRoute("BlogImportResumeStalled", "/api/internal/blog-import/resume-stalled", events.Schedule.cron({ minute: "0", hour: "12" }));
     scheduledRoute("SiteImportResumeStalled", "/api/internal/site-import/resume-stalled", events.Schedule.cron({ minute: "0", hour: "13" }));
+    // Every 10 minutes, unlike the daily import backstops above: the WordPress migration
+    // screen tells the owner they can close the tab, so a closed tab must not mean a
+    // migration sits half-done for a day.
+    scheduledRoute("WpMigrationResumeStalled", "/api/internal/wp-migration/resume-stalled", events.Schedule.rate(cdk.Duration.minutes(10)));
 
     // Every 15 minutes, NOT once a day like the other backstops above — see that route's
     // own doc comment on why: its 15-minute hold window means a once-daily sweep would

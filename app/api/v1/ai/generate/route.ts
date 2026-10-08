@@ -159,7 +159,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (body.templateKind !== "EMAIL" && body.templateKind !== "LANDING_PAGE") {
     return NextResponse.json({ error: "Invalid templateKind." }, { status: 400 });
   }
-  if (body.context === undefined || body.context === null) {
+  // Every mode edits or extends something that already exists — except generate_raw_html,
+  // which writes a brand-new page from the prompt alone, so there's nothing to send as
+  // context (the New Site wizard's "Pretty HTML" option correctly sends null, and was
+  // rejected here with 400 "Context is required."). lib/ai/generate.ts already handles it.
+  if ((body.context === undefined || body.context === null) && body.mode !== "generate_raw_html") {
     return NextResponse.json({ error: "Context is required." }, { status: 400 });
   }
   if (key.aiAccessMode === "HOST_MANAGED" && (!body.externalUserId || !body.externalUserId.trim())) {

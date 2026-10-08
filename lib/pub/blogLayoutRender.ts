@@ -11,6 +11,11 @@ export const BLOG_MARKER_NAMES = [
   "categories",
   "comments",
   "postList",
+  // Plexo-only (not emitted by the SDK builder): layouts generated from a migrated
+  // WordPress site's own blog page (lib/wpMigration/blogLayout.ts) — the listing's title
+  // (the archive name on category/tag/author pages) and its newer/older page links.
+  "heading",
+  "pagination",
 ] as const;
 
 export type BlogMarkerName = (typeof BLOG_MARKER_NAMES)[number];

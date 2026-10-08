@@ -77,6 +77,12 @@ export const User = new Entity(
       isConfirmed: { type: "boolean", default: false },
       suspendedAt: { type: "string" },
       suspendedReason: { type: "string" },
+      // Charisol Auth (server/charisolAccount.ts). `charisolSub` is the shared Charisol
+      // account this user signed in as (Google or password). `charisolPasswordAt` is set the
+      // first time they sign in with a Charisol PASSWORD — from then on Charisol holds their
+      // password and the local `passwordHash` is never accepted again (see authDynamo.ts).
+      charisolSub: { type: "string" },
+      charisolPasswordAt: { type: "string" },
       // Self-selected once on first visit to /dashboard/funnels (Funnel/LMS module) —
       // reshapes both the funnel-creation flow and the ongoing page-builder's guidance
       // density (see the Funnel/LMS plan's "Experience-level onboarding" section). Null

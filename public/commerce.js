@@ -35,6 +35,10 @@
   // live: a real site's checkout 404ed under that assumption. Falls back to the old
   // concatenation only if the config predates this (null), never as the normal case.
   var CHECKOUT_PATH = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.checkoutPath) || (STOREFRONT_PATH + "/checkout");
+  // Where product pages live: the store's own product base (a migrated WooCommerce store
+  // keeps /product/<slug>/), else under the storefront page (/store/<slug>) — which is
+  // where the server serves them; links used to hardcode /shop/<slug> and 404ed.
+  var PRODUCT_BASE = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.productBase) || STOREFRONT_PATH;
   var CART_EVENT = "plexo:cart-updated";
   var CHECKOUT_STATE_EVENT = "plexo:checkout-state-changed";
   // Shared between the checkout page's two independent marker blocks — checkout_flow
@@ -631,6 +635,32 @@
     return el("span", { class: "pc-badge pc-badge-ok" }, ["In Stock"]);
   }
 
+  // ── Products with options (Size, Colour…) ─────────────────────────────
+  // A product with variants is bought as one specific variant, chosen on its own page —
+  // so from a card or product block its button reads "Choose options" and opens that page
+  // (lib/commerce/variants.ts). `__variantId` is set by the product page's pickers.
+  function needsOptions(p) {
+    return !!(p && p.hasVariants && !p.__variantId);
+  }
+  function productHref(p) {
+    return PRODUCT_BASE.replace(/\/+$/, "") + "/" + encodeURIComponent(p.slug || p.id);
+  }
+  function cartLabel(p, text) {
+    if (p.stockQuantity === 0) return "Out of Stock";
+    if (needsOptions(p)) return "Choose options";
+    return text;
+  }
+  // "From ₦5,000" when options are priced differently; the "was" price struck through on sale.
+  function priceChildren(p) {
+    var parts = [];
+    if (p.compareAtPriceMinor && p.compareAtPriceMinor > p.priceMinor) {
+      parts.push(el("s", { style: { opacity: "0.55", marginRight: "8px", fontWeight: "400" } }, [money(p.compareAtPriceMinor, p.currency)]));
+    }
+    var ranged = p.priceRange && p.priceRange.maxMinor > p.priceRange.minMinor && !p.__variantId;
+    parts.push((ranged ? "From " : "") + money(p.priceMinor, p.currency));
+    return parts;
+  }
+
   function broadcastCart(snapshot) {
     document.dispatchEvent(new CustomEvent(CART_EVENT, { detail: snapshot }));
     document.querySelectorAll("[data-plexo-cart-count]").forEach(function (badge) {
@@ -647,7 +677,14 @@
   // already has the full product object in scope at their call site.
   function addToCart(product, quantity) {
     var qty = quantity || 1;
-    return api("/api/public/commerce/cart/items", { method: "POST", body: JSON.stringify({ productId: product.id, quantity: qty }) }).then(function (snapshot) {
+    if (needsOptions(product)) {
+      // Never guess a size — let the shopper choose on the product page.
+      window.location.href = productHref(product);
+      return new Promise(function () {});
+    }
+    var body = { productId: product.id, quantity: qty };
+    if (product.__variantId) body.variantId = product.__variantId;
+    return api("/api/public/commerce/cart/items", { method: "POST", body: JSON.stringify(body) }).then(function (snapshot) {
       broadcastCart(snapshot);
       showAddedToCartFlyout(product, qty);
       return snapshot;
@@ -871,12 +908,12 @@
                       });
                   },
                 },
-                [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart — " + money(p.priceMinor, p.currency)]
+                [cartLabel(p, "Add to Cart — " + money(p.priceMinor, p.currency))]
               )),
             ])
           );
           getCartProductIds().then(function (ids) {
-            if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+            if (ids[p.id] && p.stockQuantity !== 0 && !p.hasVariants) addBtn.textContent = "Added ✓";
           });
           return;
         }
@@ -898,7 +935,7 @@
               media,
               el("div", { style: { padding: "20px", display: "flex", flexDirection: "column", gap: "8px" } }, [
                 el("span", { style: { fontSize: "14.5px", fontWeight: "600", color: "#FBFAF6" } }, [p.name]),
-                el("span", { class: "pc-mono", style: { fontSize: "13px", color: "#E3B23C" } }, [money(p.priceMinor, p.currency)]),
+                el("span", { class: "pc-mono", style: { fontSize: "13px", color: "#E3B23C" } }, priceChildren(p)),
                 (addBtn = el(
                   "button",
                   {
@@ -920,7 +957,7 @@
                         });
                     },
                   },
-                  [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart"]
+                  [cartLabel(p, "Add to Cart")]
                 )),
               ]),
             ]
@@ -932,7 +969,7 @@
                   stockBadge(p.stockQuantity),
                 ]),
                 p.description ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13.5px", lineHeight: "1.55" } }, [p.description]) : null,
-                el("div", { class: "pc-mono", style: { fontSize: "16px", color: "#16233F" } }, [money(p.priceMinor, p.currency)]),
+                el("div", { class: "pc-mono", style: { fontSize: "16px", color: "#16233F" } }, priceChildren(p)),
                 el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
                   buildQtyRow(),
                   (addBtn = el(
@@ -955,7 +992,7 @@
                           });
                       },
                     },
-                    ["Add to Cart"]
+                    [cartLabel(p, "Add to Cart")]
                   )),
                 ]),
               ]),
@@ -964,7 +1001,7 @@
           el("div", { style: Object.assign({ height: "100%", overflow: "hidden" }, teaser ? { background: "#1E2F52", border: "1px solid rgba(227,178,60,0.16)" } : { background: "#fff", border: "1px solid #E4E1D6" }) }, body)
         );
         getCartProductIds().then(function (ids) {
-          if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+          if (ids[p.id] && p.stockQuantity !== 0 && !p.hasVariants) addBtn.textContent = "Added ✓";
         });
       })
       .catch(function (err) {
@@ -991,12 +1028,46 @@
         var qty = 1;
         var qtyLabel, addBtn;
 
+        // Options (Size, Colour…): the shopper picks one value per option; the matching
+        // variant decides the price, sale price, stock and photo shown, and what's added.
+        var hasOptions = !!(p.hasVariants && p.options && p.options.length && p.variants && p.variants.length);
+        var selected = {};
+        if (hasOptions) {
+          var startVariant = p.variants.filter(function (v) { return v.stockQuantity === null || v.stockQuantity > 0; })[0] || p.variants[0];
+          p.options.forEach(function (o) { selected[o.name] = startVariant.options[o.name]; });
+        }
+        function variantFor(choice) {
+          return p.variants.filter(function (v) {
+            return p.options.every(function (o) { return v.options[o.name] === choice[o.name]; });
+          })[0] || null;
+        }
+        function chosen() {
+          if (!hasOptions) return p;
+          var v = variantFor(selected);
+          if (!v) return Object.assign({}, p, { __variantId: null, stockQuantity: 0, hasVariants: true });
+          var label = p.options.map(function (o) { return o.name + ": " + selected[o.name]; }).join(" / ");
+          return Object.assign({}, p, {
+            __variantId: v.id,
+            name: p.name + " — " + label,
+            priceMinor: v.priceMinor,
+            compareAtPriceMinor: v.compareAtPriceMinor,
+            stockQuantity: v.stockQuantity,
+            imageUrl: v.imageUrl || p.imageUrl,
+          });
+        }
+        function buyText(view) {
+          if (hasOptions && !view.__variantId) return "Not available";
+          if (view.stockQuantity === 0) return "Out of Stock";
+          return "Add to Cart — " + money(view.priceMinor * qty, view.currency);
+        }
+
         clear(node);
         prepareNode(node);
         node.style.padding = "0";
 
+        var mediaImg = null;
         var media = p.imageUrl
-          ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } })
+          ? (mediaImg = el("img", { src: chosen().imageUrl || p.imageUrl, alt: p.name, style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }))
           : el("div", { style: { width: "100%", height: "100%", background: "linear-gradient(155deg,#1F3B2A,#2E7D52)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px", textAlign: "center" } }, [
               el("span", { class: "pc-serif", style: { fontSize: "20px", color: "#D7F0DF" } }, [p.name]),
             ]);
@@ -1037,33 +1108,99 @@
           ]);
         }
 
+        // One row of value buttons per option; a value that can't be bought with the
+        // other current choices is faded (still clickable, so the shopper sees why).
+        var priceEl, badgeEl;
+        var pickers = null;
+        var valueButtons = [];
+        function refresh() {
+          var view = chosen();
+          clear(priceEl);
+          priceChildren(view).forEach(function (c) { priceEl.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+          var badge = stockBadge(view.stockQuantity);
+          badgeEl.replaceWith(badge);
+          badgeEl = badge;
+          if (mediaImg && view.imageUrl) mediaImg.src = view.imageUrl;
+          if (addBtn) {
+            addBtn.textContent = buyText(view);
+            addBtn.disabled = (hasOptions && !view.__variantId) || view.stockQuantity === 0;
+          }
+          valueButtons.forEach(function (b) {
+            var isOn = selected[b.option] === b.value;
+            var trial = Object.assign({}, selected);
+            trial[b.option] = b.value;
+            var v = variantFor(trial);
+            var buyable = !!v && (v.stockQuantity === null || v.stockQuantity > 0);
+            b.node.style.borderColor = isOn ? "#16233F" : "#E4E1D6";
+            b.node.style.background = isOn ? "#16233F" : "#fff";
+            b.node.style.color = isOn ? "#fff" : "#16233F";
+            b.node.style.opacity = buyable ? "1" : "0.45";
+            b.node.style.textDecoration = buyable ? "none" : "line-through";
+            b.node.setAttribute("aria-pressed", isOn ? "true" : "false");
+          });
+        }
+        if (hasOptions) {
+          pickers = el(
+            "div",
+            { style: { display: "flex", flexDirection: "column", gap: "14px" } },
+            p.options.map(function (o) {
+              return el("div", { style: { display: "flex", flexDirection: "column", gap: "8px" } }, [
+                el("span", { class: "pc-mono", style: { fontSize: "11.5px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#565F72" } }, [o.name]),
+                el(
+                  "div",
+                  { style: { display: "flex", flexWrap: "wrap", gap: "8px" } },
+                  o.values.map(function (value) {
+                    var b = el(
+                      "button",
+                      {
+                        type: "button",
+                        class: "pc-btn-outline",
+                        style: { padding: "9px 16px", fontSize: "13.5px", border: "1px solid #E4E1D6", cursor: "pointer" },
+                        onclick: function () {
+                          selected[o.name] = value;
+                          refresh();
+                        },
+                      },
+                      [value]
+                    );
+                    valueButtons.push({ option: o.name, value: value, node: b });
+                    return b;
+                  })
+                ),
+              ]);
+            })
+          );
+        }
+
         var buyControl =
           p.kind === "SERVICE"
             ? el("a", { class: "pc-btn pc-btn-gold", href: "#", style: { width: "fit-content" }, onclick: function (e) { e.preventDefault(); var target = document.querySelector('[data-plexo-commerce-booking][data-plexo-service-id="' + p.id + '"]'); if (target) target.scrollIntoView({ behavior: "smooth", block: "center" }); } }, ["Book this service"])
             : el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, [
                 buildQtyRow(),
+                pickers,
                 (addBtn = el(
                   "button",
                   {
                     class: "pc-btn",
                     style: { width: "fit-content", padding: "17px 26px", fontSize: "15px" },
-                    disabled: p.stockQuantity === 0 ? "disabled" : null,
+                    disabled: chosen().stockQuantity === 0 ? "disabled" : null,
                     onclick: function () {
+                      var view = chosen();
                       addBtn.disabled = true;
                       addBtn.textContent = "Adding…";
-                      addToCart(p, qty)
+                      addToCart(view, qty)
                         .then(function () {
                           addBtn.textContent = "Added ✓";
                           addBtn.disabled = false;
                         })
                         .catch(function (err) {
-                          addBtn.textContent = "Add to Cart — " + money(p.priceMinor * qty, p.currency);
+                          addBtn.textContent = buyText(chosen());
                           addBtn.disabled = false;
                           alert(err.message);
                         });
                     },
                   },
-                  [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart — " + money(p.priceMinor, p.currency)]
+                  [buyText(chosen())]
                 )),
               ]);
 
@@ -1112,16 +1249,11 @@
             el("span", { class: "pc-mono", style: { fontSize: "11.5px", letterSpacing: "0.16em", textTransform: "uppercase", color: "#2E7D52" } }, [p.category ? p.category.name : "Shop"]),
             el("h1", { class: "pc-serif", style: { margin: "0", fontWeight: "500", fontSize: "38px", color: "#16233F" } }, [p.name]),
             el("div", { style: { display: "flex", alignItems: "center", gap: "14px" } }, [
-              el("span", { class: "pc-mono", style: { fontSize: "22px", color: "#16233F" } }, [money(p.priceMinor, p.currency)]),
-              stockBadge(p.stockQuantity),
+              (priceEl = el("span", { class: "pc-mono", style: { fontSize: "22px", color: "#16233F" } }, priceChildren(chosen()))),
+              (badgeEl = stockBadge(chosen().stockQuantity)),
             ]),
           ]),
           p.description ? el("p", { style: { margin: "0", fontSize: "15.5px", lineHeight: "1.75", color: "#3C4356" } }, [p.description]) : null,
-          el("div", { style: { background: "#F3F1EA", borderLeft: "3px solid #E3B23C", padding: "16px 20px" } }, [
-            el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13px", lineHeight: "1.6" } }, [
-              "Natural food and wellness item, not a replacement for prescribed medical treatment. Always tell your doctor about any herbal products you're using.",
-            ]),
-          ]),
           buyControl,
           deliveryRow,
         ]);
@@ -1134,10 +1266,43 @@
           ]),
         ]);
         node.appendChild(heroWrap);
+        if (hasOptions) refresh();
         if (addBtn) {
           getCartProductIds().then(function (ids) {
-            if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+            if (ids[p.id] && p.stockQuantity !== 0 && !p.hasVariants) addBtn.textContent = "Added ✓";
           });
+        }
+
+        // Approved customer reviews (e.g. carried over from a WooCommerce store).
+        var reviews = data.reviews;
+        if (reviews && reviews.count > 0) {
+          var stars = function (n) {
+            var r = Math.round(n || 0);
+            return "★★★★★".slice(0, r) + "☆☆☆☆☆".slice(0, 5 - r);
+          };
+          node.appendChild(
+            el("div", { style: { maxWidth: "1440px", margin: "0 auto", padding: "8px clamp(20px, 6vw, 56px) 72px", boxSizing: "border-box" } }, [
+              el("h2", { class: "pc-serif", style: { margin: "0 0 8px", fontWeight: "500", fontSize: "26px", color: "#16233F" } }, ["Customer reviews"]),
+              el("div", { style: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "24px" } }, [
+                el("span", { style: { color: "#E3B23C", fontSize: "18px", letterSpacing: "2px" }, "aria-hidden": "true" }, [stars(reviews.average)]),
+                el("span", { class: "pc-muted", style: { fontSize: "14px" } }, [reviews.average + " out of 5 · " + reviews.count + (reviews.count === 1 ? " review" : " reviews")]),
+              ]),
+              el(
+                "div",
+                { style: { display: "flex", flexDirection: "column", gap: "18px" } },
+                reviews.items.map(function (r) {
+                  return el("div", { style: { borderTop: "1px solid #E4E1D6", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "6px" } }, [
+                    el("div", { style: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" } }, [
+                      el("span", { style: { fontWeight: "600", fontSize: "14px", color: "#16233F" } }, [r.name]),
+                      el("span", { style: { color: "#E3B23C", letterSpacing: "1px" }, "aria-label": r.rating + " out of 5" }, [stars(r.rating)]),
+                      r.date ? el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, [new Date(r.date).toLocaleDateString()]) : null,
+                    ]),
+                    r.body ? el("p", { style: { margin: "0", fontSize: "14.5px", lineHeight: "1.7", color: "#3C4356", whiteSpace: "pre-line" } }, [r.body]) : null,
+                  ]);
+                })
+              ),
+            ])
+          );
         }
 
         // Staff-curated only (CommerceProductRelation, set from the product's own admin
@@ -1366,7 +1531,7 @@
     var addBtn;
     var textColor = dark ? "#FBFAF6" : "#16233F";
     var priceColor = dark ? "#E3B23C" : "#16233F";
-    var href = "/shop/" + encodeURIComponent(p.slug || p.id);
+    var href = productHref(p);
     var media = p.imageUrl
       ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "160px", objectFit: "cover", display: "block" } })
       : el("div", { style: { width: "100%", height: "160px", background: dark ? "linear-gradient(155deg,#1F3B2A,#2E7D52)" : "#F3F1EA", display: "flex", alignItems: "center", justifyContent: "center", color: dark ? "#D7F0DF" : "#8A93A6", fontSize: "13px" } }, [p.name]);
@@ -1385,7 +1550,7 @@
         ]),
       ]),
       el("div", { style: { padding: "8px 14px 14px", display: "flex", flexDirection: "column", gap: "8px", flex: "1" } }, [
-        el("div", { class: "pc-mono", style: { fontSize: "14.5px", fontWeight: dark ? "500" : "700", color: priceColor, marginTop: "auto" } }, [money(p.priceMinor, p.currency)]),
+        el("div", { class: "pc-mono", style: { fontSize: "14.5px", fontWeight: dark ? "500" : "700", color: priceColor, marginTop: "auto" } }, priceChildren(p)),
         (addBtn = el(
           "button",
           {
@@ -1407,12 +1572,12 @@
                 });
             },
           },
-          [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart"]
+          [cartLabel(p, "Add to Cart")]
         )),
       ]),
     ]);
     getCartProductIds().then(function (ids) {
-      if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+      if (ids[p.id] && p.stockQuantity !== 0 && !p.hasVariants) addBtn.textContent = "Added ✓";
     });
     return card;
   }
@@ -1465,7 +1630,9 @@
         });
         var catalogEmpty = allProducts.length === 0;
         var categories = data.categories || [];
-        var activeCategory = null;
+        // ?category=<slug> opens the shop already filtered (e.g. an old category link).
+        var requestedCategory = new URLSearchParams(window.location.search).get("category");
+        var activeCategory = requestedCategory && categories.some(function (c) { return c.slug === requestedCategory; }) ? requestedCategory : null;
         var searchTerm = "";
         var stockFilter = "all";
         var page = 1;
@@ -2587,6 +2754,274 @@
       .catch(function () {});
   }
 
+  // ---------------------------------------------------------------------
+  // Donations (lib/commerce/donations.ts). Two modes, one payment path:
+  //  - a native donate form, rendered into any [data-plexo-donation="<campaignId>"] block;
+  //  - an existing form (a donation form migrated from WordPress, kept pixel-identical)
+  //    marked <form data-plexo-donation="<campaignId>" data-plexo-donation-adapter>, whose
+  //    own fields are annotated with data-plexo-amount-minor / data-plexo-amount-custom /
+  //    data-plexo-custom-amount / data-plexo-monthly / data-plexo-donor-* — this just
+  //    takes over its submit.
+  // Both finish payment exactly like storefront checkout (embedded Stripe, Paystack
+  // redirect, or bank transfer), and both thank the donor when they come back.
+  // ---------------------------------------------------------------------
+  function donationReturnPath() {
+    var params = new URLSearchParams(location.search);
+    params.delete("plexo_donation");
+    params.delete("order");
+    var q = params.toString();
+    return location.pathname + (q ? "?" + q : "");
+  }
+
+  var donationConfirmSent = false;
+  function isDonationThanks() {
+    var params = new URLSearchParams(location.search);
+    var thanks = params.get("plexo_donation") === "thanks";
+    // Back from checkout: have Plexo confirm the gift with the gateway right away, so it's
+    // recorded (and the receipt sent) even if the site's webhook isn't set up yet.
+    if (thanks && !donationConfirmSent && params.get("order")) {
+      donationConfirmSent = true;
+      api("/api/public/commerce/donations/confirm", { method: "POST", body: JSON.stringify({ order: params.get("order") }) }).catch(function () {});
+    }
+    return thanks;
+  }
+
+  function donationThanksBanner(campaign) {
+    return el("div", { role: "status", style: { padding: "16px 18px", margin: "0 0 18px", borderRadius: "10px", background: "#E4F0E7", color: "#1F5C3C", fontWeight: "600", lineHeight: "1.5" } }, [
+      (campaign && campaign.thankYouMessage) || "Thank you for your gift! A receipt is on its way to your inbox.",
+    ]);
+  }
+
+  function submitDonation(payload, onError, onBusy) {
+    onBusy(true);
+    payload.returnPath = donationReturnPath();
+    return api("/api/public/commerce/donate", { method: "POST", body: JSON.stringify(payload) })
+      .then(function (result) {
+        if (result.checkout && result.checkout.provider === "stripe") {
+          onBusy(false);
+          openStripeEmbeddedCheckout(result.checkout, function (err) {
+            onError(err.message);
+          });
+          return;
+        }
+        if (result.authorizationUrl) {
+          window.location.href = result.authorizationUrl;
+          return;
+        }
+        if (result.redirectUrl) {
+          window.location.href = result.redirectUrl;
+          return;
+        }
+        onBusy(false);
+      })
+      .catch(function (err) {
+        onBusy(false);
+        onError(err.message);
+      });
+  }
+
+  function fetchDonationCampaign(id) {
+    return api("/api/public/commerce/donations/" + encodeURIComponent(id)).then(function (d) {
+      return d.campaign;
+    });
+  }
+
+  function renderDonation(node) {
+    var campaignId = node.getAttribute("data-plexo-donation");
+    if (!campaignId) return;
+    if (node.tagName === "FORM") return adaptDonationForm(node, campaignId);
+    showSpinner(node);
+    fetchDonationCampaign(campaignId)
+      .then(function (c) {
+        clear(node);
+        prepareNode(node);
+        if (isDonationThanks()) node.appendChild(donationThanksBanner(c));
+        if (!c.accepting) {
+          node.appendChild(el("div", { class: "pc-muted", style: { padding: "12px 0" } }, ["Online donations are being set up — please check back soon."]));
+          return;
+        }
+        var presets = c.presetAmounts || [];
+        var state = {
+          amountMinor: presets.length ? presets[Math.min(c.defaultPresetIndex || 0, presets.length - 1)].amountMinor : null,
+          custom: !presets.length,
+          frequency: c.allowMonthly ? c.defaultFrequency || "ONCE" : "ONCE",
+        };
+        var card = el("div", { class: "pc-card", style: { padding: "22px" } });
+        if (c.goalAmountMinor) {
+          var pct = Math.min(100, Math.round(((c.raisedMinor || 0) / c.goalAmountMinor) * 100));
+          card.appendChild(el("div", { style: { marginBottom: "18px" } }, [
+            el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "13px", marginBottom: "6px" } }, [
+              el("strong", {}, [money(c.raisedMinor || 0, c.currency) + " raised"]),
+              el("span", { class: "pc-muted" }, ["of " + money(c.goalAmountMinor, c.currency)]),
+            ]),
+            el("div", { style: { height: "8px", background: "#EEECE4", borderRadius: "99px", overflow: "hidden" } }, [
+              el("div", { class: "pc-btn-gold", style: { height: "100%", width: pct + "%", padding: "0", borderRadius: "99px" } }),
+            ]),
+          ]));
+        }
+        var freqRow = null;
+        function paintFreq() {
+          if (!freqRow) return;
+          Array.prototype.forEach.call(freqRow.children, function (b) {
+            var on = b.getAttribute("data-f") === state.frequency;
+            b.className = on ? "pc-btn" : "pc-btn pc-btn-outline";
+          });
+        }
+        if (c.allowMonthly) {
+          freqRow = el("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "14px" } }, [
+            el("button", { type: "button", "data-f": "ONCE", onclick: function () { state.frequency = "ONCE"; paintFreq(); } }, ["Give once"]),
+            el("button", { type: "button", "data-f": "MONTHLY", onclick: function () { state.frequency = "MONTHLY"; paintFreq(); } }, ["Monthly"]),
+          ]);
+          card.appendChild(freqRow);
+          paintFreq();
+        }
+        var amountGrid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: "8px", marginBottom: "12px" } });
+        var customInput = el("input", { class: "pc-input", type: "number", min: String((c.minAmountMinor || 100) / 100), step: "any", placeholder: "Other amount", style: { display: state.custom ? "block" : "none", marginBottom: "12px" } });
+        function paintAmounts() {
+          Array.prototype.forEach.call(amountGrid.children, function (b) {
+            var on = b.getAttribute("data-custom") ? state.custom : !state.custom && Number(b.getAttribute("data-amount")) === state.amountMinor;
+            b.className = on ? "pc-btn" : "pc-btn pc-btn-outline";
+          });
+          customInput.style.display = state.custom ? "block" : "none";
+        }
+        presets.forEach(function (p) {
+          amountGrid.appendChild(el("button", { type: "button", "data-amount": String(p.amountMinor), style: { flexDirection: "column", gap: "2px" }, onclick: function () { state.custom = false; state.amountMinor = p.amountMinor; paintAmounts(); } }, [
+            el("span", {}, [money(p.amountMinor, c.currency)]),
+            p.label ? el("span", { style: { fontSize: "11.5px", fontWeight: "500", opacity: "0.8" } }, [p.label]) : null,
+          ].filter(Boolean)));
+        });
+        if (c.allowCustomAmount) {
+          amountGrid.appendChild(el("button", { type: "button", "data-custom": "1", onclick: function () { state.custom = true; paintAmounts(); customInput.focus(); } }, ["Other"]));
+        }
+        card.appendChild(amountGrid);
+        card.appendChild(customInput);
+        paintAmounts();
+        var nameInput = el("input", { class: "pc-input", type: "text", placeholder: "Your name", autocomplete: "name", style: { marginBottom: "10px" } });
+        var emailInput = el("input", { class: "pc-input", type: "email", placeholder: "Email for your receipt", autocomplete: "email", required: "required", style: { marginBottom: "14px" } });
+        card.appendChild(nameInput);
+        card.appendChild(emailInput);
+        var errorBox = el("div", { class: "pc-error", style: { display: "none" } });
+        var button = el("button", { type: "button", class: "pc-btn", style: { width: "100%" } }, [c.buttonLabel || "Donate"]);
+        card.appendChild(errorBox);
+        card.appendChild(button);
+        node.appendChild(card);
+        button.addEventListener("click", function () {
+          errorBox.style.display = "none";
+          var amount = state.custom ? Math.round(parseFloat(customInput.value || "0") * 100) : state.amountMinor;
+          if (!amount || amount <= 0) {
+            errorBox.textContent = "Please choose or enter an amount.";
+            errorBox.style.display = "block";
+            return;
+          }
+          submitDonation(
+            { campaignId: campaignId, amountMinor: amount, frequency: state.frequency, donorName: nameInput.value, donorEmail: emailInput.value },
+            function (msg) { errorBox.textContent = msg; errorBox.style.display = "block"; },
+            function (busy) { button.disabled = busy; button.textContent = busy ? "Starting payment…" : c.buttonLabel || "Donate"; }
+          );
+        });
+      })
+      .catch(function (err) {
+        showError(node, err.message);
+      });
+  }
+
+  // A migrated donation form: keep its markup and styling exactly, just route its submit.
+  function adaptDonationForm(form, campaignId) {
+    if (form.getAttribute("data-plexo-adapted")) return;
+    form.setAttribute("data-plexo-adapted", "1");
+    form.removeAttribute("action");
+    fetchDonationCampaign(campaignId)
+      .then(function (c) {
+        if (isDonationThanks()) {
+          var banner = donationThanksBanner(c);
+          // A form inside a closed pop-up isn't visible on return — show the thanks on top instead.
+          if (!form.offsetParent || form.getBoundingClientRect().height === 0) {
+            banner.style.position = "fixed";
+            banner.style.top = "16px";
+            banner.style.left = "50%";
+            banner.style.transform = "translateX(-50%)";
+            banner.style.zIndex = "2147483000";
+            banner.style.maxWidth = "92vw";
+            banner.style.boxShadow = "0 8px 30px rgba(0,0,0,.25)";
+            document.body.appendChild(banner);
+            setTimeout(function () { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 8000);
+          } else {
+            form.parentNode.insertBefore(banner, form);
+          }
+        }
+        if (!c.accepting) {
+          form.parentNode.insertBefore(el("div", { class: "pc-error" }, ["Online donations are being set up — please check back soon."]), form);
+        }
+      })
+      .catch(function () {});
+    var submitBtn = form.querySelector("button[type=submit], input[type=submit], button:not([type])");
+    // Form plugins often ship their button disabled until their own script initializes it.
+    if (submitBtn) submitBtn.disabled = false;
+    var originalLabel = submitBtn ? submitBtn.innerHTML : "";
+    // Keep the form's controls in step the way its original plugin script did: picking a
+    // suggested amount fills the amount box, typing an amount selects "custom", ticking
+    // monthly reveals its options.
+    var amountBox = form.querySelector("[data-plexo-custom-amount]");
+    var customChoice = form.querySelector("[data-plexo-amount-custom]");
+    Array.prototype.forEach.call(form.querySelectorAll("[data-plexo-amount-minor]"), function (radio) {
+      radio.addEventListener("change", function () {
+        if (radio.checked && amountBox) amountBox.value = String(Number(radio.getAttribute("data-plexo-amount-minor")) / 100);
+      });
+    });
+    if (amountBox && customChoice) {
+      amountBox.addEventListener("input", function () {
+        customChoice.checked = true;
+      });
+    }
+    var monthlyBox = form.querySelector("[data-plexo-monthly]");
+    var monthlyOptions = form.querySelector("[data-plexo-monthly-options]");
+    if (monthlyBox && monthlyOptions) {
+      var syncMonthly = function () {
+        monthlyOptions.style.display = monthlyBox.checked ? "flex" : "none";
+      };
+      monthlyBox.addEventListener("change", syncMonthly);
+      syncMonthly();
+    }
+    var preset = form.querySelector("[data-plexo-amount-minor]:checked");
+    if (preset && amountBox) amountBox.value = String(Number(preset.getAttribute("data-plexo-amount-minor")) / 100);
+
+    function errorHere(msg) {
+      var box = form.querySelector(".pc-donation-error");
+      if (!box) {
+        box = el("div", { class: "pc-error pc-donation-error" });
+        form.appendChild(box);
+      }
+      box.textContent = msg;
+    }
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      var chosen = form.querySelector("[data-plexo-amount-minor]:checked, [data-plexo-amount-custom]:checked");
+      var amount = 0;
+      var customField = form.querySelector("[data-plexo-custom-amount]");
+      if (chosen && chosen.hasAttribute("data-plexo-amount-minor")) amount = Number(chosen.getAttribute("data-plexo-amount-minor"));
+      else if (customField) amount = Math.round(parseFloat(customField.value || "0") * 100);
+      if (!amount || amount <= 0) return errorHere("Please choose or enter an amount.");
+      var monthly = form.querySelector("[data-plexo-monthly]");
+      var first = form.querySelector("[data-plexo-donor-first]");
+      var last = form.querySelector("[data-plexo-donor-last]");
+      var full = form.querySelector("[data-plexo-donor-name]");
+      var email = form.querySelector("[data-plexo-donor-email]");
+      var name = full ? full.value : [first && first.value, last && last.value].filter(Boolean).join(" ");
+      if (!email || !email.value) return errorHere("Please enter your email address for your receipt.");
+      submitDonation(
+        { campaignId: campaignId, amountMinor: amount, frequency: monthly && monthly.checked ? "MONTHLY" : "ONCE", donorName: name, donorEmail: email.value },
+        errorHere,
+        function (busy) {
+          if (!submitBtn) return;
+          submitBtn.disabled = busy;
+          if (busy) submitBtn.textContent = "Starting payment…";
+          else submitBtn.innerHTML = originalLabel;
+        }
+      );
+    }, true);
+  }
+
   function init() {
     injectStyles();
     document.querySelectorAll("[data-plexo-commerce-product]").forEach(renderProduct);
@@ -2597,6 +3032,7 @@
     document.querySelectorAll("[data-plexo-commerce-orderConfirmation]").forEach(renderOrderConfirmation);
     document.querySelectorAll("[data-plexo-commerce-orderTracking]").forEach(renderOrderTracking);
     document.querySelectorAll("[data-plexo-newsletter-signup]").forEach(renderNewsletterSignup);
+    document.querySelectorAll("[data-plexo-donation]").forEach(renderDonation);
     renderProductCounts();
     fetchCart().then(broadcastCart).catch(function () {});
   }

@@ -39,6 +39,24 @@ async function tagContactIntoGroup(apiKey: string, groupId: string, order: Comme
   }
 }
 
+/** Adds (or updates) a contact in a MailDrip group — a website form's sign-up (lib/forms/formActions.ts). Throws on failure. */
+export async function addContactToMaildripGroup(
+  apiKey: string,
+  groupId: string,
+  contact: { email: string; firstName?: string; lastName?: string; phone?: string },
+): Promise<void> {
+  const response = await fetch(`${maildripApiBase()}/contacts?groupId=${encodeURIComponent(groupId)}`, {
+    method: "POST",
+    headers: { "x-api-key": apiKey, "Content-Type": "application/json" },
+    body: JSON.stringify(contact),
+    // A visitor's form submission waits on this — never for long.
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!response.ok) {
+    throw new Error(`MailDrip didn't accept the contact (${response.status}): ${(await response.text()).slice(0, 200)}`);
+  }
+}
+
 /** Tags a bare email into a MailDrip group — the newsletter signup's own path, distinct
  * from tagContactIntoGroup above which always has a real CommerceOrder (name/phone) to
  * draw from. Throws on failure; the caller (a real-time public endpoint, not a

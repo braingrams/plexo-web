@@ -19,7 +19,7 @@ export async function generateUniqueAuthorSlug(templateId: string, name: string)
  * includes templateId, so an exact (userId, templateId) lookup is a single indexed query,
  * not a scan-and-filter. */
 export async function findOrCreateAuthorForUser(templateId: string, userId: string, name: string) {
-  const { data: existing } = await BlogAuthor.query.byUser({ userId, templateId }).go();
+  const { data: existing } = await BlogAuthor.query.byUser({ userId, templateId }).go({ pages: "all" });
   if (existing[0]) return existing[0];
 
   const slug = await generateUniqueAuthorSlug(templateId, name);

@@ -1,0 +1,645 @@
+{
+ "products": [
+  {
+   "id": 40,
+   "name": "WordPress Pennant",
+   "slug": "wordpress-pennant",
+   "parent": 0,
+   "type": "external",
+   "permalink": "https://shop.example/product/wordpress-pennant/",
+   "sku": "wp-pennant",
+   "description": "<p>Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. Aenean ultricies mi vitae est. Mauris placerat eleifend leo.</p>",
+   "short_description": "<p>This is an external product.</p>",
+   "prices": {
+    "price": "1105",
+    "regular_price": "1105",
+    "sale_price": "1105",
+    "currency_code": "USD",
+    "currency_minor_unit": 2
+   },
+   "images": [
+    {
+     "src": "https://shop.example/wp-content/uploads/2019/01/pennant-1.jpg",
+     "alt": ""
+    }
+   ],
+   "categories": [
+    {
+     "id": 29,
+     "name": "Decor",
+     "slug": "decor",
+     "link": "https://shop.example/product-category/decor/"
+    }
+   ],
+   "attributes": [],
+   "variations": [],
+   "is_in_stock": true,
+   "low_stock_remaining": null,
+   "is_purchasable": false,
+   "add_to_cart": {
+    "url": "https://mercantile.wordpress.org/product/wordpress-pennant/"
+   }
+  },
+  {
+   "id": 39,
+   "name": "Logo Collection",
+   "slug": "logo-collection",
+   "parent": 0,
+   "type": "grouped",
+   "permalink": "https://shop.example/product/logo-collection/",
+   "sku": "logo-collection",
+   "description": "<p>Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. Aenean ultricies mi vitae est. Mauris placerat eleifend leo.</p>",
+   "short_description": "<p>This is a grouped product.</p>",
+   "prices": {
+    "price": "1800",
+    "regular_price": "1800",
+    "sale_price": "1800",
+    "currency_code": "USD",
+    "currency_minor_unit": 2
+   },
+   "images": [
+    {
+     "src": "https://shop.example/wp-content/uploads/2019/01/logo-1.jpg",
+     "alt": ""
+    },
+    {
+     "src": "https://shop.example/wp-content/uploads/2019/01/beanie-2.jpg",
+     "alt": ""
+    },
+    {
+     "src": "https://shop.example/wp-content/uploads/2019/01/tshirt-2.jpg",
+     "alt": ""
+    }
+   ],
+   "categories": [
+    {
+     "id": 28,
+     "name": "Clothing",
+     "slug": "clothing",
+     "link": "https://shop.example/product-category/clothing/"
+    }
+   ],
+   "attributes": [],
+   "variations": [],
+   "is_in_stock": true,
+   "low_stock_remaining": null,
+   "is_purchasable": false,
+   "add_to_cart": {
+    "url": "https://shop.example/product/logo-collection/"
+   }
+  },
+  {
+   "id": 21,
+   "name": "Beanie",
+   "slug": "beanie",
+   "parent": 0,
+   "type": "simple",
+   "permalink": "https://shop.example/product/beanie/",
+   "sku": "woo-beanie",
+   "description": "<p>Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. Aenean ultricies mi vitae est. Mauris placerat eleifend leo.</p>",
+   "short_description": "<p>This is a simple product.</p>",
+   "prices": {
+    "price": "1800",
+    "regular_price": "2000",
+    "sale_price": "1800",
+    "currency_code": "USD",
+    "currency_minor_unit": 2
+   },
+   "images": [
+    {
+     "src": "https://shop.example/wp-content/uploads/2019/01/beanie-2.jpg",
+     "alt": ""
+    }
+   ],
+   "categories": [
+    {
+     "id": 25,
+     "name": "Accessories",
+     "slug": "accessories",
+     "link": "https://shop.example/product-category/accessories/"
+    }
+   ],
+   "attributes": [
+    {
+     "id": 1,
+     "name": "color",
+     "taxonomy": "pa_color",
+     "has_variations": false,
+     "terms": [
+      {
+       "id": 20,
+       "name": "Red",
+       "slug": "red"
+      }
+     ]
+    }
+   ],
+   "variations": [],
+   "is_in_stock": true,
+   "low_stock_remaining": null,
+   "is_purchasable": true,
+   "add_to_cart": {
+    "url": "/wp-json/wc/store/v1/products?per_page=100&#038;page=1&#038;add-to-cart=21"
+   }
+  },
+  {
+   "id": 18,
+   "name": "Hoodie",
+   "slug": "hoodie",
+   "parent": 0,
+   "type": "variable",
+   "permalink": "https://shop.example/product/hoodie/",
+   "sku": "woo-hoodie",
+   "description": "<p>Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. Aenean ultricies mi vitae est. Mauris placerat eleifend leo.</p>",
+   "short_description": "<p>This is a variable product.</p>",
+   "prices": {
+    "price": "4200",
+    "regular_price": "4500",
+    "sale_price": "4200",
+    "currency_code": "USD",
+    "currency_minor_unit": 2
+   },
+   "images": [
+    {
+     "src": "https://shop.example/wp-content/uploads/2019/01/hoodie-2.jpg",
+     "alt": ""
+    }
+   ],
+   "categories": [
+    {
+     "id": 23,
+     "name": "Hoodies",
+     "slug": "hoodies",
+     "link": "https://shop.example/product-category/hoodies/"
+    }
+   ],
+   "attributes": [
+    {
+     "id": 1,
+     "name": "color",
+     "taxonomy": "pa_color",
+     "has_variations": true,
+     "terms": [
+      {
+       "id": 16,
+       "name": "Blue",
+       "slug": "blue"
+      },
+      {
+       "id": 17,
+       "name": "Green",
+       "slug": "green"
+      },
+      {
+       "id": 20,
+       "name": "Red",
+       "slug": "red"
+      }
+     ]
+    },
+    {
+     "id": 0,
+     "name": "Logo",
+     "taxonomy": null,
+     "has_variations": true,
+     "terms": [
+      {
+       "id": 0,
+       "name": "Yes",
+       "slug": "Yes"
+      },
+      {
+       "id": 0,
+       "name": "No",
+       "slug": "No"
+      }
+     ]
+    }
+   ],
+   "variations": [
+    {
+     "id": 41,
+     "attributes": [
+      {
+       "name": "color",
+       "value": "blue"
+      },
+      {
+       "name": "Logo",
+       "value": "Yes"
+      }
+     ]
+    },
+    {
+     "id": 34,
+     "attributes": [
+      {
+       "name": "color",
+       "value": "red"
+      },
+      {
+       "name": "Logo",
+       "value": "No"
+      }
+     ]
+    },
+    {
+     "id": 35,
+     "attributes": [
+      {
+       "name": "color",
+       "value": "green"
+      },
+      {
+       "name": "Logo",
+       "value": "No"
+      }
+     ]
+    },
+    {
+     "id": 36,
+     "attributes": [
+      {
+       "name": "color",
+       "value": "blue"
+      },
+      {
+       "name": "Logo",
+       "value": "No"
+      }
+     ]
+    }
+   ],
+   "is_in_stock": true,
+   "low_stock_remaining": null,
+   "is_purchasable": true,
+   "add_to_cart": {
+    "url": "https://shop.example/product/hoodie/"
+   }
+  },
+  {
+   "id": 17,
+   "name": "V-Neck T-Shirt",
+   "slug": "v-neck-t-shirt",
+   "parent": 0,
+   "type": "variable",
+   "permalink": "https://shop.example/product/v-neck-t-shirt/",
+   "sku": "woo-vneck-tee",
+   "description": "<p>Pellentesque habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas. Vestibulum tortor quam, feugiat vitae, ultricies eget, tempor sit amet, ante. Donec eu libero sit amet quam egestas semper. Aenean ultricies mi vitae est. Mauris placerat eleifend leo.</p>",
+   "short_description": "<p>This is a variable product.</p>",
+   "prices": {
+    "price": "1500",
+    "regular_price": "1500",
+    "sale_price": "1500",
+    "currency_code": "USD",
+    "currency_minor_unit": 2
+   },
+   "images": [
+    {
+     "src": "https://shop.example/wp-content/uploads/2019/01/vneck-tee-2.jpg",
+     "alt": ""
+    }
+   ],
+   "categories": [
+    {
+     "id": 22,
+     "name": "Tshirts",
+     "slug": "tshirts",
+     "link": "https://shop.example/product-category/tshirts/"
+    }
+   ],
+   "attributes": [
+    {
+     "id": 1,
+     "name": "color",
+     "taxonomy": "pa_color",
+     "has_variations": true,
+     "terms": [
+      {
+       "id": 16,
+       "name": "Blue",
+       "slug": "blue"
+      },
+      {
+       "id": 17,
+       "name": "Green",
+       "slug": "green"
+      },
+      {
+       "id": 20,
+       "name": "Red",
+       "slug": "red"
+      }
+     ]
+    },
+    {
+     "id": 2,
+     "name": "size",
+     "taxonomy": "pa_size",
+     "has_variations": true,
+     "terms": [
+      {
+       "id": 18,
+       "name": "Large",
+       "slug": "large"
+      },
+      {
+       "id": 19,
+       "name": "Medium",
+       "slug": "medium"
+      },
+      {
+       "id": 21,
+       "name": "Small",
+       "slug": "small"
+      }
+     ]
+    }
+   ],
+   "variations": [
+    {
+     "id": 31,
+     "attributes": [
+      {
+       "name": "color",
+       "value": "red"
+      },
+      {
+       "name": "size",
+       "value": null
+      }
+     ]
+    },
+    {
+     "id": 32,
+     "attributes": [
+      {
+       "name": "color",
+       "value": "green"
+      },
+      {
+       "name": "size",
+       "value": null
+      }
+     ]
+    },
+    {
+     "id": 33,
+     "attributes": [
+      {
+       "name": "color",
+       "value": "blue"
+      },
+      {
+       "name": "size",
+       "value": null
+      }
+     ]
+    }
+   ],
+   "is_in_stock": true,
+   "low_stock_remaining": null,
+   "is_purchasable": true,
+   "add_to_cart": {
+    "url": "https://shop.example/product/v-neck-t-shirt/"
+   }
+  }
+ ],
+ "variations": {
+  "17": [
+   {
+    "id": 33,
+    "name": "V-Neck T-Shirt",
+    "slug": "v-neck-t-shirt-blue",
+    "parent": 17,
+    "type": "variation",
+    "permalink": "https://shop.example/product/v-neck-t-shirt/?attribute_pa_color=blue",
+    "sku": "woo-vneck-tee-blue",
+    "description": "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum sagittis orci ac odio dictum tincidunt. Donec ut metus leo. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Sed luctus, dui eu sagittis sodales, nulla nibh sagittis augue, vel porttitor diam enim non metus. Vestibulum aliquam augue neque. Phasellus tincidunt odio eget ullamcorper efficitur. Cras placerat ut turpis pellentesque vulputate. Nam sed consequat tortor. Curabitur finibus sapien dolor. Ut eleifend tellus nec erat pulvinar dignissim. Nam non arcu purus. Vivamus et massa massa.</p>",
+    "short_description": "",
+    "prices": {
+     "price": "1500",
+     "regular_price": "1500",
+     "sale_price": "1500",
+     "currency_code": "USD",
+     "currency_minor_unit": 2
+    },
+    "images": [
+     {
+      "src": "https://shop.example/wp-content/uploads/2019/01/vnech-tee-blue-1.jpg",
+      "alt": ""
+     }
+    ],
+    "categories": [],
+    "attributes": [],
+    "variations": [],
+    "is_in_stock": true,
+    "low_stock_remaining": null,
+    "is_purchasable": true,
+    "add_to_cart": {
+     "url": "https://shop.example/product/v-neck-t-shirt/?attribute_pa_color=blue&#038;variation_id=33&#038;add-to-cart=17"
+    }
+   },
+   {
+    "id": 32,
+    "name": "V-Neck T-Shirt",
+    "slug": "v-neck-t-shirt-green",
+    "parent": 17,
+    "type": "variation",
+    "permalink": "https://shop.example/product/v-neck-t-shirt/?attribute_pa_color=green",
+    "sku": "woo-vneck-tee-green",
+    "description": "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum sagittis orci ac odio dictum tincidunt. Donec ut metus leo. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Sed luctus, dui eu sagittis sodales, nulla nibh sagittis augue, vel porttitor diam enim non metus. Vestibulum aliquam augue neque. Phasellus tincidunt odio eget ullamcorper efficitur. Cras placerat ut turpis pellentesque vulputate. Nam sed consequat tortor. Curabitur finibus sapien dolor. Ut eleifend tellus nec erat pulvinar dignissim. Nam non arcu purus. Vivamus et massa massa.</p>",
+    "short_description": "",
+    "prices": {
+     "price": "2000",
+     "regular_price": "2000",
+     "sale_price": "2000",
+     "currency_code": "USD",
+     "currency_minor_unit": 2
+    },
+    "images": [
+     {
+      "src": "https://shop.example/wp-content/uploads/2019/01/vnech-tee-green-1.jpg",
+      "alt": ""
+     }
+    ],
+    "categories": [],
+    "attributes": [],
+    "variations": [],
+    "is_in_stock": true,
+    "low_stock_remaining": null,
+    "is_purchasable": true,
+    "add_to_cart": {
+     "url": "https://shop.example/product/v-neck-t-shirt/?attribute_pa_color=green&#038;variation_id=32&#038;add-to-cart=17"
+    }
+   },
+   {
+    "id": 31,
+    "name": "V-Neck T-Shirt",
+    "slug": "v-neck-t-shirt-red",
+    "parent": 17,
+    "type": "variation",
+    "permalink": "https://shop.example/product/v-neck-t-shirt/?attribute_pa_color=red",
+    "sku": "woo-vneck-tee-red",
+    "description": "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum sagittis orci ac odio dictum tincidunt. Donec ut metus leo. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Sed luctus, dui eu sagittis sodales, nulla nibh sagittis augue, vel porttitor diam enim non metus. Vestibulum aliquam augue neque. Phasellus tincidunt odio eget ullamcorper efficitur. Cras placerat ut turpis pellentesque vulputate. Nam sed consequat tortor. Curabitur finibus sapien dolor. Ut eleifend tellus nec erat pulvinar dignissim. Nam non arcu purus. Vivamus et massa massa.</p>",
+    "short_description": "",
+    "prices": {
+     "price": "2000",
+     "regular_price": "2000",
+     "sale_price": "2000",
+     "currency_code": "USD",
+     "currency_minor_unit": 2
+    },
+    "images": [
+     {
+      "src": "https://shop.example/wp-content/uploads/2019/01/vneck-tee-2.jpg",
+      "alt": ""
+     }
+    ],
+    "categories": [],
+    "attributes": [],
+    "variations": [],
+    "is_in_stock": true,
+    "low_stock_remaining": null,
+    "is_purchasable": true,
+    "add_to_cart": {
+     "url": "https://shop.example/product/v-neck-t-shirt/?attribute_pa_color=red&#038;variation_id=31&#038;add-to-cart=17"
+    }
+   }
+  ],
+  "18": [
+   {
+    "id": 41,
+    "name": "Hoodie",
+    "slug": "hoodie-blue-yes",
+    "parent": 18,
+    "type": "variation",
+    "permalink": "https://shop.example/product/hoodie/?attribute_pa_color=blue&attribute_logo=Yes",
+    "sku": "woo-hoodie-blue-logo",
+    "description": "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum sagittis orci ac odio dictum tincidunt. Donec ut metus leo. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Sed luctus, dui eu sagittis sodales, nulla nibh sagittis augue, vel porttitor diam enim non metus. Vestibulum aliquam augue neque. Phasellus tincidunt odio eget ullamcorper efficitur. Cras placerat ut turpis pellentesque vulputate. Nam sed consequat tortor. Curabitur finibus sapien dolor. Ut eleifend tellus nec erat pulvinar dignissim. Nam non arcu purus. Vivamus et massa massa.</p>",
+    "short_description": "",
+    "prices": {
+     "price": "4500",
+     "regular_price": "4500",
+     "sale_price": "4500",
+     "currency_code": "USD",
+     "currency_minor_unit": 2
+    },
+    "images": [
+     {
+      "src": "https://shop.example/wp-content/uploads/2019/01/hoodie-with-logo-2.jpg",
+      "alt": ""
+     }
+    ],
+    "categories": [],
+    "attributes": [],
+    "variations": [],
+    "is_in_stock": true,
+    "low_stock_remaining": null,
+    "is_purchasable": true,
+    "add_to_cart": {
+     "url": "https://shop.example/product/hoodie/?attribute_pa_color=blue&#038;attribute_logo=Yes&#038;variation_id=41&#038;add-to-cart=18"
+    }
+   },
+   {
+    "id": 36,
+    "name": "Hoodie",
+    "slug": "hoodie-blue-no",
+    "parent": 18,
+    "type": "variation",
+    "permalink": "https://shop.example/product/hoodie/?attribute_pa_color=blue&attribute_logo=No",
+    "sku": "woo-hoodie-blue",
+    "description": "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum sagittis orci ac odio dictum tincidunt. Donec ut metus leo. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Sed luctus, dui eu sagittis sodales, nulla nibh sagittis augue, vel porttitor diam enim non metus. Vestibulum aliquam augue neque. Phasellus tincidunt odio eget ullamcorper efficitur. Cras placerat ut turpis pellentesque vulputate. Nam sed consequat tortor. Curabitur finibus sapien dolor. Ut eleifend tellus nec erat pulvinar dignissim. Nam non arcu purus. Vivamus et massa massa.</p>",
+    "short_description": "",
+    "prices": {
+     "price": "4500",
+     "regular_price": "4500",
+     "sale_price": "4500",
+     "currency_code": "USD",
+     "currency_minor_unit": 2
+    },
+    "images": [
+     {
+      "src": "https://shop.example/wp-content/uploads/2019/01/hoodie-blue-1.jpg",
+      "alt": ""
+     }
+    ],
+    "categories": [],
+    "attributes": [],
+    "variations": [],
+    "is_in_stock": true,
+    "low_stock_remaining": null,
+    "is_purchasable": true,
+    "add_to_cart": {
+     "url": "https://shop.example/product/hoodie/?attribute_pa_color=blue&#038;attribute_logo=No&#038;variation_id=36&#038;add-to-cart=18"
+    }
+   },
+   {
+    "id": 35,
+    "name": "Hoodie",
+    "slug": "hoodie-green-no",
+    "parent": 18,
+    "type": "variation",
+    "permalink": "https://shop.example/product/hoodie/?attribute_pa_color=green&attribute_logo=No",
+    "sku": "woo-hoodie-green",
+    "description": "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum sagittis orci ac odio dictum tincidunt. Donec ut metus leo. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Sed luctus, dui eu sagittis sodales, nulla nibh sagittis augue, vel porttitor diam enim non metus. Vestibulum aliquam augue neque. Phasellus tincidunt odio eget ullamcorper efficitur. Cras placerat ut turpis pellentesque vulputate. Nam sed consequat tortor. Curabitur finibus sapien dolor. Ut eleifend tellus nec erat pulvinar dignissim. Nam non arcu purus. Vivamus et massa massa.</p>",
+    "short_description": "",
+    "prices": {
+     "price": "4500",
+     "regular_price": "4500",
+     "sale_price": "4500",
+     "currency_code": "USD",
+     "currency_minor_unit": 2
+    },
+    "images": [
+     {
+      "src": "https://shop.example/wp-content/uploads/2019/01/hoodie-green-1.jpg",
+      "alt": ""
+     }
+    ],
+    "categories": [],
+    "attributes": [],
+    "variations": [],
+    "is_in_stock": true,
+    "low_stock_remaining": null,
+    "is_purchasable": true,
+    "add_to_cart": {
+     "url": "https://shop.example/product/hoodie/?attribute_pa_color=green&#038;attribute_logo=No&#038;variation_id=35&#038;add-to-cart=18"
+    }
+   },
+   {
+    "id": 34,
+    "name": "Hoodie",
+    "slug": "hoodie-red-no",
+    "parent": 18,
+    "type": "variation",
+    "permalink": "https://shop.example/product/hoodie/?attribute_pa_color=red&attribute_logo=No",
+    "sku": "woo-hoodie-red",
+    "description": "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vestibulum sagittis orci ac odio dictum tincidunt. Donec ut metus leo. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Sed luctus, dui eu sagittis sodales, nulla nibh sagittis augue, vel porttitor diam enim non metus. Vestibulum aliquam augue neque. Phasellus tincidunt odio eget ullamcorper efficitur. Cras placerat ut turpis pellentesque vulputate. Nam sed consequat tortor. Curabitur finibus sapien dolor. Ut eleifend tellus nec erat pulvinar dignissim. Nam non arcu purus. Vivamus et massa massa.</p>",
+    "short_description": "",
+    "prices": {
+     "price": "4200",
+     "regular_price": "4500",
+     "sale_price": "4200",
+     "currency_code": "USD",
+     "currency_minor_unit": 2
+    },
+    "images": [
+     {
+      "src": "https://shop.example/wp-content/uploads/2019/01/hoodie-2.jpg",
+      "alt": ""
+     }
+    ],
+    "categories": [],
+    "attributes": [],
+    "variations": [],
+    "is_in_stock": true,
+    "low_stock_remaining": null,
+    "is_purchasable": true,
+    "add_to_cart": {
+     "url": "https://shop.example/product/hoodie/?attribute_pa_color=red&#038;attribute_logo=No&#038;variation_id=34&#038;add-to-cart=18"
+    }
+   }
+  ]
+ }
+}

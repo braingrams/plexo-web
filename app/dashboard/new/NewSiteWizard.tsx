@@ -264,7 +264,7 @@ function Dropzone({ file, onFile }: { file: File | null; onFile: (f: File | null
 
 export function NewSiteWizard() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [startTab, setStartTab] = useState<"marketplace" | "ai" | "upload">("marketplace");
+  const [startTab, setStartTab] = useState<"marketplace" | "ai" | "upload" | "wordpress">("marketplace");
 
   const [items, setItems] = useState<MarketplaceItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
@@ -626,6 +626,23 @@ export function NewSiteWizard() {
                 >
                   Upload your own
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setStartTab("wordpress")}
+                  style={{
+                    fontSize: "12.5px",
+                    fontWeight: 650,
+                    padding: "7px 14px",
+                    borderRadius: 999,
+                    border: "none",
+                    cursor: "pointer",
+                    background: startTab === "wordpress" ? "var(--brand)" : "transparent",
+                    color: startTab === "wordpress" ? "#fff" : "var(--text-muted)",
+                    transition: "background 0.15s, color 0.15s",
+                  }}
+                >
+                  Move from WordPress
+                </button>
               </div>
 
               {startTab === "marketplace" ? (
@@ -786,6 +803,26 @@ export function NewSiteWizard() {
                       )}
                     </>
                   )}
+                </div>
+              ) : startTab === "wordpress" ? (
+                <div style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 16, alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{
+                        width: 36, height: 36, borderRadius: 10, background: "var(--brand-subtle)",
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                      }}
+                    >
+                      <IconGlobe />
+                    </div>
+                    <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+                      Already have a WordPress site? Plexo copies all of it — pages, blog posts, images, your theme&rsquo;s design and your
+                      exact web addresses — reconnects your forms, and walks you through moving your domain. Your WordPress site isn&rsquo;t changed.
+                    </p>
+                  </div>
+                  <Link href="/dashboard/migrate/wordpress" style={{ ...primaryButtonStyle(true), textDecoration: "none", display: "inline-block" }}>
+                    Move my WordPress site →
+                  </Link>
                 </div>
               ) : (
                 <form onSubmit={handleUpload} style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 22 }}>

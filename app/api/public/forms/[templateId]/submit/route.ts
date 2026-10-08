@@ -2,13 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
-import { resolveNotificationRecipient } from "@/lib/notificationPreferencesDynamo";
-import { sendMaildripEmail } from "@/lib/mail/maildrip";
-import { buildFormSubmissionEmail } from "@/lib/mail/templates";
-import { FormSubmission } from "@/lib/db/opsEntities";
-import { logEmailDelivery } from "@/lib/mail/logEmail";
-import { Template } from "@/lib/db/contentEntities";
-import { User } from "@/lib/db/coreEntities";
+import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
+import { FormSettings } from "@/lib/db/opsEntities";
 
 /**
  * Receives a real, no-JS browser form submission from a form_container's own <form
@@ -78,10 +73,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Invalid form submission." }, { status: 400 });
   }
 
-  const fields: Record<string, string> = {};
-  for (const [key, value] of formData.entries()) {
-    if (typeof value === "string" && value.trim()) fields[key] = value.trim().slice(0, 5000);
-  }
+  const fields = collectFormFields(formData.entries());
   if (Object.keys(fields).length === 0) {
     return NextResponse.json({ error: "Empty submission." }, { status: 400 });
   }
@@ -107,52 +99,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
   }
 
-  await FormSubmission.create({
-    id: crypto.randomUUID(),
-    templateId,
-    organizationId: organization.id,
-    formName,
-    fields,
-    submitterIp: clientIp(request),
-  }).go();
+  await recordFormSubmission({ templateId, organizationId: organization.id, formName, fields, submitterIp: clientIp(request), siteHost: hostname });
 
-  void notifyFormSubmission(templateId, organization.id, formName, fields).catch((err) =>
-    console.error("[mail] form submission notification failed:", err),
-  );
-
+  // A thank-you page set for this form (e.g. carried over from WordPress) wins over the
+  // default of showing the confirmation on the same page.
+  const { data: formSettings } = await FormSettings.get({ templateId, formName }).go();
+  const thankYou = formSettings?.redirectUrl;
+  if (thankYou && (thankYou.startsWith("/") || /^https:\/\//i.test(thankYou))) {
+    return NextResponse.redirect(new URL(thankYou, request.url), { status: 303 });
+  }
   return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
 }
 
-async function notifyFormSubmission(
-  templateId: string,
-  organizationId: string,
-  formName: string,
-  fields: Record<string, string>,
-): Promise<void> {
-  const { data: template } = await Template.get({ id: templateId }).go();
-  if (!template) return;
-  const { data: owner } = await User.get({ id: template.userId }).go();
-
-  const to = await resolveNotificationRecipient(organizationId, "formSubmissions", owner?.email);
-  if (!to) return;
-
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const html = buildFormSubmissionEmail({
-    siteName: template.name,
-    formName,
-    fieldsPreview: Object.entries(fields).slice(0, 8) as [string, string][],
-    submissionsUrl: `${base}/dashboard/templates/${templateId}/form-submissions`,
-  });
-  const subject = `New ${formName} submission on ${template.name}`;
-  try {
-    await sendMaildripEmail({ to, subject, html });
-    logEmailDelivery({ kind: "maildrip", to, subject, status: "sent", context: "form_submission", organizationId, templateId });
-  } catch (err) {
-    logEmailDelivery({
-      kind: "maildrip", to, subject, status: "failed",
-      errorMessage: err instanceof Error ? err.message : String(err),
-      context: "form_submission", organizationId, templateId,
-    });
-    throw err;
-  }
-}

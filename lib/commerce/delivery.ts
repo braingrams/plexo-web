@@ -64,7 +64,7 @@ export function isMethodApplicable(method: DeliveryMethodItem, address: Address)
  */
 export async function resolveAvailableDeliveryMethods(templateId: string, address: Address): Promise<DeliveryMethodItem[]> {
   const [{ data: methods }, { data: settings }] = await Promise.all([
-    CommerceDeliveryMethod.query.primary({ templateId }).go(),
+    CommerceDeliveryMethod.query.primary({ templateId }).go({ pages: "all" }),
     CommerceSettings.get({ templateId }).go(),
   ]);
   const options = resolveFulfillmentOptions(settings);

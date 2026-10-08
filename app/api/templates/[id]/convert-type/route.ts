@@ -73,7 +73,7 @@ export async function POST(
 
   const features = getTierFeatures(resolved.subscriptionPlan);
 
-  const { data: pageCount } = await Template.query.byParent({ parentId: existing.id }).go();
+  const { data: pageCount } = await Template.query.byParent({ parentId: existing.id }).go({ pages: "all" });
 
   if (targetKind === "EMAIL") {
     if (pageCount.length > 0) {

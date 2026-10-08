@@ -143,7 +143,7 @@ async function resolveCategoryId(
   if (cache.has(slug)) return cache.get(slug)!;
   const { data: categories } = await CommerceCategory.query
     .primary({ templateId })
-    .go();
+    .go({ pages: "all" });
   const existing = categories.find((c) => c.slug === slug);
   if (existing) {
     cache.set(slug, existing.id);
@@ -279,7 +279,7 @@ export async function POST(
 
   const { data: existingProducts } = await CommerceProduct.query
     .primary({ templateId })
-    .go();
+    .go({ pages: "all" });
   const existingSlugs = new Set(existingProducts.map((p) => p.slug));
   const existingSkus = new Set(
     existingProducts.map((p) => p.slug.toLowerCase()),

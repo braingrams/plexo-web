@@ -84,8 +84,8 @@ export default async function OverviewPage() {
   // aggregates in memory. Bounded by how many sites one org actually has (small in
   // practice, same assumption used throughout this migration), not by total row count.
   const [domainsByTemplate, blogPostsByTemplate, viewCountsByTemplate, apiKeysResult] = await Promise.all([
-    Promise.all(rootTemplates.map((t) => PublishedDomain.query.primary({ templateId: t.id }).go())),
-    Promise.all(rootTemplates.map((t) => BlogPost.query.primary({ templateId: t.id }).go())),
+    Promise.all(rootTemplates.map((t) => PublishedDomain.query.primary({ templateId: t.id }).go({ pages: "all" }))),
+    Promise.all(rootTemplates.map((t) => BlogPost.query.primary({ templateId: t.id }).go({ pages: "all" }))),
     Promise.all(
       rootTemplates.map((t) =>
         PageView.query
@@ -94,7 +94,7 @@ export default async function OverviewPage() {
           .go({ pages: "all" }),
       ),
     ),
-    ApiKey.query.primary({ organizationId }).go(),
+    ApiKey.query.primary({ organizationId }).go({ pages: "all" }),
   ]);
   // Matches app/dashboard/settings/api-keys/page.tsx's own filter — a revoked key stays in
   // the table (never hard-deleted) but shouldn't count here or on the management page, or
@@ -123,7 +123,7 @@ export default async function OverviewPage() {
     })
     .slice(0, 6);
   const recentTemplatePageCounts = await Promise.all(
-    recentTemplateRecords.map((t) => Template.query.byParent({ parentId: t.id }).go()),
+    recentTemplateRecords.map((t) => Template.query.byParent({ parentId: t.id }).go({ pages: "all" })),
   );
 
   const recentDomainActivity = [...allDomains]

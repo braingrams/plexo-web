@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { lineName, resolvePurchasable } from "@/lib/commerce/variants";
 import type { NextRequest, NextResponse } from "next/server";
 import { CommerceCart, CommerceCartItem, CommerceProduct, CommerceSettings } from "@/lib/db/commerceEntities";
 
@@ -36,7 +37,7 @@ export function clearCartCookie(response: NextResponse): void {
  */
 export async function findOpenCart(templateId: string, token: string | null) {
   if (!token) return null;
-  const { data: matches } = await CommerceCart.query.byToken({ cartToken: token }).go();
+  const { data: matches } = await CommerceCart.query.byToken({ cartToken: token }).go({ pages: "all" });
   const cart = matches[0];
   if (!cart || cart.templateId !== templateId || cart.status !== "OPEN") return null;
   return cart;
@@ -46,7 +47,7 @@ export async function createCart(templateId: string, organizationId: string) {
   const token = randomBytes(24).toString("hex");
   const id = randomUUID();
   await CommerceCart.create({ id, templateId, organizationId, cartToken: token, status: "OPEN" }).go();
-  const { data: cart } = await CommerceCart.get({ templateId, id }).go();
+  const { data: cart } = await CommerceCart.get({ templateId, id }).go({ consistent: true });
   if (!cart) throw new Error(`CommerceCart ${id} vanished immediately after being created`);
   return cart;
 }
@@ -56,6 +57,10 @@ export type CartSnapshot = {
   items: Array<{
     itemId: string;
     productId: string;
+    /** The chosen variant, for products with options. */
+    variantId: string | null;
+    /** "Size: M / Colour: Red" — also part of `name`. */
+    variantLabel: string | null;
     name: string;
     slug: string;
     imageUrl: string | null;
@@ -88,7 +93,7 @@ export async function readCartSnapshot(templateId: string, token: string | null)
   const cart = await findOpenCart(templateId, token);
   if (!cart) return { cartToken: null, items: [], subtotalMinor: 0, currency, paymentGateway };
 
-  const { data: items } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
+  const { data: items } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go({ pages: "all" });
   items.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
   const products = await Promise.all(items.map((item) => CommerceProduct.get({ templateId, id: item.productId }).go()));
 
@@ -96,17 +101,23 @@ export async function readCartSnapshot(templateId: string, token: string | null)
   items.forEach((item, i) => {
     const product = products[i].data;
     if (!product || !(product.active ?? true)) return;
-    const lineTotal = product.priceMinor * (item.quantity ?? 1);
+    const purchase = resolvePurchasable(product, item.variantId);
+    // A variant the owner has since removed/switched off can't be bought — dropped here,
+    // the same way an inactive product is.
+    if (!purchase.ok) return;
+    const lineTotal = purchase.unitPriceMinor * (item.quantity ?? 1);
     snapshot.items.push({
       itemId: item.id,
       productId: product.id,
-      name: product.name,
+      variantId: purchase.variant?.id ?? null,
+      variantLabel: purchase.label,
+      name: lineName(product.name, purchase.label),
       slug: product.slug,
-      imageUrl: product.imageUrl ?? null,
-      unitPriceMinor: product.priceMinor,
+      imageUrl: purchase.imageUrl,
+      unitPriceMinor: purchase.unitPriceMinor,
       quantity: item.quantity ?? 1,
       lineTotalMinor: lineTotal,
-      inStock: product.stockQuantity == null || product.stockQuantity >= (item.quantity ?? 1),
+      inStock: purchase.stockQuantity == null || purchase.stockQuantity >= (item.quantity ?? 1),
       kind: product.kind ?? "PHYSICAL",
     });
     snapshot.subtotalMinor += lineTotal;

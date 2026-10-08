@@ -26,6 +26,14 @@ function IconProducts() {
   );
 }
 
+function IconDonations() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" />
+    </svg>
+  );
+}
+
 function IconOrders() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -110,6 +118,7 @@ export function CommerceTabs({ templateId }: { templateId: string }) {
     { href: base, label: "Overview", icon: <IconOverview /> },
     { href: `${base}/products`, label: "Products", icon: <IconProducts /> },
     { href: `${base}/orders`, label: "Orders", icon: <IconOrders /> },
+    { href: `${base}/donations`, label: "Donations", icon: <IconDonations /> },
     { href: `${base}/delivery`, label: "Delivery", icon: <IconDelivery /> },
     { href: `${base}/availability`, label: "Availability", icon: <IconAvailability /> },
     { href: `${base}/customers`, label: "Customers", icon: <IconCustomers /> },

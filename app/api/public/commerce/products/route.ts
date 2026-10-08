@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { listingPriceAndStock } from "@/lib/commerce/variants";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { CommerceProduct, CommerceCategory, CommerceOrder, CommerceOrderItem } from "@/lib/db/commerceEntities";
 
@@ -14,9 +15,9 @@ const SPECIAL_CATEGORIES = new Set(["best_seller", "most_recent"]);
  * order for the site and sums in memory, same "small in practice" bound as the rest of
  * this migration's site-scoped aggregations. */
 async function bestSellerProductIds(templateId: string): Promise<string[]> {
-  const { data: orders } = await CommerceOrder.query.primary({ templateId }).go();
+  const { data: orders } = await CommerceOrder.query.primary({ templateId }).go({ pages: "all" });
   const paidOrderIds = orders.filter((o) => o.status === "PAID").map((o) => o.id);
-  const itemBatches = await Promise.all(paidOrderIds.map((orderId) => CommerceOrderItem.query.primary({ templateId, orderId }).go()));
+  const itemBatches = await Promise.all(paidOrderIds.map((orderId) => CommerceOrderItem.query.primary({ templateId, orderId }).go({ pages: "all" })));
   const totals = new Map<string, number>();
   for (const batch of itemBatches) {
     for (const item of batch.data) {
@@ -53,8 +54,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const pageSize = Number.isFinite(pageSizeParam) && pageSizeParam > 0 ? Math.min(Math.floor(pageSizeParam), 100) : null;
 
   const [{ data: allProducts }, { data: categories }] = await Promise.all([
-    CommerceProduct.query.primary({ templateId }).go(),
-    CommerceCategory.query.primary({ templateId }).go(),
+    CommerceProduct.query.primary({ templateId }).go({ pages: "all" }),
+    CommerceCategory.query.primary({ templateId }).go({ pages: "all" }),
   ]);
   const categoryBySlug = new Map(categories.map((c) => [c.slug, c]));
   const categoryById = new Map(categories.map((c) => [c.id, c]));
@@ -75,9 +76,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     description: p.description ?? null,
     imageUrl: p.imageUrl ?? null,
     kind: p.kind ?? "PHYSICAL",
-    priceMinor: p.priceMinor,
+    ...listingPriceAndStock(p),
     currency: p.currency ?? "NGN",
-    stockQuantity: p.stockQuantity ?? null,
     durationMinutes: p.durationMinutes ?? null,
     createdAt: p.createdAt,
     category: p.categoryId && categoryById.has(p.categoryId) ? { name: categoryById.get(p.categoryId)!.name, slug: categoryById.get(p.categoryId)!.slug } : null,

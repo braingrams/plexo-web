@@ -98,12 +98,12 @@ async function compileForSite(rootTemplateId: string, designJson: any): Promise<
 }
 
 async function findChildBySlug(parentId: string, slug: string): Promise<{ id: string } | null> {
-  const { data: siblings } = await Template.query.byParent({ parentId }).go();
+  const { data: siblings } = await Template.query.byParent({ parentId }).go({ pages: "all" });
   return siblings.find((s) => s.slug === slug) ?? null;
 }
 
 async function nextOrder(parentId: string): Promise<number> {
-  const { data: siblings } = await Template.query.byParent({ parentId }).go();
+  const { data: siblings } = await Template.query.byParent({ parentId }).go({ pages: "all" });
   return siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
 }
 
@@ -227,6 +227,28 @@ export async function getStorefrontSlug(templateId: string): Promise<string | nu
 }
 
 /**
+ * The storefront page's REAL served path, e.g. "/store" or "/lineagecare/shop" — a migrated
+ * store's shop page can sit under a parent page, which the bare slug can't express.
+ */
+export async function getStorefrontPath(templateId: string): Promise<string | null> {
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  return settings?.storefrontTemplateId ? pagePath(settings.storefrontTemplateId) : null;
+}
+
+/** "/a/b" for a page in the site tree (the root contributes no segment), or null if it's gone. */
+async function pagePath(pageId: string): Promise<string | null> {
+  const segments: string[] = [];
+  let currentId: string | null = pageId;
+  while (currentId) {
+    const page: TemplateItem | null = (await Template.get({ id: currentId }).go()).data;
+    if (!page) return null;
+    if (page.parentId) segments.unshift(page.slug ?? "");
+    currentId = page.parentId ?? null;
+  }
+  return segments.length ? `/${segments.join("/")}` : null;
+}
+
+/**
  * The checkout page's REAL served path — not assumed to be "{storefrontSlug}/checkout".
  * That assumption holds for the auto-provisioned flow (ensureStorefrontLayout creates
  * checkout as a genuine child of the storefront page), but a hand-built site can freely
@@ -274,4 +296,29 @@ export async function renameStorefrontSlug(templateId: string, newSlugInput: str
   const candidate = await ensureUniqueSlug(templateId, base);
   await Template.patch({ id: page.id }).set({ slug: candidate }).go();
   return candidate;
+}
+
+/**
+ * Just the order-confirmation page, for a site that takes donations but doesn't sell
+ * anything — a bank-transfer donor lands there to see the account details, and a
+ * donations-only nonprofit shouldn't get a shop, checkout and order-tracking page it never
+ * asked for. Idempotent, same rules as ensureStorefrontLayout (respects an existing page).
+ */
+export async function ensureOrderConfirmationPage(templateId: string, organizationId: string, userId: string): Promise<void> {
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  if (settings?.orderConfirmationTemplateId) return;
+  const existing = await findChildBySlug(templateId, "order-confirmation");
+  const orderConfirmationTemplateId = existing
+    ? existing.id
+    : await createChildPage({
+        parentId: templateId,
+        rootId: templateId,
+        userId,
+        organizationId,
+        name: "Order Confirmation",
+        slug: "order-confirmation",
+        designJson: buildOrderConfirmationDesignJson(),
+      });
+  if (settings) await CommerceSettings.patch({ templateId }).set({ orderConfirmationTemplateId }).go();
+  else await CommerceSettings.create({ id: randomUUID(), templateId, organizationId, orderConfirmationTemplateId }).go();
 }

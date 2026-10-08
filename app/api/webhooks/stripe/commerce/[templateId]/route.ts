@@ -1,9 +1,11 @@
+import { isExpiredButPayable, verifyOrderOnReturn } from "@/lib/commerce/verifyOnReturn";
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
 import { decryptStripeKey, tryDecrypt } from "@/lib/crypto";
 import { listConfiguredStripeWebhookSecrets, resolveStripeKeysForMode } from "@/lib/commerce/stripe";
 import { handleOrderPaid } from "@/lib/db/commerceWebhookOperations";
+import { attachStripeSubscriptionToDonation, processStripeDonationEvent } from "@/lib/commerce/donations";
 import { CommerceOrder, CommerceBooking, CommerceSettings, StripeCommerceEvent } from "@/lib/db/commerceEntities";
 
 const STRIPE_API_VERSION = "2026-06-24.dahlia";
@@ -99,6 +101,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
           .go();
       } catch (err) {
         if (!isConditionalCheckFailure(err)) throw err;
+        // …unless it was only cancelled because its checkout hold expired: reinstate it.
+        const { data: current } = await CommerceOrder.get({ templateId: templateId, id: orderRef.id }).go();
+        if (current && isExpiredButPayable(current)) await verifyOrderOnReturn(current);
         return NextResponse.json({ received: true }); // already moved past PENDING
       }
 
@@ -111,10 +116,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
       // in the site's own Stripe account and never touches Plexo's ledger; wallet crediting
       // is a PLATFORM_*-only concept (see the platform route).
       if (order) {
+        await attachStripeSubscriptionToDonation(order, typeof session.subscription === "string" ? session.subscription : session.subscription?.id);
         await handleOrderPaid(order, booking, settings);
       }
     }
   }
+
+  // Monthly donations: renewals, cancellations, failed charges.
+  const renewals = await processStripeDonationEvent(event, templateId);
+  for (const order of renewals) await handleOrderPaid(order, null, settings);
 
   return NextResponse.json({ received: true });
 }

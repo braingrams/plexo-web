@@ -5,6 +5,7 @@ import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { ensureActiveOrganization, getOrgBrandDynamo } from "@/server/orgDynamo";
 import { DashboardShell } from "./dashboard-shell";
+import { MigrationBanner } from "./migrate/wordpress/MigrationBanner";
 
 export default async function DashboardLayout({
   children,
@@ -48,6 +49,8 @@ export default async function DashboardLayout({
         organizationName={orgResolution.organizationName}
         orgBranding={orgBranding}
       >
+        {/* A WordPress site moving in the background: progress on every page, not just the migration tab. */}
+        <MigrationBanner />
         {children}
       </DashboardShell>
     </ThemeProvider>

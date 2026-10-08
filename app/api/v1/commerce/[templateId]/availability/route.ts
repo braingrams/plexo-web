@@ -16,8 +16,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   if (!product) return NextResponse.json({ error: "Product not found." }, { status: 404 });
 
   const [{ data: rules }, { data: exceptions }] = await Promise.all([
-    CommerceAvailabilityRule.query.byProduct({ productId }).go(),
-    CommerceAvailabilityException.query.byProduct({ productId }).go(),
+    CommerceAvailabilityRule.query.byProduct({ productId }).go({ pages: "all" }),
+    CommerceAvailabilityException.query.byProduct({ productId }).go({ pages: "all" }),
   ]);
   rules.sort((a, b) => (a.dayOfWeek - b.dayOfWeek) || (a.startMinute - b.startMinute));
   exceptions.sort((a, b) => a.date.localeCompare(b.date));
@@ -78,7 +78,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
     // No direct (productId, date) key — CommerceAvailabilityException's primary key is
     // (templateId, id); byProduct's GSI sort key is (date, id), so a partial-composite
     // query on just date resolves to this exact upsert target.
-    const { data: existingMatches } = await CommerceAvailabilityException.query.byProduct({ productId, date: dateIso }).go();
+    const { data: existingMatches } = await CommerceAvailabilityException.query.byProduct({ productId, date: dateIso }).go({ pages: "all" });
     const existing = existingMatches[0];
     if (existing) {
       await CommerceAvailabilityException.patch({ templateId, id: existing.id }).set({ closed: true }).go();

@@ -16,9 +16,9 @@ export async function GET(
   // BlogComment is scoped by postId, not templateId (see its own entity comment in
   // contentEntities.ts) — no direct "every comment on this site" index, so this fans out
   // per post, same as the comments moderation dashboard page.
-  const { data: posts } = await BlogPost.query.byStatus({ templateId: resolved.context.templateId }).go();
+  const { data: posts } = await BlogPost.query.byStatus({ templateId: resolved.context.templateId }).go({ pages: "all" });
   const postById = new Map(posts.map((p) => [p.id, p]));
-  const commentBatches = await Promise.all(posts.map((p) => BlogComment.query.primary({ postId: p.id }).go()));
+  const commentBatches = await Promise.all(posts.map((p) => BlogComment.query.primary({ postId: p.id }).go({ pages: "all" })));
   let comments = commentBatches.flatMap((b) => b.data);
   if (statusFilter) {
     comments = comments.filter((c) => c.status === statusFilter);

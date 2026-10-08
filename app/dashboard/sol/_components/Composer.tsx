@@ -6,6 +6,7 @@ import { AttachmentChip } from "./AttachmentChip";
 import { VoiceRecorderButton } from "./VoiceRecorderButton";
 import { ModelTierSelector } from "./ModelTierSelector";
 import { uploadAndTranscribe } from "./transcribeUpload";
+import { prepareImageForModel } from "./prepareImage";
 import { classifyAttachmentType, type ChatAttachment, type ModelTier, type PendingAttachment } from "./types";
 
 const PLACEHOLDER = "Ask SOL to publish a page…";
@@ -52,8 +53,10 @@ export function Composer({
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   }, [text]);
 
-  async function uploadAttachment(clientId: string, file: File) {
+  async function uploadAttachment(clientId: string, original: File) {
     try {
+      const file = await prepareImageForModel(original);
+      if (file !== original) setAttachments((prev) => prev.map((a) => (a.clientId === clientId ? { ...a, file } : a)));
       const presignRes = await fetch("/api/v1/sol/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

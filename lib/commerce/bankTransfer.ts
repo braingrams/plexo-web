@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { adjustStockForOrderItems } from "@/lib/commerce/stock";
 import type { EntityItem } from "electrodb";
 import { Template } from "@/lib/db/contentEntities";
 import { User, NotificationPreferences } from "@/lib/db/coreEntities";
@@ -174,15 +175,8 @@ function isConditionalCheckFailure(err: unknown): boolean {
  * the gateway-failure rollback: restock, free the booking slot (deleted, never
  * status-flipped — see checkoutDynamo.ts), un-claim the discount use. */
 async function releaseOrderHolds(order: OrderItem): Promise<void> {
-  const { data: items } = await CommerceOrderItem.query.primary({ templateId: order.templateId, orderId: order.id }).go();
-  await Promise.all(
-    items.map(async (item) => {
-      const { data: product } = await CommerceProduct.get({ templateId: order.templateId, id: item.productId }).go();
-      if (product && product.stockQuantity != null) {
-        await CommerceProduct.patch({ templateId: order.templateId, id: item.productId }).add({ stockQuantity: item.quantity ?? 1 }).go().catch(() => undefined);
-      }
-    }),
-  );
+  const { data: items } = await CommerceOrderItem.query.primary({ templateId: order.templateId, orderId: order.id }).go({ pages: "all" });
+  await adjustStockForOrderItems(order.templateId, items, 1);
   const { data: booking } = await CommerceBooking.get({ templateId: order.templateId, orderId: order.id }).go();
   if (booking && booking.status === "PENDING_PAYMENT") {
     await Promise.all([
@@ -191,7 +185,7 @@ async function releaseOrderHolds(order: OrderItem): Promise<void> {
     ]);
   }
   if (order.discountCode) {
-    const { data: matches } = await CommerceDiscountCode.query.byCode({ templateId: order.templateId, code: order.discountCode }).go();
+    const { data: matches } = await CommerceDiscountCode.query.byCode({ templateId: order.templateId, code: order.discountCode }).go({ pages: "all" });
     if (matches[0]) await CommerceDiscountCode.patch({ templateId: order.templateId, id: matches[0].id }).add({ usedCount: -1 }).go().catch(() => undefined);
   }
 }

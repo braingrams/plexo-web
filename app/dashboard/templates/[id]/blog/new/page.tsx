@@ -33,10 +33,10 @@ export default async function NewBlogPostPage({
       access.userId,
       access.userName || access.userEmail,
     ),
-    BlogCategory.query.primary({ templateId: access.templateId }).go(),
-    BlogTag.query.primary({ templateId: access.templateId }).go(),
-    BlogAuthor.query.primary({ templateId: access.templateId }).go(),
-    PublishedDomain.query.primary({ templateId: access.templateId }).go(),
+    BlogCategory.query.primary({ templateId: access.templateId }).go({ pages: "all" }),
+    BlogTag.query.primary({ templateId: access.templateId }).go({ pages: "all" }),
+    BlogAuthor.query.primary({ templateId: access.templateId }).go({ pages: "all" }),
+    PublishedDomain.query.primary({ templateId: access.templateId }).go({ pages: "all" }),
     getPublishedBlogPostQuotaStatus(access.templateId, access.subscriptionPlan),
   ]);
   categories.sort((a, b) => a.name.localeCompare(b.name));

@@ -1,3 +1,6 @@
+import { isExpiredButPayable, verifyOrderOnReturn } from "@/lib/commerce/verifyOnReturn";
+import { processPaystackDonationEvent } from "@/lib/commerce/donations";
+import { CommerceOrder } from "@/lib/db/commerceEntities";
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
@@ -64,14 +67,15 @@ export async function POST(
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }
 
-  let event: { event?: string; data?: { id?: number | string; reference?: string } };
+  let event: { event?: string; data?: { id?: number | string; reference?: string; subscription_code?: string } };
   try {
     event = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  const eventId = event.data?.id !== undefined ? String(event.data.id) : null;
+  // Subscription lifecycle events carry no numeric id — key them by event + subscription code.
+  const eventId = event.data?.id !== undefined ? String(event.data.id) : event.data?.subscription_code ? `${event.event}:${event.data.subscription_code}` : null;
   if (!eventId) {
     return NextResponse.json({ received: true });
   }
@@ -81,10 +85,26 @@ export async function POST(
     return NextResponse.json({ received: true });
   }
 
+  let confirmed: Awaited<ReturnType<typeof confirmPaystackPayment>> = null;
   if (event.event === "charge.success" && event.data?.reference) {
-    const confirmed = await confirmPaystackPayment(event.data.reference, templateId);
+    confirmed = await confirmPaystackPayment(event.data.reference, templateId);
     if (confirmed) {
       await handleOrderPaid(confirmed.order, confirmed.booking, settings);
+    }
+  }
+  // A payment completed after its checkout hold expired: reinstate rather than ignore it.
+  if (!confirmed && event.event === "charge.success" && event.data?.reference) {
+    const { data: refs } = await CommerceOrder.query.byPaymentRef({ paystackReference: event.data.reference }).go();
+    const late = refs.find((o) => o.templateId === templateId);
+    if (late && isExpiredButPayable(late)) {
+      await verifyOrderOnReturn(late);
+      return NextResponse.json({ received: true });
+    }
+  }
+  // Monthly donations: a renewal charge (no Plexo reference), subscription start/stop.
+  if (!confirmed) {
+    for (const order of await processPaystackDonationEvent(templateId, event as { event?: string; data?: Record<string, unknown> })) {
+      await handleOrderPaid(order, null, settings);
     }
   }
 

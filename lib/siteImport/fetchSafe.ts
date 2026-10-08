@@ -21,6 +21,8 @@ export class SsrfBlockedError extends Error {
 export interface SafeFetchOptions extends RequestInit {
   /** Max redirect hops to follow, each independently re-checked. Default 5. */
   maxRedirects?: number;
+  /** Return a redirect response as-is instead of following it (the target is still never connected to). */
+  returnRedirects?: boolean;
 }
 
 const DEFAULT_MAX_REDIRECTS = 5;
@@ -82,7 +84,7 @@ async function assertPublicHost(hostname: string): Promise<void> {
  * address onto the actual socket (a custom undici Agent `connect` override), left as a follow-up.
  */
 export async function safeFetch(url: string, opts: SafeFetchOptions = {}): Promise<Response> {
-  const { maxRedirects = DEFAULT_MAX_REDIRECTS, ...init } = opts;
+  const { maxRedirects = DEFAULT_MAX_REDIRECTS, returnRedirects = false, ...init } = opts;
   let currentUrl = url;
   let redirectsLeft = maxRedirects;
 
@@ -102,7 +104,7 @@ export async function safeFetch(url: string, opts: SafeFetchOptions = {}): Promi
 
     if (res.status >= 300 && res.status < 400) {
       const location = res.headers.get("location");
-      if (!location) return res; // redirect status with no Location header - nothing to follow
+      if (!location || returnRedirects) return res; // nothing to follow, or the caller wants the redirect itself
       if (redirectsLeft <= 0) {
         throw new SsrfBlockedError(currentUrl, "too many redirects");
       }

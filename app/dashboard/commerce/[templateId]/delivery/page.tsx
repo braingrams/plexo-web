@@ -6,7 +6,7 @@ export default async function CommerceDeliveryPage({ params }: { params: Promise
   const { templateId } = await params;
 
   const [{ data: methods }, { data: settings }] = await Promise.all([
-    CommerceDeliveryMethod.query.primary({ templateId }).go(),
+    CommerceDeliveryMethod.query.primary({ templateId }).go({ pages: "all" }),
     CommerceSettings.get({ templateId }).go(),
   ]);
   methods.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));

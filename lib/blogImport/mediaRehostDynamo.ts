@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import pLimit from "p-limit";
 import { uploadObject } from "@/lib/storage";
 import { safeFetch } from "@/lib/siteImport/fetchSafe";
@@ -12,6 +12,21 @@ const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
 const CONCURRENCY = 5;
 
 const limit = pLimit(CONCURRENCY);
+
+/**
+ * Where a source image is stored: a hash of its full URL. (It used to be the first 48
+ * characters of the URL's base64 — identical for every image on a site, so every
+ * imported image overwrote the same file and every post showed the same picture.)
+ */
+export function mediaKey(templateId: string, sourceUrl: string, extension: string): string {
+  return `blog-import/${templateId}/${createHash("sha256").update(sourceUrl).digest("hex").slice(0, 40)}.${extension}`;
+}
+
+/** A mapping written under the old colliding key — its file may hold another image, so it's re-uploaded. */
+export function isCollidedMapping(sourceUrl: string, blobUrl: string): boolean {
+  const name = blobUrl.split("/").pop()?.split(".")[0] ?? "";
+  return name === Buffer.from(sourceUrl).toString("base64url").slice(0, 48);
+}
 
 export function extractImageUrls(html: string): string[] {
   return Array.from(html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi), (m) => m[1]);
@@ -39,7 +54,7 @@ export async function rehostMediaUrls(templateId: string, urls: string[], errors
   const existingBatches = await Promise.all(unique.map((sourceUrl) => ImportMediaMap.get({ templateId, sourceUrl }).go()));
   const resolved = new Map<string, string>();
   existingBatches.forEach((res, i) => {
-    if (res.data) resolved.set(unique[i], res.data.blobUrl);
+    if (res.data && !isCollidedMapping(unique[i], res.data.blobUrl)) resolved.set(unique[i], res.data.blobUrl);
   });
   const toFetch = unique.filter((u) => !resolved.has(u));
 
@@ -59,9 +74,9 @@ export async function rehostMediaUrls(templateId: string, urls: string[], errors
             return;
           }
           const extension = sourceUrl.split(".").pop()?.split(/[?#]/)[0]?.slice(0, 5).replace(/[^a-z0-9]/gi, "") || "bin";
-          const key = `blog-import/${templateId}/${Buffer.from(sourceUrl).toString("base64url").slice(0, 48)}.${extension}`;
           // key is a hash of sourceUrl — a "collision" is always identical content, so
           // uploadObject's unconditional overwrite is always safe here.
+          const key = mediaKey(templateId, sourceUrl, extension);
           const blob = await uploadObject(key, buffer, { access: "public", contentType });
 
           // .put() (not .create()) — same upsert semantics as the Prisma version's

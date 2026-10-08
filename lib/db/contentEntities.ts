@@ -69,6 +69,25 @@ export const Template = new Entity(
       // Domains connect-a-domain picker (same reason isCommerceLayout/isBlogLayout are),
       // unlike isLmsFunnel: this one genuinely shouldn't be browsable as "a site."
       isLmsPageDesign: { type: "boolean", default: false },
+      // Root sites only. True when this site's URLs end in "/" (WordPress's convention) —
+      // the serve route then answers "/about/" directly and 301s "/about" to it, instead of
+      // Plexo's default of the reverse. Set by the WordPress migration (lib/wpMigration) so
+      // every migrated URL keeps working at exactly its old address, with no redirect hop.
+      urlTrailingSlash: { type: "boolean", default: false },
+      // The site this one was migrated from ("https://example.org"). Set on the root site
+      // (shown in the dashboard, used by the domain-cutover guidance) and on every page the
+      // migration created — which is how the raw-upload daily limit tells pages Plexo made
+      // for the owner apart from HTML they uploaded themselves.
+      migratedFrom: { type: "string" },
+      // When set, this page's own URL permanently redirects here (its sub-pages and files
+      // still resolve normally, and it's left out of the sitemap). Used for a WordPress
+      // "posts page" (e.g. /news/) whose job the live Plexo blog at /blog now does — a frozen
+      // copy of the old post list would never show a new post.
+      redirectTo: { type: "string" },
+      // Root sites only: paths of a migrated site's custom-plugin API endpoints that accepted
+      // submissions on WordPress (e.g. "/blog/wp-json/my-plugin/v1/contact"). The serve route
+      // captures POSTs to them into Form Submissions so anything still calling them keeps working.
+      migratedApiCaptureRoutes: { type: "any" },
       createdAt: {
         type: "string",
         default: () => new Date().toISOString(),
@@ -497,6 +516,8 @@ export const BlogSite = new Entity(
       enabled: { type: "boolean", default: false },
       title: { type: "string", default: "Blog" },
       description: { type: "string" },
+      /** The listing page's own <title> for search engines, when it differs from the heading (a migrated site keeps its WordPress posts page's SEO title). */
+      metaTitle: { type: "string" },
       postsPerPage: { type: "number", default: 10 },
       defaultCategoryId: { type: "string" },
       showOnHomepage: { type: "boolean", default: false },
@@ -706,7 +727,10 @@ export const BlogPost = new Entity(
         type: ["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"] as const,
         default: "DRAFT",
       },
-      publishedAt: { type: "string" },
+      // Part of the byStatus sort key, so it can never be missing when status is written —
+      // a never-published draft stores "" here as a key placeholder (see savePostCore.ts).
+      // The getter hands readers back "no date" for it, exactly as before.
+      publishedAt: { type: "string", get: (value?: string) => (value ? value : undefined) },
       scheduledAt: { type: "string" },
       metaTitle: { type: "string" },
       metaDescription: { type: "string" },

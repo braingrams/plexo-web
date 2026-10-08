@@ -12,6 +12,7 @@ import { resolveActiveApiKeyForUser } from "@/lib/ai/resolveUserAiKey";
 
 import { TemplateEditorDynamic } from "./template-editor-dynamic";
 import { RawFileEditor } from "./raw-file-editor";
+import { migratedPreviewBase } from "@/lib/wpMigration/previewBase";
 
 function isTemplateJson(value: unknown): value is TemplateJSON {
   if (typeof value !== "object" || value === null) {
@@ -86,6 +87,7 @@ export default async function TemplateEditorPage(props: {
         useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}
         aiProvider={activeApiKey?.aiProvider ?? "openai"}
         aiTier={activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}
+        previewBaseHref={await migratedPreviewBase(template)}
       />
     );
   }

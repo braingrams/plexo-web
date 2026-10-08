@@ -7,8 +7,10 @@ import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { getOrgBrandDynamo } from "@/server/orgDynamo";
 import { buildOrderStatusEmail, type OrderStatusEvent } from "@/lib/mail/templates";
+import { refundStripePayment } from "@/lib/commerce/stripeClient";
+import { isDonationOrder, resolveDonationGateway } from "@/lib/commerce/donations";
 import { Template } from "@/lib/db/contentEntities";
-import { CommerceOrder, CommerceOrderItem, CommerceSettings } from "@/lib/db/commerceEntities";
+import { CommerceDonationCampaign, CommerceOrder, CommerceOrderItem, CommerceSettings } from "@/lib/db/commerceEntities";
 
 export const FULFILLMENT_STATUSES = new Set(["UNFULFILLED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "COMPLETED"]);
 
@@ -61,7 +63,7 @@ export async function sendOrderStatusEmail(
 
   const [{ data: order }, { data: items }, { data: site }, brand] = await Promise.all([
     CommerceOrder.get({ templateId, id: orderId }).go(),
-    CommerceOrderItem.query.primary({ templateId, orderId }).go(),
+    CommerceOrderItem.query.primary({ templateId, orderId }).go({ pages: "all" }),
     Template.get({ id: templateId }).go(),
     getOrgBrandDynamo(organizationId),
   ]);
@@ -147,7 +149,21 @@ export async function refundCommerceOrder(
   }
 
   const isBankTransfer = order.paymentMethod === "BANK_TRANSFER";
-  if (!isBankTransfer) {
+  const isOwnStripe = !isBankTransfer && order.paymentProvider === "BYO_STRIPE";
+  if (isOwnStripe) {
+    // The site's own Stripe account: refund straight through it.
+    if (!order.stripePaymentIntentId) {
+      throw new OrderActionError("Stripe didn't give this payment a refundable reference — refund it from your Stripe dashboard (Payments), then mark it here.", 400);
+    }
+    const { data: settings } = await CommerceSettings.get({ templateId }).go();
+    const stripe = resolveDonationGateway(settings).stripe;
+    if (!stripe) throw new OrderActionError("Your Stripe keys aren't connected any more — reconnect them in Settings → Payments to refund.", 400);
+    try {
+      await refundStripePayment(stripe.secretKey, order.stripePaymentIntentId);
+    } catch (err) {
+      throw new OrderActionError(err instanceof Error ? err.message : "Refund failed.", 502);
+    }
+  } else if (!isBankTransfer) {
     if (!order.paystackMode || !order.paystackReference) {
       throw new OrderActionError("This order wasn't paid via Paystack — refunding it isn't supported yet.", 400);
     }
@@ -178,6 +194,14 @@ export async function refundCommerceOrder(
     .go();
   const { data: updated } = await CommerceOrder.get({ templateId, id: orderId }).go();
   if (!updated) throw new Error(`Order ${orderId} vanished immediately after being refunded`);
+  // A refunded gift no longer counts toward its campaign's progress.
+  const campaignId = isDonationOrder(updated) ? (updated.metadata as { campaignId?: string }).campaignId : undefined;
+  if (campaignId) {
+    await CommerceDonationCampaign.patch({ templateId, id: campaignId })
+      .add({ raisedMinor: -updated.amountMinor, donationCount: -1 })
+      .go()
+      .catch((err) => console.error("Donations: campaign total adjust on refund failed", err));
+  }
 
   await sendOrderStatusEmail(templateId, organizationId, orderId, "REFUNDED");
   return updated;

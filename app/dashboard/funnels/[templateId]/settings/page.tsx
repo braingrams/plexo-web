@@ -12,7 +12,7 @@ export default async function FunnelSettingsPage({ params }: { params: Promise<{
   const [{ data: funnel }, { data: user }, { data: products }, { data: commerceSettings }] = await Promise.all([
     LmsFunnel.get({ templateId }).go(),
     session?.user ? User.get({ id: session.user.id }).go() : Promise.resolve({ data: null }),
-    CommerceProduct.query.primary({ templateId }).go(),
+    CommerceProduct.query.primary({ templateId }).go({ pages: "all" }),
     CommerceSettings.get({ templateId }).go(),
   ]);
 

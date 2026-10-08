@@ -20,6 +20,7 @@ export type EmailDeliveryContext =
   | "commerce_order_status"
   | "commerce_digital_delivery"
   | "commerce_payment_received"
+  | "commerce_donation_receipt"
   | "testimonial_notification"
   | "feedback_notification"
   | "withdrawal_request_notification"

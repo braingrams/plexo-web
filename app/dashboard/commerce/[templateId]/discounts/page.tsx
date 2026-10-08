@@ -5,7 +5,7 @@ export default async function CommerceDiscountsPage({ params }: { params: Promis
   const { templateId } = await params;
 
   const [{ data: discounts }, { data: settings }] = await Promise.all([
-    CommerceDiscountCode.query.primary({ templateId }).go(),
+    CommerceDiscountCode.query.primary({ templateId }).go({ pages: "all" }),
     CommerceSettings.get({ templateId }).go(),
   ]);
   discounts.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));

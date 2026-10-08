@@ -10,7 +10,9 @@ import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 const REGION = process.env.AWS_REGION || "us-east-1";
 let client: S3Client | null = null;
 function s3(): S3Client {
-  if (!client) client = new S3Client({ region: REGION });
+  // Adaptive retries: a migration uploads thousands of files in bursts, and S3 answers a
+  // burst with SlowDown ("Please reduce your request rate") — retry with back-off.
+  if (!client) client = new S3Client({ region: REGION, maxAttempts: 10, retryMode: "adaptive" });
   return client;
 }
 
@@ -114,4 +116,31 @@ export async function createPresignedUploadPost(
     Expires: 5 * 60,
   });
   return { url, fields, publicUrl: publicUrlFor(key) };
+}
+
+/** Reads an object this module minted back into memory — for server-side consumers of a
+ * private upload (e.g. SOL handing a chat attachment's bytes to the model, which can't
+ * fetch a private URL itself). The bucket comes from the URL rather than
+ * USER_CONTENT_BUCKET_NAME because the SOL chat Lambda doesn't load SSM env; it's still
+ * restricted to Plexo's own user-content buckets (the same "plexo-user-content*" scope the
+ * IAM grants use), so an arbitrary S3 URL can't be read through this. */
+export async function readObject(url: string): Promise<{ body: Buffer; contentType: string | undefined }> {
+  let bucket = "";
+  let key = "";
+  try {
+    const parsed = new URL(url);
+    const match = parsed.hostname.match(/^(plexo-user-content[a-z0-9.-]*)\.s3\.[a-z0-9-]+\.amazonaws\.com$/);
+    bucket = match?.[1] ?? "";
+    key = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+  } catch {
+    // handled below
+  }
+  if (!bucket || !key) throw new StorageError("Not a Plexo storage URL.");
+  try {
+    const res = await s3().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const bytes = await res.Body!.transformToByteArray();
+    return { body: Buffer.from(bytes), contentType: res.ContentType };
+  } catch (err) {
+    throw new StorageError(err instanceof Error ? err.message : "Failed to read file.");
+  }
 }

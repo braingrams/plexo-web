@@ -12,6 +12,12 @@ on:
 permissions:
   id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
   contents: read
+  actions: write # to cancel this PR's still-running preview deploy (first step below)
+
+# Deliberately NOT in pr-deploy-aws.yml's concurrency group: sharing it made a teardown
+# queue behind a preview deploy that's pointless once the PR is merged/closed. Instead the
+# first steps below cancel that deploy, stop its CloudFormation operation, and only then
+# destroy.
 
 jobs:
   destroy:
@@ -25,6 +31,29 @@ jobs:
       AWS_REGION: us-east-1
 
     steps:
+      # Once the PR is merged or closed its preview has no purpose, so don't let a deploy
+      # that's still running (e.g. from the last push before merging) hold up the teardown
+      # for 10+ minutes — cancel it, plus any queued one, and wait until they've stopped.
+      - name: Cancel this PR's running/queued preview deploys
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # GitHub sometimes drops a run's pull_requests link once the PR is merged, so also
+          # match on the PR's branch (empty for a manual workflow_dispatch run).
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          for attempt in $(seq 1 40); do
+            RUNS=$(for status in queued in_progress waiting pending requested; do
+              gh api "repos/${{ github.repository }}/actions/workflows/pr-deploy-aws.yml/runs?status=${status}&per_page=100" \
+                --jq ".workflow_runs[] | select(any(.pull_requests[]?; .number == ${PR_NUMBER}) or (\"${HEAD_REF}\" != \"\" and .head_branch == \"${HEAD_REF}\" and .event == \"pull_request\")) | .id"
+            done | sort -u)
+            if [ -z "$RUNS" ]; then echo "✓ No preview deploy running for PR #${PR_NUMBER}"; break; fi
+            for RUN in $RUNS; do
+              echo "Cancelling preview deploy run $RUN"
+              gh api -X POST "repos/${{ github.repository }}/actions/runs/${RUN}/cancel" > /dev/null 2>&1 || true
+            done
+            sleep 15
+          done
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -96,6 +125,23 @@ jobs:
           # directory — a missing directory entry doesn't satisfy that, unlike every
           # fromAsset()/Source.asset() call above, so it needs its own placeholder here too.
           echo "// placeholder — this stack is being destroyed" > .open-next/assets/commerce.js
+
+      - name: Wait for any in-flight stack operation to finish
+        # Cancelling the GitHub run above kills `cdk deploy`, but CloudFormation carries on
+        # with the create/update by itself — and a destroy fails while the stack is in any
+        # *_IN_PROGRESS status. So wait for it to settle. (This workflow's role is
+        # deliberately read-only on CloudFormation — every stack change goes through
+        # `cdk destroy` below — so it can't cancel or delete the stack itself; an earlier
+        # version tried and failed with AccessDenied on cloudformation:DeleteStack.)
+        run: |
+          FULL_STACK="${STACK_ID}-compute-stack"
+          for attempt in $(seq 1 60); do
+            STATUS=$(aws cloudformation describe-stacks --stack-name "$FULL_STACK" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+            case "$STATUS" in
+              *_IN_PROGRESS) echo "Stack is $STATUS — waiting ($attempt/60)…"; sleep 30 ;;
+              *) echo "Stack status: $STATUS"; break ;;
+            esac
+          done
 
       - name: Destroy the PR's compute stack only — never --all, never the data stack
         working-directory: ./cdk

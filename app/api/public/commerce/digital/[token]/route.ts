@@ -22,7 +22,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tok
     return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
   }
 
-  const { data: matches } = await CommerceDigitalDelivery.query.byToken({ token }).go();
+  const { data: matches } = await CommerceDigitalDelivery.query.byToken({ token }).go({ pages: "all" });
   const delivery = matches[0];
   if (!delivery) {
     return NextResponse.json({ error: "This link is invalid." }, { status: 404 });

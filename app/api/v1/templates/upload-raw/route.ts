@@ -124,7 +124,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Only landing pages can have sub-pages." }, { status: 400 });
     }
     slug = await ensureUniqueSlug(parentIdInput, name);
-    const { data: siblings } = await Template.query.byParent({ parentId: parentIdInput }).go();
+    const { data: siblings } = await Template.query.byParent({ parentId: parentIdInput }).go({ pages: "all" });
     order = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
   } else {
     // The plan's landing-page limit counts root/home pages only, matching /api/templates.
@@ -147,7 +147,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data: orgTemplatesForRateLimit } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const recentUploadCount = orgTemplatesForRateLimit.filter(
-    (t) => t.userId === resolved.userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
+    // Pages a WordPress migration created for the owner don't count — only HTML they uploaded themselves.
+    (t) => t.userId === resolved.userId && t.sourceType === "RAW_UPLOAD" && !t.migratedFrom && (t.createdAt ?? "") >= since,
   ).length;
   if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
     return NextResponse.json({

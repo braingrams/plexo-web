@@ -10,7 +10,8 @@ import { resolveCheckoutStripeSecret } from "@/lib/commerce/stripe";
 import { isSlotAvailable } from "@/lib/commerce/availability";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { createCommerceStripeCheckoutSession } from "@/lib/commerce/stripeClient";
-import { createCommerceOrder, failCommerceOrder, OutOfStockError, SlotTakenError, InvalidDiscountError } from "@/lib/commerce/checkoutDynamo";
+import { createCommerceOrder, failCommerceOrder, OutOfStockError, SlotTakenError, InvalidDiscountError, VariantUnavailableError } from "@/lib/commerce/checkoutDynamo";
+import { lineName, resolvePurchasable } from "@/lib/commerce/variants";
 import { resolveOrderDeliveryMethod, InvalidDeliveryMethodError, pickupLocationFor } from "@/lib/commerce/delivery";
 import { readCheckoutFields, resolveCheckoutFieldAnswers, CheckoutFieldsError } from "@/lib/commerce/checkoutFields";
 import { chooseCheckoutPaymentMethod } from "@/lib/commerce/checkoutPayment";
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const {
     productId,
+    variantId: rawVariantId,
     quantity: rawQuantity,
     scheduledStart: rawScheduledStart,
     customerEmail,
@@ -125,6 +127,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Product not found." }, { status: 404 });
   }
 
+  // A product with options (Size, Colour…) is bought as one specific variant.
+  const variantId = typeof rawVariantId === "string" && rawVariantId ? rawVariantId : null;
+  const purchase = resolvePurchasable(product, variantId);
+  if (!purchase.ok) return NextResponse.json({ error: purchase.error }, { status: 400 });
+
   let quantity = 1;
   let scheduledStart: Date | null = null;
   let scheduledEnd: Date | null = null;
@@ -147,8 +154,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // even when nobody else is racing for it.
     const now = new Date();
     const [{ data: ruleRows }, { data: exceptionRows }, { data: orgBookings }] = await Promise.all([
-      CommerceAvailabilityRule.query.byProduct({ productId: product.id }).go(),
-      CommerceAvailabilityException.query.byProduct({ productId: product.id }).go(),
+      CommerceAvailabilityRule.query.byProduct({ productId: product.id }).go({ pages: "all" }),
+      CommerceAvailabilityException.query.byProduct({ productId: product.id }).go({ pages: "all" }),
       CommerceBooking.query.byOrg({ organizationId }).go({ pages: "all" }),
     ]);
     const rules = ruleRows.map((r) => ({ dayOfWeek: r.dayOfWeek, startMinute: r.startMinute, endMinute: r.endMinute, timezone: r.timezone ?? "Africa/Lagos" }));
@@ -205,7 +212,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     throw err;
   }
 
-  const subtotalMinor = product.priceMinor * quantity;
+  const subtotalMinor = purchase.unitPriceMinor * quantity;
 
   // Fast, non-authoritative pre-check — a clean error for an obviously-bad code before
   // ever attempting the transaction. The atomic claim inside createCommerceOrder is what
@@ -213,7 +220,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let discount: EntityItem<typeof CommerceDiscountCode> | null = null;
   const normalizedDiscountCode = typeof rawDiscountCode === "string" ? rawDiscountCode.trim().toUpperCase() : "";
   if (normalizedDiscountCode) {
-    const { data: matches } = await CommerceDiscountCode.query.byCode({ templateId, code: normalizedDiscountCode }).go();
+    const { data: matches } = await CommerceDiscountCode.query.byCode({ templateId, code: normalizedDiscountCode }).go({ pages: "all" });
     discount = matches[0] ?? null;
     const invalid =
       !discount ||
@@ -250,6 +257,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       templateId,
       organizationId,
       product,
+      variantId,
       quantity,
       orderNumber,
       paystackReference,
@@ -279,7 +287,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "That time slot was just booked by someone else. Please pick another." }, { status: 409 });
     }
     if (err instanceof OutOfStockError) {
-      return NextResponse.json({ error: `Only ${product.stockQuantity ?? 0} left in stock.` }, { status: 409 });
+      const left = Math.max(0, purchase.stockQuantity ?? 0);
+      return NextResponse.json({ error: left > 0 ? `Only ${left} left in stock.` : `${lineName(product.name, purchase.label)} is out of stock.` }, { status: 409 });
+    }
+    if (err instanceof VariantUnavailableError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
     }
     if (err instanceof InvalidDiscountError) {
       return NextResponse.json({ error: "That discount code isn't valid." }, { status: 400 });
@@ -307,7 +319,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         amountMinor,
         currency,
         customerEmail,
-        productName: product.name,
+        productName: lineName(product.name, purchase.label),
         returnUrl: callbackUrl,
       });
       await CommerceOrder.patch({ templateId: order.templateId, id: order.id }).set({ stripeCheckoutSessionId: session.id }).go();
@@ -347,7 +359,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Surface the real provider error (e.g. a currency the connected account isn't
     // provisioned for) instead of a generic message — a silent rejection here is exactly
     // how a currency mismatch would otherwise go unnoticed.
-    await failCommerceOrder(order, product, quantity, discount);
+    await failCommerceOrder(order, product, quantity, discount, variantId);
     const message = err instanceof Error ? err.message : "Unable to start payment. Please try again.";
     return NextResponse.json({ error: message }, { status: 502 });
   }

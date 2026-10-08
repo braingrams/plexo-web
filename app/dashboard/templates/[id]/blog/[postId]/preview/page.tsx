@@ -22,7 +22,7 @@ export default async function BlogPostPreviewPage({ params }: { params: Promise<
   // BlogPost's primary key is (templateId, slug), not (templateId, id) — postId here is
   // an id, so this has to search the template's posts rather than .get() directly.
   const [{ data: allPosts }, { data: blogSite }] = await Promise.all([
-    BlogPost.query.byStatus({ templateId: access.templateId }).go(),
+    BlogPost.query.byStatus({ templateId: access.templateId }).go({ pages: "all" }),
     BlogSite.get({ templateId: access.templateId }).go(),
   ]);
   const found = allPosts.find((p) => p.id === postId);

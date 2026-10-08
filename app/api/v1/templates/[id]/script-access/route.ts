@@ -18,7 +18,7 @@ type ScriptAccessStatus = "NONE" | "PENDING" | "APPROVED_ACTIVE" | "APPROVED_EXP
  * max by requestedAt in memory.
  */
 async function latestRequestFor(templateId: string) {
-  const { data: requests } = await ScriptAccessRequest.query.primary({ templateId }).go();
+  const { data: requests } = await ScriptAccessRequest.query.primary({ templateId }).go({ pages: "all" });
   if (requests.length === 0) return null;
   return requests.reduce((latest, r) => ((r.requestedAt ?? "") > (latest.requestedAt ?? "") ? r : latest));
 }
@@ -133,7 +133,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  const existingRequests = await ScriptAccessRequest.query.primary({ templateId: id }).go().then((r) => r.data);
+  const existingRequests = await ScriptAccessRequest.query.primary({ templateId: id }).go({ pages: "all" }).then((r) => r.data);
   const now = Date.now();
   const blocking = existingRequests.find(
     (r) => r.status === "PENDING" || (r.status === "APPROVED" && !!r.expiresAt && new Date(r.expiresAt).getTime() > now),
@@ -199,7 +199,7 @@ export async function PATCH(
   }
 
   const now = Date.now();
-  const { data: requests } = await ScriptAccessRequest.query.primary({ templateId: id }).go();
+  const { data: requests } = await ScriptAccessRequest.query.primary({ templateId: id }).go({ pages: "all" });
   const activeCandidates = requests.filter(
     (r) => r.status === "APPROVED" && !!r.expiresAt && new Date(r.expiresAt).getTime() > now,
   );
