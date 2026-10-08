@@ -14,11 +14,16 @@ import { MAX_TOKENS } from "@/lib/ai/generate";
 import { MAX_TOOL_ITERATIONS } from "@/lib/credits/agentTurnEstimate";
 import type { AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { SolMessage } from "@/lib/db/solEntities";
-import { createAttachmentResolver, publishAttachedImage } from "@/lib/ai/solAttachments";
+import { createAttachmentResolver, publishAttachedImage, PRIVATE_ATTACHMENT_PATH } from "@/lib/ai/solAttachments";
 
 /** A tool call SOL runs itself (see solToolSchema.ts) or a Plexo MCP tool. */
-function runSolTool(name: string, input: any, user: ResolvedUser): Promise<unknown> {
-  if (name === USE_ATTACHED_IMAGE_TOOL_NAME) return publishAttachedImage(user.userId, input?.attachment);
+async function runSolTool(name: string, input: any, user: ResolvedUser, history: HistoryEntry[]): Promise<unknown> {
+  if (name === USE_ATTACHED_IMAGE_TOOL_NAME) return publishAttachedImage(user.userId, input?.attachment, history);
+  // A chat attachment's address is private: in a page, it's a broken image for every
+  // visitor (what happened before use_attached_image worked — SOL then said it was done).
+  if (JSON.stringify(input ?? null).includes(PRIVATE_ATTACHMENT_PATH)) {
+    throw new Error("This puts a private chat-attachment address in the page, which visitors can't load. Call use_attached_image with that image's reference first, and use the address it returns.");
+  }
   return dispatchMcpTool(name, input, user);
 }
 
@@ -29,7 +34,7 @@ function runSolTool(name: string, input: any, user: ResolvedUser): Promise<unkno
 // before. Every provider's `generateWithTools` shares the same Anthropic-shaped in/out
 // contract (see providers/shared.ts), so this dispatch table is the only place that needs
 // to know there's more than one.
-const TOOL_CAPABLE_PROVIDERS: Record<AiProvider, (params: GenerateWithToolsParams) => Promise<GenerateWithToolsResult>> = {
+export const TOOL_CAPABLE_PROVIDERS: Record<AiProvider, (params: GenerateWithToolsParams) => Promise<GenerateWithToolsResult>> = {
   bedrock_claude: bedrockGenerateWithTools,
   anthropic_claude: anthropicGenerateWithTools,
   openai: openaiGenerateWithTools,
@@ -96,6 +101,8 @@ export interface AgentTurnDeps {
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   /** Re-checks credit balance before each model call; false stops the loop. */
+  /** The new user message's key once it's saved (e.g. to add its images' descriptions). */
+  onUserMessageSaved?: (key: { id: string; createdAt: string }) => void;
   budgetGuard: () => Promise<boolean>;
 }
 
@@ -257,7 +264,7 @@ Plexo can build a brand-new landing page two genuinely different ways — ask wh
 
 Never ask for a page's name, subdomain or domain before building it — none of them are needed to build it, and each question is one more step before the user sees anything. Name the page yourself from what it's about (it can be renamed any time), build it with create_raw_landing_page or create_landing_page (which create without publishing), and show it. Only then offer to publish it: ask with ask_user_question, offering two or three short subdomains you derive from the page's subject or the business's name (e.g. "careconnect", "meetyourcarepartner") — the interface already lets them type their own or a custom domain they own. Skip that question when they already said where it should go.
 
-When the user attaches an image and wants it on a page, use THEIR image: call use_attached_image with the attachment reference shown next to it, and put the address it returns in the page. Never replace an image they gave you with a stock photo.
+When the user attaches an image and wants it on a page, use THEIR image: call use_attached_image with the attachment reference shown next to it (like img_1a2b3c4d5e6f), and put the address it returns in the page — never the attachment's own address. Never replace an image they gave you with a stock photo. If use_attached_image fails, tell the user — don't say the page has their image unless a tool actually put it there.
 
 When a tool fails, say plainly what happened and what it means for them (e.g. "You've reached today's limit of 15 custom HTML pages"). If getting around it means doing something different from what they chose — a drag-and-drop builder page instead of the custom HTML page they picked, a different domain — ask first with ask_user_question (e.g. "Build it as a builder page now" / "Wait and build the HTML page later") instead of switching on your own.
 
@@ -390,7 +397,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
     for (const block of toolUseBlocks) {
       ctx.onToolCallStart({ id: block.id, name: block.name, args: block.input });
       try {
-        const toolResult = await runSolTool(block.name, block.input, ctx.resolvedUser);
+        const toolResult = await runSolTool(block.name, block.input, ctx.resolvedUser, ctx.history);
         ctx.onToolCallResult({ id: block.id, name: block.name, status: "success", result: toolResult });
         resultBlocks.push(buildToolResultBlock(block.id, toolResult, false));
       } catch (err) {
@@ -428,13 +435,14 @@ export async function runAgentTurn(deps: AgentTurnDeps): Promise<RunAgentTurnRes
       .go();
   }
 
-  await SolMessage.create({
+  const { data: saved } = await SolMessage.create({
     id: randomUUID(),
     conversationId: deps.conversationId,
     userId: deps.resolvedUser.userId,
     role: "user",
     content: deps.userMessageContent,
   }).go();
+  deps.onUserMessageSaved?.({ id: saved.id, createdAt: saved.createdAt });
   history.push({ role: "user", content: deps.userMessageContent });
 
   return continueLoop({
@@ -517,7 +525,7 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     if (runsNow) {
       deps.onToolCallStart({ id: block.id, name: block.name, args: block.input });
       try {
-        const toolResult = await runSolTool(block.name, block.input, deps.resolvedUser);
+        const toolResult = await runSolTool(block.name, block.input, deps.resolvedUser, history);
         deps.onToolCallResult({ id: block.id, name: block.name, status: "success", result: toolResult });
         resultBlocks.push(buildToolResultBlock(block.id, toolResult, false));
       } catch (err) {

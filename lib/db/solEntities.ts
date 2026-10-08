@@ -170,7 +170,52 @@ export const SolAttachment = new Entity(
   { table, client: docClient },
 );
 
+// A read-only link to a conversation (Share in the chat header): anyone with the link sees
+// the conversation as it was when it was shared — messages up to `upTo` — and nothing after
+// until it's shared again. Two small records for its two lookups: the link's token → its
+// conversation (the public page), and a conversation → its current token (so sharing again
+// updates the same link, and "Stop sharing" can remove it).
+export const SolShareLink = new Entity(
+  {
+    model: { entity: "solShareLink", version: "1", service: "plexoSol" },
+    attributes: {
+      token: { type: "string", required: true },
+      conversationId: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      /** Messages created up to and including this time are shown. */
+      upTo: { type: "string", required: true },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["token"], template: "SHARE#${token}" },
+        sk: { field: "sk", composite: [], template: "SHARE" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+export const SolConversationShare = new Entity(
+  {
+    model: { entity: "solConversationShare", version: "1", service: "plexoSol" },
+    attributes: {
+      conversationId: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      token: { type: "string", required: true },
+      upTo: { type: "string", required: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["conversationId"], template: "CONVO#${conversationId}" },
+        sk: { field: "sk", composite: [], template: "SHARE" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoSolService = new Service(
-  { SolConversation, SolMessage, SolMemoryFact, SolPreferences, SolAttachment },
+  { SolConversation, SolMessage, SolMemoryFact, SolPreferences, SolAttachment, SolShareLink, SolConversationShare },
   { table, client: docClient },
 );

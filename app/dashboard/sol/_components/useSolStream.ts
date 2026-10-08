@@ -7,6 +7,7 @@ import type { AskUserAnswer, ChatAttachment, ContentBlock, CreditInfo, ModelTier
 // union streams — field names/casing copied verbatim from that file, not re-derived.
 type StreamFrame =
   | { type: "tool_call_start"; id: string; name: string; label: string; args: unknown }
+  | { type: "attachment_described"; url: string; description: string }
   | { type: "tool_call_preparing"; id: string; name: string; label: string; characters: number }
   | { type: "tool_call_awaiting_confirmation"; id: string; name: string; args: unknown; messageId: string }
   | { type: "tool_call_result"; id: string; name: string; status: "success" | "error" | "cancelled"; result?: unknown }
@@ -44,6 +45,9 @@ export function useSolStream() {
   // a real race: a fast click on Confirm/Submit would silently no-op if it landed before
   // the fetch did — see SolChatView's own comment on the fix this replaced).
   const [awaitingMessageId, setAwaitingMessageId] = useState<string | null>(null);
+  // Captions SOL wrote for attached images, by the image's stored URL. Not cleared between
+  // turns: they belong to messages already on screen.
+  const [imageDescriptions, setImageDescriptions] = useState<Record<string, string>>({});
   // Only ever set once per conversation (the very first turn — see solChatHandler.ts's
   // `needsTitle` gate), arriving in its own frame right before the stream closes. The
   // caller (SolChatView) is what actually applies it to the conversation's title and
@@ -120,6 +124,10 @@ export function useSolStream() {
           setUsage(frame.usage);
           setFinalMessageId(frame.messageId);
           setOutcomeBoth("done");
+          break;
+        }
+        case "attachment_described": {
+          setImageDescriptions((prev) => ({ ...prev, [frame.url]: frame.description }));
           break;
         }
         case "title_generated": {
@@ -274,5 +282,5 @@ export function useSolStream() {
     abortRef.current?.abort();
   }, []);
 
-  return { blocks, outcome, errorMessage, creditInfo, usage, finalMessageId, awaitingMessageId, generatedTitle, sendMessage, confirmToolCall, submitAnswers, stop, reset };
+  return { blocks, outcome, errorMessage, creditInfo, usage, finalMessageId, awaitingMessageId, generatedTitle, imageDescriptions, sendMessage, confirmToolCall, submitAnswers, stop, reset };
 }
