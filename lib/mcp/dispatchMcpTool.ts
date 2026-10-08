@@ -8,8 +8,9 @@ import { getDomainLimit } from "@/lib/domainLimit";
 import { requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
 import { resolveStrataProjectId, fetchStrataTokens } from "@/server/strataDynamo";
 import { getPagesDomain } from "@/server/pagesDomain";
+import { rawUploadLimitMessage } from "@/server/rawUploadLimit";
 import { slugify, isValidSlugSegment, isReservedTopLevelSlug, ensureUniqueSlug, isSameOrAncestor, getPageTree, pathForPage } from "@/server/slugDynamo";
-import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
+import { validateRawHtmlContent, RawUploadValidationError } from "@/server/rawUpload";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { BLOG_MCP_TOOLS, BLOG_TOOL_NAMES, handleBlogTool } from "./blogTools";
 import type { RevalidateFn } from "@/lib/blog/savePostCore";
@@ -158,17 +159,9 @@ async function assertRawUploadAllowed(userId: string, organizationId: string, ac
     await User.patch({ id: userId }).set({ aupAcceptedAt: new Date().toISOString() }).go();
   }
 
-  // Org-scoped, not global across every org this user has ever created templates in —
-  // same adaptation as app/api/v1/templates/upload-raw/route.ts's identical rate-limit
-  // check, since Template has no cross-org index over userId to check this globally.
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go({ pages: "all" });
-  const recentUploadCount = orgTemplates.filter(
-    (t) => t.userId === userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
-  ).length;
-  if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
-    throw new Error(`You've reached the raw-upload limit of ${RAW_UPLOAD_DAILY_LIMIT} per 24 hours. Try again later.`);
-  }
+  // Org-scoped (Template has no cross-org index over userId); migrated pages don't count.
+  const limited = await rawUploadLimitMessage(organizationId, userId);
+  if (limited) throw new Error(limited);
 }
 
 /**

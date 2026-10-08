@@ -6,7 +6,8 @@ import { getTierFeatures } from "@/lib/subscription";
 import { ensureUniqueSlug } from "@/server/slugDynamo";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
-import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
+import { validateRawHtmlContent, RawUploadValidationError } from "@/server/rawUpload";
+import { rawUploadLimitMessage } from "@/server/rawUploadLimit";
 import { isTemplateNameTaken } from "@/server/templateNameDynamo";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
@@ -199,16 +200,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       await User.patch({ id: resolved.userId }).set({ aupAcceptedAt: new Date().toISOString() }).go();
     }
 
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
-    const recentUploadCount = orgTemplates.filter(
-      (t) => t.userId === resolved.userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
-    ).length;
-    if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
-      return NextResponse.json({
-        error: `You've reached the raw-upload limit of ${RAW_UPLOAD_DAILY_LIMIT} per 24 hours. Try again later.`,
-      }, { status: 429 });
-    }
+    const limited = await rawUploadLimitMessage(resolved.organizationId, resolved.userId);
+    if (limited) return NextResponse.json({ error: limited }, { status: 429 });
   }
 
   const id = crypto.randomUUID();

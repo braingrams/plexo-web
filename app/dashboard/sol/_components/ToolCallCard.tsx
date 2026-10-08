@@ -57,6 +57,7 @@ const VERB_PAST_TENSE: Record<string, string> = {
   upload: "Uploaded",
   import: "Imported",
   export: "Exported",
+  use: "Added",
 };
 
 // The same verbs while the step is still happening ("Publishing raw landing page…").
@@ -66,7 +67,7 @@ const VERB_IN_PROGRESS: Record<string, string> = {
   unpublish: "Unpublishing", archive: "Archiving", restore: "Restoring", duplicate: "Duplicating", clone: "Duplicating",
   rename: "Renaming", move: "Moving", enable: "Enabling", disable: "Disabling", connect: "Connecting",
   disconnect: "Disconnecting", refund: "Refunding", cancel: "Cancelling", send: "Sending", generate: "Generating",
-  upload: "Uploading", import: "Importing", export: "Exporting",
+  upload: "Uploading", import: "Importing", export: "Exporting", use: "Adding",
 };
 
 function humanizeToolLabel(name: string, inProgress = false): string {
