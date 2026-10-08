@@ -12,28 +12,35 @@ export function FileReadCard({ kind, url: storedUrl, filename, description }: { 
   const url = storedUrl ? `/api/v1/sol/attachments/view?url=${encodeURIComponent(storedUrl)}` : undefined;
 
   if (kind === "image" && url) {
+    // A compact row: a small thumbnail on the left; on the right, SOL's one-line description
+    // of the image (lib/ai/solImageDescriptions.ts) with the file's name under it. Before a
+    // description exists (older images, or the seconds before it arrives) the name leads.
+    const title = description ?? name;
+    const subtitle = description ? name : "Image";
     return (
       <a
         href={url}
         target="_blank"
         rel="noreferrer"
+        title={name}
         style={{
-          display: "inline-flex",
-          flexDirection: "column",
-          gap: "0.35rem",
+          display: "flex",
+          alignItems: "center",
+          gap: "0.65rem",
           borderRadius: 12,
           border: "1px solid rgba(255,255,255,0.08)",
           background: "rgba(255,255,255,0.03)",
-          padding: "0.5rem",
-          maxWidth: 220,
+          padding: "0.4rem 0.75rem 0.4rem 0.4rem",
+          width: "min(320px, 100%)",
           textDecoration: "none",
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={url} alt={description ?? name} style={{ width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 8, display: "block" }} />
-        {/* SOL's one-line caption (lib/ai/solImageDescriptions.ts), then the file's name. */}
-        {description && <span style={{ fontSize: "0.74rem", lineHeight: 1.4, color: "rgba(240,242,255,0.78)" }}>{description}</span>}
-        <span style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.45)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+        <img src={url} alt={description ?? name} style={{ width: 52, height: 52, flexShrink: 0, objectFit: "cover", borderRadius: 8, display: "block" }} />
+        <span style={{ display: "flex", flexDirection: "column", gap: "0.15rem", minWidth: 0 }}>
+          <span style={{ fontSize: "0.78rem", lineHeight: 1.35, color: "rgba(240,242,255,0.88)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{title}</span>
+          <span style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.45)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{subtitle}</span>
+        </span>
       </a>
     );
   }

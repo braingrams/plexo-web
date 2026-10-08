@@ -651,13 +651,16 @@ export class ComputeStack extends cdk.Stack {
         resources: [`arn:aws:kms:${this.region}:${this.account}:alias/aws/ssm`],
       }),
     );
-    // Chat attachments: the user's uploaded images/PDFs/docs live in the private half of the
-    // user-content bucket and SOL reads their bytes server-side to hand them to the model
-    // (lib/ai/solAttachments.ts) — read-only, and only under the SOL attachments prefix.
+    // User content: SOL reads chat attachments to hand them to the model, and its tools are
+    // the dashboard's own (lib/mcp/dispatchMcpTool.ts) — they save and remove files exactly
+    // as serverFn does (use_attached_image's public copy of an image, a page's files…). It
+    // used to be read-only on sol-attachments, so every tool that saves a file failed with
+    // AccessDenied (found when use_attached_image couldn't put a user's photo on a page).
+    // Same grant as serverFn's.
     solChatFn.addToRolePolicy(
       new iam.PolicyStatement({
-        actions: ["s3:GetObject"],
-        resources: ["arn:aws:s3:::plexo-user-content*/private/sol-attachments/*"],
+        actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+        resources: ["arn:aws:s3:::plexo-user-content*/*"],
       }),
     );
     // Bedrock — tightened to the exact three models SOL actually uses (see
