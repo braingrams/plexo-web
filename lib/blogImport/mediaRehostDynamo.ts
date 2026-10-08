@@ -12,6 +12,16 @@ const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
 const CONCURRENCY = 5;
 
 const limit = pLimit(CONCURRENCY);
+/** One image may take this long to download before it's given up on (it's retried later). */
+const DOWNLOAD_TIMEOUT_MS = 15_000;
+
+/** The caller's deadline passed before every image was moved — nothing is lost; call again later. */
+export class MediaOutOfTimeError extends Error {
+  constructor() {
+    super("Ran out of time moving this post's images; it will be finished in the next step.");
+    this.name = "MediaOutOfTimeError";
+  }
+}
 
 /**
  * Where a source image is stored: a hash of its full URL. (It used to be the first 48
@@ -47,7 +57,7 @@ export function rewriteImageUrls(html: string, urlMap: Map<string, string>): str
  * re-downloads a file it already moved — safe to call repeatedly with overlapping URL
  * lists across batches.
  */
-export async function rehostMediaUrls(templateId: string, urls: string[], errors: string[]): Promise<Map<string, string>> {
+export async function rehostMediaUrls(templateId: string, urls: string[], errors: string[], opts: { deadline?: number } = {}): Promise<Map<string, string>> {
   const unique = Array.from(new Set(urls.filter(Boolean)));
   if (unique.length === 0) return new Map();
 
@@ -58,11 +68,18 @@ export async function rehostMediaUrls(templateId: string, urls: string[], errors
   });
   const toFetch = unique.filter((u) => !resolved.has(u));
 
+  // With a deadline, an image that can't start (or finish) in time leaves the call unfinished
+  // instead of leaving the old site's URL in the content: the caller tries again later.
+  let outOfTime = false;
   await Promise.all(
     toFetch.map((sourceUrl) =>
       limit(async () => {
+        if (opts.deadline && Date.now() > opts.deadline) {
+          outOfTime = true;
+          return;
+        }
         try {
-          const res = await safeFetch(sourceUrl);
+          const res = await safeFetch(sourceUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
           if (!res.ok) {
             errors.push(`Media download failed (${res.status}): ${sourceUrl}`);
             return;
@@ -84,11 +101,18 @@ export async function rehostMediaUrls(templateId: string, urls: string[], errors
           await ImportMediaMap.put({ id: randomUUID(), templateId, sourceUrl, blobUrl: blob.url }).go();
           resolved.set(sourceUrl, blob.url);
         } catch (err) {
+          // Cut off by the step's deadline → try again next step. A single image that's just
+          // too slow on its own is an ordinary failure (otherwise it would be retried forever).
+          if (opts.deadline && Date.now() > opts.deadline) {
+            outOfTime = true;
+            return;
+          }
           errors.push(`Media rehost error for ${sourceUrl}: ${err instanceof Error ? err.message : String(err)}`);
         }
       }),
     ),
   );
 
+  if (outOfTime) throw new MediaOutOfTimeError();
   return resolved;
 }
