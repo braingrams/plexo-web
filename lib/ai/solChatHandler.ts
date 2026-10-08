@@ -45,6 +45,7 @@ export const VALID_TIERS = new Set<ModelTier>(["BASIC", "MEDIUM", "HIGH"]);
  * solAgent.ts's actual callback payload shapes — e.g. `onToolCallResult` can report status
  * "cancelled" (a declined confirmation's own result), not just success|error. */
 export type StreamFrame =
+  | { type: "tool_call_preparing"; id: string; name: string; label: string; characters: number }
   | { type: "tool_call_start"; id: string; name: string; label: string; args: unknown }
   | { type: "tool_call_awaiting_confirmation"; id: string; name: string; args: unknown; messageId: string }
   | { type: "tool_call_result"; id: string; name: string; status: "success" | "error" | "cancelled"; result?: unknown }
@@ -206,8 +207,17 @@ function buildUserMessageContent(text: string, attachments: Array<{ type?: strin
 
 function buildCallbacks(emit: (frame: StreamFrame) => void) {
   const toolCalls: SolToolCallRecord[] = [];
+  // One frame when a tool call starts being written, then at most every 500ms.
+  const lastPreparingAt = new Map<string, number>();
   const callbacks = {
     onTextDelta: (delta: string) => emit({ type: "token", text: delta }),
+    onToolCallPreparing: (progress: { id: string; name: string; characters: number }) => {
+      const now = Date.now();
+      const last = lastPreparingAt.get(progress.id);
+      if (last !== undefined && now - last < 500) return;
+      lastPreparingAt.set(progress.id, now);
+      emit({ type: "tool_call_preparing", id: progress.id, name: progress.name, label: humanizeToolName(progress.name), characters: progress.characters });
+    },
     onToolCallStart: (call: { id: string; name: string; args: unknown }) =>
       emit({ type: "tool_call_start", id: call.id, name: call.name, label: humanizeToolName(call.name), args: call.args }),
     onToolCallAwaitingConfirmation: async (call: { id: string; name: string; args: unknown; messageId: string }) => {

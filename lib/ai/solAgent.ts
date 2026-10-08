@@ -8,13 +8,19 @@ import { generateWithTools as anthropicGenerateWithTools } from "@/lib/ai/provid
 import { generateWithTools as openaiGenerateWithTools } from "@/lib/ai/providers/openai";
 import { generateWithTools as geminiGenerateWithTools } from "@/lib/ai/providers/gemini";
 import type { GenerateWithToolsParams, GenerateWithToolsResult } from "@/lib/ai/providers/shared";
-import { getAllSolTools, ASK_USER_QUESTION_TOOL_NAME, type BedrockToolDef } from "@/lib/ai/solToolSchema";
+import { getAllSolTools, ASK_USER_QUESTION_TOOL_NAME, USE_ATTACHED_IMAGE_TOOL_NAME, type BedrockToolDef } from "@/lib/ai/solToolSchema";
 import { resolveModel } from "@/lib/ai/modelRegistry";
 import { MAX_TOKENS } from "@/lib/ai/generate";
 import { MAX_TOOL_ITERATIONS } from "@/lib/credits/agentTurnEstimate";
 import type { AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { SolMessage } from "@/lib/db/solEntities";
-import { createAttachmentResolver } from "@/lib/ai/solAttachments";
+import { createAttachmentResolver, publishAttachedImage } from "@/lib/ai/solAttachments";
+
+/** A tool call SOL runs itself (see solToolSchema.ts) or a Plexo MCP tool. */
+function runSolTool(name: string, input: any, user: ResolvedUser): Promise<unknown> {
+  if (name === USE_ATTACHED_IMAGE_TOOL_NAME) return publishAttachedImage(user.userId, input?.attachment);
+  return dispatchMcpTool(name, input, user);
+}
 
 // Which provider actually serves a turn's model calls — resolved once per turn by the
 // caller (solChatHandler.ts) from the account's AI Access Mode: BYOK accounts route to
@@ -80,6 +86,8 @@ export interface AgentTurnDeps {
   memoryFacts: string[];
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
+  /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
+  onToolCallPreparing?: (progress: { id: string; name: string; characters: number }) => void;
   /** `messageId` is the PENDING SolMessage row's own id — the client needs it (not just the
    * Anthropic tool_use id) to actually resume the turn (see the confirm/answer routes),
    * and sending it in this same callback/frame is what lets the client act on a pause the
@@ -127,6 +135,8 @@ export interface ResumeAgentTurnDeps {
   memoryFacts: string[];
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
+  /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
+  onToolCallPreparing?: (progress: { id: string; name: string; characters: number }) => void;
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   budgetGuard: () => Promise<boolean>;
@@ -245,6 +255,12 @@ Plexo can build a brand-new landing page two genuinely different ways — ask wh
 - A page built from real, hand-crafted HTML/CSS you write directly (create_raw_landing_page/publish_raw_landing_page, htmlContent) — served byte-for-byte exactly as written, not editable in the visual builder afterward. **Recommended.** Frame this as the premium, fully custom option: it's what unlocks the most design freedom and the most polished, professional-grade finish, since nothing is constrained to the builder's block system — better for someone who wants their site to feel bespoke rather than editable.
 - A drag-and-drop BUILDER page (create_landing_page/publish_landing_page, designJson) — editable afterward with Plexo's own visual, drag-and-drop editor. Frame this as the flexible choice for a page they'll want to keep tweaking themselves later.
 
+Never ask for a page's name, subdomain or domain before building it — none of them are needed to build it, and each question is one more step before the user sees anything. Name the page yourself from what it's about (it can be renamed any time), build it with create_raw_landing_page or create_landing_page (which create without publishing), and show it. Only then offer to publish it: ask with ask_user_question, offering two or three short subdomains you derive from the page's subject or the business's name (e.g. "careconnect", "meetyourcarepartner") — the interface already lets them type their own or a custom domain they own. Skip that question when they already said where it should go.
+
+When the user attaches an image and wants it on a page, use THEIR image: call use_attached_image with the attachment reference shown next to it, and put the address it returns in the page. Never replace an image they gave you with a stock photo.
+
+When a tool fails, say plainly what happened and what it means for them (e.g. "You've reached today's limit of 15 custom HTML pages"). If getting around it means doing something different from what they chose — a drag-and-drop builder page instead of the custom HTML page they picked, a different domain — ask first with ask_user_question (e.g. "Build it as a builder page now" / "Wait and build the HTML page later") instead of switching on your own.
+
 If a tool call fails, explain what went wrong in plain terms and suggest a next step — don't just retry blindly.${memoryBlock}`;
 }
 
@@ -258,6 +274,8 @@ interface LoopContext {
   history: HistoryEntry[];
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
+  /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
+  onToolCallPreparing?: (progress: { id: string; name: string; characters: number }) => void;
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   budgetGuard: () => Promise<boolean>;
@@ -293,6 +311,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       tools,
       maxTokens: MAX_TOKENS.agent_chat,
       onTextDelta: ctx.onTextDelta,
+      onToolInputProgress: ctx.onToolCallPreparing,
     });
 
     totals.inputTokens += result.usage.inputTokens;
@@ -371,7 +390,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
     for (const block of toolUseBlocks) {
       ctx.onToolCallStart({ id: block.id, name: block.name, args: block.input });
       try {
-        const toolResult = await dispatchMcpTool(block.name, block.input, ctx.resolvedUser);
+        const toolResult = await runSolTool(block.name, block.input, ctx.resolvedUser);
         ctx.onToolCallResult({ id: block.id, name: block.name, status: "success", result: toolResult });
         resultBlocks.push(buildToolResultBlock(block.id, toolResult, false));
       } catch (err) {
@@ -428,6 +447,7 @@ export async function runAgentTurn(deps: AgentTurnDeps): Promise<RunAgentTurnRes
     history,
     onTextDelta: deps.onTextDelta,
     onToolCallStart: deps.onToolCallStart,
+    onToolCallPreparing: deps.onToolCallPreparing,
     onToolCallAwaitingConfirmation: deps.onToolCallAwaitingConfirmation,
     onToolCallResult: deps.onToolCallResult,
     budgetGuard: deps.budgetGuard,
@@ -497,7 +517,7 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     if (runsNow) {
       deps.onToolCallStart({ id: block.id, name: block.name, args: block.input });
       try {
-        const toolResult = await dispatchMcpTool(block.name, block.input, deps.resolvedUser);
+        const toolResult = await runSolTool(block.name, block.input, deps.resolvedUser);
         deps.onToolCallResult({ id: block.id, name: block.name, status: "success", result: toolResult });
         resultBlocks.push(buildToolResultBlock(block.id, toolResult, false));
       } catch (err) {
@@ -553,6 +573,7 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     history,
     onTextDelta: deps.onTextDelta,
     onToolCallStart: deps.onToolCallStart,
+    onToolCallPreparing: deps.onToolCallPreparing,
     onToolCallAwaitingConfirmation: deps.onToolCallAwaitingConfirmation,
     onToolCallResult: deps.onToolCallResult,
     budgetGuard: deps.budgetGuard,

@@ -71,6 +71,25 @@ const askUserQuestionTool: BedrockToolDef = {
   },
 };
 
+/** SOL's way to put an image the user attached to the chat onto a page. Chat attachments
+ * are private, so a page can't show them as they are; this copies the one image asked for
+ * to public storage and returns its address. Handled by the agent loop itself
+ * (lib/ai/solAttachments.ts's publishAttachedImage), never by dispatchMcpTool. */
+export const USE_ATTACHED_IMAGE_TOOL_NAME = "use_attached_image";
+
+const useAttachedImageTool: BedrockToolDef = {
+  name: USE_ATTACHED_IMAGE_TOOL_NAME,
+  description:
+    "Get a public web address for an image the user attached to this chat, so it can be used on a page (an <img src>, a background-image, a builder image element's src). Call it whenever the user wants their own attached image on a page — never substitute a stock photo for an image they gave you. Pass the attachment reference shown next to the image in the conversation. Returns { url }.",
+  input_schema: {
+    type: "object",
+    properties: {
+      attachment: { type: "string", description: "The attachment reference shown next to the image in the conversation." },
+    },
+    required: ["attachment"],
+  },
+};
+
 export function getAllSolTools(): BedrockToolDef[] {
   return [
     ...PLEXO_MCP_TOOLS.map((tool) => ({
@@ -79,6 +98,7 @@ export function getAllSolTools(): BedrockToolDef[] {
       input_schema: tool.inputSchema,
     })),
     askUserQuestionTool,
+    useAttachedImageTool,
   ];
 }
 

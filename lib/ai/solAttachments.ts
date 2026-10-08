@@ -1,5 +1,6 @@
 import JSZip from "jszip";
-import { readObject } from "@/lib/storage";
+import { createHash } from "node:crypto";
+import { readObject, uploadObject } from "@/lib/storage";
 
 // SOL chat attachments are uploaded to the PRIVATE half of the user-content bucket (see
 // app/api/v1/sol/upload/route.ts), and the transcript stores them as Anthropic-shaped
@@ -96,7 +97,12 @@ async function resolveBlock(block: Block, userId: string): Promise<Block[]> {
     if (file.body.length > MAX_IMAGE_BYTES) {
       return [note(`[The image "${name}" is too large for SOL to view (over 3.75 MB). Ask the user to send a smaller version.]`)];
     }
-    return [{ type: "image", source: { type: "base64", media_type: type, data: file.body.toString("base64") } }];
+    return [
+      // How SOL puts this image on a page (see publishAttachedImage) — the user's own photo,
+      // not a stock one.
+      note(`[Attached image "${name}" — to use it on a page, call use_attached_image with attachment "${url}".]`),
+      { type: "image", source: { type: "base64", media_type: type, data: file.body.toString("base64") } },
+    ];
   }
   if (type === "application/pdf") {
     if (file.body.length > MAX_PDF_BYTES) {
@@ -153,3 +159,28 @@ function stripFilename(block: Block): Block {
   const { filename: _filename, ...rest } = block;
   return rest;
 }
+
+const PAGE_IMAGE_EXTENSIONS: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp", "image/svg+xml": "svg", "image/avif": "avif" };
+
+/**
+ * A public address for one image the user attached to this chat, for use on a page. Chat
+ * attachments stay private; only an image SOL is asked to put on a page is copied out — to
+ * a content-addressed key, so using the same image again doesn't make another copy.
+ */
+export async function publishAttachedImage(userId: string, attachment: unknown): Promise<{ url: string }> {
+  if (typeof attachment !== "string" || !attachment) throw new Error("Pass the attachment reference shown next to the image.");
+  let key: string;
+  try {
+    key = decodeURIComponent(new URL(attachment).pathname.replace(/^\//, ""));
+  } catch {
+    throw new Error("That isn't an attachment reference from this conversation.");
+  }
+  if (!key.startsWith(`private/sol-attachments/${userId}/`)) throw new Error("That image isn't one of this user's attachments.");
+  const file = await readObject(attachment);
+  const type = (file.contentType || "").split(";")[0].trim().toLowerCase();
+  const extension = PAGE_IMAGE_EXTENSIONS[type];
+  if (!extension) throw new Error(`That attachment isn't an image a web page can show (${type || "unknown type"}).`);
+  const hash = createHash("sha256").update(file.body).digest("hex").slice(0, 40);
+  return uploadObject(`sol-images/${userId}/${hash}.${extension}`, file.body, { access: "public", contentType: type });
+}
+
