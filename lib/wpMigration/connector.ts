@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { applyWcProductExtras, importWcCoupons, importWcOrders, importWcShipping, productIdsByWcId, type WcPluginCoupon, type WcPluginOrder, type WcPluginProduct, type WcPluginZone } from "./storeImport";
 import type { EntityItem } from "electrodb";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
-import { FormSubmission } from "@/lib/db/opsEntities";
+import { FormSettings, FormSubmission } from "@/lib/db/opsEntities";
 import { BlogComment, BlogRedirect } from "@/lib/db/contentEntities";
 import { CommerceDonationCampaign, CommerceOrder, CommerceOrderItem } from "@/lib/db/commerceEntities";
 import { WpMigrationJob, WpMigrationPage } from "@/lib/db/importEntities";
@@ -13,6 +13,7 @@ import { convertWordPressHtmlToTiptapJson, tiptapJsonToHtml } from "@/lib/blogIm
 import { migrationFetch, restUrl } from "./http";
 import { hostVariants, makeOriginRewriter } from "./urlSpace";
 import type { MigratedForm } from "./htmlTransform";
+import { carryOverForm, type ExportedFormActions } from "./formCarryOver";
 import type { WpInstall } from "./types";
 
 // Plexo's side of the Plexo Migrator companion plugin (see companionPlugin.ts): pairing,
@@ -47,7 +48,7 @@ export interface ConnectorSummary {
 }
 
 export interface ExtrasState {
-  stage: "forminator" | "tables" | "payform" | "redirects" | "team" | "drafts" | "comments" | "give_forms" | "give_donations" | "wc_products" | "wc_coupons" | "wc_shipping" | "wc_orders" | "done";
+  stage: "forminator" | "tables" | "payform" | "redirects" | "form_actions" | "team" | "drafts" | "comments" | "give_forms" | "give_donations" | "wc_products" | "wc_coupons" | "wc_shipping" | "wc_orders" | "done";
   /** Position inside the current stage: which item, how far into it. */
   index: number;
   offset: number;
@@ -64,7 +65,13 @@ export interface ExtrasState {
     coupons?: number;
     deliveryMethods?: number;
     orders?: number;
+    /** Forms whose WordPress after-submit actions (webhook, thank-you page, mailing list) now run on Plexo. */
+    formActions?: number;
   };
+  /** Wildcard/regex redirect rules — Plexo redirects exact addresses, so these are listed for the owner. */
+  redirectPatterns?: { from: string; to: string; kind: string; plugin: string }[];
+  /** What a form did on WordPress that Plexo doesn't repeat, per form, in plain words. */
+  formNotes?: { form: string; note: string }[];
   /** Things about the store the owner should check, in plain words (coupon conditions, shipping formulas…). */
   storeNotes?: string[];
   team: { name: string; email: string; roles: string[] }[];
@@ -74,7 +81,7 @@ export interface ExtrasState {
   finishedAt?: string;
 }
 
-const STAGES: ExtrasState["stage"][] = ["forminator", "tables", "payform", "redirects", "team", "drafts", "comments", "give_forms", "give_donations", "wc_products", "wc_coupons", "wc_shipping", "wc_orders", "done"];
+const STAGES: ExtrasState["stage"][] = ["forminator", "tables", "payform", "redirects", "form_actions", "team", "drafts", "comments", "give_forms", "give_donations", "wc_products", "wc_coupons", "wc_shipping", "wc_orders", "done"];
 const PAGE_SIZE = 200;
 const STEP_BUDGET_MS = 35_000;
 
@@ -324,7 +331,8 @@ export async function runExtrasStep(job: JobItem, revalidate: RevalidateFn = asy
       }
 
       if (state.stage === "redirects") {
-        const { redirects } = await connectorGet<{ redirects: { from: string; to: string; code: number }[] }>(install, code, "redirects");
+        const { redirects, patterns } = await connectorGet<{ redirects: { from: string; to: string; code: number }[]; patterns?: { from: string; to: string; kind: string; plugin: string }[] }>(install, code, "redirects");
+        state.redirectPatterns = (patterns ?? []).slice(0, 200);
         const rewrite = makeOriginRewriter(install.origin);
         const hosts = hostVariants(install.origin);
         for (const r of redirects) {
@@ -341,6 +349,46 @@ export async function runExtrasStep(job: JobItem, revalidate: RevalidateFn = asy
           await BlogRedirect.put({ id: randomUUID(), templateId: job.templateId, fromPath: from, toPath: /^https?:\/\//i.test(to) ? to : normalizeRedirectPath(to) }).go();
           state.counts.redirects += 1;
         }
+        advance();
+        continue;
+      }
+
+      if (state.stage === "form_actions") {
+        let exported: ExportedFormActions[] = [];
+        try {
+          ({ forms: exported } = await connectorGet<{ forms: ExportedFormActions[] }>(install, code, "form-actions"));
+        } catch (err) {
+          // The plugin is connected (earlier stages worked) but older than 1.2: say how to get this part.
+          if (!(err instanceof ConnectorError)) throw err;
+          state.formNotes = [{ form: "Your forms", note: "Update the Plexo Migrator plugin to version 1.2 (download it again here) to also bring over what your forms did after each submission — webhooks, thank-you pages and mailing lists." }];
+          advance();
+          continue;
+        }
+        const forms = await migratedForms(job.id);
+        const notes: { form: string; note: string }[] = [];
+        for (const wp of exported) {
+          // The same WordPress form can sit on several pages (a newsletter sign-up in the footer) — one Plexo form name each.
+          const names = Array.from(new Set(forms.filter((f) => f.sourceKey === `${wp.plugin}:${wp.id}`).map((f) => f.name)));
+          if (names.length === 0) continue; // a form on a page that wasn't published
+          const carried = carryOverForm(wp, install.origin);
+          for (const formName of names) {
+            const set = {
+              source: "wordpress",
+              ...(carried.webhookUrl ? { webhookUrl: carried.webhookUrl, webhookFormat: carried.webhookFormat } : {}),
+              ...(carried.redirectUrl ? { redirectUrl: carried.redirectUrl } : {}),
+              ...(carried.maildripGroupId ? { maildripGroupId: carried.maildripGroupId } : {}),
+              ...(carried.notes.length > 0 ? { note: carried.notes.join(" ") } : {}),
+            };
+            const { data: existing } = await FormSettings.get({ templateId: job.templateId, formName }).go();
+            // Never overwrite what the owner already set up on Plexo.
+            if (existing && (existing.webhookUrl || existing.maildripGroupId || existing.redirectUrl)) continue;
+            await FormSettings.put({ templateId: job.templateId, formName, ...set }).go();
+            if (carried.webhookUrl || carried.redirectUrl || carried.maildripGroupId) state.counts.formActions = (state.counts.formActions ?? 0) + 1;
+            for (const note of carried.notes) notes.push({ form: formName, note });
+            if (carried.maildripGroupId) notes.push({ form: formName, note: "On WordPress this form added people to a MailDrip list — connect MailDrip on the Form Submissions page and confirm the list to keep that going." });
+          }
+        }
+        state.formNotes = notes.slice(0, 100);
         advance();
         continue;
       }

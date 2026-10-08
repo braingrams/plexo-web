@@ -16,7 +16,7 @@
 //  - columns that look like secrets (passwords, tokens, keys, card data) are never sent;
 //  - user export is name + email + role only — never password hashes.
 
-export const COMPANION_PLUGIN_VERSION = "1.1.0";
+export const COMPANION_PLUGIN_VERSION = "1.2.0";
 
 export const COMPANION_PLUGIN_PHP = String.raw`<?php
 /**
@@ -278,7 +278,14 @@ add_action('rest_api_init', function () {
     }));
 
     register_rest_route($ns, '/redirects', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function () {
-        return array('redirects' => plexo_migrator_redirects());
+        return array('redirects' => plexo_migrator_redirects(), 'patterns' => plexo_migrator_redirect_patterns());
+    }));
+
+    // What each form did after a submission on WordPress (send to a webhook, email someone,
+    // add to a mailing list, go to a thank-you page) — so Plexo can keep doing it. List and
+    // audience ids only; no API keys or passwords ever leave WordPress.
+    register_rest_route($ns, '/form-actions', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function () {
+        return array('forms' => plexo_migrator_elementor_forms());
     }));
 
     register_rest_route($ns, '/team', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function () {
@@ -536,11 +543,18 @@ add_action('rest_api_init', function () {
 function plexo_migrator_redirects() {
     global $wpdb;
     $out = array();
+    // Redirection plugin: plain rules (patterns are listed separately).
     $table = $wpdb->prefix . 'redirection_items';
     if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) === $table) {
         $rows = $wpdb->get_results("SELECT url, action_data, action_code FROM \`" . esc_sql($table) . "\` WHERE status = 'enabled' AND regex = 0 AND action_type = 'url' LIMIT 5000", ARRAY_A);
         foreach ((array) $rows as $r) {
             $out[] = array('from' => $r['url'], 'to' => $r['action_data'], 'code' => intval($r['action_code']));
+        }
+    }
+    // Rank Math: each redirection can have several exact sources.
+    foreach (plexo_migrator_rank_math_redirections() as $r) {
+        foreach ($r['sources'] as $src) {
+            if ($src['comparison'] === 'exact') $out[] = array('from' => '/' . ltrim($src['pattern'], '/'), 'to' => $r['to'], 'code' => $r['code']);
         }
     }
     $yoast = get_option('wpseo-premium-redirects-base');
@@ -552,6 +566,91 @@ function plexo_migrator_redirects() {
         }
     }
     return $out;
+}
+
+/** Wildcard and regex rules — Plexo redirects exact addresses, so these are listed for the owner rather than guessed at. */
+function plexo_migrator_redirect_patterns() {
+    global $wpdb;
+    $out = array();
+    $table = $wpdb->prefix . 'redirection_items';
+    if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) === $table) {
+        $rows = $wpdb->get_results("SELECT url, action_data FROM \`" . esc_sql($table) . "\` WHERE status = 'enabled' AND regex = 1 AND action_type = 'url' LIMIT 500", ARRAY_A);
+        foreach ((array) $rows as $r) $out[] = array('from' => $r['url'], 'to' => $r['action_data'], 'kind' => 'regex', 'plugin' => 'Redirection');
+    }
+    foreach (plexo_migrator_rank_math_redirections() as $r) {
+        foreach ($r['sources'] as $src) {
+            if ($src['comparison'] !== 'exact') $out[] = array('from' => $src['pattern'], 'to' => $r['to'], 'kind' => $src['comparison'], 'plugin' => 'Rank Math');
+        }
+    }
+    $yoast = get_option('wpseo-premium-redirects-regex');
+    if (is_array($yoast)) {
+        foreach ($yoast as $origin => $r) $out[] = array('from' => is_string($origin) ? $origin : (isset($r['origin']) ? $r['origin'] : ''), 'to' => isset($r['url']) ? $r['url'] : '', 'kind' => 'regex', 'plugin' => 'Yoast');
+    }
+    return $out;
+}
+
+function plexo_migrator_rank_math_redirections() {
+    global $wpdb;
+    $table = $wpdb->prefix . 'rank_math_redirections';
+    if ($wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $table)) !== $table) return array();
+    $out = array();
+    $rows = $wpdb->get_results("SELECT sources, url_to, header_code FROM \`" . esc_sql($table) . "\` WHERE status = 'active' LIMIT 5000", ARRAY_A);
+    foreach ((array) $rows as $r) {
+        $sources = maybe_unserialize($r['sources']);
+        if (!is_array($sources)) continue;
+        $list = array();
+        foreach ($sources as $src) {
+            if (is_array($src) && isset($src['pattern'])) $list[] = array('pattern' => (string) $src['pattern'], 'comparison' => isset($src['comparison']) ? (string) $src['comparison'] : 'exact');
+        }
+        // 410/451 "gone" rules have no destination — nothing to send visitors to.
+        if ($list && $r['url_to'] !== '') $out[] = array('sources' => $list, 'to' => (string) $r['url_to'], 'code' => intval($r['header_code']));
+    }
+    return $out;
+}
+
+/** Every Elementor form on the site and what it did after a submission (Elementor stores it in each page's _elementor_data). */
+function plexo_migrator_elementor_forms() {
+    global $wpdb;
+    $out = array();
+    $rows = $wpdb->get_results("SELECT post_id, meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_elementor_data' AND meta_value LIKE '%\"widgetType\":\"form\"%' LIMIT 2000", ARRAY_A);
+    foreach ((array) $rows as $row) {
+        $data = json_decode($row['meta_value'], true);
+        if (is_array($data)) plexo_migrator_walk_elementor($data, intval($row['post_id']), $out);
+    }
+    return array_values($out);
+}
+
+function plexo_migrator_walk_elementor($elements, $post_id, &$out) {
+    foreach ($elements as $el) {
+        if (!is_array($el)) continue;
+        if (isset($el['widgetType'], $el['id']) && $el['widgetType'] === 'form') {
+            $s = (isset($el['settings']) && is_array($el['settings'])) ? $el['settings'] : array();
+            $lists = array();
+            foreach ($s as $k => $v) {
+                // A mailing-list integration's chosen list/audience/group — the id only.
+                if (is_scalar($v) && (string) $v !== '' && !preg_match('/key|token|secret|password/i', $k)
+                    && preg_match('/^(maildrip|mailchimp|activecampaign|getresponse|convertkit|mailerlite|drip|mailpoet|sendinblue|brevo|klaviyo|hubspot|moosend|sendy)_/i', $k)
+                    && preg_match('/(list|audience|group|form|tag)s?(_id)?$/i', $k)) {
+                    $lists[$k] = (string) $v;
+                }
+            }
+            $redirect = isset($s['redirect_to']) ? $s['redirect_to'] : '';
+            $out[$el['id']] = array(
+                'plugin' => 'elementor',
+                'id' => (string) $el['id'],
+                'post_id' => $post_id,
+                'name' => isset($s['form_name']) ? (string) $s['form_name'] : '',
+                // Elementor's default when the owner never changed it is "email".
+                'actions' => array_values(array_map('strval', isset($s['submit_actions']) ? (array) $s['submit_actions'] : array('email'))),
+                'webhook' => isset($s['webhooks']) ? (string) $s['webhooks'] : '',
+                'webhook_advanced' => !empty($s['webhooks_advanced_data']) && $s['webhooks_advanced_data'] === 'yes',
+                'email_to' => isset($s['email_to']) ? (string) $s['email_to'] : '',
+                'redirect_to' => is_array($redirect) ? (isset($redirect['url']) ? (string) $redirect['url'] : '') : (string) $redirect,
+                'lists' => $lists,
+            );
+        }
+        if (!empty($el['elements']) && is_array($el['elements'])) plexo_migrator_walk_elementor($el['elements'], $post_id, $out);
+    }
 }
 
 /** People who log in to manage the site — name, email and role only. */

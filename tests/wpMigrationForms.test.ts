@@ -45,3 +45,11 @@ describe("maildrip's Elementor login widget (/guest-login/)", () => {
     expect(result.html).not.toMatch(/name="(log|pwd|redirect_to)"/);
   });
 });
+
+describe("migrated forms remember their WordPress form", () => {
+  it("Elementor's form id is kept so the plugin's report of what it did can be matched", async () => {
+    const { transformPage: t } = await import("@/lib/wpMigration/htmlTransform");
+    const r = t(`<html><body><form class="elementor-form" method="post"><input type="hidden" name="form_id" value="b48f986"/><input type="email" name="form_fields[email]"><button>Go</button></form></body></html>`, { origin: "https://maildrip.io", pageUrl: "https://maildrip.io/", pagePath: "/", pageTitle: "MailDrip", siteTemplateId: "site1", movedLinks: {}, appUrl: "https://plexo.charisol.io" });
+    expect(r.forms[0].sourceKey).toBe("elementor:b48f986");
+  });
+});

@@ -22,6 +22,8 @@
 //   - lib/mcp/donationTools.ts    (DONATION_MCP_TOOLS)
 //   - lib/mcp/wpMigrationTools.ts (WP_MIGRATION_MCP_TOOLS) — none destructive: a migration
 //     only ever creates a NEW site and only reads from the WordPress source.
+//   - lib/mcp/formTools.ts        (FORM_MCP_TOOLS) — none destructive: they only set where
+//     future form submissions are also sent; stored submissions are never touched.
 //
 // Explicitly EXCLUDED, and why (so a future reviewer doesn't "fix" these back in without
 // re-checking the reasoning):

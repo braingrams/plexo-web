@@ -54,6 +54,21 @@ export interface MigratedForm {
   name: string;
   plugin: string;
   fields: string[];
+  /** The WordPress form it came from ("elementor:b48f986", "forminator:12", "cf7:5", "wpforms:7"), matched to what the Plexo Migrator plugin reports it did after a submission. */
+  sourceKey?: string;
+}
+
+/** Which WordPress form this is, read from the plumbing fields the form plugins print (before they're stripped). */
+export function formSourceKey(form: cheerio.Cheerio<AnyNode>, plugin: string): string | undefined {
+  const hidden = (name: string) => form.find(`input[name="${name}"]`).first().attr("value")?.trim();
+  const id =
+    plugin === "elementor-pro" ? hidden("form_id")
+    : plugin === "forminator" ? hidden("form_id") ?? form.attr("data-form-id")
+    : plugin === "contact-form-7" ? hidden("_wpcf7")
+    : plugin === "wpforms" ? hidden("wpforms[id]") ?? form.attr("data-formid")
+    : undefined;
+  const key = plugin === "elementor-pro" ? "elementor" : plugin === "contact-form-7" ? "cf7" : plugin;
+  return id ? `${key}:${id}` : undefined;
 }
 
 /** A WordPress payment/donation form converted to a native Plexo donation campaign. */
@@ -286,6 +301,7 @@ function postsToWordPress(form: cheerio.Cheerio<AnyNode>): boolean {
  * a checkbox/radio group is named for its question and keeps every ticked value.
  */
 function rewireOneForm($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>, ctx: TransformContext, plugin: string, index: number): MigratedForm {
+  const sourceKey = formSourceKey(form, plugin);
   const formId = form.attr("id") || `plexo-form-${index}`;
   form.attr("id", formId);
   const name = formDisplayName($, form, ctx, index);
@@ -373,7 +389,7 @@ function rewireOneForm($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>, ct
       `<script>(function(){var f=document.getElementById(${JSON.stringify(formId)});if(!f)return;f.querySelectorAll(".forminator-field").forEach(function(w){var l=w.querySelector(".forminator-label"),i=w.querySelector("input.forminator-input,textarea.forminator-textarea");if(!l||!i||i.type==="checkbox"||i.type==="radio")return;var t=i.tagName==="TEXTAREA";l.classList.add(t?"forminator-floating--textarea":"forminator-floating--input");if(!t&&!i.parentNode.classList.contains("forminator-input--wrap")){var d=document.createElement("div");d.className="forminator-input--wrap";i.parentNode.insertBefore(d,i);d.appendChild(i);}function s(){w.classList.toggle("forminator-is_filled",!!i.value);}i.addEventListener("focus",function(){w.classList.add("forminator-is_active");});i.addEventListener("blur",function(){w.classList.remove("forminator-is_active");s();});i.addEventListener("input",s);s();});})();</script>`,
     );
   }
-  return { id: formId, name, plugin, fields: fieldNames };
+  return { id: formId, name, plugin, fields: fieldNames, ...(sourceKey ? { sourceKey } : {}) };
 }
 
 export function donationToken(source: string): string {
