@@ -98,13 +98,16 @@ function Block({ block, isUser }: { block: SharedBlock; isUser: boolean }) {
     );
   }
   if (block.kind === "image") {
+    // Same compact row as in the chat (FileReadCard): thumbnail left, description and name right.
     return (
-      <figure style={{ display: "flex", flexDirection: "column", gap: "0.35rem", maxWidth: 240, padding: "0.5rem", borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", margin: 0 }}>
+      <a href={block.url} target="_blank" rel="noreferrer" title={block.name} style={{ display: "flex", alignItems: "center", gap: "0.65rem", width: "min(320px, 100%)", padding: "0.4rem 0.75rem 0.4rem 0.4rem", borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", textDecoration: "none" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={block.url} alt={block.description ?? block.name} style={{ width: "100%", maxHeight: 180, objectFit: "cover", borderRadius: 8, display: "block" }} />
-        {block.description && <figcaption style={{ fontSize: "0.75rem", lineHeight: 1.4, color: "rgba(240,242,255,0.75)" }}>{block.description}</figcaption>}
-        <span style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.45)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{block.name}</span>
-      </figure>
+        <img src={block.url} alt={block.description ?? block.name} style={{ width: 52, height: 52, flexShrink: 0, objectFit: "cover", borderRadius: 8, display: "block" }} />
+        <span style={{ display: "flex", flexDirection: "column", gap: "0.15rem", minWidth: 0 }}>
+          <span style={{ fontSize: "0.78rem", lineHeight: 1.35, color: "rgba(240,242,255,0.88)" }}>{block.description ?? block.name}</span>
+          <span style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.45)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{block.description ? block.name : "Image"}</span>
+        </span>
+      </a>
     );
   }
   if (block.kind === "file") {

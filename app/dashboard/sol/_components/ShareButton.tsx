@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, Copy, Link2, Share2 } from "lucide-react";
 
 type Status = { shared: boolean; url: string | null; upTo: string | null };
@@ -16,7 +17,12 @@ export function ShareButton({ conversationId }: { conversationId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  // The panel is drawn on top of the whole page (a portal, fixed under the button): inside
+  // the header it sat beneath the chat, which showed through it and took its clicks — so
+  // "Create link and copy" closed the panel instead of creating anything.
+  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
   const endpoint = `/api/v1/sol/conversations/${conversationId}/share`;
 
   useEffect(() => {
@@ -28,13 +34,31 @@ export function ShareButton({ conversationId }: { conversationId: string }) {
       .catch(() => setError("Couldn't check whether this conversation is shared. Try again."));
   }, [open, endpoint]);
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const rect = anchorRef.current?.getBoundingClientRect();
+      if (rect) setPosition({ top: rect.bottom + 8, right: Math.max(12, window.innerWidth - rect.right) });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target) || anchorRef.current?.contains(target)) return;
+      setOpen(false);
     };
+    const escape = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", escape);
+    };
   }, [open]);
 
   async function act(method: "POST" | "DELETE") {
@@ -57,7 +81,7 @@ export function ShareButton({ conversationId }: { conversationId: string }) {
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      setTimeout(() => setCopied(false), 4000);
     } catch {
       // the link is on screen to copy by hand
     }
@@ -66,7 +90,7 @@ export function ShareButton({ conversationId }: { conversationId: string }) {
   const button: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.45rem 0.8rem", borderRadius: 9, fontSize: "0.78rem", fontWeight: 600, cursor: busy ? "default" : "pointer", fontFamily: "inherit" };
 
   return (
-    <div ref={panelRef} style={{ position: "relative" }}>
+    <div ref={anchorRef} style={{ position: "relative" }}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -75,8 +99,8 @@ export function ShareButton({ conversationId }: { conversationId: string }) {
       >
         <Share2 size={12} /> Share
       </button>
-      {open && (
-        <div role="dialog" aria-label="Share this conversation" style={{ position: "absolute", right: 0, top: "calc(100% + 8px)", width: 340, zIndex: 50, padding: "1rem", borderRadius: 14, background: "#12121a", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 16px 40px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+      {open && position && typeof document !== "undefined" && createPortal(
+        <div ref={panelRef} role="dialog" aria-label="Share this conversation" style={{ position: "fixed", right: position.right, top: position.top, width: "min(340px, calc(100vw - 24px))", zIndex: 1000, padding: "1rem", borderRadius: 14, background: "#12121a", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 16px 40px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
           <div>
             <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#f0f2ff" }}>Share this conversation</p>
             <p style={{ fontSize: "0.76rem", lineHeight: 1.5, color: "rgba(240,242,255,0.6)", marginTop: "0.3rem" }}>
@@ -109,8 +133,14 @@ export function ShareButton({ conversationId }: { conversationId: string }) {
               <Link2 size={13} /> {busy ? "Creating link…" : "Create link and copy"}
             </button>
           )}
+          {copied && (
+            <p role="status" style={{ fontSize: "0.76rem", color: "#34d399", display: "flex", alignItems: "center", gap: "0.3rem" }}>
+              <Check size={12} /> Link copied — paste it anywhere to share.
+            </p>
+          )}
           {error && <p style={{ fontSize: "0.74rem", color: "#f87171" }}>{error}</p>}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
