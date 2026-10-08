@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { SiteDeletionBlockedError, deleteTemplateAndContents } from "@/lib/sites/deleteTemplate";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { resolveUser } from "@/lib/auth/resolveUser";
@@ -6,10 +7,8 @@ import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
 import { snapshotTemplateRevision } from "@/lib/templateRevisions";
-import { getDescendantIds } from "@/server/slugDynamo";
-import { deleteObjects } from "@/lib/storage";
-import { removeCloudFrontDomain } from "@/lib/cloudfrontDomains";
-import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
+
+import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
 
 /**
@@ -206,34 +205,12 @@ export async function DELETE(
     return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });
   }
 
-  const descendantIds = await getDescendantIds(resolved.organizationId, existing.id);
-  const allIds = [existing.id, ...descendantIds];
-
-  // 1. Delete linked storage assets
-  const assetBatches = await Promise.all(allIds.map((tid) => TemplateAsset.query.primary({ templateId: tid }).go({ pages: "all" })));
-  const assets = assetBatches.flatMap((b) => b.data);
-  if (assets.length > 0) {
-    await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
-      console.error("Failed to delete blobs during template delete (non-fatal):", err)
-    );
+  try {
+    await deleteTemplateAndContents(existing, resolved.organizationId);
+  } catch (err) {
+    if (err instanceof SiteDeletionBlockedError) return NextResponse.json({ error: err.message }, { status: 409 });
+    throw err;
   }
-  await Promise.all(assets.map((a) => TemplateAsset.remove({ templateId: a.templateId, path: a.path }).go()));
-
-  // 2. Remove Custom Domains from Vercel registry
-  const domainBatches = await Promise.all(allIds.map((tid) => PublishedDomain.query.primary({ templateId: tid }).go({ pages: "all" })));
-  const domains = domainBatches.flatMap((b) => b.data);
-  for (const d of domains) {
-    if (d.type === "CUSTOM") {
-      await removeCloudFrontDomain(d.domain, { tenantId: d.tenantId, certificateArn: d.certificateArn }).catch((err) =>
-        console.error(`Failed to remove CloudFront distribution tenant for ${d.domain} during template delete (non-fatal):`, err)
-      );
-    }
-  }
-  await Promise.all(domains.map((d) => PublishedDomain.remove({ templateId: d.templateId, id: d.id }).go()));
-
-  // 3. Delete the template and every descendant page
-  await Promise.all(descendantIds.map((did) => Template.remove({ id: did }).go()));
-  await Template.remove({ id: existing.id }).go();
 
   return NextResponse.json({
     success: true,

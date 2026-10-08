@@ -637,7 +637,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
                 Delete &quot;{deleteTarget.name}&quot;?
               </h2>
               <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.6)", marginTop: "0.5rem", lineHeight: 1.5 }}>
-                This will permanently delete this template, all attached sub-pages, assets, and unbind custom domain mappings. This action cannot be undone.
+                This permanently deletes the site and everything in it: its pages, files and domains, plus its blog posts, shop products, settings and form submissions. Past orders stay in your records. This can&rsquo;t be undone.
               </p>
             </div>
 
