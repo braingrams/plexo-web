@@ -86,6 +86,8 @@ export interface AgentTurnDeps {
   memoryFacts: string[];
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
+  /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
+  onToolCallPreparing?: (progress: { id: string; name: string; characters: number }) => void;
   /** `messageId` is the PENDING SolMessage row's own id — the client needs it (not just the
    * Anthropic tool_use id) to actually resume the turn (see the confirm/answer routes),
    * and sending it in this same callback/frame is what lets the client act on a pause the
@@ -133,6 +135,8 @@ export interface ResumeAgentTurnDeps {
   memoryFacts: string[];
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
+  /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
+  onToolCallPreparing?: (progress: { id: string; name: string; characters: number }) => void;
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   budgetGuard: () => Promise<boolean>;
@@ -270,6 +274,8 @@ interface LoopContext {
   history: HistoryEntry[];
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
+  /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
+  onToolCallPreparing?: (progress: { id: string; name: string; characters: number }) => void;
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   budgetGuard: () => Promise<boolean>;
@@ -305,6 +311,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       tools,
       maxTokens: MAX_TOKENS.agent_chat,
       onTextDelta: ctx.onTextDelta,
+      onToolInputProgress: ctx.onToolCallPreparing,
     });
 
     totals.inputTokens += result.usage.inputTokens;
@@ -440,6 +447,7 @@ export async function runAgentTurn(deps: AgentTurnDeps): Promise<RunAgentTurnRes
     history,
     onTextDelta: deps.onTextDelta,
     onToolCallStart: deps.onToolCallStart,
+    onToolCallPreparing: deps.onToolCallPreparing,
     onToolCallAwaitingConfirmation: deps.onToolCallAwaitingConfirmation,
     onToolCallResult: deps.onToolCallResult,
     budgetGuard: deps.budgetGuard,
@@ -565,6 +573,7 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     history,
     onTextDelta: deps.onTextDelta,
     onToolCallStart: deps.onToolCallStart,
+    onToolCallPreparing: deps.onToolCallPreparing,
     onToolCallAwaitingConfirmation: deps.onToolCallAwaitingConfirmation,
     onToolCallResult: deps.onToolCallResult,
     budgetGuard: deps.budgetGuard,

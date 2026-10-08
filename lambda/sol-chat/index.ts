@@ -7,7 +7,7 @@ import { resolveSessionUser, parseCookies } from "./sessionAuth";
 
 // App secrets (e.g. the key that decrypts an account's own stored AI provider key) come
 // from SSM, loaded once per cold start — the same backfill instrumentation.ts runs for the
-// main server. Only the page-generation route needs them.
+// main server.
 let secretsLoaded: Promise<void> | null = null;
 function ensureSecrets(): Promise<void> {
   secretsLoaded ??= loadSecretsFromSsm().catch((err) => {
@@ -142,6 +142,12 @@ export const handler = awslambda.streamifyResponse(async (event: APIGatewayProxy
     await handleAiGenerate(request, responseStream);
     return;
   }
+
+  // SOL's tools run the same code the dashboard does, and need the same settings (the
+  // storage bucket, encryption keys, MailDrip…) — without them, e.g. a tool that stores a
+  // file or decrypts an account's own AI key fails. Best effort: a chat that needs none of
+  // them still works if SSM is briefly unreachable.
+  await ensureSecrets().catch((err) => console.error("[sol] couldn't load app settings from SSM:", err));
 
   const messagesMatch = request.path.match(MESSAGES_RE);
   const confirmMatch = request.path.match(CONFIRM_RE);

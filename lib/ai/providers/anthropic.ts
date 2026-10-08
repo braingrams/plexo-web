@@ -73,6 +73,7 @@ export async function generateWithTools({
   tools,
   maxTokens,
   onTextDelta,
+  onToolInputProgress,
 }: GenerateWithToolsParams): Promise<GenerateWithToolsResult> {
   const client = new Anthropic({ apiKey });
 
@@ -105,6 +106,23 @@ export async function generateWithTools({
 
   if (onTextDelta) {
     stream.on("text", (textDelta) => onTextDelta(textDelta));
+  }
+  if (onToolInputProgress) {
+    // A tool call's input arrives as JSON fragments after its block starts; report its size.
+    const writing = new Map<number, { id: string; name: string; characters: number }>();
+    stream.on("streamEvent", (event) => {
+      if (event.type === "content_block_start" && event.content_block.type === "tool_use") {
+        const call = { id: event.content_block.id, name: event.content_block.name, characters: 0 };
+        writing.set(event.index, call);
+        onToolInputProgress({ ...call });
+      } else if (event.type === "content_block_delta" && event.delta.type === "input_json_delta") {
+        const call = writing.get(event.index);
+        if (call) {
+          call.characters += event.delta.partial_json.length;
+          onToolInputProgress({ ...call });
+        }
+      }
+    });
   }
 
   const finalMessage = await stream.finalMessage();
