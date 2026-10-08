@@ -7,6 +7,7 @@ import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { getTierFeatures } from "@/lib/subscription";
 import { ensureUniqueSlug, isValidUuid } from "@/server/slugDynamo";
+import { rawUploadLimitMessage } from "@/server/rawUploadLimit";
 import {
   extractZipUpload,
   validateSingleHtmlUpload,
@@ -14,7 +15,6 @@ import {
   RawUploadValidationError,
   extensionOf,
   humanizePageFilename,
-  RAW_UPLOAD_DAILY_LIMIT,
   type ExtractedSite,
   type ExtractedAsset,
 } from "@/server/rawUpload";
@@ -144,17 +144,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Per-account rate limit on raw uploads specifically — this is the abuse-prone path
   // (unsanitized, arbitrary JS), so it gets its own tighter ceiling independent of the
   // general template limit above.
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: orgTemplatesForRateLimit } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
-  const recentUploadCount = orgTemplatesForRateLimit.filter(
-    // Pages a WordPress migration created for the owner don't count — only HTML they uploaded themselves.
-    (t) => t.userId === resolved.userId && t.sourceType === "RAW_UPLOAD" && !t.migratedFrom && (t.createdAt ?? "") >= since,
-  ).length;
-  if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
-    return NextResponse.json({
-      error: `You've reached the raw-upload limit of ${RAW_UPLOAD_DAILY_LIMIT} per 24 hours. Try again later.`,
-    }, { status: 429 });
-  }
+  const limited = await rawUploadLimitMessage(resolved.organizationId, resolved.userId);
+  if (limited) return NextResponse.json({ error: limited }, { status: 429 });
 
   let site: ExtractedSite;
   try {
