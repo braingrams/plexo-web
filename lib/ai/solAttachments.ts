@@ -218,5 +218,10 @@ export async function publishAttachedImage(userId: string, attachment: unknown, 
   const extension = PAGE_IMAGE_EXTENSIONS[type];
   if (!extension) throw new Error(`That attachment isn't an image a web page can show (${type || "unknown type"}).`);
   const hash = createHash("sha256").update(file.body).digest("hex").slice(0, 40);
-  return uploadObject(`sol-images/${userId}/${hash}.${extension}`, file.body, { access: "public", contentType: type });
+  try {
+    return await uploadObject(`sol-images/${userId}/${hash}.${extension}`, file.body, { access: "public", contentType: type });
+  } catch (err) {
+    console.error("[sol] couldn't save an attached image for a page:", err);
+    throw new Error("Plexo couldn't save that image for the page just now. Tell the user it's a problem on Plexo's side and to try again in a few minutes.");
+  }
 }
