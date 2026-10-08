@@ -1,17 +1,41 @@
 import { docClient, TABLES } from "@/lib/db/client";
-import { BlogSite } from "@/lib/db/contentEntities";
-import { CommerceDonationSubscription, CommerceSettings } from "@/lib/db/commerceEntities";
+import { BlogComment, BlogSite } from "@/lib/db/contentEntities";
+import { CommerceDonationSubscription, CommerceProductRelation, CommerceSettings } from "@/lib/db/commerceEntities";
+import { FormSettings } from "@/lib/db/opsEntities";
+import { WpMigrationJob } from "@/lib/db/importEntities";
 import { deleteObjects } from "@/lib/storage";
 
 // Deleting a site deletes what it owns — its blog, shop catalogue, settings, form
 // submissions, imports — not just its pages. Nearly everything a site owns lives in its
-// own partition (TEMPLATE#<siteId>) in the content, commerce, ops and import tables, so
+// own partition (template#<siteId>) in the content, commerce, ops and import tables, so
 // each partition is swept whole: whatever kinds of data a site gains later go too.
 //
 // Kept on purpose: orders, order items and bookings are financial records (payouts,
 // refunds, tax) and stay for the organization. The site's own record, files and domains
 // are removed by the delete route itself, which needs them to clean up storage and
 // CloudFront first.
+
+/**
+ * A partition's key exactly as ElectroDB stores it (it lowercases keys: "template#<id>",
+ * not the "TEMPLATE#<id>" its templates read like) — taken from the entity itself, never
+ * written by hand.
+ */
+function partitionKey(query: { params: () => Record<string, unknown> }): string {
+  const values = query.params().ExpressionAttributeValues as Record<string, unknown> | undefined;
+  const pk = values?.[":pk"];
+  if (typeof pk !== "string") throw new Error("Couldn't work out where this site's data is stored.");
+  return pk;
+}
+
+/** The site's partition in each table, and the two kinds kept under other keys. */
+export const siteKeys = {
+  content: (templateId: string) => partitionKey(BlogSite.query.primary({ templateId })),
+  commerce: (templateId: string) => partitionKey(CommerceSettings.query.primary({ templateId })),
+  ops: (templateId: string) => partitionKey(FormSettings.query.primary({ templateId })),
+  import: (templateId: string) => partitionKey(WpMigrationJob.query.primary({ templateId })),
+  postComments: (postId: string) => partitionKey(BlogComment.query.primary({ postId })),
+  productRelations: (productId: string) => partitionKey(CommerceProductRelation.query.primary({ productId })),
+};
 
 const KEEP = new Set(["commerceOrder", "commerceOrderItem", "commerceBooking", "template", "templateAsset", "publishedDomain"]);
 
@@ -75,8 +99,14 @@ export async function purgeSiteData(templateId: string, pageIds: string[] = []):
   const productIds: string[] = [];
   const blobUrls: string[] = [];
 
-  for (const table of [TABLES.content, TABLES.commerce, TABLES.ops, TABLES.import]) {
-    const rows = (await partition(table, `TEMPLATE#${templateId}`)).filter((r) => !KEEP.has(r.__edb_e__ ?? ""));
+  const tables: [string, (id: string) => string][] = [
+    [TABLES.content, siteKeys.content],
+    [TABLES.commerce, siteKeys.commerce],
+    [TABLES.ops, siteKeys.ops],
+    [TABLES.import, siteKeys.import],
+  ];
+  for (const [table, keyOf] of tables) {
+    const rows = (await partition(table, keyOf(templateId))).filter((r) => !KEEP.has(r.__edb_e__ ?? ""));
     for (const r of rows) {
       if (r.__edb_e__ === "blogPost" && r.id) postIds.push(r.id);
       if (r.__edb_e__ === "commerceProduct" && r.id) productIds.push(r.id);
@@ -86,11 +116,11 @@ export async function purgeSiteData(templateId: string, pageIds: string[] = []):
     removed += await removeRows(table, rows);
   }
   for (const pageId of pageIds) {
-    removed += await removeRows(TABLES.content, (await partition(TABLES.content, `TEMPLATE#${pageId}`)).filter((r) => !KEEP.has(r.__edb_e__ ?? "")));
+    removed += await removeRows(TABLES.content, (await partition(TABLES.content, siteKeys.content(pageId))).filter((r) => !KEEP.has(r.__edb_e__ ?? "")));
   }
   // Kept under their own keys: each post's comments, each product's related-product links.
-  for (const id of postIds) removed += await removeRows(TABLES.content, await partition(TABLES.content, `POST#${id}`));
-  for (const id of productIds) removed += await removeRows(TABLES.commerce, await partition(TABLES.commerce, `PRODUCT#${id}`));
+  for (const id of postIds) removed += await removeRows(TABLES.content, await partition(TABLES.content, siteKeys.postComments(id)));
+  for (const id of productIds) removed += await removeRows(TABLES.commerce, await partition(TABLES.commerce, siteKeys.productRelations(id)));
   if (blobUrls.length > 0) {
     await deleteObjects(blobUrls).catch((err) => console.error("[sites] couldn't delete a deleted site's imported images (non-fatal):", err));
   }

@@ -23,15 +23,25 @@ vi.mock("@/lib/db/client", () => ({
 }));
 vi.mock("@/lib/storage", () => ({ deleteObjects: vi.fn(async (urls: string[]) => void s3.push(...urls)) }));
 const subs = vi.hoisted(() => ({ list: [] as { status: string }[] }));
+// ElectroDB-shaped: query.primary(...).params() carries the stored (lowercase) partition key.
+const { keyed } = vi.hoisted(() => ({
+  keyed: (prefix: string, field: string) => ({ primary: (c: Record<string, string>) => ({ params: () => ({ ExpressionAttributeValues: { ":pk": `${prefix}#${c[field]}` } }) }) }),
+}));
 vi.mock("@/lib/db/commerceEntities", () => ({
   CommerceDonationSubscription: { query: { primary: () => ({ go: async () => ({ data: subs.list }) }) } },
-  CommerceSettings: { get: () => ({ go: async () => ({ data: { productDetailTemplateId: "layout-product" } }) }) },
+  CommerceSettings: { get: () => ({ go: async () => ({ data: { productDetailTemplateId: "layout-product" } }) }), query: keyed("template", "templateId") },
+  CommerceProductRelation: { query: keyed("product", "productId") },
 }));
-vi.mock("@/lib/db/contentEntities", () => ({ BlogSite: { get: () => ({ go: async () => ({ data: { listingLayoutTemplateId: "layout-list", postLayoutTemplateId: "layout-post" } }) }) } }));
+vi.mock("@/lib/db/contentEntities", () => ({
+  BlogSite: { get: () => ({ go: async () => ({ data: { listingLayoutTemplateId: "layout-list", postLayoutTemplateId: "layout-post" } }) }), query: keyed("template", "templateId") },
+  BlogComment: { query: keyed("post", "postId") },
+}));
+vi.mock("@/lib/db/opsEntities", () => ({ FormSettings: { query: keyed("template", "templateId") } }));
+vi.mock("@/lib/db/importEntities", () => ({ WpMigrationJob: { query: keyed("template", "templateId") } }));
 
 import { purgeSiteData, siteDeletionBlocker, siteLayoutTemplateIds } from "@/lib/sites/purgeSiteData";
 
-const T = "TEMPLATE#site1";
+const T = "template#site1"; // exactly as stored (ElectroDB lowercases keys)
 beforeEach(() => {
   throttledOnce = false;
   s3.length = 0;
@@ -43,16 +53,16 @@ beforeEach(() => {
     { pk: T, sk: "ASSET#a.css", __edb_e__: "templateAsset" },
     { pk: T, sk: "BLOGSITE", __edb_e__: "blogSite" },
     ...posts,
-    { pk: "POST#post3", sk: "COMMENT#APPROVED#x#c1", __edb_e__: "blogComment" },
-    { pk: "TEMPLATE#page2", sk: "REVISION#1", __edb_e__: "templateRevision" },
-    { pk: "TEMPLATE#other-site", sk: "POST#keep", __edb_e__: "blogPost", id: "other" },
+    { pk: "post#post3", sk: "comment#approved#x#c1", __edb_e__: "blogComment" },
+    { pk: "template#page2", sk: "revision#1", __edb_e__: "templateRevision" },
+    { pk: "template#other-site", sk: "post#keep", __edb_e__: "blogPost", id: "other" },
   ]);
   db.set("commerce", [
     { pk: T, sk: "PRODUCT#pr1", __edb_e__: "commerceProduct", id: "pr1" },
     { pk: T, sk: "SETTINGS", __edb_e__: "commerceSettings" },
     { pk: T, sk: "ORDER#o1", __edb_e__: "commerceOrder" },
     { pk: T, sk: "ORDER#o1#ITEM#i1", __edb_e__: "commerceOrderItem" },
-    { pk: "PRODUCT#pr1", sk: "RELATED#pr2", __edb_e__: "commerceProductRelation" },
+    { pk: "product#pr1", sk: "related#pr2", __edb_e__: "commerceProductRelation" },
   ]);
   db.set("ops", [{ pk: T, sk: "SUBMISSION#1#s1", __edb_e__: "formSubmission" }, { pk: T, sk: "FORMSETTINGS#News", __edb_e__: "formSettings" }]);
   db.set("import", [{ pk: T, sk: "MEDIAMAP#https://wp/a.jpg", __edb_e__: "importMediaMap", blobUrl: "https://bucket/public/blog-import/site1/abc.jpg" }]);
@@ -62,7 +72,7 @@ describe("deleting a site deletes what it owns", () => {
   it("blog, comments, catalogue, settings, forms, imports and page revisions go; orders and the site's own records stay for the delete route", async () => {
     await purgeSiteData("site1", ["page2"]);
     const left = (t: string) => (db.get(t) ?? []).map((r) => `${r.pk}|${r.sk}`).sort();
-    expect(left("content")).toEqual(["TEMPLATE#other-site|POST#keep", `${T}|ASSET#a.css`, `${T}|TEMPLATE`].sort());
+    expect(left("content")).toEqual(["template#other-site|post#keep", `${T}|ASSET#a.css`, `${T}|TEMPLATE`].sort());
     expect(left("commerce")).toEqual([`${T}|ORDER#o1`, `${T}|ORDER#o1#ITEM#i1`].sort());
     expect(left("ops")).toEqual([]);
     expect(left("import")).toEqual([]);

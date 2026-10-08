@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { EntityItem } from "electrodb";
-import { BlogPost, BlogPostCategory, BlogPostTag, BlogAuthor, BlogCategory, BlogTag } from "@/lib/db/contentEntities";
+import { BlogPost, BlogPostCategory, BlogPostTag, BlogAuthor, BlogCategory, BlogTag, BlogComment } from "@/lib/db/contentEntities";
 import { ensureUniqueBlogSlug } from "@/server/slugDynamo";
 import { sanitizeBlogHtml } from "./sanitize";
 import { estimateReadingTimeMinutes, autoExcerpt } from "./content";
@@ -325,6 +325,9 @@ export async function deleteBlogPost(templateId: string, postId: string, revalid
 
   await BlogPost.remove({ templateId, slug: existing.slug }).go();
   await syncCategoriesAndTags(templateId, existing.id, [], []);
+  // Its comments live under the post, not the site — they'd otherwise outlive it.
+  const { data: comments } = await BlogComment.query.primary({ postId: existing.id }).go({ pages: "all" });
+  if (comments.length > 0) await BlogComment.delete(comments).go();
 
   await revalidate({
     templateId,

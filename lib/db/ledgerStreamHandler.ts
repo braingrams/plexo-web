@@ -27,7 +27,9 @@ export const handler: DynamoDBStreamHandler = async (event: DynamoDBStreamEvent)
     const newImage = unmarshall(record.dynamodb.NewImage as Record<string, never>);
     const oldImage = record.dynamodb.OldImage ? unmarshall(record.dynamodb.OldImage as Record<string, never>) : null;
 
-    const isWithdrawalRequest = typeof newImage.sk === "string" && newImage.sk.startsWith("WITHDRAWAL#");
+    // By ElectroDB's entity marker, not the key: keys are stored lowercased ("withdrawal#…"),
+    // so a prefix check on "WITHDRAWAL#" would never match.
+    const isWithdrawalRequest = newImage.__edb_e__ === "withdrawalRequest";
     if (!isWithdrawalRequest) continue;
 
     const justProcessed = newImage.status === "PROCESSED" && oldImage?.status !== "PROCESSED";
