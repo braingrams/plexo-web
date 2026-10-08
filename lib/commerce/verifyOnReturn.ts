@@ -118,7 +118,7 @@ export async function verifyOrderOnReturn(order: OrderItem): Promise<string> {
     if (paid && reinstating) {
       // The expiry put this order's stock back on the shelf — take it again (it may go
       // negative if it sold out meanwhile; the owner is told below either way).
-      const { data: items } = await CommerceOrderItem.query.primary({ templateId: paid.templateId, orderId: paid.id }).go();
+      const { data: items } = await CommerceOrderItem.query.primary({ templateId: paid.templateId, orderId: paid.id }).go({ pages: "all" });
       await adjustStockForOrderItems(paid.templateId, items, -1);
       console.info(`Commerce: reinstated expired order ${paid.orderNumber} — payment completed after the checkout hold expired`);
     }

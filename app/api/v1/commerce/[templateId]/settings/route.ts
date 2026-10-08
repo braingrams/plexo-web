@@ -156,7 +156,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
   // Platform Paystack and BYO Stripe need no such gate — both are opt-in with either
   // Plexo's own Paystack account (automatic) or the site's own Stripe keys (entered below).
   if (paymentProvider === "PLATFORM_STRIPE") {
-    const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId }).go();
+    const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId }).go({ pages: "all" });
     const approved = requests.some((r) => r.status === "APPROVED");
     if (!approved) {
       return NextResponse.json(

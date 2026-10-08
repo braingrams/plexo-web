@@ -62,12 +62,12 @@ export default async function BlogOverviewPage() {
       ),
       Promise.all(
         candidates.map((t) =>
-          PublishedDomain.query.primary({ templateId: t.id }).go(),
+          PublishedDomain.query.primary({ templateId: t.id }).go({ pages: "all" }),
         ),
       ),
       Promise.all(
         candidates.map((t) =>
-          BlogPost.query.byStatus({ templateId: t.id }).go(),
+          BlogPost.query.byStatus({ templateId: t.id }).go({ pages: "all" }),
         ),
       ),
       User.get({ id: session.user.id }).go(),

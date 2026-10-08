@@ -27,7 +27,7 @@ export default async function ApiKeysPage() {
     redirect("/choose-org");
   }
 
-  const { data: allKeys } = await ApiKey.query.primary({ organizationId: orgResolution.organizationId }).go();
+  const { data: allKeys } = await ApiKey.query.primary({ organizationId: orgResolution.organizationId }).go({ pages: "all" });
   const apiKeys = allKeys
     .filter((k) => k.isActive)
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));

@@ -27,7 +27,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "orderNumber and email are required." }, { status: 400 });
   }
 
-  const { data: matches } = await CommerceOrder.query.byOrderNumber({ orderNumber }).go();
+  const { data: matches } = await CommerceOrder.query.byOrderNumber({ orderNumber }).go({ pages: "all" });
   const order = matches.find((o) => o.templateId === templateId && o.customerEmail.toLowerCase() === email);
   if (!order) {
     return NextResponse.json({ error: "No order found with that number and email." }, { status: 404 });
@@ -41,7 +41,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const awaitingTransfer = order.paymentMethod === "BANK_TRANSFER" && order.status === "PENDING";
   const [{ data: items }, { data: booking }, { data: settings }] = await Promise.all([
-    CommerceOrderItem.query.primary({ templateId, orderId: order.id }).go(),
+    CommerceOrderItem.query.primary({ templateId, orderId: order.id }).go({ pages: "all" }),
     CommerceBooking.get({ templateId, orderId: order.id }).go(),
     awaitingTransfer ? CommerceSettings.get({ templateId }).go() : Promise.resolve({ data: null }),
   ]);

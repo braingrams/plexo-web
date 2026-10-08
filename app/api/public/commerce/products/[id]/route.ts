@@ -37,7 +37,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
   const [{ data: category }, { data: relations }, { data: reviewRows }] = await Promise.all([
     product.categoryId ? CommerceCategory.get({ templateId, id: product.categoryId }).go() : Promise.resolve({ data: null }),
-    CommerceProductRelation.query.primary({ productId: product.id }).go(),
+    CommerceProductRelation.query.primary({ productId: product.id }).go({ pages: "all" }),
     CommerceProductReview.query.byProduct({ productId: product.id }).go({ pages: "all" }),
   ]);
   // Approved reviews only, newest first — name (never the email), stars, words, date.

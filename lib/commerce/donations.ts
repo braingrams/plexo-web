@@ -527,7 +527,7 @@ export async function cancelDonationSubscription(subscription: DonationSubscript
 
 /** Marks a monthly gift stopped because the gateway reported it ended (card expired, cancelled at the gateway). */
 export async function markDonationSubscriptionEnded(providerRef: string, reason: string): Promise<void> {
-  const { data } = await CommerceDonationSubscription.query.byProviderRef({ providerRef }).go();
+  const { data } = await CommerceDonationSubscription.query.byProviderRef({ providerRef }).go({ pages: "all" });
   for (const sub of data) {
     if (sub.status === "CANCELLED") continue;
     await CommerceDonationSubscription.patch({ templateId: sub.templateId, id: sub.id })
@@ -537,7 +537,7 @@ export async function markDonationSubscriptionEnded(providerRef: string, reason:
 }
 
 export async function findDonationSubscriptionByRef(providerRef: string): Promise<DonationSubscriptionItem | null> {
-  const { data } = await CommerceDonationSubscription.query.byProviderRef({ providerRef }).go();
+  const { data } = await CommerceDonationSubscription.query.byProviderRef({ providerRef }).go({ pages: "all" });
   return data[0] ?? null;
 }
 

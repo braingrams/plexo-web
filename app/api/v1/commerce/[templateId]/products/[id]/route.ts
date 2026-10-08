@@ -19,7 +19,7 @@ async function resolveCategoryId(templateId: string, organizationId: string, cat
   if (typeof categoryName !== "string" || !categoryName.trim()) return null; // explicitly cleared
   const name = categoryName.trim();
   const slug = slugify(name) || "category";
-  const { data: categories } = await CommerceCategory.query.primary({ templateId }).go();
+  const { data: categories } = await CommerceCategory.query.primary({ templateId }).go({ pages: "all" });
   const existing = categories.find((c) => c.slug === slug);
   if (existing) {
     if (existing.name !== name) await CommerceCategory.patch({ templateId, id: existing.id }).set({ name }).go();
@@ -40,7 +40,7 @@ export async function GET(
 
   const [{ data: product }, { data: relations }] = await Promise.all([
     CommerceProduct.get({ templateId, id }).go(),
-    CommerceProductRelation.query.primary({ productId: id }).go(),
+    CommerceProductRelation.query.primary({ productId: id }).go({ pages: "all" }),
   ]);
   if (!product) return NextResponse.json({ error: "Product not found." }, { status: 404 });
 
@@ -180,7 +180,7 @@ export async function PATCH(
     const { data: candidateProducts } = await CommerceProduct.query.primary({ templateId }).go({ pages: "all" });
     const validIds = candidateProducts.filter((p) => capped.includes(p.id)).map((p) => p.id);
 
-    const { data: existingRelations } = await CommerceProductRelation.query.primary({ productId: id }).go();
+    const { data: existingRelations } = await CommerceProductRelation.query.primary({ productId: id }).go({ pages: "all" });
     await Promise.all(existingRelations.map((r) => CommerceProductRelation.remove({ productId: r.productId, relatedProductId: r.relatedProductId }).go()));
     await Promise.all(
       validIds.map((relatedProductId) => CommerceProductRelation.create({ id: randomUUID(), templateId, organizationId, productId: id, relatedProductId }).go()),

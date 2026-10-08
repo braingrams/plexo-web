@@ -49,7 +49,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let cart = await findOpenCart(templateId, readCartToken(request));
   if (!cart) cart = await createCart(templateId, organization.id);
 
-  const { data: existingItems } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
+  const { data: existingItems } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go({ pages: "all" });
   // Same product in a different size is a separate line.
   const existing = existingItems.find((i) => i.productId === product.id && (i.variantId ?? undefined) === variantId);
   if (existing) {

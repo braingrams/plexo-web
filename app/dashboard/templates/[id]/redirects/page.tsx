@@ -34,7 +34,7 @@ export default async function RedirectsPage({ params }: { params: Promise<{ id: 
     redirect(`/dashboard/templates/${rootId}/redirects`);
   }
 
-  const { data: redirects } = await BlogRedirect.query.primary({ templateId: found.id }).go();
+  const { data: redirects } = await BlogRedirect.query.primary({ templateId: found.id }).go({ pages: "all" });
   redirects.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   const initialRedirects: RedirectSummary[] = redirects.map((r) => ({

@@ -9,7 +9,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   const resolved = await resolveCommerceAdmin(request, templateId);
   if (resolved.error) return resolved.error;
 
-  const { data: discounts } = await CommerceDiscountCode.query.primary({ templateId }).go();
+  const { data: discounts } = await CommerceDiscountCode.query.primary({ templateId }).go({ pages: "all" });
   discounts.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
   return NextResponse.json({ discounts });
 }
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
     return NextResponse.json({ error: "A percentage discount can't exceed 100." }, { status: 400 });
   }
 
-  const { data: byCode } = await CommerceDiscountCode.query.byCode({ templateId, code: normalizedCode }).go();
+  const { data: byCode } = await CommerceDiscountCode.query.byCode({ templateId, code: normalizedCode }).go({ pages: "all" });
   if (byCode[0]) {
     return NextResponse.json({ error: `"${normalizedCode}" is already in use.` }, { status: 409 });
   }

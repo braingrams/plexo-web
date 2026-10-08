@@ -9,9 +9,9 @@ export default async function BlogCommentsPage({ params }: { params: Promise<{ i
   // BlogComment is scoped by postId, not templateId (see its own entity comment) — no
   // direct "every comment on this site" index, so this fans out per post. A site's post
   // count is bounded in practice; a GSI3 on BlogComment is the fix if that stops holding.
-  const { data: posts } = await BlogPost.query.byStatus({ templateId: access.templateId }).go();
+  const { data: posts } = await BlogPost.query.byStatus({ templateId: access.templateId }).go({ pages: "all" });
   const postById = new Map(posts.map((p) => [p.id, p]));
-  const commentBatches = await Promise.all(posts.map((p) => BlogComment.query.primary({ postId: p.id }).go()));
+  const commentBatches = await Promise.all(posts.map((p) => BlogComment.query.primary({ postId: p.id }).go({ pages: "all" })));
   const comments = commentBatches
     .flatMap((b) => b.data)
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))

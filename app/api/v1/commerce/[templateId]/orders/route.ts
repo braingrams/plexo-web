@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   const q = searchParams.get("q")?.trim().toLowerCase();
   const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1);
 
-  const { data: allOrders } = await CommerceOrder.query.primary({ templateId }).go();
+  const { data: allOrders } = await CommerceOrder.query.primary({ templateId }).go({ pages: "all" });
   let filtered = allOrders;
   if (status) filtered = filtered.filter((o) => o.status === status);
   if (fulfillmentStatus) filtered = filtered.filter((o) => o.fulfillmentStatus === fulfillmentStatus);
@@ -38,9 +38,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   const orders = await Promise.all(
     page_.map(async (order) => {
       const [{ data: items }, { data: booking }, { data: deliveries }] = await Promise.all([
-        CommerceOrderItem.query.primary({ templateId, orderId: order.id }).go(),
+        CommerceOrderItem.query.primary({ templateId, orderId: order.id }).go({ pages: "all" }),
         CommerceBooking.get({ templateId, orderId: order.id }).go(),
-        CommerceDigitalDelivery.query.primary({ orderId: order.id }).go(),
+        CommerceDigitalDelivery.query.primary({ orderId: order.id }).go({ pages: "all" }),
       ]);
 
       const deliveriesWithProduct = await Promise.all(

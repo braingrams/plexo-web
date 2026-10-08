@@ -47,7 +47,7 @@ export default async function DomainsPage() {
   // overview page's identical query.
   const templateNameById = new Map(orgTemplates.map((t) => [t.id, t.name]));
   const rootTemplateIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
-  const domainBatches = await Promise.all(rootTemplateIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
+  const domainBatches = await Promise.all(rootTemplateIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go({ pages: "all" })));
   const publishedDomains = domainBatches
     .flatMap((b) => b.data)
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
