@@ -17,7 +17,7 @@ function isText(block: ContentBlock): block is { type: "text"; text: string } {
 function isToolUse(block: ContentBlock): block is ToolUseBlock {
   return (block as { type?: string }).type === "tool_use";
 }
-function isMedia(block: ContentBlock): block is { type: "image" | "document"; source?: { url?: string }; url?: string; filename?: string } {
+function isMedia(block: ContentBlock): block is { type: "image" | "document"; source?: { url?: string }; url?: string; filename?: string; description?: string } {
   const t = (block as { type?: string }).type;
   return t === "image" || t === "document";
 }
@@ -137,7 +137,7 @@ export function MessageBubble({
           }
           if (isMedia(block)) {
             const url = block.source?.url ?? block.url;
-            return <FileReadCard key={i} kind={block.type} url={url} filename={block.filename} />;
+            return <FileReadCard key={i} kind={block.type} url={url} filename={block.filename} description={block.description} />;
           }
           return null;
         })}

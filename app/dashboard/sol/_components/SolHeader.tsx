@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Menu, Pencil, X, Zap } from "lucide-react";
+import { ShareButton } from "./ShareButton";
 import { SolModeSwitch } from "./SolModeSwitch";
 import { useSolSidebar } from "./SolSidebarContext";
 import type { ConversationSummary } from "./types";
@@ -182,6 +183,7 @@ export function SolHeader({
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexShrink: 0 }}>
+        {conversation && <ShareButton conversationId={conversation.id} />}
         {credits !== null && (
           <span
             title="Credit balance"
