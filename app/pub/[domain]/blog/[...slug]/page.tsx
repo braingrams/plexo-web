@@ -9,6 +9,7 @@ import { BlogStyles, SiteHeader, SiteFooter, PostMeta, CategoryChips, PostCard, 
 import { hasBlogMarker, substituteBlogMarkers, extractMarkerPrefix } from "@/lib/pub/blogLayoutRender";
 import { buildPostFragments } from "@/lib/pub/blogLayoutFragments";
 import { renderCommentsSection } from "@/lib/pub/renderComments";
+import { LayoutDocument } from "@/lib/pub/layoutDocument";
 
 export const revalidate = 60;
 
@@ -74,8 +75,7 @@ export default async function BlogPostPage({ params }: { params: Promise<Params>
             Its selectors are all namespaced (plexo-post__body, plexo-chip, plexo-comments,
             ...) so they don't collide with the custom layout's own builder-generated markup. */}
         <BlogStyles appearance={site.blogSite} />
-        {/* eslint-disable-next-line react/no-danger */}
-        <div dangerouslySetInnerHTML={{ __html: html }} />
+        <LayoutDocument html={html} />
         <JsonLd items={postJsonLd(domain, post)} />
       </>
     );

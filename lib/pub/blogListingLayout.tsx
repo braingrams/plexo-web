@@ -4,6 +4,7 @@ import { hasLivePostLists, renderLivePostLists, type PostListSpec } from "@/lib/
 import { toLivePost } from "@/lib/pub/livePostQueries";
 import { BlogStyles, JsonLd, type BlogAppearance } from "@/lib/pub/blogTheme";
 import { hasBlogMarker, substituteBlogMarkers } from "@/lib/pub/blogLayoutRender";
+import { LayoutDocument } from "@/lib/pub/layoutDocument";
 import { buildPostListFragment, paginationHtml, type PostListOptions } from "@/lib/pub/blogLayoutFragments";
 
 // Every blog listing — the index, its page 2+, and category/tag/author archives — renders
@@ -59,8 +60,7 @@ export async function ListingInLayout({
       {/* The post cards/pagination are styled by BlogStyles' namespaced plexo-* classes —
           they carry no styling of their own, and don't collide with the layout's markup. */}
       <BlogStyles appearance={blogSite} />
-      {/* eslint-disable-next-line react/no-danger */}
-      <div dangerouslySetInnerHTML={{ __html: html }} />
+      <LayoutDocument html={html} />
       <JsonLd items={jsonLd} />
     </>
   );
