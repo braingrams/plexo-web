@@ -52,6 +52,9 @@ export interface GenerateWithToolsParams {
   tools?: AnthropicToolDef[];
   maxTokens: number;
   onTextDelta?: (delta: string) => void;
+  /** Called while the model writes a tool call's input — which for a whole page of HTML can
+   * take a minute or two, with no text streaming meanwhile — so the person sees progress. */
+  onToolInputProgress?: (progress: { id: string; name: string; characters: number }) => void;
 }
 
 export interface GenerateWithToolsResult {

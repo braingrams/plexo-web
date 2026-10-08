@@ -165,7 +165,10 @@ export function MessageList({
               resolvingConfirmation={resolvingConfirmation}
             />
           )}
-          {streaming && !pendingBlocks?.length && (
+          {/* SOL is working and nothing on screen shows it — before anything arrives, or after
+              its text while it decides what to do next. A step that's being written or run
+              has its own spinner. */}
+          {streaming && !lastBlockShowsActivity(pendingBlocks) && (
             <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", paddingLeft: "2.6rem" }}>
               <span className="sol-typing-dot" style={{ animationDelay: "0ms" }} />
               <span className="sol-typing-dot" style={{ animationDelay: "150ms" }} />
@@ -210,4 +213,9 @@ export function MessageList({
       )}
     </div>
   );
+}
+
+function lastBlockShowsActivity(blocks: ContentBlock[] | null): boolean {
+  const last = blocks?.[blocks.length - 1] as { type?: string; status?: string } | undefined;
+  return last?.type === "tool_use" && (last.status === "preparing" || last.status === "running" || last.status === "awaiting_confirmation");
 }

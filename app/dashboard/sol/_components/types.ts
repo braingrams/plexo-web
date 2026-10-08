@@ -10,7 +10,7 @@ export const MODEL_TIER_OPTIONS: Array<{ value: ModelTier; label: string; descri
   { value: "HIGH", label: "Most Capable", description: "SOL's top-tier model for complex work" },
 ];
 
-export type ToolCallStatus = "running" | "awaiting_confirmation" | "success" | "error" | "cancelled";
+export type ToolCallStatus = "preparing" | "running" | "awaiting_confirmation" | "success" | "error" | "cancelled";
 
 // Must match lib/ai/solToolSchema.ts's ASK_USER_QUESTION_TOOL_NAME exactly — kept as a
 // plain string literal here rather than a shared import since that file pulls in
@@ -35,6 +35,8 @@ export type ToolUseBlock = {
   input: unknown;
   status?: ToolCallStatus;
   result?: unknown;
+  /** While "preparing": how much of the call's input (e.g. a page's HTML) SOL has written. */
+  characters?: number;
 };
 export type ToolResultBlock = { type: "tool_result"; tool_use_id: string; content: unknown };
 export type MediaBlock = {
