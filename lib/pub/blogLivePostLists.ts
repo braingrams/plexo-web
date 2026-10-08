@@ -70,6 +70,42 @@ function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+/** WordPress hands titles and excerpts over HTML-encoded ("R&amp;B", "&#8220;Do Me&#8221;"). */
+function decodeEntities(text: string): string {
+  return text
+    .replace(/&#(\d+);/g, (_m, d: string) => String.fromCodePoint(Number(d)))
+    .replace(/&#x([0-9a-f]+);/gi, (_m, h: string) => String.fromCodePoint(Number.parseInt(h, 16)))
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;|&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&hellip;/g, "…")
+    .replace(/&amp;/g, "&");
+}
+
+/** The first `words` words, with an ellipsis when anything was cut — how WordPress themes shorten excerpts. */
+function firstWords(text: string, words: number): string {
+  const all = text.trim().split(/\s+/);
+  return all.length <= words ? text.trim() : `${all.slice(0, words).join(" ").replace(/[,.;:!?]+$/, "")}…`;
+}
+
+/**
+ * The card's image takes the shape the site's own card had. WordPress served each card a
+ * thumbnail already cropped to it (e.g. 412×274); Plexo shows the full featured image, so
+ * a tall photo made a tall card. The template keeps the original width/height, which
+ * becomes a fixed aspect ratio with cover cropping.
+ */
+function keepCardImageShape(html: string): string {
+  return html.replace(/<img\b[^>]*%%plexo\.image%%[^>]*>/g, (tag) => {
+    const width = Number(/\swidth=["']?(\d+)/i.exec(tag)?.[1]);
+    const height = Number(/\sheight=["']?(\d+)/i.exec(tag)?.[1]);
+    if (!width || !height || /aspect-ratio/i.test(tag)) return tag;
+    const shape = `aspect-ratio:${width} / ${height};object-fit:cover;`;
+    return /\sstyle=["']/i.test(tag) ? tag.replace(/\sstyle=(["'])/i, ` style=$1${shape}`) : tag.replace(/^<img\b/i, `<img style="${shape}"`);
+  });
+}
+
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 function ordinal(n: number): string {
@@ -106,19 +142,22 @@ export function fillCardTemplate(template: string, post: LivePost): string {
   let html = template;
   if (!post.imageUrl) html = html.replace(/<!--plexo-if-image-->[\s\S]*?<!--\/plexo-if-image-->/g, "");
   html = html.replace(/<!--\/?plexo-if-image-->/g, "");
+  const excerpt = decodeEntities(post.excerpt ?? "");
   const values: Record<string, string> = {
     url: post.url,
-    title: post.title,
-    excerpt: post.excerpt ?? "",
+    title: decodeEntities(post.title),
+    excerpt,
     image: post.imageUrl ?? "",
-    imageAlt: post.imageAlt ?? "",
-    author: post.authorName ?? "",
+    imageAlt: decodeEntities(post.imageAlt ?? ""),
+    author: decodeEntities(post.authorName ?? ""),
     authorUrl: post.authorUrl ?? post.url,
-    category: post.categoryName ?? "",
+    category: decodeEntities(post.categoryName ?? ""),
     categoryUrl: post.categoryUrl ?? post.url,
     readingTime: post.readingMinutes ? String(post.readingMinutes) : "1",
   };
-  return html
+  return keepCardImageShape(html)
+    // An excerpt the site's cards cut to a number of words (see deriveCardTemplate).
+    .replace(/%%plexo\.excerpt:(\d+)%%/g, (_m, words: string) => escapeHtml(firstWords(excerpt, Number(words))))
     .replace(/%%plexo\.date(?::([a-z-]+))?%%/g, (_m, fmt: string | undefined) => escapeHtml(formatPostDate(post.publishedAt, fmt ?? "mdy")))
     .replace(/%%plexo\.([a-zA-Z]+)%%/g, (whole, key: string) => (key in values ? escapeHtml(values[key]) : whole));
 }

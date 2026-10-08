@@ -624,7 +624,7 @@ async function runPostsStep(job: JobItem, errors: string[], revalidate: Revalida
       const html = rewritePostLinks(rewriteOrigin(rewriteImageUrls(post.contentHtml, mediaMap)), movedLinks);
       const contentJson = convertWordPressHtmlToTiptapJson(html);
       const contentHtml = tiptapJsonToHtml(contentJson);
-      const excerpt = post.excerptHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/\[&hellip;\]|\[…\]/g, "…").trim() || null;
+      const excerpt = decodeEntities(post.excerptHtml.replace(/<[^>]+>/g, " ").replace(/\[&hellip;\]|\[…\]/g, "…")).replace(/\s+/g, " ").trim() || null;
       const payload = {
         title: post.title || "Untitled",
         slug: post.slug,
