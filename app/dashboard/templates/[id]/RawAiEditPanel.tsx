@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AI_UNREACHABLE, aiErrorMessage } from "@/lib/ai/requestErrors";
+import { checkAiCredits, generateWithProgress, type AiRequestBody } from "@/lib/ai/clientGenerate";
 
 type Props = {
   templateId: string;
@@ -51,6 +51,8 @@ function IconCheck() {
 export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Props) {
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
+  // Streamed while the AI rewrites the page — how much it has written so far.
+  const [progress, setProgress] = useState<{ characters: number; attempt: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [insufficientCredits, setInsufficientCredits] = useState(false);
   const [result, setResult] = useState<{ summary: string; html: string } | null>(null);
@@ -76,27 +78,23 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
     setInsufficientCredits(false);
     setResult(null);
     try {
-      const res = await fetch("/api/v1/ai/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": "workspace-internal" },
-        body: JSON.stringify({
-          mode: "edit_raw_html",
-          prompt: prompt.trim(),
-          templateKind,
-          context: { html: currentHtml },
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (res.status === 402) setInsufficientCredits(true);
-        throw new Error(aiErrorMessage(res.status, data, "AI generation failed."));
+      const request: AiRequestBody = { mode: "edit_raw_html", prompt: prompt.trim(), templateKind, context: { html: currentHtml } };
+      // Confirm the account can afford it before anything runs.
+      const credits = await checkAiCredits(request);
+      if (credits && !credits.enough) {
+        setInsufficientCredits(true);
+        setError(credits.message ?? "You don't have enough AI credits for this.");
+        return;
       }
-      setResult({ summary: data.summary, html: data.result });
+      const data = await generateWithProgress(request, setProgress);
+      setResult({ summary: data.summary, html: data.result as string });
     } catch (err) {
-      // A fetch that never got an answer throws a TypeError ("Failed to fetch") — say what that means.
-      setError(err instanceof TypeError ? AI_UNREACHABLE : err instanceof Error ? err.message : "AI generation failed.");
+      const message = err instanceof Error ? err.message : "AI generation failed.";
+      if (/enough AI credits|out of AI credits/i.test(message)) setInsufficientCredits(true);
+      setError(message);
     } finally {
       setGenerating(false);
+      setProgress(null);
     }
   }
 
@@ -182,6 +180,15 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
               </button>
             </div>
 
+            {generating && (
+              <p aria-live="polite" style={{ color: "rgba(240,242,255,0.55)", fontSize: "0.78rem", textAlign: "center", marginTop: "0.9rem" }}>
+                {!progress || progress.characters === 0
+                  ? "Reading your page and planning the change…"
+                  : progress.attempt > 1
+                    ? `The first draft ran long — writing the full version (${progress.characters.toLocaleString()} characters so far)…`
+                    : `Rewriting your page — ${progress.characters.toLocaleString()} characters so far…`}
+              </p>
+            )}
             {insufficientCredits && (
               <p style={{ color: "#f59e0b", fontSize: "0.8rem", textAlign: "center", marginTop: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem" }}>
                 <IconWarning /> Insufficient AI credits — top up or configure your own API key in Settings.

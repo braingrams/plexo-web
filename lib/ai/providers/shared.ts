@@ -9,6 +9,8 @@ export interface ProviderCallParams {
    * Claude, Gemini) forward these as real document/inline-data blocks; OpenAI's
    * chat.completions API has no inline-document equivalent, so it degrades to a text note. */
   attachments?: Array<{ mediaType: string; data: string; name?: string }>;
+  /** Called with each piece of text as the model writes it (providers that stream; others just return the result). */
+  onTextDelta?: (delta: string) => void;
 }
 
 export interface ProviderCallResult {
