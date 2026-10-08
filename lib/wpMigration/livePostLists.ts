@@ -183,9 +183,11 @@ export function deriveCardTemplate($: CheerioAPI, item: Element, post: KnownPost
     if (excerptHead.length >= 20 && norm.startsWith(excerptHead)) {
       // Cut short on the card (Elementor's excerpt length, a theme's "excerpt_length")? Keep
       // the same number of words, so every card stays the height the site designed.
+      const dots = /\[?(\.\.\.|…)\]?$/.test(norm);
       const shown = norm.replace(/\s*\[?(\.\.\.|…)\]?$/, "").split(/\s+/).length;
       const full = normalizeText(post.excerpt ?? "").split(/\s+/).length;
-      node.data = raw.replace(raw.trim(), shown < full ? `%%plexo.excerpt:${shown}%%` : "%%plexo.excerpt%%");
+      // "%%plexo.excerpt:15%%" cuts silently; "…:15…%%" adds the ellipsis the cards showed.
+      node.data = raw.replace(raw.trim(), shown < full ? `%%plexo.excerpt:${shown}${dots ? "…" : ""}%%` : "%%plexo.excerpt%%");
       continue;
     }
     let data = raw;

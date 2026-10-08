@@ -84,10 +84,12 @@ function decodeEntities(text: string): string {
     .replace(/&amp;/g, "&");
 }
 
-/** The first `words` words, with an ellipsis when anything was cut — how WordPress themes shorten excerpts. */
-function firstWords(text: string, words: number): string {
+/** The first `words` words — with an ellipsis when something was cut, only if the site's own cards showed one (Elementor's excerpt widget doesn't). */
+function firstWords(text: string, words: number, ellipsis: boolean): string {
   const all = text.trim().split(/\s+/);
-  return all.length <= words ? text.trim() : `${all.slice(0, words).join(" ").replace(/[,.;:!?]+$/, "")}…`;
+  if (all.length <= words) return text.trim();
+  const cut = all.slice(0, words).join(" ");
+  return ellipsis ? `${cut.replace(/[,.;:!?]+$/, "")}…` : cut;
 }
 
 /**
@@ -157,7 +159,7 @@ export function fillCardTemplate(template: string, post: LivePost): string {
   };
   return keepCardImageShape(html)
     // An excerpt the site's cards cut to a number of words (see deriveCardTemplate).
-    .replace(/%%plexo\.excerpt:(\d+)%%/g, (_m, words: string) => escapeHtml(firstWords(excerpt, Number(words))))
+    .replace(/%%plexo\.excerpt:(\d+)(…)?%%/g, (_m, words: string, dots: string | undefined) => escapeHtml(firstWords(excerpt, Number(words), Boolean(dots))))
     .replace(/%%plexo\.date(?::([a-z-]+))?%%/g, (_m, fmt: string | undefined) => escapeHtml(formatPostDate(post.publishedAt, fmt ?? "mdy")))
     .replace(/%%plexo\.([a-zA-Z]+)%%/g, (whole, key: string) => (key in values ? escapeHtml(values[key]) : whole));
 }

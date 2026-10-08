@@ -35,7 +35,9 @@ describe("a post card in the site's own design", () => {
     expect(html).toContain('style="aspect-ratio:412 / 274;object-fit:cover;"');
   });
 
-  it("cuts the excerpt to the words the site's cards showed", () => {
-    expect(fillCardTemplate("<p>%%plexo.excerpt:4%%</p>", post)).toBe("<p>P-Square combined R&amp;B harmonies…</p>");
+  it("cuts the excerpt to the words the site's cards showed — with an ellipsis only if they had one", () => {
+    // Muzingo's Elementor cards: 15 words, no ellipsis ("…Start your Dolly" then "Read More").
+    expect(fillCardTemplate("<p>%%plexo.excerpt:4%%</p>", post)).toBe("<p>P-Square combined R&amp;B harmonies.</p>");
+    expect(fillCardTemplate("<p>%%plexo.excerpt:4…%%</p>", post)).toBe("<p>P-Square combined R&amp;B harmonies…</p>");
   });
 });
