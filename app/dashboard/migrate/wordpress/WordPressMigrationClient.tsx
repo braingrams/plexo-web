@@ -42,12 +42,18 @@ interface Report {
   checklist: ChecklistItem[];
   readyForCutover: boolean;
 }
+/** How often the screen checks on a running migration. */
+const WATCH_EVERY_MS = 4000;
+/** A step takes under a minute; no sign of the server for longer than this means its chain broke. */
+const QUIET_RESTART_MS = 90_000;
+
 interface JobStatus {
   id: string;
   templateId: string;
   sourceUrl: string;
   phase: string;
   pausedIn?: string | null;
+  lastHeartbeatAt?: string | null;
   counts: Counts | null;
   /** Server's estimate of the time left; null while the site's size is still being read. */
   estimatedSecondsLeft?: number | null;
@@ -632,27 +638,51 @@ export function WordPressMigrationClient() {
     return data.job;
   }, []);
 
-  // Drive the migration while this screen is open. The server does the work in bounded
-  // steps; if the tab closes, a scheduled job carries on.
+  // The server runs the migration in the background (it hands each step to the next by
+  // itself); this screen only watches. It used to drive the steps from the browser and hand
+  // over when the tab closed — but a browser freezes a tab left in the background without
+  // ever saying it's closing, so the migration sat idle until the 10-minute check found it.
+  // If the server ever goes quiet for longer than a step can take, the screen restarts it.
   const runLoop = useCallback(
     async (templateId: string, id: string) => {
       if (loopRef.current) return;
       loopRef.current = true;
+      let lastKick = 0;
+      const kick = async () => {
+        lastKick = Date.now();
+        await fetch(`/api/v1/wp-migration/${templateId}/${id}/step?handoff=1`, { method: "POST" }).catch(() => {});
+      };
       try {
+        await kick();
+        let misses = 0;
         for (;;) {
-          const stepRes = await fetch(`/api/v1/wp-migration/${templateId}/${id}/step`, { method: "POST" });
-          const current = await refresh(templateId, id);
-          if (!stepRes.ok || !current) break;
-          const step = (await stepRes.json()) as { done: boolean; phase: string; busy?: boolean };
-          if (step.done || step.phase === "PAUSED_ERROR" || current.phase === "COMPLETED") break;
-          // The server is already working on it in the background — just watch.
-          if (step.busy) await new Promise((r) => setTimeout(r, 5000));
+          await new Promise((r) => setTimeout(r, WATCH_EVERY_MS));
+          const current = await refresh(templateId, id).catch(() => null);
+          if (!current) {
+            if (++misses >= 5) break; // gone, or we're offline — reopening the page picks it back up
+            continue;
+          }
+          misses = 0;
+          if (["COMPLETED", "FAILED", "CANCELLED", "PAUSED_ERROR"].includes(current.phase)) break;
+          const lastBeat = current.lastHeartbeatAt ? Date.parse(current.lastHeartbeatAt) : 0;
+          if (Date.now() - lastBeat > QUIET_RESTART_MS && Date.now() - lastKick > QUIET_RESTART_MS) await kick();
         }
       } finally {
         loopRef.current = false;
       }
     },
     [refresh],
+  );
+
+  // "Try again" on a paused migration: run the step that paused right here (so the result
+  // shows straight away), then go back to watching the server carry on.
+  const retry = useCallback(
+    async (templateId: string, id: string) => {
+      await fetch(`/api/v1/wp-migration/${templateId}/${id}/step`, { method: "POST" }).catch(() => {});
+      const current = await refresh(templateId, id).catch(() => null);
+      if (current && !["COMPLETED", "FAILED", "CANCELLED", "PAUSED_ERROR"].includes(current.phase)) void runLoop(templateId, id);
+    },
+    [refresh, runLoop],
   );
 
   useEffect(() => {
@@ -671,16 +701,6 @@ export function WordPressMigrationClient() {
       })
       .catch(() => {});
   }, [jobId, siteId, refresh, runLoop]);
-
-  // Closing the tab hands the migration to the server straight away (rather than waiting
-  // for the scheduled check), so it keeps going at full speed.
-  const running = Boolean(job && !["COMPLETED", "FAILED", "CANCELLED", "PAUSED_ERROR"].includes(job.phase));
-  useEffect(() => {
-    if (!running || !job) return;
-    const handOff = () => navigator.sendBeacon(`/api/v1/wp-migration/${job.templateId}/${job.id}/step?handoff=1`);
-    window.addEventListener("pagehide", handOff);
-    return () => window.removeEventListener("pagehide", handOff);
-  }, [running, job?.templateId, job?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (job?.report && !subdomain) setSubdomain(slugify(job.report.source.siteName || job.report.source.origin));
@@ -830,7 +850,7 @@ export function WordPressMigrationClient() {
               {failed ? (
                 <Link href="/dashboard/migrate/wordpress" style={secondaryButton}>Start again</Link>
               ) : (
-                <button type="button" style={primaryButton(true)} onClick={() => void runLoop(job.templateId, job.id)}>Try again</button>
+                <button type="button" style={primaryButton(true)} onClick={() => void retry(job.templateId, job.id)}>Try again</button>
               )}
             </div>
           )}
