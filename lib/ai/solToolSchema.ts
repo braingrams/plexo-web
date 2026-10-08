@@ -84,7 +84,7 @@ const useAttachedImageTool: BedrockToolDef = {
   input_schema: {
     type: "object",
     properties: {
-      attachment: { type: "string", description: "The attachment reference shown next to the image in the conversation." },
+      attachment: { type: "string", description: "The attachment reference shown next to the image in the conversation, like img_1a2b3c4d5e6f." },
     },
     required: ["attachment"],
   },
