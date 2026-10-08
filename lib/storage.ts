@@ -29,9 +29,18 @@ function publicUrlFor(key: string): string {
 /** Extracts the S3 key from a URL this module minted (publicUrlFor's inverse). Throws on
  * a URL from a different bucket/format — every real caller only ever passes back a URL
  * this module itself produced. */
-function keyFromUrl(url: string): string {
+export function keyFromUrl(url: string): string {
   const parsed = new URL(url);
-  return parsed.pathname.replace(/^\//, "");
+  // A URL's path is percent-encoded ("WhatsApp%20Image…%E2%80%AFPM.jpeg"); the key isn't.
+  // Using it encoded named a file that doesn't exist: every signed link to a file with a
+  // space in its name was broken (SOL's attachment thumbnails), and deleting it silently
+  // did nothing. readObject below always decoded.
+  const path = parsed.pathname.replace(/^\//, "");
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path; // a stray "%" that isn't an escape
+  }
 }
 
 export class StorageError extends Error {}
