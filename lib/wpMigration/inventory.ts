@@ -146,20 +146,25 @@ export async function fetchPostsByIds(restRoot: string, ids: number[]): Promise<
   if (ids.length === 0) return [];
   const res = await fetchJson<RawPost[]>(restUrl(restRoot, "wp/v2/posts", { include: ids.join(","), per_page: ids.length, _embed: 1 }));
   if (!res || !Array.isArray(res.data)) throw new Error("WordPress didn't return these posts.");
-  const posts = res.data.map(mapPost);
-  // Only Yoast puts its SEO tags in the API. With Rank Math, All in One SEO, SEOPress or
-  // none, the post's own published page is the source of truth — read the tags from it.
-  const limit = pLimit(4);
-  await Promise.all(
-    posts.map((post) =>
-      limit(async () => {
-        if (post.seo.title || post.seo.description) return;
-        const page = await migrationFetch(post.link, { headers: { Accept: "text/html" } }).catch(() => null);
-        if (page?.ok) post.seo = seoFromHtml(await page.text());
-      }),
-    ),
-  );
-  return posts;
+  return res.data.map(mapPost);
+}
+
+/** How long one post's own page may take to load for its SEO tags before we go without them. */
+const SEO_PAGE_TIMEOUT_MS = 12_000;
+
+/**
+ * Only Yoast puts its SEO tags in the API. With Rank Math, All in One SEO, SEOPress or none,
+ * the post's own published page is the source of truth — read the tags from it. Done per post
+ * as that post is copied (not for a whole batch up front): on a slow site each page can take
+ * several seconds, and 40 of them in a row outlasted the step's time limit before a single
+ * post was saved — the migration then retried the same batch forever.
+ */
+export async function fillSeoFromPage(post: WpPostEntry): Promise<void> {
+  if (post.seo.title || post.seo.description) return;
+  const page = await migrationFetch(post.link, { headers: { Accept: "text/html" }, signal: AbortSignal.timeout(SEO_PAGE_TIMEOUT_MS) }).catch(() => null);
+  if (!page?.ok) return;
+  const html = await page.text().catch(() => null);
+  if (html) post.seo = seoFromHtml(html);
 }
 
 /** A page's SEO tags, whichever plugin wrote them. */
