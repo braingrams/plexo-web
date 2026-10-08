@@ -577,6 +577,9 @@ export class ComputeStack extends cdk.Stack {
         // See authSecret's own comment above — required for lambda/sol-chat/sessionAuth.ts
         // to verify a NextAuth session JWT outside of Next.js's own request context.
         AUTH_SECRET: authSecret!,
+        // AI page generation also streams from this function (api/v1/ai/stream/*, see the
+        // CloudFront behavior below) and runs on Plexo's own AI the same way serverFn does.
+        ...systemAiEnv,
       },
       logGroup: buildLogGroup(this, "SolChatFn"),
     });
@@ -616,6 +619,21 @@ export class ComputeStack extends cdk.Stack {
     // staging: "AWSKMSException: ... SolChatFnServiceRole ... is not authorized to
     // perform: kms:Decrypt" the moment a real SOL turn tried to charge usage.
     solChatFn.addToRolePolicy(ledgerKmsPolicy);
+    // AI page generation (lambda/sol-chat → lib/ai/streamGeneration.ts) loads the app's
+    // secrets from SSM at cold start, as serverFn does — e.g. to decrypt an account's own
+    // stored AI provider key. Same scope as serverFn's grant above.
+    solChatFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameters"],
+        resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/plexo/${ssmEnv}/*`],
+      }),
+    );
+    solChatFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["kms:Decrypt"],
+        resources: [`arn:aws:kms:${this.region}:${this.account}:alias/aws/ssm`],
+      }),
+    );
     // Chat attachments: the user's uploaded images/PDFs/docs live in the private half of the
     // user-content bucket and SOL reads their bytes server-side to hand them to the model
     // (lib/ai/solAttachments.ts) — read-only, and only under the SOL attachments prefix.
@@ -886,6 +904,18 @@ export class ComputeStack extends cdk.Stack {
         // claims that subtree and everything else under api/v1/sol/* correctly falls
         // through to the default (serverFn) behavior above.
         "api/v1/sol/chat/*": {
+          origin: new origins.FunctionUrlOrigin(solChatFnUrl, { customHeaders: { "x-origin-verify": originVerifySecret! } }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+          responseHeadersPolicy: securityHeadersPolicy,
+        },
+        // AI page generation, streamed to the browser as it's written (lib/ai/streamGeneration.ts)
+        // — served by the same response-streaming Lambda as SOL, so a long page isn't cut
+        // off by serverFn's buffered 60s limit. Same behavior shape as SOL's own.
+        "api/v1/ai/stream/*": {
           origin: new origins.FunctionUrlOrigin(solChatFnUrl, { customHeaders: { "x-origin-verify": originVerifySecret! } }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,

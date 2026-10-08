@@ -17,6 +17,7 @@ export async function generate({
   userPrompt,
   maxTokens,
   attachments,
+  onTextDelta,
 }: ProviderCallParams): Promise<ProviderCallResult> {
   const client = new Anthropic({ apiKey });
 
@@ -30,12 +31,18 @@ export async function generate({
   }));
   content.push({ type: "text", text: userPrompt });
 
-  const response = await client.messages.create({
+  // Streamed, then collected into one message: the SDK refuses a non-streaming request
+  // whose max_tokens could run past 10 minutes (any large page — generate_raw_html asks
+  // for up to 32000 tokens, 64000 on the truncation retry). Same result as create().
+  const stream = client.messages.stream({
     model,
     max_tokens: maxTokens,
     system: systemPrompt,
     messages: [{ role: "user", content }],
   });
+  // Lets the caller show the page being written (lib/ai/generateRequest.ts streams it to the browser).
+  if (onTextDelta) stream.on("text", onTextDelta);
+  const response = await stream.finalMessage();
 
   const textBlock = response.content.find((block) => block.type === "text");
   const text = textBlock && textBlock.type === "text" ? textBlock.text : "";

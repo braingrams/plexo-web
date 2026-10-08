@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { friendlyProviderError } from "./providerErrors";
 
 import { ElementJSONSchema, TemplateJSONSchema, hydrateStructuralDefaults } from "@/server/sanitizer";
 
@@ -180,8 +181,9 @@ async function callProvider(
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number,
+  onTextDelta?: (delta: string) => void,
 ): Promise<ProviderCallResult> {
-  const params = { model, apiKey, systemPrompt, userPrompt, maxTokens };
+  const params = { model, apiKey, systemPrompt, userPrompt, maxTokens, onTextDelta };
   switch (provider) {
     case "anthropic_claude":
       return anthropicProvider.generate(params);
@@ -208,6 +210,19 @@ export interface GenerateParams {
    * types are offered to the model at all (see BLOG_ELEMENT_TYPES above). */
   isBlogLayout?: boolean;
   context: unknown;
+  /** Called as the page is written — how much so far, and which attempt (a cut-off answer is retried once). */
+  onProgress?: (progress: { characters: number; attempt: number }) => void;
+  /** Runs before every call to the AI (including the retry) with that call's output budget —
+   * e.g. to confirm the account can still afford it. Throw a GenerationStoppedError to stop. */
+  beforeAttempt?: (maxTokens: number, attempt: number) => Promise<void>;
+}
+
+/** Stops a generation before it calls the AI (e.g. not enough credit for the next attempt) — shown to the person as is. */
+export class GenerationStoppedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GenerationStoppedError";
+  }
 }
 
 class ProviderCallError extends Error {
@@ -240,7 +255,13 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
   const schema = resultSchemaFor(params.mode);
   const maxTokens = MAX_TOKENS[params.mode];
 
+  // Every call is paid for, including a cut-off first answer that had to be retried —
+  // the outcome reports what the whole generation used.
+  const totalUsage = { inputTokens: 0, outputTokens: 0 };
+  let attemptNumber = 0;
   const attempt = async (opts?: { extraNote?: string; maxTokensOverride?: number }): Promise<GenerateOutcome> => {
+    attemptNumber += 1;
+    const thisAttempt = attemptNumber;
     // Raw HTML is embedded directly rather than JSON.stringify'd — stringifying would
     // escape every quote/newline in the document, burning tokens and making the markup
     // harder for the model to read as an actual document rather than a JSON string.
@@ -253,6 +274,14 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
         : `Current JSON:\n${JSON.stringify(trimmedContext)}`;
     const userPrompt = `${opts?.extraNote ? `${opts.extraNote}\n\n` : ""}User instruction: ${params.prompt}${contextBlock ? `\n\n${contextBlock}` : ""}`;
     const tokensForThisCall = opts?.maxTokensOverride ?? maxTokens;
+    if (params.beforeAttempt) await params.beforeAttempt(tokensForThisCall, thisAttempt);
+    let characters = 0;
+    const onTextDelta = params.onProgress
+      ? (delta: string) => {
+          characters += delta.length;
+          params.onProgress!({ characters, attempt: thisAttempt });
+        }
+      : undefined;
     let text: string;
     let usage: ProviderCallResult["usage"];
     let truncated: ProviderCallResult["truncated"];
@@ -264,13 +293,16 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
         systemPrompt,
         userPrompt,
         tokensForThisCall,
+        onTextDelta,
       ));
+      totalUsage.inputTokens += usage?.inputTokens ?? 0;
+      totalUsage.outputTokens += usage?.outputTokens ?? 0;
     } catch (err) {
       // Auth/network/rate-limit failures from the provider are not the model
       // returning malformed JSON — don't relabel them as parse errors, and
       // don't burn a retry re-asking the provider to "fix its JSON".
-      const reason = err instanceof Error ? err.message : "unknown error";
-      throw new ProviderCallError(`AI provider request failed: ${reason}`);
+      console.error(`[ai] ${params.provider} ${model} request failed:`, err);
+      throw new ProviderCallError(friendlyProviderError(err));
     }
     if (truncated) {
       throw new TruncatedResponseError(
@@ -294,13 +326,13 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
       parsed.result = hydrateStructuralDefaults(parsed.result);
     }
     const validated = schema.parse(parsed);
-    return { summary: validated.summary, result: validated.result, usage };
+    return { summary: validated.summary, result: validated.result, usage: { ...totalUsage } };
   };
 
   try {
     return await attempt();
   } catch (firstError) {
-    if (firstError instanceof ProviderCallError) {
+    if (firstError instanceof ProviderCallError || firstError instanceof GenerationStoppedError) {
       throw firstError;
     }
     try {
@@ -315,16 +347,17 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
       const reason = firstError instanceof Error ? firstError.message : "parse error";
       return await attempt({ extraNote: `Your previous response was invalid (${reason}). Return ONLY the corrected JSON object, with no markdown fences.` });
     } catch (secondError) {
-      if (secondError instanceof ProviderCallError) {
+      if (secondError instanceof ProviderCallError || secondError instanceof GenerationStoppedError) {
         throw secondError;
       }
       if (secondError instanceof TruncatedResponseError) {
         throw new Error(
-          "the AI response was cut off before it finished, even after increasing the output limit — try a shorter or more targeted instruction",
+          "The page was too long for the AI to finish in one go. Try a shorter or more focused description.",
         );
       }
       const reason = secondError instanceof Error ? secondError.message : "unknown error";
-      throw new Error(`AI response could not be parsed: ${reason}`);
+      console.error("[ai] response could not be parsed:", reason);
+      throw new Error("The AI's answer couldn't be turned into a page. Try again — rephrasing the description often helps.");
     }
   }
 }
