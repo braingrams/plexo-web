@@ -292,7 +292,7 @@ export async function startDonation(input: StartDonationInput): Promise<StartDon
   const returnUrl = new URL(input.returnUrl);
   returnUrl.searchParams.set("plexo_donation", "thanks");
   returnUrl.searchParams.set("order", number);
-  const { data: order } = await CommerceOrder.get({ templateId: input.templateId, id: orderId }).go();
+  const { data: order } = await CommerceOrder.get({ templateId: input.templateId, id: orderId }).go({ consistent: true });
   if (!order) throw new Error(`Donation order ${orderId} vanished immediately after being created`);
 
   if (useBankTransfer) {

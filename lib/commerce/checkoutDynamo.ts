@@ -231,7 +231,7 @@ export async function createCommerceOrder(params: {
     throw err;
   }
 
-  const { data: order } = await CommerceOrder.get({ templateId, id: orderId }).go();
+  const { data: order } = await CommerceOrder.get({ templateId, id: orderId }).go({ consistent: true });
   if (!order) throw new Error(`CommerceOrder ${orderId} vanished immediately after being created`);
   return order;
 }
@@ -393,7 +393,7 @@ export async function createCommerceCartOrder(params: {
     throw err;
   }
 
-  const { data: order } = await CommerceOrder.get({ templateId, id: orderId }).go();
+  const { data: order } = await CommerceOrder.get({ templateId, id: orderId }).go({ consistent: true });
   if (!order) throw new Error(`CommerceOrder ${orderId} vanished immediately after being created`);
   return order;
 }
