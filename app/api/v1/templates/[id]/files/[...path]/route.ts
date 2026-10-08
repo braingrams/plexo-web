@@ -99,7 +99,7 @@ export async function PUT(
 
   // Content changed under this template — re-scan every domain it's currently live on
   // rather than waiting for the next periodic cron pass.
-  const { data: linkedDomains } = await PublishedDomain.query.primary({ templateId: template.id }).go();
+  const { data: linkedDomains } = await PublishedDomain.query.primary({ templateId: template.id }).go({ pages: "all" });
   for (const d of linkedDomains) {
     void scanPublishedDomain(d.templateId, d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
   }

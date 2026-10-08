@@ -13,7 +13,7 @@ export async function GET(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const { data: authors } = await BlogAuthor.query.primary({ templateId: resolved.context.templateId }).go();
+  const { data: authors } = await BlogAuthor.query.primary({ templateId: resolved.context.templateId }).go({ pages: "all" });
   authors.sort((a, b) => a.name.localeCompare(b.name));
   return NextResponse.json({ authors });
 }

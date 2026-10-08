@@ -11,7 +11,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const resolved = await resolveRedirectAdmin(request, templateId);
   if (resolved.error) return resolved.error;
 
-  const { data: redirects } = await BlogRedirect.query.primary({ templateId }).go();
+  const { data: redirects } = await BlogRedirect.query.primary({ templateId }).go({ pages: "all" });
   redirects.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
   return NextResponse.json({ redirects });
 }

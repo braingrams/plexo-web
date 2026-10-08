@@ -1,23 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { uploadObject, deleteObjects } from "@/lib/storage";
+import { uploadObject } from "@/lib/storage";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { getTierFeatures } from "@/lib/subscription";
 import type { resolveUser } from "@/lib/auth/resolveUser";
 import { getDomainLimit } from "@/lib/domainLimit";
-import { removeCloudFrontDomain, requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
+import { requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
 import { resolveStrataProjectId, fetchStrataTokens } from "@/server/strataDynamo";
 import { getPagesDomain } from "@/server/pagesDomain";
-import {
-  slugify,
-  isValidSlugSegment,
-  isReservedTopLevelSlug,
-  ensureUniqueSlug,
-  isSameOrAncestor,
-  getPageTree,
-  pathForPage,
-  getDescendantIds,
-} from "@/server/slugDynamo";
+import { slugify, isValidSlugSegment, isReservedTopLevelSlug, ensureUniqueSlug, isSameOrAncestor, getPageTree, pathForPage } from "@/server/slugDynamo";
 import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { BLOG_MCP_TOOLS, BLOG_TOOL_NAMES, handleBlogTool } from "./blogTools";
@@ -27,6 +18,7 @@ import { LMS_MCP_TOOLS, LMS_TOOL_NAMES, handleLmsTool } from "./lmsTools";
 import { WP_MIGRATION_MCP_TOOLS, WP_MIGRATION_TOOL_NAMES, handleWpMigrationTool } from "./wpMigrationTools";
 import { DONATION_MCP_TOOLS, DONATION_TOOL_NAMES, handleDonationTool } from "./donationTools";
 import { FORM_MCP_TOOLS, FORM_TOOL_NAMES, handleFormTool } from "./formTools";
+import { deleteTemplateAndContents } from "@/lib/sites/deleteTemplate";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
 
@@ -787,7 +779,7 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
     name: "delete_template",
     title: "Delete Template",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-    description: "Permanently deletes any landing page or email template by templateId or template name (e.g. 'buzm'). Cleans up attached sub-pages, Vercel Blob assets, and custom domain routing. Confirm with user before calling as this action cannot be undone.",
+    description: "Permanently deletes any landing page or email template by templateId or template name (e.g. 'buzm'). Cleans up attached sub-pages, files and custom domain routing. Deleting a whole site (its home page) also deletes everything it owns — blog posts, shop products and settings, form submissions, imports — except orders, which stay as financial records; a site with active monthly donors can't be deleted until their gifts are cancelled. Confirm with user before calling as this action cannot be undone.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1558,35 +1550,9 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
         throw new Error(`No template found matching "${rawInput}" in this account. Use list_landing_pages or list_email_templates to view saved templates.`);
       }
 
-      const descendantIds = await getDescendantIds(resolved.organizationId, existing.id);
-      const allIds = [existing.id, ...descendantIds];
-
-      // Same cleanup as the REST DELETE route (app/api/templates/[id]/route.ts) —
-      // TemplateAsset rows and PublishedDomain rows cascade at the DB level under
-      // Prisma, but S3 and Vercel's own domain registry have no idea a delete
-      // happened, so both need explicit cleanup before removing the rows.
-      const assetBatches = await Promise.all(allIds.map((tid) => TemplateAsset.query.primary({ templateId: tid }).go()));
-      const assets = assetBatches.flatMap((b) => b.data);
-      if (assets.length > 0) {
-        await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
-          console.error("Failed to delete blobs during MCP page delete (non-fatal):", err)
-        );
-      }
-      await Promise.all(assets.map((a) => TemplateAsset.remove({ templateId: a.templateId, path: a.path }).go()));
-
-      const domainBatches = await Promise.all(allIds.map((tid) => PublishedDomain.query.primary({ templateId: tid }).go()));
-      const domains = domainBatches.flatMap((b) => b.data);
-      for (const d of domains) {
-        if (d.type === "CUSTOM") {
-          await removeCloudFrontDomain(d.domain, { tenantId: d.tenantId, certificateArn: d.certificateArn }).catch((err) =>
-            console.error(`Failed to remove CloudFront distribution tenant for ${d.domain} during MCP page delete (non-fatal):`, err)
-          );
-        }
-      }
-      await Promise.all(domains.map((d) => PublishedDomain.remove({ templateId: d.templateId, id: d.id }).go()));
-
-      await Promise.all(descendantIds.map((did) => Template.remove({ id: did }).go()));
-      await Template.remove({ id: existing.id }).go();
+      // Same deletion as the dashboard: a whole site also takes its blog, catalogue and settings (lib/sites/deleteTemplate.ts).
+      const { descendantCount } = await deleteTemplateAndContents(existing, resolved.organizationId);
+      const descendantIds = { length: descendantCount };
 
       toolResult = {
         success: true,

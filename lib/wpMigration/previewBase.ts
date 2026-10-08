@@ -25,7 +25,7 @@ export async function migratedPreviewBase(template: TreeNode): Promise<string | 
     if (cursor?.migratedFrom) migrated = true;
   }
   if (!cursor || !migrated) return null;
-  const { data: domains } = await PublishedDomain.query.primary({ templateId: cursor.id }).go();
+  const { data: domains } = await PublishedDomain.query.primary({ templateId: cursor.id }).go({ pages: "all" });
   const domain = domains[0]?.domain;
   if (!domain) return null;
   const path = segments.map(encodeURIComponent).join("/");

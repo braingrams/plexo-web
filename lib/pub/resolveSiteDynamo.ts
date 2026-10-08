@@ -28,12 +28,12 @@ export type ResolveSiteResult =
  */
 export async function resolveSite(rawDomain: string): Promise<ResolveSiteResult> {
   let domain = rawDomain;
-  let { data: matches } = await PublishedDomain.query.byDomain({ domain }).go();
+  let { data: matches } = await PublishedDomain.query.byDomain({ domain }).go({ pages: "all" });
 
   if (matches.length === 0 && rawDomain.endsWith(".localhost")) {
     const sub = rawDomain.replace(".localhost", "");
     domain = `${sub}.${getPagesDomain()}`;
-    ({ data: matches } = await PublishedDomain.query.byDomain({ domain }).go());
+    ({ data: matches } = await PublishedDomain.query.byDomain({ domain }).go({ pages: "all" }));
   }
 
   const domainRow = matches[0];

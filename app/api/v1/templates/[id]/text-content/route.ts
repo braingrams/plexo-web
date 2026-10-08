@@ -52,7 +52,7 @@ export async function GET(
   if (template.sourceType !== "RAW_UPLOAD") {
     return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
   }
-  const { data: assets } = await TemplateAsset.query.primary({ templateId: id }).go();
+  const { data: assets } = await TemplateAsset.query.primary({ templateId: id }).go({ pages: "all" });
 
   const externalStylesheets = await fetchCssStylesheetContents(assets);
 
@@ -125,7 +125,7 @@ export async function PATCH(
   if (template.sourceType !== "RAW_UPLOAD") {
     return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
   }
-  const { data: assets } = await TemplateAsset.query.primary({ templateId: id }).go();
+  const { data: assets } = await TemplateAsset.query.primary({ templateId: id }).go({ pages: "all" });
 
   const body = (await request.json().catch(() => null)) as {
     edits?: { id?: number; text?: string; href?: string }[];
@@ -196,7 +196,7 @@ export async function PATCH(
   await Template.patch({ id: template.id }).set({ compiledHtml: updatedHtml }).go();
 
   // Content changed — re-scan every domain it's currently live on, same as files/[...path].
-  const { data: linkedDomains } = await PublishedDomain.query.primary({ templateId: template.id }).go();
+  const { data: linkedDomains } = await PublishedDomain.query.primary({ templateId: template.id }).go({ pages: "all" });
   for (const d of linkedDomains) {
     void scanPublishedDomain(d.templateId, d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
   }

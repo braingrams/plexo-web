@@ -7,8 +7,8 @@ type CommentItem = EntityItem<typeof BlogComment>;
  * by id, somewhere in this site" needs the postId first, which callers here don't have.
  * Fans out across the template's posts, same bound as the moderation list/GET route. */
 export async function findCommentById(templateId: string, commentId: string): Promise<CommentItem | null> {
-  const { data: posts } = await BlogPost.query.byStatus({ templateId }).go();
-  const batches = await Promise.all(posts.map((p) => BlogComment.query.primary({ postId: p.id }).go()));
+  const { data: posts } = await BlogPost.query.byStatus({ templateId }).go({ pages: "all" });
+  const batches = await Promise.all(posts.map((p) => BlogComment.query.primary({ postId: p.id }).go({ pages: "all" })));
   return batches.flatMap((b) => b.data).find((c) => c.id === commentId) ?? null;
 }
 
@@ -16,7 +16,7 @@ export async function findCommentById(templateId: string, commentId: string): Pr
  * Cascade on parentId had no DynamoDB equivalent, so a comment delete has to walk this
  * itself before removing the comment. */
 export async function getDescendantCommentIds(postId: string, commentId: string): Promise<CommentItem[]> {
-  const { data: allComments } = await BlogComment.query.primary({ postId }).go();
+  const { data: allComments } = await BlogComment.query.primary({ postId }).go({ pages: "all" });
   const result: CommentItem[] = [];
   let frontier = [commentId];
   while (frontier.length > 0) {

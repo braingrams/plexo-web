@@ -15,7 +15,7 @@ export interface RevalidateBlogPostInput {
 /** DynamoDB port of lib/blog/revalidate.ts's revalidateBlogPost — same behavior (see
  * that file's comment), PublishedDomain query swapped for its own primary index. */
 export async function revalidateBlogPost(input: RevalidateBlogPostInput): Promise<void> {
-  const { data: domains } = await PublishedDomain.query.primary({ templateId: input.templateId }).go();
+  const { data: domains } = await PublishedDomain.query.primary({ templateId: input.templateId }).go({ pages: "all" });
 
   const categorySlugs = new Set([...(input.categorySlugs ?? []), ...(input.previousCategorySlugs ?? [])]);
   const tagSlugs = new Set([...(input.tagSlugs ?? []), ...(input.previousTagSlugs ?? [])]);

@@ -56,7 +56,7 @@ export async function GET(
     return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
   }
 
-  const { data: assets } = await TemplateAsset.query.primary({ templateId: template.id }).go();
+  const { data: assets } = await TemplateAsset.query.primary({ templateId: template.id }).go({ pages: "all" });
 
   const files: FileEntry[] = [
     {
@@ -149,7 +149,7 @@ export async function POST(
     return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
   }
 
-  const { data: assets } = await TemplateAsset.query.primary({ templateId: template.id }).go();
+  const { data: assets } = await TemplateAsset.query.primary({ templateId: template.id }).go({ pages: "all" });
 
   let rawPath: string;
   let buffer: Buffer;
