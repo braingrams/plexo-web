@@ -34,7 +34,7 @@ async function runSolTool(name: string, input: any, user: ResolvedUser, history:
 // before. Every provider's `generateWithTools` shares the same Anthropic-shaped in/out
 // contract (see providers/shared.ts), so this dispatch table is the only place that needs
 // to know there's more than one.
-const TOOL_CAPABLE_PROVIDERS: Record<AiProvider, (params: GenerateWithToolsParams) => Promise<GenerateWithToolsResult>> = {
+export const TOOL_CAPABLE_PROVIDERS: Record<AiProvider, (params: GenerateWithToolsParams) => Promise<GenerateWithToolsResult>> = {
   bedrock_claude: bedrockGenerateWithTools,
   anthropic_claude: anthropicGenerateWithTools,
   openai: openaiGenerateWithTools,
@@ -101,6 +101,8 @@ export interface AgentTurnDeps {
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   /** Re-checks credit balance before each model call; false stops the loop. */
+  /** The new user message's key once it's saved (e.g. to add its images' descriptions). */
+  onUserMessageSaved?: (key: { id: string; createdAt: string }) => void;
   budgetGuard: () => Promise<boolean>;
 }
 
@@ -433,13 +435,14 @@ export async function runAgentTurn(deps: AgentTurnDeps): Promise<RunAgentTurnRes
       .go();
   }
 
-  await SolMessage.create({
+  const { data: saved } = await SolMessage.create({
     id: randomUUID(),
     conversationId: deps.conversationId,
     userId: deps.resolvedUser.userId,
     role: "user",
     content: deps.userMessageContent,
   }).go();
+  deps.onUserMessageSaved?.({ id: saved.id, createdAt: saved.createdAt });
   history.push({ role: "user", content: deps.userMessageContent });
 
   return continueLoop({

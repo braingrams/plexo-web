@@ -1,4 +1,5 @@
 import { friendlyProviderError } from "@/lib/ai/providerErrors";
+import { describeAttachedImages } from "@/lib/ai/solImageDescriptions";
 import type { ResolvedUser } from "@/lib/mcp/dispatchMcpTool";
 import { ensureCreditPeriod, chargeUsage, estimateWorstCaseCost } from "@/lib/db/ledgerOperations";
 import { estimateWorstCaseAgentTurnCost } from "@/lib/credits/agentTurnEstimate";
@@ -52,6 +53,7 @@ export type StreamFrame =
   | { type: "token"; text: string }
   | { type: "message_done"; messageId: string | null; usage: { inputTokens: number; outputTokens: number } }
   | { type: "title_generated"; title: string }
+  | { type: "attachment_described"; url: string; description: string }
   | { type: "credit_exhausted"; requiredCredits: number; availableCredits: number }
   | { type: "error"; message: string };
 
@@ -285,6 +287,9 @@ async function settleTurn(
      * through several question-rounds before ever getting titled. `null` when the
      * conversation already has a title (the common case, every turn after the first). */
     titlePromise: Promise<string | null> | null;
+    /** Work that runs alongside the turn and may still send frames (image descriptions) —
+     * finished before the stream closes. */
+    alongside?: Promise<void> | null;
   },
 ): Promise<void> {
   const startedAtMs = new Date(ctx.turnStartedAt).getTime();
@@ -294,6 +299,7 @@ async function settleTurn(
   // still deserve a shot at surfacing the title the instant it's ready, since the promise
   // was already started up front and may well resolve before any of those outcomes do.
   async function finish() {
+    if (ctx.alongside) await ctx.alongside.catch(() => {});
     if (ctx.titlePromise) {
       const title = await ctx.titlePromise;
       if (title) emitter.emit({ type: "title_generated", title });
@@ -457,6 +463,43 @@ async function settleTurn(
   }
 }
 
+/**
+ * A one-line description under each image the user attached (lib/ai/solImageDescriptions.ts):
+ * sent to the chat as soon as it's ready, saved onto the user's message so it's there when
+ * the chat is reopened (or shared), and charged as SOL usage — to the account's own key for
+ * BYOK, which Plexo's credits never touch.
+ */
+async function describeImagesAlongside(params: {
+  userId: string;
+  conversationId: string;
+  routing: { provider: AiProvider; apiKey?: string; isByok: boolean };
+  content: unknown[];
+  savedKey: Promise<{ id: string; createdAt: string } | null>;
+  emit: (frame: StreamFrame) => void;
+}): Promise<void> {
+  const urls = (params.content as Array<{ type?: string; source?: { url?: string } }>)
+    .filter((b) => b?.type === "image" && typeof b.source?.url === "string")
+    .map((b) => b.source!.url!);
+  if (urls.length === 0) return;
+  const { byUrl, usage } = await describeAttachedImages({ userId: params.userId, provider: params.routing.provider, apiKey: params.routing.apiKey, urls });
+  if (!params.routing.isByok && (usage.inputTokens > 0 || usage.outputTokens > 0)) {
+    await chargeUsage(params.userId, { provider: params.routing.provider, tier: "BASIC", mode: "agent_chat", usage }).catch((err) =>
+      console.error("[sol] couldn't charge for image descriptions:", err),
+    );
+  }
+  if (byUrl.size === 0) return;
+  for (const [url, description] of byUrl) params.emit({ type: "attachment_described", url, description });
+  const key = await params.savedKey;
+  if (!key) return;
+  const content = (params.content as Array<{ type?: string; source?: { url?: string } }>).map((b) =>
+    b?.type === "image" && b.source?.url && byUrl.has(b.source.url) ? { ...b, description: byUrl.get(b.source.url) } : b,
+  );
+  await SolMessage.patch({ conversationId: params.conversationId, createdAt: key.createdAt, id: key.id })
+    .set({ content })
+    .go()
+    .catch((err) => console.error("[sol] couldn't save image descriptions:", err));
+}
+
 /** A turn that hasn't started streaming yet — either it already failed a pre-flight check
  * (`ok: false`, respond with plain JSON at `status`) or it's ready to go (`ok: true`, call
  * `run(emitter)` once the caller has its own streaming response committed). Splitting
@@ -517,15 +560,29 @@ export async function prepareMessagesTurn(
     ok: true,
     run: async (emitter) => {
       const { callbacks, toolCalls } = buildCallbacks(emitter.emit);
+      const userMessageContent = buildUserMessageContent(text, parsed.attachments);
+      let userMessageSaved: (key: { id: string; createdAt: string } | null) => void = () => {};
+      const savedKey = new Promise<{ id: string; createdAt: string } | null>((resolve) => {
+        userMessageSaved = resolve;
+      });
+      const alongside = describeImagesAlongside({
+        userId: resolved.userId,
+        conversationId,
+        routing,
+        content: userMessageContent,
+        savedKey,
+        emit: emitter.emit,
+      });
       const deps: AgentTurnDeps = {
         conversationId,
         resolvedUser: resolved,
         modelTier,
         provider: routing.provider,
         apiKey: routing.apiKey,
-        userMessageContent: buildUserMessageContent(text, parsed.attachments),
+        userMessageContent,
         memoryFacts,
         ...callbacks,
+        onUserMessageSaved: (key) => userMessageSaved(key),
         // Re-checked before EVERY loop iteration, not just once up front — a long
         // tool-using turn can, in principle, exhaust credits the generous up-front
         // worst-case estimate still passed. Always true for BYOK — see the pre-flight
@@ -539,7 +596,10 @@ export async function prepareMessagesTurn(
             },
       };
 
-      await settleTurn(emitter, runAgentTurn(deps), {
+      const turn = runAgentTurn(deps);
+      // A turn that failed before saving the message has nothing to add descriptions to.
+      void turn.then(() => userMessageSaved(null), () => userMessageSaved(null));
+      await settleTurn(emitter, turn, {
         userId: resolved.userId,
         organizationId: resolved.organizationId,
         conversationId,
@@ -556,6 +616,7 @@ export async function prepareMessagesTurn(
         existingMemoryFacts: memoryFacts,
         userTextForMemory: text,
         titlePromise,
+        alongside,
       });
     },
   };

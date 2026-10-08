@@ -44,6 +44,8 @@ export type MediaBlock = {
   source?: { type?: string; url?: string; media_type?: string };
   url?: string;
   filename?: string;
+  /** A one-line caption SOL wrote for an attached image (lib/ai/solImageDescriptions.ts). */
+  description?: string;
 };
 export type ContentBlock = TextBlock | ToolUseBlock | ToolResultBlock | MediaBlock | Record<string, unknown>;
 

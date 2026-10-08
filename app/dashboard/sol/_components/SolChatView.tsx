@@ -233,6 +233,29 @@ export function SolChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialConversation?.id]);
 
+  // A caption SOL wrote for an attached image arrives mid-turn — put it on the image in
+  // the user's message already on screen (it's saved on the server copy too).
+  useEffect(() => {
+    const described = stream.imageDescriptions;
+    if (Object.keys(described).length === 0) return;
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.role !== "user" || !Array.isArray(m.content)) return m;
+        let changed = false;
+        const content = m.content.map((b) => {
+          const block = b as { type?: string; url?: string; source?: { url?: string }; description?: string };
+          const url = block.source?.url ?? block.url;
+          if (block.type === "image" && url && described[url] && block.description !== described[url]) {
+            changed = true;
+            return { ...block, description: described[url] } as typeof b;
+          }
+          return b;
+        });
+        return changed ? { ...m, content } : m;
+      }),
+    );
+  }, [stream.imageDescriptions]);
+
   const commitAssistantMessage = useCallback(() => {
     setMessages((prev) => [
       ...prev,
