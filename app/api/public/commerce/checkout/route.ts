@@ -154,8 +154,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // even when nobody else is racing for it.
     const now = new Date();
     const [{ data: ruleRows }, { data: exceptionRows }, { data: orgBookings }] = await Promise.all([
-      CommerceAvailabilityRule.query.byProduct({ productId: product.id }).go(),
-      CommerceAvailabilityException.query.byProduct({ productId: product.id }).go(),
+      CommerceAvailabilityRule.query.byProduct({ productId: product.id }).go({ pages: "all" }),
+      CommerceAvailabilityException.query.byProduct({ productId: product.id }).go({ pages: "all" }),
       CommerceBooking.query.byOrg({ organizationId }).go({ pages: "all" }),
     ]);
     const rules = ruleRows.map((r) => ({ dayOfWeek: r.dayOfWeek, startMinute: r.startMinute, endMinute: r.endMinute, timezone: r.timezone ?? "Africa/Lagos" }));
@@ -220,7 +220,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let discount: EntityItem<typeof CommerceDiscountCode> | null = null;
   const normalizedDiscountCode = typeof rawDiscountCode === "string" ? rawDiscountCode.trim().toUpperCase() : "";
   if (normalizedDiscountCode) {
-    const { data: matches } = await CommerceDiscountCode.query.byCode({ templateId, code: normalizedDiscountCode }).go();
+    const { data: matches } = await CommerceDiscountCode.query.byCode({ templateId, code: normalizedDiscountCode }).go({ pages: "all" });
     discount = matches[0] ?? null;
     const invalid =
       !discount ||

@@ -5,15 +5,15 @@ import { OrdersClient, type OrderSummary } from "./OrdersClient";
 export default async function CommerceOrdersPage({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = await params;
 
-  const { data: allOrders } = await CommerceOrder.query.primary({ templateId }).go();
+  const { data: allOrders } = await CommerceOrder.query.primary({ templateId }).go({ pages: "all" });
   const orders = [...allOrders].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, 25);
 
   const initialOrders: OrderSummary[] = await Promise.all(
     orders.map(async (o) => {
       const [{ data: items }, { data: booking }, { data: deliveries }] = await Promise.all([
-        CommerceOrderItem.query.primary({ templateId, orderId: o.id }).go(),
+        CommerceOrderItem.query.primary({ templateId, orderId: o.id }).go({ pages: "all" }),
         CommerceBooking.get({ templateId, orderId: o.id }).go(),
-        CommerceDigitalDelivery.query.primary({ orderId: o.id }).go(),
+        CommerceDigitalDelivery.query.primary({ orderId: o.id }).go({ pages: "all" }),
       ]);
       const digitalDeliveries = await Promise.all(
         deliveries.map(async (d) => {

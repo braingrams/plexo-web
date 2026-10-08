@@ -90,7 +90,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       throw err;
     }
 
-    const { data: items } = await CommerceOrderItem.query.primary({ templateId: staleOrder.templateId, orderId: staleOrder.id }).go();
+    const { data: items } = await CommerceOrderItem.query.primary({ templateId: staleOrder.templateId, orderId: staleOrder.id }).go({ pages: "all" });
     await adjustStockForOrderItems(staleOrder.templateId, items, 1);
 
     const { data: booking } = await CommerceBooking.get({ templateId: staleOrder.templateId, orderId: staleOrder.id }).go();

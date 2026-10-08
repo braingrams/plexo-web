@@ -5,7 +5,7 @@ import { cancelDonationSubscription, DonationError } from "@/lib/commerce/donati
 
 async function findByToken(token: string | null) {
   if (!token || token.length < 20) return null;
-  const { data } = await CommerceDonationSubscription.query.byManageToken({ manageToken: token }).go();
+  const { data } = await CommerceDonationSubscription.query.byManageToken({ manageToken: token }).go({ pages: "all" });
   return data[0] ?? null;
 }
 

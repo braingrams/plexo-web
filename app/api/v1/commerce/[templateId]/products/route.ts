@@ -36,7 +36,7 @@ async function resolveCategoryId(templateId: string, organizationId: string, cat
   if (typeof categoryName !== "string" || !categoryName.trim()) return null;
   const name = categoryName.trim();
   const slug = slugify(name) || "category";
-  const { data: categories } = await CommerceCategory.query.primary({ templateId }).go();
+  const { data: categories } = await CommerceCategory.query.primary({ templateId }).go({ pages: "all" });
   const existing = categories.find((c) => c.slug === slug);
   if (existing) {
     if (existing.name !== name) await CommerceCategory.patch({ templateId, id: existing.id }).set({ name }).go();
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
 
   const [{ data: products }, { data: categories }] = await Promise.all([
     CommerceProduct.query.primary({ templateId }).go({ pages: "all" }),
-    CommerceCategory.query.primary({ templateId }).go(),
+    CommerceCategory.query.primary({ templateId }).go({ pages: "all" }),
   ]);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
 

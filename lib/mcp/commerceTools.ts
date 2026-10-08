@@ -78,7 +78,7 @@ async function resolveCategoryId(templateId: string, organizationId: string, cat
   if (typeof categoryName !== "string" || !categoryName.trim()) return null;
   const name = categoryName.trim();
   const slug = slugify(name) || "category";
-  const { data: categories } = await CommerceCategory.query.primary({ templateId }).go();
+  const { data: categories } = await CommerceCategory.query.primary({ templateId }).go({ pages: "all" });
   const existing = categories.find((c) => c.slug === slug);
   if (existing) {
     if (existing.name !== name) await CommerceCategory.patch({ templateId, id: existing.id }).set({ name }).go();
@@ -804,7 +804,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         throw new Error("paymentProvider must be BYO_PAYSTACK, PLATFORM_PAYSTACK, PLATFORM_STRIPE, or BYO_STRIPE.");
       }
       if (paymentProvider === "PLATFORM_STRIPE") {
-        const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go();
+        const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go({ pages: "all" });
         if (!requests.some((r) => r.status === "APPROVED")) throw new Error("Platform Stripe isn't approved for this organization yet — call request_commerce_stripe_access first.");
       }
 
@@ -952,7 +952,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       const page = Math.max(1, Number(args.page) || 1);
       const pageSize = 25;
 
-      const { data: allOrders } = await CommerceOrder.query.primary({ templateId: siteId }).go();
+      const { data: allOrders } = await CommerceOrder.query.primary({ templateId: siteId }).go({ pages: "all" });
       let filtered = allOrders;
       if (typeof args.status === "string") filtered = filtered.filter((o) => o.status === args.status);
       if (typeof args.q === "string" && args.q.trim()) {
@@ -967,7 +967,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
 
       const orders = await Promise.all(
         pageRows.map(async (order) => {
-          const { data: items } = await CommerceOrderItem.query.primary({ templateId: siteId, orderId: order.id }).go();
+          const { data: items } = await CommerceOrderItem.query.primary({ templateId: siteId, orderId: order.id }).go({ pages: "all" });
           return { ...withoutOrderSecrets(order), items: items.map((i) => ({ nameSnapshot: i.nameSnapshot, quantity: i.quantity ?? 1, unitPriceMinor: i.unitPriceMinor })) };
         }),
       );
@@ -983,9 +983,9 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       if (!order) throw new Error(`Order not found with id "${orderId}".`);
 
       const [{ data: items }, { data: booking }, { data: deliveries }] = await Promise.all([
-        CommerceOrderItem.query.primary({ templateId: siteId, orderId }).go(),
+        CommerceOrderItem.query.primary({ templateId: siteId, orderId }).go({ pages: "all" }),
         CommerceBooking.get({ templateId: siteId, orderId }).go(),
-        CommerceDigitalDelivery.query.primary({ orderId }).go(),
+        CommerceDigitalDelivery.query.primary({ orderId }).go({ pages: "all" }),
       ]);
       const digitalDeliveries = await Promise.all(
         deliveries.map(async (d) => {
@@ -1116,7 +1116,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       ]);
       if (!organization || !user) throw new Error("Unauthorized.");
 
-      const { data: existingRequests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go();
+      const { data: existingRequests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go({ pages: "all" });
       const blocking = existingRequests.some((r) => r.status === "PENDING" || r.status === "APPROVED");
       if (blocking) throw new Error("A Stripe access request is already pending or approved for this organization.");
 
@@ -1134,7 +1134,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
 
     case "list_commerce_delivery_methods": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const { data: methods } = await CommerceDeliveryMethod.query.primary({ templateId: siteId }).go();
+      const { data: methods } = await CommerceDeliveryMethod.query.primary({ templateId: siteId }).go({ pages: "all" });
       methods.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
       return { methods };
     }
@@ -1255,7 +1255,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
 
     case "list_commerce_discounts": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const { data: discounts } = await CommerceDiscountCode.query.primary({ templateId: siteId }).go();
+      const { data: discounts } = await CommerceDiscountCode.query.primary({ templateId: siteId }).go({ pages: "all" });
       discounts.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
       return { discounts };
     }
@@ -1268,7 +1268,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       if (typeof args.value !== "number" || !Number.isInteger(args.value) || args.value <= 0) throw new Error("value must be a positive integer.");
       if (args.type === "PERCENT" && args.value > 100) throw new Error("A percentage discount can't exceed 100.");
 
-      const { data: byCode } = await CommerceDiscountCode.query.byCode({ templateId: siteId, code: normalizedCode }).go();
+      const { data: byCode } = await CommerceDiscountCode.query.byCode({ templateId: siteId, code: normalizedCode }).go({ pages: "all" });
       if (byCode[0]) throw new Error(`"${normalizedCode}" is already in use.`);
 
       const id = randomUUID();

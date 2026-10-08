@@ -35,7 +35,7 @@ export default async function AiSettingsPage() {
   }
 
   const [{ data: allKeys }, { data: user }] = await Promise.all([
-    ApiKey.query.primary({ organizationId: orgResolution.organizationId }).go(),
+    ApiKey.query.primary({ organizationId: orgResolution.organizationId }).go({ pages: "all" }),
     User.get({ id: session.user.id }).go(),
   ]);
   if (!user) throw new Error(`Session user ${session.user.id} has no matching User record`);

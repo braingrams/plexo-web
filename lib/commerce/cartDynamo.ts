@@ -37,7 +37,7 @@ export function clearCartCookie(response: NextResponse): void {
  */
 export async function findOpenCart(templateId: string, token: string | null) {
   if (!token) return null;
-  const { data: matches } = await CommerceCart.query.byToken({ cartToken: token }).go();
+  const { data: matches } = await CommerceCart.query.byToken({ cartToken: token }).go({ pages: "all" });
   const cart = matches[0];
   if (!cart || cart.templateId !== templateId || cart.status !== "OPEN") return null;
   return cart;
@@ -93,7 +93,7 @@ export async function readCartSnapshot(templateId: string, token: string | null)
   const cart = await findOpenCart(templateId, token);
   if (!cart) return { cartToken: null, items: [], subtotalMinor: 0, currency, paymentGateway };
 
-  const { data: items } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
+  const { data: items } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go({ pages: "all" });
   items.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
   const products = await Promise.all(items.map((item) => CommerceProduct.get({ templateId, id: item.productId }).go()));
 

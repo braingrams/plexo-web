@@ -63,7 +63,7 @@ export async function sendOrderStatusEmail(
 
   const [{ data: order }, { data: items }, { data: site }, brand] = await Promise.all([
     CommerceOrder.get({ templateId, id: orderId }).go(),
-    CommerceOrderItem.query.primary({ templateId, orderId }).go(),
+    CommerceOrderItem.query.primary({ templateId, orderId }).go({ pages: "all" }),
     Template.get({ id: templateId }).go(),
     getOrgBrandDynamo(organizationId),
   ]);

@@ -19,7 +19,7 @@ export async function resendDigitalDelivery(templateId: string, orderId: string,
   // CommerceDigitalDelivery's real primary key is (orderId, productId) — id is just an
   // extra attribute, not part of the key (see commerceEntities.ts) — so a lookup by id
   // fans out over this one order's deliveries, bounded by its own line-item count.
-  const { data: deliveries } = await CommerceDigitalDelivery.query.primary({ orderId }).go();
+  const { data: deliveries } = await CommerceDigitalDelivery.query.primary({ orderId }).go({ pages: "all" });
   const delivery = deliveries.find((d) => d.id === deliveryId && d.templateId === templateId);
   if (!delivery) throw new Error("Delivery not found.");
 

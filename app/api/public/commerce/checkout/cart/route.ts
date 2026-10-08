@@ -99,7 +99,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   const isBankTransfer = paymentChoice.method === "BANK_TRANSFER";
 
-  const { data: cartItemRows } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
+  const { data: cartItemRows } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go({ pages: "all" });
   const productRows = await Promise.all(cartItemRows.map((i) => CommerceProduct.get({ templateId, id: i.productId }).go()));
   const activeItems = cartItemRows
     .map((i, idx) => ({ product: productRows[idx].data, quantity: i.quantity ?? 1, variantId: i.variantId ?? null }))
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let discount: EntityItem<typeof CommerceDiscountCode> | null = null;
   const normalizedDiscountCode = typeof rawDiscountCode === "string" ? rawDiscountCode.trim().toUpperCase() : "";
   if (normalizedDiscountCode) {
-    const { data: matches } = await CommerceDiscountCode.query.byCode({ templateId, code: normalizedDiscountCode }).go();
+    const { data: matches } = await CommerceDiscountCode.query.byCode({ templateId, code: normalizedDiscountCode }).go({ pages: "all" });
     discount = matches[0] ?? null;
     const invalid =
       !discount ||

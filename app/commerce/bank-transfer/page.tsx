@@ -47,7 +47,7 @@ export default async function BankTransferConfirmPage({ searchParams }: { search
   }
 
   const [{ data: items }, { data: siteRow }] = await Promise.all([
-    CommerceOrderItem.query.primary({ templateId: order.templateId, orderId: order.id }).go(),
+    CommerceOrderItem.query.primary({ templateId: order.templateId, orderId: order.id }).go({ pages: "all" }),
     Template.get({ id: order.templateId }).go(),
   ]);
   const amount = formatMoney(order.amountMinor, order.currency ?? "NGN");

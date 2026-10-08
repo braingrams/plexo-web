@@ -17,7 +17,7 @@ export async function GET(
   if (!order) return NextResponse.json({ error: "Order not found." }, { status: 404 });
 
   const [{ data: items }, { data: booking }] = await Promise.all([
-    CommerceOrderItem.query.primary({ templateId, orderId: id }).go(),
+    CommerceOrderItem.query.primary({ templateId, orderId: id }).go({ pages: "all" }),
     CommerceBooking.get({ templateId, orderId: id }).go(),
   ]);
 

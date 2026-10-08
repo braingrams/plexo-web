@@ -6,7 +6,7 @@ export default async function CommerceProductsPage({ params }: { params: Promise
 
   const [{ data: products }, { data: categories }, { data: settings }] = await Promise.all([
     CommerceProduct.query.primary({ templateId }).go({ pages: "all" }),
-    CommerceCategory.query.primary({ templateId }).go(),
+    CommerceCategory.query.primary({ templateId }).go({ pages: "all" }),
     CommerceSettings.get({ templateId }).go(),
   ]);
   const categoryById = new Map(categories.map((c) => [c.id, c]));

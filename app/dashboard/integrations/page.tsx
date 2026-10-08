@@ -25,7 +25,7 @@ export default async function IntegrationsPage() {
   }
 
   // Fetch the org's active API keys for easy 1-click copying
-  const { data: allKeys } = await ApiKey.query.primary({ organizationId: orgResolution.organizationId }).go();
+  const { data: allKeys } = await ApiKey.query.primary({ organizationId: orgResolution.organizationId }).go({ pages: "all" });
   const apiKeys = allKeys
     .filter((k) => k.isActive)
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))

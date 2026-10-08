@@ -15,9 +15,9 @@ const SPECIAL_CATEGORIES = new Set(["best_seller", "most_recent"]);
  * order for the site and sums in memory, same "small in practice" bound as the rest of
  * this migration's site-scoped aggregations. */
 async function bestSellerProductIds(templateId: string): Promise<string[]> {
-  const { data: orders } = await CommerceOrder.query.primary({ templateId }).go();
+  const { data: orders } = await CommerceOrder.query.primary({ templateId }).go({ pages: "all" });
   const paidOrderIds = orders.filter((o) => o.status === "PAID").map((o) => o.id);
-  const itemBatches = await Promise.all(paidOrderIds.map((orderId) => CommerceOrderItem.query.primary({ templateId, orderId }).go()));
+  const itemBatches = await Promise.all(paidOrderIds.map((orderId) => CommerceOrderItem.query.primary({ templateId, orderId }).go({ pages: "all" })));
   const totals = new Map<string, number>();
   for (const batch of itemBatches) {
     for (const item of batch.data) {
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const [{ data: allProducts }, { data: categories }] = await Promise.all([
     CommerceProduct.query.primary({ templateId }).go({ pages: "all" }),
-    CommerceCategory.query.primary({ templateId }).go(),
+    CommerceCategory.query.primary({ templateId }).go({ pages: "all" }),
   ]);
   const categoryBySlug = new Map(categories.map((c) => [c.slug, c]));
   const categoryById = new Map(categories.map((c) => [c.id, c]));

@@ -20,7 +20,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const body = (await request.json().catch(() => ({}))) as { order?: string };
   const orderNumber = typeof body.order === "string" ? body.order.trim() : "";
   if (!orderNumber) return NextResponse.json({ error: "order is required." }, { status: 400 });
-  const { data: matches } = await CommerceOrder.query.byOrderNumber({ orderNumber }).go();
+  const { data: matches } = await CommerceOrder.query.byOrderNumber({ orderNumber }).go({ pages: "all" });
   const order = matches.find((o) => o.templateId === site.published.templateId && isDonationOrder(o));
   if (!order) return NextResponse.json({ status: "UNKNOWN" });
   return NextResponse.json({ status: await verifyOrderOnReturn(order) });
