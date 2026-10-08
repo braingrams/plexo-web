@@ -93,10 +93,29 @@ export async function slimForStorage(html: string, pagePath: string, save: SaveI
     }
     total -= block.size;
   }
-  const out = $.html();
+  let out = $.html();
+  // Still over: drop the indentation between tags (a heavy Elementor page carries tens of
+  // KB of it). A run of whitespace renders as one space, so nothing visible changes;
+  // <pre>, <textarea>, scripts and styles keep theirs exactly.
+  if (bytes(out) > limit) out = collapseWhitespace(out);
   if (bytes(out) > HARD_LIMIT_BYTES) {
     // Still over even the hard limit: the page is mostly markup. Say so plainly.
     throw new Error(`This page is too large to store (${Math.round(bytes(out) / 1024)} KB of content even after moving its styles and scripts into files).`);
   }
   return out;
+}
+
+const KEEP_WHITESPACE = /(<(pre|textarea|script|style)\b[^>]*>[\s\S]*?<\/\2>)/gi;
+
+/** Collapses runs of whitespace outside <pre>, <textarea>, <script> and <style> to a single character. */
+export function collapseWhitespace(html: string): string {
+  return html
+    .split(KEEP_WHITESPACE)
+    .map((part, i) => {
+      // split() with a capturing group interleaves: [text, kept block, tag name, text, …]
+      if (i % 3 === 1) return part;
+      if (i % 3 === 2) return "";
+      return part.replace(/[ \t]*\n\s*/g, "\n").replace(/[ \t]{2,}/g, " ");
+    })
+    .join("");
 }

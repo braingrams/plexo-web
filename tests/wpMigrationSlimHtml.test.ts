@@ -40,3 +40,11 @@ describe("oversized migrated pages", () => {
     );
   });
 });
+
+describe("whitespace", () => {
+  it("indentation between tags collapses; <pre>, <textarea>, scripts and styles keep theirs", async () => {
+    const { collapseWhitespace } = await import("@/lib/wpMigration/slimHtml");
+    const html = "<div>\n\t\t\t\t<p>Hello    world</p>\n\n\t\t</div><pre>  keep\n\n    this</pre><textarea>a\n\n  b</textarea><script>var  a = 1;\n\n  b()</script>";
+    expect(collapseWhitespace(html)).toBe("<div>\n<p>Hello world</p>\n</div><pre>  keep\n\n    this</pre><textarea>a\n\n  b</textarea><script>var  a = 1;\n\n  b()</script>");
+  });
+});
