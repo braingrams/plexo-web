@@ -7,6 +7,7 @@ import type { AskUserAnswer, ChatAttachment, ContentBlock, CreditInfo, ModelTier
 // union streams — field names/casing copied verbatim from that file, not re-derived.
 type StreamFrame =
   | { type: "tool_call_start"; id: string; name: string; label: string; args: unknown }
+  | { type: "tool_call_preparing"; id: string; name: string; label: string; characters: number }
   | { type: "tool_call_awaiting_confirmation"; id: string; name: string; args: unknown; messageId: string }
   | { type: "tool_call_result"; id: string; name: string; status: "success" | "error" | "cancelled"; result?: unknown }
   | { type: "token"; text: string }
@@ -70,11 +71,21 @@ export function useSolStream() {
   const handleFrame = useCallback(
     (frame: StreamFrame) => {
       switch (frame.type) {
+        case "tool_call_preparing": {
+          // SOL is still writing this call's input — show the step straight away, with progress.
+          setBlocks((prev) =>
+            prev.some((b) => isToolUseBlock(b) && b.id === frame.id)
+              ? prev.map((b) => (isToolUseBlock(b) && b.id === frame.id ? { ...b, characters: frame.characters } : b))
+              : [...prev, { type: "tool_use", id: frame.id, name: frame.name, label: frame.label, input: {}, status: "preparing", characters: frame.characters } as ToolUseBlock],
+          );
+          break;
+        }
         case "tool_call_start": {
-          setBlocks((prev) => [
-            ...prev,
-            { type: "tool_use", id: frame.id, name: frame.name, label: frame.label, input: frame.args, status: "running" } as ToolUseBlock,
-          ]);
+          setBlocks((prev) =>
+            prev.some((b) => isToolUseBlock(b) && b.id === frame.id)
+              ? prev.map((b) => (isToolUseBlock(b) && b.id === frame.id ? { ...b, label: frame.label, input: frame.args, status: "running" } : b))
+              : [...prev, { type: "tool_use", id: frame.id, name: frame.name, label: frame.label, input: frame.args, status: "running" } as ToolUseBlock],
+          );
           break;
         }
         case "tool_call_awaiting_confirmation": {

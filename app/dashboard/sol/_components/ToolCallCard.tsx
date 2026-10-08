@@ -9,7 +9,7 @@ function toStepStatus(status: ToolUseBlock["status"]): StepStatus {
   if (status === "success") return "success";
   if (status === "error") return "error";
   if (status === "cancelled") return "cancelled";
-  if (status === "running" || status === "awaiting_confirmation") return "running";
+  if (status === "preparing" || status === "running" || status === "awaiting_confirmation") return "running";
   return "pending";
 }
 
@@ -59,11 +59,21 @@ const VERB_PAST_TENSE: Record<string, string> = {
   export: "Exported",
 };
 
-function humanizeToolLabel(name: string): string {
+// The same verbs while the step is still happening ("Publishing raw landing page…").
+const VERB_IN_PROGRESS: Record<string, string> = {
+  get: "Checking", list: "Looking up", find: "Looking up", search: "Searching", create: "Creating", add: "Adding",
+  delete: "Deleting", remove: "Removing", update: "Updating", edit: "Updating", set: "Setting", publish: "Publishing",
+  unpublish: "Unpublishing", archive: "Archiving", restore: "Restoring", duplicate: "Duplicating", clone: "Duplicating",
+  rename: "Renaming", move: "Moving", enable: "Enabling", disable: "Disabling", connect: "Connecting",
+  disconnect: "Disconnecting", refund: "Refunding", cancel: "Cancelling", send: "Sending", generate: "Generating",
+  upload: "Uploading", import: "Importing", export: "Exporting",
+};
+
+function humanizeToolLabel(name: string, inProgress = false): string {
   const parts = name.split("_").filter(Boolean);
   if (parts.length === 0) return name;
   const [verb, ...rest] = parts;
-  const pastTense = VERB_PAST_TENSE[verb.toLowerCase()];
+  const pastTense = (inProgress ? VERB_IN_PROGRESS : VERB_PAST_TENSE)[verb.toLowerCase()];
   if (pastTense) {
     const restLabel = rest.join(" ");
     return restLabel ? `${pastTense} ${restLabel}` : pastTense;
@@ -138,7 +148,13 @@ export function ToolCallCard({
           }}
         >
           <CompactStatusIcon status={toStepStatus(block.status)} />
-          <span style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.55)", flex: 1 }}>{label}</span>
+          <span style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.55)", flex: 1 }}>
+            {block.status === "preparing"
+              ? `${humanizeToolLabel(block.name, true)} — writing${block.characters ? ` (${block.characters.toLocaleString()} characters so far)` : ""}…`
+              : block.status === "running"
+                ? `${humanizeToolLabel(block.name, true)}…`
+                : label}
+          </span>
           {expanded ? (
             <ChevronUp size={12} color="rgba(240,242,255,0.35)" />
           ) : (
