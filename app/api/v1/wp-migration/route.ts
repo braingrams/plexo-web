@@ -35,8 +35,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
  * Creates a brand-new Plexo site for it (never overwrites an existing one) and the job that
  * fills it. Body: { sourceUrl, ownershipAttested: true, acceptAup?: true, drivenByDashboard?: true }
  *
- * It then runs on the server by itself; the dashboard (drivenByDashboard) drives it while
- * open instead and hands it over when the tab closes, so its start stays instant.
+ * It then runs on the server by itself; with drivenByDashboard the migration screen starts
+ * that itself as it opens (step?handoff=1), so this response stays instant.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const resolved = await resolveMigrationAccess(request, { permission: "create" });

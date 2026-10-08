@@ -9,12 +9,10 @@ import { continueInBackground } from "@/lib/wpMigration/background";
 export const maxDuration = 60;
 
 /**
- * POST — run the next bounded step of a migration. The dashboard calls this in a loop while
- * the migration screen is open (the browser loops, not the server — see
- * app/api/v1/site-import/[templateId]/[jobId]/step/route.ts for why). It's also the
- * "Try again" action for a paused migration, which resumes from the step that paused.
- * With ?handoff=1 (sent as the dashboard tab closes) it runs nothing itself and has the
- * server carry on in the background straight away.
+ * POST — run the next bounded step of a migration: the "Try again" action for a paused
+ * migration, which resumes from the step that paused. With ?handoff=1 it runs nothing itself
+ * and has the server carry on in the background — how the migration screen starts (and, if
+ * the server ever goes quiet, restarts) a migration it's watching.
  */
 export async function POST(
   request: NextRequest,
