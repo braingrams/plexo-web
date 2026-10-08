@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AI_UNREACHABLE, aiErrorMessage } from "@/lib/ai/requestErrors";
 
 type Props = {
   templateId: string;
@@ -88,11 +89,12 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (res.status === 402) setInsufficientCredits(true);
-        throw new Error(data.error ?? "AI generation failed.");
+        throw new Error(aiErrorMessage(res.status, data, "AI generation failed."));
       }
       setResult({ summary: data.summary, html: data.result });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "AI generation failed.");
+      // A fetch that never got an answer throws a TypeError ("Failed to fetch") — say what that means.
+      setError(err instanceof TypeError ? AI_UNREACHABLE : err instanceof Error ? err.message : "AI generation failed.");
     } finally {
       setGenerating(false);
     }

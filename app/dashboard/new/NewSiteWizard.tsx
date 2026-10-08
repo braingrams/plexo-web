@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AI_UNREACHABLE, aiErrorMessage } from "@/lib/ai/requestErrors";
 import type { DragEvent, FormEvent } from "react";
 import Link from "next/link";
 import { CustomSelect } from "../../_components/CustomSelect";
@@ -289,6 +290,12 @@ export function NewSiteWizard() {
   const [uploading, setUploading] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+  // The card is tall and the action buttons sit low in it: bring a new error into view,
+  // or it appears off-screen above the button that caused it and looks like nothing happened.
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [error]);
   const [template, setTemplate] = useState<CreatedTemplate | null>(null);
 
   const [baseDomain, setBaseDomain] = useState("plexo.site");
@@ -428,7 +435,7 @@ export function NewSiteWizard() {
         // same requirement every other in-dashboard AI feature already has) — point them
         // at the fix instead of leaving a bare permission error on their very first action.
         const hint = genRes.status === 403 ? " Enable AI for your account in Settings, then try again." : "";
-        setError((genData.error ?? "Failed to generate your site.") + hint);
+        setError(aiErrorMessage(genRes.status, genData, "Failed to generate your site.") + hint);
         return;
       }
 
@@ -448,6 +455,9 @@ export function NewSiteWizard() {
         return;
       }
       advanceToConnect({ id: publishData.templateId, name: publishData.name });
+    } catch {
+      // The request never got an answer (connection dropped, or the browser gave up).
+      setError(AI_UNREACHABLE);
     } finally {
       setAiGenerating(false);
     }
@@ -550,9 +560,18 @@ export function NewSiteWizard() {
           }}
         >
           {error && (
-            <p style={{ fontSize: "12.5px", color: "var(--danger)", margin: "0 0 18px" }} role="alert">
-              {error}
-            </p>
+            <div
+              ref={errorRef}
+              role="alert"
+              style={{
+                display: "flex", gap: 10, alignItems: "flex-start", margin: "0 0 18px", padding: "12px 14px", borderRadius: 10,
+                border: "1px solid rgba(248,113,113,0.45)", background: "rgba(248,113,113,0.08)", color: "#fca5a5", fontSize: "13px", lineHeight: 1.5,
+              }}
+            >
+              <span aria-hidden="true" style={{ fontWeight: 800 }}>!</span>
+              <span style={{ flex: 1 }}>{error}</span>
+              <button type="button" onClick={() => setError(null)} aria-label="Dismiss" style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+            </div>
           )}
 
           {/* Step 1 — Start */}

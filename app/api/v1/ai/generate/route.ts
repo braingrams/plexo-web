@@ -312,7 +312,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ summary: outcome.summary, result: outcome.result });
   } catch (err) {
     return NextResponse.json(
-      { error: `AI generation failed: ${err instanceof Error ? err.message : "Unknown error"}` },
+      // Already in plain words (lib/ai/generate.ts) — shown to the person as is.
+      { error: err instanceof Error ? err.message : "Something went wrong generating this. Try again." },
       { status: 502 },
     );
   }

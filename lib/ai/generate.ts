@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { friendlyProviderError } from "./providerErrors";
 
 import { ElementJSONSchema, TemplateJSONSchema, hydrateStructuralDefaults } from "@/server/sanitizer";
 
@@ -269,8 +270,8 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
       // Auth/network/rate-limit failures from the provider are not the model
       // returning malformed JSON — don't relabel them as parse errors, and
       // don't burn a retry re-asking the provider to "fix its JSON".
-      const reason = err instanceof Error ? err.message : "unknown error";
-      throw new ProviderCallError(`AI provider request failed: ${reason}`);
+      console.error(`[ai] ${params.provider} ${model} request failed:`, err);
+      throw new ProviderCallError(friendlyProviderError(err));
     }
     if (truncated) {
       throw new TruncatedResponseError(
@@ -320,11 +321,12 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
       }
       if (secondError instanceof TruncatedResponseError) {
         throw new Error(
-          "the AI response was cut off before it finished, even after increasing the output limit — try a shorter or more targeted instruction",
+          "The page was too long for the AI to finish in one go. Try a shorter or more focused description.",
         );
       }
       const reason = secondError instanceof Error ? secondError.message : "unknown error";
-      throw new Error(`AI response could not be parsed: ${reason}`);
+      console.error("[ai] response could not be parsed:", reason);
+      throw new Error("The AI's answer couldn't be turned into a page. Try again — rephrasing the description often helps.");
     }
   }
 }

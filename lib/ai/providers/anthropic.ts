@@ -30,12 +30,17 @@ export async function generate({
   }));
   content.push({ type: "text", text: userPrompt });
 
-  const response = await client.messages.create({
-    model,
-    max_tokens: maxTokens,
-    system: systemPrompt,
-    messages: [{ role: "user", content }],
-  });
+  // Streamed, then collected into one message: the SDK refuses a non-streaming request
+  // whose max_tokens could run past 10 minutes (any large page — generate_raw_html asks
+  // for up to 32000 tokens, 64000 on the truncation retry). Same result as create().
+  const response = await client.messages
+    .stream({
+      model,
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: [{ role: "user", content }],
+    })
+    .finalMessage();
 
   const textBlock = response.content.find((block) => block.type === "text");
   const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
