@@ -16,13 +16,13 @@ export async function DELETE(
   const permissionError = requirePermission(resolved.context.role, { blog: ["delete"] });
   if (permissionError) return permissionError;
 
-  const { data: tags } = await BlogTag.query.primary({ templateId: resolved.context.templateId }).go();
+  const { data: tags } = await BlogTag.query.primary({ templateId: resolved.context.templateId }).go({ pages: "all" });
   const tag = tags.find((t) => t.id === tagId);
   if (!tag) return NextResponse.json({ error: "Tag not found." }, { status: 404 });
 
   // Postgres's onDelete: Cascade on BlogPostTag -> BlogTag has no DynamoDB equivalent —
   // clean up the join rows explicitly via byTag (GSI1) before removing the tag itself.
-  const { data: links } = await BlogPostTag.query.byTag({ tagId }).go();
+  const { data: links } = await BlogPostTag.query.byTag({ tagId }).go({ pages: "all" });
   await Promise.all(links.map((l) => BlogPostTag.remove({ templateId: l.templateId, postId: l.postId, tagId: l.tagId }).go()));
 
   await BlogTag.remove({ templateId: resolved.context.templateId, slug: tag.slug }).go();

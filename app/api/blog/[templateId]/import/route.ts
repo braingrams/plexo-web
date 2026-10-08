@@ -43,7 +43,7 @@ export async function GET(
   // in practice (imports are rare, deliberate actions), so fetching the whole partition
   // and sorting is fine — same "small in practice" assumption used elsewhere in this
   // migration (e.g. server/slugDynamo.ts's ensureUniqueSlug).
-  const { data: allJobs } = await ImportJob.query.primary({ templateId: resolved.context.templateId }).go();
+  const { data: allJobs } = await ImportJob.query.primary({ templateId: resolved.context.templateId }).go({ pages: "all" });
   const jobs = allJobs
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
     .slice(0, 20);
@@ -160,7 +160,7 @@ export async function POST(
   // One job per site can safely run at a time — starting another while one is already
   // in flight would just double-process (harmlessly, thanks to upsert-by-externalId,
   // but wastefully) rather than run any faster.
-  const { data: templateJobs } = await ImportJob.query.primary({ templateId: resolved.context.templateId }).go();
+  const { data: templateJobs } = await ImportJob.query.primary({ templateId: resolved.context.templateId }).go({ pages: "all" });
   const existingActive = templateJobs.find((j) => j.status === "PENDING" || j.status === "RUNNING");
   if (existingActive) {
     return NextResponse.json({ job: existingActive, alreadyRunning: true });

@@ -47,8 +47,8 @@ export async function GET(
     BlogCategory.query
       .primary({ templateId: resolved.context.templateId })
       .go(),
-    BlogTag.query.primary({ templateId: resolved.context.templateId }).go(),
-    BlogAuthor.query.primary({ templateId: resolved.context.templateId }).go(),
+    BlogTag.query.primary({ templateId: resolved.context.templateId }).go({ pages: "all" }),
+    BlogAuthor.query.primary({ templateId: resolved.context.templateId }).go({ pages: "all" }),
     BlogPostCategory.query
       .primary({ templateId: resolved.context.templateId, postId })
       .go(),

@@ -124,7 +124,7 @@ async function resolveAuthorId(
   if (authorName === null) return null;
   const name = String(authorName).trim();
   if (!name) return null;
-  const { data: authors } = await BlogAuthor.query.primary({ templateId }).go();
+  const { data: authors } = await BlogAuthor.query.primary({ templateId }).go({ pages: "all" });
   const existing = authors.find(
     (a) => a.name.toLowerCase() === name.toLowerCase(),
   );
@@ -175,7 +175,7 @@ async function resolveTagIds(
   names: string[] | undefined,
 ): Promise<string[] | undefined> {
   if (names === undefined) return undefined;
-  const { data: tags } = await BlogTag.query.primary({ templateId }).go();
+  const { data: tags } = await BlogTag.query.primary({ templateId }).go({ pages: "all" });
   const ids: string[] = [];
   for (const name of names) {
     const existing = tags.find(
@@ -1141,9 +1141,9 @@ export async function handleBlogTool(
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
       const [{ data: allPosts }, { data: categories }, { data: authors }] =
         await Promise.all([
-          BlogPost.query.byStatus({ templateId: siteId }).go(),
-          BlogCategory.query.primary({ templateId: siteId }).go(),
-          BlogAuthor.query.primary({ templateId: siteId }).go(),
+          BlogPost.query.byStatus({ templateId: siteId }).go({ pages: "all" }),
+          BlogCategory.query.primary({ templateId: siteId }).go({ pages: "all" }),
+          BlogAuthor.query.primary({ templateId: siteId }).go({ pages: "all" }),
         ]);
 
       let filtered = allPosts;
@@ -1249,13 +1249,13 @@ export async function handleBlogTool(
         { data: postCategories },
         { data: postTags },
       ] = await Promise.all([
-        BlogCategory.query.primary({ templateId: siteId }).go(),
-        BlogTag.query.primary({ templateId: siteId }).go(),
-        BlogAuthor.query.primary({ templateId: siteId }).go(),
+        BlogCategory.query.primary({ templateId: siteId }).go({ pages: "all" }),
+        BlogTag.query.primary({ templateId: siteId }).go({ pages: "all" }),
+        BlogAuthor.query.primary({ templateId: siteId }).go({ pages: "all" }),
         BlogPostCategory.query
           .primary({ templateId: siteId, postId: post.id })
           .go(),
-        BlogPostTag.query.primary({ templateId: siteId, postId: post.id }).go(),
+        BlogPostTag.query.primary({ templateId: siteId, postId: post.id }).go({ pages: "all" }),
       ]);
       const categoryById = new Map(categories.map((c) => [c.id, c]));
       const tagById = new Map(tags.map((t) => [t.id, t]));
@@ -1704,7 +1704,7 @@ export async function handleBlogTool(
         .go();
       const postById = new Map(posts.map((p) => [p.id, p]));
       const commentBatches = await Promise.all(
-        posts.map((p) => BlogComment.query.primary({ postId: p.id }).go()),
+        posts.map((p) => BlogComment.query.primary({ postId: p.id }).go({ pages: "all" })),
       );
       let comments = commentBatches.flatMap((b) => b.data);
       if (statusFilter)

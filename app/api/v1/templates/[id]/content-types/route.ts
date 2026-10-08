@@ -22,11 +22,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const resolved = await resolveCustomContentAdmin(request, templateId);
   if (resolved.error) return resolved.error;
 
-  const { data: contentTypes } = await CustomContentType.query.primary({ templateId }).go();
+  const { data: contentTypes } = await CustomContentType.query.primary({ templateId }).go({ pages: "all" });
   contentTypes.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   const entryCounts = await Promise.all(
-    contentTypes.map((ct) => CustomContentEntry.query.primary({ contentTypeId: ct.id }).go()),
+    contentTypes.map((ct) => CustomContentEntry.query.primary({ contentTypeId: ct.id }).go({ pages: "all" })),
   );
 
   const result = contentTypes.map((ct, i) => ({
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return NextResponse.json({ error: normalizedFields.error }, { status: 400 });
   }
 
-  const { data: existing } = await CustomContentType.query.primary({ templateId }).go();
+  const { data: existing } = await CustomContentType.query.primary({ templateId }).go({ pages: "all" });
   if (existing.some((ct) => ct.slug === slug)) {
     return NextResponse.json({ error: `A content type with slug "${slug}" already exists for this site.` }, { status: 409 });
   }

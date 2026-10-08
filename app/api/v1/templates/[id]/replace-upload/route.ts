@@ -97,7 +97,7 @@ export async function POST(
     throw err;
   }
 
-  const { data: oldAssets } = await TemplateAsset.query.primary({ templateId: template.id }).go();
+  const { data: oldAssets } = await TemplateAsset.query.primary({ templateId: template.id }).go({ pages: "all" });
 
   // Upload the new assets FIRST, before touching anything old — if this fails partway,
   // the live template/domain is untouched rather than left half-replaced.
@@ -147,7 +147,7 @@ export async function POST(
 
   // Content changed under every domain this template is live on — re-scan rather than
   // wait for the next periodic cron pass.
-  const { data: linkedDomains } = await PublishedDomain.query.primary({ templateId: template.id }).go();
+  const { data: linkedDomains } = await PublishedDomain.query.primary({ templateId: template.id }).go({ pages: "all" });
   for (const d of linkedDomains) {
     void scanPublishedDomain(d.templateId, d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
   }

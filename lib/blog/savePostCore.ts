@@ -88,13 +88,13 @@ function computePublishedAt(
 }
 
 async function findPostById(templateId: string, postId: string): Promise<BlogPostItem | null> {
-  const { data: posts } = await BlogPost.query.byStatus({ templateId }).go();
+  const { data: posts } = await BlogPost.query.byStatus({ templateId }).go({ pages: "all" });
   return posts.find((p) => p.id === postId) ?? null;
 }
 
 async function syncCategoriesAndTags(templateId: string, postId: string, categoryIds: string[] | undefined, tagIds: string[] | undefined): Promise<void> {
   if (categoryIds !== undefined) {
-    const { data: existing } = await BlogPostCategory.query.primary({ templateId, postId }).go();
+    const { data: existing } = await BlogPostCategory.query.primary({ templateId, postId }).go({ pages: "all" });
     await Promise.all(existing.map((e) => BlogPostCategory.remove({ templateId, postId: e.postId, categoryId: e.categoryId }).go()));
     await Promise.all(
       categoryIds.map((categoryId) =>
@@ -107,7 +107,7 @@ async function syncCategoriesAndTags(templateId: string, postId: string, categor
     );
   }
   if (tagIds !== undefined) {
-    const { data: existing } = await BlogPostTag.query.primary({ templateId, postId }).go();
+    const { data: existing } = await BlogPostTag.query.primary({ templateId, postId }).go({ pages: "all" });
     await Promise.all(existing.map((e) => BlogPostTag.remove({ templateId, postId: e.postId, tagId: e.tagId }).go()));
     await Promise.all(
       tagIds.map((tagId) =>
@@ -123,11 +123,11 @@ async function syncCategoriesAndTags(templateId: string, postId: string, categor
 
 async function slugsForRevalidate(templateId: string, postId: string, authorId: string | null | undefined): Promise<{ categorySlugs: string[]; tagSlugs: string[]; authorSlug: string | null }> {
   const [{ data: postCategories }, { data: postTags }, { data: categories }, { data: tags }, authorResult] = await Promise.all([
-    BlogPostCategory.query.primary({ templateId, postId }).go(),
-    BlogPostTag.query.primary({ templateId, postId }).go(),
-    BlogCategory.query.primary({ templateId }).go(),
-    BlogTag.query.primary({ templateId }).go(),
-    authorId ? BlogAuthor.query.primary({ templateId }).go() : null,
+    BlogPostCategory.query.primary({ templateId, postId }).go({ pages: "all" }),
+    BlogPostTag.query.primary({ templateId, postId }).go({ pages: "all" }),
+    BlogCategory.query.primary({ templateId }).go({ pages: "all" }),
+    BlogTag.query.primary({ templateId }).go({ pages: "all" }),
+    authorId ? BlogAuthor.query.primary({ templateId }).go({ pages: "all" }) : null,
   ]);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const tagById = new Map(tags.map((t) => [t.id, t]));
@@ -145,7 +145,7 @@ async function slugsForRevalidate(templateId: string, postId: string, authorId: 
  * filters in memory, bounded by the same partition query every other per-template lookup
  * here uses, not a table-wide Scan. */
 export async function findPostByExternalId(templateId: string, externalId: string): Promise<BlogPostItem | null> {
-  const { data: posts } = await BlogPost.query.byStatus({ templateId }).go();
+  const { data: posts } = await BlogPost.query.byStatus({ templateId }).go({ pages: "all" });
   return posts.find((p) => p.externalId === externalId) ?? null;
 }
 

@@ -13,7 +13,7 @@ export async function GET(
   const resolved = await resolveBlogAdminSite(request, templateId);
   if ("error" in resolved) return resolved.error;
 
-  const { data: categories } = await BlogCategory.query.primary({ templateId: resolved.context.templateId }).go();
+  const { data: categories } = await BlogCategory.query.primary({ templateId: resolved.context.templateId }).go({ pages: "all" });
   categories.sort((a, b) => a.name.localeCompare(b.name));
   return NextResponse.json({ categories });
 }
@@ -35,7 +35,7 @@ export async function POST(
 
   // No DB-level foreign key here (unlike Prisma's P2003) — validated explicitly instead.
   if (body.parentId) {
-    const { data: siblings } = await BlogCategory.query.primary({ templateId: resolved.context.templateId }).go();
+    const { data: siblings } = await BlogCategory.query.primary({ templateId: resolved.context.templateId }).go({ pages: "all" });
     if (!siblings.some((c) => c.id === body.parentId)) {
       return NextResponse.json({ error: "Parent category not found." }, { status: 400 });
     }

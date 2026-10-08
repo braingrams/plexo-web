@@ -35,7 +35,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
   let publishedUrl: string | null = null;
   if (template.kind === "LANDING_PAGE") {
-    const { data: domains } = await PublishedDomain.query.primary({ templateId: template.id }).go();
+    const { data: domains } = await PublishedDomain.query.primary({ templateId: template.id }).go({ pages: "all" });
     if (domains[0]) {
       const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
       publishedUrl = `${protocol}://${domains[0].domain}`;
@@ -155,7 +155,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
   let publishedUrl: string | null = null;
   if (existing.kind === "LANDING_PAGE") {
-    const { data: domains } = await PublishedDomain.query.primary({ templateId: updated.id }).go();
+    const { data: domains } = await PublishedDomain.query.primary({ templateId: updated.id }).go({ pages: "all" });
     if (domains[0]) {
       const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
       publishedUrl = `${protocol}://${domains[0].domain}`;
@@ -210,7 +210,7 @@ export async function DELETE(
   const allIds = [existing.id, ...descendantIds];
 
   // 1. Delete linked storage assets
-  const assetBatches = await Promise.all(allIds.map((tid) => TemplateAsset.query.primary({ templateId: tid }).go()));
+  const assetBatches = await Promise.all(allIds.map((tid) => TemplateAsset.query.primary({ templateId: tid }).go({ pages: "all" })));
   const assets = assetBatches.flatMap((b) => b.data);
   if (assets.length > 0) {
     await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
@@ -220,7 +220,7 @@ export async function DELETE(
   await Promise.all(assets.map((a) => TemplateAsset.remove({ templateId: a.templateId, path: a.path }).go()));
 
   // 2. Remove Custom Domains from Vercel registry
-  const domainBatches = await Promise.all(allIds.map((tid) => PublishedDomain.query.primary({ templateId: tid }).go()));
+  const domainBatches = await Promise.all(allIds.map((tid) => PublishedDomain.query.primary({ templateId: tid }).go({ pages: "all" })));
   const domains = domainBatches.flatMap((b) => b.data);
   for (const d of domains) {
     if (d.type === "CUSTOM") {

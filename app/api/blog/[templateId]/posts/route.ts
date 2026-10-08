@@ -27,7 +27,7 @@ export async function GET(
 
   const [{ data: allPosts }, { data: categories }, { data: authors }] =
     await Promise.all([
-      BlogPost.query.byStatus({ templateId: resolved.context.templateId }).go(),
+      BlogPost.query.byStatus({ templateId: resolved.context.templateId }).go({ pages: "all" }),
       BlogCategory.query
         .primary({ templateId: resolved.context.templateId })
         .go(),
