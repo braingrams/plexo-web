@@ -1,3 +1,4 @@
+import { friendlyProviderError } from "@/lib/ai/providerErrors";
 import type { ResolvedUser } from "@/lib/mcp/dispatchMcpTool";
 import { ensureCreditPeriod, chargeUsage, estimateWorstCaseCost } from "@/lib/db/ledgerOperations";
 import { estimateWorstCaseAgentTurnCost } from "@/lib/credits/agentTurnEstimate";
@@ -408,7 +409,16 @@ async function settleTurn(
       return;
     }
 
-    const message = err instanceof AgentIterationLimitError || err instanceof Error ? err.message : "SOL hit an unexpected error.";
+    // Our own errors are already written for people; a provider's (a 400 about tool_use
+    // ids, a 529…) is reworded — the detail goes to the logs below, not the chat.
+    const message =
+      err instanceof AgentIterationLimitError
+        ? err.message
+        : (err as { status?: number })?.status
+          ? `SOL couldn't answer that: ${friendlyProviderError(err)}`
+          : err instanceof Error
+            ? err.message
+            : "SOL hit an unexpected error. Try sending your message again.";
     console.error("SOL chat turn failed:", err);
     // Same reasoning as the pendingConfirmation branch above: the user's own message (at
     // minimum) was already persisted before this failed, so messageCount is stale without

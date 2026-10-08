@@ -173,7 +173,12 @@ export function useSolStream() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let lastFrameType: string | null = null;
+      // Whether this turn paused for the user (a confirmation or SOL's own question). Not
+      // "was it the last frame": on a new chat's first turn the generated title arrives
+      // AFTER the pause, and reading only the last frame treated the pause as a finished
+      // turn — no question shown, the composer left open, and the next typed message
+      // corrupted the conversation.
+      let paused = false;
 
       try {
         for (;;) {
@@ -187,7 +192,7 @@ export function useSolStream() {
             if (!trimmed) continue;
             try {
               const frame = JSON.parse(trimmed) as StreamFrame;
-              lastFrameType = frame.type;
+              if (frame.type === "tool_call_awaiting_confirmation") paused = true;
               handleFrame(frame);
             } catch {
               // A malformed line shouldn't kill an otherwise-good stream.
@@ -198,7 +203,7 @@ export function useSolStream() {
         if (trailing) {
           try {
             const frame = JSON.parse(trailing) as StreamFrame;
-            lastFrameType = frame.type;
+            if (frame.type === "tool_call_awaiting_confirmation") paused = true;
             handleFrame(frame);
           } catch {
             // ignore
@@ -219,7 +224,7 @@ export function useSolStream() {
       // it never sends a dedicated "frame" for the pause itself beyond the
       // tool_call_awaiting_confirmation frame already handled above).
       if (outcomeRef.current === "streaming") {
-        setOutcomeBoth(lastFrameType === "tool_call_awaiting_confirmation" ? "awaiting_confirmation" : "done");
+        setOutcomeBoth(paused ? "awaiting_confirmation" : "done");
       }
     },
     [handleFrame, setOutcomeBoth],
