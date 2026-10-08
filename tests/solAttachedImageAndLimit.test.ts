@@ -17,23 +17,31 @@ vi.mock("@/lib/db/contentEntities", () => ({
   Template: { query: { byOrg: () => ({ go: async () => ({ data: templates.rows }) }) } },
 }));
 
-import { publishAttachedImage } from "@/lib/ai/solAttachments";
+import { attachmentRef, publishAttachedImage } from "@/lib/ai/solAttachments";
 import { rawUploadLimitMessage } from "@/server/rawUploadLimit";
 import { RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
 
-const mine = "https://bucket.s3.us-east-1.amazonaws.com/private/sol-attachments/user-1/abc-photo.png";
+// The real production file name: macOS/WhatsApp put U+202F (narrow no-break space) before "PM".
+const mine = "https://plexo-user-content.s3.us-east-1.amazonaws.com/private/sol-attachments/user-1/d81-WhatsApp Image 2026-09-20 at 7.19.12\u202fPM.jpeg";
+const history = [{ role: "user", content: [{ type: "text", text: "use this" }, { type: "image", source: { type: "url", url: mine }, filename: "WhatsApp Image.jpeg" }] }];
 
 describe("SOL putting the user's attached image on a page", () => {
   beforeEach(() => void (storage.uploads = []));
 
-  it("copies only that image to public storage and returns its address", async () => {
-    const { url } = await publishAttachedImage("user-1", mine);
+  it("finds the image by its short reference and copies only that image to public storage", async () => {
+    const { url } = await publishAttachedImage("user-1", attachmentRef(mine), history);
     expect(storage.uploads).toEqual([{ path: expect.stringMatching(/^sol-images\/user-1\/[0-9a-f]{40}\.png$/), type: "image/png" }]);
     expect(url).toMatch(/^https:\/\/bucket\/public\/sol-images\/user-1\//);
   });
 
-  it("refuses another user's attachment", async () => {
-    await expect(publishAttachedImage("user-2", mine)).rejects.toThrow(/isn't one of this user's attachments/);
+  it("still finds it when the model copies the address with an ordinary space (the production failure)", async () => {
+    const copied = mine.replace("\u202f", " ");
+    await expect(publishAttachedImage("user-1", copied, history)).resolves.toHaveProperty("url");
+  });
+
+  it("refuses another user's attachment, and says plainly when an image isn't in the conversation", async () => {
+    await expect(publishAttachedImage("user-2", attachmentRef(mine), history)).rejects.toThrow(/isn't one of this user's attachments/);
+    await expect(publishAttachedImage("user-1", "img_000000000000", history)).rejects.toThrow(/attach it again/);
     expect(storage.uploads).toEqual([]);
   });
 });

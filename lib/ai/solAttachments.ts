@@ -100,7 +100,7 @@ async function resolveBlock(block: Block, userId: string): Promise<Block[]> {
     return [
       // How SOL puts this image on a page (see publishAttachedImage) — the user's own photo,
       // not a stock one.
-      note(`[Attached image "${name}" — to use it on a page, call use_attached_image with attachment "${url}".]`),
+      note(`[Attached image "${name}" — to use it on a page, call use_attached_image with attachment "${attachmentRef(url)}".]`),
       { type: "image", source: { type: "base64", media_type: type, data: file.body.toString("base64") } },
     ];
   }
@@ -163,24 +163,60 @@ function stripFilename(block: Block): Block {
 const PAGE_IMAGE_EXTENSIONS: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp", "image/svg+xml": "svg", "image/avif": "avif" };
 
 /**
+ * A short, stable reference for an attachment, given to the model instead of its address.
+ * The model used to copy the address back — and file names carry characters it doesn't
+ * reproduce (macOS/WhatsApp put a narrow no-break space, U+202F, before "PM"), so the copy
+ * pointed at a file that doesn't exist and S3 answered "access denied".
+ */
+export function attachmentRef(url: string): string {
+  return `img_${createHash("sha256").update(url).digest("hex").slice(0, 12)}`;
+}
+
+/** Marks a chat attachment's private address — never something to put in a page. */
+export const PRIVATE_ATTACHMENT_PATH = "/private/sol-attachments/";
+
+type HistoryLike = Array<{ content: unknown }>;
+
+/** The attachment address a reference (or a copied address, however mangled) points to in this conversation. */
+function findAttachment(history: HistoryLike, reference: string): string | null {
+  const squash = (v: string) => { try { v = decodeURIComponent(v); } catch { /* keep */ } return v.normalize("NFKC").replace(/\s+/g, " ").trim(); };
+  const wanted = squash(reference);
+  for (const entry of history) {
+    for (const block of Array.isArray(entry.content) ? (entry.content as Block[]) : []) {
+      if (!isUrlMediaBlock(block)) continue;
+      const url = block.source!.url!;
+      if (attachmentRef(url) === reference || squash(url) === wanted) return url;
+    }
+  }
+  return null;
+}
+
+/**
  * A public address for one image the user attached to this chat, for use on a page. Chat
  * attachments stay private; only an image SOL is asked to put on a page is copied out — to
  * a content-addressed key, so using the same image again doesn't make another copy.
  */
-export async function publishAttachedImage(userId: string, attachment: unknown): Promise<{ url: string }> {
-  if (typeof attachment !== "string" || !attachment) throw new Error("Pass the attachment reference shown next to the image.");
+export async function publishAttachedImage(userId: string, attachment: unknown, history: HistoryLike): Promise<{ url: string }> {
+  if (typeof attachment !== "string" || !attachment) throw new Error("Pass the attachment reference shown next to the image (like img_1a2b3c4d5e6f).");
+  const url = findAttachment(history, attachment);
+  if (!url) throw new Error("That image isn't in this conversation any more — ask the user to attach it again.");
   let key: string;
   try {
-    key = decodeURIComponent(new URL(attachment).pathname.replace(/^\//, ""));
+    key = decodeURIComponent(new URL(url).pathname.replace(/^\//, ""));
   } catch {
-    throw new Error("That isn't an attachment reference from this conversation.");
+    throw new Error("That image couldn't be opened — ask the user to attach it again.");
   }
   if (!key.startsWith(`private/sol-attachments/${userId}/`)) throw new Error("That image isn't one of this user's attachments.");
-  const file = await readObject(attachment);
+  let file: { body: Buffer; contentType: string | undefined };
+  try {
+    file = await readObject(url);
+  } catch (err) {
+    console.error("[sol] couldn't read an attachment for a page:", url, err);
+    throw new Error("That image couldn't be read — it may not have finished uploading. Ask the user to attach it again.");
+  }
   const type = (file.contentType || "").split(";")[0].trim().toLowerCase();
   const extension = PAGE_IMAGE_EXTENSIONS[type];
   if (!extension) throw new Error(`That attachment isn't an image a web page can show (${type || "unknown type"}).`);
   const hash = createHash("sha256").update(file.body).digest("hex").slice(0, 40);
   return uploadObject(`sol-images/${userId}/${hash}.${extension}`, file.body, { access: "public", contentType: type });
 }
-
