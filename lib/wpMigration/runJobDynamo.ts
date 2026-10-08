@@ -8,26 +8,28 @@ import { WpMigrationJob, WpMigrationPage, WpMigrationAsset } from "@/lib/db/impo
 // can't resolve. Callers inside Next.js pass the real revalidateBlogPost in.
 import { createBlogPost, updateBlogPost, findPostByExternalId, type RevalidateFn } from "@/lib/blog/savePostCore";
 import { normalizeRedirectPath } from "@/lib/blog/redirectsDynamo";
-import { findOrCreateAuthor, findOrCreateCategory, findOrCreateTag } from "@/lib/blogImport/taxonomyDynamo";
+import { ensureCategory, ensureTag, findOrCreateAuthor, findOrCreateCategory, findOrCreateTag } from "@/lib/blogImport/taxonomyDynamo";
 import { extractImageUrls, rehostMediaUrls, rewriteImageUrls } from "@/lib/blogImport/mediaRehostDynamo";
 import { convertWordPressHtmlToTiptapJson, tiptapJsonToHtml } from "@/lib/blogImport/htmlToTiptap";
 import { discoverWordPressInstall } from "./discover";
-import { buildInventory, decodeEntities } from "./inventory";
+import { buildInventory, decodeEntities, fetchMediaPage, fetchPostIndexPage, fetchPostsByIds, fetchTermsPage, type ApiPage } from "./inventory";
 import { extractSourceFacts, transformPage, type DetectedDonationForm } from "./htmlTransform";
 import { CommerceDonationCampaign, CommerceSettings } from "@/lib/db/commerceEntities";
 import { ensureDonationsReady, resolveDonationGateway } from "@/lib/commerce/donations";
 import { fetchSourceAsset, storeMigratedAsset } from "./assets";
 import { buildPluginReport, pluginSlugsFromHtml } from "./pluginCatalog";
-import { fetchJson, migrationFetch, restUrl } from "./http";
+import { FirewallBlockedError, fetchJson, firewallBlockOf, migrationFetch, restUrl, wordpressRedirectTarget } from "./http";
 import { makeOriginRewriter, pageKey, pageKeyForUrl, pathSegments, resolveAssetOwner } from "./urlSpace";
 import { buildMigrationReport } from "./report";
-import type { DetectedPlugin, WpInstall, WpPostEntry, WpTermEntry } from "./types";
+import type { DetectedPlugin, WpInstall, WpMediaEntry, WpPostEntry, WpPostStub, WpTermEntry } from "./types";
 import * as cheerio from "cheerio";
 import { imageStem, makePostListsLive, type KnownPost } from "./livePostLists";
 import { listingLayoutFromWpHtml, postLayoutFromWpHtml, shellLayout, wpPageRole } from "./blogLayout";
 import { convertWcPage, hasWcChrome, isWooCommerce, rewriteWcChrome, storePagesFromHtml, wcPageRole } from "./woocommerce";
 import { buildStorePresentation, finishProductImport, importProductBatch, planWooCommerce, type WcPlanState } from "./storeImport";
 import { convertGiveForms } from "./givewp";
+import { notifyMigrationDone, notifyMigrationPaused } from "./notify";
+import { slimForStorage } from "./slimHtml";
 
 // The WordPress migration as a resumable, step-at-a-time job — same execution model as
 // lib/siteImport/runJobDynamo.ts (the dashboard tab drives it step by step; a daily cron
@@ -42,12 +44,20 @@ import { convertGiveForms } from "./givewp";
 //
 // Each step is bounded by STEP_BUDGET_MS so it fits inside a single serverless invocation.
 
-const STEP_BUDGET_MS = 40_000;
+// No new work starts after this; what's in flight finishes (~10s), and the background
+// hand-off (lib/wpMigration/background.ts, up to 10s) must still fit in the server's 60s.
+const STEP_BUDGET_MS = 35_000;
 const STALE_LOCK_MS = 5 * 60 * 1000;
 const PAGES_PER_STEP = 4;
-const POSTS_PER_STEP = 4;
+// Posts copied per step, a few at a time; the step's time budget is the real limit.
+const POSTS_PER_STEP = 40;
+const POST_CONCURRENCY = 4;
 const ASSET_CONCURRENCY = 6;
 const ASSETS_PER_STEP = 150;
+/** A file WordPress keeps throttling is retried in later steps this many times before it's reported. */
+const MAX_ASSET_ATTEMPTS = 6;
+/** After the host throttles, the step stops starting downloads and pauses this long before handing on. */
+const THROTTLE_BACKOFF_MS = 10_000;
 // Pages found by following links that the REST inventory didn't list (custom post types,
 // archives a plugin generates). Bounded so a site with an unbounded URL space (faceted
 // search, calendars) can't keep a job alive forever.
@@ -60,7 +70,13 @@ export interface PlanState {
   origin: string;
   homeKey: string;
   siteName: string;
-  terms: WpTermEntry[];
+  /** Older jobs only: terms were kept here and redirected at the end of POSTS. New jobs redirect them while listing. */
+  terms?: WpTermEntry[];
+  /**
+   * Planning's listing cursor: posts, categories, tags and media are read from WordPress one
+   * page (100 items) at a time, across as many steps as a big site needs. Absent once done.
+   */
+  indexing?: { list: IndexList; page: number };
   /** Hash of what the source host serves for a URL that can't exist — detects catch-all "soft 404" hosting. */
   soft404Hash: string | null;
   discoveryRounds: number;
@@ -74,6 +90,9 @@ export interface PlanState {
   /** A WooCommerce store being moved to Plexo Commerce (lib/wpMigration/storeImport.ts). */
   wc?: WcPlanState;
 }
+
+type IndexList = "posts" | "categories" | "tags" | "media";
+const INDEX_ORDER: IndexList[] = ["posts", "categories", "tags", "media"];
 
 export interface MigrationCounts {
   pages: number;
@@ -102,6 +121,37 @@ function isConditionalCheckFailure(err: unknown): boolean {
   return anyErr?.name === "ConditionalCheckFailedException" || anyErr?.cause?.name === "ConditionalCheckFailedException";
 }
 
+const TRANSIENT_AWS_ERRORS = new Set([
+  "ProvisionedThroughputExceededException",
+  "ThrottlingException",
+  "RequestLimitExceeded",
+  "InternalServerError",
+  "ServiceUnavailable",
+  "TransactionConflictException",
+  "TimeoutError",
+]);
+
+/** A temporary AWS hiccup (throttling, a blip) rather than something wrong with the site — worth simply retrying. */
+export function isTransientAwsError(err: unknown): boolean {
+  const e = err as { name?: string; message?: string; cause?: { name?: string } } | null;
+  if (!e) return false;
+  if (TRANSIENT_AWS_ERRORS.has(e.name ?? "") || TRANSIENT_AWS_ERRORS.has(e.cause?.name ?? "")) return true;
+  return /Throughput exceeds|Rate exceeded|throttl/i.test(e.message ?? "");
+}
+
+const MAX_TRANSIENT_RETRIES = 5;
+const PAUSE_EMAIL_EVERY_MS = 6 * 60 * 60 * 1000;
+
+/** What the owner reads when a step stops — never a raw database error. */
+export function stepErrorMessage(phase: string, err: unknown): string {
+  const where = phase === "PLANNING" || phase === "PENDING" ? "Reading your WordPress site" : `The ${phase.toLowerCase()} step`;
+  if (isTransientAwsError(err)) return `${where} paused because Plexo was briefly busy saving your site.`;
+  if (err instanceof FirewallBlockedError) return err.message;
+  const message = err instanceof Error ? err.message : String(err);
+  if (/DynamoDB|electrodb/i.test(message)) return `${where} stopped because Plexo couldn't save part of your site.`;
+  return `${where} stopped: ${message}`;
+}
+
 function emptyCounts(): MigrationCounts {
   return { pages: 0, pagesDone: 0, pagesFailed: 0, posts: 0, postsDone: 0, postsFailed: 0, assets: 0, assetsDone: 0, assetsFailed: 0, assetsSkipped: 0 };
 }
@@ -119,6 +169,70 @@ function servedPath(key: string, sourceUrl: string): string {
 async function allPages(jobId: string): Promise<PageItem[]> {
   const { data } = await WpMigrationPage.query.primary({ jobId }).go({ pages: "all" });
   return data;
+}
+
+/** Saves files moved out of an oversized page (lib/wpMigration/slimHtml.ts) under the site's root page, served at /plexo-inline/… */
+function inlineFileSaver(job: JobItem) {
+  return async (relPath: string, body: Buffer, contentType: string) => {
+    await storeMigratedAsset(job.id, job.templateId, relPath, body, contentType);
+  };
+}
+
+/** A redirect target on the WordPress site itself becomes a path (it moves with the site); anything else stays absolute. */
+function sameSiteTarget(target: string, origin: string): string {
+  try {
+    const url = new URL(target);
+    const site = new URL(origin);
+    if (url.hostname.replace(/^www\./, "") === site.hostname.replace(/^www\./, "")) return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    // leave as-is
+  }
+  return target;
+}
+
+/** What a redirecting page holds (the serve route redirects before using it — this is only a fallback). */
+function redirectPageHtml(target: string): string {
+  const safe = target.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0;url=${safe}"><title>Redirecting…</title></head><body><a href="${safe}">Continue</a></body></html>`;
+}
+
+/** A page's address on WordPress — what relative URLs inside it were relative to. */
+function pathOf(url: string, fallback = "/"): string {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Old post URL → its Plexo Blog path, so copied pages and posts link straight to the new
+ * post. Built from the post rows (a big blog's map would overflow the job record).
+ */
+function movedLinksFor(job: JobItem, pages: PageItem[]): Record<string, string> {
+  const links: Record<string, string> = { ...((job.movedLinks as Record<string, string> | undefined) ?? {}) };
+  for (const row of pages) {
+    if (row.kind !== "POST") continue;
+    const slug = (row.data as WpPostStub | undefined)?.slug;
+    const target = row.newPath ?? (slug ? `/blog/${slug}` : null);
+    if (target) links[pageKeyForUrl(row.sourceUrl)] = target;
+  }
+  return links;
+}
+
+/** Rewrites links to moved posts in one pass (one regex per post would be quadratic on a big blog). */
+export function rewritePostLinks(html: string, movedLinks: Record<string, string>): string {
+  return html.replace(/href=(["'])(\/[^"'#?]*)/g, (match, quote: string, path: string) => {
+    let key = path;
+    try {
+      key = decodeURIComponent(path);
+    } catch {
+      // keep as-is
+    }
+    if (key.length > 1) key = key.replace(/\/+$/, "");
+    const target = movedLinks[key];
+    return target ? `href=${quote}${target}` : match;
+  });
 }
 
 async function putRedirect(templateId: string, fromPath: string, toPath: string): Promise<void> {
@@ -215,7 +329,9 @@ async function adaptCustomApis(job: JobItem, install: WpInstall, nodes: Record<s
   return { frozenApis, capturedApis };
 }
 
-async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
+async function runPlanning(job: JobItem, warnings: string[]): Promise<string> {
+  // Listing posts/terms/media already under way (a later planning step).
+  if ((job.planState as PlanState | undefined)?.indexing) return runIndexing(job, warnings);
   const install: WpInstall = (job.install as WpInstall | undefined) ?? (await discoverWordPressInstall(job.sourceUrl));
   const inventory = await buildInventory(install);
   const origin = install.origin;
@@ -231,6 +347,8 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
   } catch {
     // unreachable probe just means no fingerprint
   }
+
+  const pageLimit = pLimit(8);
 
   // ── Page tree: static pages + WordPress pages, keyed by their exact path.
   type Planned = { key: string; url: string; title: string; kind: "WP_PAGE" | "STATIC_PAGE"; wpId?: number; order: number };
@@ -273,26 +391,11 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
 
   await Promise.all(
     Array.from(planned.values()).map((p) =>
-      WpMigrationPage.put({ id: randomUUID(), jobId: job.id, key: p.key, kind: p.kind, sourceUrl: p.url, title: p.title, wpId: p.wpId, templateId: nodes[p.key], status: "PENDING" }).go(),
+      pageLimit(() => WpMigrationPage.put({ id: randomUUID(), jobId: job.id, key: p.key, kind: p.kind, sourceUrl: p.url, title: p.title, wpId: p.wpId, templateId: nodes[p.key], status: "PENDING" }).go()),
     ),
   );
 
-  // ── Posts become Plexo Blog posts; their old URLs are remembered so pages link straight to the new ones.
-  const movedLinks: Record<string, string> = {};
   const limit = pLimit(8);
-  await Promise.all(
-    inventory.posts.map((post) =>
-      limit(async () => {
-        movedLinks[pageKeyForUrl(post.link)] = `/blog/${post.slug}`;
-        await WpMigrationPage.put({ id: randomUUID(), jobId: job.id, key: `post:${post.id}`, kind: "POST", sourceUrl: post.link, title: post.title, wpId: post.id, status: "PENDING", data: post }).go();
-      }),
-    ),
-  );
-  if (inventory.posts.length > 0) {
-    const { data: blogSite } = await BlogSite.get({ templateId: job.templateId }).go();
-    if (!blogSite) await BlogSite.create({ id: randomUUID(), templateId: job.templateId, enabled: true, title: "Blog", description: install.siteDescription || undefined }).go();
-    else if (!blogSite.enabled) await BlogSite.patch({ templateId: job.templateId }).set({ enabled: true }).go();
-  }
 
   // ── A WooCommerce store: list its products (they move in their own step, after posts).
   const store = isWooCommerce(install) ? await planWooCommerce(job, install.restRoot).catch(() => null) : null;
@@ -308,16 +411,6 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
   for (const sitemap of ["/sitemap_index.xml", "/wp-sitemap.xml", "/page-sitemap.xml", "/post-sitemap.xml", "/category-sitemap.xml", "/post_tag-sitemap.xml", "/author-sitemap.xml", "/sitemap.xml"]) {
     if (`${homePrefix}${sitemap}` !== "/sitemap.xml") redirects.push([`${homePrefix}${sitemap}`, "/sitemap.xml"]);
   }
-  // Attachment pages (Yoast's default already redirects these to the file itself).
-  for (const m of inventory.media) {
-    if (!m.link) continue;
-    try {
-      const fileKey = pageKeyForUrl(m.sourceUrl);
-      if (pageKeyForUrl(m.link) !== fileKey) redirects.push([pageKeyForUrl(m.link), fileKey]);
-    } catch {
-      // malformed media link
-    }
-  }
   await Promise.all(redirects.map(([from, to]) => limit(() => putRedirect(job.templateId, from, to))));
 
   // ── Custom plugins' own API endpoints. Readable ones are preserved as data at exactly
@@ -325,49 +418,115 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<void> {
   // submissions are registered so the serve route captures them into Form Submissions.
   const { frozenApis, capturedApis } = await adaptCustomApis(job, install, nodes);
 
-  // ── The full media library, not just what pages reference — nothing in it is lost.
-  let mediaQueued = 0;
-  await Promise.all(
-    inventory.media.map((m) =>
-      limit(async () => {
-        try {
-          const segments = pathSegments(m.sourceUrl);
-          if (new URL(m.sourceUrl).origin !== origin || segments.length === 0) return;
-          if (await enqueueAsset(job.id, segments.join("/"), "media-library")) mediaQueued += 1;
-        } catch {
-          // a media URL on another host (offloaded to a CDN) is left where it is
-        }
-      }),
-    ),
-  );
-
-  if (inventory.pages.length === 0 && inventory.posts.length === 0) {
-    warnings.push("WordPress didn't list any public pages or posts — only pages reachable by links were copied.");
-  }
-
   const counts = emptyCounts();
   counts.pages = planned.size;
-  counts.posts = inventory.posts.length;
-  counts.assets = mediaQueued;
   if (store) counts.products = store.count;
 
   const planState: PlanState = {
     origin,
     homeKey,
     siteName: install.siteName,
-    terms: inventory.terms,
     soft404Hash,
     discoveryRounds: 0,
     extraPages: 0,
     frozenApis,
     capturedApis,
     ...(store ? { wc: store.wc } : {}),
+    // Posts, terms and media are listed next, a page at a time (runIndexing).
+    indexing: { list: "posts", page: 1 },
   };
 
   await Template.patch({ id: job.templateId }).set({ migratedFrom: origin, ...(install.siteName ? { name: install.siteName } : {}) }).go();
   await WpMigrationJob.patch({ templateId: job.templateId, id: job.id })
-    .set({ install, nodes, movedLinks, counts, planState, plugins: inventory.plugins, phase: "POSTS", warnings })
+    .set({ install, nodes, counts, planState, plugins: inventory.plugins, phase: "PLANNING", warnings })
     .go();
+  return "PLANNING";
+}
+
+/**
+ * Lists the site's posts, categories, tags and media library one WordPress page (100 items)
+ * at a time, for as many steps as it takes — 9,000 posts is 90 small reads, never one
+ * enormous one. Each page is saved with the cursor, so a retried step never double-counts.
+ * Post rows hold only what's needed to place and link the post; its content is read when
+ * it's copied (runPostsStep), so nothing big is written in a burst.
+ */
+async function runIndexing(job: JobItem, warnings: string[]): Promise<string> {
+  const plan = job.planState as PlanState;
+  const install = job.install as WpInstall;
+  const counts = { ...emptyCounts(), ...(job.counts as MigrationCounts) };
+  const limit = pLimit(8);
+  const started = Date.now();
+  let cursor = plan.indexing!;
+
+  while (Date.now() - started < STEP_BUDGET_MS) {
+    let page: ApiPage<unknown>;
+    if (cursor.list === "posts") {
+      const res = await fetchPostIndexPage(install.restRoot, cursor.page);
+      await Promise.all(
+        res.items.map((post) =>
+          limit(() =>
+            WpMigrationPage.put({ id: randomUUID(), jobId: job.id, key: `post:${post.id}`, kind: "POST", sourceUrl: post.link, title: post.title, wpId: post.id, status: "PENDING", data: post }).go(),
+          ),
+        ),
+      );
+      counts.posts += res.items.length;
+      page = res;
+    } else if (cursor.list === "categories" || cursor.list === "tags") {
+      const res = await fetchTermsPage(install.restRoot, cursor.list === "categories" ? "category" : "post_tag", cursor.page);
+      // The Plexo category/tag exists from the start, so its old archive URL can redirect now.
+      // One at a time: two names that make the same slug must not race for it.
+      for (const term of res.items) {
+        const { slug } = term.taxonomy === "category" ? await ensureCategory(job.templateId, term.name) : await ensureTag(job.templateId, term.name);
+        await putRedirect(job.templateId, pageKeyForUrl(term.link), `${term.taxonomy === "category" ? "/blog/category" : "/blog/tag"}/${slug}`);
+      }
+      page = res;
+    } else {
+      // The full media library, not just what pages reference — nothing in it is lost.
+      const res = await fetchMediaPage(install.restRoot, cursor.page);
+      const queued = await Promise.all(res.items.map((m) => limit(() => indexMedia(job, plan.origin, m))));
+      counts.assets += queued.filter(Boolean).length;
+      page = res;
+    }
+
+    const listDone = page.items.length === 0 || cursor.page >= page.totalPages;
+    const nextList = INDEX_ORDER[INDEX_ORDER.indexOf(cursor.list) + 1];
+    if (!listDone) cursor = { list: cursor.list, page: cursor.page + 1 };
+    else if (nextList) cursor = { list: nextList, page: 1 };
+    else {
+      // Everything is listed.
+      if (counts.posts > 0) {
+        const { data: blogSite } = await BlogSite.get({ templateId: job.templateId }).go();
+        if (!blogSite) await BlogSite.create({ id: randomUUID(), templateId: job.templateId, enabled: true, title: "Blog", description: install.siteDescription || undefined }).go();
+        else if (!blogSite.enabled) await BlogSite.patch({ templateId: job.templateId }).set({ enabled: true }).go();
+      }
+      if (counts.pages === 0 && counts.posts === 0) {
+        warnings.push("WordPress didn't list any public pages or posts — only pages reachable by links were copied.");
+      }
+      const { indexing: _done, ...rest } = plan;
+      await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ counts, planState: rest, phase: "POSTS", warnings }).go();
+      return "POSTS";
+    }
+    await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ counts, planState: { ...plan, indexing: cursor } }).go();
+  }
+  return "PLANNING";
+}
+
+/** Queues one media-library file for copying, and redirects its WordPress attachment page to the file. */
+async function indexMedia(job: JobItem, origin: string, m: WpMediaEntry): Promise<boolean> {
+  let segments: string[];
+  let fileKey: string;
+  try {
+    segments = pathSegments(m.sourceUrl);
+    fileKey = pageKeyForUrl(m.sourceUrl);
+    if (m.link && pageKeyForUrl(m.link) !== fileKey) await putRedirect(job.templateId, pageKeyForUrl(m.link), fileKey);
+    // A media URL on another host (offloaded to a CDN) is left where it is.
+    if (new URL(m.sourceUrl).origin !== origin || segments.length === 0) return false;
+  } catch (err) {
+    if (err instanceof TypeError || err instanceof URIError) return false; // a malformed media URL
+    throw err;
+  }
+  // A failed save here is a real error, not a file to drop silently.
+  return enqueueAsset(job.id, segments.join("/"), "media-library");
 }
 
 /** Email used for imported comments until the companion plugin supplies the real one (WordPress never publishes commenter emails). */
@@ -417,13 +576,30 @@ async function runPostsStep(job: JobItem, errors: string[], revalidate: Revalida
   const pending = pages.filter((p) => p.kind === "POST" && p.status === "PENDING").slice(0, POSTS_PER_STEP);
   const plan = job.planState as PlanState;
   const counts = { ...emptyCounts(), ...(job.counts as MigrationCounts) };
-  const movedLinks = { ...((job.movedLinks as Record<string, string>) ?? {}) };
+  const movedLinks = movedLinksFor(job, pages);
   const rewriteOrigin = makeOriginRewriter(plan.origin);
   const started = Date.now();
 
-  for (const row of pending) {
-    if (Date.now() - started > STEP_BUDGET_MS) break;
-    const post = row.data as WpPostEntry;
+  // The batch's full posts, in one read. (Older jobs carried each post on its row.)
+  const isFull = (d: unknown): d is WpPostEntry => typeof (d as WpPostEntry | undefined)?.contentHtml === "string";
+  const toFetch = pending.filter((r) => !isFull(r.data) && r.wpId).map((r) => r.wpId!);
+  const fetched = new Map((await fetchPostsByIds((job.install as WpInstall).restRoot, toFetch)).map((p) => [p.id, p]));
+
+  // A few posts at a time (each mostly waits on WordPress for its images), stopping
+  // before the step's time budget runs out; whatever's left is the next step's.
+  let processed = 0;
+  const postLimit = pLimit(POST_CONCURRENCY);
+  await Promise.all(pending.map((row) => postLimit(async () => {
+    if (Date.now() - started > STEP_BUDGET_MS) return;
+    processed += 1;
+    const post = isFull(row.data) ? row.data : fetched.get(row.wpId ?? -1);
+    if (!post) {
+      // Unpublished or deleted on WordPress since planning.
+      errors.push(`Post "${row.title || row.sourceUrl}" wasn't copied — WordPress no longer shows it publicly.`);
+      await WpMigrationPage.patch({ jobId: job.id, key: row.key }).set({ status: "SKIPPED", error: "No longer public on WordPress" }).go();
+      counts.postsFailed += 1;
+      return;
+    }
     try {
       const [categoryIds, tagIds, authorId] = await Promise.all([
         Promise.all(post.categoryNames.map((n) => findOrCreateCategory(job.templateId, n))),
@@ -434,10 +610,7 @@ async function runPostsStep(job: JobItem, errors: string[], revalidate: Revalida
       // links inside the post follow the site to its new host.
       const imageUrls = [post.featuredImageUrl, post.seo.ogImage, ...extractImageUrls(post.contentHtml)].filter((u): u is string => Boolean(u));
       const mediaMap = await rehostMediaUrls(job.templateId, imageUrls, errors);
-      let html = rewriteOrigin(rewriteImageUrls(post.contentHtml, mediaMap));
-      for (const [from, to] of Object.entries(movedLinks)) {
-        html = html.replace(new RegExp(`href=(["'])${from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/?(["'#?])`, "g"), `href=$1${to}$2`);
-      }
+      const html = rewritePostLinks(rewriteOrigin(rewriteImageUrls(post.contentHtml, mediaMap)), movedLinks);
       const contentJson = convertWordPressHtmlToTiptapJson(html);
       const contentHtml = tiptapJsonToHtml(contentJson);
       const excerpt = post.excerptHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/\[&hellip;\]|\[…\]/g, "…").trim() || null;
@@ -470,18 +643,21 @@ async function runPostsStep(job: JobItem, errors: string[], revalidate: Revalida
       await putRedirect(job.templateId, pageKeyForUrl(post.link), newPath);
       await putRedirect(job.templateId, `${plan.homeKey === "/" ? "" : plan.homeKey}/?p=${post.id}`, newPath);
       await WpMigrationPage.patch({ jobId: job.id, key: row.key })
-        .set({ status: "DONE", newPath, blogPostId: saved.id, commentCount: commentsImported, sourceFacts: { title: post.seo.title ?? post.title, metaDescription: post.seo.description, canonical: post.seo.canonical } })
+        // The row keeps the post minus its body: the blog-list matcher needs title, excerpt,
+        // image, date and terms, and the body is already in Plexo.
+        .set({ status: "DONE", newPath, blogPostId: saved.id, commentCount: commentsImported, data: { ...post, contentHtml: "" }, sourceFacts: { title: post.seo.title ?? post.title, metaDescription: post.seo.description, canonical: post.seo.canonical } })
         .go();
       counts.postsDone += 1;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      if (isTransientAwsError(err)) throw err; // retried as a whole step, not marked failed
       errors.push(`Post "${post.title}" couldn't be copied: ${message}`);
       await WpMigrationPage.patch({ jobId: job.id, key: row.key }).set({ status: "FAILED", error: message }).go();
       counts.postsFailed += 1;
     }
-  }
+  })));
 
-  const stillPending = pages.filter((p) => p.kind === "POST" && p.status === "PENDING").length - pending.length;
+  const stillPending = pages.filter((p) => p.kind === "POST" && p.status === "PENDING").length - processed;
   let next = "POSTS";
   if (stillPending <= 0) {
     // Category/tag archives → their Plexo Blog equivalents, now that the terms exist.
@@ -498,7 +674,7 @@ async function runPostsStep(job: JobItem, errors: string[], revalidate: Revalida
     // A store's products move next (before pages, so product links resolve while copying).
     next = plan.wc && !plan.wc.productsFinished ? "PRODUCTS" : "PAGES";
   }
-  await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ counts, movedLinks, phase: next as "POSTS" }).go();
+  await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ counts, phase: next as "POSTS" }).go();
   return next;
 }
 
@@ -556,14 +732,30 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
   const plan = job.planState as PlanState;
   const knownPosts = await loadKnownPosts(job, pages);
   const counts = { ...emptyCounts(), ...(job.counts as MigrationCounts) };
-  const movedLinks = (job.movedLinks as Record<string, string>) ?? {};
+  const movedLinks = movedLinksFor(job, pages);
   const started = Date.now();
 
   for (const row of pending) {
     if (Date.now() - started > STEP_BUDGET_MS) break;
     try {
+      // A page WordPress redirects elsewhere (Redirection, Rank Math…) stays a redirect —
+      // copying wherever it lands would put another site's page at this address.
+      const redirect = row.key === "/" || !row.templateId ? null : await wordpressRedirectTarget(row.sourceUrl);
+      if (redirect) {
+        const target = sameSiteTarget(redirect.target, plan.origin);
+        await Template.patch({ id: row.templateId! })
+          .set({ redirectTo: target, sourceType: "RAW_UPLOAD", compiledHtml: redirectPageHtml(target) })
+          .go();
+        await WpMigrationPage.patch({ jobId: job.id, key: row.key }).set({ status: "DONE", newPath: servedPath(row.key, row.sourceUrl), sourceFacts: { redirect: target } }).go();
+        counts.pagesDone += 1;
+        continue;
+      }
       const res = await migrationFetch(row.sourceUrl, { headers: { Accept: "text/html" } });
-      if (!res.ok) throw new Error(`WordPress answered ${res.status} for this page.`);
+      if (!res.ok) {
+        const firewall = firewallBlockOf(res.status, await res.text().catch(() => ""));
+        if (firewall) throw new FirewallBlockedError(firewall);
+        throw new Error(`WordPress answered ${res.status} for this page.`);
+      }
       const raw = await res.text();
       const path = servedPath(row.key, row.sourceUrl);
       const sourceFacts = extractSourceFacts(raw);
@@ -631,6 +823,7 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
         }
       }
       const role = wpPageRole(raw);
+      html = await slimForStorage(html, pathOf(row.sourceUrl, path), inlineFileSaver(job));
       await Template.patch({ id: row.templateId })
         .set({
           compiledHtml: html,
@@ -667,6 +860,8 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
         .go();
       counts.pagesDone += 1;
     } catch (err) {
+      // Every following page would be refused too: pause and tell the owner what to do.
+      if (err instanceof FirewallBlockedError || isTransientAwsError(err)) throw err;
       const message = err instanceof Error ? err.message : String(err);
       errors.push(`${row.sourceUrl} couldn't be copied: ${message}`);
       await WpMigrationPage.patch({ jobId: job.id, key: row.key }).set({ status: "FAILED", error: message }).go();
@@ -689,7 +884,7 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
       fresh,
       await allPages(job.id),
       {
-        fetchTransformed: (url, path) => fetchTransformedPage(fresh, url, path),
+        fetchTransformed: (url, path) => fetchTransformedPage(fresh, url, path, movedLinksFor(fresh, pages)),
         putRedirect: (fromPath, toPath) => putRedirect(job.templateId, fromPath, toPath),
       },
       errors,
@@ -713,7 +908,7 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
 }
 
 /** Fetches one WordPress page and runs it through the migration's transform (links, forms, donation forms); its files are queued for copying. */
-async function fetchTransformedPage(job: JobItem, url: string, path: string): Promise<string | null> {
+async function fetchTransformedPage(job: JobItem, url: string, path: string, movedLinks: Record<string, string>): Promise<string | null> {
   const plan = job.planState as PlanState;
   const res = await migrationFetch(url, { headers: { Accept: "text/html" } });
   if (!res.ok) return null;
@@ -724,14 +919,15 @@ async function fetchTransformedPage(job: JobItem, url: string, path: string): Pr
     pagePath: path,
     pageTitle: "",
     siteTemplateId: job.templateId,
-    movedLinks: (job.movedLinks as Record<string, string>) ?? {},
+    movedLinks,
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://plexo.charisol.io",
   });
   let html = result.html;
   for (const form of result.donationForms) html = html.split(form.token).join((await ensureMigratedCampaign(job, form)).campaignId);
   const limit = pLimit(10);
   await Promise.all(result.assetPaths.map((segs) => limit(() => enqueueAsset(job.id, segs.join("/"), path))));
-  return html;
+  // Store layouts are saved as their own records — same size limit as a page.
+  return slimForStorage(html, pathOf(url, path), inlineFileSaver(job));
 }
 
 /** The site's migrated posts, newest first, in the shape the live-list matcher needs. */
@@ -831,7 +1027,7 @@ async function buildBlogPresentation(job: JobItem, knownPosts: KnownPost[], erro
           pagePath: sampleRow.newPath ?? "/blog",
           pageTitle: sample.title,
           siteTemplateId: job.templateId,
-          movedLinks: (job.movedLinks as Record<string, string>) ?? {},
+          movedLinks: movedLinksFor(job, pages),
           appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "https://plexo.charisol.io",
         });
         let html = result.html;
@@ -853,7 +1049,8 @@ async function buildBlogPresentation(job: JobItem, knownPosts: KnownPost[], erro
   }
   if (!postHtml && frontHtml) postHtml = shellLayout(frontHtml, "post", blogSite.title ?? "Blog");
 
-  const createLayout = async (name: string, compiledHtml: string) => {
+  const createLayout = async (name: string, html: string, pagePath: string) => {
+    const compiledHtml = await slimForStorage(html, pagePath, inlineFileSaver(job));
     const id = randomUUID();
     await Template.create({
       id,
@@ -870,9 +1067,14 @@ async function buildBlogPresentation(job: JobItem, knownPosts: KnownPost[], erro
     return id;
   };
   const changes: Record<string, unknown> = {};
-  if (listingHtml && !blogSite.listingLayoutTemplateId) changes.listingLayoutTemplateId = await createLayout("Blog listing (from WordPress)", listingHtml);
-  if (postHtml && !blogSite.postLayoutTemplateId) changes.postLayoutTemplateId = await createLayout("Blog post (from WordPress)", postHtml);
+  if (listingHtml && !blogSite.listingLayoutTemplateId) changes.listingLayoutTemplateId = await createLayout("Blog listing (from WordPress)", listingHtml, "/blog/");
+  if (postHtml && !blogSite.postLayoutTemplateId) changes.postLayoutTemplateId = await createLayout("Blog post (from WordPress)", postHtml, "/blog/post/");
   if (blogTitle && (!blogSite.title || blogSite.title === "Blog")) changes.title = blogTitle.slice(0, 120);
+  // The posts page's SEO title and description (Yoast, Rank Math…) become /blog's, so the
+  // blog keeps how it appeared in search results.
+  const postsFacts = postsPage && postsPage !== front ? (postsPage.sourceFacts as { title?: string; metaDescription?: string | null } | undefined) : undefined;
+  if (postsFacts?.title && !blogSite.metaTitle) changes.metaTitle = postsFacts.title.slice(0, 200);
+  if (postsFacts?.metaDescription && !blogSite.description) changes.description = postsFacts.metaDescription.slice(0, 500);
   if (postsPerPage && postsPerPage >= 1 && postsPerPage <= 50 && (blogSite.postsPerPage ?? 10) === 10) changes.postsPerPage = postsPerPage;
   if (hasComments !== null) changes.commentsEnabled = hasComments;
   // "Your homepage displays: latest posts" — the domain root serves the live blog.
@@ -893,6 +1095,7 @@ async function runAssetsStep(job: JobItem): Promise<string> {
   const counts = { ...emptyCounts(), ...(job.counts as MigrationCounts) };
   const started = Date.now();
   const limit = pLimit(ASSET_CONCURRENCY);
+  let throttled = false;
 
   const { data: pending } = await WpMigrationAsset.query
     .primary({ jobId: job.id })
@@ -903,7 +1106,7 @@ async function runAssetsStep(job: JobItem): Promise<string> {
   await Promise.all(
     batch.map((asset) =>
       limit(async () => {
-        if (Date.now() - started > STEP_BUDGET_MS) return;
+        if (Date.now() - started > STEP_BUDGET_MS || throttled) return;
         const segments = asset.path.split("/");
         const owner = resolveAssetOwner(pageKeys, segments);
         if (!owner || !nodes[owner.ownerKey]) {
@@ -913,6 +1116,13 @@ async function runAssetsStep(job: JobItem): Promise<string> {
         }
         const fetched = await fetchSourceAsset(plan.origin, segments);
         const optional = (asset.discoveredFrom ?? "").startsWith(OPTIONAL_PREFIX);
+        if (!fetched.ok && fetched.retryable && (asset.attempts ?? 0) + 1 < MAX_ASSET_ATTEMPTS) {
+          // The host is rate-limiting (WP Engine, Wordfence, a busy shared host): leave it
+          // queued for a later step and ease off for the rest of this one.
+          throttled = true;
+          await WpMigrationAsset.patch({ jobId: job.id, path: asset.path }).set({ attempts: (asset.attempts ?? 0) + 1, error: fetched.reason }).go();
+          return;
+        }
         if (!fetched.ok) {
           // An optional lazy-load candidate that doesn't exist simply isn't part of this site.
           if (optional) {
@@ -946,6 +1156,8 @@ async function runAssetsStep(job: JobItem): Promise<string> {
       }),
     ),
   );
+
+  if (throttled) await new Promise((r) => setTimeout(r, THROTTLE_BACKOFF_MS));
 
   const { data: remaining } = await WpMigrationAsset.query
     .primary({ jobId: job.id })
@@ -1011,6 +1223,13 @@ async function runFinalizing(job: JobItem): Promise<string> {
       const url = `${plan.origin}${key === "/" ? "/" : `${encodeURI(key)}/`}`;
       let ok = false;
       let finalUrl = url;
+      // A link WordPress only redirects (a moved page, a shortcut like /help → WhatsApp)
+      // becomes the same redirect on Plexo, not a copy of wherever it lands.
+      const redirect = await wordpressRedirectTarget(url).catch(() => null);
+      if (redirect) {
+        await putRedirect(job.templateId, key, sameSiteTarget(redirect.target, plan.origin));
+        continue;
+      }
       try {
         let res = await migrationFetch(url, { headers: { Accept: "text/html" } });
         if (res.status === 404) {
@@ -1080,6 +1299,7 @@ async function runFinalizing(job: JobItem): Promise<string> {
   await WpMigrationJob.patch({ templateId: job.templateId, id: job.id })
     .set({ plugins, report, phase: "COMPLETED", finishedAt: new Date().toISOString() })
     .go();
+  await notifyMigrationDone(job, report);
   return "COMPLETED";
 }
 
@@ -1099,7 +1319,8 @@ export async function donationPaymentsReady(templateId: string): Promise<boolean
  * Processes exactly one bounded step of a migration and returns the resulting phase —
  * same atomic-claim contract as lib/siteImport/runJobDynamo.ts's processSiteImportStep.
  */
-export async function processWpMigrationStep(templateId: string, jobId: string, revalidate: RevalidateFn = NOOP_REVALIDATE): Promise<{ done: boolean; phase: string }> {
+/** `busy`: another driver (the open dashboard, or the background) is running a step right now. */
+export async function processWpMigrationStep(templateId: string, jobId: string, revalidate: RevalidateFn = NOOP_REVALIDATE): Promise<{ done: boolean; phase: string; busy?: boolean }> {
   const { data: existing } = await WpMigrationJob.get({ templateId, id: jobId }).go();
   if (!existing) return { done: true, phase: "CANCELLED" };
   const existingPhase = existing.phase ?? "PENDING";
@@ -1115,7 +1336,7 @@ export async function processWpMigrationStep(templateId: string, jobId: string, 
   } catch (err) {
     if (isConditionalCheckFailure(err)) {
       const { data: current } = await WpMigrationJob.get({ templateId, id: jobId }).go();
-      return { done: false, phase: current?.phase ?? "CANCELLED" };
+      return { done: false, phase: current?.phase ?? "CANCELLED", busy: true };
     }
     throw err;
   }
@@ -1130,8 +1351,7 @@ export async function processWpMigrationStep(templateId: string, jobId: string, 
   try {
     let next: string;
     if (phase === "PENDING" || phase === "PLANNING") {
-      await runPlanning(job, warnings);
-      next = "POSTS";
+      next = await runPlanning(job, warnings);
     } else if (phase === "POSTS") {
       next = await runPostsStep(job, errors, revalidate);
     } else if (phase === "PRODUCTS") {
@@ -1145,19 +1365,35 @@ export async function processWpMigrationStep(templateId: string, jobId: string, 
     } else {
       next = phase;
     }
-    await WpMigrationJob.patch({ templateId, id: jobId }).set({ processing: false, lastHeartbeatAt: new Date().toISOString(), errors: errors.slice(-200) }).go();
+    await WpMigrationJob.patch({ templateId, id: jobId })
+      .set({ processing: false, lastHeartbeatAt: new Date().toISOString(), errors: errors.slice(-200), ...(job.transientRetries ? { transientRetries: 0 } : {}) })
+      .go();
     return { done: TERMINAL.has(next), phase: next };
   } catch (err) {
-    errors.push(`${phase === "PLANNING" || phase === "PENDING" ? "Reading your WordPress site" : `The ${phase.toLowerCase()} step`} stopped: ${err instanceof Error ? err.message : String(err)}`);
+    // A throttle or blip: every step is safe to re-run, so try again (after a short
+    // back-off) instead of stopping the owner's migration on something that isn't theirs.
+    const retries = job.transientRetries ?? 0;
+    if (isTransientAwsError(err) && retries < MAX_TRANSIENT_RETRIES) {
+      await new Promise((r) => setTimeout(r, 2000 * (retries + 1)));
+      await WpMigrationJob.patch({ templateId, id: jobId }).set({ processing: false, lastHeartbeatAt: new Date().toISOString(), transientRetries: retries + 1 }).go();
+      return { done: false, phase };
+    }
+    const reason = stepErrorMessage(phase, err);
+    errors.push(reason);
+    // An owner who closed the tab would otherwise never know it's waiting on them.
+    const emailPause = !job.pauseEmailedAt || Date.now() - Date.parse(job.pauseEmailedAt) > PAUSE_EMAIL_EVERY_MS;
     await WpMigrationJob.patch({ templateId, id: jobId })
       .set({
         phase: "PAUSED_ERROR",
         processing: false,
+        transientRetries: 0,
+        ...(emailPause ? { pauseEmailedAt: new Date().toISOString() } : {}),
         errors: errors.slice(-200),
         lastHeartbeatAt: new Date().toISOString(),
         planState: { ...((job.planState as object | undefined) ?? {}), pausedIn: phase === "PENDING" ? "PLANNING" : phase },
       })
       .go();
+    if (emailPause) await notifyMigrationPaused(job, (job.planState as PlanState | undefined)?.siteName ?? "", reason);
     return { done: false, phase: "PAUSED_ERROR" };
   }
 }

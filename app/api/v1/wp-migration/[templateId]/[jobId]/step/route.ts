@@ -4,6 +4,7 @@ import { WpMigrationJob } from "@/lib/db/importEntities";
 import { isValidUuid } from "@/lib/slugUtils";
 import { assertOwnSite, resolveMigrationAccess } from "@/lib/wpMigration/access";
 import { processWpMigrationStep } from "@/lib/wpMigration/runJobDynamo";
+import { continueInBackground } from "@/lib/wpMigration/background";
 
 export const maxDuration = 60;
 
@@ -12,6 +13,8 @@ export const maxDuration = 60;
  * the migration screen is open (the browser loops, not the server — see
  * app/api/v1/site-import/[templateId]/[jobId]/step/route.ts for why). It's also the
  * "Try again" action for a paused migration, which resumes from the step that paused.
+ * With ?handoff=1 (sent as the dashboard tab closes) it runs nothing itself and has the
+ * server carry on in the background straight away.
  */
 export async function POST(
   request: NextRequest,
@@ -26,6 +29,11 @@ export async function POST(
 
   const { data: job } = await WpMigrationJob.get({ templateId, id: jobId }).go();
   if (!job) return NextResponse.json({ error: "Migration not found." }, { status: 404 });
+
+  if (request.nextUrl.searchParams.get("handoff") === "1") {
+    await continueInBackground(templateId, jobId);
+    return NextResponse.json({ handedOff: true }, { status: 202 });
+  }
 
   const result = await processWpMigrationStep(templateId, jobId, revalidateBlogPost);
   return NextResponse.json(result);

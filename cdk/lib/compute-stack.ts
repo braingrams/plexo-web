@@ -326,7 +326,11 @@ export class ComputeStack extends cdk.Stack {
       // populated (via SSM) for ordinary Node-runtime route handlers in the very same
       // Lambda. Setting it directly here is required at `cdk deploy` time anyway
       // (originVerifySecret throws above if unset), so this has no new operational cost.
-      environment: { ...commonEnv, ...tableEnv, ...systemAiEnv, PLEXO_ENV: ssmEnv, PLEXO_ORIGIN_VERIFY_SECRET: originVerifySecret!, CRON_SECRET: cronSecret!, ASSET_VERSION: assetVersion },
+      // PLEXO_SELF_URL: this deployment's own address, for server-to-itself calls (a
+      // WordPress migration handing itself to the next background invocation —
+      // lib/wpMigration/background.ts). NEXT_PUBLIC_APP_URL can't serve: a PR preview reads
+      // staging's value from SSM, which would hand the job to staging's code instead.
+      environment: { ...commonEnv, ...tableEnv, ...systemAiEnv, PLEXO_ENV: ssmEnv, PLEXO_ORIGIN_VERIFY_SECRET: originVerifySecret!, CRON_SECRET: cronSecret!, ASSET_VERSION: assetVersion, ...(appDomain ? { PLEXO_SELF_URL: `https://${appDomain}` } : {}) },
       logGroup: buildLogGroup(this, "ServerFn"),
     });
     assetsBucket.grantReadWrite(serverFn);

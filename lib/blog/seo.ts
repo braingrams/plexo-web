@@ -7,17 +7,20 @@ export function siteOrigin(domain: string): string {
   return `https://${domain}`;
 }
 
-export function listingMetadata(domain: string, blogSite: { title: string; description: string | null }): Metadata {
+// Titles are `absolute`: these pages belong to the customer's site, so the dashboard's
+// "%s | Plexo" title template (app/layout.tsx) must never be appended to them.
+
+export function listingMetadata(domain: string, blogSite: { title: string; description: string | null; metaTitle?: string | null }): Metadata {
   return {
     metadataBase: new URL(siteOrigin(domain)),
-    title: blogSite.title,
+    title: { absolute: blogSite.metaTitle || blogSite.title },
     description: blogSite.description ?? undefined,
     alternates: {
       canonical: "/blog",
       types: { "application/rss+xml": "/blog/feed.xml" },
     },
     openGraph: {
-      title: blogSite.title,
+      title: blogSite.metaTitle || blogSite.title,
       description: blogSite.description ?? undefined,
       url: "/blog",
       type: "website",
@@ -29,7 +32,7 @@ export function archiveMetadata(domain: string, blogSiteTitle: string, archiveLa
   const title = `${archiveLabel} — ${blogSiteTitle}`;
   return {
     metadataBase: new URL(siteOrigin(domain)),
-    title,
+    title: { absolute: title },
     alternates: { canonical: path },
     openGraph: { title, url: path, type: "website" },
   };
@@ -46,7 +49,7 @@ export function postMetadata(domain: string, post: BlogPostDetail): Metadata {
 
   return {
     metadataBase: new URL(siteOrigin(domain)),
-    title,
+    title: { absolute: title },
     description,
     alternates: { canonical: path },
     robots: post.noindex ? { index: false, follow: false } : undefined,

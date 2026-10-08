@@ -171,6 +171,67 @@ const CATALOG: Record<string, CatalogEntry> = {
   akismet: { name: "Akismet", outcome: "NOT_NEEDED", explanation: "Plexo Forms and comments have spam protection built in." },
   wordfence: { name: "Wordfence", outcome: "NOT_NEEDED", explanation: "WordPress-specific security — Plexo hosting isn't exposed to WordPress attacks." },
   "classic-editor": { name: "Classic Editor", outcome: "NOT_NEEDED", explanation: "Editor-only setting — nothing to move." },
+  "cookie-law-info": {
+    name: "CookieYes cookie banner",
+    outcome: "PRESERVED",
+    explanation: "Your cookie-consent banner was copied and still shows and remembers each visitor's choice. Its consent log was kept on WordPress — if you need that record, export it from CookieYes before deleting WordPress.",
+  },
+  "contact-forms-anti-spam": { name: "Maspik anti-spam", outcome: "NOT_NEEDED", explanation: "Plexo Forms block spam on their own." },
+  pixelyoursite: {
+    name: "PixelYourSite",
+    outcome: "PRESERVED",
+    explanation: "Your Meta/Facebook pixel and other tracking tags were copied with your pages and keep reporting.",
+  },
+  "hello-elementor": { name: "Hello Elementor theme", outcome: "NOT_NEEDED", explanation: "The theme's setup helper — the theme's look was copied with your pages." },
+  redirection: {
+    name: "Redirection",
+    outcome: "NATIVE",
+    explanation: "Redirects your pages link to were recreated on Plexo. Redirects nothing links to can't be seen from outside WordPress — re-add any you still need in your site's Redirects settings.",
+  },
+  "wp-engine": { name: "WP Engine hosting tools", outcome: "NOT_NEEDED", explanation: "Your old host's tools — not needed on Plexo." },
+  "custom-post-type-ui": {
+    name: "Custom Post Type UI",
+    outcome: "PRESERVED",
+    explanation: "Content in your custom post types that your site links to was copied as pages, at the same addresses.",
+  },
+  "advanced-access-manager": {
+    name: "Advanced Access Manager",
+    outcome: "NOT_NEEDED",
+    explanation: "Only pages anyone could visit were copied. Who can edit your site is set with Plexo's team roles.",
+  },
+};
+
+// A plugin's REST namespaces share its prefix but come in many versions and sub-routes
+// (rankmath/v1/ai-visibility, pys-facebook/v1…) — matched by their first segment.
+const NAMESPACE_PREFIX_TO_SLUG: Record<string, string | null> = {
+  rankmath: "seo-by-rank-math",
+  yoast: "wordpress-seo",
+  aioseo: "all-in-one-seo-pack",
+  elementor: "elementor",
+  "elementor-pro": "elementor-pro",
+  "elementor-ai": "elementor-ai",
+  "elementor-one": "elementor-one",
+  "elementor-hello-elementor": "hello-elementor",
+  cky: "cookie-law-info",
+  maspik: "contact-forms-anti-spam",
+  pys: "pixelyoursite",
+  "pys-facebook": "pixelyoursite",
+  "pys-openai": "pixelyoursite",
+  "pys-profile": "pixelyoursite",
+  "pys-pinterest": "pixelyoursite",
+  "pys-google": "pixelyoursite",
+  redirection: "redirection",
+  wpe: "wp-engine",
+  wpe_sign_on_plugin: "wp-engine",
+  cptui: "custom-post-type-ui",
+  aam: "advanced-access-manager",
+  "wp-rocket": "wp-rocket",
+  litespeed: "litespeed-cache",
+  jetpack: "jetpack",
+  akismet: "akismet",
+  wordfence: "wordfence",
+  forminator: "forminator",
+  "contact-form-7": "contact-form-7",
 };
 
 // REST namespaces are the most reliable public signal of an active plugin, but they don't
@@ -220,6 +281,8 @@ export function pluginSlugForNamespace(namespace: string): string | null {
   if (namespace in NAMESPACE_TO_SLUG) return NAMESPACE_TO_SLUG[namespace];
   if (namespace.startsWith("wp/") || namespace.startsWith("wp-")) return null;
   if (namespace.startsWith("elementor-mcp-composer")) return "elementor-mcp-composer";
+  const prefix = namespace.split("/")[0];
+  if (prefix in NAMESPACE_PREFIX_TO_SLUG) return NAMESPACE_PREFIX_TO_SLUG[prefix];
   // WooCommerce registers many namespaces (wc/v1–v3, wc/store, wc-admin, wc-analytics,
   // wc-telemetry, wccom-site, …) and GiveWP several (give-api, givewp, give/v1): each is
   // the one plugin, not a separate unknown one.

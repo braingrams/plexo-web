@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { estimateMigrationSeconds, formatDuration } from "@/lib/wpMigration/estimate";
 
 // "Move from WordPress": the whole owner-facing flow in one screen — find the site,
 // show exactly what will move (and what happens to each plugin) before anything is
@@ -48,6 +49,8 @@ interface JobStatus {
   phase: string;
   pausedIn?: string | null;
   counts: Counts | null;
+  /** Server's estimate of the time left; null while the site's size is still being read. */
+  estimatedSecondsLeft?: number | null;
   report: Report | null;
   errors: string[];
   install?: { siteName?: string; origin?: string };
@@ -612,8 +615,10 @@ export function WordPressMigrationClient() {
           const stepRes = await fetch(`/api/v1/wp-migration/${templateId}/${id}/step`, { method: "POST" });
           const current = await refresh(templateId, id);
           if (!stepRes.ok || !current) break;
-          const step = (await stepRes.json()) as { done: boolean; phase: string };
+          const step = (await stepRes.json()) as { done: boolean; phase: string; busy?: boolean };
           if (step.done || step.phase === "PAUSED_ERROR" || current.phase === "COMPLETED") break;
+          // The server is already working on it in the background — just watch.
+          if (step.busy) await new Promise((r) => setTimeout(r, 5000));
         }
       } finally {
         loopRef.current = false;
@@ -638,6 +643,16 @@ export function WordPressMigrationClient() {
       })
       .catch(() => {});
   }, [jobId, siteId, refresh, runLoop]);
+
+  // Closing the tab hands the migration to the server straight away (rather than waiting
+  // for the scheduled check), so it keeps going at full speed.
+  const running = Boolean(job && !["COMPLETED", "FAILED", "CANCELLED", "PAUSED_ERROR"].includes(job.phase));
+  useEffect(() => {
+    if (!running || !job) return;
+    const handOff = () => navigator.sendBeacon(`/api/v1/wp-migration/${job.templateId}/${job.id}/step?handoff=1`);
+    window.addEventListener("pagehide", handOff);
+    return () => window.removeEventListener("pagehide", handOff);
+  }, [running, job?.templateId, job?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (job?.report && !subdomain) setSubdomain(slugify(job.report.source.siteName || job.report.source.origin));
@@ -674,7 +689,7 @@ export function WordPressMigrationClient() {
       const res = await fetch("/api/v1/wp-migration", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceUrl: preview.homeUrl, ownershipAttested: true, acceptAup: aup || undefined }),
+        body: JSON.stringify({ sourceUrl: preview.homeUrl, ownershipAttested: true, acceptAup: aup || undefined, drivenByDashboard: true }),
       });
       const data = await res.json();
       if (res.status === 403 && data.requiresAupAcceptance) {
@@ -738,9 +753,18 @@ export function WordPressMigrationClient() {
           <div>
             <h2 style={{ margin: "0 0 4px", fontSize: "18px", fontWeight: 700 }}>Moving {siteName} to Plexo</h2>
             <p style={muted}>
-              From {sourceHost}. Your WordPress site stays exactly as it is — nothing there is changed. You can close this tab; we&rsquo;ll keep going and the
-              report will be here when you come back.
+              From {sourceHost}. Your WordPress site stays exactly as it is — nothing there is changed.
             </p>
+            {!paused && !failed && (
+              <p style={{ ...muted, marginTop: 8, color: "var(--text-main)" }}>
+                {typeof job.estimatedSecondsLeft === "number" ? (
+                  <><strong>{capitalize(formatDuration(job.estimatedSecondsLeft))} left.</strong>{" "}</>
+                ) : (
+                  <><strong>Working out how big your site is…</strong>{" "}</>
+                )}
+                You can close this tab — we&rsquo;ll keep going and email you when it&rsquo;s done. The report will be here when you come back.
+              </p>
+            )}
           </div>
           <div style={{ ...card, display: "flex", flexDirection: "column", gap: 12 }}>
             {PHASE_STEPS.map((s, i) => {
@@ -1031,6 +1055,10 @@ export function WordPressMigrationClient() {
                 </span>
               </label>
             )}
+            <p style={{ ...muted, fontSize: "12.5px" }}>
+              Moving this site takes {formatDuration(estimateMigrationSeconds({ pages: preview.counts.pages, posts: preview.counts.posts, media: preview.counts.media }))}.
+              You don&rsquo;t need to keep this page open — we&rsquo;ll email you when it&rsquo;s done.
+            </p>
             <div>
               <button type="button" style={primaryButton(owns && (!needsAup || aup) && !starting)} disabled={!owns || (needsAup && !aup) || starting} onClick={() => void handleStart()}>
                 {starting ? "Starting…" : `Move ${preview.siteName || "my site"} to Plexo`}
@@ -1041,4 +1069,8 @@ export function WordPressMigrationClient() {
       )}
     </div>
   );
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }

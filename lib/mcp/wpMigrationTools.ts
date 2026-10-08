@@ -8,10 +8,12 @@ import { MIGRATION_PLAN_MESSAGE, type MigrationAccess } from "@/lib/wpMigration/
 import { discoverWordPressInstall } from "@/lib/wpMigration/discover";
 import { previewInstall } from "@/lib/wpMigration/inventory";
 import { startWordPressMigration } from "@/lib/wpMigration/startMigration";
+import { continueInBackground } from "@/lib/wpMigration/background";
 import { donationPaymentIssue, donationPaymentsReady, processWpMigrationStep } from "@/lib/wpMigration/runJobDynamo";
 import { analyzeDomain, plexoRoutingEndpoint, verifyLive, type CutoverPlan } from "@/lib/wpMigration/cutover";
 import { checkConnector, createConnector, revealConnectorCode, runExtrasStep, type ConnectorState } from "@/lib/wpMigration/connector";
 import { refreshReport, type MigrationReport } from "@/lib/wpMigration/report";
+import { estimateMigrationSeconds, estimateSecondsLeft, formatDuration, type EstimateCounts } from "@/lib/wpMigration/estimate";
 
 type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
 
@@ -39,7 +41,7 @@ export const WP_MIGRATION_MCP_TOOLS = [
 
 Requires the owner's explicit confirmation that they own the site (ownershipConfirmed: true) — ask them, never assume. If their account hasn't accepted Plexo's Acceptable Use Policy yet, the call fails with requiresAupAcceptance; ask them to read /legal/acceptable-use and retry with acceptAcceptableUsePolicy: true only if they agree.
 
-Returns templateId + jobId. Then call get_wordpress_migration repeatedly (each call advances the migration) until phase is COMPLETED.`,
+Returns templateId + jobId. The migration then runs on Plexo's servers by itself — a small site takes minutes, a blog with thousands of posts can take hours — and the owner is emailed when it's done (or if it pauses). Tell the owner the estimated time (preview_wordpress_migration's estimatedDuration) and that they can come back later; check progress with get_wordpress_migration.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -52,7 +54,7 @@ Returns templateId + jobId. Then call get_wordpress_migration repeatedly (each c
   },
   {
     name: "get_wordpress_migration",
-    description: `Advances a WordPress migration by one step and returns its progress — call it repeatedly until phase is COMPLETED (or PAUSED_ERROR, in which case calling again retries from where it stopped). When COMPLETED, returns the report: what was copied, SEO comparison, what happened to each plugin, and a cutover checklist. Items with status "blocked" (e.g. connecting payments for a donation form) must be done before the owner points their domain at Plexo; tell the owner about them plainly. Omit jobId to get the organization's most recent migration.`,
+    description: `Returns a WordPress migration's progress and estimated time left (it runs on its own; each call also nudges it along). Check back occasionally rather than polling in a tight loop — the owner is emailed when it finishes. If phase is PAUSED_ERROR, calling again retries from where it stopped. When COMPLETED, returns the report: what was copied, SEO comparison, what happened to each plugin, and a cutover checklist. Items with status "blocked" (e.g. connecting payments for a donation form) must be done before the owner points their domain at Plexo; tell the owner about them plainly. Omit jobId to get the organization's most recent migration.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -113,7 +115,8 @@ export async function handleWpMigrationTool(toolName: string, args: any, resolve
       accessFor(resolved, "create");
       if (typeof args.url !== "string" || !args.url.trim()) throw new Error("url is required.");
       const install = await discoverWordPressInstall(args.url);
-      return { preview: await previewInstall(install) };
+      const preview = await previewInstall(install);
+      return { preview, estimatedDuration: formatDuration(estimateMigrationSeconds(preview.counts)) };
     }
 
     case "start_wordpress_migration": {
@@ -126,13 +129,15 @@ export async function handleWpMigrationTool(toolName: string, args: any, resolve
       if (!result.ok) {
         return { started: false, error: result.error, requiresAupAcceptance: result.requiresAupAcceptance ?? false, existingMigration: result.existing ?? null };
       }
+      // Runs on the server from here — an assistant doesn't drive it step by step.
+      await continueInBackground(result.templateId, result.jobId);
       return {
         started: true,
         templateId: result.templateId,
         jobId: result.jobId,
         siteName: result.siteName,
         dashboardUrl: `${baseAppUrl}/dashboard/migrate/wordpress?site=${result.templateId}&job=${result.jobId}`,
-        next: "Call get_wordpress_migration with this templateId and jobId until phase is COMPLETED.",
+        next: "It now runs on Plexo's servers by itself — the owner is emailed when it's done (and if it ever pauses). Call get_wordpress_migration to check progress and the estimated time left; a big blog can take hours, so tell the owner they can come back later.",
       };
     }
 
@@ -179,8 +184,14 @@ export async function handleWpMigrationTool(toolName: string, args: any, resolve
         jobId,
         dashboardUrl,
         counts: job.counts ?? null,
+        estimatedTimeLeft: (() => {
+          const seconds = estimateSecondsLeft({ phase: job.phase ?? "PENDING", counts: (job.counts as EstimateCounts | undefined) ?? null, startedAt: job.startedAt });
+          return seconds === null ? "still reading the WordPress site to work out its size" : formatDuration(seconds);
+        })(),
         lastError: job.phase === "PAUSED_ERROR" && Array.isArray(job.errors) ? (job.errors as string[]).slice(-1)[0] : undefined,
-        next: job.phase === "PAUSED_ERROR" ? "Call get_wordpress_migration again to retry from where it stopped." : "Call get_wordpress_migration again to continue.",
+        next: job.phase === "PAUSED_ERROR"
+          ? "Call get_wordpress_migration again to retry from where it stopped."
+          : "It keeps running by itself and the owner is emailed when it's done — check back later with get_wordpress_migration rather than polling continuously.",
       };
     }
 

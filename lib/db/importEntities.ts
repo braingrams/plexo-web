@@ -265,6 +265,10 @@ export const WpMigrationJob = new Entity(
       counts: { type: "any" },
       /** Working state carried between phases — see lib/wpMigration/runJobDynamo.ts's PlanState. */
       planState: { type: "any" },
+      /** Steps in a row that hit a temporary AWS error (throttling, a timeout) and were retried rather than paused. */
+      transientRetries: { type: "number" },
+      /** When the owner was last emailed that this migration paused (at most every few hours). */
+      pauseEmailedAt: { type: "string" },
       /** DetectedPlugin[] — what happened to each WordPress plugin. */
       plugins: { type: "any" },
       /** Final verification report, written by the FINALIZING phase. */
@@ -369,6 +373,8 @@ export const WpMigrationAsset = new Entity(
       status: { type: ["PENDING", "DONE", "FAILED", "SKIPPED"] as const, default: "PENDING" },
       /** Where it was first referenced — a page key, a stylesheet path, or "media-library". */
       discoveredFrom: { type: "string" },
+      /** Downloads tried while WordPress was throttling or busy; the file stays queued until MAX_ASSET_ATTEMPTS. */
+      attempts: { type: "number" },
       ownerTemplateId: { type: "string" },
       relPath: { type: "string" },
       contentType: { type: "string" },

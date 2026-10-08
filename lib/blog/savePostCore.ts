@@ -179,7 +179,9 @@ export async function createBlogPost(templateId: string, input: SavePostInput, r
     authorId: input.authorId || undefined,
     externalId: input.externalId || undefined,
   }).go();
-  const { data: post } = await BlogPost.get({ templateId, slug }).go();
+  // Strongly consistent: a default (eventually consistent) read straight after the write can
+  // miss it — seen copying a WordPress blog several posts at a time.
+  const { data: post } = await BlogPost.get({ templateId, slug }).go({ consistent: true });
   if (!post) throw new Error(`BlogPost ${id} vanished immediately after being created`);
 
   await syncCategoriesAndTags(templateId, post.id, input.categoryIds, input.tagIds);
@@ -294,7 +296,7 @@ export async function updateBlogPost(templateId: string, postId: string, input: 
 
   await syncCategoriesAndTags(templateId, existing.id, input.categoryIds, input.tagIds);
 
-  const { data: post } = await BlogPost.get({ templateId, slug: finalSlug }).go();
+  const { data: post } = await BlogPost.get({ templateId, slug: finalSlug }).go({ consistent: true });
   if (!post) throw new Error(`BlogPost ${postId} vanished immediately after being updated`);
 
   const { categorySlugs, tagSlugs, authorSlug } = await slugsForRevalidate(templateId, post.id, post.authorId);

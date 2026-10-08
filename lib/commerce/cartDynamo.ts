@@ -47,7 +47,7 @@ export async function createCart(templateId: string, organizationId: string) {
   const token = randomBytes(24).toString("hex");
   const id = randomUUID();
   await CommerceCart.create({ id, templateId, organizationId, cartToken: token, status: "OPEN" }).go();
-  const { data: cart } = await CommerceCart.get({ templateId, id }).go();
+  const { data: cart } = await CommerceCart.get({ templateId, id }).go({ consistent: true });
   if (!cart) throw new Error(`CommerceCart ${id} vanished immediately after being created`);
   return cart;
 }

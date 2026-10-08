@@ -240,6 +240,8 @@ const PLUGIN_HIDDEN_FIELD_RE = /^(_wpnonce|.*_nonce|nonce|_wp_http_referer|_wp_o
 // site is on Plexo. Matched against the action's path after origin rewriting.
 const WORDPRESS_ENDPOINT_RE = /\/wp-admin\/admin-(post|ajax)\.php$|\/wp-json\/|\/wp-comments-post\.php$|\/wp-login\.php$|[?&]rest_route=/i;
 
+const CAPTCHA_SELECTOR = ".g-recaptcha, .elementor-g-recaptcha, .wpcf7-recaptcha, .wpforms-recaptcha-container, .forminator-g-recaptcha, .cf-turnstile, .h-captcha, .elementor-field-type-recaptcha, .elementor-field-type-recaptcha_v3";
+
 const PAYMENT_FORM_SELECTOR = "form.wpf_form, form[data-wpf_form_id], form.give-form, form.woocommerce-cart-form, form.checkout.woocommerce-checkout";
 
 function slugify(s: string): string {
@@ -294,6 +296,14 @@ function rewireOneForm($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>, ct
   form.removeAttr("novalidate");
   form.removeAttr("onsubmit");
   form.removeAttr("data-forminator-render");
+  // A captcha checks submissions on WordPress's side, which Plexo doesn't do — kept, it'd be
+  // a box that does nothing (or Google's "invalid domain for site key" on a new address).
+  // Plexo Forms' honeypot (below) does the spam-blocking instead.
+  form.find(CAPTCHA_SELECTOR).each((_, el) => {
+    const widget = $(el);
+    const group = widget.closest(".elementor-field-group, .wpforms-field, .forminator-row, p");
+    (group.length > 0 && group.closest("form").is(form) && group.find("input:not([type=hidden]), select, textarea").length === 0 ? group : widget).remove();
+  });
   form.removeClass("forminator_ajax");
   const style = (form.attr("style") || "").replace(/display\s*:\s*none\s*;?/gi, "").trim();
   if (style) form.attr("style", style);
@@ -492,6 +502,9 @@ function rewireForms($: cheerio.CheerioAPI, ctx: TransformContext): { forms: Mig
   for (const { plugin, selector } of PLUGIN_FORM_SELECTORS) {
     $(selector).each((_, el) => {
       if (handled.has(el)) return;
+      // A password field means a login form (Elementor's login widget is also a
+      // .elementor-form) — never a form whose answers get stored and emailed. Handled below.
+      if (isLoginForm($(el))) return;
       handled.add(el);
       index += 1;
       pluginsSeen.add(plugin);
@@ -513,7 +526,8 @@ function rewireForms($: cheerio.CheerioAPI, ctx: TransformContext): { forms: Mig
       form.append(`<input type="hidden" name="sites" value="${host}">`);
       return;
     }
-    if (isLoginForm(form) && (postsToWordPress(form) || /wp-login|log-?in|portal/i.test(form.attr("action") || "") || form.find('input[name="log"], input[name="pwd"]').length > 0)) {
+    // Any form asking for a password: typed credentials must never be submitted anywhere.
+    if (isLoginForm(form)) {
       handled.add(el);
       loginForms += 1;
       // Never send typed credentials anywhere: strip every field's name so nothing is

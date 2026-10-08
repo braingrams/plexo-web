@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   // as an optional attribute instead, so it's normalized here rather than passed straight
   // through, same "construct the exact shape" adapter every ported pub page in this
   // migration uses at the boundary with a not-yet-ported shared render helper.
-  return listingMetadata(domain, { title: site.blogSite.title ?? "Blog", description: site.blogSite.description ?? null });
+  return listingMetadata(domain, { title: site.blogSite.title ?? "Blog", description: site.blogSite.description ?? null, metaTitle: site.blogSite.metaTitle ?? null });
 }
 
 export default async function BlogIndexPage({ params }: { params: Promise<Params> }) {
