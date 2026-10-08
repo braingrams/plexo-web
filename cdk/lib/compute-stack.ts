@@ -133,6 +133,20 @@ if (!authSecret) throw new Error("AUTH_SECRET is required for SolChatFn's sessio
 // with System AI not yet configured should just make that one feature unavailable
 // (resolveSystemProvider() already throws a clean, caught "not configured" error at
 // request time), not fail the whole deploy the way a missing auth/security secret would.
+// The app's own URL and the published-sites domain. Next.js bakes NEXT_PUBLIC_* values into
+// serverFn's bundle at build time; SolChatFn is bundled separately (NodejsFunction) and gets
+// them here instead. Without NEXT_PUBLIC_PAGES_DOMAIN, SOL's publish tools built
+// "careconnect.localhost" instead of "careconnect.plexopages.com" (server/pagesDomain.ts's
+// local-dev fallback) — and told the person their page was live at an address that 404'd.
+const publicUrlEnv: Record<string, string> = {};
+for (const key of ["NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_PAGES_DOMAIN"]) {
+  const value = process.env[key];
+  if (value) publicUrlEnv[key] = value;
+}
+if (isProd && !publicUrlEnv.NEXT_PUBLIC_PAGES_DOMAIN) {
+  throw new Error("NEXT_PUBLIC_PAGES_DOMAIN is required to deploy production (SOL publishes pages under it).");
+}
+
 const systemAiEnv: Record<string, string> = {};
 for (const key of ["SYSTEM_AI_PROVIDER", "SYSTEM_AI_KEY_ANTHROPIC_CLAUDE", "SYSTEM_AI_KEY_OPENAI", "SYSTEM_AI_KEY_GOOGLE_GEMINI"]) {
   const value = process.env[key];
@@ -580,6 +594,7 @@ export class ComputeStack extends cdk.Stack {
         // AI page generation also streams from this function (api/v1/ai/stream/*, see the
         // CloudFront behavior below) and runs on Plexo's own AI the same way serverFn does.
         ...systemAiEnv,
+        ...publicUrlEnv,
       },
       logGroup: buildLogGroup(this, "SolChatFn"),
     });
