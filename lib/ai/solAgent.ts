@@ -162,6 +162,50 @@ function buildToolResultBlock(toolUseId: string, output: unknown, isError: boole
   };
 }
 
+const ANSWERED_IN_CHAT = "The user didn't use the buttons — they answered in their own words in the message that follows.";
+const SUPERSEDED_BY_MESSAGE = "Not done: the user sent a new message instead of confirming this. Don't do it unless they ask for it again.";
+
+/**
+ * Makes a history the Messages API will accept: every tool_use answered by a tool_result in
+ * the very next message, and no tool_result without its tool_use. Two real ways it breaks:
+ * the person replies in their own words while SOL's question (or a confirmation) is still
+ * open — the open tool_use then has no result, and every later turn of that chat failed with
+ * a 400 — and the 40-message window starting just after a tool_use, leaving its results
+ * orphaned. An unanswered question takes the reply that follows as its answer; an
+ * unconfirmed action counts as not done.
+ */
+export function pairToolCalls(history: HistoryEntry[]): HistoryEntry[] {
+  const toolUses = (entry: HistoryEntry | undefined): any[] =>
+    entry?.role === "assistant" && Array.isArray(entry.content) ? entry.content.filter((b: any) => b?.type === "tool_use") : [];
+  const asBlocks = (content: unknown): any[] => (Array.isArray(content) ? content : [{ type: "text", text: String(content ?? "") }]);
+
+  const entries = [...history];
+  const out: HistoryEntry[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    if (entry.role === "user") {
+      const prev = out[out.length - 1];
+      const answerable = new Set(toolUses(prev).map((b) => b.id));
+      const content = asBlocks(entry.content).filter((b: any) => b?.type !== "tool_result" || answerable.has(b.tool_use_id));
+      if (content.length > 0) out.push({ ...entry, content });
+      continue;
+    }
+    if (out.length === 0) continue; // the conversation sent to the model must start with the user
+    out.push(entry);
+    const uses = toolUses(entry);
+    const next = entries[i + 1];
+    if (uses.length === 0 || !next) continue; // nothing to answer, or the pause still open right now
+    const answered = new Set(next.role === "user" ? asBlocks(next.content).filter((b: any) => b?.type === "tool_result").map((b: any) => b.tool_use_id) : []);
+    const missing = uses
+      .filter((b) => !answered.has(b.id))
+      .map((b) => (b.name === ASK_USER_QUESTION_TOOL_NAME ? buildToolResultBlock(b.id, ANSWERED_IN_CHAT, false) : buildToolResultBlock(b.id, SUPERSEDED_BY_MESSAGE, true)));
+    if (missing.length === 0) continue;
+    if (next.role === "user") entries[i + 1] = { ...next, content: [...missing, ...asBlocks(next.content)] };
+    else entries.splice(i + 1, 0, { role: "user", content: missing });
+  }
+  return out;
+}
+
 /** Renders the user's answers back as plain text for the model — the same "replay
  * verbatim, keep it human-readable" spirit as every other tool_result in this file. */
 function formatAnswersForModel(answers: AskUserAnswer[]): string {
@@ -245,7 +289,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       model,
       apiKey: ctx.apiKey,
       systemPrompt,
-      conversationHistory: await resolveAttachments(ctx.history),
+      conversationHistory: await resolveAttachments(pairToolCalls(ctx.history)),
       tools,
       maxTokens: MAX_TOKENS.agent_chat,
       onTextDelta: ctx.onTextDelta,
@@ -353,6 +397,17 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
 export async function runAgentTurn(deps: AgentTurnDeps): Promise<RunAgentTurnResult> {
   const recent = await loadRecentMessages(deps.conversationId);
   const history = recent.map(toHistoryEntry);
+
+  // A question or confirmation still open when a new message arrives is closed by it: the
+  // reply answers the question in the person's own words, an unconfirmed action stays
+  // undone (pairToolCalls tells the model which). Closed here too, so it isn't shown as
+  // waiting again when the chat is reopened.
+  for (const open of recent.filter((m) => m.role === "assistant" && m.confirmationState === "PENDING")) {
+    const asked = Array.isArray(open.content) && open.content.some((b: any) => b?.type === "tool_use" && b.name === ASK_USER_QUESTION_TOOL_NAME);
+    await SolMessage.patch({ conversationId: deps.conversationId, createdAt: open.createdAt, id: open.id })
+      .set({ confirmationState: asked ? "CONFIRMED" : "DECLINED" })
+      .go();
+  }
 
   await SolMessage.create({
     id: randomUUID(),
