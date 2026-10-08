@@ -954,7 +954,7 @@ export async function POST(
 
   const action = new URL(request.url).searchParams.get("action");
   const formName = isCaptureRoute ? humanizeRoute(path) : `Website form${action ? ` (${action.replace(/[-_]+/g, " ")})` : ""}`;
-  await recordFormSubmission({ templateId, organizationId: siteResult.published.organization.id, formName, fields, submitterIp: clientIp(request) });
+  await recordFormSubmission({ templateId, organizationId: siteResult.published.organization.id, formName, fields, submitterIp: clientIp(request), siteHost: decodeURIComponent(domain) });
 
   const message = "Thank you — your submission has been received.";
   // Covers the response shapes WordPress plugin JavaScript commonly checks.

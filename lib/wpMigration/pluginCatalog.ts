@@ -186,7 +186,7 @@ const CATALOG: Record<string, CatalogEntry> = {
   redirection: {
     name: "Redirection",
     outcome: "NATIVE",
-    explanation: "Redirects your pages link to were recreated on Plexo. Redirects nothing links to can't be seen from outside WordPress — re-add any you still need in your site's Redirects settings.",
+    explanation: "Redirects your pages link to were recreated on Plexo. To bring every rule — including ones nothing links to — connect the Plexo Migrator plugin below; any wildcard rules are listed for you to re-add.",
   },
   "wp-engine": { name: "WP Engine hosting tools", outcome: "NOT_NEEDED", explanation: "Your old host's tools — not needed on Plexo." },
   "custom-post-type-ui": {

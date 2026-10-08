@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireSiteLayoutAccess } from "@/lib/siteLayoutDynamo";
 import { PageContainer } from "../../../_components/PageContainer";
 import { FormSubmissionsClient } from "./FormSubmissionsClient";
+import { FormDestinationsClient } from "./FormDestinationsClient";
 
 function IconArrowLeft() {
   return (
@@ -34,6 +35,7 @@ export default async function FormSubmissionsPage({ params }: { params: Promise<
         </p>
       </div>
 
+      <FormDestinationsClient templateId={id} />
       <FormSubmissionsClient templateId={id} />
     </PageContainer>
   );

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
+import { FormSettings } from "@/lib/db/opsEntities";
 
 /**
  * Receives a real, no-JS browser form submission from a form_container's own <form
@@ -98,8 +99,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
   }
 
-  await recordFormSubmission({ templateId, organizationId: organization.id, formName, fields, submitterIp: clientIp(request) });
+  await recordFormSubmission({ templateId, organizationId: organization.id, formName, fields, submitterIp: clientIp(request), siteHost: hostname });
 
+  // A thank-you page set for this form (e.g. carried over from WordPress) wins over the
+  // default of showing the confirmation on the same page.
+  const { data: formSettings } = await FormSettings.get({ templateId, formName }).go();
+  const thankYou = formSettings?.redirectUrl;
+  if (thankYou && (thankYou.startsWith("/") || /^https:\/\//i.test(thankYou))) {
+    return NextResponse.redirect(new URL(thankYou, request.url), { status: 303 });
+  }
   return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
 }
 

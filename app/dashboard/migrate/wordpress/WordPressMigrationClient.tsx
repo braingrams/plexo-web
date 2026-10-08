@@ -180,8 +180,11 @@ interface ExtrasView {
     coupons?: number;
     deliveryMethods?: number;
     orders?: number;
+    formActions?: number;
   };
   storeNotes?: string[];
+  redirectPatterns?: { from: string; to: string; kind: string; plugin: string }[];
+  formNotes?: { form: string; note: string }[];
   team: { name: string; email: string; roles: string[] }[];
   unmoved: { table: string; rows: number }[];
   error?: string;
@@ -335,6 +338,7 @@ function PrivateDataCard({ templateId, jobId }: { templateId: string; jobId: str
               extras.counts.deliveryMethods && `${extras.counts.deliveryMethods} delivery options`,
               extras.counts.digitalProducts && `${extras.counts.digitalProducts} downloads`,
               extras.counts.stockUpdated && `exact stock for ${extras.counts.stockUpdated} products`,
+              extras.counts.formActions && `what ${extras.counts.formActions} form${extras.counts.formActions === 1 ? "" : "s"} did after a submission (webhooks, thank-you pages, mailing lists)`,
             ].filter(Boolean).join(", ") || "everything"}. Form history is in Form Submissions; donations, orders, coupons and delivery are in Commerce.
           </p>
           {extras.storeNotes && extras.storeNotes.length > 0 && (
@@ -343,6 +347,30 @@ function PrivateDataCard({ templateId, jobId }: { templateId: string; jobId: str
               <ul style={{ ...muted, margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
                 {extras.storeNotes.map((n) => (
                   <li key={n}>{n}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {extras.formNotes && extras.formNotes.length > 0 && (
+            <div>
+              <p style={{ ...muted, fontWeight: 650, color: "#f0f2ff", marginBottom: 6 }}>Your forms</p>
+              <ul style={{ ...muted, margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+                {extras.formNotes.map((n) => (
+                  <li key={`${n.form}:${n.note}`}><strong style={{ color: "#f0f2ff" }}>{n.form}:</strong> {n.note}</li>
+                ))}
+              </ul>
+              <Link href={`/dashboard/templates/${templateId}/form-submissions`} style={{ ...secondaryButton, marginTop: 8, display: "inline-block" }}>Set up where submissions go →</Link>
+            </div>
+          )}
+          {extras.redirectPatterns && extras.redirectPatterns.length > 0 && (
+            <div>
+              <p style={{ ...muted, fontWeight: 650, color: "#f0f2ff", marginBottom: 6 }}>Redirect rules to add yourself</p>
+              <p style={{ ...muted, marginBottom: 6 }}>
+                These match many addresses at once (wildcards or patterns). Plexo redirects exact addresses, so add the ones you still need in your site&rsquo;s Redirects settings — every exact rule was copied already.
+              </p>
+              <ul style={{ ...muted, margin: 0, paddingLeft: 18, fontSize: "11.5px" }}>
+                {extras.redirectPatterns.map((r) => (
+                  <li key={`${r.from}→${r.to}`}><code>{r.from}</code> → <code>{r.to}</code> <span style={{ opacity: 0.7 }}>({r.plugin}, {r.kind})</span></li>
                 ))}
               </ul>
             </div>

@@ -4,6 +4,7 @@ import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildFormSubmissionEmail } from "@/lib/mail/templates";
 import { logEmailDelivery } from "@/lib/mail/logEmail";
 import { FormSubmission } from "@/lib/db/opsEntities";
+import { runFormActions } from "@/lib/forms/formActions";
 import { Template } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
 
@@ -40,6 +41,8 @@ export async function recordFormSubmission(input: {
   formName: string;
   fields: Record<string, string>;
   submitterIp?: string | null;
+  /** The site's address, passed on to a webhook. */
+  siteHost?: string | null;
 }): Promise<void> {
   await FormSubmission.create({
     id: randomUUID(),
@@ -53,6 +56,8 @@ export async function recordFormSubmission(input: {
   void notifyFormSubmission(input.templateId, input.organizationId, input.formName, input.fields).catch((err) =>
     console.error("[mail] form submission notification failed:", err),
   );
+  // MailDrip list / webhook, when the owner set them up for this form (lib/forms/formActions.ts).
+  await runFormActions({ templateId: input.templateId, formName: input.formName, fields: input.fields, siteHost: input.siteHost });
 }
 
 async function notifyFormSubmission(

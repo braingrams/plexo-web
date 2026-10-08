@@ -26,6 +26,7 @@ import { COMMERCE_MCP_TOOLS, COMMERCE_TOOL_NAMES, handleCommerceTool } from "./c
 import { LMS_MCP_TOOLS, LMS_TOOL_NAMES, handleLmsTool } from "./lmsTools";
 import { WP_MIGRATION_MCP_TOOLS, WP_MIGRATION_TOOL_NAMES, handleWpMigrationTool } from "./wpMigrationTools";
 import { DONATION_MCP_TOOLS, DONATION_TOOL_NAMES, handleDonationTool } from "./donationTools";
+import { FORM_MCP_TOOLS, FORM_TOOL_NAMES, handleFormTool } from "./formTools";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
 
@@ -902,6 +903,7 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   ...LMS_MCP_TOOLS,
   ...WP_MIGRATION_MCP_TOOLS,
   ...DONATION_MCP_TOOLS,
+  ...FORM_MCP_TOOLS,
 ];
 
 /**
@@ -1780,6 +1782,10 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
       }
       if (DONATION_TOOL_NAMES.has(toolName)) {
         toolResult = await handleDonationTool(toolName, args, resolved);
+        break;
+      }
+      if (FORM_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleFormTool(toolName, args, resolved);
         break;
       }
       throw new Error(`Unknown tool: ${toolName}`);
