@@ -70,6 +70,29 @@ function sameSitePathsFromCss(css: string, cssUrl: string, origin: string): stri
   return found;
 }
 
+const MAX_FILE_REDIRECTS = 3;
+
+/**
+ * Fetches a file, following a redirect only while it still points at the same file name
+ * (http→https, www, a CDN). Many sites send every missing file to the homepage instead of
+ * answering 404 — following that downloads the whole homepage (on one slow site, 22s and
+ * ~450KB per missing file) only to throw it away. Such a redirect comes back as the 3xx
+ * response itself, which the caller treats as missing.
+ */
+async function fetchSameFile(url: string): Promise<Response> {
+  const fileName = (u: string) => new URL(u).pathname.split("/").pop() ?? "";
+  let current = url;
+  for (let hop = 0; ; hop++) {
+    const res = await migrationFetch(current, { returnRedirects: true });
+    if (res.status < 300 || res.status >= 400) return res;
+    const location = res.headers.get("location");
+    const next = location ? new URL(location, current).toString() : null;
+    if (!next || hop >= MAX_FILE_REDIRECTS || fileName(next) !== fileName(url)) return res;
+    await res.body?.cancel().catch(() => {});
+    current = next;
+  }
+}
+
 /**
  * Downloads one file from the source site at its original path. Root-relative references
  * inside CSS/JS are left alone (they resolve identically on Plexo); absolute references to
@@ -84,11 +107,11 @@ export async function fetchSourceAsset(origin: string, segments: string[]): Prom
   const url = `${origin}/${encodePath(segments)}`;
   let res: Response;
   try {
-    res = await migrationFetch(url);
+    res = await fetchSameFile(url);
   } catch (err) {
     return { ok: false, skipped: false, retryable: true, reason: `Couldn't download: ${err instanceof Error ? err.message : String(err)}` };
   }
-  if (res.status === 404 || res.status === 410) {
+  if (res.status === 404 || res.status === 410 || (res.status >= 300 && res.status < 400)) {
     return { ok: false, skipped: true, reason: "Referenced by your site but missing on WordPress too (already broken there)" };
   }
   if (!res.ok) {
