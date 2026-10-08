@@ -272,7 +272,7 @@ export async function verifyLive(job: JobItem, plan: CutoverPlan, report: Migrat
   const domain = plan.domain;
   const canonicalHost = new URL(report.source.origin).host;
 
-  const { data: domains } = await PublishedDomain.query.primary({ templateId: job.templateId }).go();
+  const { data: domains } = await PublishedDomain.query.primary({ templateId: job.templateId }).go({ pages: "all" });
   const connected = domains.filter((d) => d.type === "CUSTOM" && (d.domain === domain || d.domain === plan.wwwDomain));
   checks.push({
     id: "connected",

@@ -32,7 +32,7 @@ export async function GET(
   // template's posts rather than .get() directly, same as savePostDynamo.ts's findPostById.
   const { data: allPosts } = await BlogPost.query
     .byStatus({ templateId: resolved.context.templateId })
-    .go();
+    .go({ pages: "all" });
   const post = allPosts.find((p) => p.id === postId);
   if (!post)
     return NextResponse.json({ error: "Post not found." }, { status: 404 });
@@ -46,15 +46,15 @@ export async function GET(
   ] = await Promise.all([
     BlogCategory.query
       .primary({ templateId: resolved.context.templateId })
-      .go(),
+      .go({ pages: "all" }),
     BlogTag.query.primary({ templateId: resolved.context.templateId }).go({ pages: "all" }),
     BlogAuthor.query.primary({ templateId: resolved.context.templateId }).go({ pages: "all" }),
     BlogPostCategory.query
       .primary({ templateId: resolved.context.templateId, postId })
-      .go(),
+      .go({ pages: "all" }),
     BlogPostTag.query
       .primary({ templateId: resolved.context.templateId, postId })
-      .go(),
+      .go({ pages: "all" }),
   ]);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const tagById = new Map(tags.map((t) => [t.id, t]));
@@ -108,7 +108,7 @@ export async function PATCH(
     // quota — an already-PUBLISHED post being re-saved shouldn't trip its own limit.
     const { data: allPosts } = await BlogPost.query
       .byStatus({ templateId: resolved.context.templateId })
-      .go();
+      .go({ pages: "all" });
     const existing = allPosts.find((p) => p.id === postId);
     if (!existing)
       return NextResponse.json({ error: "Post not found." }, { status: 404 });

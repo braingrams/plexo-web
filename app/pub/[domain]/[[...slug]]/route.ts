@@ -466,7 +466,7 @@ export async function GET(
   // lands on the canonical address.
   const canonicalHost = published.template.migratedFrom ? safeHost(published.template.migratedFrom) : null;
   if (canonicalHost && rawDomain !== canonicalHost && (rawDomain === `www.${canonicalHost}` || `www.${rawDomain}` === canonicalHost)) {
-    const { data: canonicalRows } = await PublishedDomain.query.byDomain({ domain: canonicalHost }).go();
+    const { data: canonicalRows } = await PublishedDomain.query.byDomain({ domain: canonicalHost }).go({ pages: "all" });
     if (canonicalRows.some((d) => d.templateId === published.templateId && (d.active ?? true))) {
       const target = new URL(request.url);
       return NextResponse.redirect(`https://${canonicalHost}${target.pathname}${target.search}`, 301);

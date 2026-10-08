@@ -142,7 +142,7 @@ async function resolveCategoryIds(
   if (names === undefined) return undefined;
   const { data: categories } = await BlogCategory.query
     .primary({ templateId })
-    .go();
+    .go({ pages: "all" });
   const ids: string[] = [];
   for (const name of names) {
     const existing = categories.find(
@@ -1166,7 +1166,7 @@ export async function handleBlogTool(
         const { data: linked } = category
           ? await BlogPostCategory.query
               .byCategory({ categoryId: category.id })
-              .go()
+              .go({ pages: "all" })
           : { data: [] as { postId: string; templateId: string }[] };
         const postIdsInCategory = new Set(
           linked.filter((l) => l.templateId === siteId).map((l) => l.postId),
@@ -1184,7 +1184,7 @@ export async function handleBlogTool(
         filtered.map((p) =>
           BlogPostCategory.query
             .primary({ templateId: siteId, postId: p.id })
-            .go(),
+            .go({ pages: "all" }),
         ),
       );
 
@@ -1234,7 +1234,7 @@ export async function handleBlogTool(
       } else {
         const { data: allPosts } = await BlogPost.query
           .byStatus({ templateId: siteId })
-          .go();
+          .go({ pages: "all" });
         post = allPosts.find((p) => p.id === postId) ?? null;
       }
       if (!post)
@@ -1254,7 +1254,7 @@ export async function handleBlogTool(
         BlogAuthor.query.primary({ templateId: siteId }).go({ pages: "all" }),
         BlogPostCategory.query
           .primary({ templateId: siteId, postId: post.id })
-          .go(),
+          .go({ pages: "all" }),
         BlogPostTag.query.primary({ templateId: siteId, postId: post.id }).go({ pages: "all" }),
       ]);
       const categoryById = new Map(categories.map((c) => [c.id, c]));
@@ -1387,7 +1387,7 @@ export async function handleBlogTool(
         if (args.status === "PUBLISHED") {
           const { data: existingPosts } = await BlogPost.query
             .byStatus({ templateId: siteId })
-            .go();
+            .go({ pages: "all" });
           const existing = existingPosts.find((p) => p.id === postId);
           if (existing && existing.status !== "PUBLISHED") {
             const quota = await assertPublishedBlogPostQuota(
@@ -1455,7 +1455,7 @@ export async function handleBlogTool(
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
       const { data: categories } = await BlogCategory.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       categories.sort((a, b) => a.name.localeCompare(b.name));
       return { categories };
     }
@@ -1467,7 +1467,7 @@ export async function handleBlogTool(
 
       const { data: siblings } = await BlogCategory.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
 
       let parentId: string | undefined;
       if (typeof args.parentName === "string" && args.parentName.trim()) {
@@ -1518,7 +1518,7 @@ export async function handleBlogTool(
 
       const { data: categories } = await BlogCategory.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       let category = isValidUuid(idOrName)
         ? categories.find((c) => c.id === idOrName)
         : undefined;
@@ -1532,7 +1532,7 @@ export async function handleBlogTool(
       // equivalent — clean up the join rows explicitly via byCategory (GSI1) first.
       const { data: links } = await BlogPostCategory.query
         .byCategory({ categoryId: category.id })
-        .go();
+        .go({ pages: "all" });
       await Promise.all(
         links.map((l) =>
           BlogPostCategory.remove({
@@ -1554,7 +1554,7 @@ export async function handleBlogTool(
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
       const { data: tags } = await BlogTag.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       tags.sort((a, b) => a.name.localeCompare(b.name));
       return { tags };
     }
@@ -1591,7 +1591,7 @@ export async function handleBlogTool(
 
       const { data: tags } = await BlogTag.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       let tag = isValidUuid(idOrName)
         ? tags.find((t) => t.id === idOrName)
         : undefined;
@@ -1603,7 +1603,7 @@ export async function handleBlogTool(
       // equivalent — clean up the join rows explicitly via byTag (GSI1) first.
       const { data: links } = await BlogPostTag.query
         .byTag({ tagId: tag.id })
-        .go();
+        .go({ pages: "all" });
       await Promise.all(
         links.map((l) =>
           BlogPostTag.remove({
@@ -1622,7 +1622,7 @@ export async function handleBlogTool(
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
       const { data: authors } = await BlogAuthor.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       authors.sort((a, b) => a.name.localeCompare(b.name));
       return { authors };
     }
@@ -1661,7 +1661,7 @@ export async function handleBlogTool(
 
       const { data: authors } = await BlogAuthor.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       let author = isValidUuid(idOrName)
         ? authors.find((a) => a.id === idOrName)
         : undefined;
@@ -1675,7 +1675,7 @@ export async function handleBlogTool(
       // No DynamoDB equivalent, so every post referencing this author is patched first.
       const { data: posts } = await BlogPost.query
         .byStatus({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       const affected = posts.filter((p) => p.authorId === author!.id);
       await Promise.all(
         affected.map((p) =>
@@ -1701,7 +1701,7 @@ export async function handleBlogTool(
       // direct "every comment on this site" index, so this fans out per post.
       const { data: posts } = await BlogPost.query
         .byStatus({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       const postById = new Map(posts.map((p) => [p.id, p]));
       const commentBatches = await Promise.all(
         posts.map((p) => BlogComment.query.primary({ postId: p.id }).go({ pages: "all" })),
