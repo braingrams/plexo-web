@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveAiCaller } from "@/lib/ai/aiCaller";
-import { NOT_ENOUGH_CREDITS, creditCheck, parseGenerateBody } from "@/lib/ai/generateRequest";
+import { creditCheck, parseGenerateBody } from "@/lib/ai/generateRequest";
 
 /**
  * POST — would this AI request be affordable, before running it. Same body as
@@ -13,6 +13,5 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if ("error" in resolved) return NextResponse.json({ error: resolved.error }, { status: resolved.status });
   const parsed = parseGenerateBody(resolved.key, await request.json().catch(() => null));
   if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: parsed.status });
-  const check = await creditCheck(resolved.key, parsed.input);
-  return NextResponse.json({ ...check, ...(check.enough ? {} : { message: NOT_ENOUGH_CREDITS }) });
+  return NextResponse.json(await creditCheck(resolved.key, parsed.input));
 }

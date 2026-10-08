@@ -82,7 +82,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
       // Confirm the account can afford it before anything runs.
       const credits = await checkAiCredits(request);
       if (credits && !credits.enough) {
-        setInsufficientCredits(true);
+        setInsufficientCredits(credits.paidBy === "plexo" && credits.estimatedCredits !== null);
         setError(credits.message ?? "You don't have enough AI credits for this.");
         return;
       }

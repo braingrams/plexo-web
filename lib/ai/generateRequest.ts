@@ -35,6 +35,9 @@ export interface ResolvedAiKey {
   subscriptionPlan: string;
 }
 
+export const PLEXO_AI_UNAVAILABLE = "Plexo's AI isn't available right now. Add your own AI provider key in Settings → AI to keep going, or try again later.";
+const BAD_API_KEY = "That API key isn't valid or has been turned off. Check it in Settings → API keys.";
+
 export type Refusal = { status: number; error: string };
 type ApiKeyItem = Awaited<ReturnType<typeof resolveActiveApiKeyForUser>>;
 
@@ -68,9 +71,9 @@ export async function resolveAiKeyByRawKey(rawKey: string): Promise<{ key: Resol
   const hashedKey = createHash("sha256").update(rawKey, "utf8").digest("hex");
   const { data: matches } = await ApiKey.query.byHashedKey({ hashedKey }).go({ pages: "all" });
   const activeKey = matches.find((k) => k.isActive);
-  if (!activeKey) return { error: "Forbidden", status: 403 };
+  if (!activeKey) return { error: BAD_API_KEY, status: 403 };
   const { data: user } = await User.get({ id: activeKey.userId }).go();
-  if (!user) return { error: "Forbidden", status: 403 };
+  if (!user) return { error: BAD_API_KEY, status: 403 };
   return { key: toResolvedAiKey(activeKey as NonNullable<ApiKeyItem>, user.subscriptionPlan ?? "FREE") };
 }
 
@@ -182,7 +185,7 @@ export async function planGeneration(key: ResolvedAiKey, input: GenerateInput): 
   } catch (err) {
     // The detail is for us (logs), not the site owner.
     console.error("[ai] Plexo's own AI isn't set up on this deployment:", err instanceof Error ? err.message : err);
-    return { error: "Plexo's AI isn't available right now. Add your own AI provider key in Settings → AI to keep going, or try again later.", status: 503 };
+    return { error: PLEXO_AI_UNAVAILABLE, status: 503 };
   }
   const plan: GenerationPlan = { provider: systemProvider.provider, providerApiKey: systemProvider.apiKey, isSystemAi: true, isHostManaged: false, hostRequestId: null };
   const balance = await ensureCreditPeriod(key.userId);
@@ -193,18 +196,19 @@ export async function planGeneration(key: ResolvedAiKey, input: GenerateInput): 
 }
 
 /** What this request would cost at most, and whether the account can cover it — for showing before anyone clicks. */
-export async function creditCheck(key: ResolvedAiKey, input: GenerateInput): Promise<{ paidBy: "plexo" | "own-key" | "host"; enough: boolean; estimatedCredits: number | null; balance: number | null }> {
+export async function creditCheck(key: ResolvedAiKey, input: GenerateInput): Promise<{ paidBy: "plexo" | "own-key" | "host"; enough: boolean; estimatedCredits: number | null; balance: number | null; message?: string }> {
   if (key.aiAccessMode === "HOST_MANAGED") return { paidBy: "host", enough: true, estimatedCredits: null, balance: null };
   if (key.aiApiKey) return { paidBy: "own-key", enough: true, estimatedCredits: null, balance: null };
   let provider: AiProvider;
   try {
     provider = resolveSystemProvider().provider;
   } catch {
-    return { paidBy: "plexo", enough: true, estimatedCredits: null, balance: null }; // the generation itself explains the setup problem
+    return { paidBy: "plexo", enough: false, estimatedCredits: null, balance: null, message: PLEXO_AI_UNAVAILABLE };
   }
   const balance = await ensureCreditPeriod(key.userId);
   const estimatedCredits = estimateWorstCaseCost(provider, input.concreteTier, input.mode, approxInputChars(input));
-  return { paidBy: "plexo", enough: balance.total >= estimatedCredits, estimatedCredits, balance: balance.total };
+  const enough = balance.total >= estimatedCredits;
+  return { paidBy: "plexo", enough, estimatedCredits, balance: balance.total, ...(enough ? {} : { message: NOT_ENOUGH_CREDITS }) };
 }
 
 /**

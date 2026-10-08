@@ -17,10 +17,10 @@ export async function resolveAiCaller(request: NextRequest): Promise<{ key: Reso
   const xApiKey = request.headers.get("x-api-key")?.trim();
   if (xApiKey === "workspace-internal") {
     const session = await auth();
-    if (!session?.user) return { error: "Unauthorized", status: 401 };
+    if (!session?.user) return { error: "You're signed out. Sign in again, then try once more.", status: 401 };
     return resolveAiKeyForUser(session.user.id);
   }
   const rawKey = xApiKey || parseBearerToken(request.headers.get("authorization"));
-  if (!rawKey) return { error: "Unauthorized", status: 401 };
+  if (!rawKey) return { error: "This request needs an API key (x-api-key header) or a signed-in session.", status: 401 };
   return resolveAiKeyByRawKey(rawKey);
 }

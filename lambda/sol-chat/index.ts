@@ -188,7 +188,7 @@ async function handleAiGenerate(request: ParsedRequest, responseStream: awslambd
     } else {
       const user = await resolveSessionUser(request.cookies);
       if (!user) {
-        sendJson(responseStream, 401, { error: "Unauthorized" });
+        sendJson(responseStream, 401, { error: "You're signed out. Sign in again, then try once more." });
         return;
       }
       caller = { userId: user.userId };
