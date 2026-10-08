@@ -40,7 +40,28 @@ const ELEMENTOR_FIXED = [
 const KEBAB_TOKEN_RE = /[`'"]([a-z][a-z0-9]*(?:-[a-z0-9]+)*)[`'"]/g;
 const MAX_CHUNK_CANDIDATES = 160;
 
+/** A webpack chunk's file name as its runtime lists it: "lightbox.570c05c5a283cfb6b223.bundle.min.js". */
+const WEBPACK_CHUNK_RE = /["'`]([A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*\.bundle(?:\.min)?\.(?:js|css))["'`]/g;
+
 const HARVESTERS: Harvester[] = [
+  {
+    // Any webpack-built plugin script (Elementor 3.x's webpack.runtime.min.js, Elementor
+    // Pro's webpack-pro.runtime.min.js, WooCommerce blocks…) maps chunk ids to hashed file
+    // names — "lightbox.570c05c5a283cfb6b223.bundle.min.js" — and loads them from its own
+    // folder only when a widget needs one. Found on playmuzingo.com: none were copied, so its
+    // gallery never showed its photos, the testimonial carousel never started, and the FAQ
+    // lost its opening animation and video.
+    match: /\.js$/,
+    harvest(path, text) {
+      const dir = path.slice(0, path.lastIndexOf("/") + 1);
+      const names = new Set<string>();
+      for (const m of text.matchAll(WEBPACK_CHUNK_RE)) {
+        if (names.size >= MAX_CHUNK_CANDIDATES) break;
+        names.add(m[1]);
+      }
+      return Array.from(names).map((n) => `${dir}${n}`);
+    },
+  },
   {
     // Elementor and Elementor Pro: the frontend bundle holds the chunk-name registry.
     match: /\/plugins\/(elementor|elementor-pro)\/assets\/js\/(frontend|elements-handlers)(\.min)?\.js$/,
