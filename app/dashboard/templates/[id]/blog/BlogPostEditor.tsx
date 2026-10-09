@@ -455,11 +455,9 @@ export function BlogPostEditor({
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}) as { error?: string });
-      if (res.status === 402)
-        throw new Error(
-          "Insufficient AI credits — top up or configure your own API key in Settings.",
-        );
-      throw new Error(aiErrorMessage(res.status, body, "AI generation failed."));
+      // The assistant shows SOL's top-up card for this one.
+      if (res.status === 402) throw Object.assign(new Error("You're out of AI credits."), { outOfCredits: true });
+      throw new Error(aiErrorMessage(res.status, body, "SOL couldn't write that post. Please try again."));
     }
     const { result } = (await res.json()) as { result: AiBlogPostResult };
     return result;

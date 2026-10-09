@@ -463,7 +463,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
             {([
               { key: "text", label: "Text Content" },
               { key: "code", label: "Code" },
-              { key: "ai", label: "AI Edit" },
+              { key: "ai", label: "Ask SOL" },
             ] as const).map((tab) => {
               const disabled = tab.key !== "code" && isDirty("index.html");
               const aiCostHint = tab.key === "ai" ? "Uses AI credits — the whole page is sent and returned, so larger pages cost more per edit." : undefined;

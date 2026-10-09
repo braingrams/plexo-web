@@ -375,7 +375,7 @@ export function AppEditor(props: {
         // Free plans on Plexo's AI run on Basic (the server enforces it — lib/ai/solEngine.ts).
         lockedModelTier: props.lockedModelTier ?? undefined,
         afterMessages: firstBuild ? (
-          <div style={{ maxWidth: 760, margin: "0.5rem auto 1rem", border: `1px solid ${C.border}`, borderRadius: 14, padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+          <div style={{ width: "100%", boxSizing: "border-box", maxWidth: 760, margin: "0.5rem auto 1rem", border: `1px solid ${C.border}`, borderRadius: 14, padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
             <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.faint }}>What I&rsquo;m doing</div>
             {steps.map((label, i) => {
               const state = i < stepsDone ? "done" : i === stepsDone ? "active" : "todo";

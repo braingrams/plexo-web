@@ -397,6 +397,13 @@ export function DesignPane(props: {
       )}
       <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
         <V2Canvas
+          // Ask SOL on the canvas is the real SOL: the question goes to the editor's SOL chat
+          // (with the selected element and this page), where SOL answers and makes changes.
+          onAskSol={async (question, context) => {
+            const about = context.nodeType ? ` (about the selected ${context.nodeType.toLowerCase()} on the "${current.name}" design, page ${current.route})` : ` (on the "${current.name}" design, page ${current.route})`;
+            props.onAskSol(`${question}${about}`);
+            return "I've picked this up in the chat on the left — I'll answer there and make any change to the design.";
+          }}
           onUploadImage={uploadImage}
           stockImageProviders={providers.length ? providers : undefined}
           onSearchStockImages={providers.length ? searchStock : undefined}
