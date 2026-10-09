@@ -100,6 +100,12 @@ export async function listUsers(ctx: AppContext, opts: { search?: string; limit?
   return { users: rows, total: rows[0]?.total ?? 0 };
 }
 
+/** How many people signed up since a moment (the editor's "since you were last here"). */
+export async function countUsersSince(ctx: AppContext, since: string): Promise<number> {
+  const rows = await sys<{ n: number }>(ctx, "SELECT count(*)::int AS n FROM plexo.users WHERE created_at > $1", [since]);
+  return rows[0]?.n ?? 0;
+}
+
 // ------------------------------------------------------------- identities (OAuth)
 
 export async function findUserByIdentity(ctx: AppContext, provider: string, providerUserId: string): Promise<AppUserRow | null> {

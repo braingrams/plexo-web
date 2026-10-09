@@ -2,6 +2,7 @@ import { buildSolAppContext } from "@/lib/projects/solAppContext";
 import { friendlyProviderError } from "@/lib/ai/providerErrors";
 import { describeAttachedImages } from "@/lib/ai/solImageDescriptions";
 import type { ResolvedUser } from "@/lib/mcp/dispatchMcpTool";
+import { User } from "@/lib/db/coreEntities";
 import { ensureCreditPeriod, chargeUsage, estimateWorstCaseCost } from "@/lib/db/ledgerOperations";
 import { estimateWorstCaseAgentTurnCost } from "@/lib/credits/agentTurnEstimate";
 import { SolConversation, SolMessage, SolMemoryFact, SolPreferences } from "@/lib/db/solEntities";
@@ -517,7 +518,7 @@ export async function prepareMessagesTurn(
 ): Promise<PreparedTurn> {
   const parsed = body as { text?: string; attachments?: Array<{ type?: string; url?: string; filename?: string }>; modelTier?: string };
   const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
-  const modelTier = parsed.modelTier as ModelTier;
+  let modelTier = parsed.modelTier as ModelTier;
   const hasAttachments = Array.isArray(parsed.attachments) && parsed.attachments.some((a) => a?.url);
 
   // An image sent with no caption is a perfectly normal message ("what do you think of this?").
@@ -531,6 +532,14 @@ export async function prepareMessagesTurn(
   }
 
   const routing = await resolveSolAiRouting(resolved.userId);
+
+  // Free accounts build apps on the Basic model: their monthly AI allowance is small
+  // (lib/credits/value.ts), and Basic rounds cost about a third of Medium's, so it goes
+  // roughly three times further. Not for BYOK — their own key, their own choice.
+  if (!routing.isByok && conversation.appId && modelTier !== "BASIC") {
+    const { data: owner } = await User.get({ id: resolved.userId }).go();
+    if ((owner?.subscriptionPlan ?? "FREE") === "FREE") modelTier = "BASIC";
+  }
 
   // BYOK turns are billed to the account's own provider key directly — Plexo's credit
   // balance is never consulted for them, so this pre-flight check (and the mid-loop

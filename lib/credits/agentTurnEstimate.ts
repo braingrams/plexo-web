@@ -7,21 +7,22 @@ import type { ConcreteTier } from "@/lib/ai/types";
 // throws AgentIterationLimitError if it's exhausted without a final (non-tool_use) answer.
 export const MAX_TOOL_ITERATIONS = 8;
 // A turn that's building a React app (lib/mcp/appTools.ts) — write files, build, fix
-// errors, screenshot, fix again — legitimately needs many more rounds. The pre-flight
-// estimate below still assumes MAX_TOOL_ITERATIONS; the per-round budgetGuard covers the rest.
+// errors, screenshot, fix again — legitimately needs many more rounds; the per-round
+// budgetGuard checks the balance before each one.
 export const MAX_APP_TOOL_ITERATIONS = 40;
 
 /**
- * Worst-case credit cost of one full agent turn, used as a pre-flight balance gate before
- * starting the loop (and again, via budgetGuard, before each iteration inside it). Each
- * iteration is priced as its own worst-case bedrock_claude/"agent_chat" call (conservative
- * input-char estimate, MAX_TOKENS.agent_chat as the output ceiling — see
- * estimateWorstCaseCost in lib/db/ledgerOperations.ts), multiplied by the max number of
- * iterations a turn could take. This is deliberately pessimistic — chargeUsage bills the
- * real, usually far lower, per-call amount after the fact — the same "estimate high,
- * charge actual" pattern generateBuilderAction/chargeUsage already use for a single call.
+ * The credits SOL needs before it starts a turn: one round's worst case (a bedrock_claude
+ * "agent_chat" call with a conservative input estimate and MAX_TOKENS.agent_chat as the
+ * output ceiling — estimateWorstCaseCost in lib/db/ledgerOperations.ts).
+ *
+ * Deliberately one round, not every round a turn could take: the per-round budgetGuard
+ * already checks the balance before each further round and stops the turn cleanly (work so
+ * far is saved) when it runs out. Gating on all rounds up front asked for more credits than
+ * a whole month's allowance (8 × 32k output tokens ≈ $3.84 on MEDIUM), so most people
+ * couldn't start a turn at all — see lib/credits/value.ts for the allowances.
+ * chargeUsage still bills each call's real, usually far lower, cost after the fact.
  */
 export function estimateWorstCaseAgentTurnCost(tier: ConcreteTier, approxInputChars: number): number {
-  const perCallEstimate = estimateWorstCaseCost("bedrock_claude", tier, "agent_chat", approxInputChars);
-  return perCallEstimate * MAX_TOOL_ITERATIONS;
+  return estimateWorstCaseCost("bedrock_claude", tier, "agent_chat", approxInputChars);
 }

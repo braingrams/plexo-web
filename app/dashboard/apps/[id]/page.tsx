@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { Template } from "@/lib/db/contentEntities";
+import { User } from "@/lib/db/coreEntities";
 import { SolMessage } from "@/lib/db/solEntities";
 import { ensureAppConversation } from "@/lib/projects/appConversation";
 import { appSummary } from "@/lib/projects/summary";
@@ -50,6 +51,8 @@ export default async function AppEditorPage({ params, searchParams }: { params: 
       createdAt: m.createdAt,
     }));
 
+  const { data: owner } = await User.get({ id: session.user.id }).go();
+
   return (
     <SolSidebarProvider>
       <AppEditor
@@ -59,6 +62,9 @@ export default async function AppEditorPage({ params, searchParams }: { params: 
         initialMessages={initialMessages}
         userName={session.user.name ?? session.user.email?.split("@")[0] ?? null}
         initialPrompt={query.prompt ?? null}
+        initialPlan={query.plan ?? null}
+        subscriptionPlan={owner?.subscriptionPlan ?? "FREE"}
+       
         initialPanel={query.panel ?? null}
         addSecretName={query.add ?? null}
         // Stock photo search in the Design tab — the same keys the site editor uses.

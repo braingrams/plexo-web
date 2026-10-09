@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Check, Sparkles, Zap } from "lucide-react";
 import { Reveal } from "@/app/scroll-fx";
+import { planMonthlyCredits } from "@/lib/credits/value";
 
 type Plan = {
   name: string;
@@ -25,7 +26,7 @@ const PLANS: Plan[] = [
     description: "Essential page & email builder features for creators and personal projects.",
     features: [
       "Up to 5 Email Templates & 5 Landing Pages",
-      "10 Monthly AI Credits",
+      `${planMonthlyCredits("FREE").toLocaleString("en-US")} Monthly AI Credits`,
       "Subdomain publishing (plexopages.com)",
       "Visual Drag & Drop Builder",
       "Standard HTML5 & MJML Export",
@@ -43,7 +44,7 @@ const PLANS: Plan[] = [
     popular: true,
     features: [
       "Up to 25 Email Templates & 25 Landing Pages",
-      "2,000 Monthly AI Credits",
+      `${planMonthlyCredits("PRO").toLocaleString("en-US")} Monthly AI Credits`,
       "Custom Domain Linking (yourdomain.com)",
       "Branding Removal (Hide 'Hosted with Plexo')",
       "Visual & Raw HTML Eject Mode",
@@ -61,7 +62,7 @@ const PLANS: Plan[] = [
     description: "Maximum power for power users, teams, and platforms needing AI automation.",
     features: [
       "Up to 100 Email Templates & 100 Landing Pages",
-      "5,000 Monthly AI Credits",
+      `${planMonthlyCredits("ULTRA").toLocaleString("en-US")} Monthly AI Credits`,
       "Multi-Page Sites Enabled",
       "Host-Managed AI Enabled",
       "MCP Server Agent Access",

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { getStripePromise } from "@/lib/stripeClientPromise";
+import { useTopupPacks, packLabel } from "../_components/useTopupPacks";
 
 type LedgerEntryType = "MONTHLY_GRANT" | "TOPUP_PURCHASE" | "AI_USAGE" | "REFUND" | "ADJUSTMENT";
 
@@ -47,10 +48,11 @@ const TYPE_LABELS: Record<LedgerEntryType, string> = {
   ADJUSTMENT: "Adjustment",
 };
 
-const TOPUP_PACKS: Array<{ pack: "SMALL" | "MEDIUM" | "LARGE"; label: string; sub: string }> = [
-  { pack: "SMALL", label: "5,000 credits", sub: "Small top-up" },
-  { pack: "MEDIUM", label: "25,000 credits", sub: "Medium top-up" },
-  { pack: "LARGE", label: "120,000 credits", sub: "Large top-up" },
+// Credits per pack come from its real price (half of it as AI value — lib/credits/value.ts).
+const TOPUP_PACKS: Array<{ pack: "SMALL" | "MEDIUM" | "LARGE"; sub: string }> = [
+  { pack: "SMALL", sub: "Small top-up" },
+  { pack: "MEDIUM", sub: "Medium top-up" },
+  { pack: "LARGE", sub: "Large top-up" },
 ];
 
 const actionButtonStyle: CSSProperties = {
@@ -133,6 +135,7 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const packInfo = useTopupPacks();
   const [error, setError] = useState<string | null>(null);
   const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<{ kind: "success" | "processing" | "error"; text: string } | null>(null);
@@ -428,7 +431,8 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
             Buy credits
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem" }}>
-            {TOPUP_PACKS.map(({ pack, label, sub }) => {
+            {TOPUP_PACKS.map(({ pack, sub }) => {
+              const label = packLabel(packInfo[pack]);
               const actionKey = `topup-${pack}`;
               return (
                 <button
@@ -439,7 +443,7 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
                   style={{ ...actionButtonStyle, opacity: busyAction === actionKey ? 0.7 : 1 }}
                 >
                   <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>{busyAction === actionKey ? "Opening…" : label}</span>
-                  <span style={{ fontSize: "0.68rem", opacity: 0.7, fontWeight: 500 }}>{sub}</span>
+                  <span style={{ fontSize: "0.68rem", opacity: 0.7, fontWeight: 500 }}>{packInfo[pack]?.price ?? sub}</span>
                 </button>
               );
             })}

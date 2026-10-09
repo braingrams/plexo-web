@@ -77,7 +77,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     maxEmailTemplates: 5,
     maxLandingPages: 5,
     maxPublishedBlogPosts: 5,
-    // Free ships 10 monthly AI credits (PLAN_MONTHLY_CREDITS.FREE below) — hard-locking the
+    // Free ships a small monthly AI allowance (lib/credits/value.ts) — hard-locking the
     // AI entry point here made those credits impossible to ever spend (a free user could
     // never even open the AI prompt box to try one). The real, already-enforced limit is
     // ensureCreditPeriod/chargeUsage in app/api/v1/ai/generate/route.ts rejecting a request
@@ -133,24 +133,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
   },
 };
 
-/**
- * Monthly system-AI credit allowance per plan — granted lazily (see
- * `lib/credits/ledger.ts`'s `ensureCreditPeriod`) and reset (not rolled over)
- * each 30-day cycle. Only applies to accounts using system AI (no BYOK key
- * configured); BYOK accounts never touch credits.
- *
- * Sized against `lib/credits/pricing.ts`'s CREDIT_USD_VALUE default of $0.001/credit
- * (1000 credits = $1): ULTRA's 5,000 credits = $5 of real AI cost at that rate.
- *
- * ULTRA is intentionally a large-but-finite number, not unlimited — now that
- * system AI has a real dollar cost behind it, unbounded usage on a fixed
- * subscription price is a margin risk; usage beyond the allowance is a top-up.
- */
-export const PLAN_MONTHLY_CREDITS: Record<SubscriptionPlan, number> = {
-  FREE: 10,
-  PRO: 2_000,
-  ULTRA: 5_000,
-};
+// Monthly AI credit allowances are derived from each plan's AI dollar value in
+// lib/credits/value.ts (planMonthlyCredits) — the single reference for credit amounts.
 
 /**
  * Returns the feature set for a given subscription plan.

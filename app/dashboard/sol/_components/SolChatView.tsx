@@ -110,6 +110,17 @@ export type SolChatEmbedding = {
   returnTo?: string;
   /** Adds host context (e.g. the selected element) to what the person typed, before sending. */
   transformOutgoing?: (text: string) => string;
+  /** The host handles running out of credits in place (instead of the top-up modal): it gets
+   *  the shortfall and a resend() that sends the same message again once topped up. */
+  onCreditExhausted?: (info: CreditInfo, resend: () => void, midTurn: boolean) => void;
+  /** Fixes the model for this chat (e.g. Basic for Free app builds), with the reason. */
+  lockedModelTier?: { tier: ModelTier; note: string };
+  /** Rendered after the last message, inside the conversation (e.g. a build checklist). */
+  afterMessages?: React.ReactNode;
+  /** The chat box's placeholder. */
+  composerPlaceholder?: string;
+  /** Called when a turn ends ("done", "error", "awaiting_confirmation", "credit_exhausted"). */
+  onTurnEnd?: (outcome: string) => void;
 };
 
 export function SolChatView({
@@ -126,7 +137,7 @@ export function SolChatView({
   const { bumpRefresh, setActiveConversationIdOverride } = useSolSidebar();
   const [conversation, setConversation] = useState<ConversationSummary | null>(initialConversation);
   const [messages, setMessages] = useState<SolMessage[]>(initialMessages);
-  const [modelTier, setModelTier] = useState<ModelTier>(initialConversation?.modelTier ?? "BASIC");
+  const [modelTier, setModelTier] = useState<ModelTier>(embedded?.lockedModelTier?.tier ?? initialConversation?.modelTier ?? "BASIC");
   const [pendingConfirmMessageId, setPendingConfirmMessageId] = useState<string | null>(null);
   const [creditInfo, setCreditInfo] = useState<CreditInfo | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
@@ -338,6 +349,7 @@ export function SolChatView({
   }, []);
 
   useEffect(() => {
+    if (stream.outcome !== "idle" && stream.outcome !== "streaming") embedded?.onTurnEnd?.(stream.outcome);
     if (stream.outcome === "done") {
       commitAssistantMessage();
     } else if (stream.outcome === "awaiting_confirmation") {
@@ -349,6 +361,14 @@ export function SolChatView({
       // handleConfirmToolCall/handleSubmitAnswers below both bail out when
       // pendingConfirmMessageId is still null.
       setPendingConfirmMessageId(stream.awaitingMessageId);
+    } else if (stream.outcome === "credit_exhausted" && embedded?.onCreditExhausted && stream.creditInfo) {
+      // Ran out before starting → the message never happened: take it back and resend it as
+      // is. Ran out partway → the rounds so far are saved: keep everything and, once topped
+      // up, ask SOL to carry on rather than start over.
+      const midTurn = stream.blocks.length > 0;
+      if (!midTurn) rollbackOptimisticUserMessage();
+      const text = midTurn ? "Carry on where you stopped." : lastSentTextRef.current;
+      embedded.onCreditExhausted(stream.creditInfo, () => void handleSendRef.current(text, []), midTurn);
     } else if (stream.outcome === "credit_exhausted") {
       rollbackOptimisticUserMessage();
       setCreditInfo(stream.creditInfo);
@@ -538,6 +558,8 @@ export function SolChatView({
         onSend={(text, attachments) => void handleSend(text, attachments)}
         onStop={handleStop}
         initialText={composerRestoreText}
+        placeholder={embedded?.composerPlaceholder}
+        tierNote={embedded?.lockedModelTier?.note}
       />
     </>
   );
@@ -592,6 +614,7 @@ export function SolChatView({
               streaming={streaming}
               onConfirmToolCall={handleConfirmToolCall}
               confirmBusy={streaming && pendingConfirmMessageId !== null}
+              footer={embedded?.afterMessages}
             />
             <div style={{ padding: "0 1.25rem 1.25rem" }}>
               <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
