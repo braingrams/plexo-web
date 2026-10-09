@@ -149,6 +149,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (RESERVED_SUBDOMAINS.has(rawDomain)) {
       return NextResponse.json({ error: "This subdomain name is reserved." }, { status: 400 });
     }
+    // "--" is reserved for Plexo's own app preview hosts (lib/projects/previewHost.ts).
+    if (rawDomain.includes("--")) {
+      return NextResponse.json({ error: "Subdomains can't contain two hyphens in a row (--). Try a single hyphen instead." }, { status: 400 });
+    }
     finalDomain = `${rawDomain}.${baseDomain}`;
   } else {
     // Custom domain

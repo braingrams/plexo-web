@@ -9,6 +9,7 @@ import type {
   GenerateWithToolsParams,
   GenerateWithToolsResult,
 } from "./shared";
+import { toolResultText } from "./shared";
 import { toOpenAiTools } from "@/lib/ai/solToolSchema";
 
 /**
@@ -138,10 +139,7 @@ function toOpenAiMessages(
       if (blocks.length > 0 && blocks[0].type === "tool_result") {
         for (const block of blocks) {
           if (block.type !== "tool_result") continue;
-          const content =
-            typeof block.content === "string"
-              ? block.content
-              : JSON.stringify(block.content ?? null);
+          const content = toolResultText(block.content);
           messages.push({
             role: "tool",
             tool_call_id: block.tool_use_id,

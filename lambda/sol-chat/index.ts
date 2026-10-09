@@ -67,9 +67,16 @@ function openNdjsonStream(stream: awslambda.HttpResponseStream): NodeJS.Writable
 }
 
 function lambdaEmitter(stream: NodeJS.WritableStream): TurnEmitter {
+  // CloudFront drops a streamed response that goes quiet for longer than its origin read
+  // timeout. A turn can legitimately be silent for a minute while a tool runs (an app
+  // build), so a tiny keepalive frame goes out every 15 s; clients ignore unknown frames.
+  const keepalive = setInterval(() => stream.write(`${JSON.stringify({ type: "ping" })}\n`), 15_000);
   return {
     emit: (frame: StreamFrame) => stream.write(`${JSON.stringify(frame)}\n`),
-    end: () => stream.end(),
+    end: () => {
+      clearInterval(keepalive);
+      stream.end();
+    },
   };
 }
 

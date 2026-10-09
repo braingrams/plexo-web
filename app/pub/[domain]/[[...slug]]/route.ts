@@ -13,6 +13,10 @@ import { getStorefrontPath, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/l
 import { deriveCommerceTheme, type CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
 import { PageView } from "@/lib/db/opsEntities";
 import { recordPageViewRollup } from "@/lib/analyticsRollup";
+import { escapeHtmlAttr, injectBrandingBar, injectFavicon, injectSeoTags } from "@/lib/pub/htmlInject";
+import { serveProject } from "@/lib/projects/serve";
+import { resolvePreviewHost } from "@/lib/projects/previewHost";
+import { User, Organization } from "@/lib/db/coreEntities";
 import { buildSiteRobotsTxt, buildSiteSitemap } from "@/lib/pub/siteSitemap";
 import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
@@ -85,51 +89,6 @@ function injectBaseHref(html: string, basePath: string): string {
     return html.slice(0, idx) + baseTag + html.slice(idx);
   }
   return baseTag + html;
-}
-
-// White-label favicon override for a published page, splice-injected the same way as
-// injectBaseHref — only called for orgs entitled to (and who've set) custom branding, see
-// the call site below. A same-origin builder-compiled page won't already have its own
-// <link rel="icon">, so this never needs to replace one, only add one.
-function injectFavicon(html: string, logoUrl: string): string {
-  const linkTag = `<link rel="icon" href="${logoUrl}">`;
-  const headMatch = html.match(/<head[^>]*>/i);
-  if (headMatch && headMatch.index !== undefined) {
-    const idx = headMatch.index + headMatch[0].length;
-    return html.slice(0, idx) + linkTag + html.slice(idx);
-  }
-  return html;
-}
-
-// Applies to BUILDER and RAW_UPLOAD pages alike. RAW_UPLOAD content is arbitrary uploaded
-// HTML, which could contain a literal "</body>" string inside a <script>/<style> block or
-// string literal that isn't the real closing tag — naively splicing at the first textual
-// match risks landing mid-script and corrupting it. Masking out every <script>/<style>
-// block's own contents before searching (replacing them with same-length blanks, so every
-// other offset lines up 1:1 with the real, untouched `html`) means a fake "</body>" inside
-// one can never be mistaken for the real tag, while every byte OUTSIDE the insertion point
-// still reaches the browser exactly as uploaded — a full HTML reparse/reserialize (cheerio,
-// used for the disposable Text Content preview) isn't used here because this is the actual
-// serving path, and RAW_UPLOAD content is meant to be served byte-for-byte as uploaded.
-function injectBrandingBar(html: string, ctaHref: string): string {
-  const bar = `<div style="position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;gap:12px;padding:10px 16px;background:#0b0f19;color:#f0f2ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;line-height:1;border-top:1px solid rgba(255,255,255,0.08);box-shadow:0 -4px 20px rgba(0,0,0,0.35);">
-  <span>Hosted with <strong>Plexo</strong>.</span>
-  <a href="${ctaHref}" target="_blank" rel="noopener" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;padding:6px 14px;border-radius:8px;font-weight:700;text-decoration:none;">Host yours now</a>
-</div>`;
-  const maskedHtml = html.replace(
-    /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
-    (block) => " ".repeat(block.length),
-  );
-  let insertAt = -1;
-  const bodyCloseRe = /<\/body\s*>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = bodyCloseRe.exec(maskedHtml)) !== null) {
-    insertAt = match.index; // last real match wins — see doc comment above
-  }
-  if (insertAt !== -1) {
-    return html.slice(0, insertAt) + bar + html.slice(insertAt);
-  }
-  return html + bar;
 }
 
 // Explicit merchant override (CommerceSettings) wins; otherwise auto-detect from the site's
@@ -283,10 +242,6 @@ function injectProductSeo(html: string, product: { name: string; description: st
   return out;
 }
 
-function escapeHtmlAttr(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
 // designJson (unlike compiledHtml) is never run through sanitizeCompiledHtml.ts —
 // server/sanitizer.ts's sanitizePlexoPayload only Zod-validates + prototype-pollution-
 // cleans it (see that file's own comment) — so the raw customJs string the author typed
@@ -317,48 +272,6 @@ function injectCustomJs(html: string, customJs: string | null | undefined): stri
     return html.slice(0, insertAt) + scriptTag + html.slice(insertAt);
   }
   return html + scriptTag;
-}
-
-// JSON.stringify alone doesn't escape "</" — a value containing the literal substring
-// "</script>" would otherwise prematurely close the tag this gets embedded in.
-function safeJsonLd(value: unknown): string {
-  return JSON.stringify(value).replace(/</g, "\\u003c");
-}
-
-// Self-canonical + (optional) noindex + a baseline WebSite JSON-LD schema — the three
-// concrete gaps the migration-readiness doc flagged for non-blog pages (blog posts
-// already get all three from lib/blog/seo.ts's generateMetadata path). Applied at serve
-// time, same insertion point as injectFavicon, so it works for BUILDER and RAW_UPLOAD
-// pages alike without needing a compiler/SDK change.
-//
-// A page that already declares its own canonical URL or structured data (a page migrated
-// from WordPress carries Yoast's, an uploaded site may carry its own) is authoritative —
-// adding ours on top would give search engines two conflicting canonicals, and pointing
-// it at the Plexo preview host would hand the original site's rankings to the preview.
-function injectSeoTags(html: string, opts: { canonicalUrl: string; noindex: boolean; siteName: string }): string {
-  const headEnd = html.search(/<\/head\s*>/i);
-  const head = headEnd === -1 ? html.slice(0, 20000) : html.slice(0, headEnd);
-  const hasOwnCanonical = /<link\b[^>]*\brel=["']?canonical["']?/i.test(head);
-  const hasOwnSchema = /<script\b[^>]*application\/ld\+json/i.test(html);
-  let tags = hasOwnCanonical ? "" : `<link rel="canonical" href="${escapeHtmlAttr(opts.canonicalUrl)}">`;
-  if (opts.noindex) {
-    tags += `<meta name="robots" content="noindex,nofollow">`;
-  }
-  if (!hasOwnSchema) {
-    tags += `<script type="application/ld+json">${safeJsonLd({
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      name: opts.siteName,
-      url: opts.canonicalUrl,
-    })}</script>`;
-  }
-  if (!tags) return html;
-  const headMatch = html.match(/<head[^>]*>/i);
-  if (headMatch && headMatch.index !== undefined) {
-    const idx = headMatch.index + headMatch[0].length;
-    return html.slice(0, idx) + tags + html.slice(idx);
-  }
-  return tags + html;
 }
 
 // Routes <img> tags served from our own uploads bucket (see lib/storage.ts's
@@ -439,6 +352,23 @@ async function findChildBySlug(parentId: string, slug: string): Promise<Template
   return full ?? null;
 }
 
+async function servePreviewHost(request: NextRequest, host: string, templateId: string): Promise<NextResponse> {
+  const { data: template } = await Template.get({ id: templateId }).go();
+  if (!template || template.sourceType !== "REACT_PROJECT") return notFoundResponse();
+  const [{ data: user }, { data: organization }] = await Promise.all([
+    User.get({ id: template.userId }).go(),
+    Organization.get({ id: template.organizationId }).go(),
+  ]);
+  return serveProject(request, {
+    template,
+    host,
+    isPreview: true,
+    noindex: true,
+    owner: { subscriptionPlan: user?.subscriptionPlan ?? "FREE", hideBranding: user?.hideBranding ?? false },
+    organization: { id: template.organizationId, logo: organization?.logo ?? null, whiteLabelEnabled: organization?.whiteLabelEnabled ?? false },
+  });
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ domain: string; slug?: string[] }> }
@@ -448,6 +378,9 @@ export async function GET(
 
   const siteResult = await resolveSite(rawDomain);
   if (siteResult.status === "not_found") {
+    // A React app's preview address (preview--<id>.<pagesDomain>) isn't a PublishedDomain.
+    const previewTarget = await resolvePreviewHost(rawDomain);
+    if (previewTarget) return servePreviewHost(request, rawDomain, previewTarget.templateId);
     return notFoundResponse();
   }
   // A suspended domain (abuse takedown — see lib/safeBrowsing.ts /
@@ -457,6 +390,16 @@ export async function GET(
     return suspendedResponse();
   }
   const published = siteResult.published;
+  if (published.template.sourceType === "REACT_PROJECT") {
+    return serveProject(request, {
+      template: published.template,
+      host: rawDomain,
+      isPreview: false,
+      noindex: published.noindex ?? false,
+      owner: published.user,
+      organization: published.organization,
+    });
+  }
   const slugSegments = params.slug ?? [];
   if (isWordPressAjaxPath(slugSegments)) return wordPressAjaxStub();
 

@@ -1,3 +1,4 @@
+import { buildSolAppContext } from "@/lib/projects/solAppContext";
 import { friendlyProviderError } from "@/lib/ai/providerErrors";
 import { describeAttachedImages } from "@/lib/ai/solImageDescriptions";
 import type { ResolvedUser } from "@/lib/mcp/dispatchMcpTool";
@@ -581,6 +582,7 @@ export async function prepareMessagesTurn(
         apiKey: routing.apiKey,
         userMessageContent,
         memoryFacts,
+        appContext: conversation.appId ? await buildSolAppContext(conversation.appId, resolved).catch(() => undefined) : undefined,
         ...callbacks,
         onUserMessageSaved: (key) => userMessageSaved(key),
         // Re-checked before EVERY loop iteration, not just once up front — a long
@@ -708,6 +710,7 @@ export async function prepareConfirmTurn(
         decision,
         answers,
         memoryFacts,
+        appContext: conversation.appId ? await buildSolAppContext(conversation.appId, resolved).catch(() => undefined) : undefined,
         ...callbacks,
         budgetGuard: routing.isByok
           ? async () => true

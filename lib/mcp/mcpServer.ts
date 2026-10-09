@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readObject } from "@/lib/storage";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { revalidateBlogPost } from "@/lib/blog/revalidateDynamo";
 
@@ -90,6 +91,17 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
       // — see dispatchMcpTool.ts's own comment on its optional `revalidateBlogPost` param.
       const toolResult = await dispatchMcpTool(toolName, args, resolved, revalidateBlogPost);
 
+      // A tool can attach rich content (app_screenshot's image) as __contentBlocks — sent to
+      // MCP clients as real image content, not inside the JSON text.
+      const { __contentBlocks: blocks, ...plain } = (toolResult && typeof toolResult === "object" ? toolResult : { value: toolResult }) as { __contentBlocks?: any[] };
+      const images = await Promise.all(
+        (blocks ?? [])
+          .filter((b) => b?.type === "image" && b.source?.type === "url")
+          .map(async (b) => {
+            const file = await readObject(b.source.url).catch(() => null);
+            return file ? { type: "image", data: file.body.toString("base64"), mimeType: file.contentType || "image/jpeg" } : null;
+          }),
+      );
       return NextResponse.json({
         jsonrpc,
         id,
@@ -97,8 +109,9 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           content: [
             {
               type: "text",
-              text: JSON.stringify(toolResult, null, 2),
+              text: JSON.stringify(toolResult && typeof toolResult === "object" ? plain : toolResult, null, 2),
             },
+            ...images.filter(Boolean),
           ],
         },
       });

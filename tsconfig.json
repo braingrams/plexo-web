@@ -45,6 +45,8 @@
     "node_modules",
     ".next",
     "scripts",
-    "cdk"
+    "cdk",
+    "lib/projects/scaffold/template",
+    "lambda/project-build"
   ]
 }

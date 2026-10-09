@@ -48,3 +48,8 @@ cdk/lib/lib/
 .tmp-scripts/
 
 *.lock
+# Self-hosted Monaco editor, copied from node_modules at build (scripts/copy-monaco.mjs)
+public/monaco/
+
+# Built inside the build Lambda image (lambda/project-build/Dockerfile)
+lambda/project-build/dist/

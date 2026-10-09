@@ -47,6 +47,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   // Handle CORS and preflight requests for API endpoints
   if (pathname.startsWith("/api/")) {
+    // The React-app runtime is only ever reached through the /__plexo/api rewrite on the
+    // app's own domain (below). Called directly — on the dashboard or any host — it would
+    // let one origin act on another app's sessions, so it doesn't exist from the outside.
+    if (pathname === "/api/runtime" || pathname.startsWith("/api/runtime/")) {
+      return new NextResponse("Not found.", { status: 404 });
+    }
     if (hasTrailingSlash && request.method !== "OPTIONS") return stripTrailingSlash();
     const origin = request.headers.get("origin") || "";
     const appOrigin = new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").origin;
@@ -175,6 +181,14 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     if (hostname.endsWith(".localhost")) {
       const sub = hostname.replace(".localhost", "");
       lookupDomain = `${sub}.${pagesDomain}`;
+    }
+
+    // A React app's own backend (lib/projects, docs/plexo-projects/ARCHITECTURE.md): data,
+    // sign-in, storage and server functions, answered on the app's own domain so its
+    // session cookie stays first-party. A separate route tree, never the page catch-all.
+    if (pathname === "/__plexo/api" || pathname.startsWith("/__plexo/api/")) {
+      const rest = pathname.slice("/__plexo/api".length) || "/";
+      return NextResponse.rewrite(new URL(`/api/runtime/${lookupDomain}${rest}${request.nextUrl.search}`, request.url));
     }
 
     // The blog's own routes keep Next's default URL style; every other path keeps its

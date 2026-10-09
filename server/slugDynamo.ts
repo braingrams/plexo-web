@@ -77,7 +77,7 @@ export interface PageTreeNode {
   parentId: string | null;
   order: number;
   updatedAt: string;
-  sourceType: "BUILDER" | "RAW_UPLOAD";
+  sourceType: "BUILDER" | "RAW_UPLOAD" | "REACT_PROJECT";
 }
 
 function toNode(t: {
@@ -87,7 +87,7 @@ function toNode(t: {
   parentId?: string;
   order?: number;
   updatedAt?: string;
-  sourceType?: "BUILDER" | "RAW_UPLOAD";
+  sourceType?: "BUILDER" | "RAW_UPLOAD" | "REACT_PROJECT";
 }): PageTreeNode {
   return {
     id: t.id,

@@ -61,6 +61,10 @@ export const DESTRUCTIVE_TOOL_NAMES: ReadonlySet<string> = new Set([
   // --- lib/mcp/lmsTools.ts (Funnel/LMS) ---
   "delete_funnel_page", // deletes a funnel page outright (unlike delete_funnel, nothing here is soft/reversible)
   "set_funnel_enrollment_status", // can immediately revoke a paying learner's access to content they bought
+
+  // --- lib/mcp/appTools.ts (React apps) ---
+  "app_publish", // changes what the app's real visitors get, and migrates the LIVE database
+  "app_restore_version", // replaces the app's current files with an older version's
 ]);
 
 export function isDestructiveTool(toolName: string): boolean {

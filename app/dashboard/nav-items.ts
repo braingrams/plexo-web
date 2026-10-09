@@ -10,6 +10,7 @@ export type NavItem = { href: string; label: string; badge?: string };
 // direct link in the Templates toolbar), not as its own primary destination.
 export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Overview" },
+  { href: "/dashboard/apps", label: "Apps", badge: "New" },
   { href: "/dashboard/pages", label: "Pages" },
   { href: "/dashboard/blog", label: "Blog" },
   { href: "/dashboard/commerce", label: "Commerce", badge: "New" },

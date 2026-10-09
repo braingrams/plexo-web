@@ -11,7 +11,7 @@ import type { GenerateWithToolsParams, GenerateWithToolsResult } from "@/lib/ai/
 import { getAllSolTools, ASK_USER_QUESTION_TOOL_NAME, USE_ATTACHED_IMAGE_TOOL_NAME, type BedrockToolDef } from "@/lib/ai/solToolSchema";
 import { resolveModel } from "@/lib/ai/modelRegistry";
 import { MAX_TOKENS } from "@/lib/ai/generate";
-import { MAX_TOOL_ITERATIONS } from "@/lib/credits/agentTurnEstimate";
+import { MAX_TOOL_ITERATIONS, MAX_APP_TOOL_ITERATIONS } from "@/lib/credits/agentTurnEstimate";
 import type { AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { SolMessage } from "@/lib/db/solEntities";
 import { createAttachmentResolver, publishAttachedImage, PRIVATE_ATTACHMENT_PATH } from "@/lib/ai/solAttachments";
@@ -89,6 +89,8 @@ export interface AgentTurnDeps {
   /** Bedrock/Anthropic content blocks (text, image, document refs) for the new user message. */
   userMessageContent: any[];
   memoryFacts: string[];
+  /** When the conversation is an app's builder chat: what SOL needs to know about that app. */
+  appContext?: string;
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
   /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
@@ -140,6 +142,7 @@ export interface ResumeAgentTurnDeps {
   /** Required only when resuming an ask_user_question pause. */
   answers?: AskUserAnswer[];
   memoryFacts: string[];
+  appContext?: string;
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
   /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
@@ -171,10 +174,14 @@ function extractText(content: any[]): string {
 }
 
 function buildToolResultBlock(toolUseId: string, output: unknown, isError: boolean) {
+  // A tool can return rich content (app_screenshot: text + an image the model should see)
+  // as __contentBlocks; its image is stored privately and resolved to bytes just before the
+  // model call (lib/ai/solAttachments.ts), so the saved conversation stays small.
+  const blocks = output && typeof output === "object" && Array.isArray((output as any).__contentBlocks) ? (output as any).__contentBlocks : null;
   return {
     type: "tool_result",
     tool_use_id: toolUseId,
-    content: typeof output === "string" ? output : JSON.stringify(output ?? null),
+    content: blocks ?? (typeof output === "string" ? output : JSON.stringify(output ?? null)),
     is_error: isError,
   };
 }
@@ -238,7 +245,7 @@ function formatAnswersForModel(answers: AskUserAnswer[]): string {
  * around the fact that a pause is coming, instead of talking as if the action already
  * silently happened.
  */
-function buildSolSystemPrompt(memoryFacts: string[]): string {
+function buildSolSystemPrompt(memoryFacts: string[], appContext?: string): string {
   const memoryBlock =
     memoryFacts.length > 0
       ? `\n\nWhat you already know about this user (from their saved SOL memory — treat as established context, don't re-ask for it):\n${memoryFacts.map((fact) => `- ${fact}`).join("\n")}`
@@ -268,7 +275,23 @@ When the user attaches an image and wants it on a page, use THEIR image: call us
 
 When a tool fails, say plainly what happened and what it means for them (e.g. "You've reached today's limit of 15 custom HTML pages"). If getting around it means doing something different from what they chose — a drag-and-drop builder page instead of the custom HTML page they picked, a different domain — ask first with ask_user_question (e.g. "Build it as a builder page now" / "Wait and build the HTML page later") instead of switching on your own.
 
-If a tool call fails, explain what went wrong in plain terms and suggest a next step — don't just retry blindly.${memoryBlock}`;
+If a tool call fails, explain what went wrong in plain terms and suggest a next step — don't just retry blindly.
+
+## Building apps
+
+Plexo also builds full-stack web apps — anything with logins, saved data, dashboards, forms that do something, bookings, payments, admin areas, internal tools, games. When someone wants one of those, use create_app (not a landing page) and build it, without asking which page type they want.
+
+How to build an app well:
+- Don't interrogate first. If the request is clear enough to build something useful, build a complete first version with sensible defaults, then offer refinements. Ask (with ask_user_question) only about things that change what you'd build.
+- Start by reading PLEXO.md and src/App.tsx. Follow PLEXO.md exactly: pages in src/pages, routes in src/App.tsx, the UI components in src/components/ui, the plexo client for data/sign-in/storage/functions, design tokens instead of hard-coded colors.
+- Make it look professionally designed: a clear visual hierarchy, consistent spacing, real copy (no lorem ipsum), sensible empty states ("No tasks yet — add your first"), loading states and error messages. It must work on a phone.
+- Data lives in Postgres. Create tables in a new numbered migration (db/migrations/0001_init.sql, 0002_…). Every table needs row-level-security policies for who can read and write it — e.g. "users only see their own rows" is \`using (user_id = plexo.uid())\`. Without a policy the app can't reach the table at all. Reference accounts with \`references plexo.users(id)\`.
+- Anything secret (API keys) goes in a server function (functions/<name>.ts), never in src/. Use app_request_secret to get a key from the owner — never ask for one in chat.
+- Write in sensible chunks with app_write_files; change existing code with app_edit_file. Then app_build. Fix every error and type problem it reports and build again until it's clean.
+- After a clean build, check it with app_screenshot — the main page and at least one other, and on mobile. Fix anything that looks broken or wrong before telling the owner it's ready.
+- Pages in src/plexo-canvas/ were designed visually in the editor's Design tab (<name>.canvas.json is the design; <Name>Page.tsx is generated from it). For small content or style changes to a designed page, suggest the Design tab; if you do edit its .tsx, say so — the Design tab will ask the owner before replacing your edit. Never edit src/plexo-canvas/routes.tsx or brand.json, and keep the designRoutes line in src/App.tsx.
+- When a message includes a selected element (a file and line from the editor's Select & Edit), change exactly that element. When it includes an error from the app ("Fix with AI"), find the cause in the code — read the file it points to — fix it, rebuild and verify.
+- Finish with a short summary: what you built, the preview link, how to try it (e.g. "sign up with any email"), and two or three good next steps. Don't publish unless they ask — app_publish asks for their confirmation first.${appContext ? `\n\n## The app you're working on\n\n${appContext}` : ""}${memoryBlock}`;
 }
 
 interface LoopContext {
@@ -278,6 +301,7 @@ interface LoopContext {
   provider: AiProvider;
   apiKey?: string;
   memoryFacts: string[];
+  appContext?: string;
   history: HistoryEntry[];
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
@@ -299,13 +323,16 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
   const tools: BedrockToolDef[] = getAllSolTools();
   const model = resolveModel(ctx.provider, ctx.modelTier);
   const generateWithTools = TOOL_CAPABLE_PROVIDERS[ctx.provider];
-  const systemPrompt = buildSolSystemPrompt(ctx.memoryFacts);
+  const systemPrompt = buildSolSystemPrompt(ctx.memoryFacts, ctx.appContext);
 
   // Stored attachment blocks point at private uploads; the model needs their bytes inline.
   const resolveAttachments = createAttachmentResolver(ctx.resolvedUser.userId);
   const totals = { inputTokens: 0, outputTokens: 0 };
 
-  for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+  // Building an app takes many rounds (write → build → fix → screenshot); once a turn is
+  // working on an app it gets the larger allowance. Every round is still balance-checked.
+  let iterationLimit = MAX_TOOL_ITERATIONS;
+  for (let iteration = 0; iteration < iterationLimit; iteration++) {
     if (!(await ctx.budgetGuard())) {
       throw new InsufficientCreditsError();
     }
@@ -325,6 +352,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
     totals.outputTokens += result.usage.outputTokens;
 
     const toolUseBlocks = Array.isArray(result.content) ? result.content.filter((block) => block?.type === "tool_use") : [];
+    if (toolUseBlocks.some((b) => b.name === "create_app" || String(b.name).startsWith("app_"))) iterationLimit = MAX_APP_TOOL_ITERATIONS;
 
     if (result.stopReason !== "tool_use" || toolUseBlocks.length === 0) {
       await SolMessage.create({
@@ -452,6 +480,7 @@ export async function runAgentTurn(deps: AgentTurnDeps): Promise<RunAgentTurnRes
     provider: deps.provider,
     apiKey: deps.apiKey,
     memoryFacts: deps.memoryFacts,
+    appContext: deps.appContext,
     history,
     onTextDelta: deps.onTextDelta,
     onToolCallStart: deps.onToolCallStart,
@@ -578,6 +607,7 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     provider: deps.provider,
     apiKey: deps.apiKey,
     memoryFacts: deps.memoryFacts,
+    appContext: deps.appContext,
     history,
     onTextDelta: deps.onTextDelta,
     onToolCallStart: deps.onToolCallStart,

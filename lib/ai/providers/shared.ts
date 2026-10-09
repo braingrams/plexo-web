@@ -67,3 +67,16 @@ export interface GenerateWithToolsResult {
     outputTokens: number;
   };
 }
+
+/** A tool result as plain text, for providers whose tool results are text-only (OpenAI,
+ * Gemini). Content arrays (e.g. a screenshot tool's text + image) keep their text; images
+ * become a short note instead of a wall of base64. */
+export function toolResultText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((b: any) => (b?.type === "text" ? String(b.text ?? "") : b?.type === "image" ? "[Image omitted — this AI provider can't view images in tool results.]" : JSON.stringify(b)))
+      .join("\n");
+  }
+  return JSON.stringify(content ?? null);
+}

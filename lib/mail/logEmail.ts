@@ -32,7 +32,11 @@ export type EmailDeliveryContext =
   | "lms_magic_link"
   | "lms_enrollment_confirmation"
   | "lms_drip_ready"
-  | "commerce_bank_transfer";
+  | "commerce_bank_transfer"
+  // Sign-in emails sent on behalf of an app built on Plexo (lib/appAuth/emails.ts), and
+  // emails its server functions send (ctx.sendEmail).
+  | "app_auth"
+  | "app_function_email";
 
 /**
  * Fire-and-forget write to EmailLog — mirrors this codebase's established

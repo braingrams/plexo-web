@@ -3,6 +3,7 @@ import { deleteObjects } from "@/lib/storage";
 import { removeCloudFrontDomain } from "@/lib/cloudfrontDomains";
 import { getDescendantIds } from "@/server/slugDynamo";
 import { purgeSiteData, siteDeletionBlocker, siteLayoutTemplateIds } from "./purgeSiteData";
+import { purgeAppProject } from "@/lib/projects/purgeApp";
 
 // The one way a page or site is deleted — shared by the dashboard route
 // (app/api/templates/[id]), the v1 API and the MCP delete_template tool, so they can't
@@ -51,6 +52,8 @@ export async function deleteTemplateAndContents(existing: { id: string; parentId
   }
   await Promise.all(domains.map((d) => PublishedDomain.remove({ templateId: d.templateId, id: d.id }).go()));
 
+  // A React app also owns a database, server functions, builds and stored files.
+  if (isSite && full?.sourceType === "REACT_PROJECT") await purgeAppProject(existing.id);
   const { removed } = isSite ? await purgeSiteData(existing.id, otherIds) : { removed: 0 };
 
   await Promise.all(otherIds.map((id) => Template.remove({ id }).go()));

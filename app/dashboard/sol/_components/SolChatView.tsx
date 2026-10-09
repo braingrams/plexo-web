@@ -95,14 +95,33 @@ function draftStorageKey(conversationId: string): string {
   return `sol:draft:${conversationId}`;
 }
 
+/** Options for SOL embedded in another surface (the app editor's chat panel). */
+export type SolChatEmbedding = {
+  /** Text shown in the empty state instead of the greeting. */
+  emptyTitle?: string;
+  emptySuggestions?: string[];
+  /** Lets the host send a message itself (Select & Edit, "Fix with AI"). */
+  registerSend?: (send: (text: string) => void) => void;
+  /** Called once per tool call that finishes in this session (e.g. a build → refresh the preview). */
+  onToolFinished?: (call: { name: string; status: string; result: unknown }) => void;
+  /** Rendered just above the composer (e.g. the element picked with Select & Edit). */
+  composerPrefix?: React.ReactNode;
+  /** Where the credit modal returns to. */
+  returnTo?: string;
+  /** Adds host context (e.g. the selected element) to what the person typed, before sending. */
+  transformOutgoing?: (text: string) => string;
+};
+
 export function SolChatView({
   conversation: initialConversation,
   initialMessages,
   userName,
+  embedded,
 }: {
   conversation: ConversationSummary | null;
   initialMessages: SolMessage[];
   userName: string | null;
+  embedded?: SolChatEmbedding;
 }) {
   const { bumpRefresh, setActiveConversationIdOverride } = useSolSidebar();
   const [conversation, setConversation] = useState<ConversationSummary | null>(initialConversation);
@@ -388,7 +407,8 @@ export function SolChatView({
     }
   }
 
-  async function handleSend(text: string, attachments: ChatAttachment[]) {
+  async function handleSend(typed: string, attachments: ChatAttachment[]) {
+    const text = embedded?.transformOutgoing ? embedded.transformOutgoing(typed) : typed;
     setInlineError(null);
     setComposerRestoreText(undefined);
     const target = await ensureConversation();
@@ -396,14 +416,34 @@ export function SolChatView({
     const mediaBlocks: MediaBlock[] = attachments.map((a) => ({ type: a.type === "pdf" ? "document" : a.type, url: a.url, filename: a.filename }));
     const optimisticId = `local-user-${randomId()}`;
     optimisticUserMessageIdRef.current = optimisticId;
-    lastSentTextRef.current = text;
+    lastSentTextRef.current = typed;
     setMessages((prev) => [
       ...prev,
-      { id: optimisticId, role: "user", content: [{ type: "text", text }, ...mediaBlocks], createdAt: new Date().toISOString() },
+      // The bubble shows what the person typed; any host context rides along only in what's sent.
+      { id: optimisticId, role: "user", content: [{ type: "text", text: typed }, ...mediaBlocks], createdAt: new Date().toISOString() },
     ]);
 
     void stream.sendMessage(target.id, text, attachments, modelTier);
   }
+
+  // Embedded hosts can send on the person's behalf; always the latest handleSend.
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
+  useEffect(() => {
+    embedded?.registerSend?.((text: string) => void handleSendRef.current(text, []));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const reportedToolCallsRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!embedded?.onToolFinished) return;
+    for (const block of stream.blocks) {
+      if (!isToolUseBlock(block) || !block.status || !["success", "error"].includes(block.status)) continue;
+      if (reportedToolCallsRef.current.has(block.id)) continue;
+      reportedToolCallsRef.current.add(block.id);
+      embedded.onToolFinished({ name: block.name, status: block.status, result: block.result });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream.blocks]);
 
   function handleConfirmToolCall(decision: "confirmed" | "declined") {
     if (!conversation || !pendingConfirmMessageId) return;
@@ -504,18 +544,43 @@ export function SolChatView({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0 }}>
-      <SolHeader
-        conversation={conversation}
-        onRename={handleRename}
-        creditsRefreshKey={creditsRefreshKey}
-        titleJustGenerated={titleJustGenerated}
-        onTitleRevealDone={() => setTitleJustGenerated(false)}
-      />
+      {!embedded && (
+        <SolHeader
+          conversation={conversation}
+          onRename={handleRename}
+          creditsRefreshKey={creditsRefreshKey}
+          titleJustGenerated={titleJustGenerated}
+          onTitleRevealDone={() => setTitleJustGenerated(false)}
+        />
+      )}
 
       {isEmpty ? (
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 1.25rem", gap: "1.75rem" }}>
-          <Greeting name={userName} />
-          <div style={{ width: "100%", maxWidth: 680 }}>{composer}</div>
+          {embedded?.emptyTitle ? (
+            <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "0.9rem", alignItems: "center" }}>
+              <h2 style={{ margin: 0, fontFamily: "var(--font-heading), sans-serif", fontSize: "1.25rem", fontWeight: 700, color: "#f0f2ff" }}>{embedded.emptyTitle}</h2>
+              {embedded.emptySuggestions && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem", justifyContent: "center", maxWidth: 520 }}>
+                  {embedded.emptySuggestions.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => void handleSend(suggestion, [])}
+                      style={{ padding: "0.45rem 0.8rem", borderRadius: 999, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "rgba(240,242,255,0.8)", fontSize: "0.78rem", cursor: "pointer" }}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <Greeting name={userName} />
+          )}
+          <div style={{ width: "100%", maxWidth: 680 }}>
+            {embedded?.composerPrefix}
+            {composer}
+          </div>
         </div>
       ) : (
         <div className="sol-split-row" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "row" }}>
@@ -530,9 +595,10 @@ export function SolChatView({
             />
             <div style={{ padding: "0 1.25rem 1.25rem" }}>
               <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                {activeArtifact && !showArtifactPanel && (
+                {!embedded && activeArtifact && !showArtifactPanel && (
                   <ArtifactCard artifact={activeArtifact} onOpen={() => setShowArtifactPanel(true)} />
                 )}
+                {embedded?.composerPrefix}
                 {composer}
               </div>
             </div>
@@ -566,7 +632,7 @@ export function SolChatView({
       {creditInfo && (
         <CreditExhaustedModal
           creditInfo={creditInfo}
-          returnTo={conversation ? `/dashboard/sol/${conversation.id}` : "/dashboard/sol"}
+          returnTo={embedded?.returnTo ?? (conversation ? `/dashboard/sol/${conversation.id}` : "/dashboard/sol")}
           onClose={handleCloseCreditModal}
         />
       )}

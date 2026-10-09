@@ -19,7 +19,9 @@ import { LMS_MCP_TOOLS, LMS_TOOL_NAMES, handleLmsTool } from "./lmsTools";
 import { WP_MIGRATION_MCP_TOOLS, WP_MIGRATION_TOOL_NAMES, handleWpMigrationTool } from "./wpMigrationTools";
 import { DONATION_MCP_TOOLS, DONATION_TOOL_NAMES, handleDonationTool } from "./donationTools";
 import { FORM_MCP_TOOLS, FORM_TOOL_NAMES, handleFormTool } from "./formTools";
+import { APP_MCP_TOOLS, APP_TOOL_NAMES, handleAppTool } from "./appTools";
 import { deleteTemplateAndContents } from "@/lib/sites/deleteTemplate";
+import { linkDomainToTemplate, SUBDOMAIN_REGEX, DOMAIN_REGEX, RESERVED_SUBDOMAINS } from "@/lib/sites/linkDomain";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
 
@@ -40,16 +42,6 @@ import { User } from "@/lib/db/coreEntities";
 // never calls resolveUser() itself. mcpServer.ts re-exports both `dispatchMcpTool` and
 // `ResolvedUser` from here so handleMcpJsonRpc's existing call site, and any other file that
 // imported them from mcpServer.ts, keep working completely unchanged.
-
-const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
-const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
-
-const RESERVED_SUBDOMAINS = new Set([
-  "admin", "api", "auth", "dashboard", "plexobuilder", "www", "localhost", "dev",
-  "test", "prod", "staging", "status", "dns", "mail", "email", "support", "help",
-  "static", "assets", "sdk", "pub", "published", "templates", "compile", "settings",
-  "profile", "domains", "account", "login", "register", "signup", "logout", "signin"
-]);
 
 const SCHEMA_HINT =
   "Every row must already be a fully hydrated layout: { id, style, columns: [{ id, width, elements: [{ id, type, style, attributes }] }] }. " +
@@ -172,122 +164,6 @@ async function assertRawUploadAllowed(userId: string, organizationId: string, ac
  * thrown error) — the same check app/api/v1/publish/route.ts's REST
  * counterpart already enforces.
  */
-async function linkDomainToTemplate(
-  resolved: { userId: string; organizationId: string; subscriptionPlan: string; customDomainLimit: number | null },
-  templateId: string,
-  rawDomainInput: string,
-  domainTypeInput?: "SUBDOMAIN" | "CUSTOM"
-): Promise<{
-  finalDomain: string;
-  publishedUrl: string;
-  routingEndpoint: string | undefined;
-  certificateValidationName: string | undefined;
-  certificateValidationValue: string | undefined;
-}> {
-  const rawDomain = rawDomainInput.trim().toLowerCase();
-  if (!rawDomain) {
-    throw new Error("A domain is required to publish.");
-  }
-
-  // Tenant subdomains live on the dedicated pages domain (server/pagesDomain.ts),
-  // isolated from the dashboard's own cookie/session domain — not the app's own
-  // hostname. This function previously derived baseDomain from NEXT_PUBLIC_APP_URL
-  // directly, missing the plexopages.io migration entirely: every subdomain published
-  // through MCP was still landing on the dashboard's own domain regardless of that fix.
-  const pagesDomain = getPagesDomain();
-
-  let domainType = domainTypeInput;
-  if (!domainType) {
-    domainType = rawDomain.includes(".") ? "CUSTOM" : "SUBDOMAIN";
-  }
-
-  let finalDomain = rawDomain;
-  if (domainType === "SUBDOMAIN") {
-    if (!SUBDOMAIN_REGEX.test(rawDomain)) {
-      throw new Error("Subdomain slug must be lowercase alphanumeric characters or hyphens.");
-    }
-    if (RESERVED_SUBDOMAINS.has(rawDomain)) {
-      throw new Error(`Subdomain '${rawDomain}' is reserved.`);
-    }
-    finalDomain = `${rawDomain}.${pagesDomain}`;
-  } else {
-    if (!DOMAIN_REGEX.test(rawDomain)) {
-      throw new Error("Invalid custom domain format.");
-    }
-    if (rawDomain.endsWith("." + pagesDomain) || rawDomain === pagesDomain) {
-      throw new Error("Custom domains cannot end with the platform pages domain.");
-    }
-  }
-
-  // PublishedDomain has no org-wide index (only templateId-primary and byDomain-GSI1,
-  // see contentEntities.ts) — fan out per org root template, same bound every other
-  // ported org-wide domain count uses (app/api/v1/domains/route.ts, publish/route.ts).
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
-  const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
-  const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
-  const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);
-  const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
-  if (currentDomainCount >= domainLimit) {
-    throw new Error(`Published domain limit reached (${domainLimit}). Unlink an existing domain to publish a new one.`);
-  }
-
-  const { data: domainMatches } = await PublishedDomain.query.byDomain({ domain: finalDomain }).go();
-  const existingDomain = domainMatches[0] ?? null;
-  if (existingDomain) {
-    if (existingDomain.organizationId !== resolved.organizationId) {
-      throw new Error(`Domain '${finalDomain}' is already registered by another account.`);
-    }
-    // templateId is part of this entity's own primary key (see contentEntities.ts) —
-    // ElectroDB can't .set() a key-composite attribute in place, so a real re-link moves
-    // the item via create-at-new-key + remove-old-key, same pattern used everywhere else
-    // this migration has hit the same constraint (BlogPost slug rename, this same
-    // re-link in app/api/v1/domains/route.ts and app/api/v1/publish/route.ts).
-    if (existingDomain.templateId !== templateId) {
-      await PublishedDomain.create({ ...existingDomain, templateId }).go();
-      await PublishedDomain.remove({ templateId: existingDomain.templateId, id: existingDomain.id }).go();
-    }
-  } else {
-    // A CUSTOM domain needs a real CloudFront distribution tenant (cdk/lib/published-
-    // sites-stack.ts) before it has any valid routing or TLS cert — without this, the
-    // database row alone would never actually work when visited. Connecting one is now a
-    // two-phase, asynchronous process (see lib/cloudfrontDomains.ts's own comment): this
-    // only requests the certificate and records what's needed to finish later;
-    // lib/lambda/certificateAttachment.ts's scheduled check creates the actual
-    // distribution tenant once ACM issues it.
-    let cfRoutingEndpoint: string | undefined;
-    let certificateArn: string | undefined;
-    let certificateValidationName: string | undefined;
-    let certificateValidationValue: string | undefined;
-    if (domainType === "CUSTOM") {
-      const result = await requestCustomDomainConnection(finalDomain);
-      cfRoutingEndpoint = result.routingEndpoint;
-      certificateArn = result.certificateArn;
-      certificateValidationName = result.certificateValidationName;
-      certificateValidationValue = result.certificateValidationValue;
-    }
-    await PublishedDomain.create({
-      id: randomUUID(),
-      userId: resolved.userId,
-      organizationId: resolved.organizationId,
-      templateId,
-      domain: finalDomain,
-      type: domainType,
-      ...(domainType === "CUSTOM" ? { certificateArn, certificateStatus: "PENDING_VALIDATION" as const, certificateValidationName, certificateValidationValue } : {}),
-    }).go();
-    const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
-    return {
-      finalDomain,
-      publishedUrl: `${protocol}://${finalDomain}`,
-      routingEndpoint: cfRoutingEndpoint,
-      certificateValidationName,
-      certificateValidationValue,
-    };
-  }
-
-  const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
-  return { finalDomain, publishedUrl: `${protocol}://${finalDomain}`, routingEndpoint: undefined, certificateValidationName: undefined, certificateValidationValue: undefined };
-}
-
 export const PLEXO_MCP_TOOLS = [
   {
     name: "publish_landing_page",
@@ -889,6 +765,7 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   ...WP_MIGRATION_MCP_TOOLS,
   ...DONATION_MCP_TOOLS,
   ...FORM_MCP_TOOLS,
+  ...APP_MCP_TOOLS,
 ];
 
 /**
@@ -1745,6 +1622,10 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
       }
       if (FORM_TOOL_NAMES.has(toolName)) {
         toolResult = await handleFormTool(toolName, args, resolved);
+        break;
+      }
+      if (APP_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleAppTool(toolName, args, resolved);
         break;
       }
       throw new Error(`Unknown tool: ${toolName}`);

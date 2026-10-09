@@ -90,6 +90,10 @@ async function resolveBlock(block: Block, userId: string): Promise<Block[]> {
   }
   const type = (file.contentType || "").split(";")[0].trim().toLowerCase();
 
+  if (type.startsWith("image/") && key.includes("/screenshots/")) {
+    // A screenshot SOL took of an app's preview (app_screenshot), not a user's photo.
+    return [note("[Screenshot of the app's preview:]"), { type: "image", source: { type: "base64", media_type: type, data: file.body.toString("base64") } }];
+  }
   if (type.startsWith("image/")) {
     if (!MODEL_IMAGE_TYPES.has(type)) {
       return [note(`[The image "${name}" is a ${type.slice(6).toUpperCase()} file, which SOL can't view. Ask the user to send it as a JPG, PNG, GIF or WebP.]`)];
@@ -134,21 +138,38 @@ async function resolveBlock(block: Block, userId: string): Promise<Block[]> {
  */
 export function createAttachmentResolver(userId: string): (history: HistoryEntry[]) => Promise<HistoryEntry[]> {
   const cache = new Map<string, Promise<Block[]>>();
+  const resolve = (block: Block): Promise<Block[]> => {
+    const url = block.source!.url!;
+    if (!cache.has(url)) cache.set(url, resolveBlock(block, userId));
+    return cache.get(url)!;
+  };
   return async (history) => {
-    if (!history.some((m) => Array.isArray(m.content) && m.content.some(isUrlMediaBlock))) return history;
-    return Promise.all(
-      history.map(async (message) => {
-        if (!Array.isArray(message.content) || !message.content.some(isUrlMediaBlock)) return message;
-        const parts = await Promise.all(
-          (message.content as Block[]).map((block) => {
-            if (!isUrlMediaBlock(block)) return Promise.resolve([stripFilename(block)]);
-            const url = block.source!.url!;
-            if (!cache.has(url)) cache.set(url, resolveBlock(block, userId));
-            return cache.get(url)!;
+    const hasMedia = (blocks: unknown): boolean =>
+      Array.isArray(blocks) && blocks.some((b: any) => isUrlMediaBlock(b) || (b?.type === "tool_result" && hasMedia(b.content)));
+    if (!history.some((m) => hasMedia(m.content))) return history;
+    // App screenshots pile up during a build-and-fix session; only the newest few are sent
+    // as images (each costs ~1.5k tokens on every model call), older ones become a note.
+    const screenshotUrls = history.flatMap((m) =>
+      Array.isArray(m.content)
+        ? (m.content as Block[]).flatMap((b) => (b?.type === "tool_result" && Array.isArray(b.content) ? (b.content as Block[]) : [b])).filter((b) => isUrlMediaBlock(b) && b.source!.url!.includes("/screenshots/")).map((b) => b.source!.url!)
+        : [],
+    );
+    const keep = new Set(screenshotUrls.slice(-3));
+    const resolveList = async (blocks: Block[]): Promise<Block[]> =>
+      (
+        await Promise.all(
+          blocks.map(async (block) => {
+            if (block?.type === "tool_result" && Array.isArray(block.content)) {
+              return [{ ...block, content: await resolveList(block.content as Block[]) }];
+            }
+            if (!isUrlMediaBlock(block)) return [stripFilename(block)];
+            if (block.source!.url!.includes("/screenshots/") && !keep.has(block.source!.url!)) return [note("[An earlier screenshot of the app — superseded by a newer one.]")];
+            return resolve(block);
           }),
-        );
-        return { ...message, content: parts.flat() };
-      }),
+        )
+      ).flat();
+    return Promise.all(
+      history.map(async (message) => (hasMedia(message.content) ? { ...message, content: await resolveList(message.content as Block[]) } : message)),
     );
   };
 }
