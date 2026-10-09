@@ -125,5 +125,7 @@ export function timeAgo(iso: string | null | undefined): string {
   if (s < 45) return "just now";
   if (s < 3600) return `${Math.round(s / 60)} min ago`;
   if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  if (s < 86400 * 2) return "yesterday";
+  if (s < 86400 * 7) return `${Math.round(s / 86400)} days ago`;
   return new Date(iso).toLocaleDateString();
 }
