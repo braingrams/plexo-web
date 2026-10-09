@@ -75,6 +75,17 @@ export async function chargeFor(userId: string, route: SolRoute, tier: ConcreteT
   await chargeUsage(userId, { provider: route.provider, tier, mode, usage });
 }
 
+/** Longest answer per SOL round for Free accounts on Plexo's AI. The usual 32,000-token ceiling
+ *  makes one Basic round's worst case ~160 credits — most of Free's 200 (lib/credits/value.ts);
+ *  12,000 brings it to ~60, so a Free month covers a few rounds. Only a single very large file
+ *  written in one answer comes near it. */
+export const FREE_SOL_MAX_ANSWER_TOKENS = 12_000;
+
+/** Rule 2b — the longest answer per SOL round (undefined: the normal ceiling). */
+export function maxAnswerTokensFor(route: SolRoute, plan: string): number | undefined {
+  return route.paidBy === "plexo" && plan === "FREE" ? FREE_SOL_MAX_ANSWER_TOKENS : undefined;
+}
+
 export const BASIC_LOCK_NOTE = "On the Free plan, SOL uses the Basic model so your monthly AI goes further. Upgrade to choose Medium or High.";
 
 /** For the chat box: the tier this person is held to (rule 2), with the reason — or null when

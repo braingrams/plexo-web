@@ -15,7 +15,7 @@ vi.mock("@/lib/db/ledgerOperations", () => ({ chargeUsage: vi.fn(), ensureCredit
 let plan = "FREE";
 let activeKey: Record<string, unknown> | null = null;
 
-import { routeForKey, tierFor, lockedTierFor, checkCanAfford } from "@/lib/ai/solEngine";
+import { routeForKey, tierFor, lockedTierFor, checkCanAfford, maxAnswerTokensFor, FREE_SOL_MAX_ANSWER_TOKENS } from "@/lib/ai/solEngine";
 
 beforeEach(() => vi.stubEnv("SYSTEM_AI_PROVIDER", "bedrock_claude"));
 afterEach(() => {
@@ -64,5 +64,12 @@ describe("SOL engine", () => {
     const plexo = { provider: "bedrock_claude" as const, apiKey: "", paidBy: "plexo" as const };
     expect(await checkCanAfford("u", plexo, "BASIC", "import_products", 100)).toMatchObject({ status: 402 });
     expect(await checkCanAfford("u", { ...plexo, paidBy: "own-key" }, "BASIC", "import_products", 100)).toBeNull();
+  });
+
+  it("gives Free accounts on Plexo's AI shorter answers per SOL round", () => {
+    const plexo = { provider: "bedrock_claude" as const, apiKey: "", paidBy: "plexo" as const };
+    expect(maxAnswerTokensFor(plexo, "FREE")).toBe(FREE_SOL_MAX_ANSWER_TOKENS);
+    expect(maxAnswerTokensFor(plexo, "PRO")).toBeUndefined();
+    expect(maxAnswerTokensFor({ ...plexo, paidBy: "own-key" }, "FREE")).toBeUndefined();
   });
 });

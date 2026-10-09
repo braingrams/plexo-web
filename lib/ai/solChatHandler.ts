@@ -2,7 +2,7 @@ import { buildSolAppContext } from "@/lib/projects/solAppContext";
 import { friendlyProviderError } from "@/lib/ai/providerErrors";
 import { describeAttachedImages } from "@/lib/ai/solImageDescriptions";
 import type { ResolvedUser } from "@/lib/mcp/dispatchMcpTool";
-import { solRouteForUser, tierFor, type SolRefusal, type SolRoute } from "@/lib/ai/solEngine";
+import { maxAnswerTokensFor, solRouteForUser, tierFor, type SolRefusal, type SolRoute } from "@/lib/ai/solEngine";
 import { ensureCreditPeriod, chargeUsage, estimateWorstCaseCost } from "@/lib/db/ledgerOperations";
 import { estimateWorstCaseAgentTurnCost } from "@/lib/credits/agentTurnEstimate";
 import { SolConversation, SolMessage, SolMemoryFact, SolPreferences } from "@/lib/db/solEntities";
@@ -522,7 +522,7 @@ export async function prepareMessagesTurn(
   // balance is never consulted for them, so this pre-flight check (and the mid-loop
   // budgetGuard below) only applies to System AI turns.
   if (!routing.isByok) {
-    const requiredCredits = estimateWorstCaseAgentTurnCost(modelTier, text.length);
+    const requiredCredits = estimateWorstCaseAgentTurnCost(modelTier, text.length, maxAnswerTokensFor(routing.route, routing.plan));
     const preflightBalance = await ensureCreditPeriod(resolved.userId);
     if (preflightBalance.total < requiredCredits) {
       return { ok: false, status: 402, body: { error: "insufficient_credits", requiredCredits, availableCredits: preflightBalance.total } };
@@ -575,11 +575,12 @@ export async function prepareMessagesTurn(
         // tool-using turn can, in principle, exhaust credits the generous up-front
         // worst-case estimate still passed. Always true for BYOK — see the pre-flight
         // check above.
+        maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan),
         budgetGuard: routing.isByok
           ? async () => true
           : async () => {
               const balance = await ensureCreditPeriod(resolved.userId);
-              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", text.length);
+              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", text.length, maxAnswerTokensFor(routing.route, routing.plan));
               return balance.total >= perCallEstimate;
             },
       };
@@ -699,11 +700,12 @@ export async function prepareConfirmTurn(
         memoryFacts,
         appContext: conversation.appId ? await buildSolAppContext(conversation.appId, resolved).catch(() => undefined) : undefined,
         ...callbacks,
+        maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan),
         budgetGuard: routing.isByok
           ? async () => true
           : async () => {
               const balance = await ensureCreditPeriod(resolved.userId);
-              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", approxInputChars);
+              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", approxInputChars, maxAnswerTokensFor(routing.route, routing.plan));
               return balance.total >= perCallEstimate;
             },
       };
