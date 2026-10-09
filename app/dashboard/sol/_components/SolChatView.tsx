@@ -112,7 +112,9 @@ export type SolChatEmbedding = {
   transformOutgoing?: (text: string) => string;
   /** The host handles running out of credits in place (instead of the top-up modal): it gets
    *  the shortfall and a resend() that sends the same message again once topped up. */
-  onCreditExhausted?: (info: CreditInfo, resend: () => void) => void;
+  onCreditExhausted?: (info: CreditInfo, resend: () => void, midTurn: boolean) => void;
+  /** Fixes the model for this chat (e.g. Basic for Free app builds), with the reason. */
+  lockedModelTier?: { tier: ModelTier; note: string };
   /** Rendered after the last message, inside the conversation (e.g. a build checklist). */
   afterMessages?: React.ReactNode;
   /** The chat box's placeholder. */
@@ -135,7 +137,7 @@ export function SolChatView({
   const { bumpRefresh, setActiveConversationIdOverride } = useSolSidebar();
   const [conversation, setConversation] = useState<ConversationSummary | null>(initialConversation);
   const [messages, setMessages] = useState<SolMessage[]>(initialMessages);
-  const [modelTier, setModelTier] = useState<ModelTier>(initialConversation?.modelTier ?? "BASIC");
+  const [modelTier, setModelTier] = useState<ModelTier>(embedded?.lockedModelTier?.tier ?? initialConversation?.modelTier ?? "BASIC");
   const [pendingConfirmMessageId, setPendingConfirmMessageId] = useState<string | null>(null);
   const [creditInfo, setCreditInfo] = useState<CreditInfo | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
@@ -360,9 +362,13 @@ export function SolChatView({
       // pendingConfirmMessageId is still null.
       setPendingConfirmMessageId(stream.awaitingMessageId);
     } else if (stream.outcome === "credit_exhausted" && embedded?.onCreditExhausted && stream.creditInfo) {
-      rollbackOptimisticUserMessage();
-      const text = lastSentTextRef.current;
-      embedded.onCreditExhausted(stream.creditInfo, () => void handleSendRef.current(text, []));
+      // Ran out before starting → the message never happened: take it back and resend it as
+      // is. Ran out partway → the rounds so far are saved: keep everything and, once topped
+      // up, ask SOL to carry on rather than start over.
+      const midTurn = stream.blocks.length > 0;
+      if (!midTurn) rollbackOptimisticUserMessage();
+      const text = midTurn ? "Carry on where you stopped." : lastSentTextRef.current;
+      embedded.onCreditExhausted(stream.creditInfo, () => void handleSendRef.current(text, []), midTurn);
     } else if (stream.outcome === "credit_exhausted") {
       rollbackOptimisticUserMessage();
       setCreditInfo(stream.creditInfo);
@@ -553,6 +559,7 @@ export function SolChatView({
         onStop={handleStop}
         initialText={composerRestoreText}
         placeholder={embedded?.composerPlaceholder}
+        tierNote={embedded?.lockedModelTier?.note}
       />
     </>
   );

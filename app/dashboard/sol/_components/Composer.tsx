@@ -27,6 +27,7 @@ export function Composer({
   onStop,
   initialText,
   placeholder,
+  tierNote,
 }: {
   streaming: boolean;
   disabled?: boolean;
@@ -36,6 +37,8 @@ export function Composer({
   onStop: () => void;
   initialText?: string;
   placeholder?: string;
+  /** When set, the model choice is fixed and this explains why (shown on hover). */
+  tierNote?: string;
 }) {
   const [text, setText] = useState(initialText ?? "");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -240,11 +243,11 @@ export function Composer({
 
         <span style={{ flex: 1 }} />
 
-        <div style={{ flexShrink: 0 }}>
+        <div style={{ flexShrink: 0 }} title={tierNote}>
           <ModelTierSelector
             value={modelTier}
             onChange={onModelTierChange}
-            disabled={disabled || streaming}
+            disabled={disabled || streaming || !!tierNote}
             className="sol-composer-tier-select"
             menuWidth={260}
           />

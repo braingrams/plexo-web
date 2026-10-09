@@ -140,7 +140,7 @@ export function CreditsPanel({ credits, monthly, onPick, onClose }: { credits: n
 }
 
 /** Shown above the chat box when a message couldn't be sent for lack of credits. */
-export function OutOfCreditsCard({ onPick, onDismiss, onOpenCode }: { onPick: (pack: Pack) => void; onDismiss: () => void; onOpenCode: () => void }) {
+export function OutOfCreditsCard({ midTurn, onPick, onDismiss, onOpenCode }: { midTurn?: boolean; onPick: (pack: Pack) => void; onDismiss: () => void; onOpenCode: () => void }) {
   const packs = usePacks(true);
   const [chosen, setChosen] = useState<PackId>("MEDIUM");
   const pack = packs?.find((p) => p.pack === chosen) ?? packs?.[0] ?? null;
@@ -148,8 +148,10 @@ export function OutOfCreditsCard({ onPick, onDismiss, onOpenCode }: { onPick: (p
     <div style={{ marginBottom: 8, padding: "0.9rem", borderRadius: 14, border: `1.5px solid ${C.text}`, background: C.panelSolid, display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 800 }}>You&rsquo;ve used all your AI credits</div>
-          <div style={{ fontSize: "0.78rem", color: C.muted, marginTop: 3, lineHeight: 1.5 }}>Top up to keep going. Your message is kept and SOL carries on as soon as you&rsquo;re done.</div>
+          <div style={{ fontSize: "0.9rem", fontWeight: 800 }}>{midTurn ? "SOL ran out of credits partway through" : "You’ve used all your AI credits"}</div>
+          <div style={{ fontSize: "0.78rem", color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
+            {midTurn ? "Everything it built so far is saved. Top up and SOL carries on from where it stopped." : "Top up to keep going. Your message is kept and SOL carries on as soon as you’re done."}
+          </div>
         </div>
         <button type="button" onClick={onDismiss} aria-label="Dismiss" style={{ background: "none", border: "none", color: C.muted, cursor: "pointer" }}>
           <X size={15} />
