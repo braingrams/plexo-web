@@ -10,8 +10,8 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe("AI credit value", () => {
   it("grants each plan its monthly AI dollars in credits", () => {
-    expect(PLAN_MONTHLY_AI_USD).toEqual({ FREE: 0.5, PRO: 2, ULTRA: 3 });
-    expect(planMonthlyCredits("FREE")).toBe(500);
+    expect(PLAN_MONTHLY_AI_USD).toEqual({ FREE: 0.1, PRO: 2, ULTRA: 3 });
+    expect(planMonthlyCredits("FREE")).toBe(100);
     expect(planMonthlyCredits("PRO")).toBe(2_000);
     expect(planMonthlyCredits("ULTRA")).toBe(3_000);
   });

@@ -17,7 +17,7 @@ import type { SubscriptionPlan } from "@/lib/subscription";
  * Monthly allowance (granted each 30-day period, not rolled over — lib/db/ledgerOperations.ts):
  *
  *   Plan    AI value / month   Credits / month (at $0.001)
- *   FREE    $0.50              0.50 ÷ 0.001 =   500
+ *   FREE    $0.10              0.10 ÷ 0.001 =   100
  *   PRO     $2.00              2.00 ÷ 0.001 = 2,000
  *   ULTRA   $3.00              3.00 ÷ 0.001 = 3,000
  *
@@ -34,7 +34,7 @@ import type { SubscriptionPlan } from "@/lib/subscription";
  * alters credits already granted.
  */
 export const PLAN_MONTHLY_AI_USD: Record<SubscriptionPlan, number> = {
-  FREE: 0.5,
+  FREE: 0.1,
   PRO: 2,
   ULTRA: 3,
 };
