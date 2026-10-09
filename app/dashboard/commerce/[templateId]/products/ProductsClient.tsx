@@ -576,7 +576,7 @@ export function ProductsClient({
               color: "#f0f2ff",
             }}
           >
-            Import with AI
+            Import with SOL
           </button>
           <button
             type="button"

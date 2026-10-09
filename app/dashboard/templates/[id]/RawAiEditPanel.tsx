@@ -1,5 +1,6 @@
 "use client";
 
+import { SolHandoff, SolIcon, SolOutOfCredits } from "../../_components/sol/SolTopUp";
 import { useEffect, useRef, useState } from "react";
 import { checkAiCredits, generateWithProgress, type AiRequestBody } from "@/lib/ai/clientGenerate";
 
@@ -89,7 +90,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
       const data = await generateWithProgress(request, setProgress);
       setResult({ summary: data.summary, html: data.result as string });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "AI generation failed.";
+      const message = err instanceof Error ? err.message : "SOL couldn't finish that. Please try again.";
       if (/enough AI credits|out of AI credits/i.test(message)) setInsufficientCredits(true);
       setError(message);
     } finally {
@@ -102,8 +103,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
     return (
       <div style={{ flex: 1, display: "grid", placeItems: "center", padding: "2rem", textAlign: "center" }}>
         <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", maxWidth: 360 }}>
-          AI editing isn&apos;t enabled for this account. Configure an API key with AI enabled in Settings, or
-          upgrade your plan.
+          SOL isn&apos;t turned on for this account yet. Turn it on in Settings → AI.
         </p>
       </div>
     );
@@ -125,8 +125,9 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
           <h2 style={{
             fontFamily: "var(--font-heading), sans-serif", fontSize: "clamp(1.2rem, 5vw, 1.6rem)", fontWeight: 700,
             color: "#f0f2ff", textAlign: "center", margin: 0,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "0.55rem",
           }}>
-            What would you like to change?
+            <SolIcon size={26} /> What should SOL change?
           </h2>
 
           <div style={{ width: "100%", maxWidth: 680 }}>
@@ -190,9 +191,16 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
               </p>
             )}
             {insufficientCredits && (
-              <p style={{ color: "#f59e0b", fontSize: "0.8rem", textAlign: "center", marginTop: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem" }}>
-                <IconWarning /> Insufficient AI credits — top up or configure your own API key in Settings.
-              </p>
+              <div style={{ marginTop: "0.9rem" }}>
+                <SolOutOfCredits
+                  onDismiss={() => setInsufficientCredits(false)}
+                  onToppedUp={() => {
+                    setInsufficientCredits(false);
+                    setError(null);
+                    void handleGenerate();
+                  }}
+                />
+              </div>
             )}
             {error && !insufficientCredits && (
               <p style={{ color: "#f87171", fontSize: "0.8rem", textAlign: "center", marginTop: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem" }}><IconWarning /> {error}</p>
@@ -206,9 +214,10 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
           }}>
             {isLargePage && <IconWarning />}
             {isLargePage
-              ? `This page is fairly large (~${pageSizeKb}KB) — the whole thing is sent to the AI and back, so this edit will use a lot of AI credits.`
-              : "The AI edits the full page and shows you the result before anything is saved. Larger pages use more AI credits per edit."}
+              ? `This page is fairly large (~${pageSizeKb}KB) — SOL reads and rewrites the whole page, so this edit will use a lot of AI credits.`
+              : "SOL edits the whole page and shows you the result before anything is saved. Larger pages use more AI credits per edit."}
           </p>
+          <SolHandoff draft={prompt} />
         </div>
       ) : (
         <div className="raw-ai-result" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "0.75rem", padding: "1.25rem", maxWidth: 900, margin: "0 auto", width: "100%" }}>

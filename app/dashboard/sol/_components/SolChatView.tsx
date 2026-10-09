@@ -129,6 +129,7 @@ export function SolChatView({
   userName,
   embedded,
   lockedModelTier: lockedModelTierProp,
+  initialDraft,
 }: {
   conversation: ConversationSummary | null;
   initialMessages: SolMessage[];
@@ -136,6 +137,8 @@ export function SolChatView({
   embedded?: SolChatEmbedding;
   /** The model this person is held to (Free plans on Plexo's AI → Basic — lib/ai/solEngine.ts). */
   lockedModelTier?: { tier: ModelTier; note: string } | null;
+  /** Text to start the chat box with (e.g. handed over from another SOL feature) — not sent. */
+  initialDraft?: string;
 }) {
   const lockedModelTier = lockedModelTierProp ?? embedded?.lockedModelTier;
   const { bumpRefresh, setActiveConversationIdOverride } = useSolSidebar();
@@ -145,7 +148,7 @@ export function SolChatView({
   const [pendingConfirmMessageId, setPendingConfirmMessageId] = useState<string | null>(null);
   const [creditInfo, setCreditInfo] = useState<CreditInfo | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
-  const [composerRestoreText, setComposerRestoreText] = useState<string | undefined>(undefined);
+  const [composerRestoreText, setComposerRestoreText] = useState<string | undefined>(initialDraft || undefined);
   const [creditsRefreshKey, setCreditsRefreshKey] = useState(0);
   const [creatingConversation, setCreatingConversation] = useState(false);
   // True for exactly the one render where a title just arrived live from the stream (see

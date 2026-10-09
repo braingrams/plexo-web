@@ -140,7 +140,7 @@ export function CreditsPanel({ credits, monthly, onPick, onClose }: { credits: n
 }
 
 /** Shown above the chat box when a message couldn't be sent for lack of credits. */
-export function OutOfCreditsCard({ midTurn, onPick, onDismiss, onOpenCode }: { midTurn?: boolean; onPick: (pack: Pack) => void; onDismiss: () => void; onOpenCode: () => void }) {
+export function OutOfCreditsCard({ midTurn, onPick, onDismiss, onOpenCode }: { midTurn?: boolean; onPick: (pack: Pack) => void; onDismiss: () => void; onOpenCode?: () => void }) {
   const packs = usePacks(true);
   const [chosen, setChosen] = useState<PackId>("MEDIUM");
   const pack = packs?.find((p) => p.pack === chosen) ?? packs?.[0] ?? null;
@@ -170,7 +170,7 @@ export function OutOfCreditsCard({ midTurn, onPick, onDismiss, onOpenCode }: { m
       </button>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.76rem" }}>
         <a href="/dashboard/settings/subscription" style={{ color: C.brand, textDecoration: "none" }}>Upgrade plan instead</a>
-        <button type="button" onClick={onOpenCode} style={{ background: "none", border: "none", padding: 0, color: C.muted, cursor: "pointer", fontFamily: "inherit", fontSize: "0.76rem" }}>Editing code is still free →</button>
+        {onOpenCode && <button type="button" onClick={onOpenCode} style={{ background: "none", border: "none", padding: 0, color: C.muted, cursor: "pointer", fontFamily: "inherit", fontSize: "0.76rem" }}>Editing code is still free →</button>}
       </div>
     </div>
   );

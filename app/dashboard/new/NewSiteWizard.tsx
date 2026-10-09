@@ -1,5 +1,6 @@
 "use client";
 
+import { SolIcon, SolOutOfCredits } from "../_components/sol/SolTopUp";
 import { useEffect, useRef, useState } from "react";
 import { AI_UNREACHABLE } from "@/lib/ai/requestErrors";
 import { checkAiCredits, generateWithProgress, type AiRequestBody } from "@/lib/ai/clientGenerate";
@@ -96,21 +97,11 @@ function IconGlobe() {
   );
 }
 
-function IconSparkle() {
+function IconSuccess() {
   return (
     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10" />
       <polyline points="8 12.5 11 15.5 16 9" />
-    </svg>
-  );
-}
-
-function IconWand() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m15 4 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z" />
-      <path d="M5 20 19 6" />
-      <path d="m5 13 .8 1.7L7.5 15.5l-1.7.8L5 18l-.8-1.7L2.5 15.5l1.7-.8L5 13Z" />
     </svg>
   );
 }
@@ -295,6 +286,7 @@ export function NewSiteWizard() {
   const [uploading, setUploading] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+  const [outOfCredits, setOutOfCredits] = useState(false);
   // The card is tall and the action buttons sit low in it: bring a new error into view,
   // or it appears off-screen above the button that caused it and looks like nothing happened.
   const errorRef = useRef<HTMLDivElement>(null);
@@ -358,7 +350,7 @@ export function NewSiteWizard() {
         });
         const createData = await createRes.json().catch(() => ({}));
         if (!createRes.ok) {
-          setError(createData.error ?? "Couldn't create an API key to enable AI with.");
+          setError(createData.error ?? "Couldn't turn on SOL. Please try again.");
           return;
         }
         keyId = createData.apiKey.id;
@@ -371,7 +363,7 @@ export function NewSiteWizard() {
       });
       const patchData = await patchRes.json().catch(() => ({}));
       if (!patchRes.ok) {
-        setError(patchData.error ?? "Couldn't enable AI.");
+        setError(patchData.error ?? "Couldn't turn on SOL. Please try again.");
         return;
       }
       setAiKeyStatus("enabled");
@@ -413,6 +405,7 @@ export function NewSiteWizard() {
    * the fastest path plexo-web itself has to a working page from a prompt.
    */
   async function handleGenerateWithAi() {
+    setOutOfCredits(false);
     if (!aiPrompt.trim()) {
       setError("Describe the site you want first.");
       return;
@@ -434,7 +427,9 @@ export function NewSiteWizard() {
       setAiStage("checking");
       const credits = await checkAiCredits(request);
       if (credits && !credits.enough) {
-        setError(credits.message ?? "You don't have enough AI credits for this.");
+        // Plexo's AI and not enough credits → SOL's top-up card; anything else is a plain message.
+        if (credits.paidBy === "plexo" && credits.estimatedCredits !== null) setOutOfCredits(true);
+        else setError(credits.message ?? "You don't have enough AI credits for this.");
         return;
       }
 
@@ -445,8 +440,9 @@ export function NewSiteWizard() {
       } catch (err) {
         // "AI is not enabled for this account" is the one error a first-time user is likely
         // to hit — point them at the fix instead of leaving a bare permission error.
-        const message = err instanceof Error ? err.message : "Failed to generate your site.";
-        setError(/not enabled/i.test(message) ? `${message} Enable AI for your account in Settings, then try again.` : message);
+        const message = err instanceof Error ? err.message : "SOL couldn't build your site. Please try again.";
+        if (/enough AI credits|out of AI credits/i.test(message)) setOutOfCredits(true);
+        else setError(/not enabled/i.test(message) ? "SOL isn't turned on for your account yet. Turn it on in Settings → AI, then try again." : message);
         return;
       }
       setAiStage("saving");
@@ -573,6 +569,11 @@ export function NewSiteWizard() {
             boxShadow: "0 24px 60px -30px rgba(0,0,0,0.6)",
           }}
         >
+          {outOfCredits && (
+            <div style={{ margin: "0 0 18px" }}>
+              <SolOutOfCredits onDismiss={() => setOutOfCredits(false)} onToppedUp={() => void handleGenerateWithAi()} />
+            </div>
+          )}
           {error && (
             <div
               ref={errorRef}
@@ -739,15 +740,15 @@ export function NewSiteWizard() {
                         display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                       }}
                     >
-                      <IconWand />
+                      <SolIcon size={20} />
                     </div>
                     <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-muted)" }}>
-                      Describe the site you want — Plexo's AI builds a complete, working page from your prompt.
+                      Describe the site you want — SOL builds a complete, working page from your description.
                     </p>
                   </div>
 
                   {aiKeyStatus === "checking" || aiKeyStatus === "unchecked" ? (
-                    <p style={{ fontSize: "12.5px", color: "var(--text-faint)" }}>Checking your AI settings…</p>
+                    <p style={{ fontSize: "12.5px", color: "var(--text-faint)" }}>Getting SOL ready…</p>
                   ) : aiKeyStatus === "disabled" ? (
                     <div
                       style={{
@@ -761,11 +762,10 @@ export function NewSiteWizard() {
                         alignItems: "flex-start",
                       }}
                     >
-                      <p style={{ margin: 0, fontSize: "13px", fontWeight: 650 }}>Turn on AI to build with a prompt</p>
+                      <p style={{ margin: 0, fontSize: "13px", fontWeight: 650 }}>Turn on SOL to build from a description</p>
                       <p style={{ margin: 0, fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-                        AI generation isn&rsquo;t on for your account yet. Turning it on uses Plexo&rsquo;s system AI by
-                        default (billed from your credit balance) — no setup needed. You can switch to your own API key
-                        any time in{" "}
+                        SOL isn&rsquo;t on for your account yet. Turning it on uses Plexo&rsquo;s AI, paid from your AI
+                        credits — no setup needed. You can switch to your own AI key any time in{" "}
                         <Link href="/dashboard/settings/ai" target="_blank" style={{ color: "var(--brand)" }}>
                           Settings
                         </Link>
@@ -777,7 +777,7 @@ export function NewSiteWizard() {
                         disabled={enablingAi}
                         style={{ ...primaryButtonStyle(!enablingAi), cursor: enablingAi ? "wait" : "pointer" }}
                       >
-                        {enablingAi ? "Turning on…" : "Turn on AI"}
+                        {enablingAi ? "Turning on…" : "Turn on SOL"}
                       </button>
                     </div>
                   ) : (
@@ -982,7 +982,7 @@ export function NewSiteWizard() {
               {publishedUrl ? (
                 <div style={{ textAlign: "center", padding: "12px 0" }}>
                   <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-                    <IconSparkle />
+                    <IconSuccess />
                   </div>
                   <h2 style={{ margin: "0 0 8px", fontSize: "19px", fontWeight: 700 }}>Your site is live</h2>
                   <Link href={publishedUrl} target="_blank" style={{ fontFamily: "var(--font-mono)", fontSize: "15px", fontWeight: 650, color: "var(--brand)" }}>
