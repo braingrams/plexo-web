@@ -66,7 +66,7 @@ export function HistoryPane(props: { appId: string; refreshKey?: number; onResto
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 1000 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", gap: 6 }}>
         {(["versions", "builds"] as const).map((v) => (
           <Button key={v} size="sm" variant={view === v ? "primary" : "secondary"} onClick={() => setView(v)}>

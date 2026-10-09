@@ -73,8 +73,8 @@ export function GitHubPane(props: { appId: string; onLinked?: (buildId: string |
   if (!status.configured) return <Empty title="GitHub sync isn't available yet">It hasn't been set up on this Plexo environment.</Empty>;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 760 }}>
-      {message && <Notice tone={message.tone}>{message.text}</Notice>}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 440px), 1fr))", alignItems: "start", gap: 12 }}>
+      {message && <div style={{ gridColumn: "1 / -1" }}><Notice tone={message.tone}>{message.text}</Notice></div>}
       {status.link ? (
         <Panel title="Synced with GitHub" description="Every change you or SOL make is committed here, and pushes to this branch come back into Plexo.">
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>

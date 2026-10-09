@@ -692,7 +692,7 @@ export function WordPressMigrationClient() {
   }
 
   const frame = (step: WizardStep, content: React.ReactNode, reachable?: WizardStep[], onSelect?: (s: WizardStep) => void) => (
-    <div style={{ maxWidth: 780, margin: "0 auto", padding: "8px 0 48px" }}>
+    <div style={{ width: "100%", padding: "8px 0 48px" }}>
       <Stepper current={step} reachable={reachable} onSelect={onSelect} />
       {content}
     </div>

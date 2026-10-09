@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import {
-  AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Clock, ExternalLink, Globe, Lock, PartyPopper, RefreshCw, Rocket, Search, ShieldCheck, Sparkles,
+  AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Clock, Copy, ExternalLink, FileText, FormInput, Globe, Image as ImageIcon, Link2, Lock, Mail, Newspaper, PartyPopper, Pencil, RefreshCw, Rocket, Search, ShieldCheck, ShoppingBag,
 } from "lucide-react";
 
 import { estimateMigrationSeconds, formatDuration } from "@/lib/wpMigration/estimate";
-import { BigStat, Callout, Disclosure, Panel, PrimaryButton, ProgressBar, SecondaryButton, StepShell, secondaryButtonStyle, text, tone } from "./ui";
+import { AsideCard, AsideItem, BigStat, Callout, Disclosure, Panel, PrimaryButton, ProgressBar, SecondaryButton, StepShell, WIZARD_STEPS, secondaryButtonStyle, text, tone } from "./ui";
 import type { ChecklistItem, DomainRow, ExistingMigration, JobStatus, Outcome, Plugin, Preview, Report } from "./types";
 
 // The five screens of "Move from WordPress". Each takes plain data and callbacks — the
@@ -33,6 +33,22 @@ const inputStyle: React.CSSProperties = {
 
 // ── 1. Find your site ───────────────────────────────────────────────────────────
 
+const NEXT_STEP_HINT = [
+  "see what we found and what happens to each plugin",
+  "we copy everything while you get on with your day",
+  "look around your new site and sort out anything flagged",
+  "point your domain at Plexo, with no gap for visitors",
+];
+
+const BROUGHT_ACROSS = [
+  { icon: <FileText size={18} />, title: "Pages and design", body: "Your layout, menus, fonts and colours, page by page." },
+  { icon: <Newspaper size={18} />, title: "Blog posts", body: "Every post with its categories, tags, authors and dates." },
+  { icon: <ImageIcon size={18} />, title: "Images and files", body: "Your media library, PDFs and downloads, re-hosted on Plexo." },
+  { icon: <FormInput size={18} />, title: "Forms", body: "Contact and sign-up forms keep working and collecting replies." },
+  { icon: <ShoppingBag size={18} />, title: "Shop products", body: "If you sell with WooCommerce, products and prices land in Commerce." },
+  { icon: <Search size={18} />, title: "Search settings", body: "Page titles and descriptions, so Google sees the same site." },
+];
+
 export function FindSiteStep(props: {
   url: string;
   onUrl: (value: string) => void;
@@ -47,6 +63,26 @@ export function FindSiteStep(props: {
       icon={<Globe size={24} />}
       title="Let's move your WordPress site to Plexo"
       subtitle="Type your website's address and we'll take a look. This only reads your site — nothing on WordPress changes, and your visitors won't notice a thing."
+      aside={
+        <>
+          <AsideCard title="Why it's safe">
+            <AsideItem icon={<Copy size={18} />} title="We only copy">Your WordPress site keeps running, untouched, until you decide to switch.</AsideItem>
+            <AsideItem icon={<Link2 size={18} />} title="Same web addresses">Every page keeps its address, so links and your search ranking stay put.</AsideItem>
+            <AsideItem icon={<Clock size={18} />} title="Walk away while it works">Most sites move in minutes. Close the tab — we&rsquo;ll email you when it&rsquo;s done.</AsideItem>
+          </AsideCard>
+          <AsideCard title="What happens next">
+            {WIZARD_STEPS.slice(1).map((label, i) => (
+              <div key={label} style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "var(--brand)", width: 14, flexShrink: 0 }}>{i + 2}</span>
+                <span style={{ fontSize: 13.5, color: "var(--text-main)" }}>
+                  <strong style={{ fontWeight: 650 }}>{label}</strong>
+                  <span style={{ color: "var(--text-muted)" }}> — {NEXT_STEP_HINT[i]}</span>
+                </span>
+              </div>
+            ))}
+          </AsideCard>
+        </>
+      }
     >
       {props.existing && (
         <Callout kind="info" icon={<RefreshCw size={18} />} title={`You already started moving ${props.existing.siteName ?? "a site"}`}>
@@ -91,18 +127,19 @@ export function FindSiteStep(props: {
         </Callout>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginTop: 8 }}>
-        {[
-          { icon: <Sparkles size={18} />, title: "Same look, same addresses", body: "Every page, post, image and form comes across, at the same web addresses, so your search ranking stays put." },
-          { icon: <ShieldCheck size={18} />, title: "Your WordPress stays safe", body: "We only copy. Your WordPress site keeps running until you decide to switch." },
-          { icon: <Clock size={18} />, title: "Walk away while it works", body: "Most sites move in minutes. Close the tab — we'll email you when it's done." },
-        ].map((f) => (
-          <div key={f.title} style={{ display: "flex", flexDirection: "column", gap: 6, padding: 16, borderRadius: 14, border: "1px solid var(--surface-border)" }}>
-            <span style={{ color: "var(--brand)" }}>{f.icon}</span>
-            <span style={{ fontSize: 14, fontWeight: 650, color: "var(--text-main)" }}>{f.title}</span>
-            <span style={text.small}>{f.body}</span>
-          </div>
-        ))}
+      <div>
+        <p style={{ margin: "8px 0 12px", fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-faint)" }}>What comes across</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+          {BROUGHT_ACROSS.map((f) => (
+            <div key={f.title} style={{ display: "flex", gap: 12, padding: 16, borderRadius: 14, border: "1px solid var(--surface-border)", background: "var(--surface)" }}>
+              <span style={{ color: "var(--brand)", flexShrink: 0, marginTop: 1 }}>{f.icon}</span>
+              <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+                <span style={{ fontSize: 14, fontWeight: 650, color: "var(--text-main)" }}>{f.title}</span>
+                <span style={text.small}>{f.body}</span>
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </StepShell>
   );
@@ -174,7 +211,18 @@ export function ReviewStep(props: {
   const ready = props.owns && (!props.needsAup || props.aup) && !props.starting;
 
   return (
-    <StepShell icon={<CheckCircle2 size={24} />} title={`We found ${name}`} subtitle="Here's everything we'll bring across. Take a quick look, then start whenever you're ready.">
+    <StepShell
+      icon={<CheckCircle2 size={24} />}
+      title={`We found ${name}`}
+      subtitle="Here's everything we'll bring across. Take a quick look, then start whenever you're ready."
+      aside={
+        <AsideCard title="When you start">
+          <AsideItem icon={<Clock size={18} />} title={`Takes about ${minutes}`}>Based on {preview.counts.pages + preview.counts.posts} pages and posts and {preview.counts.media} files.</AsideItem>
+          <AsideItem icon={<Mail size={18} />} title="Close the tab any time">We keep going on our side and email you the moment it&rsquo;s done.</AsideItem>
+          <AsideItem icon={<ShieldCheck size={18} />} title="WordPress stays as it is">Nothing changes there until you choose to switch, at the very end.</AsideItem>
+        </AsideCard>
+      }
+    >
       <Panel>
         <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
           <span style={{ width: 44, height: 44, borderRadius: 12, display: "grid", placeItems: "center", background: "rgba(var(--brand-rgb),0.1)", color: "var(--brand)", fontWeight: 750, fontSize: 18 }}>
@@ -215,9 +263,6 @@ export function ReviewStep(props: {
             </span>
           </label>
         )}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, ...text.small }}>
-          <Clock size={15} /> Takes {minutes}. You can close this page once it starts — we&rsquo;ll email you when it&rsquo;s done.
-        </div>
         {props.error && <Callout kind="bad" icon={<AlertTriangle size={18} />}>{props.error}</Callout>}
       </Panel>
 
@@ -292,6 +337,32 @@ export function MovingStep({ job, siteName, onRetry }: { job: JobStatus; siteNam
         : paused ? "Usually your WordPress host was slow or briefly offline. Trying again picks up exactly where we stopped."
         : "Sit back — we're copying everything over. Your WordPress site stays exactly as it is."
       }
+      aside={
+        <AsideCard title="Progress">
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {phases.map((p, i) => {
+                const state = i < idx ? "done" : i === idx && !paused && !failed ? "active" : i === idx ? "stopped" : "todo";
+                return (
+                  <div key={p.phase} style={{ display: "flex", alignItems: "center", gap: 12, opacity: state === "todo" ? 0.45 : 1 }}>
+                    <span
+                      style={{
+                        width: 22, height: 22, borderRadius: 999, flexShrink: 0, display: "grid", placeItems: "center",
+                        background: state === "done" ? tone.good : "transparent",
+                        border: state === "done" ? "none" : `2px solid ${state === "active" ? "var(--brand)" : state === "stopped" ? tone.warn : "var(--surface-border)"}`,
+                        color: "#fff",
+                      }}
+                    >
+                      {state === "done" && <CheckCircle2 size={14} />}
+                      {state === "active" && <span style={{ width: 8, height: 8, borderRadius: 999, background: "var(--brand)", animation: "wiz-pulse 1.4s ease-in-out infinite" }} />}
+                    </span>
+                    <span style={{ fontSize: 14, color: "var(--text-main)", fontWeight: state === "active" ? 650 : 500 }}>{state === "done" ? p.done : p.doing}</span>
+                  </div>
+                );
+              })}
+              <style>{`@keyframes wiz-pulse { 0%,100% { opacity: 0.35; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }`}</style>
+            </div>
+        </AsideCard>
+      }
     >
       <Panel style={{ display: "flex", flexDirection: "column", gap: 18 }}>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
@@ -308,29 +379,16 @@ export function MovingStep({ job, siteName, onRetry }: { job: JobStatus; siteNam
             {now.doing}…{detail && <span style={{ fontWeight: 500, color: "var(--text-muted)" }}> {detail}</span>}
           </p>
         )}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 6, borderTop: "1px solid var(--surface-border)" }}>
-          {phases.map((p, i) => {
-            const state = i < idx ? "done" : i === idx && !paused && !failed ? "active" : i === idx ? "stopped" : "todo";
-            return (
-              <div key={p.phase} style={{ display: "flex", alignItems: "center", gap: 12, opacity: state === "todo" ? 0.45 : 1 }}>
-                <span
-                  style={{
-                    width: 22, height: 22, borderRadius: 999, flexShrink: 0, display: "grid", placeItems: "center",
-                    background: state === "done" ? tone.good : "transparent",
-                    border: state === "done" ? "none" : `2px solid ${state === "active" ? "var(--brand)" : state === "stopped" ? tone.warn : "var(--surface-border)"}`,
-                    color: "#fff",
-                  }}
-                >
-                  {state === "done" && <CheckCircle2 size={14} />}
-                  {state === "active" && <span style={{ width: 8, height: 8, borderRadius: 999, background: "var(--brand)", animation: "wiz-pulse 1.4s ease-in-out infinite" }} />}
-                </span>
-                <span style={{ fontSize: 14, color: "var(--text-main)", fontWeight: state === "active" ? 650 : 500 }}>{state === "done" ? p.done : p.doing}</span>
-              </div>
-            );
-          })}
-          <style>{`@keyframes wiz-pulse { 0%,100% { opacity: 0.35; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }`}</style>
-        </div>
       </Panel>
+
+      {job.counts && (
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+          <BigStat value={`${job.counts.pagesDone} of ${job.counts.pages}`} label="pages copied" />
+          <BigStat value={`${job.counts.postsDone} of ${job.counts.posts}`} label="blog posts moved" />
+          {(job.counts.products ?? 0) > 0 && <BigStat value={`${job.counts.productsDone ?? 0} of ${job.counts.products}`} label="products moved" />}
+          <BigStat value={`${job.counts.assetsDone + job.counts.assetsSkipped} of ${job.counts.assets}`} label="images & files copied" />
+        </div>
+      )}
 
       {(paused || failed) && (
         <Callout kind="warn" icon={<AlertTriangle size={18} />} title={failed ? "What happened" : "What we saw"}>
@@ -384,13 +442,18 @@ export function CheckStep(props: {
       icon={<PartyPopper size={24} />}
       title={`${props.siteName} is on Plexo`}
       subtitle="Everything has been copied, at the same web addresses. Have a look around your new site before you switch over — your WordPress site is still running."
+      aside={
+        <AsideCard title="What moved">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <BigStat value={r.summary.pagesCopied} label="pages" />
+            <BigStat value={r.summary.postsCopied} label="blog posts" />
+            {r.summary.productsMoved != null && <BigStat value={r.summary.productsMoved} label="products" />}
+            <BigStat value={r.summary.filesCopied} label="images & files" />
+          </div>
+          <Link href={`/dashboard/templates/${props.templateId}`} style={{ ...secondaryButtonStyle, justifyContent: "center" }}><Pencil size={14} /> Edit my pages</Link>
+        </AsideCard>
+      }
     >
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <BigStat value={r.summary.pagesCopied} label="pages" />
-        <BigStat value={r.summary.postsCopied} label="blog posts" />
-        {r.summary.productsMoved != null && <BigStat value={r.summary.productsMoved} label="products" />}
-        <BigStat value={r.summary.filesCopied} label="images & files" />
-      </div>
 
       <Panel style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div>
@@ -455,7 +518,6 @@ export function CheckStep(props: {
       </Disclosure>
 
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, flexWrap: "wrap" }}>
-        <Link href={`/dashboard/templates/${props.templateId}`} style={{ ...secondaryButtonStyle, padding: "12px 18px" }}>Edit my pages</Link>
         <PrimaryButton onClick={props.onContinue}>Next: go live <ArrowRight size={16} /></PrimaryButton>
       </div>
     </StepShell>
@@ -480,6 +542,13 @@ export function GoLiveStep({ host, onBack, children }: { host: string; onBack: (
       icon={<Globe size={24} />}
       title={`Put ${host} on Plexo`}
       subtitle="The last step: point your domain at Plexo. Your WordPress site keeps serving visitors the whole time, and nobody sees a gap — when it switches, they simply get your Plexo site at the same addresses."
+      aside={
+        <AsideCard title="While you switch">
+          <AsideItem icon={<Clock size={18} />} title="No gap for visitors">Until your domain points at Plexo, WordPress keeps answering. After, Plexo does.</AsideItem>
+          <AsideItem icon={<Link2 size={18} />} title="Same addresses">Bookmarks, shared links and search results keep working.</AsideItem>
+          <AsideItem icon={<ShieldCheck size={18} />} title="Keep WordPress for now">Cancel your old hosting only once we confirm the switch is complete.</AsideItem>
+        </AsideCard>
+      }
     >
       {children}
       <div><SecondaryButton onClick={onBack}><ArrowLeft size={15} /> Back to checking my site</SecondaryButton></div>
