@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.hoisted(() => {
+  for (const t of ["CORE", "LEDGER", "COMMERCE", "CONTENT", "OPS", "IMPORT", "SOL"]) process.env[`PLEXO_${t}_TABLE`] = `test-${t.toLowerCase()}`;
+});
+
 // A conversation row is rewritten (delete + put) whenever its activity or title changes,
 // because updatedAt is part of its key. Every rewrite must carry the app link over: an app
 // editor chat that lost appId stopped getting the app in context after its first turn
