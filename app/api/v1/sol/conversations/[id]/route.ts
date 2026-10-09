@@ -57,15 +57,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .where((attr, op) => op.eq(attr.updatedAt, existing.updatedAt))
     .params();
   const putParams = SolConversation.create({
-    id: existing.id,
-    userId: existing.userId,
-    organizationId: existing.organizationId,
+    // Every field carried over (appId included — dropping it unlinked an app's chat
+    // from its app after the first turn); only what this write changes is set below.
+    ...existing,
     title: nextTitle,
-    modelTier: existing.modelTier,
     status: nextStatus,
-    lastMessageAt: existing.lastMessageAt,
-    messageCount: existing.messageCount,
-    createdAt: existing.createdAt,
     updatedAt: now,
   }).params();
 
