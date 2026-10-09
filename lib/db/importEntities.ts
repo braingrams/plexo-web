@@ -283,6 +283,9 @@ export const WpMigrationJob = new Entity(
       warnings: { type: "any" },
       startedAt: { type: "string" },
       finishedAt: { type: "string" },
+      // The owner closed the "has moved to Plexo" banner — kept on the job (not the browser)
+      // so it stays closed on every device.
+      bannerDismissedAt: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
       ttl: { type: "number", default: migrationTtl },

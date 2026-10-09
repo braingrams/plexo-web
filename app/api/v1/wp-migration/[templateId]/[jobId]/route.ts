@@ -50,3 +50,24 @@ export async function GET(
     domains: domains.map((d) => ({ domain: d.domain, type: d.type, active: d.active ?? true, dnsVerified: d.dnsVerified ?? false, certificateStatus: (d as { certificateStatus?: string }).certificateStatus ?? null })),
   });
 }
+
+/** PATCH { dismissBanner: true } — the owner closed the "has moved to Plexo" banner. */
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ templateId: string; jobId: string }> },
+): Promise<NextResponse> {
+  const { templateId, jobId } = await context.params;
+  const resolved = await resolveMigrationAccess(request, { permission: "update" });
+  if ("error" in resolved) return resolved.error;
+  const notOwn = await assertOwnSite(resolved.access, templateId);
+  if (notOwn) return notOwn;
+  if (!isValidUuid(jobId)) return NextResponse.json({ error: "Migration not found." }, { status: 404 });
+  const body = (await request.json().catch(() => ({}))) as { dismissBanner?: boolean };
+  if (body.dismissBanner !== true) return NextResponse.json({ error: "Nothing to change." }, { status: 400 });
+  try {
+    await WpMigrationJob.patch({ templateId, id: jobId }).set({ bannerDismissedAt: new Date().toISOString() }).go();
+  } catch {
+    return NextResponse.json({ error: "Migration not found." }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true });
+}

@@ -31,7 +31,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // app/dashboard/page.tsx) and filter to this specific user's rows in memory, so the
     // counts match the original per-user semantics exactly rather than counting the
     // whole org.
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+    // Only the fields counted here — never the pages' content (a migrated site's pages are
+    // 100–300 KB each, which made this the slowest call on the dashboard).
+    const { data: orgTemplates } = await Template.query
+      .byOrg({ organizationId: resolved.organizationId })
+      .go({ pages: "all", attributes: ["id", "userId", "kind", "parentId", "isBlogLayout", "isSiteLayoutFragment"] });
     const userTemplates = orgTemplates.filter((t) => t.userId === user.id);
 
     const emailTemplateCount = userTemplates.filter((t) => t.kind === "EMAIL").length;
@@ -41,8 +45,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       (t) => t.kind === "LANDING_PAGE" && !t.isBlogLayout && !t.isSiteLayoutFragment,
     ).length;
 
+    // Domains belong to whole sites, never their sub-pages (same rule as app/api/v1/domains).
     const domainBatches = await Promise.all(
-      orgTemplates.map((t) => PublishedDomain.query.primary({ templateId: t.id }).go()),
+      orgTemplates.filter((t) => !t.parentId).map((t) => PublishedDomain.query.primary({ templateId: t.id }).go({ attributes: ["userId"] })),
     );
     const domainCount = domainBatches.reduce((sum, batch) => sum + batch.data.filter((d) => d.userId === user.id).length, 0);
 
