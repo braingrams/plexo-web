@@ -283,13 +283,23 @@ with a message written for a non-technical reader.
 | `POST /api/v1/deploy` | `{ appId?, name?, files?: [{ path, content? , base64? }], dist?: [...], publish?: boolean, subdomain? }` → `{ appId, versionId, buildId, previewUrl, liveUrl? }` |
 | `GET /api/v1/deploy/:buildId` | → `{ status, errors[], previewUrl, liveUrl? }` |
 
-## Visual design (SDK v2 canvas)
-- `@charisol/plexo-sdk` v2's `compilePageToReact(nodes, pageOrder, { componentName })` turns a
-  canvas page into a self-contained React component (exact layout at the 1400px design width,
-  scaled proportionally on narrower screens; content always emitted as string literals). The
-  app editor's Design view stores `src/plexo-canvas/<Name>.canvas.json` and writes the
-  compiled `src/plexo-canvas/<Name>.tsx` next to it; apps import it like any component.
-- Requires the SDK to publish v2 as a package entry (`@charisol/plexo-sdk/v2`).
+## Visual design (SDK v2 canvas) — `lib/projects/designs.ts`
+The editor's **Design** tab is the SDK v2 canvas (`@charisol/plexo-sdk/v2`, loaded in the
+browser only). Each design is one page of the app, stored as ordinary project files:
+- `src/plexo-canvas/<slug>.canvas.json` — the design (nodes, page order, name, route) and the
+  hash of the code last generated from it.
+- `src/plexo-canvas/<Name>Page.tsx` — the page, compiled **on the server** with the
+  React-free `@charisol/plexo-sdk/v2/compile` (`compilePageToReact`: exact layout at the
+  1400px design width, scaled on narrower screens; content always emitted as string literals).
+- `src/plexo-canvas/routes.tsx` — every design's route; `src/App.tsx` renders them first
+  inside `<Routes>` (new apps ship wired; older ones are wired on the first save, or the
+  owner gets an "Ask SOL to add it" button when App.tsx was rewritten).
+- `src/plexo-canvas/brand.json` — the app's brand kit; changing it restyles every design.
+
+Saves happen automatically a moment after each change, then the preview rebuilds. If a
+page's `.tsx` was edited by hand (Code Mode, SOL, a GitHub push), saving the design asks
+first — "Use the design" or "Keep the code". Page addresses are unique across designs.
+API: `GET/POST /api/v1/apps/:id/designs`, `GET/PUT/DELETE /api/v1/apps/:id/designs/:slug`.
 
 ## Roadmap (build order)
 1. Project model, file store, versions, scaffold, build pipeline, serving, previews.

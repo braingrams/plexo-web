@@ -61,6 +61,8 @@ export default async function AppEditorPage({ params, searchParams }: { params: 
         initialPrompt={query.prompt ?? null}
         initialPanel={query.panel ?? null}
         addSecretName={query.add ?? null}
+        // Stock photo search in the Design tab — the same keys the site editor uses.
+        stockKeys={{ unsplash: process.env.UNSPLASH_KEY || undefined, pexels: process.env.PEXELS_KEY || undefined, pixabay: process.env.PIXABAY_KEY || undefined }}
       />
     </SolSidebarProvider>
   );

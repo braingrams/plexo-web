@@ -18,10 +18,12 @@ import { SettingsPane } from "./SettingsPane";
 import { HistoryPane } from "./HistoryPane";
 import { PublishDialog } from "./PublishDialog";
 import { GitHubPane } from "./GitHubPane";
+import { DesignPane } from "./DesignPane";
 
-type Tab = "preview" | "code" | "database" | "users" | "functions" | "secrets" | "history" | "github" | "settings";
+type Tab = "preview" | "design" | "code" | "database" | "users" | "functions" | "secrets" | "history" | "github" | "settings";
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "preview", label: "Preview" },
+  { id: "design", label: "Design" },
   { id: "code", label: "Code" },
   { id: "database", label: "Database" },
   { id: "users", label: "Users" },
@@ -44,6 +46,7 @@ export function AppEditor(props: {
   initialPrompt: string | null;
   initialPanel: string | null;
   addSecretName: string | null;
+  stockKeys: { unsplash?: string; pexels?: string; pixabay?: string };
 }) {
   const { appId } = props;
   const [summary, setSummary] = useState<AppSummary>(props.initialSummary);
@@ -65,6 +68,11 @@ export function AppEditor(props: {
   const [mobileView, setMobileView] = useState<"chat" | "app">("app");
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // The design canvas stays mounted once opened, so its undo history survives tab switches.
+  const [designVisited, setDesignVisited] = useState(tab === "design");
+  useEffect(() => {
+    if (tab === "design") setDesignVisited(true);
+  }, [tab]);
 
   const sendRef = useRef<((text: string) => void) | null>(null);
   const turnBaseVersion = useRef<string | null>(summary.headVersionId);
@@ -120,6 +128,14 @@ export function AppEditor(props: {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => void runBuild("Edited in Code Mode"), 1200);
   }, [runBuild]);
+  // Design saves → same: rebuild once the edits settle.
+  const onDesignSaved = useCallback(
+    (message: string) => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => void runBuild(message), 1200);
+    },
+    [runBuild],
+  );
 
   useEffect(() => {
     if (!summary.latestBuild && !building) void runBuild("First build");
@@ -408,6 +424,26 @@ export function AppEditor(props: {
                 onDismissRuntime={() => setRuntimeErrors([])}
               />
             </div>
+            {designVisited && (
+              <div style={{ position: "absolute", inset: 0, display: tab === "design" ? "block" : "none" }}>
+                <DesignPane
+                  appId={appId}
+                  refreshKey={refreshKey}
+                  stockKeys={props.stockKeys}
+                  onSaved={onDesignSaved}
+                  onAskSol={sendToSol}
+                  onOpenCode={(path) => {
+                    setCodeOpen({ path, nonce: Date.now() });
+                    setTab("code");
+                  }}
+                  onPreview={(path) => {
+                    setRoute(path);
+                    setRouteDraft(path);
+                    setTab("preview");
+                  }}
+                />
+              </div>
+            )}
             {tab === "code" && <CodePane appId={appId} openRequest={codeOpen} refreshKey={refreshKey} onSaved={onCodeSaved} />}
             {tab === "database" && (
               <Scroll>

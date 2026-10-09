@@ -63,6 +63,10 @@ export type BuildReport = {
 
 export type FileEntry = { path: string; size: number; contentType: string; sha: string };
 
+export type DesignSummary = { slug: string; name: string; route: string; file: string; codeFile: string; codeEdited: boolean; updatedAt: string };
+export type DesignSave = { name: string; route: string; nodes: unknown; pageOrder: string[]; brand?: Record<string, unknown> | null };
+export type DesignSaveResult = { design: DesignSummary; routesWired: boolean; recompiled: string[]; skipped: string[] };
+
 export const appsApi = {
   summary: (id: string) => api<AppSummary>(`/api/v1/apps/${id}`),
   rename: (id: string, name: string) => api<AppSummary>(`/api/v1/apps/${id}`, { method: "PATCH", json: { name } }),
@@ -86,6 +90,11 @@ export const appsApi = {
       `/api/v1/apps/${id}/versions/${versionId}/diff?against=${encodeURIComponent(against)}${path ? `&path=${encodeURIComponent(path)}` : ""}`,
     ),
   runtimeErrors: (id: string, minutes = 30) => api<{ errors: Array<{ kind: string; message: string; stack: string | null; url: string | null; lastAt: string; count: number }> }>(`/api/v1/apps/${id}/runtime-errors?minutes=${minutes}`),
+  designs: (id: string) => api<{ designs: DesignSummary[]; brand: Record<string, unknown> | null }>(`/api/v1/apps/${id}/designs`),
+  design: (id: string, slug: string) => api<{ design: DesignSummary; nodes: Record<string, unknown>; pageOrder: string[]; brand: Record<string, unknown> | null }>(`/api/v1/apps/${id}/designs/${slug}`),
+  createDesign: (id: string, body: DesignSave) => api<DesignSaveResult>(`/api/v1/apps/${id}/designs`, { method: "POST", json: body }),
+  saveDesign: (id: string, slug: string, body: DesignSave & { overwrite?: boolean }) => api<DesignSaveResult>(`/api/v1/apps/${id}/designs/${slug}`, { method: "PUT", json: body }),
+  deleteDesign: (id: string, slug: string) => api(`/api/v1/apps/${id}/designs/${slug}`, { method: "DELETE" }),
   conversation: (id: string) => api<{ conversationId: string; modelTier: "BASIC" | "MEDIUM" | "HIGH" }>(`/api/v1/apps/${id}/conversation`, { method: "POST" }),
 };
 

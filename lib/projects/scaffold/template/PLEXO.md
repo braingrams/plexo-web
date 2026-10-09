@@ -9,6 +9,7 @@ installs, builds and hosts it — there's nothing to configure.
 | Path | What goes there |
 | --- | --- |
 | `src/pages/` | One component per page. Register each in `src/App.tsx` above the `*` route. |
+| `src/plexo-canvas/` | Pages designed visually in the editor's Design tab: `<name>.canvas.json` is the design, `<Name>Page.tsx` the code Plexo generates from it, `routes.tsx` their addresses (rendered in `src/App.tsx`). Saving a design regenerates its page — change designed pages in the Design tab, or edit the `.tsx` (the Design tab then asks before replacing your edits). Don't edit `routes.tsx` or `brand.json` by hand. |
 | `src/components/` | Your components. `src/components/ui/` holds the UI kit (shadcn/ui style). |
 | `src/lib/plexo.ts` | The backend client — `plexo.from()`, `plexo.auth`, `plexo.functions`, `plexo.storage`. Don't edit. |
 | `src/lib/plexo-react.tsx` | `useAuth()` and `<RequireAuth>`. |
