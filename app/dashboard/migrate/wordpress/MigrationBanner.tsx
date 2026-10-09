@@ -11,6 +11,8 @@ import { isRunning, migrationHref, useMigrations, type MigrationSummary } from "
 // for a few days after it finishes until they've seen the report.
 
 const RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+// Closing the banner is saved on the migration (so it stays closed on every device); this
+// browser also remembers it, so it hides instantly before the list has loaded.
 const dismissKey = (id: string) => `plexo:wp-migration-banner-dismissed:${id}`;
 
 function readDismissed(id: string): boolean {
@@ -31,10 +33,14 @@ export function MigrationBanner() {
   const [dismissed, setDismissed] = useState<Record<string, boolean>>({});
 
   const shown = migrations.find((m) => isRunning(m) || m.phase === "PAUSED_ERROR")
-    ?? migrations.find((m) => m.phase === "COMPLETED" && m.finishedAt && Date.now() - Date.parse(m.finishedAt) < RECENT_MS);
+    ?? migrations.find((m) => m.phase === "COMPLETED" && !m.bannerDismissed && m.finishedAt && Date.now() - Date.parse(m.finishedAt) < RECENT_MS);
 
   useEffect(() => {
-    if (shown) setDismissed((d) => (shown.id in d ? d : { ...d, [shown.id]: readDismissed(shown.id) }));
+    if (!shown) return;
+    const closedHere = readDismissed(shown.id);
+    setDismissed((d) => (shown.id in d ? d : { ...d, [shown.id]: closedHere }));
+    // Closed in this browser before it was saved on the account: save it now.
+    if (closedHere && shown.phase === "COMPLETED") void saveDismissal(shown);
   }, [shown]);
 
   // The migration screen already shows all of this.
@@ -49,6 +55,7 @@ export function MigrationBanner() {
       // still hidden for this visit
     }
     setDismissed((d) => ({ ...d, [shown.id]: true }));
+    void saveDismissal(shown);
   };
 
   return (
@@ -70,6 +77,14 @@ export function MigrationBanner() {
       )}
     </div>
   );
+}
+
+function saveDismissal(m: MigrationSummary): Promise<unknown> {
+  return fetch(`/api/v1/wp-migration/${m.templateId}/${m.id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dismissBanner: true }),
+  }).catch(() => undefined);
 }
 
 function headline(m: MigrationSummary, name: string): string {

@@ -22,7 +22,9 @@ if (typeof window !== "undefined") {
     // static logo file to point at directly; this is the one place Plexo's mark already
     // gets rendered to an actual image).
     appLogoUrl: `${window.location.origin}/icon`,
-    showRedirectNotice: true,
+    // "Continue with Google" goes straight to Google (triggerGoogleSignIn) — no notice
+    // screen or Charisol page in between.
+    showRedirectNotice: false,
   });
 }
 
@@ -34,9 +36,11 @@ export { CharisolAuth };
 // back once the sign-in round-trip completes.
 export const POST_LOGIN_REDIRECT_KEY = "plexo_post_login_redirect";
 
-// Shared by GoogleAuthButton.tsx and app/auth/login/page.tsx's "this account uses Google
-// sign-in" prompt — one place for the stash-then-redirect sequence so both stay in sync.
+// The one place that starts a Google sign-in (GoogleAuthButton.tsx): stash where to go
+// afterwards, then hand off to Google.
 export async function triggerGoogleSignIn(callbackURL: string): Promise<void> {
   window.sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, callbackURL);
-  await CharisolAuth.signIn();
+  // identity_provider=Google skips the Charisol sign-in page and opens Google's account
+  // picker directly ("Google" is the provider's name on the Charisol user pool).
+  await CharisolAuth.signIn({ idp: "Google" });
 }

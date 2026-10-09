@@ -15,6 +15,7 @@ export type HomeApp = { id: string; name: string; previewUrl: string | null; pub
 
 import {
   AUDIENCES, FEATURES, FEATURES_FOR, STARTERS, AppPreview, describeAnswers, encodePlan, suggestName, ink, muted, faint, surface, border, fill,
+  accent, tint, brandGradient, hueFor, gradientFor,
   type AudienceId, type FeatureId,
 } from "./appPlan";
 
@@ -22,22 +23,23 @@ import {
 // ------------------------------------------------------------------ small pieces
 
 function Tile({ icon: Icon, title, body, on, onClick }: { icon: LucideIcon; title: string; body: string; on: boolean; onClick: () => void }) {
+  const hue = hueFor(title);
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={on}
       className="ah-tile"
-      style={{ display: "flex", gap: 14, alignItems: "center", padding: 16, borderRadius: 16, textAlign: "left", fontFamily: "inherit", color: ink, cursor: "pointer", border: on ? `2px solid ${ink}` : `1px solid ${border}`, background: on ? fill(5) : surface, margin: on ? 0 : 1 }}
+      style={{ display: "flex", gap: 14, alignItems: "center", padding: 16, borderRadius: 16, textAlign: "left", fontFamily: "inherit", color: ink, cursor: "pointer", border: on ? `2px solid ${accent}` : `1px solid ${border}`, background: on ? tint(accent, 10) : surface, margin: on ? 0 : 1, boxShadow: on ? "0 8px 24px var(--brand-subtle)" : "none" }}
     >
-      <span style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, display: "grid", placeItems: "center", background: on ? ink : fill(8), color: on ? "var(--bg)" : muted }}>
+      <span style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, display: "grid", placeItems: "center", background: on ? hue : tint(hue, 16), color: on ? "#fff" : hue }}>
         <Icon size={19} />
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: "block", fontSize: 16, fontWeight: 700 }}>{title}</span>
         <span style={{ display: "block", fontSize: 13, color: muted }}>{body}</span>
       </span>
-      <span style={{ width: 24, height: 24, borderRadius: 99, flexShrink: 0, display: "grid", placeItems: "center", background: on ? ink : "transparent", border: on ? "none" : `1.5px solid ${border}`, color: "var(--bg)" }}>
+      <span style={{ width: 24, height: 24, borderRadius: 99, flexShrink: 0, display: "grid", placeItems: "center", background: on ? accent : "transparent", border: on ? "none" : `1.5px solid ${border}`, color: "#fff" }}>
         {on && <Check size={14} strokeWidth={3} />}
       </span>
     </button>
@@ -46,7 +48,7 @@ function Tile({ icon: Icon, title, body, on, onClick }: { icon: LucideIcon; titl
 
 const primaryButton = (enabled: boolean): CSSProperties => ({
   display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit", fontSize: 15, fontWeight: 700, padding: "14px 24px", borderRadius: 13, border: "none",
-  background: enabled ? ink : fill(22), color: "var(--bg)", cursor: enabled ? "pointer" : "default", transition: "background 0.2s",
+  background: enabled ? brandGradient : fill(14), color: enabled ? "#fff" : muted, cursor: enabled ? "pointer" : "default", transition: "background 0.2s", boxShadow: enabled ? "0 8px 24px var(--brand-glow)" : "none",
 });
 const secondaryButton: CSSProperties = { fontFamily: "inherit", fontSize: 14.5, fontWeight: 600, padding: "13px 18px", borderRadius: 13, border: `1px solid ${border}`, background: surface, color: ink, cursor: "pointer" };
 const linkButton: CSSProperties = { background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: 13.5, color: "var(--brand)", cursor: "pointer" };
@@ -54,7 +56,7 @@ const eyebrow: CSSProperties = { fontSize: 13, fontWeight: 700, letterSpacing: "
 
 function Thumb({ name, size }: { name: string; size: { w: number; h: number } }) {
   return (
-    <span aria-hidden style={{ width: size.w, height: size.h, borderRadius: 9, flexShrink: 0, display: "grid", placeItems: "center", background: `repeating-linear-gradient(135deg, ${fill(4)} 0 8px, ${fill(8)} 8px 16px)`, color: muted, fontSize: Math.round(size.h * 0.36), fontWeight: 800 }}>
+    <span aria-hidden style={{ width: size.w, height: size.h, borderRadius: 9, flexShrink: 0, display: "grid", placeItems: "center", background: gradientFor(name), color: "#fff", fontSize: Math.round(size.h * 0.36), fontWeight: 800, textShadow: "0 1px 8px rgba(0,0,0,0.2)" }}>
       {name.charAt(0).toUpperCase()}
     </span>
   );
@@ -62,15 +64,15 @@ function Thumb({ name, size }: { name: string; size: { w: number; h: number } })
 
 function AppCard({ app, large }: { app: HomeApp; large?: boolean }) {
   return (
-    <Link href={`/dashboard/apps/${app.id}`} className="ah-card" style={{ display: "flex", gap: 14, alignItems: "center", borderRadius: 14, background: surface, padding: 10, textDecoration: "none", color: ink, border: app.needsFix ? `1.5px solid ${ink}` : `1px solid ${border}`, minWidth: 0 }}>
+    <Link href={`/dashboard/apps/${app.id}`} className="ah-card" style={{ display: "flex", gap: 14, alignItems: "center", borderRadius: 14, background: surface, padding: 10, textDecoration: "none", color: ink, border: app.needsFix ? "1.5px solid #f59e0b" : `1px solid ${border}`, minWidth: 0 }}>
       <Thumb name={app.name} size={large ? { w: 132, h: 84 } : { w: 116, h: 72 }} />
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: "block", fontSize: 14.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{app.name}</span>
         <span style={{ display: "block", fontSize: 12.5, color: muted, marginTop: 2 }}>
-          {app.published ? "● Live" : "○ Draft"} · {timeAgo(app.updatedAt)}
+          <span style={{ color: app.published ? "#10b981" : muted, fontWeight: 600 }}>{app.published ? "● Live" : "○ Draft"}</span> · {timeAgo(app.updatedAt)}
         </span>
       </span>
-      {app.needsFix && <span style={{ padding: "6px 10px", borderRadius: 99, background: ink, color: "var(--bg)", fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Needs a fix</span>}
+      {app.needsFix && <span style={{ padding: "6px 10px", borderRadius: 99, background: tint("#f59e0b", 18), color: "#f59e0b", fontSize: 11.5, fontWeight: 700, whiteSpace: "nowrap" }}>Needs a fix</span>}
     </Link>
   );
 }
@@ -197,8 +199,8 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
         )}
 
         {!composing ? (
-          <button type="button" onClick={() => setComposing(true)} className="ah-create" style={{ minHeight: 420, fontFamily: "inherit", color: ink, cursor: "pointer", border: `2px dashed ${border}`, borderRadius: 22, background: surface, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
-            <span style={{ width: 64, height: 64, borderRadius: 18, background: ink, color: "var(--bg)", display: "grid", placeItems: "center" }}><Plus size={30} /></span>
+          <button type="button" onClick={() => setComposing(true)} className="ah-create" style={{ minHeight: 420, fontFamily: "inherit", color: ink, cursor: "pointer", border: `2px dashed ${tint(accent, 40)}`, borderRadius: 22, background: `radial-gradient(50% 70% at 20% 0%, ${tint("#c084fc", 10)}, transparent 70%), radial-gradient(60% 80% at 85% 100%, ${tint(accent, 16)}, transparent 70%), ${surface}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
+            <span style={{ width: 64, height: 64, borderRadius: 18, background: brandGradient, color: "#fff", display: "grid", placeItems: "center", boxShadow: "0 12px 32px var(--brand-glow)" }}><Plus size={30} /></span>
             <span style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.01em" }}>Create a new app</span>
             <span style={{ fontSize: 15, color: muted }}>Answer three quick questions and we&rsquo;ll build it.</span>
           </button>
@@ -239,7 +241,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: muted, whiteSpace: "nowrap" }}>Step {step} of 3</div>
                 <div style={{ flex: 1, display: "flex", gap: 6 }}>
-                  {[1, 2, 3].map((i) => <span key={i} style={{ flex: 1, height: 6, borderRadius: 99, background: i <= step ? ink : fill(12), transition: "background 0.3s" }} />)}
+                  {[1, 2, 3].map((i) => <span key={i} style={{ flex: 1, height: 6, borderRadius: 99, background: i <= step ? brandGradient : fill(12), transition: "background 0.3s" }} />)}
                 </div>
                 {hasApps && <button type="button" onClick={cancel} style={{ ...linkButton, color: muted, display: "inline-flex", alignItems: "center", gap: 4 }}><X size={14} /> Cancel</button>}
               </div>
@@ -248,7 +250,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                   <span style={{ fontSize: 13, color: muted }}>Your answers:</span>
                   {answers.map((a) => (
-                    <button key={a.label} type="button" onClick={() => setStep(a.step)} style={{ padding: "6px 12px", borderRadius: 99, border: "none", background: fill(7), color: ink, fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                    <button key={a.label} type="button" onClick={() => setStep(a.step)} style={{ padding: "6px 12px", borderRadius: 99, border: "none", background: tint(accent, 14), color: ink, fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                       {a.label} <span style={{ color: faint, fontWeight: 500 }}>· change</span>
                     </button>
                   ))}
@@ -292,7 +294,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
                   onChange={(e) => setName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && onContinue()}
                   maxLength={60}
-                  style={{ padding: "18px 20px", borderRadius: 16, border: `2px solid ${ink}`, background: surface, color: ink, fontSize: 22, fontWeight: 700, fontFamily: "inherit", outline: "none" }}
+                  style={{ padding: "18px 20px", borderRadius: 16, border: `2px solid ${accent}`, background: surface, color: ink, fontSize: 22, fontWeight: 700, fontFamily: "inherit", outline: "none" }}
                 />
               )}
 
@@ -308,7 +310,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
             </div>
           )}
 
-          <div className="ah-preview" style={{ background: fill(4), padding: 28, display: "flex", flexDirection: "column", gap: 12, borderLeft: `1px solid ${border}` }}>
+          <div className="ah-preview" style={{ background: `radial-gradient(80% 60% at 100% 0%, ${tint(accent, 12)}, transparent 70%), ${fill(3)}`, padding: 28, display: "flex", flexDirection: "column", gap: 12, borderLeft: `1px solid ${border}` }}>
             {describing ? (
               <div style={{ flex: 1, borderRadius: 14, border: `1px solid ${border}`, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", padding: 24, color: muted, fontSize: 13.5, background: `repeating-linear-gradient(135deg, ${fill(2)} 0 12px, ${fill(4)} 12px 24px)` }}>
                 We&rsquo;ll show your app here as soon as it&rsquo;s built.
@@ -342,7 +344,7 @@ const STYLES = `
   .ah-tile:hover { transform: translateY(-1px); }
   .ah-card { transition: transform 0.15s, border-color 0.15s; }
   .ah-create { transition: border-color 0.15s, background 0.15s; }
-  .ah-create:hover { border-color: var(--text-main) !important; }
+  .ah-create:hover { border-color: var(--brand) !important; }
   .ah-card:hover { transform: translateY(-1px); }
   .ah-fade { animation: ah-fade 0.3s ease-out; }
   @keyframes ah-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }

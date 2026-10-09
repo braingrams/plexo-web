@@ -20,7 +20,7 @@ import { PublishDialog } from "./PublishDialog";
 import { GitHubPane } from "./GitHubPane";
 import { DesignPane } from "./DesignPane";
 import { CreditsMeter, CreditsPanel, OutOfCreditsCard, TopUpSheet, useCredits, type Pack } from "./Credits";
-import { AppPreview, buildSteps, decodePlan } from "./appPlan";
+import { AppPreview, buildSteps, decodePlan, brandGradient, gradientFor } from "./appPlan";
 
 // The app editor (wireframes E, F, F2): chat with SOL on the left; the app on the right with
 // everyday tabs (Preview · Design · Data · People · Settings · More) and a separate Code
@@ -375,15 +375,15 @@ export function AppEditor(props: {
         // Free plans on Plexo's AI run on Basic (the server enforces it — lib/ai/solEngine.ts).
         lockedModelTier: props.lockedModelTier ?? undefined,
         afterMessages: firstBuild ? (
-          <div style={{ width: "100%", boxSizing: "border-box", maxWidth: 760, margin: "0.5rem auto 1rem", border: `1px solid ${C.border}`, borderRadius: 14, padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+          <div style={{ width: "100%", boxSizing: "border-box", maxWidth: 760, margin: "0.5rem auto 1rem", border: "1px solid rgba(139,92,246,0.28)", background: "linear-gradient(180deg, rgba(139,92,246,0.10), rgba(139,92,246,0.03))", borderRadius: 14, padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
             <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.faint }}>What I&rsquo;m doing</div>
             {steps.map((label, i) => {
               const state = i < stepsDone ? "done" : i === stepsDone ? "active" : "todo";
               return (
                 <div key={label} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "0.86rem", fontWeight: state === "active" ? 700 : 500, color: state === "todo" ? C.faint : C.text }}>
-                  <span style={{ width: 20, height: 20, borderRadius: 99, flexShrink: 0, display: "grid", placeItems: "center", background: state === "done" ? C.text : "transparent", border: state === "done" ? "none" : `${state === "active" ? 2 : 1.5}px solid ${state === "active" ? C.text : C.borderStrong}`, color: C.bg }}>
+                  <span style={{ width: 20, height: 20, borderRadius: 99, flexShrink: 0, display: "grid", placeItems: "center", background: state === "done" ? C.success : "transparent", border: state === "done" ? "none" : `${state === "active" ? 2 : 1.5}px solid ${state === "active" ? C.brand : C.borderStrong}`, color: "#06281d" }}>
                     {state === "done" && <Check size={12} strokeWidth={3} />}
-                    {state === "active" && <span className="ed-pulse" style={{ width: 8, height: 8, borderRadius: 99, background: C.text }} />}
+                    {state === "active" && <span className="ed-pulse" style={{ width: 8, height: 8, borderRadius: 99, background: C.brand }} />}
                   </span>
                   {label}
                 </div>
@@ -518,14 +518,14 @@ export function AppEditor(props: {
         {plan ? (
           <AppPreview audience={plan.audience} features={plan.features} other={plan.other} name={plan.name} />
         ) : (
-          <div style={{ flex: 1, borderRadius: 16, border: `1px solid ${C.border}`, display: "grid", placeItems: "center", color: C.muted, fontSize: "0.86rem", background: "repeating-linear-gradient(135deg, rgba(255,255,255,0.02) 0 12px, rgba(255,255,255,0.04) 12px 24px)" }}>
+          <div style={{ flex: 1, borderRadius: 16, border: `1px solid ${C.border}`, display: "grid", placeItems: "center", color: C.muted, fontSize: "0.86rem", background: "radial-gradient(60% 50% at 30% 20%, rgba(192,132,252,0.12), transparent 70%), radial-gradient(60% 60% at 75% 80%, rgba(139,92,246,0.18), transparent 70%)" }}>
             Your app appears here as it&rsquo;s built.
           </div>
         )}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <span style={{ flex: 1, height: 6, borderRadius: 99, background: "rgba(255,255,255,0.1)" }}>
-          <span style={{ display: "block", width: `${Math.max(6, (stepsDone / steps.length) * 100)}%`, height: "100%", borderRadius: 99, background: C.text, transition: "width 0.6s" }} />
+          <span style={{ display: "block", width: `${Math.max(6, (stepsDone / steps.length) * 100)}%`, height: "100%", borderRadius: 99, background: brandGradient, transition: "width 0.6s" }} />
         </span>
         <span style={{ fontSize: "0.78rem", color: C.muted, whiteSpace: "nowrap" }}>
           {stepsDone} of {steps.length} done
@@ -589,7 +589,7 @@ export function AppEditor(props: {
         <Link href="/dashboard/apps" aria-label="Back to apps" style={{ color: C.muted, display: "inline-flex" }}>
           <ArrowLeft size={18} />
         </Link>
-        <span aria-hidden style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: "grid", placeItems: "center", background: "rgba(255,255,255,0.08)", color: C.muted, fontWeight: 800, fontSize: "0.86rem" }}>
+        <span aria-hidden style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: "grid", placeItems: "center", background: gradientFor(summary.name), color: "#fff", fontWeight: 800, fontSize: "0.86rem" }}>
           {summary.name.charAt(0).toUpperCase()}
         </span>
         <div style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
@@ -653,7 +653,7 @@ export function AppEditor(props: {
           <button type="button" disabled={!publishable || !summary.previewUrl} onClick={copyPreviewLink} title="Copy a link anyone can open" style={{ padding: "0.5rem 0.85rem", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: publishable ? C.text : C.faint, fontFamily: "inherit", fontSize: "0.8rem", cursor: publishable ? "pointer" : "default" }}>
             {copied ? "Link copied" : "Share"}
           </button>
-          <button type="button" disabled={!publishable} onClick={() => setPublishOpen(true)} style={{ padding: "0.5rem 0.95rem", borderRadius: 10, border: "none", background: publishable ? C.text : "rgba(255,255,255,0.18)", color: C.bg, fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 700, cursor: publishable ? "pointer" : "default" }}>
+          <button type="button" disabled={!publishable} onClick={() => setPublishOpen(true)} style={{ padding: "0.5rem 0.95rem", borderRadius: 10, border: "none", background: publishable ? brandGradient : "rgba(255,255,255,0.12)", color: publishable ? "#fff" : C.faint, boxShadow: publishable ? "0 6px 20px rgba(139,92,246,0.35)" : "none", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 700, cursor: publishable ? "pointer" : "default" }}>
             {summary.published ? "Publish changes" : "Publish"}
           </button>
         </div>
@@ -752,7 +752,7 @@ export function AppEditor(props: {
                 )}
                 {tab === "functions" && (
                   <Scroll>
-                    <FunctionsPane appId={appId} refreshKey={refreshKey} />
+                    <FunctionsPane appId={appId} refreshKey={refreshKey} onAskAi={sendToSol} />
                   </Scroll>
                 )}
                 {tab === "secrets" && (
@@ -786,9 +786,9 @@ export function AppEditor(props: {
                   </Scroll>
                 )}
                 {tab === "settings" && (
-                  <Scroll>
+                  <div style={{ position: "absolute", inset: 0 }}>
                     <SettingsPane appId={appId} summary={summary} onRenamed={(name) => setSummary((s) => ({ ...s, name }))} />
-                  </Scroll>
+                  </div>
                 )}
               </>
             )}

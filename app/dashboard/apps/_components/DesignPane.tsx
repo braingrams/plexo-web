@@ -1,9 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Trash2, Code2, MessageSquare, Palette, MousePointer2, Link2, FileCode2 } from "lucide-react";
+import { Plus, Trash2, Code2, MessageSquare } from "lucide-react";
 import { appsApi, ApiError, type DesignSummary } from "./api";
 import { C, Button, Notice, inputStyle } from "./ui";
+
+const CODE_CHANGED_NOTE = "This page was changed in code since you last designed it. Saving here replaces those code changes.";
+
+type PickKind = "landing" | "about" | "pricing" | "contact" | "blank";
+const PAGE_PICKS: { name: string; route: string; hint: string; kind: PickKind; accent: string; bg: string }[] = [
+  { name: "Landing page", route: "/landing-page", hint: "Your big first impression", kind: "landing", accent: "#8b5cf6", bg: "linear-gradient(135deg, rgba(139,92,246,0.28), rgba(192,132,252,0.12))" },
+  { name: "About", route: "/about", hint: "Your story and your team", kind: "about", accent: "#a78bfa", bg: "linear-gradient(135deg, rgba(167,139,250,0.22), rgba(109,40,217,0.08))" },
+  { name: "Pricing", route: "/pricing", hint: "Plans side by side", kind: "pricing", accent: "#6366f1", bg: "linear-gradient(135deg, rgba(99,102,241,0.22), rgba(196,181,253,0.08))" },
+  { name: "Contact", route: "/contact", hint: "A way to get in touch", kind: "contact", accent: "#7c3aed", bg: "linear-gradient(135deg, rgba(124,58,237,0.24), rgba(139,92,246,0.08))" },
+  { name: "Blank page", route: "/new-page", hint: "Start from nothing", kind: "blank", accent: "#94a3b8", bg: "rgba(255,255,255,0.02)" },
+];
 
 // The Design tab: design app pages visually on the Plexo canvas (@charisol/plexo-sdk/v2).
 // Each design is one page; saving compiles it to real React code in src/plexo-canvas/ and
@@ -122,7 +133,7 @@ export function DesignPane(props: {
         setRoute(loaded.design.route);
         setProblem(null);
         setNotWired(false);
-        setConflict(loaded.design.codeEdited ? `${loaded.design.codeFile.split("/").pop()} was edited in code since this design was last saved. Saving the design replaces those code changes.` : null);
+        setConflict(loaded.design.codeEdited ? CODE_CHANGED_NOTE : null);
       } catch (err) {
         setProblem(err instanceof ApiError ? err.message : "Couldn't open that design.");
       }
@@ -130,10 +141,6 @@ export function DesignPane(props: {
     [appId, sdk, loadIntoCanvas],
   );
 
-  // No designs yet: the empty state shows the new-page form straight away.
-  useEffect(() => {
-    if (designs && designs.length === 0 && !creating) setCreating({ name: "Landing page", route: "/landing-page", busy: false });
-  }, [designs, creating]);
 
   // First load: the list, then the first design.
   useEffect(() => {
@@ -168,7 +175,7 @@ export function DesignPane(props: {
         setDesigns((list) => list?.map((d) => (d.slug === result.design.slug ? result.design : d)) ?? list);
         setConflict(null);
         setRouteTaken(false);
-        setProblem(result.skipped.length ? `Brand changes weren't applied to ${result.skipped.join(", ")} — their code was edited by hand.` : null);
+        setProblem(result.skipped.length ? `Your brand changes weren't applied to ${result.skipped.length === 1 ? "one page" : `${result.skipped.length} pages`} that were changed in code, so those changes stay as they are.` : null);
         setNotWired(!result.routesWired);
         if (editVersion.current === version) {
           setDirty(false);
@@ -198,10 +205,11 @@ export function DesignPane(props: {
     return () => clearTimeout(timer);
   }, [dirty, conflict, routeTaken, save]);
 
-  const create = async () => {
-    if (!sdk || !creating) return;
-    const pageName = creating.name.trim() || "New page";
-    setCreating({ ...creating, busy: true });
+  const create = async (pick?: { name: string; route: string }) => {
+    const request = pick ? { ...pick, busy: false } : creating;
+    if (!sdk || !request || creating?.busy) return;
+    const pageName = request.name.trim() || "New page";
+    setCreating({ ...request, busy: true });
     try {
       // A new page starts from the canvas's starter layout, ready to edit.
       hydrating.current = true;
@@ -209,7 +217,7 @@ export function DesignPane(props: {
       sdk.useCanvasStore.getState().seed();
       hydrating.current = false;
       const { nodes, pageOrder } = sdk.useCanvasStore.getState();
-      const result = await appsApi.createDesign(appId, { name: pageName, route: creating.route, nodes, pageOrder, brand: brandSnapshot() });
+      const result = await appsApi.createDesign(appId, { name: pageName, route: request.route, nodes, pageOrder, brand: brandSnapshot() });
       setDesigns((list) => [...(list ?? []), result.design].sort((a, b) => a.route.localeCompare(b.route)));
       setCurrent(result.design);
       setName(result.design.name);
@@ -219,11 +227,11 @@ export function DesignPane(props: {
       setProblem(null);
       setNotWired(!result.routesWired);
       setCreating(null);
+      // Straight into the canvas to design it.
       onSaved(`Added the ${result.design.name} page`);
-      props.onPreview(result.design.route);
     } catch (err) {
       hydrating.current = false;
-      setCreating({ ...creating, busy: false });
+      setCreating(null);
       setProblem(err instanceof ApiError ? err.message : "Couldn't create the page.");
       if (currentRef.current) void open(currentRef.current.slug);
     }
@@ -315,43 +323,59 @@ export function DesignPane(props: {
   );
 
   if (!designs!.length || !current) {
-    const howItWorks = [
-      { icon: MousePointer2, title: "Drag, drop and style", body: "Sections, text, images, buttons, forms and menus on a canvas — with your brand's fonts and colours." },
-      { icon: FileCode2, title: "Real React code", body: "Each design becomes a page in src/plexo-canvas/. SOL, Code mode and GitHub all see it." },
-      { icon: Link2, title: "Its own address", body: "Pick where the page lives, like /pricing. Plexo adds it to your app for you." },
-    ];
+    const taken = new Set(designs!.map((d) => d.route));
+    const freeRoute = (base: string) => {
+      if (!taken.has(base)) return base;
+      for (let i = 2; ; i++) if (!taken.has(`${base}-${i}`)) return `${base}-${i}`;
+    };
+    const busyWith = creating?.busy ? creating.name : null;
     return (
-      <div style={{ position: "absolute", inset: 0, overflow: "auto", padding: "1.5rem" }}>
-        <div className="design-empty-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 24, alignItems: "start" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-              <span style={{ width: 40, height: 40, flexShrink: 0, borderRadius: 11, display: "grid", placeItems: "center", background: "rgba(139,92,246,0.15)" }}>
-                <Palette size={20} color={C.brand} />
-              </span>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Design a page visually</div>
-                <div style={{ fontSize: "0.82rem", color: C.muted, marginTop: 4, maxWidth: 640 }}>
-                  Lay a page out on the canvas and Plexo turns it into real React code in your app. Start with a page name and address — you can change both later.
-                </div>
-              </div>
-            </div>
-            {problem && <Notice tone="danger">{problem}</Notice>}
-            <div style={{ padding: "1.1rem", borderRadius: 14, border: `1px solid ${C.border}`, background: C.panel }}>{newPageForm}</div>
+      <div style={{ position: "absolute", inset: 0, overflow: "auto" }}>
+        <div style={{ padding: "2.75rem 3rem 3rem", display: "flex", flexDirection: "column", gap: "2.25rem" }}>
+          <header style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <h2 style={{ margin: 0, fontSize: "1.75rem", fontWeight: 750, letterSpacing: "-0.02em" }}>Design a page your way</h2>
+            <p style={{ margin: 0, fontSize: "0.95rem", color: C.muted, lineHeight: 1.6, maxWidth: 640 }}>
+              Pick a starting point. You&rsquo;ll drag in sections, text, images and buttons, and everything saves as you go.
+            </p>
+          </header>
+          {problem && <Notice tone="danger">{problem}</Notice>}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 22 }}>
+            {PAGE_PICKS.map((pick) => {
+              const busy = busyWith === pick.name;
+              return (
+                <button
+                  key={pick.name}
+                  type="button"
+                  className="design-pick"
+                  disabled={!!busyWith}
+                  onClick={() => void create({ name: pick.name === "Blank page" ? "New page" : pick.name, route: freeRoute(pick.route) })}
+                  style={{
+                    position: "relative",
+                    textAlign: "left",
+                    padding: 0,
+                    borderRadius: 18,
+                    overflow: "hidden",
+                    cursor: busyWith ? "default" : "pointer",
+                    color: C.text,
+                    background: C.panel,
+                    border: `1px solid ${busy ? "rgba(139,92,246,0.6)" : C.border}`,
+                    opacity: busyWith && !busy ? 0.5 : 1,
+                  }}
+                >
+                  <div style={{ height: 168, padding: 18, background: pick.bg, borderBottom: `1px solid ${C.border}` }}>
+                    <PickThumb kind={pick.kind} accent={pick.accent} />
+                  </div>
+                  <div style={{ padding: "1rem 1.1rem 1.15rem" }}>
+                    <div style={{ fontSize: "0.98rem", fontWeight: 700 }}>{busy ? "Setting it up…" : pick.name}</div>
+                    <div style={{ fontSize: "0.8rem", color: C.muted, marginTop: 4 }}>{pick.hint}</div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
-          <aside style={{ padding: "1.1rem", borderRadius: 14, border: `1px solid ${C.border}`, background: C.panel, display: "flex", flexDirection: "column", gap: 14 }}>
-            <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.faint }}>How designs work</div>
-            {howItWorks.map(({ icon: Icon, title, body }) => (
-              <div key={title} style={{ display: "flex", gap: 12 }}>
-                <Icon size={17} color={C.brand} style={{ flexShrink: 0, marginTop: 2 }} />
-                <div>
-                  <div style={{ fontSize: "0.84rem", fontWeight: 650 }}>{title}</div>
-                  <div style={{ fontSize: "0.77rem", color: C.muted, lineHeight: 1.45 }}>{body}</div>
-                </div>
-              </div>
-            ))}
-          </aside>
+          <p style={{ margin: 0, fontSize: "0.8rem", color: C.faint }}>You can rename any page or change its web address later.</p>
         </div>
-        <style>{`@media (max-width: 1000px) { .design-empty-grid { grid-template-columns: minmax(0, 1fr) !important; } }`}</style>
+        <style>{`.design-pick { transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s; } .design-pick:not(:disabled):hover { transform: translateY(-3px); border-color: rgba(139,92,246,0.55) !important; box-shadow: 0 16px 40px rgba(139,92,246,0.18); } @media (prefers-reduced-motion: reduce) { .design-pick:hover { transform: none !important; } }`}</style>
       </div>
     );
   }
@@ -369,7 +393,7 @@ export function DesignPane(props: {
                 <span style={{ flex: 1, minWidth: 220 }}>{conflict}</span>
                 <Button size="sm" variant="primary" onClick={() => void save({ overwrite: true })}>Use the design</Button>
                 <Button size="sm" variant="ghost" onClick={() => props.onOpenCode(current.codeFile)}>
-                  <Code2 size={13} /> Keep the code
+                  <Code2 size={13} /> Keep the code changes
                 </Button>
               </span>
             </Notice>
@@ -378,9 +402,9 @@ export function DesignPane(props: {
           {notWired && (
             <Notice tone="info">
               <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-                <span style={{ flex: 1, minWidth: 220 }}>Your App.tsx was changed, so Plexo couldn't add this page's address ({current.route}) automatically.</span>
+                <span style={{ flex: 1, minWidth: 220 }}>This page isn't linked into your app yet, so visitors can't reach {current.route}.</span>
                 <Button size="sm" onClick={() => props.onAskSol(`Show my designed pages in the app: render the routes exported as designRoutes from src/plexo-canvas/routes.tsx inside <Routes> in src/App.tsx (before the catch-all route), then rebuild.`)}>
-                  <MessageSquare size={13} /> Ask SOL to add it
+                  <MessageSquare size={13} /> Ask SOL to link it
                 </Button>
               </span>
             </Notice>
@@ -435,6 +459,68 @@ export function DesignPane(props: {
           }
         />
       </div>
+    </div>
+  );
+}
+
+/** A small drawing of each kind of page, so the choice is visual. */
+function PickThumb({ kind, accent }: { kind: PickKind; accent: string }) {
+  const line = (w: string, o = 0.35, h = 6) => <span style={{ display: "block", width: w, height: h, borderRadius: 99, background: `rgba(255,255,255,${o})` }} />;
+  const frame: React.CSSProperties = { height: "100%", borderRadius: 10, background: "rgba(11,15,25,0.55)", border: "1px solid rgba(255,255,255,0.08)", padding: 12, display: "flex", flexDirection: "column", gap: 8, overflow: "hidden" };
+  if (kind === "blank")
+    return (
+      <div style={{ ...frame, border: "1.5px dashed rgba(255,255,255,0.16)", background: "transparent", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ width: 38, height: 38, borderRadius: 12, display: "grid", placeItems: "center", background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)" }}>
+          <Plus size={20} />
+        </span>
+      </div>
+    );
+  return (
+    <div style={frame}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        {line("22%", 0.5)}
+        <span style={{ display: "flex", gap: 5 }}>{line("14px", 0.2, 4)}{line("14px", 0.2, 4)}{line("14px", 0.2, 4)}</span>
+      </div>
+      {kind === "landing" && (
+        <>
+          <div style={{ flex: 1, borderRadius: 8, background: `linear-gradient(135deg, ${accent}, #c084fc)`, padding: 10, display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>
+            {line("60%", 0.9, 8)}
+            {line("40%", 0.55, 5)}
+            <span style={{ width: 44, height: 14, borderRadius: 5, background: "#fff", marginTop: 2 }} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>{[0, 1, 2].map((i) => <span key={i} style={{ height: 16, borderRadius: 5, background: "rgba(255,255,255,0.08)" }} />)}</div>
+        </>
+      )}
+      {kind === "about" && (
+        <>
+          {line("50%", 0.6, 7)}
+          {line("80%", 0.2, 4)}
+          {line("70%", 0.2, 4)}
+          <div style={{ display: "flex", gap: 8, marginTop: "auto" }}>
+            {[accent, "#6d28d9", "#c4b5fd"].map((c) => <span key={c} style={{ width: 26, height: 26, borderRadius: 99, background: c }} />)}
+          </div>
+        </>
+      )}
+      {kind === "pricing" && (
+        <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+          {[0, 1, 2].map((i) => (
+            <div key={i} style={{ borderRadius: 7, padding: 7, display: "flex", flexDirection: "column", gap: 5, background: i === 1 ? accent : "rgba(255,255,255,0.06)" }}>
+              {line("50%", i === 1 ? 0.9 : 0.4, 5)}
+              <span style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>${[9, 29, 99][i]}</span>
+              {line("80%", 0.25, 3)}
+              {line("60%", 0.25, 3)}
+            </div>
+          ))}
+        </div>
+      )}
+      {kind === "contact" && (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
+          {line("45%", 0.6, 7)}
+          {[0, 1].map((i) => <span key={i} style={{ height: 14, borderRadius: 5, border: "1px solid rgba(255,255,255,0.18)" }} />)}
+          <span style={{ flex: 1, minHeight: 16, borderRadius: 5, border: "1px solid rgba(255,255,255,0.18)" }} />
+          <span style={{ width: 52, height: 14, borderRadius: 5, background: accent }} />
+        </div>
+      )}
     </div>
   );
 }

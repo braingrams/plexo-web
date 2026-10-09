@@ -94,6 +94,9 @@ export const AppSettings = new Entity(
       buckets: { type: "any" },
       // Per-app request quota (requests/minute across the runtime API), raisable per plan.
       requestsPerMinute: { type: "number" },
+      // Search & sharing (lib/projects/appSeo.ts): title, description, sharing image, icon,
+      // search-console verification codes — written into every page as it's served.
+      seo: { type: "any" },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },
     indexes: {

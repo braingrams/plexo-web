@@ -1,9 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Play, RefreshCw, Server } from "lucide-react";
+import type { ComponentType } from "react";
+import { AlertTriangle, Bot, CheckCircle2, CalendarClock, ChevronDown, Clock, Code2, CreditCard, Mail, Play, RefreshCw, ScrollText, Search, Server, Webhook } from "lucide-react";
 import { api, ApiError, type AppEnv } from "./api";
-import { Button, C, Empty, Notice, Panel, inputStyle, timeAgo } from "./ui";
+import { Button, C, EmptyHero, IconButton, Notice, PaneHeader, Pill, ProblemState, Shimmer, StatCard, StateStyles, hueGradient, inputStyle, timeAgo, SolIdeas } from "./ui";
+
+// "Server code": the small pieces of the app that run on Plexo's servers rather than in the
+// visitor's browser — sending emails, taking payments, jobs that run on a schedule.
 
 type FunctionRow = {
   name: string;
@@ -19,71 +23,92 @@ type LogLine = { at: string; message: string; requestId?: string };
 type RunResult = { status: number; body: string };
 
 const WINDOWS = [
-  { minutes: 15, label: "15m" },
-  { minutes: 60, label: "1h" },
-  { minutes: 24 * 60, label: "24h" },
+  { minutes: 15, label: "Last 15 min" },
+  { minutes: 60, label: "Last hour" },
+  { minutes: 24 * 60, label: "Last day" },
 ];
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const isNum = (s: string) => /^\d+$/.test(s);
+const CUSTOM = "on a custom schedule";
 
-/** Turns the common 5-field UTC cron shapes into words; anything unusual is shown as-is. */
+/** Turns the common 5-field UTC cron shapes into words; anything unusual reads as "on a custom
+ *  schedule" (the raw value is shown as a tooltip where it's used). */
 export function describeSchedule(cron: string): string {
   const parts = cron.trim().split(/\s+/);
-  if (parts.length !== 5) return cron;
+  if (parts.length !== 5) return CUSTOM;
   const [min, hour, dom, mon, dow] = parts;
-  if (mon !== "*") return `cron: ${cron}`;
+  if (mon !== "*") return CUSTOM;
   if (min === "*" && hour === "*" && dom === "*" && dow === "*") return "every minute";
   const everyMin = min.match(/^\*\/(\d+)$/);
   if (everyMin && hour === "*" && dom === "*" && dow === "*") return `every ${everyMin[1]} minutes`;
   if (isNum(min) && hour === "*" && dom === "*" && dow === "*") return min === "0" ? "every hour, on the hour" : `every hour at :${pad(+min)}`;
   const everyHour = hour.match(/^\*\/(\d+)$/);
   if (isNum(min) && everyHour && dom === "*" && dow === "*") return `every ${everyHour[1]} hours`;
-  if (!isNum(min) || !isNum(hour)) return `cron: ${cron}`;
+  if (!isNum(min) || !isNum(hour)) return CUSTOM;
   const at = `${pad(+hour)}:${pad(+min)} UTC`;
   if (dom === "*" && dow === "*") return `every day at ${at}`;
   if (dom === "*" && (dow === "1-5" || dow === "MON-FRI")) return `every weekday at ${at}`;
   if (dom === "*" && (dow === "0,6" || dow === "6,0" || dow === "SAT,SUN")) return `every weekend day at ${at}`;
   if (dom === "*" && isNum(dow) && +dow <= 7) return `every ${DAYS[+dow % 7]} at ${at}`;
   if (isNum(dom) && dow === "*") return `on day ${+dom} of every month at ${at}`;
-  return `cron: ${cron}`;
+  return CUSTOM;
 }
 
-function StatusDot({ status }: { status: FunctionRow["status"] }) {
-  const color = status === "READY" ? C.success : status === "FAILED" ? C.danger : C.warning;
-  const label = status === "READY" ? "Running" : status === "FAILED" ? "Failed" : "Deploying";
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "0.72rem", color }}>
-      <span aria-hidden style={{ width: 7, height: 7, borderRadius: 99, background: color }} />
-      {label}
-    </span>
-  );
+const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** "send-welcome-email" / "sendWelcomeEmail" → "Send welcome email". */
+function friendlyName(name: string): string {
+  const words = name
+    .replace(/\.[a-z]+$/i, "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[-_\s/]+/)
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return words ? capitalise(words) : name;
 }
 
-function EnvBadge({ env }: { env: AppEnv }) {
+/** A picture for each function, guessed from its name so the list is easy to scan. */
+function iconFor(fn: FunctionRow): ComponentType<{ size?: number }> {
+  const n = fn.name.toLowerCase();
+  if (/mail|email|newsletter|notify|notification/.test(n)) return Mail;
+  if (/pay|stripe|checkout|charge|invoice|billing|order|subscri/.test(n)) return CreditCard;
+  if (/ai|chat|gpt|claude|summar|generate/.test(n)) return Bot;
+  if (/hook|callback|webhook/.test(n)) return Webhook;
+  if (fn.schedule || /cron|daily|weekly|nightly|schedule|reminder/.test(n)) return CalendarClock;
+  return Code2;
+}
+
+const STATUS: Record<FunctionRow["status"], { label: string; color: string }> = {
+  READY: { label: "Running fine", color: C.success },
+  FAILED: { label: "Had a problem", color: C.danger },
+  DEPLOYING: { label: "Getting ready", color: C.warning },
+};
+
+function EnvTag({ env }: { env: AppEnv }) {
   const live = env === "live";
   return (
-    <span
-      style={{
-        fontSize: "0.66rem",
-        fontWeight: 700,
-        padding: "0.1rem 0.4rem",
-        borderRadius: 6,
-        background: live ? "rgba(52,211,153,0.12)" : "rgba(139,92,246,0.15)",
-        color: live ? C.success : "#c4b5fd",
-      }}
-    >
+    <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: live ? "rgba(139,92,246,0.22)" : "rgba(196,181,253,0.1)", color: live ? "#c4b5fd" : C.muted, border: `1px solid ${live ? "rgba(139,92,246,0.4)" : C.border}` }}>
       {live ? "Live" : "Preview"}
     </span>
   );
 }
 
-export function FunctionsPane({ appId, refreshKey }: { appId: string; refreshKey?: number }) {
+/** What sets it off, in plain words. */
+function Trigger({ schedule }: { schedule: string | null }) {
+  if (!schedule) return <>Runs when your app asks for it</>;
+  return <span title={`Schedule: ${schedule} (UTC)`}>Runs {describeSchedule(schedule)}</span>;
+}
+
+export function FunctionsPane({ appId, refreshKey, onAskAi }: { appId: string; refreshKey?: number; onAskAi?: (text: string) => void }) {
   const [functions, setFunctions] = useState<FunctionRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<{ name: string; env: AppEnv } | null>(null);
+  const [expanded, setExpanded] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(
     async (signal?: { cancelled: boolean }) => {
@@ -94,7 +119,7 @@ export function FunctionsPane({ appId, refreshKey }: { appId: string; refreshKey
         setFunctions(sorted);
         setError(null);
       } catch (err) {
-        if (!signal?.cancelled) setError(err instanceof ApiError ? err.message : "Couldn't load server functions.");
+        if (!signal?.cancelled) setError(err instanceof ApiError ? err.message : "Something went wrong on our side.");
       }
     },
     [appId],
@@ -117,78 +142,189 @@ export function FunctionsPane({ appId, refreshKey }: { appId: string; refreshKey
 
   const current = useMemo(() => functions?.find((f) => selected && f.name === selected.name && f.env === selected.env) ?? null, [functions, selected]);
 
-  if (error && !functions) {
-    return (
-      <div style={{ padding: "1rem" }}>
-        <Notice tone="danger">
-          {error}{" "}
-          <button type="button" onClick={() => void load()} style={linkButton}>
-            Try again
-          </button>
-        </Notice>
-      </div>
-    );
-  }
-  if (!functions) return <p style={{ padding: "1rem", color: C.muted, fontSize: "0.8rem" }}>Loading server functions…</p>;
-  if (!functions.length) {
-    return (
-      <Empty title="No server functions yet">
-        Code that runs on the server: send emails, take payments, call AI or other APIs with secret keys. Add a file in <code style={{ fontFamily: C.mono }}>functions/</code> (or ask SOL) and build.
-      </Empty>
-    );
-  }
+  const refresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
+  // Summary numbers, counted per piece of code (its Preview and Live copies count once).
+  const stats = useMemo(() => {
+    if (!functions?.length) return null;
+    const names = new Set(functions.map((f) => f.name));
+    const scheduled = new Set(functions.filter((f) => f.schedule).map((f) => f.name));
+    const problems = functions.filter((f) => f.status === "FAILED").length;
+    return { total: names.size, scheduled: scheduled.size, problems };
+  }, [functions]);
 
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.9rem", padding: "1rem", alignItems: "flex-start" }}>
-      <div style={{ flex: "1 1 240px", maxWidth: "100%", minWidth: 0 }}>
-        <Panel
-          title="Server functions"
-          actions={
-            <Button size="sm" variant="ghost" onClick={() => void load()} aria-label="Refresh functions">
-              <RefreshCw size={13} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <StateStyles />
+      <PaneHeader
+        title="Server code"
+        subtitle="The parts of your app that run on our servers, not in your visitor's browser: sending emails, taking payments, jobs that run on a schedule."
+        actions={
+          functions && functions.length > 0 ? (
+            <Button size="sm" onClick={() => void refresh()} disabled={refreshing} aria-busy={refreshing}>
+              <RefreshCw size={14} aria-hidden /> {refreshing ? "Checking…" : "Refresh"}
             </Button>
+          ) : undefined
+        }
+      />
+
+      {error && !functions ? (
+        <ProblemState title="We couldn't load your server code just now" message={`${error} Your app keeps running as normal in the meantime.`} onRetry={() => void load()} />
+      ) : !functions ? (
+        <FunctionsSkeleton />
+      ) : functions.length === 0 ? (
+        <EmptyHero
+          tint="#8b5cf6"
+          title="No server code yet"
+          body={
+            <>
+              Some things have to happen on a server, not in the visitor&rsquo;s browser: sending emails, taking payments, running a task every morning. SOL adds these here when your app needs them. Just describe what you want, like &ldquo;email me when someone fills in the contact form&rdquo;, and you&rsquo;ll see it appear here with a record of every time it runs.
+            </>
           }
+          art={<ServerIllustration />}
         >
-          <ul role="listbox" aria-label="Server functions" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+          {onAskAi && (
+            <SolIdeas
+              ideas={["Email me when someone fills in the contact form", "Send new sign-ups a welcome email", "Take a card payment when someone places an order", "Every morning, email me yesterday's new sign-ups"]}
+              onPick={onAskAi}
+            />
+          )}
+        </EmptyHero>
+      ) : (
+        <>
+          {error && <Notice tone="warning">We couldn&rsquo;t refresh just now: {error} What you see below may be a moment out of date.</Notice>}
+          {stats && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
+              <StatCard label={stats.total === 1 ? "Piece of server code" : "Pieces of server code"} value={stats.total} color="#8b5cf6" icon={Server} />
+              <StatCard label="Run on a schedule" value={stats.scheduled} color="#c084fc" icon={Clock} />
+              <StatCard label={stats.problems ? "Need attention" : "All running fine"} value={stats.problems || "✓"} color={stats.problems ? C.danger : C.success} icon={stats.problems ? AlertTriangle : CheckCircle2} />
+            </div>
+          )}
+
+          <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 12 }}>
             {functions.map((f) => {
-              const active = !!selected && selected.name === f.name && selected.env === f.env;
+              const isSelected = !!selected && selected.name === f.name && selected.env === f.env;
+              const open = isSelected && expanded;
+              const Icon = iconFor(f);
+              const status = STATUS[f.status];
+              const toggle = () => {
+                if (isSelected) return setExpanded(!expanded);
+                setSelected({ name: f.name, env: f.env });
+                setExpanded(true);
+              };
               return (
-                <li key={`${f.env}:${f.name}`} role="option" aria-selected={active}>
-                  <button
-                    type="button"
-                    onClick={() => setSelected({ name: f.name, env: f.env })}
-                    style={{
-                      width: "100%",
-                      textAlign: "left",
-                      padding: "0.55rem 0.65rem",
-                      borderRadius: 9,
-                      border: `1px solid ${active ? "rgba(139,92,246,0.45)" : "transparent"}`,
-                      background: active ? "rgba(139,92,246,0.12)" : "transparent",
-                      color: C.text,
-                      cursor: "pointer",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 4,
-                    }}
-                  >
-                    <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                      <Server size={13} color={C.muted} aria-hidden />
-                      <span style={{ fontFamily: C.mono, fontSize: "0.78rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{f.name}</span>
-                      <EnvBadge env={f.env} />
+                <li
+                  key={`${f.env}:${f.name}`}
+                  style={{ borderRadius: 18, border: `1px solid ${open ? "rgba(139,92,246,0.4)" : C.border}`, background: open ? "linear-gradient(180deg, rgba(139,92,246,0.07), rgba(255,255,255,0.015) 160px)" : C.panel, overflow: "hidden" }}
+                >
+                  <div className="plx-row" style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", padding: "1rem 1.15rem", cursor: "pointer" }} onClick={toggle}>
+                    <span aria-hidden style={{ width: 46, height: 46, borderRadius: 14, flexShrink: 0, display: "grid", placeItems: "center", background: hueGradient(f.name), color: "#fff", boxShadow: "0 8px 22px rgba(0,0,0,0.3)", opacity: f.status === "FAILED" ? 0.6 : 1 }}>
+                      <Icon size={21} />
                     </span>
-                    <span style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem 0.7rem", fontSize: "0.7rem", color: C.muted }}>
-                      <StatusDot status={f.status} />
-                      {f.schedule && <span>Runs {describeSchedule(f.schedule)}</span>}
-                      <span>Deployed {timeAgo(f.deployedAt)}</span>
+                    <span style={{ flex: "1 1 260px", minWidth: 0 }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                        <span style={{ fontSize: "0.95rem", fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{friendlyName(f.name)}</span>
+                        <EnvTag env={f.env} />
+                      </span>
+                      <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.3rem 0.9rem", marginTop: 5, fontSize: "0.76rem", color: C.muted }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                          {f.schedule ? <Clock size={13} aria-hidden /> : <Play size={12} aria-hidden />}
+                          <Trigger schedule={f.schedule} />
+                        </span>
+                        <span>Updated {timeAgo(f.deployedAt)}</span>
+                        <span style={{ color: C.faint, fontFamily: C.mono, fontSize: "0.7rem" }}>{f.name}</span>
+                      </span>
                     </span>
-                  </button>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }} onClick={(e) => e.stopPropagation()}>
+                      <Pill color={status.color}>{status.label}</Pill>
+                      <IconButton label={open ? `Hide activity for ${friendlyName(f.name)}` : `Run and see activity for ${friendlyName(f.name)}`} onClick={toggle}>
+                        {open ? <ChevronDown size={15} style={{ transform: "rotate(180deg)" }} /> : <ScrollText size={15} />}
+                      </IconButton>
+                    </span>
+                  </div>
+                  {open && current && current.name === f.name && current.env === f.env && (
+                    <div style={{ borderTop: `1px solid ${C.border}`, padding: "1.1rem 1.15rem 1.2rem" }}>
+                      <FunctionDetail key={`${current.env}:${current.name}`} appId={appId} fn={current} />
+                    </div>
+                  )}
                 </li>
               );
             })}
           </ul>
-        </Panel>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** First load: summary cards and function rows, gently pulsing. */
+function FunctionsSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading your server code" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
+        {[0, 1, 2].map((i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: "1rem 1.1rem", borderRadius: 16, border: `1px solid ${C.border}` }}>
+            <Shimmer width={40} height={40} radius={12} />
+            <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 7 }}>
+              <Shimmer width={34} height={16} />
+              <Shimmer width="60%" height={8} radius={99} />
+            </span>
+          </div>
+        ))}
       </div>
-      <div style={{ flex: "2 1 380px", maxWidth: "100%", minWidth: 0 }}>{current && <FunctionDetail key={`${current.env}:${current.name}`} appId={appId} fn={current} />}</div>
+      {[58, 44, 66].map((w, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "1rem 1.15rem", borderRadius: 18, border: `1px solid ${C.border}` }}>
+          <Shimmer width={46} height={46} radius={14} />
+          <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+            <Shimmer width={`${w * 0.6}%`} height={12} radius={99} />
+            <Shimmer width={`${w}%`} height={8} radius={99} />
+          </span>
+          <Shimmer width={92} height={22} radius={99} />
+          <Shimmer width={32} height={32} radius={9} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** A friendly picture: a few everyday jobs wired up to a server. */
+function ServerIllustration() {
+  const tasks = [
+    { icon: Mail, color: "#8b5cf6", label: "Email sent", w: "62%" },
+    { icon: CreditCard, color: "#c084fc", label: "Payment taken", w: "48%" },
+    { icon: Clock, color: "#6366f1", label: "Every morning", w: "56%" },
+  ];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 0, transform: "rotate(-1.5deg)" }}>
+      <div style={{ flex: "1 1 auto", display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
+        {tasks.map(({ icon: Icon, color, label, w }, i) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", marginLeft: i === 1 ? 18 : 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.6rem 0.75rem", borderRadius: 13, background: "rgba(11,15,25,0.7)", border: `1px solid ${C.borderStrong}`, boxShadow: "0 14px 34px rgba(0,0,0,0.35)", minWidth: 150 }}>
+              <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "grid", placeItems: "center", background: `${color}33`, color }}>
+                <Icon size={15} />
+              </span>
+              <span style={{ display: "flex", flexDirection: "column", gap: 5, flex: 1 }}>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: C.text }}>{label}</span>
+                <span style={{ width: w, height: 5, borderRadius: 99, background: "rgba(255,255,255,0.16)" }} />
+              </span>
+            </div>
+            <span style={{ flex: 1, minWidth: 18, height: 2, background: `linear-gradient(90deg, ${color}, rgba(139,92,246,0.25))` }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ width: 92, flexShrink: 0, borderRadius: 16, padding: 10, display: "flex", flexDirection: "column", gap: 8, background: "linear-gradient(160deg, #7c3aed, #6d28d9)", border: "1px solid rgba(196,181,253,0.35)", boxShadow: "0 24px 60px rgba(76,29,149,0.45)" }}>
+        {[0, 1, 2].map((i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 8px", borderRadius: 8, background: "rgba(11,15,25,0.35)" }}>
+            <span style={{ width: 6, height: 6, borderRadius: 99, background: C.success, boxShadow: `0 0 8px ${C.success}` }} />
+            <span style={{ flex: 1, height: 4, borderRadius: 99, background: "rgba(196,181,253,0.45)" }} />
+          </div>
+        ))}
+        <Server size={18} color="#ede9fe" style={{ alignSelf: "center", marginTop: 2 }} />
+      </div>
     </div>
   );
 }
@@ -224,7 +360,7 @@ function FunctionDetail({ appId, fn }: { appId: string; fn: FunctionRow }) {
       setLogs(res.logs);
       setLogError(null);
     } catch (err) {
-      if (seq === requestSeq.current) setLogError(err instanceof ApiError ? err.message : "Couldn't load logs.");
+      if (seq === requestSeq.current) setLogError(err instanceof ApiError ? err.message : "We couldn't load its activity just now.");
     } finally {
       if (seq === requestSeq.current) setLoadingLogs(false);
     }
@@ -259,7 +395,7 @@ function FunctionDetail({ appId, fn }: { appId: string; fn: FunctionRow }) {
       setRunResult(res);
       void fetchLogs();
     } catch (err) {
-      setRunError(err instanceof ApiError ? err.message : "Couldn't run the function.");
+      setRunError(err instanceof ApiError ? err.message : "We couldn't run it just now. Try again in a moment.");
     } finally {
       setRunning(false);
     }
@@ -268,45 +404,50 @@ function FunctionDetail({ appId, fn }: { appId: string; fn: FunctionRow }) {
   const ok = runResult && runResult.status >= 200 && runResult.status < 400;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
-      <Panel
-        title={fn.name}
-        description={
-          <>
-            {fn.env === "live" ? "The live version, used by your visitors." : "The preview version, used while you build."}{" "}
-            {fn.schedule ? `Runs automatically ${describeSchedule(fn.schedule)}.` : "Runs when your app calls it."}
-          </>
-        }
-        actions={
-          <Button size="sm" variant="primary" onClick={() => void run()} disabled={running || fn.status !== "READY"} aria-busy={running}>
-            <Play size={13} aria-hidden /> {running ? "Running…" : "Run now"}
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {fn.status === "FAILED" && (
+        <Notice tone="danger">
+          This piece of code couldn&rsquo;t start{fn.statusMessage ? `: ${fn.statusMessage}` : "."} Ask SOL to fix it, and it&rsquo;ll be back up after the next build.
+        </Notice>
+      )}
+      {fn.status === "DEPLOYING" && <Notice tone="warning">Still getting ready. It&rsquo;ll be able to run in a moment.</Notice>}
+
+      {/* Try it: run it right now and see what it sent back. */}
+      <section style={{ display: "flex", flexDirection: "column", gap: 12, padding: "1rem 1.1rem", borderRadius: 14, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.02)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <span style={{ flex: "1 1 280px", minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: "0.88rem", fontWeight: 700, color: C.text }}>Try it now</span>
+            <span style={{ display: "block", fontSize: "0.76rem", color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
+              {fn.env === "live" ? "This is the live copy your visitors use." : "This is the preview copy, used while you build."}{" "}
+              {fn.schedule ? `It also runs by itself ${describeSchedule(fn.schedule)}.` : "Your app runs it whenever it's needed."}
+            </span>
+          </span>
+          <Button variant="primary" onClick={() => void run()} disabled={running || fn.status !== "READY"} aria-busy={running}>
+            <Play size={14} aria-hidden /> {running ? "Running…" : "Run now"}
           </Button>
-        }
-      >
-        {fn.status === "FAILED" && (
-          <div style={{ marginBottom: "0.7rem" }}>
-            <Notice tone="danger">This function didn&apos;t deploy{fn.statusMessage ? `: ${fn.statusMessage}` : "."} Fix the code and build again.</Notice>
-          </div>
-        )}
-        {fn.status === "DEPLOYING" && (
-          <div style={{ marginBottom: "0.7rem" }}>
-            <Notice tone="warning">Still deploying — it&apos;ll be ready in a moment.</Notice>
-          </div>
-        )}
+        </div>
         {runError && <Notice tone="danger">{runError}</Notice>}
         {runResult && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }} aria-live="polite">
-            <span style={{ fontSize: "0.76rem", color: ok ? C.success : C.danger, fontWeight: 600 }}>
-              {ok ? "Finished" : "Finished with an error"} — status {runResult.status}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }} aria-live="polite">
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <Pill color={ok ? C.success : C.danger}>{ok ? "Finished fine" : "Finished with a problem"}</Pill>
+              <span style={{ fontSize: "0.72rem", color: C.faint }}>code {runResult.status}</span>
             </span>
-            <pre style={preStyle}>{runResult.body || "(no response body)"}</pre>
+            <div style={frameStyle}>
+              <div style={frameBar}>What it sent back</div>
+              <pre style={preStyle}>{runResult.body || "(nothing — it finished without a reply)"}</pre>
+            </div>
           </div>
         )}
-        {!runError && !runResult && <p style={{ margin: 0, fontSize: "0.74rem", color: C.faint }}>“Run now” calls it right away, the same way its schedule would.</p>}
-      </Panel>
+      </section>
 
-      <Panel title="Logs" description="What the function printed (console.log) and any errors it hit.">
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center", marginBottom: "0.7rem" }}>
+      {/* Activity: everything it wrote down while running, newest at the bottom. */}
+      <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ flex: "1 1 220px", minWidth: 0 }}>
+            <span style={{ display: "block", fontSize: "0.88rem", fontWeight: 700, color: C.text }}>Activity</span>
+            <span style={{ display: "block", fontSize: "0.76rem", color: C.muted, marginTop: 3 }}>What it noted down while running, and any errors it hit.</span>
+          </span>
           <div role="group" aria-label="Time window" style={{ display: "inline-flex", border: `1px solid ${C.border}`, borderRadius: 9, overflow: "hidden" }}>
             {WINDOWS.map((w) => (
               <button
@@ -314,73 +455,93 @@ function FunctionDetail({ appId, fn }: { appId: string; fn: FunctionRow }) {
                 type="button"
                 aria-pressed={minutes === w.minutes}
                 onClick={() => setMinutes(w.minutes)}
-                style={{ padding: "0.32rem 0.6rem", fontSize: "0.74rem", fontWeight: 600, border: "none", cursor: "pointer", background: minutes === w.minutes ? "rgba(139,92,246,0.25)" : "transparent", color: minutes === w.minutes ? C.text : C.muted }}
+                style={{ padding: "0.36rem 0.7rem", fontSize: "0.74rem", fontWeight: 600, border: "none", cursor: "pointer", background: minutes === w.minutes ? "rgba(139,92,246,0.25)" : "transparent", color: minutes === w.minutes ? C.text : C.muted }}
               >
                 {w.label}
               </button>
             ))}
           </div>
-          <input
-            type="search"
-            value={filterInput}
-            onChange={(e) => setFilterInput(e.target.value)}
-            placeholder="Filter (e.g. error)"
-            aria-label="Filter logs"
-            style={{ ...inputStyle, flex: "1 1 140px", width: "auto", padding: "0.35rem 0.6rem" }}
-          />
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.74rem", color: C.muted, cursor: "pointer" }}>
-            <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} />
-            Auto-refresh
+          <label style={{ position: "relative", flex: "0 1 220px", minWidth: 150, display: "flex" }}>
+            <Search size={13} color={C.muted} aria-hidden style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)" }} />
+            <input
+              type="search"
+              value={filterInput}
+              onChange={(e) => setFilterInput(e.target.value)}
+              placeholder="Find (e.g. error)"
+              aria-label="Find in activity"
+              style={{ ...inputStyle, padding: "0.36rem 0.6rem 0.36rem 1.8rem" }}
+            />
           </label>
-          <Button size="sm" variant="ghost" onClick={() => void fetchLogs()} disabled={loadingLogs} aria-label="Refresh logs">
-            <RefreshCw size={13} aria-hidden />
-          </Button>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.74rem", color: C.muted, cursor: "pointer" }}>
+            <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)} style={{ accentColor: C.brand }} />
+            Keep updating
+          </label>
+          <IconButton label="Refresh activity" disabled={loadingLogs} onClick={() => void fetchLogs()}>
+            <RefreshCw size={14} />
+          </IconButton>
         </div>
-        {logError && (
-          <div style={{ marginBottom: "0.6rem" }}>
-            <Notice tone="danger">{logError}</Notice>
+        {logError && <Notice tone="danger">{logError}</Notice>}
+        <div style={frameStyle}>
+          <div style={{ ...frameBar, display: "flex", alignItems: "center", gap: 6 }}>
+            {["#8b5cf6", "#a78bfa", "#c4b5fd"].map((c) => (
+              <span key={c} aria-hidden style={{ width: 8, height: 8, borderRadius: 99, background: c, opacity: 0.8 }} />
+            ))}
+            <span style={{ marginLeft: 6 }}>{friendlyName(fn.name)} · {fn.env === "live" ? "Live" : "Preview"}</span>
+            {autoRefresh && (
+              <span style={{ marginLeft: "auto" }}>
+                <Pill color={C.success}>Updating</Pill>
+              </span>
+            )}
           </div>
-        )}
-        <div
-          ref={logBox}
-          role="log"
-          aria-live="off"
-          aria-busy={loadingLogs}
-          style={{ maxHeight: 380, minHeight: 120, overflow: "auto", background: "rgba(0,0,0,0.35)", border: `1px solid ${C.border}`, borderRadius: 10, padding: "0.5rem 0.65rem", fontFamily: C.mono, fontSize: "0.72rem", lineHeight: 1.55 }}
-        >
-          {logs === null ? (
-            <span style={{ color: C.muted }}>Loading logs…</span>
-          ) : logs.length === 0 ? (
-            <span style={{ color: C.muted }}>{filter ? `No log lines matching “${filter}” in this window.` : "Nothing logged in this window. Try a longer window, or run the function."}</span>
-          ) : (
-            logs.map((l, i) => (
-              <div key={`${l.at}-${i}`} style={{ display: "flex", gap: "0.7rem", color: /error|exception|failed/i.test(l.message) ? C.danger : C.text }}>
-                <time dateTime={l.at} style={{ color: C.faint, flexShrink: 0 }} title={new Date(l.at).toLocaleString()}>
-                  {new Date(l.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-                </time>
-                <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", minWidth: 0 }}>{l.message}</span>
-              </div>
-            ))
-          )}
+          <div
+            ref={logBox}
+            role="log"
+            aria-live="off"
+            aria-busy={loadingLogs}
+            style={{ maxHeight: 380, minHeight: 140, overflow: "auto", padding: "0.7rem 0.85rem", fontFamily: C.mono, fontSize: "0.72rem", lineHeight: 1.6 }}
+          >
+            {logs === null ? (
+              <span style={{ display: "flex", flexDirection: "column", gap: 9 }} aria-label="Loading activity">
+                {[70, 52, 84, 40].map((w, i) => (
+                  <Shimmer key={i} width={`${w}%`} height={9} radius={99} />
+                ))}
+              </span>
+            ) : logs.length === 0 ? (
+              <span style={{ display: "block", padding: "1.6rem 0.5rem", textAlign: "center", color: C.muted, fontFamily: "inherit" }}>
+                {filter ? `Nothing matching “${filter}” in this time.` : "Nothing happened in this time. Pick a longer time, or press Run now to try it."}
+              </span>
+            ) : (
+              logs.map((l, i) => {
+                const bad = /error|exception|failed/i.test(l.message);
+                return (
+                  <div key={`${l.at}-${i}`} style={{ display: "flex", gap: "0.8rem", padding: "1px 6px", margin: "0 -6px", borderRadius: 6, color: bad ? C.danger : C.text, background: bad ? "rgba(248,113,113,0.07)" : "transparent" }}>
+                    <time dateTime={l.at} style={{ color: C.faint, flexShrink: 0 }} title={new Date(l.at).toLocaleString()}>
+                      {new Date(l.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                    </time>
+                    <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", minWidth: 0 }}>{l.message}</span>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
-      </Panel>
+      </section>
     </div>
   );
 }
+
+// A dark, framed window for anything shown in monospace (replies and activity).
+const frameStyle = { borderRadius: 12, border: `1px solid ${C.borderStrong}`, background: "rgba(5,7,14,0.6)", overflow: "hidden" as const };
+const frameBar = { padding: "0.45rem 0.8rem", borderBottom: `1px solid ${C.border}`, fontSize: "0.7rem", fontWeight: 600, color: C.muted, background: "rgba(139,92,246,0.06)" };
 
 const preStyle = {
   margin: 0,
   maxHeight: 240,
   overflow: "auto",
-  background: "rgba(0,0,0,0.35)",
-  border: `1px solid ${C.border}`,
-  borderRadius: 10,
-  padding: "0.55rem 0.7rem",
+  padding: "0.65rem 0.85rem",
   fontFamily: C.mono,
   fontSize: "0.72rem",
   color: C.text,
   whiteSpace: "pre-wrap" as const,
   wordBreak: "break-word" as const,
 };
-
-const linkButton = { background: "none", border: "none", padding: 0, color: "inherit", textDecoration: "underline", cursor: "pointer", font: "inherit" };
