@@ -105,7 +105,7 @@ export function SecretsPane({ appId, addName }: { appId: string; addName?: strin
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", padding: "1rem", maxWidth: 820 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 440px), 1fr))", alignItems: "start", gap: "0.9rem", padding: "1rem" }}>
       <Panel
         title={replacing ? "Replace a secret" : "Add a secret"}
         description={
