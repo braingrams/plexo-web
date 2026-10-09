@@ -10,6 +10,16 @@ import type { ProjectBuildError } from "@/lib/db/projectEntities";
 // how the last build went — so SOL starts each turn oriented instead of spending tool calls
 // rediscovering the project.
 
+// How SOL works inside the app editor. The owner already told Plexo what they want (the Apps
+// home asks who it's for and what people should be able to do), so the first message is a
+// brief to build from, not the start of an interview.
+const WORKING_ON_AN_APP = `How to work on this app:
+- Build first. When the owner asks for an app or a feature, build a complete, working version straight away with sensible defaults — don't ask questions before building. They've already answered Plexo's setup questions; their message is the brief. For anything they didn't specify, pick what most owners would want (e.g. a few sample products or plans with prices they can edit, a simple review form with 1–5 stars) and keep going.
+- After building, say in one or two short sentences what you chose for anything they didn't specify, and that they can ask you to change it.
+- Only ask (with ask_user_question) when you genuinely can't continue without them — e.g. a private key only they have, or a choice that would mean throwing away work they've already done.
+- Work in small steps so the owner sees progress: write a few files per app_write_files call rather than everything at once.
+- Talk to the owner in plain words: what their visitors will see and be able to do, never file names, code or technical terms.`;
+
 export async function buildSolAppContext(appId: string, resolved: { organizationId: string }): Promise<string | undefined> {
   const { data: app } = await Template.get({ id: appId }).go();
   if (!app || app.organizationId !== resolved.organizationId || app.sourceType !== "REACT_PROJECT") return undefined;
@@ -35,6 +45,7 @@ export async function buildSolAppContext(appId: string, resolved: { organization
     `Files (${files.length}):\n${tree.join("\n")}${files.length > tree.length ? "\n…" : ""}`,
     uiKit.length ? `UI components available in src/components/ui: ${uiKit.join(", ")}.` : "",
     guide ? `The app's PLEXO.md (its conventions — follow them):\n${guide.slice(0, 6000)}` : "",
+    WORKING_ON_AN_APP,
   ];
   return lines.filter(Boolean).join("\n\n");
 }

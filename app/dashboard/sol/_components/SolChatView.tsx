@@ -7,6 +7,7 @@ import { Composer } from "./Composer";
 import { Greeting } from "./Greeting";
 import { CreditExhaustedModal } from "./CreditExhaustedModal";
 import { AskUserQuestionOverlay } from "./AskUserQuestionCard";
+import { pausingCall } from "./pausingCall";
 import { ArtifactCanvas, ArtifactCard, type ActiveArtifact } from "./ArtifactCanvas";
 import { useSolStream } from "./useSolStream";
 import { useSolSidebar } from "./SolSidebarContext";
@@ -545,8 +546,8 @@ export function SolChatView({
   // source of truth for WHICH message; this just finds its actual content wherever it is.
   const pendingToolUseBlock =
     stream.outcome === "awaiting_confirmation" && pendingConfirmMessageId === stream.awaitingMessageId
-      ? stream.blocks.find(isToolUseBlock)
-      : messages.find((m) => m.id === pendingConfirmMessageId)?.content.find(isToolUseBlock);
+      ? pausingCall(stream.blocks)
+      : pausingCall(messages.find((m) => m.id === pendingConfirmMessageId)?.content);
   const pendingQuestionBlock =
     pendingToolUseBlock && pendingToolUseBlock.name === ASK_USER_QUESTION_TOOL_NAME ? pendingToolUseBlock : null;
 
