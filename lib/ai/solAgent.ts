@@ -328,6 +328,10 @@ interface LoopContext {
  * assistant message plus its freshly-resolved tool_results) — this function only ever
  * appends to it and persists what it appends.
  */
+/** Sent back to SOL (not shown, not saved) when its answer hit the length limit. */
+const ANSWER_CUT_OFF_NOTE =
+  "Your last answer was too long and was cut off before it finished, so nothing in it ran. Continue from where you were, in smaller steps: write at most 2–3 files per app_write_files call (split big files across calls), and keep any text short.";
+
 async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
   const tools: BedrockToolDef[] = getAllSolTools();
   const model = resolveModel(ctx.provider, ctx.modelTier);
@@ -362,6 +366,28 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
 
     const toolUseBlocks = Array.isArray(result.content) ? result.content.filter((block) => block?.type === "tool_use") : [];
     if (toolUseBlocks.some((b) => b.name === "create_app" || String(b.name).startsWith("app_"))) iterationLimit = MAX_APP_TOOL_ITERATIONS;
+
+    // Cut off at the answer-length limit — typically while writing many files in one call. The
+    // half-written tool call can't run; keep any finished text, tell SOL to work in smaller
+    // pieces, and carry on (this round still counts toward the limit). Ending here used to
+    // save an empty "final" message and stop the build silently.
+    if (result.stopReason === "max_tokens") {
+      const finishedText = (Array.isArray(result.content) ? result.content : []).filter((b) => b?.type === "text" && String(b.text ?? "").trim());
+      if (finishedText.length) {
+        await SolMessage.create({
+          id: randomUUID(),
+          conversationId: ctx.conversationId,
+          userId: ctx.resolvedUser.userId,
+          role: "assistant",
+          content: finishedText,
+          usage: result.usage,
+          confirmationState: "AUTO",
+        }).go();
+      }
+      ctx.history.push({ role: "assistant", content: finishedText.length ? finishedText : [{ type: "text", text: "(My last answer was too long and got cut off.)" }] });
+      ctx.history.push({ role: "user", content: [{ type: "text", text: ANSWER_CUT_OFF_NOTE }] });
+      continue;
+    }
 
     if (result.stopReason !== "tool_use" || toolUseBlocks.length === 0) {
       await SolMessage.create({

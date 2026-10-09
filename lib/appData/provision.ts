@@ -12,6 +12,12 @@ import { databaseName } from "./db";
 //   _system  owns the plexo schema (visitor accounts, sessions, migration history)
 // plexo_anon / plexo_authenticated are cluster-wide NOLOGIN roles; what they can touch is
 // decided per database by grants and row-level-security policies.
+//
+// The admin (plexo_admin, password sign-in through the RDS Data API) must never INHERIT an app
+// role: they're members of rds_iam, and on Aurora any login that inherits rds_iam is forced
+// onto IAM sign-in — the admin would lock itself out of the whole cluster (it did, on
+// staging). It may only SET ROLE to them, to create objects as them; and it owns each app
+// database itself, so it can always drop it.
 
 export const roleName = (database: string, login: "owner" | "api" | "system") => `${database}_${login}`;
 
@@ -82,10 +88,11 @@ export function provisioningSteps(database: string): ProvisioningStep[] {
   END $$`);
   step(`GRANT rds_iam TO ${ident(owner)}, ${ident(api)}, ${ident(system)}`);
   step(`GRANT plexo_anon, plexo_authenticated TO ${ident(api)}`);
-  // The admin must be a member of the owner role to create a database owned by it.
-  step(`GRANT ${ident(owner)}, ${ident(system)} TO CURRENT_USER`);
-  stepIgnoringExists(`CREATE DATABASE ${db} OWNER ${ident(owner)}`);
+  // SET only — never INHERIT (see the note at the top of this file).
+  step(`GRANT ${ident(owner)}, ${ident(system)} TO CURRENT_USER WITH INHERIT FALSE, SET TRUE`);
+  stepIgnoringExists(`CREATE DATABASE ${db}`);
   step(`REVOKE ALL ON DATABASE ${db} FROM PUBLIC`);
+  step(`GRANT ALL ON DATABASE ${db} TO ${ident(owner)}`);
   step(`GRANT CONNECT ON DATABASE ${db} TO ${ident(api)}, ${ident(system)}`);
 
   // Inside the new database.
@@ -95,6 +102,8 @@ export function provisioningSteps(database: string): ProvisioningStep[] {
     `DO $$ BEGIN ${EXTENSIONS.map((e) => `BEGIN CREATE EXTENSION IF NOT EXISTS "${e}"; EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'extension ${e} unavailable'; END;`).join(" ")} END $$`,
     database,
   );
+  // The app's tables live in public, created by the owner role.
+  step(`GRANT ALL ON SCHEMA public TO ${ident(owner)}`, database);
   step(`DO $$ BEGIN
     CREATE SCHEMA IF NOT EXISTS plexo AUTHORIZATION ${ident(system)};
     EXECUTE 'SET LOCAL ROLE ${system}';
@@ -168,11 +177,13 @@ export function provisioningSteps(database: string): ProvisioningStep[] {
 
   // What the two client roles may do with the app's tables. Row-level security (switched
   // on for every new table — see migrations.ts) still decides which rows.
+  // Default privileges are set as the owner itself (FOR ROLE would need the admin to inherit it).
   step(`DO $$ BEGIN
     GRANT USAGE ON SCHEMA public TO plexo_anon, plexo_authenticated;
-    ALTER DEFAULT PRIVILEGES FOR ROLE ${ident(owner)} IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO plexo_anon, plexo_authenticated;
-    ALTER DEFAULT PRIVILEGES FOR ROLE ${ident(owner)} IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO plexo_anon, plexo_authenticated;
-    ALTER DEFAULT PRIVILEGES FOR ROLE ${ident(owner)} IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO plexo_anon, plexo_authenticated;
+    EXECUTE 'SET LOCAL ROLE ${owner}';
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO plexo_anon, plexo_authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO plexo_anon, plexo_authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO plexo_anon, plexo_authenticated;
   END $$`, database);
   return steps;
 }
