@@ -3,10 +3,11 @@ import { loadApp, appError, readBody } from "@/lib/projects/appAccess";
 import { AppSettings } from "@/lib/db/appEntities";
 import { getAppSettings, forgetAppContext } from "@/lib/appRuntime/context";
 import { encryptAppSecret } from "@/lib/crypto";
+import { normalizeSeo, SeoInputError, type AppSeo } from "@/lib/projects/appSeo";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** The app's sign-in settings and storage buckets. Secrets (Google client secret) are
+/** The app's sign-in settings, storage buckets and search & sharing details. Secrets (Google client secret) are
  *  write-only: they're accepted here and never returned. */
 export async function GET(request: NextRequest, { params }: Ctx): Promise<NextResponse> {
   const { id } = await params;
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest, { params }: Ctx): Promise<NextRe
     },
     buckets: s.buckets ?? {},
     requestsPerMinute: s.requestsPerMinute ?? 600,
+    seo: (s.seo as AppSeo | undefined) ?? {},
   });
 }
 
@@ -77,6 +79,10 @@ export async function PATCH(request: NextRequest, { params }: Ctx): Promise<Next
       }
       set.buckets = buckets;
     }
+    if (body.seo && typeof body.seo === "object") {
+      const seo = normalizeSeo(body.seo as Record<string, unknown>);
+      set.seo = Object.keys(seo).length ? seo : undefined;
+    }
     const { data: existing } = await AppSettings.get({ templateId: id }).go();
     if (!existing) await AppSettings.create({ templateId: id, organizationId: loaded.app.organizationId }).go();
     // undefined values remove an attribute.
@@ -88,6 +94,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx): Promise<Next
     forgetAppContext(id);
     return GET(request, { params });
   } catch (err) {
+    if (err instanceof SeoInputError) return NextResponse.json({ error: err.message }, { status: 400 });
     return appError(err);
   }
 }

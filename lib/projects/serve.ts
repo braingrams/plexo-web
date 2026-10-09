@@ -8,6 +8,8 @@ import { injectBrandingBar, injectFavicon, injectSeoTags, insertBeforeBodyEnd } 
 import { buildSitePrefix, getObject } from "./blobStore";
 import { ANALYTICS_BEACON_JS, previewRuntimeJs } from "./previewRuntime";
 import { latestSuccessfulBuild, recordLatestBuild } from "./builds";
+import { injectAppSeo, type AppSeo } from "./appSeo";
+import { AppSettings } from "@/lib/db/appEntities";
 
 // Serves a REACT_PROJECT site from one of its builds. Real files are served as built; any
 // other path gets index.html so the app's own router handles it. Build output never
@@ -131,13 +133,29 @@ export async function serveProject(request: Request, ctx: ServeContext): Promise
   return htmlResponse(index.body.toString("utf8"), url, ctx);
 }
 
+// The owner's search & sharing settings, briefly kept per Lambda instance — HTML is served on
+// every page view, and a change shows up within the edge cache's own minute anyway.
+const SEO_TTL_MS = 30_000;
+const seoCache = new Map<string, { seo: AppSeo | null; at: number }>();
+
+async function appSeo(templateId: string): Promise<AppSeo | null> {
+  const hit = seoCache.get(templateId);
+  if (hit && Date.now() - hit.at < SEO_TTL_MS) return hit.seo;
+  const { data } = await AppSettings.get({ templateId }).go({ attributes: ["seo"] }).catch(() => ({ data: null }));
+  const seo = (data?.seo as AppSeo | undefined) ?? null;
+  seoCache.set(templateId, { seo, at: Date.now() });
+  if (seoCache.size > 2000) seoCache.delete(seoCache.keys().next().value!);
+  return seo;
+}
+
 async function htmlResponse(source: string, url: URL, ctx: ServeContext): Promise<NextResponse> {
   let html = source;
+  const seo = await appSeo(ctx.template.id);
   html = injectSeoTags(html, {
     canonicalUrl: `https://${ctx.host}${url.pathname}`,
     // Previews are never indexed — they're work in progress at a throwaway address.
     noindex: ctx.isPreview || ctx.noindex,
-    siteName: ctx.template.name,
+    siteName: seo?.title ?? ctx.template.name,
   });
   if (ctx.isPreview) {
     const editorOrigin = new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").origin;
@@ -149,9 +167,10 @@ async function htmlResponse(source: string, url: URL, ctx: ServeContext): Promis
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
   }
-  if (ctx.organization.logo && ctx.organization.whiteLabelEnabled && canWhiteLabel(await getOrganizationOwnerPlanDynamo(ctx.organization.id))) {
+  if (!seo?.faviconUrl && ctx.organization.logo && ctx.organization.whiteLabelEnabled && canWhiteLabel(await getOrganizationOwnerPlanDynamo(ctx.organization.id))) {
     html = injectFavicon(html, ctx.organization.logo);
   }
+  html = injectAppSeo(html, seo, `https://${ctx.host}${url.pathname}`);
   return new NextResponse(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
