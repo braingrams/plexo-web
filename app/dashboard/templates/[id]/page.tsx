@@ -57,6 +57,11 @@ export default async function TemplateEditorPage(props: {
   if (!template || template.organizationId !== orgResolution.organizationId) {
     notFound();
   }
+  // React apps have their own editor (code, preview, database, AI) — any link here for one
+  // (site lists, domains, older bookmarks) lands there.
+  if (template.sourceType === "REACT_PROJECT") {
+    redirect(`/dashboard/apps/${template.id}`);
+  }
 
   const [{ data: user }, activeApiKey] = await Promise.all([
     User.get({ id: session.user.id }).go(),

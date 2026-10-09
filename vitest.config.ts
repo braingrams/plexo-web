@@ -7,6 +7,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
+    // lambda/project-build is its own package (installed in CI before tests run).
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx", "lambda/project-build/test/**/*.test.ts"],
   },
 });

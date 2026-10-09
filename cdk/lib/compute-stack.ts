@@ -15,6 +15,7 @@ import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { buildLogGroup, buildCloudFrontWebAcl, isWafEnabled } from "./conventions";
+import { addProjectRuntime } from "./project-runtime";
 
 // Real OpenNext deployment (SSR Lambda + image-optimization Lambda + CloudFront + S3 +
 // SQS/DynamoDB for ISR), built from a verified `.open-next/` build output — not
@@ -566,6 +567,11 @@ export class ComputeStack extends cdk.Stack {
         tsconfig: path.join(__dirname, "..", "..", "tsconfig.json"),
         minify: false,
         sourceMap: true,
+        // SOL's app_screenshot tool drives a remote browser with playwright-core, which
+        // can't be bundled (optional native/bidi modules) — shipped as a real dependency.
+        // node-postgres's optional native binding is never used.
+        nodeModules: ["playwright-core"],
+        externalModules: ["pg-native"],
         // aws-sdk-v3 clients used by this handler's own imports (Dynamo, Bedrock,
         // Transcribe) are bundled in rather than externalized — the NODEJS_24_X managed
         // runtime's built-in AWS SDK is v3 but its exact minor version isn't pinned to
@@ -573,7 +579,10 @@ export class ComputeStack extends cdk.Stack {
         // is small enough that bundling it is simpler than chasing a version mismatch.
       },
       memorySize: 1536,
-      timeout: cdk.Duration.minutes(5),
+      // 15 minutes (Lambda's ceiling): a SOL turn that builds an app runs many tool rounds,
+      // each possibly waiting on a build. The stream sends keepalives meanwhile
+      // (lambda/sol-chat/index.ts), so CloudFront never sees an idle connection.
+      timeout: cdk.Duration.minutes(15),
       environment: {
         ...tableEnv,
         PLEXO_ENV: ssmEnv,
@@ -735,6 +744,36 @@ export class ComputeStack extends cdk.Stack {
       action: "lambda:InvokeFunctionUrl",
       functionUrlAuthType: lambda.FunctionUrlAuthType.NONE,
     });
+
+    // Apps built on Plexo: build pipeline, server-function roles, and the grants serverFn /
+    // SolChatFn need to queue builds, run app databases and deploy functions
+    // (cdk/lib/project-runtime.ts). SOL runs whole app-building turns (write → build → fix →
+    // screenshot), so its tools may wait minutes for a build — within its own timeout.
+    solChatFn.addEnvironment("APP_TOOL_WAIT_MS", "240000");
+    addProjectRuntime(this, {
+      appFunctions: [serverFn, solChatFn],
+      envName: ssmEnv as "production" | "staging",
+      contentTableName: tableEnv.PLEXO_CONTENT_TABLE,
+      finalizeEnvironment: { ...tableEnv, ...publicUrlEnv, PLEXO_ENV: ssmEnv },
+      sharedStatements: [
+        new iam.PolicyStatement({
+          actions: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:BatchWriteItem", "dynamodb:TransactWriteItems"],
+          resources: Object.values(tableEnv).flatMap((tableName) => [
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/${tableName}`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/${tableName}/index/*`,
+          ]),
+        }),
+        ledgerKmsPolicy,
+        new iam.PolicyStatement({ actions: ["ssm:GetParameters"], resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/plexo/${ssmEnv}/*`] }),
+        new iam.PolicyStatement({ actions: ["kms:Decrypt"], resources: [`arn:aws:kms:${this.region}:${this.account}:alias/aws/ssm`] }),
+        new iam.PolicyStatement({ actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"], resources: ["arn:aws:s3:::plexo-user-content*", "arn:aws:s3:::plexo-user-content*/*"] }),
+      ],
+    });
+    // Project storage clean-up lists prefixes (lib/projects/blobStore.ts deletePrefix,
+    // lib/appStorage listFiles); the object-level grants above don't cover ListBucket.
+    for (const fn of [serverFn, solChatFn]) {
+      fn.addToRolePolicy(new iam.PolicyStatement({ actions: ["s3:ListBucket"], resources: ["arn:aws:s3:::plexo-user-content*"] }));
+    }
 
     const revalidationFn = new lambda.Function(this, "RevalidationFn", {
       runtime: lambda.Runtime.NODEJS_24_X,

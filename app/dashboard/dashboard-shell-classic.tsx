@@ -322,7 +322,9 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
   // and its own Settings/Memory subpages under that same /dashboard/sol/ tree) — no room
   // for this shell's fixed sidebar alongside it, same reasoning as the template editor
   // route above.
-  const isSolRoute = /^\/dashboard\/sol(\/.*)?$/.test(pathname);
+  // The app editor (/dashboard/apps/<id>) is the same kind of full-viewport surface — chat,
+  // preview and code side by side — so it reuses SOL's chrome-free treatment.
+  const isSolRoute = /^\/dashboard\/sol(\/.*)?$/.test(pathname) || /^\/dashboard\/apps\/[^/]+$/.test(pathname);
   const rootClassName = isEditorRoute
     ? "dash-classic-root dash-classic-editor-route"
     : isSolRoute

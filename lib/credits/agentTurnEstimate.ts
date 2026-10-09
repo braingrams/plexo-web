@@ -6,6 +6,10 @@ import type { ConcreteTier } from "@/lib/ai/types";
 // MAX_TOOL_ITERATIONS bounds how many of those model calls one turn may make; runAgentTurn
 // throws AgentIterationLimitError if it's exhausted without a final (non-tool_use) answer.
 export const MAX_TOOL_ITERATIONS = 8;
+// A turn that's building a React app (lib/mcp/appTools.ts) — write files, build, fix
+// errors, screenshot, fix again — legitimately needs many more rounds. The pre-flight
+// estimate below still assumes MAX_TOOL_ITERATIONS; the per-round budgetGuard covers the rest.
+export const MAX_APP_TOOL_ITERATIONS = 40;
 
 /**
  * Worst-case credit cost of one full agent turn, used as a pre-flight balance gate before
