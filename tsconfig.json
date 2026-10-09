@@ -47,6 +47,6 @@
     "scripts",
     "cdk",
     "lib/projects/scaffold/template",
-    "lambda/project-build/template"
+    "lambda/project-build"
   ]
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseSync } from "vite";
-import { planInstall, InstallPlanError } from "@/lambda/project-build/src/installPlan";
-import { sourceLocPlugin } from "@/lambda/project-build/src/sourceLocPlugin";
+import { planInstall, InstallPlanError } from "../src/installPlan";
+import { sourceLocPlugin } from "../src/sourceLocPlugin";
 
 const BASE = { react: "19.3.0", "react-dom": "19.3.0", vite: "8.3.4", "lucide-react": "1.54.0", "@tanstack/react-query": "5.104.1" };
 
