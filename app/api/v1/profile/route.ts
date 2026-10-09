@@ -4,6 +4,8 @@ import { getDomainLimit } from "@/lib/domainLimit";
 import { getTierFeatures } from "@/lib/subscription";
 import { User } from "@/lib/db/coreEntities";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
+import { planMonthlyCredits } from "@/lib/credits/value";
+import type { SubscriptionPlan } from "@/lib/subscription";
 
 /**
  * GET /api/v1/profile
@@ -58,6 +60,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         allowanceBalance: user.allowanceBalance ?? 0,
         topupBalance: user.topupBalance ?? 0,
         totalCredits: (user.allowanceBalance ?? 0) + (user.topupBalance ?? 0),
+        // What the plan grants each month (lib/credits/value.ts) — the credit meter's "full".
+        monthlyCredits: planMonthlyCredits((user.subscriptionPlan ?? "FREE") as SubscriptionPlan),
         layoutMode: user.layoutMode ?? "CLASSIC",
         createdAt: user.createdAt,
       },

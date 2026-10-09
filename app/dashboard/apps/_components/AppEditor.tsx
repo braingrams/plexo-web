@@ -99,7 +99,7 @@ export function AppEditor(props: {
   const [hasChatted, setHasChatted] = useState(props.initialMessages.length > 0);
 
   // Credits
-  const { credits, setCredits, refresh: refreshCredits } = useCredits();
+  const { credits, monthly, setCredits, refresh: refreshCredits } = useCredits();
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [topUp, setTopUp] = useState<Pack | null>(null);
   const [outOfCredits, setOutOfCredits] = useState<{ resend: () => void } | null>(null);
@@ -633,10 +633,11 @@ export function AppEditor(props: {
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
           <div style={{ position: "relative" }} className="ed-desktop">
-            <CreditsMeter credits={credits} open={creditsOpen} onToggle={() => setCreditsOpen((v) => !v)} />
+            <CreditsMeter credits={credits} monthly={monthly} open={creditsOpen} onToggle={() => setCreditsOpen((v) => !v)} />
             {creditsOpen && (
               <CreditsPanel
                 credits={credits}
+                monthly={monthly}
                 onClose={() => setCreditsOpen(false)}
                 onPick={(p) => {
                   setCreditsOpen(false);

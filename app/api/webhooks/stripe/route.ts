@@ -5,6 +5,7 @@ import { TransactWriteCommand, type TransactWriteCommandInput } from "@aws-sdk/l
 import type { EntityItem } from "electrodb";
 
 import { grantTopup, grantPlanChangeAllowance } from "@/lib/db/ledgerOperations";
+import { creditsForCompletedTopup } from "@/lib/credits/topupOffer";
 import { getStripe } from "@/lib/stripe";
 import type { SubscriptionPlan } from "@/lib/subscription";
 import { getMarketplaceOwnerUserId } from "@/lib/marketplaceListing";
@@ -152,7 +153,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (!plexoUserId) break;
 
       if (checkoutSession.mode === "payment" && checkoutSession.metadata?.kind === "topup") {
-        const credits = Number(checkoutSession.metadata.credits ?? 0);
+        // Half of what was actually paid (before tax) becomes AI credits — lib/credits/value.ts.
+        // The checkout-time estimate in metadata is only a fallback (non-USD sessions).
+        const credits = creditsForCompletedTopup(checkoutSession) ?? Number(checkoutSession.metadata.credits ?? 0);
         if (credits > 0) {
           await grantTopup(
             plexoUserId,

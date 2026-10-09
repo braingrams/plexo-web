@@ -5,14 +5,13 @@ import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe
 import { CircleAlert, X } from "lucide-react";
 import { getStripePromise } from "@/lib/stripeClientPromise";
 import type { CreditInfo } from "./types";
+import { useTopupPacks, packLabel } from "../../_components/useTopupPacks";
 
-// Same pack labels/credit amounts as app/dashboard/settings/billing-section.tsx's own
-// TOPUP_PACKS — that file is off-limits to modify/import from (client component with its
-// own local const, not exported), so these are kept in exact lockstep with it by value.
-const TOPUP_PACKS: Array<{ pack: "SMALL" | "MEDIUM" | "LARGE"; label: string; sub: string }> = [
-  { pack: "SMALL", label: "5,000 credits", sub: "Small top-up" },
-  { pack: "MEDIUM", label: "25,000 credits", sub: "Medium top-up" },
-  { pack: "LARGE", label: "120,000 credits", sub: "Large top-up" },
+// Credits per pack come from its real price (half of it as AI value — lib/credits/value.ts).
+const TOPUP_PACKS: Array<{ pack: "SMALL" | "MEDIUM" | "LARGE"; sub: string }> = [
+  { pack: "SMALL", sub: "Small top-up" },
+  { pack: "MEDIUM", sub: "Medium top-up" },
+  { pack: "LARGE", sub: "Large top-up" },
 ];
 
 export function CreditExhaustedModal({
@@ -28,6 +27,7 @@ export function CreditExhaustedModal({
   onClose: () => void;
 }) {
   const [busyPack, setBusyPack] = useState<"SMALL" | "MEDIUM" | "LARGE" | null>(null);
+  const packInfo = useTopupPacks();
   const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,7 +123,7 @@ export function CreditExhaustedModal({
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              {TOPUP_PACKS.map(({ pack, label, sub }) => (
+              {TOPUP_PACKS.map(({ pack, sub }) => (
                 <button
                   key={pack}
                   type="button"
@@ -145,8 +145,8 @@ export function CreditExhaustedModal({
                   }}
                 >
                   <span>
-                    <span style={{ display: "block", fontSize: "0.88rem", fontWeight: 700 }}>{label}</span>
-                    <span style={{ display: "block", fontSize: "0.7rem", color: "rgba(240,242,255,0.4)" }}>{sub}</span>
+                    <span style={{ display: "block", fontSize: "0.88rem", fontWeight: 700 }}>{packLabel(packInfo[pack])}</span>
+                    <span style={{ display: "block", fontSize: "0.7rem", color: "rgba(240,242,255,0.4)" }}>{packInfo[pack]?.price ?? sub}</span>
                   </span>
                   <span
                     style={{

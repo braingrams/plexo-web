@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
-import { PLAN_PRICE_ENV, TOPUP_PACKS, resolvePriceId } from "@/lib/credits/catalog";
+import { PLAN_PRICE_ENV, resolvePriceId } from "@/lib/credits/catalog";
+import { topupOffer } from "@/lib/credits/topupOffer";
 import { getStripe } from "@/lib/stripe";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
@@ -130,8 +131,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    const pack = TOPUP_PACKS[body.pack];
-    const priceId = resolvePriceId(pack.priceEnv);
+    // Credits are half the pack's price as AI value (lib/credits/value.ts); the webhook grants
+    // from what was actually paid — this is the amount shown before paying.
+    const offer = await topupOffer(stripe, body.pack);
+    const priceId = offer.priceId;
     const checkoutSession = await stripe.checkout.sessions.create({
       ui_mode: "embedded_page",
       mode: "payment",
@@ -141,7 +144,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         plexoUserId: session.user.id,
         kind: "topup",
         pack: body.pack,
-        credits: String(pack.credits),
+        credits: String(offer.credits),
       },
       return_url: returnUrl,
       // stayInPage: the app editor's top-up panel finishes in place (onComplete) instead of

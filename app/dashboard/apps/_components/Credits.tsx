@@ -14,23 +14,20 @@ import { C } from "./ui";
 export type PackId = "SMALL" | "MEDIUM" | "LARGE";
 export type Pack = { pack: PackId; credits: number; price: string | null };
 
-const FALLBACK_PACKS: Pack[] = [
-  { pack: "SMALL", credits: 5_000, price: null },
-  { pack: "MEDIUM", credits: 25_000, price: null },
-  { pack: "LARGE", credits: 120_000, price: null },
-];
-/** Below this, the meter warns. Roughly a handful of app changes. */
-export const LOW_CREDITS = 1_000;
+/** Running low: under a fifth of what the plan grants each month. */
+export const isLow = (credits: number, monthly: number | null) => credits < Math.max(10, (monthly ?? 0) * 0.2);
 const n = (v: number) => v.toLocaleString("en-US");
 
 export function useCredits() {
   const [credits, setCredits] = useState<number | null>(null);
+  const [monthly, setMonthly] = useState<number | null>(null);
   const refresh = useCallback(async (): Promise<number | null> => {
     try {
       const res = await fetch("/api/v1/profile", { cache: "no-store" });
       const data = res.ok ? await res.json() : null;
       const total = typeof data?.user?.totalCredits === "number" ? data.user.totalCredits : null;
       setCredits(total);
+      if (typeof data?.user?.monthlyCredits === "number") setMonthly(data.user.monthlyCredits);
       return total;
     } catch {
       return null;
@@ -39,11 +36,12 @@ export function useCredits() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-  return { credits, setCredits, refresh };
+  return { credits, monthly, setCredits, refresh };
 }
 
+/** The packs with their real prices and credits (half the price as AI value — lib/credits/value.ts). */
 export function usePacks(enabled: boolean) {
-  const [packs, setPacks] = useState<Pack[]>(FALLBACK_PACKS);
+  const [packs, setPacks] = useState<Pack[] | null>(null);
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
@@ -58,19 +56,19 @@ export function usePacks(enabled: boolean) {
   return packs;
 }
 
-function Bar({ credits, height = 6 }: { credits: number; height?: number }) {
-  // Fills against the smallest pack: 5,000+ reads as full, the low-credit line (1,000) as a fifth.
-  const pct = Math.max(credits > 0 ? 4 : 0, Math.min(100, (credits / 5_000) * 100));
+function Bar({ credits, monthly, height = 6 }: { credits: number; monthly: number | null; height?: number }) {
+  // Full = the plan's monthly amount; top-ups beyond it still read as full.
+  const pct = Math.max(credits > 0 ? 4 : 0, Math.min(100, (credits / Math.max(1, monthly ?? credits)) * 100));
   return (
     <span style={{ display: "block", width: "100%", height, borderRadius: 99, background: "rgba(255,255,255,0.1)" }}>
-      <span style={{ display: "block", width: `${pct}%`, height: "100%", borderRadius: 99, background: credits < LOW_CREDITS ? C.warning : C.text }} />
+      <span style={{ display: "block", width: `${pct}%`, height: "100%", borderRadius: 99, background: isLow(credits, monthly) ? C.warning : C.text }} />
     </span>
   );
 }
 
 /** The top-bar meter. Opens the credits panel. */
-export function CreditsMeter({ credits, open, onToggle }: { credits: number | null; open: boolean; onToggle: () => void }) {
-  const low = credits !== null && credits < LOW_CREDITS;
+export function CreditsMeter({ credits, monthly, open, onToggle }: { credits: number | null; monthly: number | null; open: boolean; onToggle: () => void }) {
+  const low = credits !== null && isLow(credits, monthly);
   return (
     <button
       type="button"
@@ -79,7 +77,7 @@ export function CreditsMeter({ credits, open, onToggle }: { credits: number | nu
       aria-label={credits === null ? "AI credits" : `${n(credits)} AI credits left`}
       style={{ display: "inline-flex", alignItems: "center", gap: 9, padding: "0.38rem 0.7rem", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", color: C.text, background: "transparent", border: `1px solid ${low ? C.warning : C.border}` }}
     >
-      <span style={{ width: 54 }}>{credits !== null && <Bar credits={credits} />}</span>
+      <span style={{ width: 54 }}>{credits !== null && <Bar credits={credits} monthly={monthly} />}</span>
       <span style={{ fontSize: "0.76rem", fontWeight: 600, whiteSpace: "nowrap", color: low ? C.warning : C.text }}>
         {credits === null ? "Credits" : credits <= 0 ? "No credits left" : `${n(credits)} credits left`}
       </span>
@@ -106,7 +104,7 @@ function PackRow({ pack, highlight, onPick }: { pack: Pack; highlight?: boolean;
 }
 
 /** The panel under the meter: balance, a plain-words note, and the packs. */
-export function CreditsPanel({ credits, onPick, onClose }: { credits: number | null; onPick: (pack: Pack) => void; onClose: () => void }) {
+export function CreditsPanel({ credits, monthly, onPick, onClose }: { credits: number | null; monthly: number | null; onPick: (pack: Pack) => void; onClose: () => void }) {
   const packs = usePacks(true);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -120,20 +118,21 @@ export function CreditsPanel({ credits, onPick, onClose }: { credits: number | n
       document.removeEventListener("keydown", onKey);
     };
   }, [onClose]);
-  const low = credits !== null && credits < LOW_CREDITS;
+  const low = credits !== null && isLow(credits, monthly);
   return (
     <div ref={ref} role="dialog" aria-label="AI credits" style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 360, zIndex: 80, padding: "1rem", borderRadius: 16, background: C.panelSolid, border: `1px solid ${C.borderStrong}`, boxShadow: "0 24px 60px -20px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
         <span style={{ fontSize: "1.6rem", fontWeight: 800 }}>{credits === null ? "—" : n(Math.max(0, credits))}</span>
         <span style={{ fontSize: "0.76rem", color: C.muted }}>AI credits left</span>
       </div>
-      {credits !== null && <Bar credits={credits} height={8} />}
+      {credits !== null && <Bar credits={credits} monthly={monthly} height={8} />}
+      {monthly !== null && <div style={{ fontSize: "0.74rem", color: C.faint }}>Your plan adds {n(monthly)} credits each month.</div>}
       <div style={{ padding: "0.6rem 0.75rem", borderRadius: 10, background: "rgba(255,255,255,0.05)", fontSize: "0.8rem", lineHeight: 1.5, color: low ? C.warning : C.muted }}>
         {low ? "Running low. Top up so SOL doesn't stop in the middle of a change." : "SOL uses credits when it changes your app. Editing the code yourself is free."}
       </div>
       <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.faint }}>Top up</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {packs.map((p) => <PackRow key={p.pack} pack={p} highlight={p.pack === "MEDIUM"} onPick={() => onPick(p)} />)}
+        {packs === null ? <div style={{ fontSize: "0.8rem", color: C.muted }}>Loading prices…</div> : packs.length === 0 ? <div style={{ fontSize: "0.8rem", color: C.muted }}>Top-ups aren&rsquo;t available right now.</div> : packs.map((p) => <PackRow key={p.pack} pack={p} highlight={p.pack === "MEDIUM"} onPick={() => onPick(p)} />)}
       </div>
       <a href="/dashboard/settings/subscription" style={{ fontSize: "0.8rem", color: C.brand, textDecoration: "none" }}>Upgrade your plan for more each month →</a>
     </div>
@@ -144,7 +143,7 @@ export function CreditsPanel({ credits, onPick, onClose }: { credits: number | n
 export function OutOfCreditsCard({ onPick, onDismiss, onOpenCode }: { onPick: (pack: Pack) => void; onDismiss: () => void; onOpenCode: () => void }) {
   const packs = usePacks(true);
   const [chosen, setChosen] = useState<PackId>("MEDIUM");
-  const pack = packs.find((p) => p.pack === chosen) ?? packs[1];
+  const pack = packs?.find((p) => p.pack === chosen) ?? packs?.[0] ?? null;
   return (
     <div style={{ marginBottom: 8, padding: "0.9rem", borderRadius: 14, border: `1.5px solid ${C.text}`, background: C.panelSolid, display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
@@ -157,15 +156,15 @@ export function OutOfCreditsCard({ onPick, onDismiss, onOpenCode }: { onPick: (p
         </button>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
-        {packs.map((p) => (
+        {(packs ?? []).map((p) => (
           <button key={p.pack} type="button" onClick={() => setChosen(p.pack)} aria-pressed={p.pack === chosen} style={{ padding: "0.55rem 0.3rem", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", color: C.text, textAlign: "center", background: p.pack === chosen ? "rgba(255,255,255,0.06)" : "transparent", border: p.pack === chosen ? `2px solid ${C.text}` : `1px solid ${C.border}` }}>
             <span style={{ display: "block", fontSize: "0.82rem", fontWeight: 700 }}>{n(p.credits)}</span>
             <span style={{ display: "block", fontSize: "0.7rem", color: C.muted }}>{p.price ?? "credits"}</span>
           </button>
         ))}
       </div>
-      <button type="button" onClick={() => onPick(pack)} style={{ padding: "0.7rem", borderRadius: 11, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: "0.86rem", fontWeight: 700, background: C.text, color: C.bg }}>
-        Add {n(pack.credits)} credits{pack.price ? ` · ${pack.price}` : ""}
+      <button type="button" disabled={!pack} onClick={() => pack && onPick(pack)} style={{ padding: "0.7rem", borderRadius: 11, border: "none", cursor: pack ? "pointer" : "default", fontFamily: "inherit", fontSize: "0.86rem", fontWeight: 700, background: C.text, color: C.bg, opacity: pack ? 1 : 0.6 }}>
+        {pack ? `Add ${n(pack.credits)} credits${pack.price ? ` · ${pack.price}` : ""}` : "Loading prices…"}
       </button>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.76rem" }}>
         <a href="/dashboard/settings/subscription" style={{ color: C.brand, textDecoration: "none" }}>Upgrade plan instead</a>

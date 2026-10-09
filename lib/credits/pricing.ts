@@ -67,7 +67,7 @@ export function imageGenerationCredits(): number {
 }
 
 /** USD value of a single credit — how the configurable credit<->dollar ratio is expressed. */
-function creditUsdValue(): number {
+export function creditUsdValue(): number {
   const raw = process.env.CREDIT_USD_VALUE;
   const parsed = raw ? Number(raw) : NaN;
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0.001; // default: 1000 credits = $1
