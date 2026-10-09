@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
+import { lockedTierFor } from "@/lib/ai/solEngine";
 import { SolConversation } from "@/lib/db/solEntities";
 import { SolChatView } from "./_components/SolChatView";
 import { SOL_LAST_CONVERSATION_COOKIE } from "./_components/types";
@@ -39,5 +40,5 @@ export default async function SolIndexPage({ searchParams }: { searchParams: Pro
   }
 
   const userName = session.user.name ?? session.user.email?.split("@")[0] ?? null;
-  return <SolChatView conversation={null} initialMessages={[]} userName={userName} />;
+  return <SolChatView conversation={null} initialMessages={[]} userName={userName} lockedModelTier={await lockedTierFor(session.user.id)} />;
 }

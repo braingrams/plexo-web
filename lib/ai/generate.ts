@@ -37,6 +37,8 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   // gets cut off mid tool-call JSON is worse than a plain generation mode being cut off,
   // since dispatchMcpTool would then receive unparseable/truncated tool input.
   agent_chat: 32000,
+  // A catalog's product rows as JSON — ample for a few hundred products in one pass.
+  import_products: 8000,
 };
 
 /** Ceiling for the one-time adaptive retry when a response comes back truncated (see
@@ -174,7 +176,9 @@ function trimContext(mode: AiActionMode, context: unknown): unknown {
   return clone;
 }
 
-async function callProvider(
+/** One model call on any supported provider — the single dispatcher every SOL-powered
+ *  feature uses (lib/ai/solEngine.ts decides which provider and key). */
+export async function callProvider(
   provider: AiProvider,
   model: string,
   apiKey: string,
@@ -182,8 +186,9 @@ async function callProvider(
   userPrompt: string,
   maxTokens: number,
   onTextDelta?: (delta: string) => void,
+  attachments?: Array<{ mediaType: string; data: string; name?: string }>,
 ): Promise<ProviderCallResult> {
-  const params = { model, apiKey, systemPrompt, userPrompt, maxTokens, onTextDelta };
+  const params = { model, apiKey, systemPrompt, userPrompt, maxTokens, onTextDelta, ...(attachments ? { attachments } : {}) };
   switch (provider) {
     case "anthropic_claude":
       return anthropicProvider.generate(params);

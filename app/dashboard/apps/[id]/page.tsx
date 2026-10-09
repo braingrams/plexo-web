@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { Template } from "@/lib/db/contentEntities";
-import { User } from "@/lib/db/coreEntities";
+import { lockedTierFor } from "@/lib/ai/solEngine";
 import { SolMessage } from "@/lib/db/solEntities";
 import { ensureAppConversation } from "@/lib/projects/appConversation";
 import { appSummary } from "@/lib/projects/summary";
@@ -51,7 +51,7 @@ export default async function AppEditorPage({ params, searchParams }: { params: 
       createdAt: m.createdAt,
     }));
 
-  const { data: owner } = await User.get({ id: session.user.id }).go();
+  const lockedModelTier = await lockedTierFor(session.user.id);
 
   return (
     <SolSidebarProvider>
@@ -63,7 +63,7 @@ export default async function AppEditorPage({ params, searchParams }: { params: 
         userName={session.user.name ?? session.user.email?.split("@")[0] ?? null}
         initialPrompt={query.prompt ?? null}
         initialPlan={query.plan ?? null}
-        subscriptionPlan={owner?.subscriptionPlan ?? "FREE"}
+        lockedModelTier={lockedModelTier}
        
         initialPanel={query.panel ?? null}
         addSecretName={query.add ?? null}
