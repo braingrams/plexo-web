@@ -22,6 +22,9 @@ export const SolConversation = new Entity(
       status: { type: ["ACTIVE", "ARCHIVED"] as const, default: "ACTIVE" },
       lastMessageAt: { type: "string" },
       messageCount: { type: "number", default: 0 },
+      // Set when the conversation is an app's builder chat (the app editor): SOL then works
+      // on that app with its files and conventions in context (lib/projects/solAppContext.ts).
+      appId: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },

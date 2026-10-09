@@ -5,6 +5,7 @@ import type {
   GenerateWithToolsParams,
   GenerateWithToolsResult,
 } from "./shared";
+import { toolResultText } from "./shared";
 import { toGeminiTools } from "@/lib/ai/solToolSchema";
 
 /**
@@ -193,10 +194,7 @@ function toGeminiSteps(
           steps.push({
             type: "function_result",
             call_id: block.tool_use_id,
-            result:
-              typeof block.content === "string"
-                ? block.content
-                : JSON.stringify(block.content ?? null),
+            result: toolResultText(block.content),
             is_error: block.is_error,
           });
         }

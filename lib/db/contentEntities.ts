@@ -23,10 +23,21 @@ export const Template = new Entity(
       organizationId: { type: "string", required: true },
       name: { type: "string", required: true },
       kind: { type: ["EMAIL", "LANDING_PAGE"] as const, required: true },
+      // REACT_PROJECT: a full-stack React app (docs/plexo-projects/ARCHITECTURE.md). Its
+      // files live in ProjectFile rows (lib/db/projectEntities.ts), not designJson/
+      // compiledHtml — those two stay set to {}/"" only because they're required here.
       sourceType: {
-        type: ["BUILDER", "RAW_UPLOAD"] as const,
+        type: ["BUILDER", "RAW_UPLOAD", "REACT_PROJECT"] as const,
         default: "BUILDER",
       },
+      // REACT_PROJECT only. liveBuildId: the ProjectBuild the published domain serves.
+      // latestBuildId: the newest successful build (what the preview host serves).
+      // headVersionId: the newest ProjectVersion snapshot. previewHost: the
+      // "<host>.<pagesDomain>" label of the shareable preview (ProjectPreviewHost).
+      liveBuildId: { type: "string" },
+      latestBuildId: { type: "string" },
+      headVersionId: { type: "string" },
+      previewHost: { type: "string" },
       designJson: { type: "any", required: true },
       compiledHtml: { type: "string", required: true },
       // Draft/Publish model: designJson/compiledHtml above are always the LIVE, currently-

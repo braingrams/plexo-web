@@ -21,6 +21,17 @@ const AREAS = [
   "lib/mcp/blogTools.ts",
   "lib/mcp/commerceTools.ts",
   "lib/mcp/formTools.ts",
+  // React apps (docs/plexo-projects/ARCHITECTURE.md).
+  "lib/projects/**/*.ts",
+  "lib/appData/**/*.ts",
+  "lib/appAuth/**/*.ts",
+  "lib/appRuntime/**/*.ts",
+  "lib/appStorage/**/*.ts",
+  "lib/appFunctions/**/*.ts",
+  "lib/mcp/appTools.ts",
+  "app/api/v1/apps/**/*.ts",
+  "app/api/v1/deploy/**/*.ts",
+  "app/api/runtime/**/*.ts",
 ];
 const FIRST_PAGE_ONLY = /\.query\s*\.\s*[a-zA-Z]+\s*\([^()]*(?:\([^()]*\)[^()]*)*\)\s*\.go\(\)/g;
 

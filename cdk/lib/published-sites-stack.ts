@@ -207,6 +207,23 @@ export class PublishedSitesStack extends cdk.Stack {
       enableAcceptEncodingBrotli: true,
     });
 
+    // Built files of apps built on Plexo (lib/projects/serve.ts): every path under
+    // /__plexo/assets/<buildId>/ is content-hashed and never changes, so it's cached at the
+    // edge for up to a year. Keyed by host (x-forwarded-host, set by the viewer-request
+    // function) like page HTML: two apps' builds can never be confused.
+    const appAssetCachePolicy = new cloudfront.CachePolicy(this, "AppAssetCachePolicy", {
+      cachePolicyName: `${this.stackName}-app-assets`,
+      comment: "Immutable, host-keyed cache for React app build assets (/__plexo/assets/*)",
+      defaultTtl: cdk.Duration.days(1),
+      minTtl: cdk.Duration.seconds(0),
+      maxTtl: cdk.Duration.days(365),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
+      headerBehavior: cloudfront.CacheHeaderBehavior.allowList("x-forwarded-host"),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    });
+
     // The "_next/image*" behavior below used CACHING_OPTIMIZED (a managed policy with no
     // query-string forwarding/cache-keying at all) with no originRequestPolicyId — the
     // ImageFn origin's own Lambda never received "url"/"w"/"q" at all, so every image ever
@@ -328,6 +345,10 @@ export class PublishedSitesStack extends cdk.Stack {
           // to checkout, cart shows empty/stale until reload" — the reload just happened
           // to land after the cached entry expired. CACHING_DISABLED is CloudFront's own
           // managed zero-TTL policy — every request here always reaches ServerFn fresh.
+          // A React app's own backend (/__plexo/api/* on its domain → app/api/runtime): per
+          // visitor, never cached, every method.
+          { pathPattern: "__plexo/api/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_DISABLED, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: ALLOW_ALL_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
+          { pathPattern: "__plexo/assets/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: appAssetCachePolicy.cachePolicyId, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
           { pathPattern: "api/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_DISABLED, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: ALLOW_ALL_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
           { pathPattern: "_next/image*", targetOriginId: "ImageFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: imageOptimizerCachePolicy.cachePolicyId, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "_next/*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
