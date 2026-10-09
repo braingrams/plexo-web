@@ -73,6 +73,7 @@ export function MessageList({
   onConfirmToolCall,
   confirmBusy,
   resolvingConfirmation,
+  footer,
 }: {
   messages: SolMessage[];
   conversationId: string;
@@ -81,6 +82,8 @@ export function MessageList({
   onConfirmToolCall?: (decision: "confirmed" | "declined") => void;
   confirmBusy?: boolean;
   resolvingConfirmation?: boolean;
+  /** Rendered after the last message, inside the scrolling list (e.g. a build checklist). */
+  footer?: React.ReactNode;
 }) {
   const merged = mergeToolResults(messages);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -179,6 +182,7 @@ export function MessageList({
               `}</style>
             </div>
           )}
+          {footer}
           <div ref={bottomRef} />
         </div>
       </div>

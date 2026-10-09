@@ -26,6 +26,7 @@ export function Composer({
   onSend,
   onStop,
   initialText,
+  placeholder,
 }: {
   streaming: boolean;
   disabled?: boolean;
@@ -34,6 +35,7 @@ export function Composer({
   onSend: (text: string, attachments: ChatAttachment[]) => void;
   onStop: () => void;
   initialText?: string;
+  placeholder?: string;
 }) {
   const [text, setText] = useState(initialText ?? "");
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -185,12 +187,35 @@ export function Composer({
         </div>
       )}
 
-      {/* One row: attach (+), the growing input, the model-tier switcher, voice, then send —
-          a single compact toolbar rather than a text area with a separate icon row
-          underneath, matching a tighter, more "AI native" composer feel. `alignItems:
-          flex-end` keeps every icon pinned to the input's baseline as it grows to multiple
-          lines, instead of drifting to the vertical center of a tall textarea. */}
-      <div className="sol-composer-row" style={{ display: "flex", alignItems: "flex-end", gap: "0.35rem" }}>
+      {/* The text box gets the full width on top; the tools sit in a row underneath —
+          add a file on the left; the model, voice and send on the right. */}
+        <textarea
+          ref={textareaRef}
+          className="sol-composer-input"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
+          placeholder={placeholder ?? PLACEHOLDER}
+          rows={1}
+          disabled={disabled}
+          style={{
+            width: "100%",
+            display: "block",
+            resize: "none",
+            background: "transparent",
+            border: "none",
+            outline: "none",
+            color: "#f3f0fa",
+            fontSize: "0.92rem",
+            lineHeight: 1.5,
+            fontFamily: "inherit",
+            maxHeight: 220,
+            padding: "0.45rem 0.35rem 0.25rem",
+          }}
+        />
+
+      <div className="sol-composer-row" style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
         <input ref={fileInputRef} type="file" multiple accept={ACCEPTED_FILE_TYPES} style={{ display: "none" }} onChange={(e) => { void handleFilesPicked(e.target.files); e.target.value = ""; }} />
         <button
           type="button"
@@ -213,31 +238,7 @@ export function Composer({
           <Plus size={17} />
         </button>
 
-        <textarea
-          ref={textareaRef}
-          className="sol-composer-input"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          placeholder={PLACEHOLDER}
-          rows={1}
-          disabled={disabled}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            resize: "none",
-            background: "transparent",
-            border: "none",
-            outline: "none",
-            color: "#f3f0fa",
-            fontSize: "0.92rem",
-            lineHeight: 1.5,
-            fontFamily: "inherit",
-            maxHeight: 220,
-            padding: "0.5rem 0.2rem",
-          }}
-        />
+        <span style={{ flex: 1 }} />
 
         <div style={{ flexShrink: 0 }}>
           <ModelTierSelector
@@ -326,14 +327,9 @@ export function Composer({
           font-size: 0.78rem !important;
         }
         .sol-composer-tier-select:hover { background: rgba(255,255,255,0.05) !important; }
-        /* At ~375px, attach+textarea+tier-selector+voice+send in one row squeezes the
-           textarea down to ~30-60px wide — not clipped (flex:1/minWidth:0 shrinks safely),
-           but close to unusable for actually typing (found by a mobile audit). Wrapping
-           the input onto its own full-width line, with the icon controls on the line below,
-           fixes that at the cost of one extra line of height. */
+        /* Narrow phones: let the tools row wrap rather than squeeze its controls. */
         @media (max-width: 480px) {
           .sol-composer-row { flex-wrap: wrap; }
-          .sol-composer-input { flex-basis: 100%; order: -1; margin-bottom: 0.3rem; }
         }
       `}</style>
     </div>

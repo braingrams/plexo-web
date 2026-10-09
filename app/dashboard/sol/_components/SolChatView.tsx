@@ -110,6 +110,15 @@ export type SolChatEmbedding = {
   returnTo?: string;
   /** Adds host context (e.g. the selected element) to what the person typed, before sending. */
   transformOutgoing?: (text: string) => string;
+  /** The host handles running out of credits in place (instead of the top-up modal): it gets
+   *  the shortfall and a resend() that sends the same message again once topped up. */
+  onCreditExhausted?: (info: CreditInfo, resend: () => void) => void;
+  /** Rendered after the last message, inside the conversation (e.g. a build checklist). */
+  afterMessages?: React.ReactNode;
+  /** The chat box's placeholder. */
+  composerPlaceholder?: string;
+  /** Called when a turn ends ("done", "error", "awaiting_confirmation", "credit_exhausted"). */
+  onTurnEnd?: (outcome: string) => void;
 };
 
 export function SolChatView({
@@ -338,6 +347,7 @@ export function SolChatView({
   }, []);
 
   useEffect(() => {
+    if (stream.outcome !== "idle" && stream.outcome !== "streaming") embedded?.onTurnEnd?.(stream.outcome);
     if (stream.outcome === "done") {
       commitAssistantMessage();
     } else if (stream.outcome === "awaiting_confirmation") {
@@ -349,6 +359,10 @@ export function SolChatView({
       // handleConfirmToolCall/handleSubmitAnswers below both bail out when
       // pendingConfirmMessageId is still null.
       setPendingConfirmMessageId(stream.awaitingMessageId);
+    } else if (stream.outcome === "credit_exhausted" && embedded?.onCreditExhausted && stream.creditInfo) {
+      rollbackOptimisticUserMessage();
+      const text = lastSentTextRef.current;
+      embedded.onCreditExhausted(stream.creditInfo, () => void handleSendRef.current(text, []));
     } else if (stream.outcome === "credit_exhausted") {
       rollbackOptimisticUserMessage();
       setCreditInfo(stream.creditInfo);
@@ -538,6 +552,7 @@ export function SolChatView({
         onSend={(text, attachments) => void handleSend(text, attachments)}
         onStop={handleStop}
         initialText={composerRestoreText}
+        placeholder={embedded?.composerPlaceholder}
       />
     </>
   );
@@ -592,6 +607,7 @@ export function SolChatView({
               streaming={streaming}
               onConfirmToolCall={handleConfirmToolCall}
               confirmBusy={streaming && pendingConfirmMessageId !== null}
+              footer={embedded?.afterMessages}
             />
             <div style={{ padding: "0 1.25rem 1.25rem" }}>
               <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: "0.6rem" }}>

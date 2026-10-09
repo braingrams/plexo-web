@@ -62,10 +62,10 @@
    Design tokens — theme-independent
    ───────────────────────────────────────── */
 :root {
-  /* geist's own variable names are fixed by the package; bridged here so every existing
+  /* Figtree (app/layout.tsx) for headings and body; bridged here so every existing
      var(--font-heading)/var(--font-body) reference elsewhere keeps working unchanged. */
-  --font-heading: var(--font-geist-sans);
-  --font-body: var(--font-geist-sans);
+  --font-heading: var(--font-figtree);
+  --font-body: var(--font-figtree);
   --font-mono: var(--font-geist-mono);
 
   --radius: 20px;

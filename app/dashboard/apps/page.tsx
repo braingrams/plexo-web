@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { Figtree } from "next/font/google";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { Template } from "@/lib/db/contentEntities";
@@ -8,8 +7,6 @@ import { previewUrl } from "@/lib/projects/previewHost";
 import { AppsHome, type HomeApp } from "./_components/AppsHome";
 
 export const dynamic = "force-dynamic";
-
-const figtree = Figtree({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], display: "swap" });
 
 /** Apps: pick up where you left off, or answer three questions to start a new one. */
 export default async function AppsPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -39,5 +36,5 @@ export default async function AppsPage({ searchParams }: { searchParams: Promise
     }),
   );
 
-  return <AppsHome apps={apps} userName={session.user.name?.split(" ")[0] ?? null} showAll={query.view === "all"} fontClassName={figtree.className} />;
+  return <AppsHome apps={apps} userName={session.user.name?.split(" ")[0] ?? null} showAll={query.view === "all"} />;
 }

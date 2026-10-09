@@ -59,6 +59,8 @@ export default async function AppEditorPage({ params, searchParams }: { params: 
         initialMessages={initialMessages}
         userName={session.user.name ?? session.user.email?.split("@")[0] ?? null}
         initialPrompt={query.prompt ?? null}
+        initialPlan={query.plan ?? null}
+       
         initialPanel={query.panel ?? null}
         addSecretName={query.add ?? null}
         // Stock photo search in the Design tab — the same keys the site editor uses.

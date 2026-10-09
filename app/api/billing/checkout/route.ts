@@ -144,6 +144,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         credits: String(pack.credits),
       },
       return_url: returnUrl,
+      // stayInPage: the app editor's top-up panel finishes in place (onComplete) instead of
+      // navigating away; Stripe still redirects for payment methods that need it.
+      ...((body as { stayInPage?: unknown }).stayInPage === true ? { redirect_on_completion: "if_required" as const } : {}),
     });
     return NextResponse.json({ clientSecret: checkoutSession.client_secret });
   } catch (err) {
