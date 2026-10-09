@@ -64,17 +64,19 @@ export function SettingsPane({ appId, summary, onRenamed }: { appId: string; sum
   }, [load]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", padding: "1rem", maxWidth: 820 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 440px), 1fr))", alignItems: "start", gap: "0.9rem", padding: "1rem" }}>
       <NameSection appId={appId} summary={summary} onRenamed={onRenamed} />
       {loadError && !settings && (
+        <div style={{ gridColumn: "1 / -1" }}>
         <Notice tone="danger">
           {loadError}{" "}
           <button type="button" onClick={() => void load()} style={linkButton}>
             Try again
           </button>
         </Notice>
+        </div>
       )}
-      {!settings && !loadError && <p style={{ margin: 0, fontSize: "0.8rem", color: C.muted }}>Loading settings…</p>}
+      {!settings && !loadError && <p style={{ margin: 0, fontSize: "0.8rem", color: C.muted, gridColumn: "1 / -1" }}>Loading settings…</p>}
       {settings && (
         <>
           <SignInSection appId={appId} summary={summary} settings={settings} onSaved={setSettings} />

@@ -10,11 +10,11 @@ import {
   Link2,
   LoaderCircle,
   Lock,
+  MessageSquare,
   Play,
   Plus,
   RefreshCw,
   Search,
-  Sparkles,
   Table2,
   Trash2,
   TriangleAlert,
@@ -208,7 +208,7 @@ export function DatabasePane(props: { appId: string; refreshKey?: number; onAskA
                     </div>
                     {onAskAi && (
                       <Button size="sm" onClick={() => onAskAi(`Fix this database security issue: ${f.message} Suggested fix: ${f.fix}`)}>
-                        <Sparkles size={12} /> Ask SOL to fix
+                        <MessageSquare size={12} /> Ask SOL to fix
                       </Button>
                     )}
                     <button

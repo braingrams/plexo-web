@@ -71,20 +71,53 @@ export function Stepper({ current, reachable, onSelect }: { current: WizardStep;
   );
 }
 
-/** One step's page: a friendly icon, a big title, one line of reassurance, then its content. */
-export function StepShell({ icon, title, subtitle, children }: { icon?: React.ReactNode; title: string; subtitle?: React.ReactNode; children: React.ReactNode }) {
+/** One step's page, using the full width: the title and the step's work on the left, and a
+ *  side panel (what happens next, live progress, the site at a glance) on the right. Below
+ *  1100px the side panel moves under the main column. */
+export function StepShell({ icon, title, subtitle, aside, children }: { icon?: React.ReactNode; title: string; subtitle?: React.ReactNode; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section style={{ display: "flex", flexDirection: "column", gap: 24, animation: "wiz-in 0.35s var(--ease-out)" }}>
-      <header style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {icon && (
-          <span style={{ width: 48, height: 48, borderRadius: 14, display: "grid", placeItems: "center", background: "rgba(var(--brand-rgb),0.12)", color: "var(--brand)" }}>{icon}</span>
-        )}
-        <h1 style={{ margin: 0, fontSize: 28, fontWeight: 750, letterSpacing: "-0.02em", lineHeight: 1.2, color: "var(--text-main)" }}>{title}</h1>
-        {subtitle && <p style={{ ...text.muted, fontSize: 15, maxWidth: 620 }}>{subtitle}</p>}
-      </header>
-      {children}
-      <style>{`@keyframes wiz-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }`}</style>
+    <section className="wiz-grid" style={{ display: "grid", gridTemplateColumns: aside ? "minmax(0, 1fr) 360px" : "minmax(0, 1fr)", gap: 28, alignItems: "start", animation: "wiz-in 0.35s var(--ease-out)" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 24, minWidth: 0 }}>
+        <header style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
+          {icon && (
+            <span style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 12, display: "grid", placeItems: "center", background: "rgba(var(--brand-rgb),0.12)", color: "var(--brand)" }}>{icon}</span>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 750, letterSpacing: "-0.02em", lineHeight: 1.2, color: "var(--text-main)" }}>{title}</h1>
+            {subtitle && <p style={{ ...text.muted, fontSize: 15, maxWidth: 760 }}>{subtitle}</p>}
+          </div>
+        </header>
+        {children}
+      </div>
+      {aside && <aside style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>{aside}</aside>}
+      <style>{`
+        @keyframes wiz-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        @media (max-width: 1100px) { .wiz-grid { grid-template-columns: minmax(0, 1fr) !important; } }
+      `}</style>
     </section>
+  );
+}
+
+/** A titled card for the side panel. */
+export function AsideCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{ borderRadius: 16, border: "1px solid var(--surface-border)", background: "var(--surface)", padding: 20, display: "flex", flexDirection: "column", gap: 14 }}>
+      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--text-faint)" }}>{title}</p>
+      {children}
+    </div>
+  );
+}
+
+/** A row in a side-panel list: an icon, a bold line and a short explanation. */
+export function AsideItem({ icon, title, children }: { icon: React.ReactNode; title: string; children?: React.ReactNode }) {
+  return (
+    <div style={{ display: "flex", gap: 12 }}>
+      <span style={{ color: "var(--brand)", flexShrink: 0, marginTop: 1 }}>{icon}</span>
+      <div style={{ minWidth: 0 }}>
+        <p style={{ margin: 0, fontSize: 14, fontWeight: 650, color: "var(--text-main)" }}>{title}</p>
+        {children && <p style={{ ...text.small, marginTop: 2 }}>{children}</p>}
+      </div>
+    </div>
   );
 }
 

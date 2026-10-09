@@ -77,7 +77,7 @@ export function UsersPane(props: { appId: string }) {
   const base = `/api/v1/apps/${appId}/users`;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 1100 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <h2 style={{ margin: 0, fontSize: "1rem", flex: 1 }}>Users</h2>
         <EnvSwitch value={env} onChange={(v) => { setEnv(v); setOffset(0); }} />

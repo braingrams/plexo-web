@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Plus, Trash2, Code2, Sparkles, Palette } from "lucide-react";
+import { Plus, Trash2, Code2, MessageSquare, Palette, MousePointer2, Link2, FileCode2 } from "lucide-react";
 import { appsApi, ApiError, type DesignSummary } from "./api";
 import { C, Button, Notice, inputStyle } from "./ui";
 
@@ -129,6 +129,11 @@ export function DesignPane(props: {
     },
     [appId, sdk, loadIntoCanvas],
   );
+
+  // No designs yet: the empty state shows the new-page form straight away.
+  useEffect(() => {
+    if (designs && designs.length === 0 && !creating) setCreating({ name: "Landing page", route: "/landing-page", busy: false });
+  }, [designs, creating]);
 
   // First load: the list, then the first design.
   useEffect(() => {
@@ -283,17 +288,19 @@ export function DesignPane(props: {
         e.preventDefault();
         void create();
       }}
-      style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%", maxWidth: 380 }}
+      style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}
     >
-      <label style={{ fontSize: "0.76rem", color: C.muted }}>
-        Page name
-        <input autoFocus value={creating.name} onChange={(e) => setCreating({ ...creating, name: e.target.value, route: routeFromName(e.target.value) })} placeholder="About us" style={{ ...inputStyle, marginTop: 4 }} />
-      </label>
-      <label style={{ fontSize: "0.76rem", color: C.muted }}>
-        Page address
-        <input value={creating.route} onChange={(e) => setCreating({ ...creating, route: e.target.value })} placeholder="/about" style={{ ...inputStyle, marginTop: 4, fontFamily: C.mono }} />
-        <span style={{ display: "block", marginTop: 4, color: C.faint }}>Use / to make this design your home page (it replaces the current one).</span>
-      </label>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+        <label style={{ fontSize: "0.76rem", color: C.muted }}>
+          Page name
+          <input autoFocus value={creating.name} onChange={(e) => setCreating({ ...creating, name: e.target.value, route: routeFromName(e.target.value) })} placeholder="About us" style={{ ...inputStyle, marginTop: 4 }} />
+        </label>
+        <label style={{ fontSize: "0.76rem", color: C.muted }}>
+          Page address
+          <input value={creating.route} onChange={(e) => setCreating({ ...creating, route: e.target.value })} placeholder="/about" style={{ ...inputStyle, marginTop: 4, fontFamily: C.mono }} />
+          <span style={{ display: "block", marginTop: 4, color: C.faint }}>Use / to make this design your home page (it replaces the current one).</span>
+        </label>
+      </div>
       <div style={{ display: "flex", gap: 8 }}>
         <Button type="submit" variant="primary" disabled={creating.busy}>
           {creating.busy ? "Creating…" : "Create page"}
@@ -308,22 +315,44 @@ export function DesignPane(props: {
   );
 
   if (!designs!.length || !current) {
+    const howItWorks = [
+      { icon: MousePointer2, title: "Drag, drop and style", body: "Sections, text, images, buttons, forms and menus on a canvas — with your brand's fonts and colours." },
+      { icon: FileCode2, title: "Real React code", body: "Each design becomes a page in src/plexo-canvas/. SOL, Code mode and GitHub all see it." },
+      { icon: Link2, title: "Its own address", body: "Pick where the page lives, like /pricing. Plexo adds it to your app for you." },
+    ];
     return (
-      <Centered>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, textAlign: "center", maxWidth: 440 }}>
-          <Palette size={28} color={C.brand} />
-          <div style={{ fontWeight: 700 }}>Design pages visually</div>
-          <div style={{ fontSize: "0.82rem", color: C.muted }}>
-            Drag, drop and style a page on the canvas — Plexo turns it into real React code in your app and adds it to your site. SOL and Code mode can keep working on everything else.
+      <div style={{ position: "absolute", inset: 0, overflow: "auto", padding: "1.5rem" }}>
+        <div className="design-empty-grid" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 360px", gap: 24, alignItems: "start" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+              <span style={{ width: 40, height: 40, flexShrink: 0, borderRadius: 11, display: "grid", placeItems: "center", background: "rgba(139,92,246,0.15)" }}>
+                <Palette size={20} color={C.brand} />
+              </span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Design a page visually</div>
+                <div style={{ fontSize: "0.82rem", color: C.muted, marginTop: 4, maxWidth: 640 }}>
+                  Lay a page out on the canvas and Plexo turns it into real React code in your app. Start with a page name and address — you can change both later.
+                </div>
+              </div>
+            </div>
+            {problem && <Notice tone="danger">{problem}</Notice>}
+            <div style={{ padding: "1.1rem", borderRadius: 14, border: `1px solid ${C.border}`, background: C.panel }}>{newPageForm}</div>
           </div>
-          {problem && <Notice tone="danger">{problem}</Notice>}
-          {creating ? newPageForm : (
-            <Button variant="primary" onClick={() => setCreating({ name: "Landing page", route: "/landing-page", busy: false })}>
-              <Plus size={14} /> Design a page
-            </Button>
-          )}
+          <aside style={{ padding: "1.1rem", borderRadius: 14, border: `1px solid ${C.border}`, background: C.panel, display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.faint }}>How designs work</div>
+            {howItWorks.map(({ icon: Icon, title, body }) => (
+              <div key={title} style={{ display: "flex", gap: 12 }}>
+                <Icon size={17} color={C.brand} style={{ flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <div style={{ fontSize: "0.84rem", fontWeight: 650 }}>{title}</div>
+                  <div style={{ fontSize: "0.77rem", color: C.muted, lineHeight: 1.45 }}>{body}</div>
+                </div>
+              </div>
+            ))}
+          </aside>
         </div>
-      </Centered>
+        <style>{`@media (max-width: 1000px) { .design-empty-grid { grid-template-columns: minmax(0, 1fr) !important; } }`}</style>
+      </div>
     );
   }
 
@@ -351,7 +380,7 @@ export function DesignPane(props: {
               <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
                 <span style={{ flex: 1, minWidth: 220 }}>Your App.tsx was changed, so Plexo couldn't add this page's address ({current.route}) automatically.</span>
                 <Button size="sm" onClick={() => props.onAskSol(`Show my designed pages in the app: render the routes exported as designRoutes from src/plexo-canvas/routes.tsx inside <Routes> in src/App.tsx (before the catch-all route), then rebuild.`)}>
-                  <Sparkles size={13} /> Ask SOL to add it
+                  <MessageSquare size={13} /> Ask SOL to add it
                 </Button>
               </span>
             </Notice>
