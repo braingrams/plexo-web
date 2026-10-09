@@ -1,3 +1,4 @@
+import { lockedTierFor } from "@/lib/ai/solEngine";
 import { notFound, redirect } from "next/navigation";
 import type { TemplateJSON } from "@charisol/plexo-sdk";
 
@@ -67,6 +68,8 @@ export default async function TemplateEditorPage(props: {
     User.get({ id: session.user.id }).go(),
     resolveActiveApiKeyForUser(session.user.id),
   ]);
+  // Free accounts on Plexo's AI run on Basic everywhere (lib/ai/solEngine.ts) — show that.
+  const basicLock = !!(await lockedTierFor(session.user.id));
 
   // Commerce (and Site Layout) are scoped per SITE (the root Template — parentId null),
   // not per page, so a sub-page's editor needs to walk up to the root to know whether to
@@ -91,7 +94,7 @@ export default async function TemplateEditorPage(props: {
         subscriptionPlan={user?.subscriptionPlan ?? "FREE"}
         useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}
         aiProvider={activeApiKey?.aiProvider ?? "openai"}
-        aiTier={activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}
+        aiTier={basicLock ? "BASIC" : activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}
         previewBaseHref={await migratedPreviewBase(template)}
       />
     );
@@ -121,7 +124,7 @@ export default async function TemplateEditorPage(props: {
       subscriptionPlan={user?.subscriptionPlan ?? "FREE"}
       useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}
       aiProvider={activeApiKey?.aiProvider ?? "openai"}
-      aiTier={activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}
+      aiTier={basicLock ? "BASIC" : activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}
       unsplashKey={unsplashKey}
       pexelsKey={pexelsKey}
       pixabayKey={pixabayKey}

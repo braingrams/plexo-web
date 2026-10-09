@@ -4,7 +4,7 @@ import { classifyPromptComplexity } from "@/lib/ai/complexity";
 import { decryptSecret } from "@/lib/crypto";
 import { GenerationStoppedError, generateBuilderAction } from "@/lib/ai/generate";
 import { authorizeHostManagedAction, newRequestId, settleHostManagedAction } from "@/lib/ai/hostAuthorization";
-import { resolveSystemProvider } from "@/lib/ai/systemProvider";
+import { SOL_NOT_ENOUGH_CREDITS, SOL_UNAVAILABLE, checkCanAfford, routeForKey, tierFor } from "@/lib/ai/solEngine";
 import type { AiActionMode, AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { chargeUsage, ensureCreditPeriod, estimateWorstCaseCost } from "@/lib/db/ledgerOperations";
 import { resolveActiveApiKeyForUser } from "@/lib/ai/resolveUserAiKey";
@@ -15,11 +15,13 @@ import { ApiKey, User } from "@/lib/db/coreEntities";
 // can afford it, the generation itself, and paying for it. Shared by the buffered route
 // (app/api/v1/ai/generate) and the streaming one (lambda/sol-chat → /api/v1/ai/stream/generate),
 // so both behave identically; the streaming one also reports progress as the page is written.
+// Which AI runs, on which tier, and how it's paid for follow SOL's rules (lib/ai/solEngine.ts),
+// the same as every other AI feature; only host-managed SDK access is handled here.
 
 const VALID_MODES = new Set<AiActionMode>(["edit_element", "edit_layout", "generate_layout", "edit_raw_html", "generate_raw_html", "generate_blog_post"]);
 const VALID_TIERS = new Set(["AUTO", "BASIC", "MEDIUM", "HIGH"]);
 
-export const NOT_ENOUGH_CREDITS = "You don't have enough AI credits for this. Top up in Settings → Subscription, or add your own AI provider key in Settings → AI.";
+export const NOT_ENOUGH_CREDITS = SOL_NOT_ENOUGH_CREDITS;
 
 export interface ResolvedAiKey {
   id: string;
@@ -29,13 +31,14 @@ export interface ResolvedAiKey {
   aiProvider: string;
   aiTier: string;
   aiApiKey: string | null;
-  aiAccessMode: "SYSTEM" | "BYOK" | "HOST_MANAGED";
+  /** null: saved before the access-mode choice existed (treated as "own key" if one is saved). */
+  aiAccessMode: "SYSTEM" | "BYOK" | "HOST_MANAGED" | null;
   hostAuthWebhookUrl: string | null;
   hostWebhookSecret: string | null;
   subscriptionPlan: string;
 }
 
-export const PLEXO_AI_UNAVAILABLE = "Plexo's AI isn't available right now. Add your own AI provider key in Settings → AI to keep going, or try again later.";
+export const PLEXO_AI_UNAVAILABLE = SOL_UNAVAILABLE;
 const BAD_API_KEY = "That API key isn't valid or has been turned off. Check it in Settings → API keys.";
 
 export type Refusal = { status: number; error: string };
@@ -50,7 +53,7 @@ function toResolvedAiKey(item: NonNullable<ApiKeyItem>, subscriptionPlan: string
     aiProvider: item.aiProvider ?? "openai",
     aiTier: item.aiTier ?? "AUTO",
     aiApiKey: item.aiApiKey ?? null,
-    aiAccessMode: item.aiAccessMode ?? "SYSTEM",
+    aiAccessMode: item.aiAccessMode ?? null,
     hostAuthWebhookUrl: item.hostAuthWebhookUrl ?? null,
     hostWebhookSecret: item.hostWebhookSecret ?? null,
     subscriptionPlan,
@@ -169,44 +172,25 @@ export async function planGeneration(key: ResolvedAiKey, input: GenerateInput): 
     return { plan: { provider: key.aiProvider as AiProvider, providerApiKey, isSystemAi: false, isHostManaged: true, hostRequestId } };
   }
 
-  if (key.aiApiKey) {
-    // BYOK — the account's own key and bill; no Plexo credits involved.
-    try {
-      return { plan: { provider: key.aiProvider as AiProvider, providerApiKey: decryptSecret(key.aiApiKey), isSystemAi: false, isHostManaged: false, hostRequestId: null } };
-    } catch {
-      return { error: "Stored AI key could not be decrypted. Please re-enter it in Settings.", status: 500 };
-    }
-  }
-
-  // System AI — paid for out of the account's credit balance.
-  let systemProvider;
-  try {
-    systemProvider = resolveSystemProvider();
-  } catch (err) {
-    // The detail is for us (logs), not the site owner.
-    console.error("[ai] Plexo's own AI isn't set up on this deployment:", err instanceof Error ? err.message : err);
-    return { error: PLEXO_AI_UNAVAILABLE, status: 503 };
-  }
-  const plan: GenerationPlan = { provider: systemProvider.provider, providerApiKey: systemProvider.apiKey, isSystemAi: true, isHostManaged: false, hostRequestId: null };
-  const balance = await ensureCreditPeriod(key.userId);
-  if (balance.total < estimateWorstCaseCost(plan.provider, input.concreteTier, input.mode, approxInputChars(input))) {
-    return { error: NOT_ENOUGH_CREDITS, status: 402 };
-  }
-  return { plan };
+  // Everything else follows SOL's rules: the account's Settings → AI choice decides whose AI
+  // runs; Free accounts on Plexo's AI run on Basic; Plexo's AI must be affordable up front.
+  const route = routeForKey(key);
+  if ("error" in route) return route;
+  input.concreteTier = tierFor(route, key.subscriptionPlan, input.concreteTier);
+  const plan: GenerationPlan = { provider: route.provider, providerApiKey: route.apiKey, isSystemAi: route.paidBy === "plexo", isHostManaged: false, hostRequestId: null };
+  const refusal = await checkCanAfford(key.userId, route, input.concreteTier, input.mode, approxInputChars(input));
+  return refusal ?? { plan };
 }
 
 /** What this request would cost at most, and whether the account can cover it — for showing before anyone clicks. */
 export async function creditCheck(key: ResolvedAiKey, input: GenerateInput): Promise<{ paidBy: "plexo" | "own-key" | "host"; enough: boolean; estimatedCredits: number | null; balance: number | null; message?: string }> {
   if (key.aiAccessMode === "HOST_MANAGED") return { paidBy: "host", enough: true, estimatedCredits: null, balance: null };
-  if (key.aiApiKey) return { paidBy: "own-key", enough: true, estimatedCredits: null, balance: null };
-  let provider: AiProvider;
-  try {
-    provider = resolveSystemProvider().provider;
-  } catch {
-    return { paidBy: "plexo", enough: false, estimatedCredits: null, balance: null, message: PLEXO_AI_UNAVAILABLE };
-  }
+  const route = routeForKey(key);
+  if ("error" in route) return { paidBy: "plexo", enough: false, estimatedCredits: null, balance: null, message: route.error };
+  if (route.paidBy === "own-key") return { paidBy: "own-key", enough: true, estimatedCredits: null, balance: null };
+  const tier = tierFor(route, key.subscriptionPlan, input.concreteTier);
   const balance = await ensureCreditPeriod(key.userId);
-  const estimatedCredits = estimateWorstCaseCost(provider, input.concreteTier, input.mode, approxInputChars(input));
+  const estimatedCredits = estimateWorstCaseCost(route.provider, tier, input.mode, approxInputChars(input));
   const enough = balance.total >= estimatedCredits;
   return { paidBy: "plexo", enough, estimatedCredits, balance: balance.total, ...(enough ? {} : { message: NOT_ENOUGH_CREDITS }) };
 }
@@ -224,7 +208,8 @@ export async function runGeneration(
 ): Promise<{ summary: string; result: unknown }> {
   const outcome = await generateBuilderAction({
     provider: plan.provider,
-    tier: input.tier,
+    // The tier decided in planGeneration (incl. Free → Basic), not "AUTO" re-picked here.
+    tier: input.concreteTier,
     apiKey: plan.providerApiKey,
     mode: input.mode,
     prompt: input.prompt,

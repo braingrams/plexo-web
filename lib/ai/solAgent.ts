@@ -106,6 +106,9 @@ export interface AgentTurnDeps {
   /** The new user message's key once it's saved (e.g. to add its images' descriptions). */
   onUserMessageSaved?: (key: { id: string; createdAt: string }) => void;
   budgetGuard: () => Promise<boolean>;
+  /** Longest answer per round (output tokens) — shorter for Free accounts on Plexo's AI
+   *  (lib/ai/solEngine.ts maxAnswerTokensFor). Defaults to MAX_TOKENS.agent_chat. */
+  maxOutputTokens?: number;
 }
 
 export interface RunAgentTurnResult {
@@ -150,6 +153,9 @@ export interface ResumeAgentTurnDeps {
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   budgetGuard: () => Promise<boolean>;
+  /** Longest answer per round (output tokens) — shorter for Free accounts on Plexo's AI
+   *  (lib/ai/solEngine.ts maxAnswerTokensFor). Defaults to MAX_TOKENS.agent_chat. */
+  maxOutputTokens?: number;
 }
 
 /** Loads a conversation's most recent messages, oldest first (chronological). */
@@ -310,6 +316,9 @@ interface LoopContext {
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   budgetGuard: () => Promise<boolean>;
+  /** Longest answer per round (output tokens) — shorter for Free accounts on Plexo's AI
+   *  (lib/ai/solEngine.ts maxAnswerTokensFor). Defaults to MAX_TOKENS.agent_chat. */
+  maxOutputTokens?: number;
 }
 
 /**
@@ -343,7 +352,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       systemPrompt,
       conversationHistory: await resolveAttachments(pairToolCalls(ctx.history)),
       tools,
-      maxTokens: MAX_TOKENS.agent_chat,
+      maxTokens: ctx.maxOutputTokens ?? MAX_TOKENS.agent_chat,
       onTextDelta: ctx.onTextDelta,
       onToolInputProgress: ctx.onToolCallPreparing,
     });
@@ -488,6 +497,7 @@ export async function runAgentTurn(deps: AgentTurnDeps): Promise<RunAgentTurnRes
     onToolCallAwaitingConfirmation: deps.onToolCallAwaitingConfirmation,
     onToolCallResult: deps.onToolCallResult,
     budgetGuard: deps.budgetGuard,
+    maxOutputTokens: deps.maxOutputTokens,
   });
 }
 
@@ -615,5 +625,6 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     onToolCallAwaitingConfirmation: deps.onToolCallAwaitingConfirmation,
     onToolCallResult: deps.onToolCallResult,
     budgetGuard: deps.budgetGuard,
+    maxOutputTokens: deps.maxOutputTokens,
   });
 }
