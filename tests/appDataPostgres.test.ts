@@ -72,6 +72,18 @@ describe("provisioning", () => {
     await expect(provision(dbA)).resolves.toBeUndefined();
   });
 
+  // On Aurora every app login is in rds_iam, and any role that inherits rds_iam must sign in
+  // with IAM — so if plexo_admin inherited an app role, its password (which the Data API uses)
+  // would stop working cluster-wide. Provisioning runs as plexo_admin here, as it does there.
+  it("never lets the admin inherit an app's roles", async () => {
+    const { rows } = await pgt.superQuery(`
+      SELECT r.rolname, m.inherit_option FROM pg_auth_members m
+      JOIN pg_roles r ON r.oid = m.roleid JOIN pg_roles u ON u.oid = m.member
+      WHERE u.rolname = 'plexo_admin' AND r.rolname LIKE 'a\\_%'`);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.filter((row) => row.inherit_option)).toEqual([]);
+  });
+
   it("installs the plexo schema with the helper functions", async () => {
     const [r] = await ok({ database: dbA, login: "owner", statements: [{ sql: "SELECT plexo.uid() AS uid, to_regclass('plexo.users') IS NOT NULL AS users" }] });
     expect(r.rows[0]).toEqual({ uid: null, users: true });

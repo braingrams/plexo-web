@@ -1019,6 +1019,16 @@ export class ComputeStack extends cdk.Stack {
           cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
           responseHeadersPolicy: securityHeadersPolicy,
         },
+        // The app editor's self-hosted code editor (scripts/copy-monaco.mjs). Versioned paths,
+        // so the immutable cache DeployAssets stamps on them is safe. Without this behavior the
+        // requests fell through to the server function, which doesn't carry public/ — 404s,
+        // and Code mode sat on "Loading editor…".
+        "monaco/*": {
+          origin: origins.S3BucketOrigin.withOriginAccessControl(assetsBucket, { originPath: "/_assets" }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          responseHeadersPolicy: securityHeadersPolicy,
+        },
         "uploads/*": {
           origin: origins.S3BucketOrigin.withOriginAccessControl(assetsBucket, { originPath: "/_assets" }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
