@@ -3,87 +3,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { estimateMigrationSeconds, formatDuration } from "@/lib/wpMigration/estimate";
 
-// "Move from WordPress": the whole owner-facing flow in one screen — find the site,
-// show exactly what will move (and what happens to each plugin) before anything is
-// created, run the migration with live progress, then hand over a report that says in
-// plain language whether it's safe to switch the domain and delete WordPress.
+import { CheckStep, FindSiteStep, GoLiveStep, MovingStep, PluginList, ReviewStep } from "./wizard/steps";
+import { Stepper, type WizardStep } from "./wizard/ui";
+import type { DomainRow, ExistingMigration, JobStatus, Preview, Report } from "./wizard/types";
 
-const hairline = "rgba(255,255,255,0.09)";
-const PAGES_DOMAIN = process.env.NEXT_PUBLIC_PAGES_DOMAIN || "plexopages.com";
+// "Move from WordPress", as a guided wizard (./wizard): find the site → review what will
+// move → watch it move → check the new site → go live. One thing per screen, one obvious
+// button, the details tucked away until someone asks for them. This file owns the data —
+// checking the site, starting the move, watching it, publishing a preview — and the two
+// working panels (bringing over private data, switching the domain); ./wizard/steps.tsx
+// draws each screen.
 
-type Outcome = "NATIVE" | "PRESERVED" | "NEEDS_ATTENTION" | "NOT_NEEDED";
-interface Plugin { slug: string; name: string; outcome: Outcome; explanation: string }
-interface Preview {
-  siteName: string;
-  siteDescription: string;
-  origin: string;
-  homeUrl: string;
-  inSubdirectory: boolean;
-  staticPages: string[];
-  counts: { pages: number; posts: number; media: number; categories: number; tags: number };
-  theme: { slug: string; parentSlug: string | null } | null;
-  plugins: Plugin[];
-}
-interface Counts { pages: number; pagesDone: number; pagesFailed: number; posts: number; postsDone: number; postsFailed: number; assets: number; assetsDone: number; assetsFailed: number; assetsSkipped: number; products?: number; productsDone?: number; productsSkipped?: number; productsFailed?: number }
-interface ChecklistItem { id: string; label: string; status: "done" | "blocked" | "review" | "todo"; detail: string }
-interface PageRow { key: string; kind: string; title: string; sourceUrl: string; newPath: string | null; status: string; error: string | null; seo: Record<string, boolean> | null }
-interface Report {
-  source: { origin: string; homeUrl: string; siteName: string };
-  summary: { pagesCopied: number; pagesFailed: number; postsCopied: number; postsFailed: number; filesCopied: number; filesFailed: number; filesAlreadyMissing: number; bytesCopied: number; formsReconnected: number; productsMoved?: number };
-  seo: { pagesChecked: number; titles: number; descriptions: number; canonicals: number; structuredData: number; robots: number };
-  pages: PageRow[];
-  forms: { page: string; name: string; fields: string[] }[];
-  brokenLinks: { from: string; href: string; reason: string }[];
-  failedFiles: { path: string; reason: string }[];
-  missingOnSource: { path: string; from: string | null }[];
-  plugins: Plugin[];
-  checklist: ChecklistItem[];
-  readyForCutover: boolean;
-}
+const hairline = "var(--surface-border)";
+
 /** How often the screen checks on a running migration. */
 const WATCH_EVERY_MS = 4000;
 /** A step takes under a minute; no sign of the server for longer than this means its chain broke. */
 const QUIET_RESTART_MS = 90_000;
-
-interface JobStatus {
-  id: string;
-  templateId: string;
-  sourceUrl: string;
-  phase: string;
-  pausedIn?: string | null;
-  lastHeartbeatAt?: string | null;
-  counts: Counts | null;
-  /** Server's estimate of the time left; null while the site's size is still being read. */
-  estimatedSecondsLeft?: number | null;
-  report: Report | null;
-  errors: string[];
-  install?: { siteName?: string; origin?: string };
-}
-interface DomainRow { domain: string; type: "SUBDOMAIN" | "CUSTOM"; active: boolean; dnsVerified: boolean }
-
-const OUTCOME_GROUPS: { outcome: Outcome; title: string; tone: string }[] = [
-  { outcome: "NEEDS_ATTENTION", title: "Needs your attention", tone: "#f5b74a" },
-  { outcome: "NATIVE", title: "Replaced by Plexo", tone: "#6ee7a8" },
-  { outcome: "PRESERVED", title: "Carried over, works the same", tone: "#8fb4ff" },
-  { outcome: "NOT_NEEDED", title: "Not needed on Plexo", tone: "rgba(240,242,255,0.45)" },
-];
-
-const PHASE_STEPS: { phase: string; label: string }[] = [
-  { phase: "PLANNING", label: "Reading your WordPress site" },
-  { phase: "POSTS", label: "Moving blog posts" },
-  { phase: "PRODUCTS", label: "Moving your shop's products" },
-  { phase: "PAGES", label: "Copying pages and your theme" },
-  { phase: "ASSETS", label: "Copying images, fonts and files" },
-  { phase: "FINALIZING", label: "Checking every link and SEO tag" },
-];
-
-function phaseIndex(phase: string): number {
-  if (phase === "PENDING") return 0;
-  if (phase === "COMPLETED") return PHASE_STEPS.length;
-  return Math.max(0, PHASE_STEPS.findIndex((p) => p.phase === phase));
-}
 
 function slugify(input: string): string {
   return input.toLowerCase().replace(/^https?:\/\//, "").replace(/\.[a-z]+$/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
@@ -93,26 +30,38 @@ function mb(bytes: number): string {
   return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-const card: React.CSSProperties = { borderRadius: 12, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.02)", padding: "18px 20px" };
-const muted: React.CSSProperties = { fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.6, margin: 0 };
+const card: React.CSSProperties = { borderRadius: 16, border: `1px solid ${hairline}`, background: "var(--surface)", padding: 24, boxShadow: "var(--shadow-card)" };
+const muted: React.CSSProperties = { fontSize: "13.5px", color: "var(--text-muted)", lineHeight: 1.6, margin: 0 };
 const inputStyle: React.CSSProperties = {
-  flex: 1, minWidth: 0, background: "rgba(255,255,255,0.04)", border: `1px solid ${hairline}`, borderRadius: 9,
-  color: "var(--text-main)", padding: "10px 12px", fontSize: "13.5px", outline: "none", fontFamily: "inherit",
+  flex: 1, minWidth: 0, background: "rgba(var(--brand-rgb),0.03)", border: `1px solid ${hairline}`, borderRadius: 12,
+  color: "var(--text-main)", padding: "11px 14px", fontSize: "14px", outline: "none", fontFamily: "inherit",
 };
 
 function primaryButton(enabled: boolean): React.CSSProperties {
   return {
-    fontSize: "13px", fontWeight: 650, color: "var(--bg)", background: enabled ? "var(--text-main)" : "var(--text-faint)",
-    padding: "10px 18px", borderRadius: 9, border: "none", cursor: enabled ? "pointer" : "not-allowed", whiteSpace: "nowrap", fontFamily: "inherit",
+    fontSize: "14px", fontWeight: 650, color: "#fff", background: enabled ? "linear-gradient(135deg, var(--brand), var(--brand-deeper))" : "var(--text-faint)",
+    padding: "11px 20px", borderRadius: 12, border: "none", cursor: enabled ? "pointer" : "not-allowed", whiteSpace: "nowrap", fontFamily: "inherit",
+    boxShadow: enabled ? "0 6px 18px rgba(var(--brand-rgb),0.25)" : "none", opacity: enabled ? 1 : 0.6,
   };
 }
 const secondaryButton: React.CSSProperties = {
-  fontSize: "12.5px", fontWeight: 650, color: "var(--text-main)", background: "transparent", padding: "9px 16px",
-  borderRadius: 9, border: `1px solid ${hairline}`, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit", textDecoration: "none", display: "inline-block",
+  fontSize: "13.5px", fontWeight: 600, color: "var(--text-main)", background: "transparent", padding: "10px 16px",
+  borderRadius: 12, border: `1px solid ${hairline}`, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit", textDecoration: "none", display: "inline-block",
 };
 
-function StatusDot({ status }: { status: ChecklistItem["status"] }) {
-  const map = { done: ["#6ee7a8", "✓"], blocked: ["#f87171", "!"], review: ["#f5b74a", "?"], todo: ["rgba(240,242,255,0.35)", "○"] } as const;
+type CheckStatus = "done" | "blocked" | "review" | "todo";
+/** A numbered heading for each of the domain switch's three steps. */
+function NumberedTitle({ n, children }: { n: number; children: React.ReactNode }) {
+  return (
+    <p style={{ margin: 0, display: "flex", alignItems: "center", gap: 10, fontSize: "15px", fontWeight: 700, color: "var(--text-main)" }}>
+      <span style={{ width: 26, height: 26, borderRadius: 999, display: "grid", placeItems: "center", fontSize: 13, background: "rgba(var(--brand-rgb),0.12)", color: "var(--brand)", flexShrink: 0 }}>{n}</span>
+      {children}
+    </p>
+  );
+}
+
+function StatusDot({ status }: { status: CheckStatus }) {
+  const map = { done: ["#34d399", "✓"], blocked: ["#f87171", "!"], review: ["#f5b74a", "?"], todo: ["var(--text-faint)", "○"] } as const;
   const [color, glyph] = map[status];
   return (
     <span style={{ width: 22, height: 22, borderRadius: 999, border: `1.5px solid ${color}`, color, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
@@ -120,42 +69,6 @@ function StatusDot({ status }: { status: ChecklistItem["status"] }) {
     </span>
   );
 }
-
-function Stat({ value, label }: { value: string | number; label: string }) {
-  return (
-    <div style={{ ...card, padding: "14px 16px", flex: "1 1 140px" }}>
-      <div style={{ fontSize: "22px", fontWeight: 750, letterSpacing: "-0.02em" }}>{value}</div>
-      <div style={{ fontSize: "11.5px", color: "var(--text-muted)", marginTop: 2 }}>{label}</div>
-    </div>
-  );
-}
-
-function PluginGroups({ plugins }: { plugins: Plugin[] }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {OUTCOME_GROUPS.map((g) => {
-        const list = plugins.filter((p) => p.outcome === g.outcome);
-        if (list.length === 0) return null;
-        return (
-          <div key={g.outcome}>
-            <div style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: g.tone, marginBottom: 8 }}>
-              {g.title} · {list.length}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {list.map((p) => (
-                <div key={p.slug} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
-                  <span style={{ fontSize: "12.5px", fontWeight: 650, minWidth: 170, flexShrink: 0 }}>{p.name}</span>
-                  <span style={{ ...muted, fontSize: "12px" }}>{p.explanation}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 
 interface ConnectorView {
   status: "WAITING" | "CONNECTED" | "ERROR";
@@ -280,10 +193,9 @@ function PrivateDataCard({ templateId, jobId }: { templateId: string; jobId: str
   const done = extras?.stage === "done";
 
   return (
-    <div style={card}>
-      <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: 700 }}>Copy what WordPress keeps private</h3>
-      <p style={{ ...muted, fontSize: "12px", marginBottom: 12 }}>
-        Everything visitors see is already on Plexo. A small, read-only WordPress plugin lets Plexo also copy what only lives in your WordPress database:
+    <div>
+      <p style={{ ...muted, marginBottom: 14 }}>
+        Everything visitors see is already on Plexo. A small, read-only WordPress plugin lets Plexo also copy what only lives inside WordPress:
         past form entries and applications, donation history, drafts, redirect rules and your team. It never changes your WordPress site.
       </p>
 
@@ -294,14 +206,14 @@ function PrivateDataCard({ templateId, jobId }: { templateId: string; jobId: str
       )}
 
       {connector && connector.status !== "CONNECTED" && (
-        <ol style={{ ...muted, fontSize: "12.5px", paddingLeft: 18, display: "flex", flexDirection: "column", gap: 10, margin: 0 }}>
+        <ol style={{ ...muted, fontSize: "13.5px", paddingLeft: 18, display: "flex", flexDirection: "column", gap: 10, margin: 0 }}>
           <li>
             <a href="/api/v1/wp-migration/plugin" style={{ color: "var(--brand)", fontWeight: 650 }}>Download the Plexo Migrator plugin</a>, then in WordPress go to <strong>Plugins → Add New → Upload Plugin</strong>, upload it and click <strong>Activate</strong>.
           </li>
           <li>
             In WordPress go to <strong>Tools → Plexo Migrator</strong> and paste this code:
             <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
-              <code style={{ ...inputStyle, flex: "1 1 260px", fontSize: "12px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{connector.code}</code>
+              <code style={{ ...inputStyle, flex: "1 1 260px", fontSize: "13px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{connector.code}</code>
               <button type="button" style={secondaryButton} onClick={() => { void navigator.clipboard.writeText(connector.code ?? ""); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
                 {copied ? "Copied ✓" : "Copy"}
               </button>
@@ -374,7 +286,7 @@ function PrivateDataCard({ templateId, jobId }: { templateId: string; jobId: str
               <p style={{ ...muted, marginBottom: 6 }}>
                 These match many addresses at once (wildcards or patterns). Plexo redirects exact addresses, so add the ones you still need in your site&rsquo;s Redirects settings — every exact rule was copied already.
               </p>
-              <ul style={{ ...muted, margin: 0, paddingLeft: 18, fontSize: "11.5px" }}>
+              <ul style={{ ...muted, margin: 0, paddingLeft: 18, fontSize: "13.5px" }}>
                 {extras.redirectPatterns.map((r) => (
                   <li key={`${r.from}→${r.to}`}><code>{r.from}</code> → <code>{r.to}</code> <span style={{ opacity: 0.7 }}>({r.plugin}, {r.kind})</span></li>
                 ))}
@@ -386,22 +298,22 @@ function PrivateDataCard({ templateId, jobId }: { templateId: string; jobId: str
               <p style={{ ...muted, fontWeight: 650, color: "#f0f2ff", marginBottom: 6 }}>Invite your team to Plexo</p>
               {extras.team.map((t) => (
                 <div key={t.email} style={{ display: "flex", gap: 10, alignItems: "center", padding: "6px 0", borderTop: `1px solid ${hairline}`, flexWrap: "wrap" }}>
-                  <span style={{ flex: "1 1 220px", fontSize: "12.5px" }}>{t.name} <span style={muted}>{t.email}</span></span>
-                  <span style={{ ...muted, fontSize: "11.5px", minWidth: 120 }}>{plexoRoleFor(t.roles) === "editor" ? "Editor (this site)" : plexoRoleFor(t.roles) === "admin" ? "Admin" : "Blogger"}</span>
+                  <span style={{ flex: "1 1 220px", fontSize: "13.5px" }}>{t.name} <span style={muted}>{t.email}</span></span>
+                  <span style={{ ...muted, fontSize: "13.5px", minWidth: 120 }}>{plexoRoleFor(t.roles) === "editor" ? "Editor (this site)" : plexoRoleFor(t.roles) === "admin" ? "Admin" : "Blogger"}</span>
                   {invited[t.email] === "sent" ? (
-                    <span style={{ fontSize: "12px", color: "#6ee7a8", fontWeight: 650 }}>Invited ✓</span>
+                    <span style={{ fontSize: "13px", color: "#6ee7a8", fontWeight: 650 }}>Invited ✓</span>
                   ) : (
                     <button type="button" style={{ ...secondaryButton, padding: "5px 12px" }} disabled={invited[t.email] === "sending"} onClick={() => void invite(t)}>
                       {invited[t.email] === "sending" ? "Sending…" : "Invite"}
                     </button>
                   )}
-                  {invited[t.email] && !["sent", "sending"].includes(invited[t.email]) && <span style={{ ...muted, color: "#f87171", fontSize: "11.5px" }}>{invited[t.email]}</span>}
+                  {invited[t.email] && !["sent", "sending"].includes(invited[t.email]) && <span style={{ ...muted, color: "#f87171", fontSize: "13.5px" }}>{invited[t.email]}</span>}
                 </div>
               ))}
             </div>
           )}
           {extras.unmoved.length > 0 && (
-            <p style={{ ...muted, fontSize: "11.5px" }}>
+            <p style={{ ...muted, fontSize: "13.5px" }}>
               Left on WordPress (plugin settings and internal data, not visitor submissions): {extras.unmoved.map((u) => `${u.table} (${u.rows})`).join(", ")}.
             </p>
           )}
@@ -437,7 +349,7 @@ interface CutoverView {
 function RecordTable({ records }: { records: CutoverRecord[] }) {
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
         <thead>
           <tr style={{ textAlign: "left", color: "var(--text-muted)" }}>
             <th style={{ padding: "4px 8px 4px 0" }}>Type</th><th style={{ padding: "4px 8px" }}>Name</th><th style={{ padding: "4px 8px" }}>Value</th><th style={{ padding: "4px 0 4px 8px" }}>What it does</th>
@@ -518,24 +430,19 @@ function CutoverPanel({ templateId, jobId }: { templateId: string; jobId: string
   const v = view.verification;
 
   return (
-    <div style={{ ...card, display: "flex", flexDirection: "column", gap: 16 }}>
-      <div>
-        <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: 700 }}>Switch {plan.domain} to Plexo</h3>
-        <p style={{ ...muted, fontSize: "12px" }}>
-          Your WordPress site keeps serving visitors the whole time — the moment DNS switches, visitors start getting the Plexo copy at exactly the same addresses.
-        </p>
-      </div>
+    <div style={{ ...card, display: "flex", flexDirection: "column", gap: 20 }}>
 
       {plan.warnings.map((w) => (
         <div key={w} style={{ padding: "10px 12px", borderRadius: 9, border: `1px solid ${/stop|deleted|shut/i.test(w) ? "rgba(245,183,74,0.45)" : hairline}`, background: /stop|deleted|shut/i.test(w) ? "rgba(245,183,74,0.07)" : "transparent" }}>
-          <p style={{ ...muted, color: "var(--text-main)", fontSize: "12.5px" }}>{w}</p>
+          <p style={{ ...muted, color: "var(--text-main)", fontSize: "13.5px" }}>{w}</p>
         </div>
       ))}
 
       <div>
-        <p style={{ margin: "0 0 6px", fontSize: "13px", fontWeight: 700 }}>1. Connect your domain in Plexo</p>
+        <NumberedTitle n={1}>Tell Plexo about your domain</NumberedTitle>
+        <div style={{ height: 8 }} />
         {bothConnected ? (
-          <p style={{ ...muted, fontSize: "12px" }}>{view.connected.map((c) => `${c.domain} — ${c.ready ? "certificate ready" : "waiting for DNS"}`).join(" · ")}</p>
+          <p style={{ ...muted, fontSize: "13px" }}>{view.connected.map((c) => `${c.domain} — ${c.ready ? "certificate ready" : "waiting for DNS"}`).join(" · ")}</p>
         ) : (
           <button type="button" style={primaryButton(busy !== "connect")} disabled={busy === "connect"} onClick={() => void connect()}>
             {busy === "connect" ? "Connecting…" : `Connect ${plan.domain} and ${plan.wwwDomain}`}
@@ -545,14 +452,14 @@ function CutoverPanel({ templateId, jobId }: { templateId: string; jobId: string
 
       {bothConnected && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <p style={{ margin: 0, fontSize: "13px", fontWeight: 700 }}>2. Update your DNS {plan.dnsHost.name !== "unknown" ? `(currently at ${plan.dnsHost.name})` : ""}</p>
-          <ol style={{ ...muted, fontSize: "12.5px", paddingLeft: 18, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+          <NumberedTitle n={2}>Update your domain&rsquo;s settings{plan.dnsHost.name !== "unknown" ? ` at ${plan.dnsHost.name}` : ""}</NumberedTitle>
+          <ol style={{ ...muted, fontSize: "13.5px", paddingLeft: 18, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
             {plan.steps.map((step) => <li key={step}>{step}</li>)}
           </ol>
           <div>
             <p style={{ ...muted, fontWeight: 650, color: "var(--text-main)", marginBottom: 4 }}>Add these (Plexo)</p>
             <RecordTable records={plan.plexo} />
-            {!plan.plexo.some((r) => /certificate/i.test(r.why)) && <p style={{ ...muted, fontSize: "11.5px", marginTop: 4 }}>The certificate record appears here a few seconds after connecting — refresh if it's missing.</p>}
+            {!plan.plexo.some((r) => /certificate/i.test(r.why)) && <p style={{ ...muted, fontSize: "13.5px", marginTop: 4 }}>The certificate record appears here a few seconds after connecting — refresh if it's missing.</p>}
           </div>
           {plan.keep.length > 0 && (
             <div>
@@ -569,7 +476,7 @@ function CutoverPanel({ templateId, jobId }: { templateId: string; jobId: string
 
       {bothConnected && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <p style={{ margin: 0, fontSize: "13px", fontWeight: 700 }}>3. Check it's live — then you can cancel WordPress</p>
+          <NumberedTitle n={3}>Check it&rsquo;s live — then you can cancel WordPress</NumberedTitle>
           <div>
             <button type="button" style={primaryButton(busy !== "verify")} disabled={busy === "verify"} onClick={() => void verify()}>
               {busy === "verify" ? "Checking every page on your domain…" : "Check my domain"}
@@ -581,8 +488,8 @@ function CutoverPanel({ templateId, jobId }: { templateId: string; jobId: string
                 <div key={c.id} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                   <StatusDot status={c.status} />
                   <div>
-                    <div style={{ fontSize: "12.5px", fontWeight: 650 }}>{c.label}</div>
-                    <p style={{ ...muted, fontSize: "12px" }}>{c.detail}</p>
+                    <div style={{ fontSize: "13.5px", fontWeight: 650 }}>{c.label}</div>
+                    <p style={{ ...muted, fontSize: "13px" }}>{c.detail}</p>
                   </div>
                 </div>
               ))}
@@ -590,7 +497,7 @@ function CutoverPanel({ templateId, jobId }: { templateId: string; jobId: string
                 <p style={{ margin: 0, fontSize: "13px", fontWeight: 700 }}>
                   {v.safeToCancelWordPress ? "It's safe to cancel your WordPress hosting." : "Not yet — keep WordPress running for now."}
                 </p>
-                <p style={{ ...muted, fontSize: "12px", marginTop: 4 }}>
+                <p style={{ ...muted, fontSize: "13px", marginTop: 4 }}>
                   {v.safeToCancelWordPress
                     ? "Every page is served by Plexo on your domain, email is intact and your DNS no longer depends on the old host. Keep a backup of your WordPress files if your host offers one, then cancel."
                     : "Finish the items above and check again. Nothing is lost by waiting — visitors are being served the whole time."}
@@ -619,11 +526,12 @@ export function WordPressMigrationClient() {
   const [starting, setStarting] = useState(false);
   const [job, setJob] = useState<JobStatus | null>(null);
   const [domains, setDomains] = useState<DomainRow[]>([]);
-  const [existing, setExisting] = useState<{ id: string; templateId: string; siteName: string | null; phase: string } | null>(null);
+  const [existing, setExisting] = useState<ExistingMigration | null>(null);
   const [subdomain, setSubdomain] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
-  const [showAllPages, setShowAllPages] = useState(false);
+  /** After the move: checking the new site, or going live. */
+  const [afterView, setAfterView] = useState<"check" | "live" | null>(null);
   const loopRef = useRef(false);
 
   const jobId = searchParams.get("job");
@@ -695,7 +603,7 @@ export function WordPressMigrationClient() {
     // Picking back up where they left off beats silently starting over.
     void fetch("/api/v1/wp-migration")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { migrations: { id: string; templateId: string; siteName: string | null; phase: string }[] } | null) => {
+      .then((data: { migrations: ExistingMigration[] } | null) => {
         const active = data?.migrations.find((m) => !["COMPLETED", "FAILED", "CANCELLED"].includes(m.phase));
         if (active) setExisting(active);
       })
@@ -749,10 +657,12 @@ export function WordPressMigrationClient() {
         return;
       }
       if (!res.ok) {
-        setError(data.error ?? "Couldn't start the migration — try again.");
+        setError(data.error ?? "Couldn't start the move — try again.");
         return;
       }
       router.push(`/dashboard/migrate/wordpress?site=${data.templateId}&job=${data.jobId}`);
+    } catch {
+      setError("We couldn't reach Plexo — check your connection and try again.");
     } finally {
       setStarting(false);
     }
@@ -770,355 +680,163 @@ export function WordPressMigrationClient() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setPublishError(data.error ?? "Couldn't publish — try a different address.");
+        setPublishError(data.error ?? "That address didn't work — try a different one.");
         return;
       }
       await refresh(job.templateId, job.id);
+    } catch {
+      setPublishError("We couldn't reach Plexo — check your connection and try again.");
     } finally {
       setPublishing(false);
     }
   }
 
-  // ── Running / report ──────────────────────────────────────────────────────────
+  const frame = (step: WizardStep, content: React.ReactNode, reachable?: WizardStep[], onSelect?: (s: WizardStep) => void) => (
+    <div style={{ maxWidth: 780, margin: "0 auto", padding: "8px 0 48px" }}>
+      <Stepper current={step} reachable={reachable} onSelect={onSelect} />
+      {content}
+    </div>
+  );
+
+  // ── A move that's started ────────────────────────────────────────────────────
   if (jobId && siteId) {
-    if (!job) return <p style={muted}>Loading your migration…</p>;
-    const siteName = job.report?.source.siteName || job.install?.siteName || "Your site";
-    const sourceHost = (() => {
-      try {
-        return new URL(job.report?.source.origin || job.install?.origin || job.sourceUrl).host;
-      } catch {
-        return job.sourceUrl;
-      }
-    })();
+    if (!job) return frame(2, <p style={muted}>Loading your move…</p>);
+    const siteName = job.report?.source.siteName || job.install?.siteName || "your site";
 
     if (job.phase !== "COMPLETED" || !job.report) {
-      const c = job.counts;
-      const idx = phaseIndex(job.phase === "PAUSED_ERROR" ? job.pausedIn ?? "PLANNING" : job.phase);
-      const paused = job.phase === "PAUSED_ERROR";
-      const failed = job.phase === "FAILED";
-      return (
-        <div style={{ maxWidth: 720, display: "flex", flexDirection: "column", gap: 20 }}>
-          <div>
-            <h2 style={{ margin: "0 0 4px", fontSize: "18px", fontWeight: 700 }}>Moving {siteName} to Plexo</h2>
-            <p style={muted}>
-              From {sourceHost}. Your WordPress site stays exactly as it is — nothing there is changed.
-            </p>
-            {!paused && !failed && (
-              <p style={{ ...muted, marginTop: 8, color: "var(--text-main)" }}>
-                {typeof job.estimatedSecondsLeft === "number" ? (
-                  <><strong>{capitalize(formatDuration(job.estimatedSecondsLeft))} left.</strong>{" "}</>
-                ) : (
-                  <><strong>Working out how big your site is…</strong>{" "}</>
-                )}
-                You can close this tab — we&rsquo;ll keep going and email you when it&rsquo;s done. The report will be here when you come back.
-              </p>
-            )}
-          </div>
-          <div style={{ ...card, display: "flex", flexDirection: "column", gap: 12 }}>
-            {PHASE_STEPS.map((s, i) => {
-              // The products step only exists for a site with a WooCommerce shop.
-              if (s.phase === "PRODUCTS" && !(c?.products && c.products > 0)) return null;
-              const state = i < idx ? "done" : i === idx && !paused && !failed ? "active" : "todo";
-              let detail = "";
-              if (c && s.phase === "PRODUCTS" && c.products) detail = `${(c.productsDone ?? 0) + (c.productsSkipped ?? 0) + (c.productsFailed ?? 0)} of ${c.products}`;
-              if (c && s.phase === "POSTS" && c.posts > 0) detail = `${c.postsDone} of ${c.posts}`;
-              if (c && s.phase === "PAGES" && c.pages > 0) detail = `${c.pagesDone} of ${c.pages}`;
-              if (c && s.phase === "ASSETS" && c.assets > 0) detail = `${c.assetsDone + c.assetsFailed + c.assetsSkipped} of ${c.assets}`;
-              return (
-                <div key={s.phase} style={{ display: "flex", alignItems: "center", gap: 12, opacity: state === "todo" ? 0.5 : 1 }}>
-                  <span
-                    style={{
-                      width: 20, height: 20, borderRadius: 999, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 800,
-                      background: state === "done" ? "#6ee7a8" : "transparent", color: "#0b0f19",
-                      border: state === "done" ? "none" : `1.5px solid ${state === "active" ? "var(--brand)" : hairline}`,
-                    }}
-                  >
-                    {state === "done" ? "✓" : ""}
-                  </span>
-                  <span style={{ fontSize: "13px", fontWeight: state === "active" ? 700 : 550, flex: 1 }}>{s.label}{state === "active" ? "…" : ""}</span>
-                  {detail && <span style={{ fontSize: "12px", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>{detail}</span>}
-                </div>
-              );
-            })}
-          </div>
-          {(paused || failed) && (
-            <div style={{ ...card, borderColor: "rgba(248,113,113,0.4)" }}>
-              <p style={{ margin: "0 0 6px", fontSize: "13px", fontWeight: 700 }}>{failed ? "This migration stopped" : "The migration paused"}</p>
-              <p style={{ ...muted, marginBottom: 12 }}>
-                {job.errors[job.errors.length - 1] ?? "Something went wrong."} {failed ? "Start a new migration to try again." : "This is usually temporary (your WordPress host was slow or briefly offline) — trying again picks up exactly where it stopped."}
-              </p>
-              {failed ? (
-                <Link href="/dashboard/migrate/wordpress" style={secondaryButton}>Start again</Link>
-              ) : (
-                <button type="button" style={primaryButton(true)} onClick={() => void retry(job.templateId, job.id)}>Try again</button>
-              )}
-            </div>
-          )}
-        </div>
-      );
+      return frame(2, <MovingStep job={job} siteName={siteName} onRetry={() => void retry(job.templateId, job.id)} />);
     }
 
-    const r = job.report;
-    const preview_ = domains.find((d) => d.type === "SUBDOMAIN");
-    const custom = domains.find((d) => d.type === "CUSTOM");
-    const checklist = r.checklist.map((item) => {
-      if (item.id === "publish" && preview_) return { ...item, status: "done" as const, detail: `Live at ${preview_.domain} — click around and compare it with your WordPress site.` };
-      if (item.id === "domain" && custom) {
-        return custom.dnsVerified
-          ? { ...item, status: "done" as const, detail: `${custom.domain} now points to Plexo. Once you've confirmed it shows your Plexo site, you can cancel your WordPress hosting.` }
-          : { ...item, status: "review" as const, detail: `${custom.domain} is connected — finish the DNS step in Domains. Keep WordPress running until it's verified.` };
+    const report = job.report;
+    const previewDomain = domains.find((d) => d.type === "SUBDOMAIN");
+    const host = (() => {
+      try {
+        return new URL(report.source.origin).host.replace(/^www\./, "");
+      } catch {
+        return "your domain";
       }
-      return item;
-    });
-    const blocked = checklist.filter((c) => c.status === "blocked");
-    const pageRows = r.pages.filter((p) => p.kind !== "POST");
-    const shownPages = showAllPages ? r.pages : pageRows.slice(0, 8);
+    })();
+    // Someone who already connected their domain is past checking — open on going live.
+    const view = afterView ?? (domains.some((d) => d.type === "CUSTOM") ? "live" : "check");
+    const go = (s: WizardStep) => setAfterView(s === 4 ? "live" : "check");
 
-    return (
-      <div style={{ maxWidth: 880, display: "flex", flexDirection: "column", gap: 22 }}>
-        <div>
-          <h2 style={{ margin: "0 0 4px", fontSize: "19px", fontWeight: 750 }}>{siteName} is on Plexo</h2>
-          <p style={muted}>
-            Every page, post, image and file from {sourceHost} has been copied, at the same web addresses. Your WordPress site hasn&rsquo;t been touched.
-          </p>
-        </div>
-
-        <div
-          style={{
-            ...card,
-            borderColor: blocked.length ? "rgba(248,113,113,0.35)" : "rgba(110,231,168,0.35)",
-            background: blocked.length ? "rgba(248,113,113,0.05)" : "rgba(110,231,168,0.05)",
-          }}
-        >
-          <p style={{ margin: 0, fontSize: "13.5px", fontWeight: 700 }}>
-            {blocked.length
-              ? `${blocked.length} thing${blocked.length > 1 ? "s" : ""} to finish before you switch your domain`
-              : custom?.dnsVerified
-                ? "All done — your domain is on Plexo"
-                : "Ready to switch your domain"}
-          </p>
-          <p style={{ ...muted, marginTop: 4 }}>
-            {blocked.length
-              ? "Switching now would break the items marked below for your visitors, so finish them first. Everything else is ready."
-              : "Preview the site, then point your domain to Plexo. Keep WordPress running until your domain shows the Plexo site — after that, it's safe to delete."}
-          </p>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {checklist.map((item) => (
-            <div key={item.id} style={{ ...card, display: "flex", gap: 14, padding: "14px 18px" }}>
-              <StatusDot status={item.status} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "13px", fontWeight: 700, marginBottom: 2 }}>{item.label}</div>
-                <p style={{ ...muted, fontSize: "12px" }}>{item.detail}</p>
-                {item.id === "publish" && !preview_ && (
-                  <div style={{ marginTop: 10 }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "1 1 280px" }}>
-                        <input value={subdomain} onChange={(e) => setSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} style={inputStyle} aria-label="Preview address" />
-                        <span style={{ fontSize: "12.5px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>.{PAGES_DOMAIN}</span>
-                      </div>
-                      <button type="button" style={primaryButton(!publishing && Boolean(subdomain))} disabled={publishing || !subdomain} onClick={() => void handlePublish()}>
-                        {publishing ? "Publishing…" : "Publish preview"}
-                      </button>
-                    </div>
-                    {publishError && <p style={{ ...muted, color: "#f87171", marginTop: 6 }}>{publishError}</p>}
-                  </div>
-                )}
-                {item.id === "publish" && preview_ && (
-                  <a href={`https://${preview_.domain}${new URL(r.source.homeUrl).pathname}`} target="_blank" rel="noreferrer" style={{ ...secondaryButton, marginTop: 10 }}>Open preview ↗</a>
-                )}
-                {item.id === "domain" && (
-                  <a href="#switch-domain" style={{ ...secondaryButton, marginTop: 10 }}>See the steps ↓</a>
-                )}
-                {item.id === "payments" && (
-                  <Link
-                    href={item.status === "done" ? `/dashboard/commerce/${job.templateId}/donations` : `/dashboard/commerce/${job.templateId}/settings/payments`}
-                    style={{ ...secondaryButton, marginTop: 10 }}
-                  >
-                    {item.status === "done" ? "Open Donations →" : "Connect payments →"}
-                  </Link>
-                )}
-                {item.id === "payments-other" && (
-                  <Link href={`/dashboard/commerce/${job.templateId}`} style={{ ...secondaryButton, marginTop: 10 }}>Open Commerce →</Link>
-                )}
-                {item.id === "team-access" && (
-                  <Link href="/dashboard/settings/team" style={{ ...secondaryButton, marginTop: 10 }}>Invite your team →</Link>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-          <Stat value={r.summary.pagesCopied} label="pages copied" />
-          <Stat value={r.summary.postsCopied} label="blog posts moved" />
-          {r.summary.productsMoved != null && <Stat value={r.summary.productsMoved} label="products moved" />}
-          <Stat value={r.summary.filesCopied} label={`files (${mb(r.summary.bytesCopied)})`} />
-          <Stat value={`${r.seo.titles}/${r.seo.pagesChecked}`} label="pages with identical SEO" />
-          {r.summary.formsReconnected > 0 && <Stat value={r.summary.formsReconnected} label="forms reconnected" />}
-        </div>
-
-        <PrivateDataCard templateId={job.templateId} jobId={job.id} />
-
-        <div id="switch-domain">
+    if (view === "live") {
+      return frame(
+        4,
+        <GoLiveStep host={host} onBack={() => setAfterView("check")}>
           <CutoverPanel templateId={job.templateId} jobId={job.id} />
-        </div>
-
-        <div style={card}>
-          <h3 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: 700 }}>What happened to each plugin</h3>
-          <PluginGroups plugins={r.plugins} />
-        </div>
-
-        <div style={card}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-            <h3 style={{ margin: 0, fontSize: "14px", fontWeight: 700 }}>Pages and posts</h3>
-            <button type="button" style={{ ...secondaryButton, padding: "5px 10px", fontSize: "11.5px" }} onClick={() => setShowAllPages((v) => !v)}>
-              {showAllPages ? "Show fewer" : `Show all ${r.pages.length}`}
-            </button>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {shownPages.map((p) => {
-              const seoOk = p.seo ? Object.values(p.seo).every(Boolean) : null;
-              return (
-                <div key={p.key} style={{ display: "flex", gap: 12, alignItems: "center", padding: "8px 0", borderTop: `1px solid ${hairline}` }}>
-                  <span style={{ fontSize: "12.5px", fontWeight: 600, flex: "1 1 40%", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</span>
-                  <code style={{ fontSize: "11.5px", color: "var(--text-muted)", flex: "1 1 40%", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.newPath ?? p.key}</code>
-                  <span style={{ fontSize: "11.5px", fontWeight: 650, color: p.status === "FAILED" ? "#f87171" : seoOk === false ? "#f5b74a" : "#6ee7a8", flexShrink: 0 }}>
-                    {p.status === "FAILED" ? "Not copied" : p.kind === "POST" ? "Moved to blog" : seoOk ? "Identical SEO" : "Check SEO"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {(r.brokenLinks.length > 0 || r.missingOnSource.length > 0 || r.failedFiles.length > 0) && (
-          <div style={card}>
-            <h3 style={{ margin: "0 0 10px", fontSize: "14px", fontWeight: 700 }}>Worth a look</h3>
-            {r.failedFiles.map((f) => (
-              <p key={f.path} style={{ ...muted, fontSize: "12px" }}><code>{f.path}</code> — {f.reason}</p>
-            ))}
-            {r.brokenLinks.map((l) => (
-              <p key={`${l.from}${l.href}`} style={{ ...muted, fontSize: "12px" }}>
-                Link to <code>{l.href}</code> on <code>{l.from}</code> — {l.reason}
-              </p>
-            ))}
-            {r.missingOnSource.length > 0 && (
-              <p style={{ ...muted, fontSize: "12px" }}>
-                {r.missingOnSource.length} file(s) your pages refer to were already missing on WordPress (so nothing changes for visitors): {r.missingOnSource.slice(0, 3).map((m) => m.path).join(", ")}
-                {r.missingOnSource.length > 3 ? "…" : ""}
-              </p>
-            )}
-          </div>
-        )}
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Link href={`/dashboard/templates/${job.templateId}`} style={secondaryButton}>Edit your pages</Link>
-          {r.summary.postsCopied > 0 && <Link href={`/dashboard/templates/${job.templateId}/blog`} style={secondaryButton}>Manage your blog</Link>}
-          {r.summary.formsReconnected > 0 && <Link href={`/dashboard/templates/${job.templateId}/form-submissions`} style={secondaryButton}>Form submissions</Link>}
-        </div>
-      </div>
+        </GoLiveStep>,
+        [3, 4],
+        go,
+      );
+    }
+    return frame(
+      3,
+      <CheckStep
+        report={report}
+        siteName={siteName}
+        templateId={job.templateId}
+        preview={previewDomain}
+        subdomain={subdomain}
+        onSubdomain={setSubdomain}
+        publishing={publishing}
+        publishError={publishError}
+        onPublish={() => void handlePublish()}
+        onContinue={() => {
+          setAfterView("live");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+        privateData={<PrivateDataCard templateId={job.templateId} jobId={job.id} />}
+        fullReport={<FullReport report={report} templateId={job.templateId} />}
+      />,
+      [3, 4],
+      go,
     );
   }
 
-  // ── Start ─────────────────────────────────────────────────────────────────────
-  return (
-    <div style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 20 }}>
-      <div>
-        <h2 style={{ margin: "0 0 4px", fontSize: "19px", fontWeight: 750 }}>Move your WordPress site to Plexo</h2>
-        <p style={muted}>
-          Enter your website&rsquo;s address. Plexo copies every page, blog post, image and file, keeps your design and your web addresses exactly as they are,
-          and reconnects your forms — then helps you point your domain here. Nothing on WordPress is changed.
-        </p>
-      </div>
-
-      {existing && (
-        <div style={{ ...card, display: "flex", alignItems: "center", gap: 12, justifyContent: "space-between", flexWrap: "wrap" }}>
-          <p style={{ ...muted, margin: 0 }}>You have a migration in progress{existing.siteName ? ` for ${existing.siteName}` : ""}.</p>
-          <Link href={`/dashboard/migrate/wordpress?site=${existing.templateId}&job=${existing.id}`} style={secondaryButton}>Continue it →</Link>
-        </div>
-      )}
-
-      <form onSubmit={handleCheck} style={{ display: "flex", gap: 8 }}>
-        <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="yourwebsite.com" style={inputStyle} autoFocus aria-label="Your WordPress site's address" />
-        <button type="submit" style={primaryButton(!checking && Boolean(url.trim()))} disabled={checking || !url.trim()}>
-          {checking ? "Looking at your site…" : "Check my site"}
-        </button>
-      </form>
-
-      {error && (
-        <div style={{ ...card, borderColor: "rgba(248,113,113,0.35)" }}>
-          <p style={{ ...muted, color: "var(--text-main)" }}>{error}</p>
-          {upgradeNeeded && (
-            <Link href="/dashboard/settings/subscription?upgrade=ULTRA&returnTo=/dashboard/migrate/wordpress" style={{ ...secondaryButton, marginTop: 10 }}>See Ultra →</Link>
-          )}
-        </div>
-      )}
-
-      {preview && (
-        <>
-          <div style={card}>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
-              <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 750 }}>{preview.siteName || new URL(preview.origin).host}</h3>
-              <span style={{ fontSize: "11.5px", color: "#6ee7a8", fontWeight: 650 }}>WordPress found</span>
-            </div>
-            {preview.siteDescription && <p style={{ ...muted, marginTop: 4 }}>{preview.siteDescription}</p>}
-            {(preview.inSubdirectory || preview.staticPages.length > 0) && (
-              <p style={{ ...muted, marginTop: 10, fontSize: "12px" }}>
-                {preview.inSubdirectory && <>WordPress is installed at <code>{new URL(preview.homeUrl).pathname}</code>. </>}
-                {preview.staticPages.length > 0 && (
-                  <>
-                    We also found {preview.staticPages.length} page{preview.staticPages.length > 1 ? "s" : ""} in front of it that aren&rsquo;t part of WordPress (
-                    {preview.staticPages.map((p) => new URL(p).pathname).join(", ")}) — those move too.
-                  </>
-                )}
-              </p>
-            )}
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-              <Stat value={preview.counts.pages} label="pages" />
-              <Stat value={preview.counts.posts} label="blog posts" />
-              <Stat value={preview.counts.media} label="images & files" />
-              {preview.theme && <Stat value={preview.theme.parentSlug ? `${preview.theme.parentSlug}` : preview.theme.slug} label={preview.theme.parentSlug ? "theme (with your customizations)" : "theme"} />}
-            </div>
-          </div>
-
-          <div style={card}>
-            <h3 style={{ margin: "0 0 4px", fontSize: "14px", fontWeight: 700 }}>Your plugins on Plexo</h3>
-            <p style={{ ...muted, marginBottom: 14, fontSize: "12px" }}>Here&rsquo;s what will happen to each one. You&rsquo;ll get a full checklist at the end.</p>
-            <PluginGroups plugins={preview.plugins} />
-          </div>
-
-          <div style={{ ...card, display: "flex", flexDirection: "column", gap: 10 }}>
-            <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: "12.5px", cursor: "pointer" }}>
-              <input type="checkbox" checked={owns} onChange={(e) => setOwns(e.target.checked)} style={{ marginTop: 2 }} />
-              <span>I own this website, or have the owner&rsquo;s permission to move it.</span>
-            </label>
-            {needsAup && (
-              <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: "12.5px", cursor: "pointer" }}>
-                <input type="checkbox" checked={aup} onChange={(e) => setAup(e.target.checked)} style={{ marginTop: 2 }} />
-                <span>
-                  I agree to Plexo&rsquo;s{" "}
-                  <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--brand)" }}>Acceptable Use Policy</Link>.
-                </span>
-              </label>
-            )}
-            <p style={{ ...muted, fontSize: "12.5px" }}>
-              Moving this site takes {formatDuration(estimateMigrationSeconds({ pages: preview.counts.pages, posts: preview.counts.posts, media: preview.counts.media }))}.
-              You don&rsquo;t need to keep this page open — we&rsquo;ll email you when it&rsquo;s done.
-            </p>
-            <div>
-              <button type="button" style={primaryButton(owns && (!needsAup || aup) && !starting)} disabled={!owns || (needsAup && !aup) || starting} onClick={() => void handleStart()}>
-                {starting ? "Starting…" : `Move ${preview.siteName || "my site"} to Plexo`}
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
+  // ── Before the move ──────────────────────────────────────────────────────────
+  if (preview) {
+    return frame(
+      1,
+      <ReviewStep
+        preview={preview}
+        owns={owns}
+        onOwns={setOwns}
+        needsAup={needsAup}
+        aup={aup}
+        onAup={setAup}
+        starting={starting}
+        error={error}
+        onStart={() => void handleStart()}
+        onBack={() => {
+          setPreview(null);
+          setError(null);
+        }}
+      />,
+      [0],
+      () => setPreview(null),
+    );
+  }
+  return frame(0, <FindSiteStep url={url} onUrl={setUrl} onCheck={(e) => void handleCheck(e)} checking={checking} error={error} upgradeNeeded={upgradeNeeded} existing={existing} />);
 }
 
-function capitalize(text: string): string {
-  return text.charAt(0).toUpperCase() + text.slice(1);
+/** Everything the move did, for anyone who wants the detail: pages, plugins, anything worth a look. */
+function FullReport({ report: r, templateId }: { report: Report; templateId: string }) {
+  const [showAll, setShowAll] = useState(false);
+  const rows = showAll ? r.pages : r.pages.filter((p) => p.kind !== "POST").slice(0, 10);
+  const sectionTitle: React.CSSProperties = { margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: "var(--text-main)" };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <p style={muted}>
+        {r.summary.filesCopied} files ({mb(r.summary.bytesCopied)}) copied · {r.seo.titles} of {r.seo.pagesChecked} pages kept the same search title
+        {r.summary.formsReconnected > 0 ? ` · ${r.summary.formsReconnected} form${r.summary.formsReconnected === 1 ? "" : "s"} reconnected` : ""}.
+      </p>
+
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+          <p style={sectionTitle}>Pages and posts</p>
+          <button type="button" style={{ ...secondaryButton, padding: "5px 10px", fontSize: 12 }} onClick={() => setShowAll((v) => !v)}>
+            {showAll ? "Show fewer" : `Show all ${r.pages.length}`}
+          </button>
+        </div>
+        {rows.map((p) => {
+          const seoOk = p.seo ? Object.values(p.seo).every(Boolean) : null;
+          return (
+            <div key={p.key} style={{ display: "flex", gap: 12, alignItems: "center", padding: "9px 0", borderTop: `1px solid ${hairline}` }}>
+              <span style={{ fontSize: 13.5, fontWeight: 600, flex: "1 1 45%", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--text-main)" }}>{p.title}</span>
+              <code style={{ fontSize: 12, color: "var(--text-muted)", flex: "1 1 35%", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.newPath ?? p.key}</code>
+              <span style={{ fontSize: 12, fontWeight: 650, flexShrink: 0, color: p.status === "FAILED" ? "#f87171" : seoOk === false ? "#f5b74a" : "#34d399" }}>
+                {p.status === "FAILED" ? "Not copied" : p.kind === "POST" ? "In your blog" : seoOk ? "Copied" : "Check search title"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div>
+        <p style={sectionTitle}>What happened to each plugin</p>
+        <PluginList plugins={r.plugins} />
+      </div>
+
+      {(r.brokenLinks.length > 0 || r.missingOnSource.length > 0 || r.failedFiles.length > 0) && (
+        <div>
+          <p style={sectionTitle}>Worth a look</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {r.failedFiles.map((f) => <p key={f.path} style={{ ...muted, fontSize: 12.5 }}><code>{f.path}</code> — {f.reason}</p>)}
+            {r.brokenLinks.map((l) => <p key={`${l.from}${l.href}`} style={{ ...muted, fontSize: 12.5 }}>A link to <code>{l.href}</code> on <code>{l.from}</code> — {l.reason}</p>)}
+            {r.missingOnSource.length > 0 && (
+              <p style={{ ...muted, fontSize: 12.5 }}>
+                {r.missingOnSource.length} file{r.missingOnSource.length === 1 ? " was" : "s were"} already missing on WordPress, so nothing changes for visitors ({r.missingOnSource.slice(0, 3).map((m) => m.path).join(", ")}{r.missingOnSource.length > 3 ? "…" : ""}).
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        {r.summary.postsCopied > 0 && <Link href={`/dashboard/templates/${templateId}/blog`} style={secondaryButton}>Manage your blog</Link>}
+        {r.summary.formsReconnected > 0 && <Link href={`/dashboard/templates/${templateId}/form-submissions`} style={secondaryButton}>Form submissions</Link>}
+      </div>
+    </div>
+  );
 }
