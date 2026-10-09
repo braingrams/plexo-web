@@ -128,16 +128,20 @@ export function SolChatView({
   initialMessages,
   userName,
   embedded,
+  lockedModelTier: lockedModelTierProp,
 }: {
   conversation: ConversationSummary | null;
   initialMessages: SolMessage[];
   userName: string | null;
   embedded?: SolChatEmbedding;
+  /** The model this person is held to (Free plans on Plexo's AI → Basic — lib/ai/solEngine.ts). */
+  lockedModelTier?: { tier: ModelTier; note: string } | null;
 }) {
+  const lockedModelTier = lockedModelTierProp ?? embedded?.lockedModelTier;
   const { bumpRefresh, setActiveConversationIdOverride } = useSolSidebar();
   const [conversation, setConversation] = useState<ConversationSummary | null>(initialConversation);
   const [messages, setMessages] = useState<SolMessage[]>(initialMessages);
-  const [modelTier, setModelTier] = useState<ModelTier>(embedded?.lockedModelTier?.tier ?? initialConversation?.modelTier ?? "BASIC");
+  const [modelTier, setModelTier] = useState<ModelTier>(lockedModelTier?.tier ?? initialConversation?.modelTier ?? "BASIC");
   const [pendingConfirmMessageId, setPendingConfirmMessageId] = useState<string | null>(null);
   const [creditInfo, setCreditInfo] = useState<CreditInfo | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
@@ -559,7 +563,7 @@ export function SolChatView({
         onStop={handleStop}
         initialText={composerRestoreText}
         placeholder={embedded?.composerPlaceholder}
-        tierNote={embedded?.lockedModelTier?.note}
+        tierNote={lockedModelTier?.note}
       />
     </>
   );

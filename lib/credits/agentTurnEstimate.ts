@@ -23,6 +23,6 @@ export const MAX_APP_TOOL_ITERATIONS = 40;
  * couldn't start a turn at all — see lib/credits/value.ts for the allowances.
  * chargeUsage still bills each call's real, usually far lower, cost after the fact.
  */
-export function estimateWorstCaseAgentTurnCost(tier: ConcreteTier, approxInputChars: number): number {
-  return estimateWorstCaseCost("bedrock_claude", tier, "agent_chat", approxInputChars);
+export function estimateWorstCaseAgentTurnCost(tier: ConcreteTier, approxInputChars: number, maxOutputTokens?: number): number {
+  return estimateWorstCaseCost("bedrock_claude", tier, "agent_chat", approxInputChars, maxOutputTokens);
 }

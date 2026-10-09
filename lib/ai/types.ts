@@ -14,7 +14,10 @@ export type AiActionMode =
   // tool-using conversation. See MAX_TOKENS below (lib/ai/generate.ts) for its output
   // ceiling and lib/credits/agentTurnEstimate.ts for how a whole agent turn (which may
   // call the model up to MAX_TOOL_ITERATIONS times) is pre-flight estimated.
-  | "agent_chat";
+  | "agent_chat"
+  // Commerce's AI product import: reads a catalog file (CSV text or a PDF) and returns
+  // product rows (app/api/v1/commerce/[templateId]/products/import-ai).
+  | "import_products";
 
 // `anthropic_claude` = direct Anthropic API (BYOK / Host-Managed AI modes, via
 // lib/ai/providers/anthropic.ts). `bedrock_claude` = Amazon Bedrock (Plexo's own
