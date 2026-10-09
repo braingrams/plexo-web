@@ -4,6 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import Editor, { type OnMount } from "@monaco-editor/react";
 import {
   ChevronDown,
+  CloudOff,
+  Database,
+  Heart,
+  Mail,
+  ShoppingBag,
+  Users,
   ChevronLeft,
   ChevronRight,
   KeyRound,
@@ -21,7 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { api, ApiError, type AppEnv } from "./api";
-import { Button, C, Empty, EnvSwitch, Notice, Panel, inputStyle, timeAgo } from "./ui";
+import { Button, C, Empty, EnvSwitch, Notice, PaneHeader, Panel, inputStyle, timeAgo } from "./ui";
 import { ensureMonaco, EDITOR_THEME } from "./monaco";
 
 // Mirrors lib/appData/overview.ts (kept local so this client bundle doesn't pull server code).
@@ -58,7 +64,7 @@ function errorText(err: unknown): string {
     if (err.status === 503) return WAKING_MESSAGE + " Try again in a moment.";
     return err.hint ? `${err.message} ${err.hint}` : err.message;
   }
-  return err instanceof Error ? err.message : "Something went wrong.";
+  return "Something went wrong on our side.";
 }
 
 type EditorKind = "json" | "boolean" | "text";
@@ -99,7 +105,111 @@ function parseDraft(draft: string, column: Column): unknown {
 const rowKey = (row: Row, pk: string[]) => JSON.stringify(pk.map((c) => row[c]));
 const keyObject = (row: Row, pk: string[]) => Object.fromEntries(pk.map((c) => [c, row[c]]));
 
+const DATA_IDEAS: { icon: typeof Database; color: string; title: string; prompt: string }[] = [
+  { icon: Mail, color: "#7c3aed", title: "Contact form messages", prompt: "Save messages people send through a contact form, and show them to me in a list" },
+  { icon: Heart, color: "#c084fc", title: "Favourites", prompt: "Let signed-in people save their favourite items and see them on their own page" },
+  { icon: ShoppingBag, color: "#a78bfa", title: "Products", prompt: "Keep a list of products with a name, price and photo that I can edit" },
+  { icon: Users, color: "#6366f1", title: "Newsletter sign-ups", prompt: "Collect email addresses for a newsletter with a simple sign-up box" },
+];
+
+/** Nothing saved yet: what will appear here, and one tap to set something up with SOL. */
+function DataEmpty({ onAskAi }: { onAskAi?: (text: string) => void }) {
+  return (
+    <section className="plx-data-empty" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.9fr)", gap: "2rem", alignItems: "center", padding: "2.2rem", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(70% 90% at 100% 0%, rgba(139,92,246,0.14), transparent 60%), rgba(255,255,255,0.015)" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "1.2rem", minWidth: 0 }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: "1.35rem", fontWeight: 750, letterSpacing: "-0.01em" }}>Nothing saved yet</h3>
+          <p style={{ margin: "0.45rem 0 0", fontSize: "0.88rem", color: C.muted, lineHeight: 1.6, maxWidth: 520 }}>
+            When your app keeps track of things — sign-ups, orders, messages — you&rsquo;ll see them here and can edit them. Pick one to have SOL set it up:
+          </p>
+        </div>
+        {onAskAi && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
+            {DATA_IDEAS.map(({ icon: Icon, color, title, prompt }) => (
+              <button key={title} type="button" className="plx-data-idea" onClick={() => onAskAi(prompt)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "0.8rem 0.9rem", borderRadius: 14, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.03)", color: C.text, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}>
+                <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center", background: `${color}26`, color }}>
+                  <Icon size={17} />
+                </span>
+                <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{title}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <DataIllustration />
+    </section>
+  );
+}
+
+/** A friendly picture of a filled-in table. */
+function DataIllustration() {
+  const rows = [
+    { c: "#8b5cf6", w: ["58%", "34%"] },
+    { c: "#c084fc", w: ["44%", "48%"] },
+    { c: "#a78bfa", w: ["66%", "26%"] },
+    { c: "#6366f1", w: ["50%", "40%"] },
+  ];
+  return (
+    <div aria-hidden className="plx-data-art" style={{ borderRadius: 16, background: "rgba(11,15,25,0.6)", border: `1px solid ${C.borderStrong}`, padding: 16, display: "flex", flexDirection: "column", gap: 10, boxShadow: "0 24px 60px rgba(0,0,0,0.35)", transform: "rotate(-1.5deg)" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
+        <span style={{ width: 70, height: 8, borderRadius: 99, background: "rgba(255,255,255,0.35)" }} />
+        <span style={{ marginLeft: "auto", width: 46, height: 18, borderRadius: 6, background: C.brand }} />
+      </div>
+      {rows.map((row, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ width: 26, height: 26, borderRadius: 99, background: row.c, flexShrink: 0 }} />
+          <span style={{ width: row.w[0], height: 7, borderRadius: 99, background: "rgba(255,255,255,0.28)" }} />
+          <span style={{ marginLeft: "auto", width: row.w[1], maxWidth: 80, height: 7, borderRadius: 99, background: "rgba(255,255,255,0.12)" }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** First load: the shape of the page, gently pulsing. */
+function DataSkeleton() {
+  const block = (h: number, w: string = "100%") => <span className="plx-skel" style={{ display: "block", height: h, width: w, borderRadius: 8 }} />;
+  return (
+    <div className="plx-db-layout" aria-busy="true" aria-label="Loading your data">
+      <div style={{ border: `1px solid ${C.border}`, borderRadius: 14, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+        {[70, 55, 80, 60].map((w, i) => <span key={i}>{block(14, `${w}%`)}</span>)}
+      </div>
+      <div style={{ border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+        {block(30, "40%")}
+        {[0, 1, 2, 3, 4, 5].map((i) => <span key={i}>{block(18)}</span>)}
+      </div>
+    </div>
+  );
+}
+
+/** Couldn't reach the data at all: say so plainly, with a way forward. */
+function DataProblem({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const waking = message.startsWith(WAKING_MESSAGE);
+  return (
+    <section style={{ display: "flex", alignItems: "center", gap: "1.2rem", flexWrap: "wrap", padding: "1.8rem 2rem", borderRadius: 20, border: `1px solid ${waking ? "rgba(139,92,246,0.3)" : "rgba(251,191,36,0.3)"}`, background: waking ? "rgba(139,92,246,0.06)" : "rgba(251,191,36,0.05)" }}>
+      <span style={{ width: 48, height: 48, borderRadius: 14, display: "grid", placeItems: "center", background: waking ? "rgba(139,92,246,0.16)" : "rgba(251,191,36,0.14)", color: waking ? "#c4b5fd" : C.warning, flexShrink: 0 }}>
+        {waking ? <LoaderCircle size={22} className="plx-spin" /> : <CloudOff size={22} />}
+      </span>
+      <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+        <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 700 }}>{waking ? "Waking up your data…" : "We couldn't open your app's data just now"}</h3>
+        <p style={{ margin: "0.3rem 0 0", fontSize: "0.84rem", color: C.muted, lineHeight: 1.55 }}>
+          {waking ? "This takes a few seconds the first time after a quiet spell." : `${message} Nothing is lost — your app's data is safe.`}
+        </p>
+      </div>
+      <Button variant="primary" onClick={onRetry}>
+        <RefreshCw size={14} /> Try again
+      </Button>
+    </section>
+  );
+}
+
 const RESPONSIVE_CSS = `
+.plx-skel { background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.09), rgba(255,255,255,0.04)); background-size: 200% 100%; animation: plx-shimmer 1.4s ease-in-out infinite; }
+@keyframes plx-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.plx-data-idea { transition: border-color 0.15s, background 0.15s, transform 0.15s; }
+.plx-data-idea:hover { border-color: rgba(139,92,246,0.5) !important; background: rgba(139,92,246,0.08) !important; transform: translateY(-1px); }
+@media (max-width: 1000px) { .plx-data-empty { grid-template-columns: minmax(0, 1fr) !important; } .plx-data-art { display: none !important; } }
+@media (prefers-reduced-motion: reduce) { .plx-skel { animation: none; } .plx-data-idea:hover { transform: none; } }
 .plx-db-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 0.85rem; align-items: start; }
 @media (max-width: 900px) { .plx-db-layout { grid-template-columns: minmax(0, 1fr); } }
 .plx-db-cell:focus-visible, .plx-db-th:focus-visible { outline: 2px solid ${C.brand}; outline-offset: -2px; }
@@ -160,21 +270,25 @@ export function DatabasePane(props: { appId: string; refreshKey?: number; onAskA
     <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem", color: C.text, minWidth: 0 }}>
       <style>{RESPONSIVE_CSS}</style>
 
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.6rem", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-          <EnvSwitch value={env} onChange={changeEnv} />
-          <div role="tablist" aria-label="Database view" style={{ display: "inline-flex", gap: "0.25rem" }}>
-            {(["tables", "sql"] as const).map((t) => (
-              <Button key={t} role="tab" aria-selected={tab === t} size="sm" variant={tab === t ? "secondary" : "ghost"} onClick={() => setTab(t)}>
-                {t === "tables" ? "Tables" : "SQL"}
-              </Button>
-            ))}
-          </div>
-        </div>
-        <Button size="sm" onClick={refreshAll} disabled={loadingOverview} aria-label="Refresh database">
-          <RefreshCw size={13} className={loadingOverview ? "plx-spin" : undefined} /> Refresh
-        </Button>
-      </div>
+      <PaneHeader
+        title="Data"
+        subtitle={env === "dev" ? "Everything your app saves while you test it in Preview." : "Everything your live app has saved for real visitors."}
+        actions={
+          <>
+            <div role="tablist" aria-label="Data view" style={{ display: "inline-flex", gap: "0.25rem" }}>
+              {(["tables", "sql"] as const).map((t) => (
+                <Button key={t} role="tab" aria-selected={tab === t} size="sm" variant={tab === t ? "secondary" : "ghost"} onClick={() => setTab(t)}>
+                  {t === "tables" ? "Browse" : "Advanced"}
+                </Button>
+              ))}
+            </div>
+            <EnvSwitch value={env} onChange={changeEnv} />
+            <Button size="sm" variant="ghost" onClick={refreshAll} disabled={loadingOverview} aria-label="Refresh">
+              <RefreshCw size={13} className={loadingOverview ? "plx-spin" : undefined} />
+            </Button>
+          </>
+        }
+      />
 
       {env === "live" && (
         <Notice tone="warning">
@@ -182,7 +296,7 @@ export function DatabasePane(props: { appId: string; refreshKey?: number; onAskA
         </Notice>
       )}
       {waking && <Notice tone="info">{WAKING_MESSAGE}</Notice>}
-      {overviewError && (
+      {overviewError && overview && (
         <Notice tone="danger">
           {overviewError}{" "}
           <Button size="sm" variant="ghost" onClick={() => void loadOverview()} style={{ padding: "0 0.3rem" }}>
@@ -227,7 +341,13 @@ export function DatabasePane(props: { appId: string; refreshKey?: number; onAskA
         </ul>
       )}
 
-      {tab === "tables" ? (
+      {tab === "tables" && !overview && overviewError ? (
+        <DataProblem message={overviewError} onRetry={() => void loadOverview()} />
+      ) : tab === "tables" && !overview ? (
+        <DataSkeleton />
+      ) : tab === "tables" && overview && overview.tables.length === 0 ? (
+        <DataEmpty onAskAi={onAskAi} />
+      ) : tab === "tables" ? (
         <div className="plx-db-layout">
           <TableList tables={overview?.tables ?? null} loading={loadingOverview && !overview} selected={selected} onSelect={setSelected} />
           {table ? (
@@ -255,7 +375,7 @@ function TableList(props: { tables: TableOverview[] | null; loading: boolean; se
       {loading ? (
         <p style={{ color: C.muted, fontSize: "0.78rem", margin: "0.5rem" }}>Loading tables…</p>
       ) : !tables || tables.length === 0 ? (
-        <Empty title="No tables yet">Ask SOL to add data to your app, or create one in the SQL editor.</Empty>
+        <Empty title="Nothing here yet">Ask SOL to add something for your app to keep track of.</Empty>
       ) : (
         <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 2 }}>
           {tables.map((t) => {

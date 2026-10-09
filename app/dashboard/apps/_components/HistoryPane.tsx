@@ -1,16 +1,41 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import { Bot, CalendarClock, Code2, Eye, FileText, Flag, GitMerge, Hammer, History, Rocket, RotateCcw, Undo2 } from "lucide-react";
 import { appsApi, ApiError, type BuildReport } from "./api";
-import { C, Button, Panel, Notice, Empty, timeAgo } from "./ui";
+import { C, Button, Notice, PaneHeader, StateStyles, Shimmer, ListSkeleton, ProblemState, EmptyHero, StatCard, Pill, timeAgo } from "./ui";
 
-// Every version of the app (each AI turn, Code Mode build, deploy, restore, GitHub push) with
-// one-click restore, plus the build log of every build.
+// Every version of the app (each SOL turn, code edit, publish, go-back, import) with one-click
+// go-back, plus the log of every preview refresh and publish.
 
 type Version = Awaited<ReturnType<typeof appsApi.versions>>["versions"][number];
 type BuildRow = Awaited<ReturnType<typeof appsApi.builds>>["builds"][number];
+type IconType = ComponentType<{ size?: number }>;
 
-const SOURCE: Record<string, string> = { ai: "SOL", editor: "Code", deploy: "Deploy", restore: "Restore", scaffold: "Created", git: "GitHub" };
+// Who or what made each version, in the owner's words — each with its own colour on the timeline.
+const SOURCE: Record<string, { label: string; color: string; icon: IconType }> = {
+  ai: { label: "SOL", color: "#8b5cf6", icon: Bot },
+  editor: { label: "Code edit", color: "#6366f1", icon: Code2 },
+  deploy: { label: "Published", color: "#7c3aed", icon: Rocket },
+  restore: { label: "Went back", color: "#c084fc", icon: Undo2 },
+  scaffold: { label: "App created", color: "#a78bfa", icon: Flag },
+  git: { label: "Imported", color: "#6d28d9", icon: GitMerge },
+};
+const sourceOf = (s: string) => SOURCE[s] ?? { label: "Saved", color: "#c4b5fd", icon: History };
+
+/** "Today", "Yesterday", or a friendly date — the timeline's section labels. */
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOf(today) - startOf(d)) / 86_400_000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+}
+
+// Server messages are kept only when they're already written for people; anything else becomes plain words.
+const plainError = (err: unknown, fallback: string) => (err instanceof ApiError && err.status < 500 ? err.message : fallback);
 
 export function HistoryPane(props: { appId: string; refreshKey?: number; onRestored?: (buildId: string | null) => void; onViewChanges?: (versionId: string, against: string) => void }) {
   const { appId } = props;
@@ -19,7 +44,7 @@ export function HistoryPane(props: { appId: string; refreshKey?: number; onResto
   const [builds, setBuilds] = useState<BuildRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
   const [report, setReport] = useState<BuildReport | null>(null);
   const reportRequest = useRef(0);
 
@@ -30,7 +55,7 @@ export function HistoryPane(props: { appId: string; refreshKey?: number; onResto
       setVersions(v.versions);
       setBuilds(b.builds);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Couldn't load the history.");
+      setError(plainError(err, "Something went wrong on our side."));
     }
   }, [appId]);
 
@@ -39,16 +64,16 @@ export function HistoryPane(props: { appId: string; refreshKey?: number; onResto
   }, [load, props.refreshKey]);
 
   async function restore(v: Version) {
-    if (!window.confirm(`Restore "${v.message}"?\n\nYour files go back to this version (saved as a new version, so you can undo it). The live app only changes when you publish.`)) return;
+    if (!window.confirm(`Go back to "${v.message}"?\n\nYour app goes back to how it was at this point. This is saved as a new version, so you can always undo it. Your live site only changes when you publish.`)) return;
     setBusy(v.id);
     setNotice(null);
     try {
       const res = await appsApi.restore(appId, v.id);
-      setNotice("Restored — rebuilding the preview.");
+      setNotice({ tone: "success", text: "Done — your app is back to that version. Refreshing the preview now." });
       props.onRestored?.(res.buildId);
       await load();
     } catch (err) {
-      setNotice(err instanceof ApiError ? err.message : "Couldn't restore that version.");
+      setNotice({ tone: "danger", text: plainError(err, "We couldn't go back to that version. Nothing was changed — try again in a moment.") });
     } finally {
       setBusy(null);
     }
@@ -61,122 +86,319 @@ export function HistoryPane(props: { appId: string; refreshKey?: number; onResto
       const r = await appsApi.buildReport(appId, id, true);
       if (req === reportRequest.current) setReport(r);
     } catch (err) {
-      if (req === reportRequest.current) setNotice(err instanceof ApiError ? err.message : "Couldn't load that build.");
+      if (req === reportRequest.current) setNotice({ tone: "danger", text: plainError(err, "We couldn't open that update just now.") });
     }
   }
 
+  const loaded = versions !== null && builds !== null;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", gap: 6 }}>
-        {(["versions", "builds"] as const).map((v) => (
-          <Button key={v} size="sm" variant={view === v ? "primary" : "secondary"} onClick={() => setView(v)}>
-            {v === "versions" ? "Versions" : "Builds"}
-          </Button>
-        ))}
-      </div>
-      {notice && <Notice>{notice}</Notice>}
-      {error && <Notice tone="danger">{error}</Notice>}
+    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <StateStyles />
+      <style>{HISTORY_CSS}</style>
+      <PaneHeader
+        title="History"
+        subtitle="Every change to your app is saved automatically. Go back to any earlier version — even going back can be undone."
+        actions={<ViewSwitch value={view} onChange={setView} />}
+      />
+      {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
+      {error && loaded && <Notice tone="danger">{error}</Notice>}
 
-      {view === "versions" && (
-        <Panel title="Versions" description="Every change is saved as a version. Restoring one is always undoable.">
-          {!versions ? (
-            <Empty title="Loading…" />
-          ) : versions.length === 0 ? (
-            <Empty title="No versions yet" />
-          ) : (
-            <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-              {versions.map((v, i) => {
-                const previous = versions[i + 1];
-                return (
-                  <li key={v.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.55rem 0.7rem", borderRadius: 10, border: `1px solid ${C.border}`, background: v.isLive ? "rgba(52,211,153,0.06)" : "transparent", flexWrap: "wrap" }}>
-                    <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "0.12rem 0.45rem", borderRadius: 999, background: "rgba(255,255,255,0.06)", color: C.muted }}>{SOURCE[v.source] ?? v.source}</span>
-                    <div style={{ flex: 1, minWidth: 180 }}>
-                      <div style={{ fontSize: "0.8rem" }}>
-                        {v.message}
-                        {v.isLive && <span style={{ marginLeft: 8, color: C.success, fontSize: "0.7rem", fontWeight: 700 }}>● LIVE</span>}
-                      </div>
-                      <div style={{ fontSize: "0.7rem", color: C.faint }}>
-                        {v.authorName ? `${v.authorName} · ` : ""}
-                        {timeAgo(v.createdAt)} · {v.fileCount} files{v.commitSha ? ` · ${v.commitSha.slice(0, 7)}` : ""}
-                      </div>
-                    </div>
-                    {previous && props.onViewChanges && (
-                      <Button size="sm" variant="ghost" onClick={() => props.onViewChanges!(previous.id, v.id)}>
-                        View changes
-                      </Button>
-                    )}
-                    {i > 0 && (
-                      <Button size="sm" disabled={busy === v.id} onClick={() => void restore(v)}>
-                        {busy === v.id ? "Restoring…" : "Restore"}
-                      </Button>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-        </Panel>
-      )}
-
-      {view === "builds" && (
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
-          <Panel title="Builds" style={{ flex: "1 1 320px" }}>
-            {!builds ? (
-              <Empty title="Loading…" />
-            ) : builds.length === 0 ? (
-              <Empty title="No builds yet" />
-            ) : (
-              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-                {builds.map((b) => (
-                  <li key={b.id}>
-                    <button type="button" onClick={() => void openBuild(b.id)} style={{ width: "100%", textAlign: "left", display: "flex", gap: 8, alignItems: "center", padding: "0.45rem 0.6rem", borderRadius: 8, border: `1px solid ${report?.buildId === b.id ? C.brand : C.border}`, background: "transparent", color: C.text, cursor: "pointer", fontSize: "0.76rem" }}>
-                      <span style={{ color: b.status === "SUCCEEDED" ? C.success : b.status === "FAILED" ? C.danger : C.muted }}>●</span>
-                      <span style={{ flex: 1 }}>
-                        {b.mode === "release" ? "Publish" : "Preview"} · {b.summary ?? b.status.toLowerCase()}
-                      </span>
-                      <span style={{ color: C.faint }}>{timeAgo(b.createdAt)}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Panel>
-          {report && (
-            <Panel title={`${report.mode === "release" ? "Publish" : "Preview"} build`} description={report.summary} style={{ flex: "2 1 420px", minWidth: 0 }}>
-              {[...report.errors, ...report.typeProblems].length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
-                  {[...report.errors, ...report.typeProblems].map((e, i) => (
-                    <div key={i} style={{ fontSize: "0.76rem", padding: "0.4rem 0.55rem", borderRadius: 8, background: "rgba(0,0,0,0.25)" }}>
-                      <div style={{ fontFamily: C.mono, color: e.kind === "type" ? C.warning : C.danger }}>
-                        {e.file ?? e.kind}
-                        {e.line ? `:${e.line}` : ""}
-                      </div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>{e.message}</div>
-                      {e.snippet && <pre style={{ margin: "4px 0 0", fontFamily: C.mono, color: C.faint, whiteSpace: "pre-wrap" }}>{e.snippet}</pre>}
-                    </div>
-                  ))}
-                </div>
-              )}
-              {report.migrations && (report.migrations.applied.length > 0 || report.migrations.failed) && (
-                <p style={{ fontSize: "0.76rem", color: report.migrations.failed ? C.danger : C.muted }}>
-                  {report.migrations.failed
-                    ? `Database change ${report.migrations.failed.name} failed: ${report.migrations.failed.message}`
-                    : `Database changes applied: ${report.migrations.applied.join(", ")}`}
-                </p>
-              )}
-              {report.functions && (
-                <p style={{ fontSize: "0.76rem", color: report.functions.failed.length ? C.danger : C.muted }}>
-                  {report.functions.deployed.length > 0 && `Functions deployed: ${report.functions.deployed.join(", ")}. `}
-                  {report.functions.failed.map((f) => `${f.name} failed: ${f.message}`).join(" ")}
-                </p>
-              )}
-              {report.log && (
-                <pre style={{ margin: 0, maxHeight: 320, overflow: "auto", padding: "0.6rem", borderRadius: 8, background: "rgba(0,0,0,0.35)", fontFamily: C.mono, fontSize: "0.7rem", color: C.muted, whiteSpace: "pre-wrap" }}>{report.log}</pre>
-              )}
-            </Panel>
-          )}
+      {error && !loaded ? (
+        <ProblemState title="We couldn't load your app's history just now" message={`${error} Every saved version is still safe.`} onRetry={() => void load()} />
+      ) : view === "versions" ? (
+        !versions ? (
+          <TimelineSkeleton />
+        ) : versions.length === 0 ? (
+          <EmptyHero
+            title="No versions yet"
+            tint="#8b5cf6"
+            body="Every change you or SOL make to your app is saved here automatically, so you can see what changed and go back to any earlier version anytime. Ask SOL to build something and your first version will show up here."
+            art={<TimelineIllustration />}
+          />
+        ) : (
+          <VersionTimeline versions={versions} busy={busy} onRestore={(v) => void restore(v)} onViewChanges={props.onViewChanges} />
+        )
+      ) : !builds ? (
+        <ListSkeleton rows={5} label="Loading updates" />
+      ) : builds.length === 0 ? (
+        <EmptyHero title="No updates yet" tint="#6366f1" body="Each time your preview refreshes or you publish, it's logged here — with what went wrong, if anything did, so SOL can fix it." />
+      ) : (
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <BuildList builds={builds} selected={report?.buildId ?? null} onOpen={(id) => void openBuild(id)} />
+          {report && <BuildDetail report={report} />}
         </div>
       )}
     </div>
   );
 }
+
+/** Versions ↔ updates, styled like the editor's other segmented switches. */
+function ViewSwitch({ value, onChange }: { value: "versions" | "builds"; onChange: (v: "versions" | "builds") => void }) {
+  const options = [
+    { id: "versions" as const, label: "Versions", icon: History },
+    { id: "builds" as const, label: "Updates", icon: Hammer },
+  ];
+  return (
+    <div role="tablist" aria-label="Show" style={{ display: "inline-flex", border: `1px solid ${C.border}`, borderRadius: 10, overflow: "hidden" }}>
+      {options.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={value === id}
+          onClick={() => onChange(id)}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0.4rem 0.8rem", fontSize: "0.76rem", fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit", background: value === id ? "rgba(139,92,246,0.25)" : "transparent", color: value === id ? C.text : C.muted }}
+        >
+          <Icon size={14} /> {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function VersionTimeline({ versions, busy, onRestore, onViewChanges }: { versions: Version[]; busy: string | null; onRestore: (v: Version) => void; onViewChanges?: (versionId: string, against: string) => void }) {
+  const weekAgo = Date.now() - 7 * 86_400_000;
+  const stats = [
+    { label: versions.length === 1 ? "Version saved" : "Versions saved", value: versions.length, color: "#8b5cf6", icon: History },
+    { label: "Made by SOL", value: versions.filter((v) => v.source === "ai").length, color: "#c084fc", icon: Bot },
+    { label: "This week", value: versions.filter((v) => Date.parse(v.createdAt) > weekAgo).length, color: "#6366f1", icon: CalendarClock },
+  ];
+
+  return (
+    <>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+        {stats.map((s) => (
+          <StatCard key={s.label} {...s} value={s.value.toLocaleString()} />
+        ))}
+      </div>
+      <section style={{ border: `1px solid ${C.border}`, borderRadius: 18, background: C.panel, padding: "0.6rem 1rem 0.8rem" }}>
+        <ol style={{ listStyle: "none", margin: 0, padding: 0, position: "relative" }}>
+          {/* The timeline's spine, running behind every dot. */}
+          <span aria-hidden style={{ position: "absolute", left: 19, top: 22, bottom: 22, width: 2, borderRadius: 2, background: "linear-gradient(180deg, rgba(139,92,246,0.6), rgba(192,132,252,0.3) 50%, rgba(255,255,255,0.06))" }} />
+          {versions.map((v, i) => {
+            const previous = versions[i + 1];
+            const day = dayLabel(v.createdAt);
+            const newDay = i === 0 || dayLabel(versions[i - 1].createdAt) !== day;
+            const src = sourceOf(v.source);
+            const Icon = src.icon;
+            const current = i === 0;
+            return (
+              <li key={v.id}>
+                {newDay && (
+                  <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14, padding: "0.8rem 0 0.4rem" }}>
+                    <span aria-hidden style={{ width: 40, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 99, background: C.bg, border: `2px solid ${C.borderStrong}` }} />
+                    </span>
+                    <span style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: C.faint }}>{day}</span>
+                  </div>
+                )}
+                <div style={{ position: "relative", display: "flex", alignItems: "flex-start", gap: 14, padding: "0.35rem 0" }}>
+                  <span aria-hidden style={{ width: 40, height: 40, borderRadius: 99, flexShrink: 0, display: "grid", placeItems: "center", background: `linear-gradient(135deg, ${src.color}, ${src.color}aa)`, color: "#fff", border: `3px solid ${C.bg}`, boxShadow: current ? `0 0 0 3px ${src.color}40, 0 8px 24px ${src.color}40` : "0 6px 18px rgba(0,0,0,0.3)", marginTop: 4 }}>
+                    <Icon size={16} />
+                  </span>
+                  <div
+                    className="plx-row"
+                    style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "0.7rem 1rem", flexWrap: "wrap", padding: "0.8rem 1rem", borderRadius: 14, border: `1px solid ${current ? `${src.color}55` : C.border}`, background: current ? `linear-gradient(135deg, ${src.color}14, transparent 70%)` : "transparent", opacity: busy === v.id ? 0.55 : 1 }}
+                  >
+                    <div style={{ flex: "1 1 260px", minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.88rem", fontWeight: 600, color: C.text, lineHeight: 1.4, overflowWrap: "anywhere" }}>{v.message}</span>
+                        {current && <Pill color="#8b5cf6">Current version</Pill>}
+                        {v.isLive && <Pill color={C.success}>Live on your site</Pill>}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: "0.75rem", color: C.muted }}>
+                        <span style={{ color: src.color, fontWeight: 650 }}>{src.label}</span>
+                        {v.authorName && v.source !== "ai" && <span>· by {v.authorName}</span>}
+                        <span>· {timeAgo(v.createdAt)}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      {previous && onViewChanges && (
+                        <Button size="sm" variant="ghost" onClick={() => onViewChanges(previous.id, v.id)}>
+                          <Eye size={14} /> See changes
+                        </Button>
+                      )}
+                      {!current && (
+                        <Button size="sm" disabled={busy !== null} onClick={() => onRestore(v)}>
+                          <RotateCcw size={14} /> {busy === v.id ? "Going back…" : "Go back to this version"}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
+    </>
+  );
+}
+
+/** First load: stat cards and a timeline, gently shimmering. */
+function TimelineSkeleton() {
+  const widths = [58, 44, 66, 50, 38];
+  return (
+    <div aria-busy="true" aria-label="Loading your history" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+        {[0, 1, 2].map((i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 14, padding: "1rem 1.1rem", borderRadius: 16, border: `1px solid ${C.border}` }}>
+            <Shimmer width={40} height={40} radius={12} />
+            <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 7 }}>
+              <Shimmer width={44} height={16} />
+              <Shimmer width="50%" height={8} radius={99} />
+            </span>
+          </div>
+        ))}
+      </div>
+      <div style={{ position: "relative", border: `1px solid ${C.border}`, borderRadius: 18, padding: "0.8rem 1rem" }}>
+        <span aria-hidden style={{ position: "absolute", left: 35, top: 30, bottom: 30, width: 2, background: "rgba(255,255,255,0.06)" }} />
+        {widths.map((w, i) => (
+          <div key={i} style={{ position: "relative", display: "flex", alignItems: "center", gap: 14, padding: "0.45rem 0" }}>
+            <Shimmer width={40} height={40} radius={99} />
+            <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 14, padding: "0.85rem 1rem", borderRadius: 14, border: `1px solid ${C.border}` }}>
+              <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 7 }}>
+                <Shimmer width={`${w}%`} height={11} radius={99} />
+                <Shimmer width="20%" height={8} radius={99} />
+              </span>
+              <Shimmer width={150} height={26} radius={9} />
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** A little timeline of coloured versions, the newest glowing at the top. */
+function TimelineIllustration() {
+  const steps = [
+    { c: "#8b5cf6", w: "64%" },
+    { c: "#c084fc", w: "48%" },
+    { c: "#6366f1", w: "56%" },
+    { c: "#a78bfa", w: "40%" },
+  ];
+  return (
+    <div style={{ position: "relative", borderRadius: 16, background: "rgba(11,15,25,0.6)", border: `1px solid ${C.borderStrong}`, padding: "18px 18px 18px 16px", boxShadow: "0 24px 60px rgba(0,0,0,0.35)", transform: "rotate(-1.5deg)", display: "flex", flexDirection: "column", gap: 12 }}>
+      <span style={{ position: "absolute", left: 30, top: 30, bottom: 30, width: 2, background: "linear-gradient(180deg, rgba(139,92,246,0.7), rgba(196,181,253,0.2))" }} />
+      {steps.map((s, i) => (
+        <div key={i} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ width: 28, height: 28, borderRadius: 99, flexShrink: 0, background: `linear-gradient(135deg, ${s.c}, ${s.c}99)`, border: "3px solid #0b0f19", boxShadow: i === 0 ? `0 0 0 3px ${s.c}40` : "none" }} />
+          <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 10, border: `1px solid ${i === 0 ? `${s.c}66` : C.border}`, background: i === 0 ? `${s.c}1a` : "rgba(255,255,255,0.03)" }}>
+            <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
+              <span style={{ width: s.w, height: 7, borderRadius: 99, background: "rgba(255,255,255,0.32)" }} />
+              <span style={{ width: "30%", height: 5, borderRadius: 99, background: "rgba(255,255,255,0.12)" }} />
+            </span>
+            {i > 0 && (
+              <span style={{ color: s.c, display: "grid", placeItems: "center" }}>
+                <RotateCcw size={13} />
+              </span>
+            )}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const STATUS: Record<string, { label: string; color: string }> = {
+  SUCCEEDED: { label: "Worked", color: C.success },
+  FAILED: { label: "Had a problem", color: C.danger },
+  CANCELLED: { label: "Stopped", color: C.muted },
+  BUILDING: { label: "In progress", color: "#a78bfa" },
+  QUEUED: { label: "Waiting", color: C.warning },
+};
+
+function BuildList({ builds, selected, onOpen }: { builds: BuildRow[]; selected: string | null; onOpen: (id: string) => void }) {
+  return (
+    <section style={{ flex: "1 1 340px", minWidth: 0, border: `1px solid ${C.border}`, borderRadius: 18, background: C.panel, overflow: "hidden" }}>
+      <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        {builds.map((b) => {
+          const status = STATUS[b.status] ?? { label: b.status.toLowerCase(), color: C.muted };
+          const publish = b.mode === "release";
+          const Icon = publish ? Rocket : Eye;
+          const tint = publish ? "#7c3aed" : "#6366f1";
+          return (
+            <li key={b.id} className="plx-history-build" style={{ borderBottom: `1px solid ${C.border}` }}>
+              <button
+                type="button"
+                className="plx-row"
+                onClick={() => onOpen(b.id)}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "0.75rem 1rem", border: "none", borderLeft: `3px solid ${selected === b.id ? C.brand : "transparent"}`, background: selected === b.id ? "rgba(139,92,246,0.08)" : "transparent", color: C.text, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}
+              >
+                <span aria-hidden style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center", background: `${tint}26`, color: tint }}>
+                  <Icon size={16} />
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: "0.84rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b.summary ?? (publish ? "Published your app" : "Refreshed the preview")}</span>
+                  <span style={{ display: "block", fontSize: "0.73rem", color: C.muted, marginTop: 2 }}>
+                    {publish ? "Publish" : "Preview"} · {timeAgo(b.createdAt)}
+                  </span>
+                </span>
+                <Pill color={status.color}>{status.label}</Pill>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function BuildDetail({ report }: { report: BuildReport }) {
+  const problems = [...report.errors, ...report.typeProblems];
+  const failedFns = report.functions?.failed ?? [];
+  return (
+    <section style={{ flex: "2 1 440px", minWidth: 0, border: `1px solid ${C.border}`, borderRadius: 18, background: C.panel, padding: "1.1rem 1.2rem", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <span aria-hidden style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: "grid", placeItems: "center", background: report.mode === "release" ? "rgba(124,58,237,0.2)" : "rgba(99,102,241,0.2)", color: report.mode === "release" ? "#a78bfa" : "#c4b5fd" }}>
+          {report.mode === "release" ? <Rocket size={18} /> : <Eye size={18} />}
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: 0, fontSize: "0.98rem", fontWeight: 700, color: C.text }}>{report.mode === "release" ? "Publish" : "Preview update"}</h3>
+          <p style={{ margin: "0.15rem 0 0", fontSize: "0.78rem", color: C.muted, lineHeight: 1.5 }}>{report.summary}</p>
+        </div>
+      </div>
+      {problems.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {problems.map((e, i) => (
+            <div key={i} style={{ fontSize: "0.76rem", padding: "0.55rem 0.7rem", borderRadius: 10, background: "rgba(0,0,0,0.25)", borderLeft: `3px solid ${e.kind === "type" ? C.warning : C.danger}` }}>
+              <div style={{ fontFamily: C.mono, color: e.kind === "type" ? C.warning : C.danger }}>
+                {e.file ?? e.kind}
+                {e.line ? `:${e.line}` : ""}
+              </div>
+              <div style={{ whiteSpace: "pre-wrap" }}>{e.message}</div>
+              {e.snippet && <pre style={{ margin: "4px 0 0", fontFamily: C.mono, color: C.faint, whiteSpace: "pre-wrap" }}>{e.snippet}</pre>}
+            </div>
+          ))}
+        </div>
+      )}
+      {report.migrations && (report.migrations.applied.length > 0 || report.migrations.failed) && (
+        <Notice tone={report.migrations.failed ? "danger" : "success"}>
+          {report.migrations.failed
+            ? `Database change ${report.migrations.failed.name} failed: ${report.migrations.failed.message}`
+            : `Database changes applied: ${report.migrations.applied.join(", ")}`}
+        </Notice>
+      )}
+      {report.functions && (report.functions.deployed.length > 0 || failedFns.length > 0) && (
+        <Notice tone={failedFns.length ? "danger" : "success"}>
+          {report.functions.deployed.length > 0 && `Functions deployed: ${report.functions.deployed.join(", ")}. `}
+          {failedFns.map((f) => `${f.name} failed: ${f.message}`).join(" ")}
+        </Notice>
+      )}
+      {report.log && (
+        <details>
+          <summary style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.76rem", color: C.muted, cursor: "pointer" }}>
+            <FileText size={13} /> Full details (for SOL or support)
+          </summary>
+          <pre style={{ margin: "8px 0 0", maxHeight: 320, overflow: "auto", padding: "0.7rem", borderRadius: 10, background: "rgba(0,0,0,0.35)", fontFamily: C.mono, fontSize: "0.7rem", color: C.muted, whiteSpace: "pre-wrap" }}>{report.log}</pre>
+        </details>
+      )}
+    </section>
+  );
+}
+
+const HISTORY_CSS = `
+.plx-history-build:last-child { border-bottom: none !important; }
+`;

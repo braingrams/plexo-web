@@ -583,7 +583,39 @@ export function SolChatView({
         />
       )}
 
-      {isEmpty ? (
+      {isEmpty && embedded ? (
+        // Inside the app editor the chat box always sits at the bottom — the same spot it
+        // keeps once a conversation starts — with the starting ideas just above it.
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "1.25rem" }}>
+            {embedded.emptyTitle && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+                <h2 style={{ margin: 0, fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 700, color: "#f0f2ff" }}>{embedded.emptyTitle}</h2>
+                {embedded.emptySuggestions && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", alignItems: "flex-start" }}>
+                    {embedded.emptySuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        onClick={() => void handleSend(suggestion, [])}
+                        style={{ padding: "0.5rem 0.85rem", borderRadius: 12, border: "1px solid rgba(139,92,246,0.25)", background: "rgba(139,92,246,0.08)", color: "rgba(240,242,255,0.88)", fontSize: "0.8rem", textAlign: "left", cursor: "pointer" }}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div style={{ padding: "0 1.25rem 1.25rem" }}>
+            <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+              {embedded.composerPrefix}
+              {composer}
+            </div>
+          </div>
+        </div>
+      ) : isEmpty ? (
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 1.25rem", gap: "1.75rem" }}>
           {embedded?.emptyTitle ? (
             <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "0.9rem", alignItems: "center" }}>
