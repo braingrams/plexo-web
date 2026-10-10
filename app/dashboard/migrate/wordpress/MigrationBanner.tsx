@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { AlertTriangle, ArrowRightLeft, CheckCircle2 } from "lucide-react";
+import { DashboardNotice } from "../../_components/DashboardNotice";
 import { usePathname } from "next/navigation";
 import { formatDuration, migrationActivity, migrationProgress } from "@/lib/wpMigration/estimate";
 import { isRunning, migrationHref, useMigrations, type MigrationSummary } from "./useMigrations";
@@ -59,23 +60,15 @@ export function MigrationBanner() {
   };
 
   return (
-    <div role="status" style={{ ...bar, borderColor: tone(shown).border, background: tone(shown).background }}>
-      <div style={{ flex: 1, minWidth: 220 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "#f0f2ff" }}>{headline(shown, name)}</div>
-        <div style={{ fontSize: 12, color: "rgba(240,242,255,0.6)", marginTop: 2 }}>{detail(shown)}</div>
-        {isRunning(shown) && (
-          <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", marginTop: 8, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${Math.round(migrationProgress(shown.phase, shown.counts) * 100)}%`, background: "var(--brand)", transition: "width 0.6s" }} />
-          </div>
-        )}
-      </div>
-      <Link href={migrationHref(shown)} style={button}>
-        {shown.phase === "PAUSED_ERROR" ? "Continue the move" : shown.phase === "COMPLETED" ? "See your report" : "View progress"} →
-      </Link>
-      {shown.phase === "COMPLETED" && (
-        <button type="button" onClick={dismiss} aria-label="Dismiss" style={close}>×</button>
-      )}
-    </div>
+    <DashboardNotice
+      tone={shown.phase === "PAUSED_ERROR" ? "warning" : shown.phase === "COMPLETED" ? "success" : "brand"}
+      icon={shown.phase === "PAUSED_ERROR" ? AlertTriangle : shown.phase === "COMPLETED" ? CheckCircle2 : ArrowRightLeft}
+      title={headline(shown, name)}
+      detail={detail(shown)}
+      progress={isRunning(shown) ? migrationProgress(shown.phase, shown.counts) : undefined}
+      actions={[{ label: shown.phase === "PAUSED_ERROR" ? "Continue the move" : shown.phase === "COMPLETED" ? "See your report" : "View progress", href: migrationHref(shown) }]}
+      onDismiss={shown.phase === "COMPLETED" ? dismiss : undefined}
+    />
   );
 }
 
@@ -100,11 +93,6 @@ function detail(m: MigrationSummary): string {
   return `${migrationActivity(m.phase, m.counts)}${left} · It keeps going if you leave — we'll email you when it's done.`;
 }
 
-function tone(m: MigrationSummary) {
-  if (m.phase === "PAUSED_ERROR") return { border: "rgba(245,183,74,0.45)", background: "rgba(245,183,74,0.08)" };
-  if (m.phase === "COMPLETED") return { border: "rgba(110,231,168,0.4)", background: "rgba(110,231,168,0.07)" };
-  return { border: "rgba(var(--brand-rgb),0.35)", background: "rgba(var(--brand-rgb),0.07)" };
-}
 
 function hostOf(url: string): string {
   try {
@@ -114,36 +102,3 @@ function hostOf(url: string): string {
   }
 }
 
-const bar: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 14,
-  flexWrap: "wrap",
-  padding: "12px 16px",
-  margin: "0 0 20px",
-  borderRadius: 12,
-  border: "1px solid",
-};
-
-const button: React.CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "8px 14px",
-  borderRadius: 10,
-  fontSize: 13,
-  fontWeight: 700,
-  textDecoration: "none",
-  background: "rgba(var(--brand-rgb),0.18)",
-  color: "var(--brand)",
-  whiteSpace: "nowrap",
-};
-
-const close: React.CSSProperties = {
-  border: "none",
-  background: "transparent",
-  color: "rgba(240,242,255,0.5)",
-  fontSize: 20,
-  lineHeight: 1,
-  cursor: "pointer",
-  padding: "0 4px",
-};

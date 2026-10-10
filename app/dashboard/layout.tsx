@@ -7,7 +7,7 @@ import { ensureActiveOrganization, getOrgBrandDynamo } from "@/server/orgDynamo"
 import { DashboardShell } from "./dashboard-shell";
 import { MigrationBanner } from "./migrate/wordpress/MigrationBanner";
 import { PlanBanner, type PlanBannerState } from "./_components/PlanBanner";
-import { accessDaysLeft, effectivePlan, paidAccess, planSyncAction } from "@/lib/plan/entitlement";
+import { TRIAL_DAYS, accessDaysLeft, canStartTrial, effectivePlan, paidAccess, planSyncAction } from "@/lib/plan/entitlement";
 import { syncPlanLifecycle } from "@/lib/plan/lifecycle";
 
 export default async function DashboardLayout({
@@ -69,19 +69,19 @@ export default async function DashboardLayout({
   );
 }
 
-function planBannerState(user: Parameters<typeof paidAccess>[0] & { planDowngradedAt?: string | null; planBeforeDowngrade?: string | null; planDowngradeReason?: string | null }): PlanBannerState | null {
+function planBannerState(user: Parameters<typeof paidAccess>[0] & { planDowngradedAt?: string | null; planBeforeDowngrade?: string | null; planDowngradeReason?: string | null; trialStartedAt?: string | null }): PlanBannerState | null {
   const plan = effectivePlan(user);
   if (plan !== "FREE") {
     const access = paidAccess(user);
     const daysLeft = accessDaysLeft(user);
     if (access.entitled && (access.basis === "TRIAL" || access.basis === "GRANT") && daysLeft !== null) {
-      return access.basis === "TRIAL" ? { kind: "trial", plan, daysLeft } : { kind: "grant", plan, daysLeft };
+      return access.basis === "TRIAL" ? { kind: "trial", plan, daysLeft, trialDays: TRIAL_DAYS } : { kind: "grant", plan, daysLeft };
     }
     if (access.entitled && access.basis === "SUBSCRIPTION" && user.subscriptionStatus === "PAST_DUE") return { kind: "past_due", plan };
     return null;
   }
   if (user.planDowngradedAt) {
-    return { kind: "downgraded", previousPlan: user.planBeforeDowngrade === "ULTRA" ? "ULTRA" : "PRO", since: user.planDowngradedAt, reason: user.planDowngradeReason ?? null };
+    return { kind: "downgraded", previousPlan: user.planBeforeDowngrade === "ULTRA" ? "ULTRA" : "PRO", since: user.planDowngradedAt, reason: user.planDowngradeReason ?? null, trialAvailable: canStartTrial(user) };
   }
   return null;
 }

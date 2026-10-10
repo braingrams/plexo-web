@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { startTrial } from "./trial";
 
 // A slim strip at the top of the site and app editors saying what the owner's plan means
 // for THIS site, with the one action that fixes it. Silent whenever there's nothing to say
@@ -10,6 +11,7 @@ import Link from "next/link";
 type SiteStatus = {
   plan: "FREE" | "PRO" | "ULTRA";
   previousPlan: "PRO" | "ULTRA" | null;
+  trialAvailable: boolean;
   homeOnly: boolean;
   isApp: boolean;
   site: { id: string; name: string; isLive: boolean; liveAddress: string | null; pausedCustomDomains: string[]; everPublished: boolean } | null;
@@ -62,6 +64,28 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
     }
   }
 
+  const trialPlan = status.previousPlan ?? "PRO";
+  // With the free trial still unused, every upgrade button here starts it instead (no card).
+  const Upgrade = ({ label }: { label: string }) =>
+    status.trialAvailable ? (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          void startTrial(trialPlan).catch((err) => {
+            setMessage(err instanceof Error ? err.message : "Couldn't start your trial.");
+            setBusy(false);
+          });
+        }}
+        style={{ ...primaryButton, border: "none", cursor: "pointer", fontFamily: "inherit" }}
+      >
+        {busy ? "Starting…" : `Try ${PLAN_NAME[trialPlan]} free for 14 days`}
+      </button>
+    ) : (
+      <Link href={upgradeHref} style={primaryButton}>{label}</Link>
+    );
+
   const notices: React.ReactNode[] = [];
 
   // 1. This site is offline because Free keeps one site live and another one is.
@@ -79,7 +103,7 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
           <button type="button" onClick={() => void makeLive()} disabled={busy} style={secondaryButton}>
             {busy ? "Switching…" : "Make this my live site"}
           </button>
-          <Link href={upgradeHref} style={primaryButton}>Upgrade to keep both</Link>
+          <Upgrade label={"Upgrade to keep both"} />
         </span>
       </Strip>,
     );
@@ -90,7 +114,7 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
           Live at <strong>{status.site.liveAddress}</strong>. Your domain <strong>{status.site.pausedCustomDomains[0]}</strong> is paused on the Free plan — it comes back the moment you upgrade.
         </span>
         <span style={actions}>
-          <Link href={upgradeHref} style={primaryButton}>Bring back my domain</Link>
+          <Upgrade label={"Bring back my domain"} />
         </span>
       </Strip>,
     );
@@ -106,7 +130,7 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
             : <>Your site has more pages than the Free plan publishes — only the homepage is live. Upgrade to Pro to publish them, or keep only 1 page to continue editing on the Free tier.</>}
         </span>
         <span style={actions}>
-          <Link href={upgradeHref} style={primaryButton}>{status.previousPlan ? `Reactivate ${previous}` : "Upgrade to Pro"}</Link>
+          <Upgrade label={status.previousPlan ? `Reactivate ${previous}` : "Upgrade to Pro"} />
         </span>
       </Strip>,
     );
@@ -118,7 +142,7 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
       <Strip key="app" tone="info">
         <span>On the Free plan visitors see your app&apos;s first screen. Other screens send them back to it.</span>
         <span style={actions}>
-          <Link href={upgradeHref} style={primaryButton}>Upgrade to open every screen</Link>
+          <Upgrade label={"Upgrade to open every screen"} />
         </span>
       </Strip>,
     );
@@ -143,7 +167,7 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
           <button type="button" onClick={() => setLinksOpen((v) => !v)} style={secondaryButton}>
             {linksOpen ? "Hide links" : "Show links"}
           </button>
-          <Link href={upgradeHref} style={primaryButton}>Publish those pages</Link>
+          <Upgrade label={"Publish those pages"} />
         </span>
       </Strip>,
     );
