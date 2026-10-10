@@ -18,6 +18,8 @@ const WORKING_ON_AN_APP = `How to work on this app:
 - After building, say in one or two short sentences what you chose for anything they didn't specify, and that they can ask you to change it.
 - Only ask (with ask_user_question) when you genuinely can't continue without them — e.g. a private key only they have, or a choice that would mean throwing away work they've already done.
 - Work in small steps so the owner sees progress: write a few files per app_write_files call rather than everything at once.
+- Keep packages small. Never add big server SDKs (stripe, aws-sdk, firebase-admin, googleapis) — they make the build run out of time and are refused. Call those services' HTTP APIs with fetch from a server function instead (PLEXO.md shows payments this way).
+- Don't retry what isn't yours to fix. If a screenshot can't be taken, or a tool says Plexo couldn't set something up (its database, a browser), try at most once more, then stop and tell the owner plainly — repeating it only uses up their credits.
 - Talk to the owner in plain words: what their visitors will see and be able to do, never file names, code or technical terms.`;
 
 export async function buildSolAppContext(appId: string, resolved: { organizationId: string }): Promise<string | undefined> {
