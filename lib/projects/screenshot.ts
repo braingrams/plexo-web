@@ -1,19 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { chromium } from "playwright-core";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { BrowserbaseNotConfiguredError } from "@/lib/siteImport/browserbaseClient";
+import { checkPage, VIEWPORTS, type PageCheck, type Viewport } from "./pageCheck";
 
-// Opens an app's preview in a real browser (Browserbase), the way a visitor would, and
-// reports what it shows: a screenshot plus every error the page hit while loading. SOL uses
-// this to check its own work after building, instead of assuming a successful build means
-// a working app.
+// Opens an app's preview in a real browser, the way a visitor would, and reports what it
+// shows: a screenshot plus every error the page hit while loading. SOL uses this to check its
+// own work after building, instead of assuming a successful build means a working app.
+//
+// Plexo's own browser (lambda/browser — Chromium in a Lambda, SCREENSHOT_FUNCTION_NAME) is
+// tried first: no outside service, no shared limit. Browserbase is the backup, used only if
+// that fails.
 
-export const VIEWPORTS = {
-  desktop: { width: 1440, height: 900 },
-  tablet: { width: 768, height: 1024 },
-  mobile: { width: 375, height: 812 },
-} as const;
-export type Viewport = keyof typeof VIEWPORTS;
+export { VIEWPORTS, type Viewport };
 
 const API = "https://api.browserbase.com/v1";
 
@@ -48,7 +48,20 @@ async function openSession(apiKey: string, wait: (ms: number) => Promise<void> =
 }
 export const _openSessionForTests = openSession;
 
-export async function screenshotPage(url: string, opts: { viewport?: Viewport; userId: string; fullPage?: boolean }): Promise<ScreenshotResult> {
+let lambdaClient: LambdaClient | null = null;
+
+/** Plexo's own browser, or null when this environment doesn't have one. */
+async function viaOwnBrowser(url: string, opts: { viewport?: Viewport; fullPage?: boolean }): Promise<PageCheck | null> {
+  const functionName = process.env.SCREENSHOT_FUNCTION_NAME;
+  if (!functionName) return null;
+  lambdaClient ??= new LambdaClient({ region: process.env.AWS_REGION || "us-east-1" });
+  const res = await lambdaClient.send(new InvokeCommand({ FunctionName: functionName, Payload: Buffer.from(JSON.stringify({ url, viewport: opts.viewport, fullPage: opts.fullPage })) }));
+  const body = res.Payload ? JSON.parse(Buffer.from(res.Payload).toString("utf8")) : null;
+  if (res.FunctionError || !body?.image) throw new Error(body?.errorMessage ?? `browser function failed (${res.FunctionError ?? "no image"})`);
+  return { ...body, image: Buffer.from(body.image, "base64") } as PageCheck;
+}
+
+async function viaBrowserbase(url: string, opts: { viewport?: Viewport; fullPage?: boolean }): Promise<PageCheck> {
   const apiKey = process.env.BROWSERBASE_API_KEY;
   if (!apiKey) throw new BrowserbaseNotConfiguredError();
   const session = await openSession(apiKey);
@@ -57,33 +70,27 @@ export async function screenshotPage(url: string, opts: { viewport?: Viewport; u
     browser = await chromium.connectOverCDP(session.connectUrl, { timeout: 30_000 });
     const context = browser.contexts()[0] ?? (await browser.newContext());
     const page = context.pages()[0] ?? (await context.newPage());
-    await page.setViewportSize(VIEWPORTS[opts.viewport ?? "desktop"]);
-    const consoleErrors: string[] = [];
-    const failedRequests: string[] = [];
-    page.on("console", (msg) => {
-      if (msg.type() === "error" && consoleErrors.length < 20) consoleErrors.push(msg.text().slice(0, 500));
-    });
-    page.on("pageerror", (err) => {
-      if (consoleErrors.length < 20) consoleErrors.push(`Uncaught: ${err.message}`.slice(0, 500));
-    });
-    page.on("response", (r) => {
-      if (r.status() >= 400 && failedRequests.length < 20) failedRequests.push(`${r.status()} ${r.request().method()} ${new URL(r.url()).pathname}`);
-    });
-    const response = await page.goto(url, { waitUntil: "load", timeout: 45_000 });
-    // Let the app fetch its data and render (an SPA keeps working after "load").
-    await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => undefined);
-    await page.waitForTimeout(800);
-    const image = await page.screenshot({ type: "jpeg", quality: 70, fullPage: opts.fullPage ?? false });
-    // Same private area as chat attachments (so SOL's attachment resolver can show it to the
-    // model), tagged to expire after a week (data-stack.ts lifecycle rule).
-    const bucket = process.env.USER_CONTENT_BUCKET_NAME!;
-    const region = process.env.AWS_REGION || "us-east-1";
-    const key = `private/sol-attachments/${opts.userId}/screenshots/${randomUUID()}.jpg`;
-    await new S3Client({ region }).send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: image, ContentType: "image/jpeg", Tagging: "plexo-expire=screenshot" }));
-    const imageUrl = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
-    return { imageUrl, title: await page.title(), url: page.url(), consoleErrors, failedRequests, status: response?.status() ?? null };
+    return await checkPage(page, url, opts);
   } finally {
     await browser?.close().catch(() => {});
     await fetch(`${API}/sessions/${session.id}`, { method: "POST", headers: { "X-BB-API-Key": apiKey, "Content-Type": "application/json" }, body: JSON.stringify({ status: "REQUEST_RELEASE" }) }).catch(() => {});
   }
+}
+
+export async function screenshotPage(url: string, opts: { viewport?: Viewport; userId: string; fullPage?: boolean }): Promise<ScreenshotResult> {
+  let shot: PageCheck | null = null;
+  try {
+    shot = await viaOwnBrowser(url, opts);
+  } catch (err) {
+    console.warn("[screenshot] Plexo's browser failed, using Browserbase instead:", err instanceof Error ? err.message : err);
+  }
+  shot ??= await viaBrowserbase(url, opts);
+  // Same private area as chat attachments (so SOL's attachment resolver can show it to the
+  // model), tagged to expire after a week (data-stack.ts lifecycle rule).
+  const bucket = process.env.USER_CONTENT_BUCKET_NAME!;
+  const region = process.env.AWS_REGION || "us-east-1";
+  const key = `private/sol-attachments/${opts.userId}/screenshots/${randomUUID()}.jpg`;
+  await new S3Client({ region }).send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: shot.image, ContentType: "image/jpeg", Tagging: "plexo-expire=screenshot" }));
+  const imageUrl = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+  return { imageUrl, title: shot.title, url: shot.url, consoleErrors: shot.consoleErrors, failedRequests: shot.failedRequests, status: shot.status };
 }

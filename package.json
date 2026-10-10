@@ -53,6 +53,7 @@
 		"@gsap/react": "^2.1.2",
 		"@monaco-editor/react": "^4.7.0",
 		"@mozilla/readability": "^0.6.0",
+		"@sparticuz/chromium": "152.0.0",
 		"@stripe/react-stripe-js": "^6.9.0",
 		"@stripe/stripe-js": "^9.15.0",
 		"@tailwindcss/postcss": "^4.3.3",
