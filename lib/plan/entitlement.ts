@@ -109,3 +109,13 @@ export function shouldOfferTrial(
   const created = Date.parse(user.createdAt ?? "");
   return Number.isFinite(created) && now.getTime() - created < TRIAL_OFFER_WINDOW_MS;
 }
+
+/**
+ * May start the one free trial now — any account that's never had one and isn't paying,
+ * whenever it likes (not just right after signup: shouldOfferTrial only decides when the
+ * offer screen pops up by itself).
+ */
+export function canStartTrial(user: PlanUser & { trialStartedAt?: string | null }, now: Date = new Date()): boolean {
+  if (user.trialStartedAt) return false;
+  return effectivePlan(user, now) === "FREE";
+}

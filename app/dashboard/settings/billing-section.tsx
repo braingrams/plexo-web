@@ -1,5 +1,6 @@
 "use client";
 
+import { startTrial } from "../_components/trial";
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
@@ -31,6 +32,8 @@ type Props = {
   paying?: boolean;
   /** One plain-language line on where the plan stands (trial days left, kept by Plexo, …). */
   planNote?: { text: string; tone: "info" | "warning" } | null;
+  /** The account can still start its one free trial. */
+  trialAvailable?: boolean;
   allowanceBalance: number;
   topupBalance: number;
   allowanceResetAt: string;
@@ -134,7 +137,7 @@ function CheckoutModal({ clientSecret, onClose }: { clientSecret: string; onClos
   );
 }
 
-export function BillingSection({ plan, paying = plan !== "FREE", planNote = null, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
+export function BillingSection({ plan, paying = plan !== "FREE", planNote = null, trialAvailable = false, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -390,6 +393,25 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
                 style={{ ...actionButtonStyle, opacity: busyAction === `sub-${p}` ? 0.7 : 1 }}
               >
                 {busyAction === `sub-${p}` ? "Opening…" : p === plan ? `Keep ${p}` : `Subscribe to ${p}`}
+              </button>
+            ))}
+            {/* The one free trial, for anyone who hasn't had it — no card. */}
+            {plan === "FREE" && trialAvailable && (["PRO", "ULTRA"] as const).map((p) => (
+              <button
+                key={`trial-${p}`}
+                type="button"
+                disabled={busyAction !== null}
+                onClick={() => {
+                  setBusyAction(`trial-${p}`);
+                  setError(null);
+                  void startTrial(p).catch((err) => {
+                    setError(err instanceof Error ? err.message : "Couldn't start your trial.");
+                    setBusyAction(null);
+                  });
+                }}
+                style={{ ...(p === "PRO" ? actionButtonStyle : secondaryButtonStyle), opacity: busyAction === `trial-${p}` ? 0.7 : 1 }}
+              >
+                {busyAction === `trial-${p}` ? "Starting your trial…" : `Try ${p === "PRO" ? "Pro" : "Ultra"} free for 14 days`}
               </button>
             ))}
             {plan === "FREE" && (

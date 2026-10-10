@@ -9,7 +9,7 @@ import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { SettingsShell } from "../../_components/SettingsShell";
 import { PageHeader } from "../../_components/PageHeader";
 import { BillingSection } from "../billing-section";
-import { accessDaysLeft, effectivePlan, paidAccess } from "@/lib/plan/entitlement";
+import { accessDaysLeft, canStartTrial, effectivePlan, paidAccess } from "@/lib/plan/entitlement";
 
 export default async function SubscriptionPage() {
   const session = await auth();
@@ -61,6 +61,7 @@ export default async function SubscriptionPage() {
         plan={plan}
         paying={paying}
         planNote={planNote}
+        trialAvailable={canStartTrial(user)}
         allowanceBalance={balance.allowanceBalance}
         topupBalance={balance.topupBalance}
         allowanceResetAt={balance.allowanceResetAt}

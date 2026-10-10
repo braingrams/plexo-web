@@ -7,6 +7,7 @@ import { findRootTemplateId } from "@/lib/siteLayoutDynamo";
 import { getTierFeatures, isHomePageOnlyPlan } from "@/lib/subscription";
 import { findSecondaryPageLinks, isDomainLive, otherLiveSites } from "@/lib/plan/siteLimits";
 import { listGovernedSites } from "@/lib/plan/sitesStore";
+import { canStartTrial } from "@/lib/plan/entitlement";
 
 /**
  * GET /api/v1/plan/site?templateId=<any page of the site>
@@ -46,6 +47,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   return NextResponse.json({
     plan,
     previousPlan: user?.planBeforeDowngrade ?? null,
+    trialAvailable: !!user && canStartTrial(user),
     homeOnly,
     isApp: page.sourceType === "REACT_PROJECT",
     site: site

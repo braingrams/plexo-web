@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { startTrial, useTrialAvailable } from "./trial";
 
 /** Generic plan-upgrade prompt — deep-links into /dashboard/settings/subscription's
  * existing ?upgrade=PRO|ULTRA&returnTo=… contract (see billing-section.tsx), same as
@@ -21,7 +22,19 @@ export function UpgradeModal({
   returnTo: string;
 }) {
   const [redirecting, setRedirecting] = useState(false);
+  const [trialError, setTrialError] = useState<string | null>(null);
+  const trial = useTrialAvailable();
   if (!open) return null;
+  const planName = targetPlan === "PRO" ? "Pro" : "Ultra";
+
+  function tryFree(): void {
+    setRedirecting(true);
+    setTrialError(null);
+    void startTrial(targetPlan, returnTo).catch((err) => {
+      setTrialError(err instanceof Error ? err.message : "Couldn't start your trial.");
+      setRedirecting(false);
+    });
+  }
 
   function startUpgrade(): void {
     setRedirecting(true);
@@ -73,6 +86,12 @@ export function UpgradeModal({
         >
           {message}
         </p>
+        {trial.available && (
+          <p style={{ fontSize: "0.8rem", color: "#c4b5fd", marginTop: "-0.6rem", marginBottom: "1.25rem" }}>
+            You can try {planName} free for {trial.trialDays} days first — no card needed.
+          </p>
+        )}
+        {trialError && <p style={{ fontSize: "0.8rem", color: "#f87171", marginBottom: "1rem" }}>{trialError}</p>}
         <div
           style={{
             display: "flex",
@@ -97,9 +116,29 @@ export function UpgradeModal({
           >
             Not now
           </button>
+          {trial.available && (
+            <button
+              type="button"
+              onClick={startUpgrade}
+              disabled={redirecting}
+              style={{
+                padding: "0.65rem 1.1rem",
+                borderRadius: 9,
+                border: "1px solid rgba(255,255,255,0.14)",
+                background: "transparent",
+                color: "#f0f2ff",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: "0.875rem",
+                fontWeight: 600,
+              }}
+            >
+              Pay now
+            </button>
+          )}
           <button
             type="button"
-            onClick={startUpgrade}
+            onClick={trial.available ? tryFree : startUpgrade}
             disabled={redirecting}
             style={{
               padding: "0.65rem 1.4rem",
@@ -117,8 +156,10 @@ export function UpgradeModal({
             }}
           >
             {redirecting
-              ? "Redirecting…"
-              : `Upgrade to ${targetPlan === "PRO" ? "Pro" : "Ultra"}`}
+              ? "One moment…"
+              : trial.available
+                ? `Try ${planName} free`
+                : `Upgrade to ${planName}`}
           </button>
         </div>
       </div>
