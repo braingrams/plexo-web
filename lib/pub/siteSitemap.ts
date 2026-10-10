@@ -26,16 +26,18 @@ function encodeSegments(segments: string[]): string {
 }
 
 /** Every publicly-served page of a site, depth-first, as absolute URLs on `host`. */
-async function listSitePages(root: TemplateItem, host: string): Promise<{ loc: string; lastmod?: string }[]> {
+async function listSitePages(root: TemplateItem, host: string, homeOnly: boolean): Promise<{ loc: string; lastmod?: string }[]> {
   const out: { loc: string; lastmod?: string }[] = [];
   if (!isNoindex(root.compiledHtml)) out.push({ loc: `https://${host}/`, lastmod: root.updatedAt });
+  if (homeOnly) return out;
 
   const queue: { node: TemplateItem; segments: string[] }[] = [{ node: root, segments: [] }];
   while (queue.length > 0 && out.length < MAX_SITEMAP_URLS) {
     const { node, segments } = queue.shift()!;
     const { data: children } = await Template.query.byParent({ parentId: node.id }).go({ pages: "all" });
     for (const child of children.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))) {
-      if (!child.slug || child.isSiteLayoutFragment || child.isBlogLayout || child.isLmsPageDesign) continue;
+      // An unpublished page (and everything under it) isn't served, so it isn't listed.
+      if (!child.slug || child.isSiteLayoutFragment || child.isBlogLayout || child.isLmsPageDesign || child.isPublished === false) continue;
       const childSegments = [...segments, child.slug];
       queue.push({ node: child, segments: childSegments });
       if (child.redirectTo || isNoindex(child.compiledHtml)) continue;
@@ -45,10 +47,12 @@ async function listSitePages(root: TemplateItem, host: string): Promise<{ loc: s
   return out;
 }
 
-export async function buildSiteSitemap(root: TemplateItem, host: string): Promise<string> {
-  const entries = await listSitePages(root, host);
+/** `homeOnly`: the owner's plan serves just the homepage (Free) — list only that. */
+export async function buildSiteSitemap(root: TemplateItem, host: string, opts: { homeOnly?: boolean } = {}): Promise<string> {
+  const homeOnly = opts.homeOnly ?? false;
+  const entries = await listSitePages(root, host, homeOnly);
 
-  const { data: blogSite } = await BlogSite.get({ templateId: root.id }).go();
+  const { data: blogSite } = homeOnly ? { data: null } : await BlogSite.get({ templateId: root.id }).go();
   if (blogSite?.enabled) {
     const [posts, categories, tags] = await Promise.all([listAllPublishedSlugs(root.id), listAllCategories(root.id), listAllTags(root.id)]);
     entries.push({ loc: `https://${host}/blog` });

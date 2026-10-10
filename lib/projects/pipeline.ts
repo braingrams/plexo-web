@@ -11,6 +11,8 @@ import { forgetAppContext } from "@/lib/appRuntime/context";
 import { forgetSchemaVersion } from "@/lib/appRuntime/data";
 import { databaseName } from "@/lib/appData/db";
 import { linkDomainToTemplate } from "@/lib/sites/linkDomain";
+import { isDomainLive } from "@/lib/plan/siteLimits";
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { slugify } from "@/server/slugDynamo";
 
 // The two things everyone (SOL, MCP, Code Mode, the Deploy API) actually wants:
@@ -176,10 +178,11 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
 /** An app gets a working address on first publish without the owner having to pick one. */
 async function ensureDomain(templateId: string, name: string, userId: string, organizationId: string, requested?: string): Promise<string[]> {
   const { data: existing } = await PublishedDomain.query.primary({ templateId }).go({ pages: "all" });
-  const active = existing.filter((d) => d.active !== false).map((d) => d.domain);
+  // Addresses switched off by the plan (Free keeps one live site) don't count as live.
+  const active = existing.filter(isDomainLive).map((d) => d.domain);
   if (active.length && !requested) return active;
   const { data: user } = await User.get({ id: userId }).go();
-  const owner = { userId, organizationId, subscriptionPlan: user?.subscriptionPlan ?? "FREE", customDomainLimit: user?.customDomainLimit ?? null };
+  const owner = { userId, organizationId, subscriptionPlan: effectivePlan(user), customDomainLimit: user?.customDomainLimit ?? null };
   const base = slugify(name).replace(/-{2,}/g, "-").slice(0, 40) || "app";
   const candidates = requested ? [requested] : [base, `${base}-${Math.random().toString(36).slice(2, 6)}`, `${base}-${Math.random().toString(36).slice(2, 8)}`];
   let lastError: unknown = null;

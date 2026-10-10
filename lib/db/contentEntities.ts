@@ -99,6 +99,12 @@ export const Template = new Entity(
       // submissions on WordPress (e.g. "/blog/wp-json/my-plugin/v1/contact"). The serve route
       // captures POSTs to them into Form Submissions so anything still calling them keeps working.
       migratedApiCaptureRoutes: { type: "any" },
+      // Sub-pages only (the root template IS the site's homepage). Absent = published.
+      // false = visitors get a 404 (the serve route checks it on every page of the path).
+      isPublished: { type: "boolean" },
+      // Set when a plan downgrade unpublished this page (lib/plan/lifecycle.ts), so an
+      // upgrade republishes exactly these pages and never one the owner unpublished.
+      planArchivedAt: { type: "string" },
       createdAt: {
         type: "string",
         default: () => new Date().toISOString(),
@@ -301,6 +307,13 @@ export const PublishedDomain = new Entity(
       // equivalent) — read by app/pub/[domain]/[[...slug]]/route.ts to emit
       // <meta name="robots" content="noindex,nofollow"> on every page this domain serves.
       noindex: { type: "boolean", default: false },
+      // Taken offline by the plan, not by abuse review (that's `active`): Free keeps one
+      // live site on a Plexo address. The row, its certificate and its CloudFront tenant
+      // are all kept, so an upgrade brings the domain straight back (lib/plan/lifecycle.ts).
+      planDisabledAt: { type: "string" },
+      // A Plexo address created by a downgrade because the site's only addresses were
+      // custom domains — so the one site Free keeps live is still reachable.
+      planFallback: { type: "boolean" },
       createdAt: {
         type: "string",
         default: () => new Date().toISOString(),

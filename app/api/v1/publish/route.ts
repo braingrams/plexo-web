@@ -10,6 +10,9 @@ import { getPagesDomain } from "@/server/pagesDomain";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
+import { PlanLimitError, planLimitResponse } from "@/lib/plan/publishGuard";
+import { otherLiveSites } from "@/lib/plan/siteLimits";
+import { listGovernedSites } from "@/lib/plan/sitesStore";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -98,6 +101,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { error: `Failed to compile designJson into HTML: ${err instanceof Error ? err.message : "Malformed structure"}` },
       { status: 400 }
     );
+  }
+
+  // Plan check BEFORE anything is created, so a refused publish leaves nothing behind.
+  // Free: Plexo addresses only, and one live site at a time (lib/plan/publishGuard.ts).
+  if (kind === "LANDING_PAGE" && rawDomain) {
+    const wantsCustom = (domainType ?? (rawDomain.includes(".") ? "CUSTOM" : "SUBDOMAIN")) === "CUSTOM";
+    try {
+      if (wantsCustom && !features.customDomainEnabled) {
+        throw new PlanLimitError("PLAN_CUSTOM_DOMAIN_REQUIRES_UPGRADE", "Custom domains are part of Pro. Publish to a free Plexo address (a name without dots, e.g. \"acme\") or upgrade to use your own domain.");
+      }
+      if (features.maxPublishedSites !== null) {
+        // The page is brand new, so every live site counts against the limit — except one
+        // that already owns this exact address (re-pointing it replaces that site).
+        const finalForCheck = wantsCustom ? rawDomain : `${rawDomain}.${getPagesDomain()}`;
+        const live = otherLiveSites(await listGovernedSites(resolved.userId), "").filter((s) => !s.domains.some((d) => d.domain === finalForCheck));
+        if (live.length >= features.maxPublishedSites) {
+          throw new PlanLimitError(
+            "PLAN_SITE_LIMIT_EXCEEDED",
+            `The Free plan keeps one site live at a time, and "${live[0].name}" is live now. Upgrade to Pro to publish more sites, or call again without a domain to save this page as a draft.`,
+            { liveSiteIds: live.map((s) => s.id), liveSiteNames: live.map((s) => s.name) },
+          );
+        }
+      }
+    } catch (err) {
+      if (err instanceof PlanLimitError) return planLimitResponse(err);
+      throw err;
+    }
   }
 
   // Check template creation limits — root/home pages only, per kind, so a landing page
@@ -193,7 +223,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { data: orgTemplatesForCount } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const rootIds = orgTemplatesForCount.filter((t) => !t.parentId).map((t) => t.id);
   const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
-  const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);
+  const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.filter((d) => !d.planDisabledAt).length, 0);
   const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
   if (currentDomainCount >= domainLimit) {
     return NextResponse.json({

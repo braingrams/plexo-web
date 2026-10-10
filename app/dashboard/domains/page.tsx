@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
@@ -78,6 +79,7 @@ export default async function DomainsPage() {
       certificateValidationName: d.certificateValidationName,
       certificateValidationValue: d.certificateValidationValue,
       noindex: d.noindex ?? false,
+      pausedByPlan: !!d.planDisabledAt,
       registration: reg
         ? {
             status: reg.status,
@@ -97,7 +99,7 @@ export default async function DomainsPage() {
       <DomainsClient
         initialDomains={domains}
         landingPages={landingPages}
-        plan={user.subscriptionPlan ?? "FREE"}
+        plan={effectivePlan(user)}
         customLimit={user.customDomainLimit ?? null}
       />
     </PageContainer>

@@ -18,6 +18,7 @@ import {
   type CommentTarget,
 } from "@charisol/plexo-sdk";
 import "@charisol/plexo-sdk/dist/plexo-sdk.css";
+import { SitePlanNotice } from "../../_components/SitePlanNotice";
 import { PagesPanel } from "./PagesPanel";
 import { CommentLayer } from "./comments/CommentLayer";
 import { BuyDomainFlow } from "../../domains/domains-client";
@@ -1076,6 +1077,9 @@ export function TemplateEditorClient({
           subscriptionPlan={subscriptionPlan}
           onNavigate={(pageId) => void handleNavigateToPage(pageId)}
         />
+      )}
+      {templateKind === "LANDING_PAGE" && !isBlogLayout && (
+        <SitePlanNotice templateId={templateId} refreshKey={isPublishing} />
       )}
       {isBlogLayout && (
         <div

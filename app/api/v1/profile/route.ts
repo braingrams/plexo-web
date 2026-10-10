@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { getDomainLimit } from "@/lib/domainLimit";
@@ -51,8 +52,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
     const domainCount = domainBatches.reduce((sum, batch) => sum + batch.data.filter((d) => d.userId === user.id).length, 0);
 
-    const features = getTierFeatures(user.subscriptionPlan ?? "FREE");
-    const domainLimit = getDomainLimit(user.subscriptionPlan ?? "FREE", user.customDomainLimit ?? null);
+    const features = getTierFeatures(effectivePlan(user));
+    const domainLimit = getDomainLimit(effectivePlan(user), user.customDomainLimit ?? null);
 
     return NextResponse.json({
       success: true,
@@ -61,12 +62,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         name: user.name,
         email: user.email,
         image: user.image ?? null,
-        subscriptionPlan: user.subscriptionPlan ?? "FREE",
+        subscriptionPlan: effectivePlan(user),
         allowanceBalance: user.allowanceBalance ?? 0,
         topupBalance: user.topupBalance ?? 0,
         totalCredits: (user.allowanceBalance ?? 0) + (user.topupBalance ?? 0),
         // What the plan grants each month (lib/credits/value.ts) — the credit meter's "full".
-        monthlyCredits: planMonthlyCredits((user.subscriptionPlan ?? "FREE") as SubscriptionPlan),
+        monthlyCredits: planMonthlyCredits(effectivePlan(user)),
         layoutMode: user.layoutMode ?? "CLASSIC",
         createdAt: user.createdAt,
       },

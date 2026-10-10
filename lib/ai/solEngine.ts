@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { decryptSecret } from "@/lib/crypto";
 import { resolveSystemProvider } from "@/lib/ai/systemProvider";
 import { resolveActiveApiKeyForUser } from "@/lib/ai/resolveUserAiKey";
@@ -54,7 +55,7 @@ export async function solRouteForUser(userId: string): Promise<{ route: SolRoute
   const [key, user] = await Promise.all([resolveActiveApiKeyForUser(userId), User.get({ id: userId }).go().then((r) => r.data)]);
   const route = routeForKey(key);
   if ("error" in route) return route;
-  return { route, plan: user?.subscriptionPlan ?? "FREE" };
+  return { route, plan: effectivePlan(user) };
 }
 
 /** Rule 2 — the tier a request actually runs on. */

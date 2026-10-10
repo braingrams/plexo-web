@@ -24,6 +24,8 @@ export type ServeContext = {
   noindex: boolean;
   owner: { subscriptionPlan: string; hideBranding: boolean };
   organization: { id: string; logo: string | null; whiteLabelEnabled: boolean };
+  /** The owner's plan serves only the first screen (Free): other routes send visitors to "/". */
+  homeOnly?: boolean;
 };
 
 const MAX_CACHED_BYTES = 256 * 1024;
@@ -104,6 +106,16 @@ export async function serveProject(request: Request, ctx: ServeContext): Promise
   const prefix = build.outputPrefix || buildSitePrefix(ctx.template.id, build.id);
   const isAsset = rel.startsWith("__plexo/assets/");
   const wantsFile = rel !== "" && rel !== "index.html";
+  const last = rel.split("/").pop() ?? "";
+  const looksLikeFile = /\.[a-z0-9]{1,8}$/i.test(last) && !/\.html?$/i.test(last);
+
+  // Free: the app's first screen only. Any other page — a route the app's own router
+  // would handle, or a pre-rendered page — sends the visitor back to "/". Scripts, styles
+  // and images still load (the first screen needs them). The in-app router is covered too:
+  // HOME_ONLY_GUARD_JS (htmlResponse) stops client-side navigation to other screens.
+  if (ctx.homeOnly && wantsFile && !isAsset && !looksLikeFile) {
+    return NextResponse.redirect(new URL(`/${url.search}`, url), { status: 302, headers: { "Cache-Control": "no-store" } });
+  }
 
   if (wantsFile) {
     const file = await readBuildFile(`${prefix}/${rel}`) ?? (rel.endsWith("/") ? null : await readBuildFile(`${prefix}/${rel}/index.html`));
@@ -122,8 +134,7 @@ export async function serveProject(request: Request, ctx: ServeContext): Promise
     }
     // A missing script, stylesheet or image is a real 404 — answering it with index.html
     // turns a clear "file not found" into a confusing "unexpected token <" in the browser.
-    const last = rel.split("/").pop() ?? "";
-    if (isAsset || (/\.[a-z0-9]{1,8}$/i.test(last) && !/\.html?$/i.test(last))) {
+    if (isAsset || looksLikeFile) {
       return new NextResponse("Not found", { status: 404, headers: { "Cache-Control": "public, max-age=0, s-maxage=10" } });
     }
   }
@@ -132,6 +143,17 @@ export async function serveProject(request: Request, ctx: ServeContext): Promise
   if (!index) return statusPage("Something went wrong", "This app's build is missing its index.html. Rebuilding it usually fixes this.", 500);
   return htmlResponse(index.body.toString("utf8"), url, ctx);
 }
+
+// Free serves an app's first screen only. The server already redirects any other address
+// to "/"; this covers navigation INSIDE the app (a router's pushState never reaches the
+// server): moving to another screen loads the first screen instead. Same-page changes —
+// "/?tab=2", "#section" — are left alone.
+export const HOME_ONLY_GUARD_JS = `(function(){try{
+var home=function(u){try{var p=new URL(u,location.href);return p.origin!==location.origin||p.pathname==="/"||p.pathname===""}catch(e){return true}};
+if(!home(location.href)){location.replace("/");return}
+["pushState","replaceState"].forEach(function(k){var o=history[k];history[k]=function(s,t,u){if(u!=null&&!home(String(u))){location.assign("/");return}return o.apply(this,arguments)}});
+window.addEventListener("popstate",function(){if(!home(location.href))location.replace("/")});
+}catch(e){}})();`;
 
 // The owner's search & sharing settings, briefly kept per Lambda instance — HTML is served on
 // every page view, and a change shows up within the edge cache's own minute anyway.
@@ -161,6 +183,10 @@ async function htmlResponse(source: string, url: URL, ctx: ServeContext): Promis
     const editorOrigin = new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").origin;
     // First thing in <head>, so it catches errors thrown while the app itself loads.
     html = html.replace(/<head[^>]*>/i, (m) => `${m}<script>${previewRuntimeJs(editorOrigin)}</script>`);
+  }
+  if (ctx.homeOnly && !ctx.isPreview) {
+    // First thing in <head>, before the app's own router starts.
+    html = html.replace(/<head[^>]*>/i, (m) => `${m}<script>${HOME_ONLY_GUARD_JS}</script>`);
   }
   html = insertBeforeBodyEnd(html, `<script>${ANALYTICS_BEACON_JS}</script>`);
   if (!resolveHideBranding(ctx.owner.subscriptionPlan, ctx.owner.hideBranding)) {

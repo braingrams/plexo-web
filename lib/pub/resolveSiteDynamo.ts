@@ -2,6 +2,10 @@ import { EntityItem } from "electrodb";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { Template, PublishedDomain, BlogSite } from "@/lib/db/contentEntities";
 import { User, Organization } from "@/lib/db/coreEntities";
+import { after } from "next/server";
+import { effectivePlan, planSyncAction } from "@/lib/plan/entitlement";
+import { syncPlanLifecycle } from "@/lib/plan/lifecycle";
+import { isHomePageOnlyPlan } from "@/lib/subscription";
 
 // DynamoDB-stack port of lib/pub/resolveSite.ts — same behavior, same rationale (see that
 // file's comments), just backed by PublishedDomain/Template/User/Organization/BlogSite
@@ -19,7 +23,19 @@ export type ResolvedPublishedDomain = EntityItem<typeof PublishedDomain> & {
 export type ResolveSiteResult =
   | { status: "not_found" }
   | { status: "suspended" }
+  // Switched off by the owner's plan (Free keeps one live site, on a Plexo address).
+  | { status: "inactive"; domain: string; domainType: "SUBDOMAIN" | "CUSTOM" }
   | { status: "ok"; published: ResolvedPublishedDomain };
+
+/** Runs after the response is sent where the runtime supports it; otherwise just starts it. */
+function inBackground(task: () => Promise<unknown>): void {
+  const run = () => task().catch((err) => console.error("plan lifecycle (background):", err));
+  try {
+    after(run);
+  } catch {
+    void run();
+  }
+}
 
 /**
  * Resolves an incoming /pub/[domain] request to its PublishedDomain + root Template
@@ -51,10 +67,25 @@ export async function resolveSite(rawDomain: string): Promise<ResolveSiteResult>
   ]);
   if (!template) return { status: "not_found" };
 
+  // The plan lifecycle heals itself here, whatever changed the plan (Stripe, the trial
+  // running out, the admin console): a site whose owner paid again comes back on this very
+  // request; a downgrade's bookkeeping runs after the response — visitors already get the
+  // Free experience meanwhile, since everything below uses the effective plan.
+  let row = domainRow;
+  const action = user ? planSyncAction(user) : null;
+  if (user && action === "restore") {
+    await syncPlanLifecycle(user.id).catch((err) => console.error("plan lifecycle (restore on visit):", err));
+    if (row.planDisabledAt) row = (await PublishedDomain.get({ templateId: row.templateId, id: row.id }).go()).data ?? row;
+  } else if (user && action) {
+    inBackground(() => syncPlanLifecycle(user.id));
+  }
+  if (row.planDisabledAt) return { status: "inactive", domain: row.domain, domainType: row.type };
+
+  const plan = effectivePlan(user);
   const published: ResolvedPublishedDomain = {
-    ...domainRow,
+    ...row,
     template,
-    user: { subscriptionPlan: user?.subscriptionPlan ?? "FREE", hideBranding: user?.hideBranding ?? false },
+    user: { subscriptionPlan: plan, hideBranding: user?.hideBranding ?? false },
     organization: { id: domainRow.organizationId, logo: organization?.logo ?? null, whiteLabelEnabled: organization?.whiteLabelEnabled ?? false },
   };
 
@@ -64,6 +95,7 @@ export async function resolveSite(rawDomain: string): Promise<ResolveSiteResult>
 export type ResolveBlogSiteResult =
   | { status: "not_found" }
   | { status: "suspended" }
+  | { status: "inactive"; domain: string; domainType: "SUBDOMAIN" | "CUSTOM" }
   | { status: "blog_disabled" }
   | { status: "ok"; published: ResolvedPublishedDomain; blogSite: EntityItem<typeof BlogSite> };
 
@@ -75,6 +107,9 @@ export type ResolveBlogSiteResult =
 export async function resolveBlogSite(rawDomain: string): Promise<ResolveBlogSiteResult> {
   const site = await resolveSite(rawDomain);
   if (site.status !== "ok") return site;
+
+  // Free serves a site's homepage only — the blog is kept, but not served, until an upgrade.
+  if (isHomePageOnlyPlan(site.published.user.subscriptionPlan)) return { status: "blog_disabled" };
 
   const { data: blogSite } = await BlogSite.get({ templateId: site.published.template.id }).go();
   if (!blogSite || !blogSite.enabled) {

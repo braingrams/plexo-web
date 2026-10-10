@@ -27,6 +27,10 @@ type LedgerEntry = {
 
 type Props = {
   plan: "FREE" | "PRO" | "ULTRA";
+  /** A paid subscription is behind the plan (false on Free, a trial, or an admin grant). */
+  paying?: boolean;
+  /** One plain-language line on where the plan stands (trial days left, kept by Plexo, …). */
+  planNote?: { text: string; tone: "info" | "warning" } | null;
   allowanceBalance: number;
   topupBalance: number;
   allowanceResetAt: string;
@@ -130,7 +134,7 @@ function CheckoutModal({ clientSecret, onClose }: { clientSecret: string; onClos
   );
 }
 
-export function BillingSection({ plan, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
+export function BillingSection({ plan, paying = plan !== "FREE", planNote = null, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -363,7 +367,31 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
           <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
             Plan
           </p>
+          {planNote && (
+            <p
+              style={{
+                fontSize: "0.82rem", lineHeight: 1.5, marginBottom: "0.75rem", padding: "0.6rem 0.9rem", borderRadius: 10,
+                color: planNote.tone === "warning" ? "#fbbf24" : "rgba(240,242,255,0.75)",
+                background: planNote.tone === "warning" ? "rgba(251,191,36,0.08)" : "rgba(var(--brand-rgb),0.07)",
+                border: `1px solid ${planNote.tone === "warning" ? "rgba(251,191,36,0.25)" : "rgba(var(--brand-rgb),0.25)"}`,
+              }}
+            >
+              {planNote.text}
+            </p>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+            {/* On a trial or an admin grant there's no subscription yet: offer both plans, to keep. */}
+            {!paying && plan !== "FREE" && (["PRO", "ULTRA"] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                disabled={busyAction === `sub-${p}`}
+                onClick={() => void startCheckout({ kind: "subscription", plan: p }, `sub-${p}`)}
+                style={{ ...actionButtonStyle, opacity: busyAction === `sub-${p}` ? 0.7 : 1 }}
+              >
+                {busyAction === `sub-${p}` ? "Opening…" : p === plan ? `Keep ${p}` : `Subscribe to ${p}`}
+              </button>
+            ))}
             {plan === "FREE" && (
               <button
                 type="button"
@@ -374,7 +402,7 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
                 {busyAction === "sub-PRO" ? "Opening…" : "Upgrade to PRO"}
               </button>
             )}
-            {plan !== "ULTRA" && (
+            {paying && plan !== "ULTRA" || plan === "FREE" ? (
               <button
                 type="button"
                 disabled={busyAction === "sub-ULTRA"}
@@ -383,8 +411,8 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
               >
                 {busyAction === "sub-ULTRA" ? "Opening…" : "Upgrade to ULTRA"}
               </button>
-            )}
-            {plan === "ULTRA" && (
+            ) : null}
+            {paying && plan === "ULTRA" && (
               <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#34d399", padding: "0.5rem 0.9rem", borderRadius: 9, background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
                 Current Plan: ULTRA <IconSparkle />
               </span>

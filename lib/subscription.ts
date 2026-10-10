@@ -70,6 +70,18 @@ export type TierFeatures = {
    * this is the free allotment, not a hard cap.
    */
   includedFunnelSlots: number;
+  /**
+   * How many sites (landing pages and apps) can be LIVE at once — reachable at any address.
+   * `null` = no cap beyond the published-domain limit. Free keeps one: on a downgrade the
+   * most recently edited site stays up and the rest go offline (lib/plan/lifecycle.ts).
+   */
+  maxPublishedSites: number | null;
+  /**
+   * How many pages of one site are served. `1` = only the homepage — every other page,
+   * the blog and the store send visitors back to the homepage (app/pub/[domain]) and an
+   * app only answers its first screen (lib/projects/serve.ts). `null` = every page.
+   */
+  maxPublishedPagesPerSite: number | null;
 };
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
@@ -96,6 +108,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     brandingRemovalEnabled: false,
     whiteLabelEnabled: false,
     includedFunnelSlots: 0,
+    maxPublishedSites: 1,
+    maxPublishedPagesPerSite: 1,
   },
   PRO: {
     maxEmailTemplates: 25,
@@ -113,6 +127,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     brandingRemovalEnabled: true,
     whiteLabelEnabled: true,
     includedFunnelSlots: 0,
+    maxPublishedSites: null,
+    maxPublishedPagesPerSite: null,
   },
   ULTRA: {
     maxEmailTemplates: 100,
@@ -130,6 +146,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     brandingRemovalEnabled: true,
     whiteLabelEnabled: true,
     includedFunnelSlots: 1,
+    maxPublishedSites: null,
+    maxPublishedPagesPerSite: null,
   },
 };
 
@@ -145,6 +163,11 @@ export function getTierFeatures(plan: string | null | undefined): TierFeatures {
     return TIER_DEFINITIONS[plan];
   }
   return TIER_DEFINITIONS.FREE;
+}
+
+/** True when only a site's homepage may be served on this plan (Free). */
+export function isHomePageOnlyPlan(plan: string | null | undefined): boolean {
+  return getTierFeatures(plan).maxPublishedPagesPerSite === 1;
 }
 
 /**

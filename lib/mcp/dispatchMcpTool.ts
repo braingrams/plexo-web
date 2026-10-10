@@ -1563,14 +1563,23 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
             id: userRow.id,
             name: userRow.name,
             email: userRow.email,
-            subscriptionPlan: userRow.subscriptionPlan,
+            subscriptionPlan: resolved.subscriptionPlan,
             allowanceBalance: userRow.allowanceBalance,
             topupBalance: userRow.topupBalance,
             customDomainLimit: userRow.customDomainLimit ?? null,
           }
         : null;
       const features = getTierFeatures(user?.subscriptionPlan);
-      toolResult = { user, features, limit: getDomainLimit(user?.subscriptionPlan ?? "FREE", user?.customDomainLimit ?? null) };
+      toolResult = {
+        user,
+        features,
+        limit: getDomainLimit(user?.subscriptionPlan ?? "FREE", user?.customDomainLimit ?? null),
+        // So an assistant knows up front what publishing will allow, instead of learning it from a refusal.
+        publishing:
+          features.maxPublishedSites === null
+            ? "Every site and every page can be live."
+            : `Free plan: ${features.maxPublishedSites} live site, homepage only, on a Plexo address (no custom domain). Other pages stay saved as drafts.`,
+      };
       break;
     }
 

@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { lockedTierFor } from "@/lib/ai/solEngine";
 import { notFound, redirect } from "next/navigation";
 import type { TemplateJSON } from "@charisol/plexo-sdk";
@@ -83,7 +84,7 @@ export default async function TemplateEditorPage(props: {
     templateId: rootTemplateId,
   }).go();
 
-  const tierFeatures = getTierFeatures(user?.subscriptionPlan);
+  const tierFeatures = getTierFeatures(effectivePlan(user));
 
   if (template.sourceType === "RAW_UPLOAD") {
     return (
@@ -91,7 +92,7 @@ export default async function TemplateEditorPage(props: {
         templateId={template.id}
         templateName={template.name}
         templateKind={template.kind}
-        subscriptionPlan={user?.subscriptionPlan ?? "FREE"}
+        subscriptionPlan={effectivePlan(user)}
         useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}
         aiProvider={activeApiKey?.aiProvider ?? "openai"}
         aiTier={basicLock ? "BASIC" : activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}
@@ -121,7 +122,7 @@ export default async function TemplateEditorPage(props: {
       initialDesignJson={initialDesignJson}
       liveDesignJson={liveDesignJson}
       hasUnpublishedChanges={hasUnpublishedChanges}
-      subscriptionPlan={user?.subscriptionPlan ?? "FREE"}
+      subscriptionPlan={effectivePlan(user)}
       useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled}
       aiProvider={activeApiKey?.aiProvider ?? "openai"}
       aiTier={basicLock ? "BASIC" : activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}
