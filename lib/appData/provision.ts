@@ -47,18 +47,37 @@ export async function ensureAppDatabase(templateId: string, organizationId: stri
   return { database };
 }
 
-/** Permanently removes an app database and its logins (the app is being deleted). */
+/** Permanently removes an app database and its logins (the app is being deleted). Runs
+ * whether or not Plexo has a record of the database (a failed setup can leave one behind),
+ * and works however it's owned. Throws if anything is left, so the app isn't deleted with
+ * its data still on the server. */
 export async function dropAppDatabase(templateId: string, env: AppEnv): Promise<void> {
-  const { data } = await AppDatabase.get({ templateId, env }).go();
-  if (!data) return;
   const database = databaseName(templateId, env);
-  // FORCE disconnects any open session (a warm AppDbFn connection) first.
-  await adminExec(`DROP DATABASE IF EXISTS ${ident(database)} WITH (FORCE)`);
-  for (const login of ["owner", "api", "system"] as const) {
-    await adminExec(`DROP ROLE IF EXISTS ${ident(roleName(database, login))}`);
-  }
-  await AppDatabase.delete({ templateId, env }).go();
+  for (const step of dropSteps(database)) await adminExec(step.sql, step.database);
+  await AppDatabase.delete({ templateId, env }).go().catch(() => undefined);
 }
+
+/** The admin statements that remove one app database and its logins, in order. Pure, so the
+ * exact SQL is tested against a real Postgres (tests/appDataPostgres.test.ts). Dropping a
+ * database takes being its owner, and older app databases are owned by their _owner login —
+ * so the admin briefly takes that role on, which is safe only once the logins are off
+ * rds_iam (see the note at the top of this file). Every step is a no-op if already done. */
+export function dropSteps(database: string): ProvisioningStep[] {
+  const owner = roleName(database, "owner");
+  const logins = (["owner", "api", "system"] as const).map((l) => roleName(database, l));
+  const ifRole = (role: string, sql: string) =>
+    `DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN EXECUTE ${quoteLiteral(sql)}; END IF; END $$`;
+  return [
+    ...logins.map((l) => ({ sql: ifRole(l, `REVOKE rds_iam FROM ${ident(l)}`), database: "postgres" })),
+    { sql: ifRole(owner, `GRANT ${ident(owner)} TO CURRENT_USER WITH INHERIT TRUE, SET TRUE`), database: "postgres" },
+    // FORCE disconnects any open session (a warm AppDbFn connection) first.
+    { sql: `DROP DATABASE IF EXISTS ${ident(database)} WITH (FORCE)`, database: "postgres" },
+    { sql: ifRole(owner, `REVOKE ${ident(owner)} FROM CURRENT_USER`), database: "postgres" },
+    { sql: `DROP ROLE IF EXISTS ${logins.map(ident).join(", ")}`, database: "postgres" },
+  ];
+}
+
+const quoteLiteral = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 async function provisionDatabase(database: string): Promise<void> {
   for (const step of provisioningSteps(database)) {

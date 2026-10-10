@@ -3,7 +3,7 @@ import { deleteObjects } from "@/lib/storage";
 import { removeCloudFrontDomain } from "@/lib/cloudfrontDomains";
 import { getDescendantIds } from "@/server/slugDynamo";
 import { purgeSiteData, siteDeletionBlocker, siteLayoutTemplateIds } from "./purgeSiteData";
-import { purgeAppProject } from "@/lib/projects/purgeApp";
+import { dropAppDatabases, purgeAppProject } from "@/lib/projects/purgeApp";
 
 // The one way a page or site is deleted — shared by the dashboard route
 // (app/api/templates/[id]), the v1 API and the MCP delete_template tool, so they can't
@@ -20,6 +20,15 @@ export async function deleteTemplateAndContents(existing: { id: string; parentId
   if (isSite) {
     const blocker = await siteDeletionBlocker(existing.id);
     if (blocker) throw new SiteDeletionBlockedError(blocker);
+  }
+
+  // An app's databases first: if they can't be removed, stop before anything else is.
+  if (isSite && full?.sourceType === "REACT_PROJECT") {
+    try {
+      await dropAppDatabases(existing.id);
+    } catch (err) {
+      throw new SiteDeletionBlockedError((err as Error).message);
+    }
   }
 
   const descendantIds = await getDescendantIds(organizationId, existing.id);
