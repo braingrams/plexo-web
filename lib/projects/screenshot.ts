@@ -27,12 +27,31 @@ export type ScreenshotResult = {
   status: number | null;
 };
 
+/** Thrown when the browser service stays busy — the app itself is fine. */
+export const BROWSER_BUSY_MESSAGE =
+  "The browser Plexo uses to look at the app is busy right now, so there's no screenshot this time. This isn't a problem with the app — the build itself is what matters. Don't try again this turn; carry on, and tell the owner they can check the preview themselves.";
+
+// Browserbase answers 429 when the account's browsers are all in use (another check, an
+// import, or the last one still closing). Waiting a little usually frees one; give up after
+// ~25s rather than make the owner wait on a nice-to-have.
+const BUSY_WAITS_MS = [2_000, 5_000, 8_000, 10_000];
+
+async function openSession(apiKey: string, wait: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<{ id: string; connectUrl: string }> {
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${API}/sessions`, { method: "POST", headers: { "X-BB-API-Key": apiKey, "Content-Type": "application/json" }, body: "{}" });
+    if (res.ok) return (await res.json()) as { id: string; connectUrl: string };
+    if (res.status !== 429) throw new Error(`Couldn't open a browser to check the app (${res.status}).`);
+    if (attempt >= BUSY_WAITS_MS.length) throw new Error(BROWSER_BUSY_MESSAGE);
+    const retryAfter = Number(res.headers.get("retry-after"));
+    await wait(Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 15_000) : BUSY_WAITS_MS[attempt]);
+  }
+}
+export const _openSessionForTests = openSession;
+
 export async function screenshotPage(url: string, opts: { viewport?: Viewport; userId: string; fullPage?: boolean }): Promise<ScreenshotResult> {
   const apiKey = process.env.BROWSERBASE_API_KEY;
   if (!apiKey) throw new BrowserbaseNotConfiguredError();
-  const res = await fetch(`${API}/sessions`, { method: "POST", headers: { "X-BB-API-Key": apiKey, "Content-Type": "application/json" }, body: "{}" });
-  if (!res.ok) throw new Error(`Couldn't open a browser to check the app (${res.status}).`);
-  const session = (await res.json()) as { id: string; connectUrl: string };
+  const session = await openSession(apiKey);
   let browser: Awaited<ReturnType<typeof chromium.connectOverCDP>> | null = null;
   try {
     browser = await chromium.connectOverCDP(session.connectUrl, { timeout: 30_000 });

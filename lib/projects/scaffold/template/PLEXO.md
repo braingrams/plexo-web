@@ -29,7 +29,9 @@ installs, builds and hosts it — there's nothing to configure.
   default and denies everything until a policy allows it).
 - Secrets (API keys) never go in `src/` — everything in `src/` is shipped to browsers. Use a
   server function and read the key from `env`.
-- Add npm packages by adding them to `package.json` `dependencies`.
+- Add npm packages by adding them to `package.json` `dependencies`. Keep them small: big
+  server SDKs (`stripe`, `aws-sdk`, `firebase-admin`, `googleapis`…) make the build run out of
+  time and are refused — call those services' HTTP APIs with `fetch` from a server function.
 - Make every page responsive (it should look right on a phone) and give every async view
   a loading state and an empty state.
 
@@ -85,3 +87,43 @@ const { data: link } = await plexo.storage.from("documents").createSignedUrl(`${
   view a file by its URL). Every other bucket is **private**: only the person who uploaded a
   file can open it, through `createSignedUrl`.
 - Files a server function writes (`ctx.db` has full access) can go anywhere.
+
+## Payments
+
+Take payments with Stripe Checkout from a server function — `fetch`, no Stripe package. The
+owner adds their key in Plexo → your app → Secret keys as `STRIPE_SECRET_KEY`.
+
+```ts
+// functions/create-checkout.ts
+import type { PlexoFunction } from "./types";
+
+const handler: PlexoFunction = async (req, { user, env }) => {
+  if (!user) return Response.json({ error: "Sign in first" }, { status: 401 });
+  const { origin } = new URL(req.url);
+  const body = new URLSearchParams({
+    mode: "payment",
+    "line_items[0][price_data][currency]": "usd",
+    "line_items[0][price_data][product_data][name]": "Premium access",
+    "line_items[0][price_data][unit_amount]": "4900", // cents
+    "line_items[0][quantity]": "1",
+    client_reference_id: user.id,
+    success_url: `${origin}/thanks?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${origin}/pricing`,
+  });
+  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const session = await res.json();
+  if (!res.ok) return Response.json({ error: session.error?.message ?? "Payment couldn't start" }, { status: 400 });
+  return Response.json({ url: session.url });
+};
+export default handler;
+```
+
+In the app: `const { data } = await plexo.functions.invoke("create-checkout"); location.assign(data.url);`
+
+To confirm a payment, have another server function fetch
+`https://api.stripe.com/v1/checkout/sessions/<session_id>` (same `Authorization` header) on the
+thanks page and record it when `payment_status` is `"paid"` — never trust the browser alone.

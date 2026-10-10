@@ -438,7 +438,9 @@ export function SolChatView({
   async function handleSend(typed: string, attachments: ChatAttachment[]) {
     const text = embedded?.transformOutgoing ? embedded.transformOutgoing(typed) : typed;
     setInlineError(null);
-    setComposerRestoreText(undefined);
+    // "" (not undefined) actually empties the box: a message put back after running out of
+    // credits and then resent from the top-up card otherwise stayed in it after sending.
+    setComposerRestoreText("");
     const target = await ensureConversation();
 
     const mediaBlocks: MediaBlock[] = attachments.map((a) => ({ type: a.type === "pdf" ? "document" : a.type, url: a.url, filename: a.filename }));
