@@ -5,6 +5,7 @@ import { deleteAllFunctions } from "@/lib/appFunctions/deploy";
 import { dropAppDatabase } from "@/lib/appData/provision";
 import { clusterConfigured } from "@/lib/appData/admin";
 import { chunk } from "./concurrency";
+import { deleteAppConversations } from "./appConversations";
 
 // Everything a React app owns outside its content partition (that partition — files,
 // versions, database records, secrets, settings, functions, GitHub link — is swept by
@@ -32,7 +33,7 @@ export async function dropAppDatabases(templateId: string): Promise<void> {
 }
 
 export async function purgeAppProject(templateId: string): Promise<void> {
-  const { data: template } = await Template.get({ id: templateId }).go({ attributes: ["previewHost"] });
+  const { data: template } = await Template.get({ id: templateId }).go({ attributes: ["previewHost", "userId", "organizationId"] });
   const steps: Array<[string, () => Promise<unknown>]> = [
     ["functions", () => deleteAllFunctions(templateId)],
     ["project files", () => deletePrefix(`${projectPrefix(templateId)}/`)],
@@ -46,6 +47,7 @@ export async function purgeAppProject(templateId: string): Promise<void> {
       },
     ],
     ["preview address", async () => (template?.previewHost ? ProjectPreviewHost.delete({ host: template.previewHost }).go() : undefined)],
+    ["SOL chats", async () => (template?.organizationId ? deleteAppConversations({ id: templateId, userId: template.userId, organizationId: template.organizationId }) : undefined)],
   ];
   for (const [name, run] of steps) {
     await run().catch((err) => console.error(`Deleting app ${templateId}: removing its ${name} failed (non-fatal):`, err));
