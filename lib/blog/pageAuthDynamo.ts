@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { redirect, notFound } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { Template } from "@/lib/db/contentEntities";
@@ -52,6 +53,6 @@ export async function requireBlogSiteAccess(
     userName: session.user.name ?? "",
     userEmail: session.user.email ?? "",
     role: orgResolution.role,
-    subscriptionPlan: user?.subscriptionPlan ?? "FREE",
+    subscriptionPlan: effectivePlan(user),
   };
 }

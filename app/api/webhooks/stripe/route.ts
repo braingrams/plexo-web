@@ -5,6 +5,7 @@ import { TransactWriteCommand, type TransactWriteCommandInput } from "@aws-sdk/l
 import type { EntityItem } from "electrodb";
 
 import { grantTopup, grantPlanChangeAllowance } from "@/lib/db/ledgerOperations";
+import { creditsForCompletedTopup } from "@/lib/credits/topupOffer";
 import { getStripe } from "@/lib/stripe";
 import type { SubscriptionPlan } from "@/lib/subscription";
 import { getMarketplaceOwnerUserId } from "@/lib/marketplaceListing";
@@ -14,6 +15,7 @@ import { TemplatePurchase } from "@/lib/db/contentEntities";
 import { SellerLedgerEntry, StripeEvent } from "@/lib/db/ledgerEntities";
 import { handleLmsAddonSlotSubscriptionUpdate, handleLmsAddonSlotSubscriptionDeleted } from "@/lib/lms/activateFunnelAddonSlot";
 import { reconcileFunnelSlotsForOrg } from "@/lib/lms/funnelSlots";
+import { mapStripeStatus, syncPlanLifecycle } from "@/lib/plan/lifecycle";
 
 // DynamoDB-stack port of this file — Plexo's own SaaS-billing Stripe webhook (distinct
 // from app/api/webhooks/stripe/commerce/route.ts, which handles Plexo-hosted Commerce
@@ -39,6 +41,13 @@ async function reconcileFunnelSlotsForOwnedOrgs(userId: string): Promise<void> {
   const { data: memberships } = await Member.query.byUser({ userId }).go({ pages: "all" });
   const ownedOrgIds = memberships.filter((m) => m.role === "owner").map((m) => m.organizationId);
   await Promise.all(ownedOrgIds.map((organizationId) => reconcileFunnelSlotsForOrg(organizationId)));
+}
+
+/** The event is already claimed, so a failure here mustn't fail the webhook (Stripe's
+ * retry would be skipped as a duplicate). The facts are saved; the next dashboard load,
+ * site visit or hourly sweep finishes whatever this couldn't (lib/plan/lifecycle.ts). */
+async function syncAfterWebhook(userId: string): Promise<void> {
+  await syncPlanLifecycle(userId).catch((err) => console.error(`plan lifecycle after Stripe webhook failed for ${userId}`, err));
 }
 
 async function claimStripeEvent(eventId: string): Promise<boolean> {
@@ -152,7 +161,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (!plexoUserId) break;
 
       if (checkoutSession.mode === "payment" && checkoutSession.metadata?.kind === "topup") {
-        const credits = Number(checkoutSession.metadata.credits ?? 0);
+        // Half of what was actually paid (before tax) becomes AI credits — lib/credits/value.ts.
+        // The checkout-time estimate in metadata is only a fallback (non-USD sessions).
+        const credits = creditsForCompletedTopup(checkoutSession) ?? Number(checkoutSession.metadata.credits ?? 0);
         if (credits > 0) {
           await grantTopup(
             plexoUserId,
@@ -208,22 +219,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const plexoUserId = subscription.metadata?.plexoUserId;
       const plan = subscription.metadata?.plan as SubscriptionPlan | undefined;
       if (!plexoUserId || !plan) break;
-      if (subscription.status !== "active" && subscription.status !== "trialing") break;
+
+      const { data: userBeforeUpdate } = await User.get({ id: plexoUserId }).go();
+      if (!userBeforeUpdate) break;
+      const status = mapStripeStatus(subscription.status);
+
+      if (status === "PAST_DUE" || status === "CANCELED") {
+        // Only the account's CURRENT subscription speaks for its plan — an older one
+        // (replaced by an upgrade) going past due or ending changes nothing. PAST_DUE keeps
+        // the plan while Stripe retries the card; CANCELED (unpaid, expired) ends it, and
+        // the lifecycle downgrades — unless an admin keeps this account on its plan.
+        if (userBeforeUpdate.stripeSubscriptionId === subscription.id) {
+          await User.patch({ id: plexoUserId }).set({ subscriptionStatus: status }).go();
+          await syncAfterWebhook(plexoUserId);
+        }
+        break;
+      }
 
       // Read the plan as it stood BEFORE this update, so an allowance refresh only fires
       // on a genuine plan change — not on every unrelated "customer.subscription.updated"
       // (a payment method swap, a metadata edit, etc.) that happens to match this same
       // event type.
-      const { data: userBeforeUpdate } = await User.get({ id: plexoUserId }).go();
-      const previousPlan = userBeforeUpdate?.subscriptionPlan;
+      const previousPlan = userBeforeUpdate.subscriptionPlan;
 
       // Clears pendingPlan unconditionally on any confirmed active/trialing subscription,
       // even if it doesn't match what was originally picked at signup (e.g. the user
       // changed their mind and paid for a different plan) — requiring an exact match would
-      // create a stuck "never lets them in" state instead.
+      // create a stuck "never lets them in" state instead. A paid subscription also ends
+      // any trial or time-limited grant: from here the subscription is what counts.
       await User.patch({ id: plexoUserId })
-        .set({ subscriptionPlan: plan, stripeSubscriptionId: subscription.id })
-        .remove(["pendingPlan"])
+        .set({ subscriptionPlan: plan, stripeSubscriptionId: subscription.id, subscriptionStatus: status })
+        .remove(["pendingPlan", "planAccessUntil", "planAccessSource", "planAccessReminderSentAt"])
         .go();
 
       // The subscriptionPlan patch above alone left the AI credit allowance untouched —
@@ -239,6 +265,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         // is over budget), so this isn't gated further on which direction the change went.
         await reconcileFunnelSlotsForOwnedOrgs(plexoUserId);
       }
+      // Coming back from Free: every page, site and custom domain the downgrade took
+      // offline is restored right now, exactly as it was.
+      await syncAfterWebhook(plexoUserId);
       break;
     }
 
@@ -255,11 +284,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const plexoUserId = subscription.metadata?.plexoUserId;
       if (!plexoUserId) break;
 
+      // An upgrade (Pro → Ultra) creates a new subscription and ends the old one — that
+      // old one ending must not drop the account to Free. Only the current one counts.
+      const { data: current } = await User.get({ id: plexoUserId }).go();
+      if (!current || (current.stripeSubscriptionId && current.stripeSubscriptionId !== subscription.id)) break;
+
+      // Record the fact; the lifecycle does the rest — Free's limits (one live site,
+      // homepage only, custom domains paused, nothing deleted), the email, credits and
+      // funnel slots. An account an admin keeps on its plan stays on it.
       await User.patch({ id: plexoUserId })
-        .set({ subscriptionPlan: "FREE" })
+        .set({ subscriptionStatus: "CANCELED" })
         .remove(["stripeSubscriptionId", "pendingPlan"])
         .go();
-      await reconcileFunnelSlotsForOwnedOrgs(plexoUserId);
+      await syncAfterWebhook(plexoUserId);
       break;
     }
 

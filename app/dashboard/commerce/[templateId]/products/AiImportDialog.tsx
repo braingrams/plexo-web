@@ -1,5 +1,6 @@
 "use client";
 
+import { SolIcon, SolOutOfCredits } from "../../../_components/sol/SolTopUp";
 import { useMemo, useRef, useState } from "react";
 import {
   PRODUCT_CSV_FIELDS,
@@ -33,6 +34,7 @@ export function AiImportDialog({
 }) {
   const [step, setStep] = useState<Step>("upload");
   const [error, setError] = useState<string | null>(null);
+  const [outOfCredits, setOutOfCredits] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [headers, setHeaders] = useState<string[]>([]);
   const [dataRows, setDataRows] = useState<string[][]>([]);
@@ -56,6 +58,7 @@ export function AiImportDialog({
 
   async function handleFile(file: File) {
     setError(null);
+    setOutOfCredits(null);
     setFileName(file.name);
     setSuggesting(true);
     try {
@@ -67,13 +70,18 @@ export function AiImportDialog({
         { method: "POST", body },
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "AI import failed.");
+      // Out of AI credits → SOL's top-up card, then the same file is read again.
+      if (res.status === 402) {
+        setOutOfCredits(file);
+        return;
+      }
+      if (!res.ok) throw new Error(data.error ?? "SOL couldn't read that file. Please try again.");
       setHeaders(data.headers ?? []);
       setDataRows(data.dataRows ?? []);
       setColumnMapping(data.columnMapping ?? {});
       setStep("mapping");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "AI import failed.");
+      setError(err instanceof Error ? err.message : "SOL couldn't read that file. Please try again.");
     } finally {
       setSuggesting(false);
     }
@@ -152,7 +160,9 @@ export function AiImportDialog({
           <h2
             style={{ fontSize: "1.05rem", fontWeight: 700, color: "#f0f2ff" }}
           >
-            Import products with AI
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <SolIcon size={18} /> Import products with SOL
+            </span>
           </h2>
           <button
             type="button"
@@ -170,6 +180,11 @@ export function AiImportDialog({
           </button>
         </div>
 
+        {outOfCredits && (
+          <div style={{ marginBottom: "0.75rem" }}>
+            <SolOutOfCredits onDismiss={() => setOutOfCredits(null)} onToppedUp={() => void handleFile(outOfCredits)} />
+          </div>
+        )}
         {error && (
           <div
             style={{
@@ -189,8 +204,8 @@ export function AiImportDialog({
         {step === "upload" && (
           <div style={{ display: "grid", gap: "1rem" }}>
             <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.55)" }}>
-              Upload a CSV or PDF product catalog. AI will read it and align the
-              data into your product list — no manual column setup needed.
+              Upload a CSV or PDF product catalog. SOL reads it and lines the
+              products up with your product list — no column setup needed. Uses AI credits.
             </p>
             <label
               style={{
@@ -206,7 +221,7 @@ export function AiImportDialog({
               }}
             >
               {suggesting
-                ? "Reading file with AI…"
+                ? "SOL is reading your file…"
                 : fileName
                   ? `Selected: ${fileName}`
                   : "Click to choose a .csv or .pdf file"}
@@ -228,8 +243,8 @@ export function AiImportDialog({
         {step === "mapping" && (
           <div style={{ display: "grid", gap: "1rem" }}>
             <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.55)" }}>
-              Review the AI-suggested field mapping, then adjust any that look
-              wrong.
+              Check how SOL matched your file to product fields, then change any that
+              look wrong.
             </p>
             <div style={{ display: "grid", gap: "0.6rem" }}>
               {headers.map((header, index) => (

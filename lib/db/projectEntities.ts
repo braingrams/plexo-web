@@ -183,6 +183,8 @@ export const ProjectGitLink = new Entity(
       repoId: { type: "number", required: true },
       branch: { type: "string", required: true },
       lastSyncedCommitSha: { type: "string" },
+      // When the app and GitHub were last brought in step (shown as "Last synced").
+      lastSyncedAt: { type: "string" },
       lastSyncedVersionId: { type: "string" },
       // OK, CONFLICT (an open plexo/* pull request needs merging), ERROR (app uninstalled,
       // repo gone, branch protected) — shown on the project's GitHub panel.

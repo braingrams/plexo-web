@@ -12,6 +12,7 @@ import type { FileEntry } from "@/app/api/v1/templates/[id]/files/route";
 import { buildPreviewHtml } from "./preview-utils";
 import { injectBaseHref } from "@/lib/wpMigration/injectBaseHref";
 import { PagesPanel } from "./PagesPanel";
+import { SitePlanNotice } from "../../_components/SitePlanNotice";
 import { RawTextContentEditor, type RawTextContentEditorHandle, type RawTextContentSaveStatus } from "./RawTextContentEditor";
 import { RawAiEditPanel } from "./RawAiEditPanel";
 import { EmbedCodeModal } from "./EmbedCodeModal";
@@ -442,6 +443,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
         subscriptionPlan={subscriptionPlan}
         onNavigate={(pageId) => { if (pageId !== templateId) router.push(`/dashboard/templates/${pageId}`); }}
       />
+      <SitePlanNotice templateId={templateId} />
       {/* Toolbar */}
       <div className="raw-editor-toolbar" style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -463,7 +465,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
             {([
               { key: "text", label: "Text Content" },
               { key: "code", label: "Code" },
-              { key: "ai", label: "AI Edit" },
+              { key: "ai", label: "Ask SOL" },
             ] as const).map((tab) => {
               const disabled = tab.key !== "code" && isDirty("index.html");
               const aiCostHint = tab.key === "ai" ? "Uses AI credits — the whole page is sent and returned, so larger pages cost more per edit." : undefined;

@@ -16,14 +16,13 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   edit_element: 4000,
   edit_layout: 16000,
   generate_layout: 16000,
-  // Full-document output (the whole uploaded index.html back). Raised from the previous
-  // 16000: the model returns the ENTIRE document as one JSON string, so anything beyond a
-  // small page routinely hit that ceiling mid-string, producing an unparseable truncated
-  // response ("Unterminated string in JSON..."). See TRUNCATED_RETRY_CAP below for the
-  // further adaptive bump this mode's edits get if even this isn't enough.
-  edit_raw_html: 32000,
-  // Same full-document-output reasoning as edit_raw_html just above — a freshly generated
-  // page can be just as large as an edited one.
+  // Edits come back as find/replace changes, which are small; this ceiling is for the
+  // occasional page-wide rewrite, which returns the whole document (and, if even that's cut
+  // off, gets TRUNCATED_RETRY_CAP below). It also sets the pre-flight credit check, so it's
+  // kept well under a full rewrite's worst case.
+  edit_raw_html: 16000,
+  // A freshly generated page is a full document: a page can routinely pass 16000 tokens, and
+  // a cut-off answer mid-string can't be parsed.
   generate_raw_html: 32000,
   // A full post as HTML plus excerpt/SEO/category/tag/image-prompt metadata — lighter than
   // a builder layout's nested JSON per token, so a smaller ceiling than edit_layout/
@@ -37,6 +36,8 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   // gets cut off mid tool-call JSON is worse than a plain generation mode being cut off,
   // since dispatchMcpTool would then receive unparseable/truncated tool input.
   agent_chat: 32000,
+  // A catalog's product rows as JSON — ample for a few hundred products in one pass.
+  import_products: 8000,
 };
 
 /** Ceiling for the one-time adaptive retry when a response comes back truncated (see
@@ -89,8 +90,15 @@ Respond with ONLY a JSON object of this exact shape, no markdown fences, no pros
   if (mode === "edit_raw_html") {
     return `You are Plexo's builder AI. You edit a complete, self-contained static HTML document (an uploaded site, not a Plexo builder layout) according to the user's instruction.
 Preserve everything the user didn't ask you to change — structure, existing <style>/<script> blocks, classes, attributes, and functionality — and make only the requested edit.
+Return ONLY the changes, never the whole document: a list of edits, each replacing one exact piece of the current document. Plexo applies them for you.
+- "find" must be copied character-for-character from the current document (same spaces, quotes and line breaks) and must appear exactly ONCE in it — include a little surrounding text when a short snippet would match more than once.
+- Keep each "find" as short as that allows. "replace" is what goes in its place ("" removes it). Edits are applied in order.
+- To add something new, "find" the spot next to it (e.g. the closing tag before it) and put that same text back in "replace" together with the new markup.
+- Use "html" (the COMPLETE new document) instead of "edits" ONLY when the instruction rewrites most of the page (e.g. "redesign the whole page") and edits would be longer than the document itself.
 Respond with ONLY a JSON object of this exact shape, no markdown fences, no prose outside the JSON:
-{ "summary": "<one short sentence describing the change you made>", "result": "<the COMPLETE modified HTML document as a single string, starting from <!DOCTYPE html> or <html>, not a diff or partial snippet>" }`;
+{ "summary": "<one short sentence describing the change you made>", "result": { "edits": [ { "find": "<exact current text>", "replace": "<new text>" } ] } }
+or, only for a page-wide rewrite:
+{ "summary": "<one short sentence>", "result": { "html": "<the COMPLETE modified HTML document>" } }`;
   }
 
   if (mode === "generate_raw_html") {
@@ -135,8 +143,35 @@ Respond with ONLY a JSON object of this exact shape, no markdown fences, no pros
 { "summary": "<one or two short sentences describing what you changed or built>", "result": <the full TemplateJSON, i.e. { "body": { "style": {...}, "rows": [...] } }> }`;
 }
 
+const RawHtmlEditsSchema = z.union([
+  z.object({ edits: z.array(z.object({ find: z.string().min(1), replace: z.string() })).min(1).max(60) }),
+  z.object({ html: z.string().min(1) }),
+]);
+
+/** An edit the AI asked for that can't be applied safely — fed back to it on the retry. */
+export class RawHtmlEditError extends Error {}
+
+/** Applies find/replace edits to an HTML document, in order. Each "find" must match exactly
+ *  once in the document as it stands at that point, so an edit can never land in the wrong
+ *  place or half-apply; anything else throws, saying which edit and why. */
+export function applyHtmlEdits(html: string, edits: Array<{ find: string; replace: string }>): string {
+  let doc = html;
+  edits.forEach(({ find, replace }, i) => {
+    const at = doc.indexOf(find);
+    const label = `edit ${i + 1} (find: ${JSON.stringify(find.length > 80 ? `${find.slice(0, 80)}…` : find)})`;
+    if (at === -1) throw new RawHtmlEditError(`${label} doesn't match the document — copy "find" exactly from the current HTML`);
+    if (doc.indexOf(find, at + 1) !== -1) throw new RawHtmlEditError(`${label} matches more than once — include more surrounding text so it's unique`);
+    // Sliced, not String.replace: "$&" or "$1" in the new markup must stay literal.
+    doc = doc.slice(0, at) + replace + doc.slice(at + find.length);
+  });
+  return doc;
+}
+
 function resultSchemaFor(mode: AiActionMode) {
-  if (mode === "edit_raw_html" || mode === "generate_raw_html") {
+  if (mode === "edit_raw_html") {
+    return z.object({ summary: z.string().max(2000), result: RawHtmlEditsSchema });
+  }
+  if (mode === "generate_raw_html") {
     return z.object({ summary: z.string().max(2000), result: z.string().min(1) });
   }
   if (mode === "generate_blog_post") {
@@ -174,7 +209,9 @@ function trimContext(mode: AiActionMode, context: unknown): unknown {
   return clone;
 }
 
-async function callProvider(
+/** One model call on any supported provider — the single dispatcher every SOL-powered
+ *  feature uses (lib/ai/solEngine.ts decides which provider and key). */
+export async function callProvider(
   provider: AiProvider,
   model: string,
   apiKey: string,
@@ -182,8 +219,9 @@ async function callProvider(
   userPrompt: string,
   maxTokens: number,
   onTextDelta?: (delta: string) => void,
+  attachments?: Array<{ mediaType: string; data: string; name?: string }>,
 ): Promise<ProviderCallResult> {
-  const params = { model, apiKey, systemPrompt, userPrompt, maxTokens, onTextDelta };
+  const params = { model, apiKey, systemPrompt, userPrompt, maxTokens, onTextDelta, ...(attachments ? { attachments } : {}) };
   switch (provider) {
     case "anthropic_claude":
       return anthropicProvider.generate(params);
@@ -326,6 +364,14 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
       parsed.result = hydrateStructuralDefaults(parsed.result);
     }
     const validated = schema.parse(parsed);
+    if (params.mode === "edit_raw_html") {
+      // Only the changes come back (far fewer tokens than the whole page); the editor still
+      // gets the complete document.
+      const answer = validated.result as z.infer<typeof RawHtmlEditsSchema>;
+      const current = (trimmedContext as { html: string }).html;
+      const html = "html" in answer ? answer.html : applyHtmlEdits(current, answer.edits);
+      return { summary: validated.summary, result: html, usage: { ...totalUsage } };
+    }
     return { summary: validated.summary, result: validated.result, usage: { ...totalUsage } };
   };
 
@@ -345,6 +391,9 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
       }
       // Layout JSON is large and occasionally malformed — one retry with the error fed back.
       const reason = firstError instanceof Error ? firstError.message : "parse error";
+      if (firstError instanceof RawHtmlEditError) {
+        return await attempt({ extraNote: `Your previous edits couldn't be applied: ${reason}. Nothing was changed. Send the edits again (all of them), each "find" copied exactly from the current document and unique in it — or, if that isn't possible, the complete document in "html".` });
+      }
       return await attempt({ extraNote: `Your previous response was invalid (${reason}). Return ONLY the corrected JSON object, with no markdown fences.` });
     } catch (secondError) {
       if (secondError instanceof ProviderCallError || secondError instanceof GenerationStoppedError) {

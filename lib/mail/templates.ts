@@ -754,3 +754,70 @@ export function buildWpMigrationPausedEmail(input: { siteName: string; reason: s
     `,
   });
 }
+
+// ── Plan lifecycle (lib/plan/lifecycle.ts) ──────────────────────────────────────────────
+
+const PLAN_NAME: Record<string, string> = { PRO: "Pro", ULTRA: "Ultra", FREE: "Free" };
+
+export function buildPlanEndingSoonEmail(input: { plan: string; endsAt: string; isTrial: boolean; upgradeUrl: string }): string {
+  const plan = PLAN_NAME[input.plan] ?? input.plan;
+  const date = new Date(input.endsAt).toLocaleDateString("en-US", { day: "numeric", month: "long" });
+  return emailShell({
+    title: input.isTrial ? `Your ${plan} trial ends ${date}` : `Your ${plan} access ends ${date}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">
+        ${input.isTrial ? `Your ${plan} trial ends on ${date}` : `Your ${plan} access ends on ${date}`}
+      </h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Keep everything working exactly as it is by choosing a plan before then. If you don't, your account moves to Free:
+        one site stays live with just its homepage, on a Plexo address. Nothing is deleted — upgrading later brings it all back.
+      </p>
+      ${CTA_BUTTON(input.upgradeUrl, `Keep ${plan}`)}
+      ${FALLBACK_LINK(input.upgradeUrl)}
+    `,
+  });
+}
+
+export function buildPlanEndedEmail(input: {
+  previousPlan: string;
+  reason: "PAYMENT_ENDED" | "TRIAL_ENDED" | "GRANT_ENDED" | "NO_PAYMENT" | "ADMIN";
+  liveSiteName: string | null;
+  liveAddress: string | null;
+  offlineSiteCount: number;
+  archivedPageCount: number;
+  customDomainCount: number;
+  upgradeUrl: string;
+}): string {
+  const plan = PLAN_NAME[input.previousPlan] ?? input.previousPlan;
+  const why =
+    input.reason === "TRIAL_ENDED" ? `Your ${plan} trial has ended`
+      : input.reason === "PAYMENT_ENDED" ? `Your ${plan} subscription has ended`
+        : `Your ${plan} access has ended`;
+  const changes: string[] = [];
+  if (input.liveSiteName) {
+    changes.push(`<strong>${esc(input.liveSiteName)}</strong> is still live${input.liveAddress ? ` at <strong>${esc(input.liveAddress)}</strong>` : ""}, showing its homepage.`);
+  }
+  if (input.archivedPageCount > 0) changes.push(`${input.archivedPageCount} other page${input.archivedPageCount === 1 ? " is" : "s are"} saved but not published.`);
+  if (input.offlineSiteCount > 0) changes.push(`${input.offlineSiteCount} other site${input.offlineSiteCount === 1 ? " is" : "s are"} offline.`);
+  if (input.customDomainCount > 0) changes.push(`Your custom domain${input.customDomainCount === 1 ? " is" : "s are"} paused.`);
+  const list = changes.length
+    ? `<ul style="margin:0 0 20px;padding:0 0 0 20px;font-size:14px;color:#475569;line-height:1.7;text-align:left;">${changes.map((c) => `<li>${c}</li>`).join("")}</ul>`
+    : "";
+  return emailShell({
+    title: `${why} — you're now on Free`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">
+        ${why}
+      </h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Your account is now on Free. Nothing has been deleted.
+      </p>
+      ${list}
+      <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Upgrade any time and everything comes straight back — every page, every site and your custom domain${input.customDomainCount === 1 ? "" : "s"}.
+      </p>
+      ${CTA_BUTTON(input.upgradeUrl, "Bring everything back")}
+      ${FALLBACK_LINK(input.upgradeUrl)}
+    `,
+  });
+}

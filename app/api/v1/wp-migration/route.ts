@@ -21,6 +21,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       siteName: (j.install as { siteName?: string } | undefined)?.siteName ?? null,
       createdAt: j.createdAt,
       finishedAt: j.finishedAt ?? null,
+      bannerDismissed: !!j.bannerDismissedAt,
       // For the dashboard-wide progress banner and the site card's badge.
       counts: j.counts ?? null,
       estimatedSecondsLeft: estimateSecondsLeft({ phase: j.phase ?? "PENDING", counts: (j.counts as EstimateCounts | undefined) ?? null, startedAt: j.startedAt }),

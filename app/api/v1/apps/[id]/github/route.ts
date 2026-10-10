@@ -36,7 +36,7 @@ export async function GET(request: NextRequest, { params }: Ctx): Promise<NextRe
     return NextResponse.json({
       configured: true,
       link: link
-        ? { repo: link.repoFullName, branch: link.branch, status: link.status, statusMessage: link.statusMessage ?? null, conflictPullRequestUrl: link.conflictPullRequestUrl ?? null, lastSyncedCommitSha: link.lastSyncedCommitSha ?? null }
+        ? { repo: link.repoFullName, branch: link.branch, status: link.status, statusMessage: link.statusMessage ?? null, conflictPullRequestUrl: link.conflictPullRequestUrl ?? null, lastSyncedCommitSha: link.lastSyncedCommitSha ?? null, lastSyncedAt: link.lastSyncedAt ?? null }
         : null,
       installations: installations.map((i) => ({ id: i.installationId, account: i.accountLogin, type: i.accountType ?? null })),
       installUrl: installUrl(signInstallState({ appId: id, organizationId: loaded.resolved.organizationId, userId: loaded.resolved.userId })),

@@ -12,6 +12,17 @@ import { databaseName } from "./db";
 //   _system  owns the plexo schema (visitor accounts, sessions, migration history)
 // plexo_anon / plexo_authenticated are cluster-wide NOLOGIN roles; what they can touch is
 // decided per database by grants and row-level-security policies.
+//
+// The admin (plexo_admin, password sign-in through the RDS Data API) must never be a member —
+// inherited or not — of a role that's in rds_iam: on Aurora any login with a membership path
+// to rds_iam is forced onto IAM sign-in, and the admin is locked out of the whole cluster (it
+// was, on staging; non-inherited membership wasn't enough). But it must SET ROLE to the owner
+// and system roles to create objects as them. So the order is what keeps it safe:
+//   1. the logins are created WITHOUT rds_iam (on a re-run, rds_iam is taken away first);
+//   2. the admin joins owner/system, sets everything up as them, then leaves;
+//   3. only then do the logins get rds_iam.
+// A run that stops partway leaves the admin a member only of roles without rds_iam, so it can
+// never lock itself out. The admin owns each app database, so it can always drop it.
 
 export const roleName = (database: string, login: "owner" | "api" | "system") => `${database}_${login}`;
 
@@ -36,18 +47,37 @@ export async function ensureAppDatabase(templateId: string, organizationId: stri
   return { database };
 }
 
-/** Permanently removes an app database and its logins (the app is being deleted). */
+/** Permanently removes an app database and its logins (the app is being deleted). Runs
+ * whether or not Plexo has a record of the database (a failed setup can leave one behind),
+ * and works however it's owned. Throws if anything is left, so the app isn't deleted with
+ * its data still on the server. */
 export async function dropAppDatabase(templateId: string, env: AppEnv): Promise<void> {
-  const { data } = await AppDatabase.get({ templateId, env }).go();
-  if (!data) return;
   const database = databaseName(templateId, env);
-  // FORCE disconnects any open session (a warm AppDbFn connection) first.
-  await adminExec(`DROP DATABASE IF EXISTS ${ident(database)} WITH (FORCE)`);
-  for (const login of ["owner", "api", "system"] as const) {
-    await adminExec(`DROP ROLE IF EXISTS ${ident(roleName(database, login))}`);
-  }
-  await AppDatabase.delete({ templateId, env }).go();
+  for (const step of dropSteps(database)) await adminExec(step.sql, step.database);
+  await AppDatabase.delete({ templateId, env }).go().catch(() => undefined);
 }
+
+/** The admin statements that remove one app database and its logins, in order. Pure, so the
+ * exact SQL is tested against a real Postgres (tests/appDataPostgres.test.ts). Dropping a
+ * database takes being its owner, and older app databases are owned by their _owner login —
+ * so the admin briefly takes that role on, which is safe only once the logins are off
+ * rds_iam (see the note at the top of this file). Every step is a no-op if already done. */
+export function dropSteps(database: string): ProvisioningStep[] {
+  const owner = roleName(database, "owner");
+  const logins = (["owner", "api", "system"] as const).map((l) => roleName(database, l));
+  const ifRole = (role: string, sql: string) =>
+    `DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN EXECUTE ${quoteLiteral(sql)}; END IF; END $$`;
+  return [
+    ...logins.map((l) => ({ sql: ifRole(l, `REVOKE rds_iam FROM ${ident(l)}`), database: "postgres" })),
+    { sql: ifRole(owner, `GRANT ${ident(owner)} TO CURRENT_USER WITH INHERIT TRUE, SET TRUE`), database: "postgres" },
+    // FORCE disconnects any open session (a warm AppDbFn connection) first.
+    { sql: `DROP DATABASE IF EXISTS ${ident(database)} WITH (FORCE)`, database: "postgres" },
+    { sql: ifRole(owner, `REVOKE ${ident(owner)} FROM CURRENT_USER`), database: "postgres" },
+    { sql: `DROP ROLE IF EXISTS ${logins.map(ident).join(", ")}`, database: "postgres" },
+  ];
+}
+
+const quoteLiteral = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 async function provisionDatabase(database: string): Promise<void> {
   for (const step of provisioningSteps(database)) {
@@ -80,12 +110,13 @@ export function provisioningSteps(database: string): ProvisioningStep[] {
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${system}') THEN
       CREATE ROLE ${ident(system)} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS CONNECTION LIMIT 10; END IF;
   END $$`);
-  step(`GRANT rds_iam TO ${ident(owner)}, ${ident(api)}, ${ident(system)}`);
   step(`GRANT plexo_anon, plexo_authenticated TO ${ident(api)}`);
-  // The admin must be a member of the owner role to create a database owned by it.
-  step(`GRANT ${ident(owner)}, ${ident(system)} TO CURRENT_USER`);
-  stepIgnoringExists(`CREATE DATABASE ${db} OWNER ${ident(owner)}`);
+  // Steps 1–2 of the note at the top: no IAM sign-in while the admin is a member.
+  step(`REVOKE rds_iam FROM ${ident(owner)}, ${ident(system)}`);
+  step(`GRANT ${ident(owner)}, ${ident(system)} TO CURRENT_USER WITH INHERIT FALSE, SET TRUE`);
+  stepIgnoringExists(`CREATE DATABASE ${db}`);
   step(`REVOKE ALL ON DATABASE ${db} FROM PUBLIC`);
+  step(`GRANT ALL ON DATABASE ${db} TO ${ident(owner)}`);
   step(`GRANT CONNECT ON DATABASE ${db} TO ${ident(api)}, ${ident(system)}`);
 
   // Inside the new database.
@@ -95,6 +126,8 @@ export function provisioningSteps(database: string): ProvisioningStep[] {
     `DO $$ BEGIN ${EXTENSIONS.map((e) => `BEGIN CREATE EXTENSION IF NOT EXISTS "${e}"; EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'extension ${e} unavailable'; END;`).join(" ")} END $$`,
     database,
   );
+  // The app's tables live in public, created by the owner role.
+  step(`GRANT ALL ON SCHEMA public TO ${ident(owner)}`, database);
   step(`DO $$ BEGIN
     CREATE SCHEMA IF NOT EXISTS plexo AUTHORIZATION ${ident(system)};
     EXECUTE 'SET LOCAL ROLE ${system}';
@@ -168,11 +201,17 @@ export function provisioningSteps(database: string): ProvisioningStep[] {
 
   // What the two client roles may do with the app's tables. Row-level security (switched
   // on for every new table — see migrations.ts) still decides which rows.
+  // Default privileges are set as the owner itself (FOR ROLE would need the admin to inherit it).
   step(`DO $$ BEGIN
     GRANT USAGE ON SCHEMA public TO plexo_anon, plexo_authenticated;
-    ALTER DEFAULT PRIVILEGES FOR ROLE ${ident(owner)} IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO plexo_anon, plexo_authenticated;
-    ALTER DEFAULT PRIVILEGES FOR ROLE ${ident(owner)} IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO plexo_anon, plexo_authenticated;
-    ALTER DEFAULT PRIVILEGES FOR ROLE ${ident(owner)} IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO plexo_anon, plexo_authenticated;
+    EXECUTE 'SET LOCAL ROLE ${owner}';
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO plexo_anon, plexo_authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO plexo_anon, plexo_authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO plexo_anon, plexo_authenticated;
   END $$`, database);
+
+  // Step 3: the admin leaves, and only then can the logins sign in with IAM.
+  step(`REVOKE ${ident(owner)}, ${ident(system)} FROM CURRENT_USER`);
+  step(`GRANT rds_iam TO ${ident(owner)}, ${ident(api)}, ${ident(system)}`);
   return steps;
 }

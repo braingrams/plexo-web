@@ -71,7 +71,7 @@ export class InsufficientCreditsError extends Error {
 }
 
 export class AgentIterationLimitError extends Error {
-  constructor(message = `SOL couldn't finish this action within ${MAX_TOOL_ITERATIONS} tool-call rounds.`) {
+  constructor(message = "SOL paused after a lot of steps. Everything so far is saved — say “continue” and it'll pick up where it left off.") {
     super(message);
     this.name = "AgentIterationLimitError";
   }
@@ -106,6 +106,9 @@ export interface AgentTurnDeps {
   /** The new user message's key once it's saved (e.g. to add its images' descriptions). */
   onUserMessageSaved?: (key: { id: string; createdAt: string }) => void;
   budgetGuard: () => Promise<boolean>;
+  /** Longest answer per round (output tokens) — shorter for Free accounts on Plexo's AI
+   *  (lib/ai/solEngine.ts maxAnswerTokensFor). Defaults to MAX_TOKENS.agent_chat. */
+  maxOutputTokens?: number;
 }
 
 export interface RunAgentTurnResult {
@@ -150,6 +153,9 @@ export interface ResumeAgentTurnDeps {
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   budgetGuard: () => Promise<boolean>;
+  /** Longest answer per round (output tokens) — shorter for Free accounts on Plexo's AI
+   *  (lib/ai/solEngine.ts maxAnswerTokensFor). Defaults to MAX_TOKENS.agent_chat. */
+  maxOutputTokens?: number;
 }
 
 /** Loads a conversation's most recent messages, oldest first (chronological). */
@@ -310,6 +316,9 @@ interface LoopContext {
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   budgetGuard: () => Promise<boolean>;
+  /** Longest answer per round (output tokens) — shorter for Free accounts on Plexo's AI
+   *  (lib/ai/solEngine.ts maxAnswerTokensFor). Defaults to MAX_TOKENS.agent_chat. */
+  maxOutputTokens?: number;
 }
 
 /**
@@ -319,6 +328,24 @@ interface LoopContext {
  * assistant message plus its freshly-resolved tool_results) — this function only ever
  * appends to it and persists what it appends.
  */
+/** Sent back to SOL (not shown, not saved) when its answer hit the length limit. */
+// When a turn has used all its steps: one last answer, in words, instead of an error — the
+// work so far is saved and the owner just needs to know where things stand.
+const STEP_LIMIT_NOTE =
+  "You've reached this turn's step limit. Don't call any more tools. In two or three short, plain sentences, tell the owner what you finished, what's left (if anything), and that they can say “continue” for you to carry on.";
+const STEP_LIMIT_FALLBACK = "I've done a lot in this turn and paused here so you can check in. Everything so far is saved — say “continue” and I'll pick up where I left off.";
+
+/** One line per model call, so a slow step can be traced to the AI service (on staging one
+ *  call took ~5 minutes for a 2.6k-token answer that normally takes ~15 seconds). */
+function logModelCall(conversationId: string, round: number, ms: number, result: { usage: { inputTokens: number; outputTokens: number }; stopReason?: string }): void {
+  const line = JSON.stringify({ sol: "model_call", conversationId, round, ms, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, stopReason: result.stopReason });
+  if (ms > 60_000) console.warn(`[sol] slow model call ${line}`);
+  else console.log(`[sol] ${line}`);
+}
+
+const ANSWER_CUT_OFF_NOTE =
+  "Your last answer was too long and was cut off before it finished, so nothing in it ran. Continue from where you were, in smaller steps: write at most 2–3 files per app_write_files call (split big files across calls), and keep any text short.";
+
 async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
   const tools: BedrockToolDef[] = getAllSolTools();
   const model = resolveModel(ctx.provider, ctx.modelTier);
@@ -337,22 +364,46 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       throw new InsufficientCreditsError();
     }
 
+    const callStarted = Date.now();
     const result = await generateWithTools({
       model,
       apiKey: ctx.apiKey,
       systemPrompt,
       conversationHistory: await resolveAttachments(pairToolCalls(ctx.history)),
       tools,
-      maxTokens: MAX_TOKENS.agent_chat,
+      maxTokens: ctx.maxOutputTokens ?? MAX_TOKENS.agent_chat,
       onTextDelta: ctx.onTextDelta,
       onToolInputProgress: ctx.onToolCallPreparing,
     });
+    logModelCall(ctx.conversationId, iteration, Date.now() - callStarted, result);
 
     totals.inputTokens += result.usage.inputTokens;
     totals.outputTokens += result.usage.outputTokens;
 
     const toolUseBlocks = Array.isArray(result.content) ? result.content.filter((block) => block?.type === "tool_use") : [];
     if (toolUseBlocks.some((b) => b.name === "create_app" || String(b.name).startsWith("app_"))) iterationLimit = MAX_APP_TOOL_ITERATIONS;
+
+    // Cut off at the answer-length limit — typically while writing many files in one call. The
+    // half-written tool call can't run; keep any finished text, tell SOL to work in smaller
+    // pieces, and carry on (this round still counts toward the limit). Ending here used to
+    // save an empty "final" message and stop the build silently.
+    if (result.stopReason === "max_tokens") {
+      const finishedText = (Array.isArray(result.content) ? result.content : []).filter((b) => b?.type === "text" && String(b.text ?? "").trim());
+      if (finishedText.length) {
+        await SolMessage.create({
+          id: randomUUID(),
+          conversationId: ctx.conversationId,
+          userId: ctx.resolvedUser.userId,
+          role: "assistant",
+          content: finishedText,
+          usage: result.usage,
+          confirmationState: "AUTO",
+        }).go();
+      }
+      ctx.history.push({ role: "assistant", content: finishedText.length ? finishedText : [{ type: "text", text: "(My last answer was too long and got cut off.)" }] });
+      ctx.history.push({ role: "user", content: [{ type: "text", text: ANSWER_CUT_OFF_NOTE }] });
+      continue;
+    }
 
     if (result.stopReason !== "tool_use" || toolUseBlocks.length === 0) {
       await SolMessage.create({
@@ -445,7 +496,46 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
     ctx.history.push({ role: "user", content: resultBlocks });
   }
 
-  throw new AgentIterationLimitError();
+  return wrapUpAtStepLimit(ctx, { model, systemPrompt, tools, generateWithTools, resolveAttachments }, totals);
+}
+
+/** All steps used: ask for a plain summary (no tools) and end the turn normally. Only its text
+ *  is kept, so the history stays valid (every tool call answered) for the next turn. */
+async function wrapUpAtStepLimit(
+  ctx: LoopContext,
+  call: { model: string; systemPrompt: string; tools: BedrockToolDef[]; generateWithTools: (p: GenerateWithToolsParams) => Promise<GenerateWithToolsResult>; resolveAttachments: (h: HistoryEntry[]) => Promise<HistoryEntry[]> },
+  totals: { inputTokens: number; outputTokens: number },
+): Promise<{ finalText: string; usage: { inputTokens: number; outputTokens: number } }> {
+  let text = STEP_LIMIT_FALLBACK;
+  let usage: GenerateWithToolsResult["usage"] | undefined;
+  if (await ctx.budgetGuard()) {
+    const last = ctx.history[ctx.history.length - 1];
+    const note = { type: "text", text: STEP_LIMIT_NOTE };
+    // The note rides in the last tool-results message (a second user message in a row isn't allowed).
+    const history = last?.role === "user" && Array.isArray(last.content) ? [...ctx.history.slice(0, -1), { ...last, content: [...last.content, note] }] : [...ctx.history, { role: "user" as const, content: [note] }];
+    try {
+      const result = await call.generateWithTools({
+        model: call.model,
+        apiKey: ctx.apiKey,
+        systemPrompt: call.systemPrompt,
+        conversationHistory: await call.resolveAttachments(pairToolCalls(history)),
+        tools: call.tools,
+        maxTokens: 1024,
+        onTextDelta: ctx.onTextDelta,
+      });
+      usage = result.usage;
+      totals.inputTokens += result.usage.inputTokens;
+      totals.outputTokens += result.usage.outputTokens;
+      const said = extractText((Array.isArray(result.content) ? result.content : []).filter((b) => b?.type === "text"));
+      if (said.trim()) text = said.trim();
+    } catch (err) {
+      console.warn("[sol] step-limit summary failed; using the standard note:", err instanceof Error ? err.message : err);
+    }
+  }
+  const content = [{ type: "text", text }];
+  await SolMessage.create({ id: randomUUID(), conversationId: ctx.conversationId, userId: ctx.resolvedUser.userId, role: "assistant", content, ...(usage ? { usage } : {}), confirmationState: "AUTO" }).go();
+  ctx.history.push({ role: "assistant", content });
+  return { finalText: text, usage: totals };
 }
 
 export async function runAgentTurn(deps: AgentTurnDeps): Promise<RunAgentTurnResult> {
@@ -488,6 +578,7 @@ export async function runAgentTurn(deps: AgentTurnDeps): Promise<RunAgentTurnRes
     onToolCallAwaitingConfirmation: deps.onToolCallAwaitingConfirmation,
     onToolCallResult: deps.onToolCallResult,
     budgetGuard: deps.budgetGuard,
+    maxOutputTokens: deps.maxOutputTokens,
   });
 }
 
@@ -615,5 +706,6 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     onToolCallAwaitingConfirmation: deps.onToolCallAwaitingConfirmation,
     onToolCallResult: deps.onToolCallResult,
     budgetGuard: deps.budgetGuard,
+    maxOutputTokens: deps.maxOutputTokens,
   });
 }

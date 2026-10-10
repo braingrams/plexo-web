@@ -55,8 +55,10 @@ export function appError(err: unknown): NextResponse {
     return NextResponse.json({ error: err.error.message, code: err.error.code, hint: err.error.hint, position: err.error.position }, { status: err.error.kind === "resuming" ? 503 : 400 });
   }
   if (err instanceof BuildUnavailableError || err instanceof AppDbUnavailableError) return NextResponse.json({ error: err.message }, { status: 503 });
+  // Anything unexpected is logged in full but never shown as-is: its text is written for
+  // engineers (setting names, AWS errors), not for the owner looking at the screen.
   console.error("App API error", err);
-  return NextResponse.json({ error: err instanceof Error ? err.message : "Something went wrong." }, { status: 500 });
+  return NextResponse.json({ error: "Something went wrong on our side. Please try again in a moment." }, { status: 500 });
 }
 
 export async function readBody(request: NextRequest, maxBytes = 5 * 1024 * 1024): Promise<Record<string, any>> {

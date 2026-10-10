@@ -15,6 +15,8 @@ export interface MigrationSummary {
   siteName: string | null;
   createdAt: string;
   finishedAt: string | null;
+  /** The owner closed the "has moved" banner (on any device). */
+  bannerDismissed?: boolean;
   counts: EstimateCounts | null;
   estimatedSecondsLeft: number | null;
   pausedReason: string | null;

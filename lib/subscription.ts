@@ -70,6 +70,18 @@ export type TierFeatures = {
    * this is the free allotment, not a hard cap.
    */
   includedFunnelSlots: number;
+  /**
+   * How many sites (landing pages and apps) can be LIVE at once — reachable at any address.
+   * `null` = no cap beyond the published-domain limit. Free keeps one: on a downgrade the
+   * most recently edited site stays up and the rest go offline (lib/plan/lifecycle.ts).
+   */
+  maxPublishedSites: number | null;
+  /**
+   * How many pages of one site are served. `1` = only the homepage — every other page,
+   * the blog and the store send visitors back to the homepage (app/pub/[domain]) and an
+   * app only answers its first screen (lib/projects/serve.ts). `null` = every page.
+   */
+  maxPublishedPagesPerSite: number | null;
 };
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
@@ -77,7 +89,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     maxEmailTemplates: 5,
     maxLandingPages: 5,
     maxPublishedBlogPosts: 5,
-    // Free ships 10 monthly AI credits (PLAN_MONTHLY_CREDITS.FREE below) — hard-locking the
+    // Free ships a small monthly AI allowance (lib/credits/value.ts) — hard-locking the
     // AI entry point here made those credits impossible to ever spend (a free user could
     // never even open the AI prompt box to try one). The real, already-enforced limit is
     // ensureCreditPeriod/chargeUsage in app/api/v1/ai/generate/route.ts rejecting a request
@@ -96,6 +108,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     brandingRemovalEnabled: false,
     whiteLabelEnabled: false,
     includedFunnelSlots: 0,
+    maxPublishedSites: 1,
+    maxPublishedPagesPerSite: 1,
   },
   PRO: {
     maxEmailTemplates: 25,
@@ -113,6 +127,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     brandingRemovalEnabled: true,
     whiteLabelEnabled: true,
     includedFunnelSlots: 0,
+    maxPublishedSites: null,
+    maxPublishedPagesPerSite: null,
   },
   ULTRA: {
     maxEmailTemplates: 100,
@@ -130,27 +146,13 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     brandingRemovalEnabled: true,
     whiteLabelEnabled: true,
     includedFunnelSlots: 1,
+    maxPublishedSites: null,
+    maxPublishedPagesPerSite: null,
   },
 };
 
-/**
- * Monthly system-AI credit allowance per plan — granted lazily (see
- * `lib/credits/ledger.ts`'s `ensureCreditPeriod`) and reset (not rolled over)
- * each 30-day cycle. Only applies to accounts using system AI (no BYOK key
- * configured); BYOK accounts never touch credits.
- *
- * Sized against `lib/credits/pricing.ts`'s CREDIT_USD_VALUE default of $0.001/credit
- * (1000 credits = $1): ULTRA's 5,000 credits = $5 of real AI cost at that rate.
- *
- * ULTRA is intentionally a large-but-finite number, not unlimited — now that
- * system AI has a real dollar cost behind it, unbounded usage on a fixed
- * subscription price is a margin risk; usage beyond the allowance is a top-up.
- */
-export const PLAN_MONTHLY_CREDITS: Record<SubscriptionPlan, number> = {
-  FREE: 10,
-  PRO: 2_000,
-  ULTRA: 5_000,
-};
+// Monthly AI credit allowances are derived from each plan's AI dollar value in
+// lib/credits/value.ts (planMonthlyCredits) — the single reference for credit amounts.
 
 /**
  * Returns the feature set for a given subscription plan.
@@ -161,6 +163,11 @@ export function getTierFeatures(plan: string | null | undefined): TierFeatures {
     return TIER_DEFINITIONS[plan];
   }
   return TIER_DEFINITIONS.FREE;
+}
+
+/** True when only a site's homepage may be served on this plan (Free). */
+export function isHomePageOnlyPlan(plan: string | null | undefined): boolean {
+  return getTierFeatures(plan).maxPublishedPagesPerSite === 1;
 }
 
 /**

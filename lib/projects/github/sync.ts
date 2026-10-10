@@ -107,7 +107,7 @@ export async function pushVersion(templateId: string, versionId: string): Promis
       message,
     });
     await setRef(link, link.branch, commitSha, !!head);
-    await ProjectGitLink.patch({ templateId }).set({ lastSyncedCommitSha: commitSha, lastSyncedVersionId: versionId, status: "OK", statusMessage: "" }).go();
+    await ProjectGitLink.patch({ templateId }).set({ lastSyncedAt: new Date().toISOString(), lastSyncedCommitSha: commitSha, lastSyncedVersionId: versionId, status: "OK", statusMessage: "" }).go();
     if (versionRows[0]) await ProjectVersion.patch({ templateId, createdAt: versionRows[0].createdAt!, id: versionId }).set({ commitSha }).go();
     return { commitSha };
   } catch (err) {
@@ -157,12 +157,12 @@ export async function linkRepo(input: {
     const stale = current.map((f) => f.path).filter((p) => !incoming.has(p));
     if (stale.length) await deleteFiles(input.templateId, stale);
     const { versionId } = await snapshotVersion(input.templateId, { message: `Imported from ${link.repoFullName}`, source: "git" });
-    await ProjectGitLink.patch({ templateId: input.templateId }).set({ lastSyncedCommitSha: head, lastSyncedVersionId: versionId }).go();
+    await ProjectGitLink.patch({ templateId: input.templateId }).set({ lastSyncedAt: new Date().toISOString(), lastSyncedCommitSha: head, lastSyncedVersionId: versionId }).go();
     return { action: "imported", versionId };
   }
 
   const { versionId } = await snapshotVersion(input.templateId, { message: `Linked to ${link.repoFullName}`, source: "editor", skipGitPush: true });
-  if (head) await ProjectGitLink.patch({ templateId: input.templateId }).set({ lastSyncedCommitSha: head }).go();
+  if (head) await ProjectGitLink.patch({ templateId: input.templateId }).set({ lastSyncedAt: new Date().toISOString(), lastSyncedCommitSha: head }).go();
   await pushVersion(input.templateId, versionId);
   return { action: "pushed", versionId };
 }
@@ -198,7 +198,7 @@ export async function importPush(templateId: string, push: { after: string; ref:
   for (const batch of chunk(changed, PROJECT_LIMITS.maxFilesPerWrite)) await writeFiles(templateId, batch, `github:${push.author}`);
   if (removed.length) await deleteFiles(templateId, removed);
   const { versionId } = await snapshotVersion(templateId, { message: push.headMessage.split("\n")[0].slice(0, 200) || "Pushed from GitHub", source: "git", authorName: push.author, commitSha: push.after, skipGitPush: true });
-  await ProjectGitLink.patch({ templateId }).set({ lastSyncedCommitSha: push.after, lastSyncedVersionId: versionId, status: "OK", statusMessage: "" }).go();
+  await ProjectGitLink.patch({ templateId }).set({ lastSyncedAt: new Date().toISOString(), lastSyncedCommitSha: push.after, lastSyncedVersionId: versionId, status: "OK", statusMessage: "" }).go();
   return { versionId };
 }
 

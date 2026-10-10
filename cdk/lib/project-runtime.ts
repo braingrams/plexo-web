@@ -8,6 +8,9 @@ import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "node:path";
 import { buildLogGroup } from "./conventions";
 
+/** A PR's throwaway preview stack (STACK_ID "pr-<number>-plexo"), not staging or production. */
+const IS_PR_PREVIEW = /^pr-\d+/.test(process.env.STACK_ID ?? "");
+
 // Infrastructure for apps built on Plexo (docs/plexo-projects/ARCHITECTURE.md), added to the
 // compute stack (so every environment, PR previews included, gets its own build pipeline):
 //
@@ -65,12 +68,16 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
     memorySize: 4096,
     timeout: cdk.Duration.minutes(15),
     ephemeralStorageSize: cdk.Size.gibibytes(10),
-    // Backpressure: a burst of builds queues instead of fanning out without limit.
-    reservedConcurrentExecutions: Number(process.env.PROJECT_BUILD_CONCURRENCY || 50),
+    // Backpressure: a burst of builds queues instead of fanning out without limit. Staging
+    // and production reserve their share of the account's Lambda capacity; a PR's
+    // throwaway stack doesn't — every reservation comes out of one account-wide pool that
+    // must keep 40 free, and a third or fourth stack reserving 50 more made AWS refuse to
+    // create the function (pr-117). Previews are capped on the queue instead (below).
+    reservedConcurrentExecutions: IS_PR_PREVIEW ? undefined : Number(process.env.PROJECT_BUILD_CONCURRENCY || 50),
     environment: { BUILD_EVENTS_QUEUE_URL: eventsQueue.queueUrl },
     logGroup: buildLogGroup(scope, "ProjectBuildFn"),
   });
-  buildFn.addEventSource(new lambdaEventSources.SqsEventSource(buildQueue, { batchSize: 1, reportBatchItemFailures: true }));
+  buildFn.addEventSource(new lambdaEventSources.SqsEventSource(buildQueue, { batchSize: 1, reportBatchItemFailures: true, ...(IS_PR_PREVIEW ? { maxConcurrency: 5 } : {}) }));
   eventsQueue.grantSendMessages(buildFn);
 
   const workerRole = new iam.Role(scope, "BuildWorkerRole", {

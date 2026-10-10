@@ -354,3 +354,14 @@ jobs:
             exit 1
           fi
           echo "✓ Dashboard responded 200"
+
+      # Plan enforcement applies to every account right after a deploy — not only as each
+      # one is next visited (lib/plan/sweep.ts). Idempotent; the hourly schedule finishes
+      # anything this run doesn't. Never fails the deploy.
+      - name: Apply plan lifecycle to every account
+        continue-on-error: true
+        run: |
+          STATUS=$(curl -s -o /tmp/plan-sweep.json -w "%{http_code}" --max-time 90 \
+            -H "x-cron-secret: $CRON_SECRET" "https://staging-plexo.charisol.io/api/internal/plan-lifecycle" || true)
+          echo "Plan lifecycle sweep: HTTP $STATUS"
+          cat /tmp/plan-sweep.json 2>/dev/null || true

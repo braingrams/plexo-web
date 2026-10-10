@@ -1,13 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { GeistSans } from "geist/font/sans";
+import { Figtree } from "next/font/google";
 import { GeistMono } from "geist/font/mono";
 import { ThemeProvider } from "next-themes";
 
 import "./globals.css";
 
-// geist's variable names (--font-geist-sans/--font-geist-mono) are fixed by the package
-// itself, unlike next/font/google's `variable` option — globals.css bridges these to the
-// existing --font-heading/--font-body contract so nothing downstream needs to change names.
+// Figtree is the site's typeface (headings and body); Geist Mono stays for code. globals.css
+// maps --font-figtree/--font-geist-mono onto the --font-heading/--font-body/--font-mono
+// contract, so nothing downstream needs to change names.
+const figtree = Figtree({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], display: "swap", variable: "--font-figtree" });
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -119,8 +120,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    // The font variables live on <html> so :root's --font-heading/--font-body (globals.css)
+    // can resolve them — set on <body> they were invisible to :root, and every page fell back
+    // to the system font.
+    <html lang="en" suppressHydrationWarning className={`${figtree.variable} ${GeistMono.variable}`}>
+      <body>
         <script
           type="application/ld+json"
           // eslint-disable-next-line react/no-danger

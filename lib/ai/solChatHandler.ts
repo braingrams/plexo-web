@@ -2,13 +2,13 @@ import { buildSolAppContext } from "@/lib/projects/solAppContext";
 import { friendlyProviderError } from "@/lib/ai/providerErrors";
 import { describeAttachedImages } from "@/lib/ai/solImageDescriptions";
 import type { ResolvedUser } from "@/lib/mcp/dispatchMcpTool";
+import { maxAnswerTokensFor, solRouteForUser, tierFor, type SolRefusal, type SolRoute } from "@/lib/ai/solEngine";
 import { ensureCreditPeriod, chargeUsage, estimateWorstCaseCost } from "@/lib/db/ledgerOperations";
+import { sumUsageSince } from "@/lib/ai/solTurnUsage";
 import { estimateWorstCaseAgentTurnCost } from "@/lib/credits/agentTurnEstimate";
 import { SolConversation, SolMessage, SolMemoryFact, SolPreferences } from "@/lib/db/solEntities";
 import { bumpConversationActivity } from "@/lib/db/solConversationActivity";
 import { isDestructiveTool } from "@/lib/mcp/toolRiskClassification";
-import { resolveActiveApiKeyForUser } from "@/lib/ai/resolveUserAiKey";
-import { decryptSecret } from "@/lib/crypto";
 import type { AiProvider, ConcreteTier } from "./types";
 import {
   runAgentTurn,
@@ -106,34 +106,18 @@ interface SolAiRouting {
   /** True when this turn is billed to the account's own provider key, not Plexo's credit
    * ledger — settleTurn uses this to skip chargeUsage entirely. */
   isByok: boolean;
+  route: SolRoute;
+  /** The account's plan — Free accounts on Plexo's AI run on Basic (lib/ai/solEngine.ts). */
+  plan: string;
 }
 
-/** Resolves which provider/key actually serves this user's SOL turns, honoring their AI
- * Access Mode exactly the way the pre-existing page-builder AI feature already does (see
- * app/api/v1/ai/generate/route.ts): a BYOK account's own configured provider/key is used
- * and billed directly, never touching Plexo's credit ledger. Every other case — System AI,
- * Host-Managed (which has no real meaning for a native, session-authenticated SOL
- * conversation the way it does for a third-party app's own end users, since there is no
- * "host" here — the account IS the host), or no active key at all — falls back to Plexo's
- * system Bedrock Claude, credit-metered exactly as before this existed. Reuses the same
- * "most-recently-created active key" resolution as the page-builder feature (see
- * lib/ai/resolveUserAiKey.ts) rather than adding a second, SOL-specific notion of "the
- * user's key".
- */
-async function resolveSolAiRouting(userId: string): Promise<SolAiRouting> {
-  const key = await resolveActiveApiKeyForUser(userId);
-  if (key?.aiAccessMode === "BYOK" && key.aiApiKey) {
-    try {
-      return { provider: key.aiProvider as AiProvider, apiKey: decryptSecret(key.aiApiKey), isByok: true };
-    } catch (err) {
-      // Stored key can't be decrypted (e.g. AI_KEY_ENCRYPTION_SECRET was rotated) — fall
-      // back to System AI rather than failing the whole turn; re-entering the key in
-      // Settings is what the AI settings page already tells the user to do for this exact
-      // failure mode on the page-builder feature.
-      console.error(`resolveSolAiRouting: failed to decrypt BYOK key for user ${userId}, falling back to System AI:`, err);
-    }
-  }
-  return { provider: "bedrock_claude", isByok: false };
+/** Which provider/key serves this user's SOL turns — the same rules every AI feature uses
+ *  (lib/ai/solEngine.ts): their Settings → AI choice, Plexo's system AI otherwise. */
+async function resolveSolAiRouting(userId: string): Promise<SolAiRouting | SolRefusal> {
+  const resolved = await solRouteForUser(userId);
+  if ("error" in resolved) return resolved;
+  const { route, plan } = resolved;
+  return { provider: route.provider, apiKey: route.apiKey || undefined, isByok: route.paidBy === "own-key", route, plan };
 }
 
 /** Finds the most recent user-authored message strictly before `beforeCreatedAt` in an
@@ -159,25 +143,6 @@ async function loadLastMessage(conversationId: string): Promise<{ id: string; cr
   return message ? { id: message.id, createdAt: message.createdAt } : null;
 }
 
-/** Sums the usage of every SolMessage persisted in this conversation at or after `sinceIso` —
- * used to recover "how much was actually consumed" when InsufficientCreditsError aborts a
- * turn mid-loop. solAgent.ts's continueLoop persists each assistant message (with its real
- * `usage`) BEFORE the next iteration's budgetGuard check can throw, but the thrown error
- * itself carries no usage payload — so the persisted rows are the only source of truth for
- * what to actually charge for. */
-async function sumUsageSince(conversationId: string, sinceIso: string): Promise<{ inputTokens: number; outputTokens: number }> {
-  const { data: messages } = await SolMessage.query.primary({ conversationId }).go({ order: "desc", limit: 20 });
-  let inputTokens = 0;
-  let outputTokens = 0;
-  for (const message of messages) {
-    if (message.createdAt < sinceIso) break; // chronological desc — everything after this predates the turn
-    if (message.role === "assistant" && message.usage) {
-      inputTokens += message.usage.inputTokens ?? 0;
-      outputTokens += message.usage.outputTokens ?? 0;
-    }
-  }
-  return { inputTokens, outputTokens };
-}
 
 /** Fire-and-forget per lib/solAnalytics.ts's own documented convention — a failed analytics
  * write must never affect the real response (already sent/streamed by the time this fires)
@@ -437,6 +402,19 @@ async function settleTurn(
             ? err.message
             : "SOL hit an unexpected error. Try sending your message again.";
     console.error("SOL chat turn failed:", err);
+    // The rounds that ran before the failure did real work (their results are saved) and are
+    // charged like any other — a turn that stopped partway used to cost nothing at all. A
+    // model call that itself failed has no usage, so it's never charged.
+    const partialUsage = await sumUsageSince(ctx.conversationId, ctx.turnStartedAt).catch(() => ({ inputTokens: 0, outputTokens: 0 }));
+    let creditsCharged = 0;
+    // Own-key accounts are billed by their provider, never in credits.
+    if (!ctx.isByok && (partialUsage.inputTokens > 0 || partialUsage.outputTokens > 0)) {
+      const charged = await chargeUsage(ctx.userId, { provider: ctx.provider, tier: ctx.modelTier, mode: "agent_chat", usage: partialUsage }).catch((chargeErr) => {
+        console.error("settleTurn: failed to charge the rounds that ran before an error:", chargeErr);
+        return null;
+      });
+      creditsCharged = charged?.creditsCharged ?? 0;
+    }
     // Same reasoning as the pendingConfirmation branch above: the user's own message (at
     // minimum) was already persisted before this failed, so messageCount is stale without
     // this — best-effort, never worth failing the error response itself over.
@@ -450,9 +428,9 @@ async function settleTurn(
       conversationId: ctx.conversationId,
       provider: ctx.provider,
       tier: ctx.modelTier,
-      inputTokens: 0,
-      outputTokens: 0,
-      creditsCharged: 0,
+      inputTokens: partialUsage.inputTokens,
+      outputTokens: partialUsage.outputTokens,
+      creditsCharged,
       latencyMs: Date.now() - startedAtMs,
       outcome: err instanceof AgentIterationLimitError ? "timeout" : "error",
       errorCode: err instanceof Error ? err.name : "unknown",
@@ -517,7 +495,7 @@ export async function prepareMessagesTurn(
 ): Promise<PreparedTurn> {
   const parsed = body as { text?: string; attachments?: Array<{ type?: string; url?: string; filename?: string }>; modelTier?: string };
   const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
-  const modelTier = parsed.modelTier as ModelTier;
+  let modelTier = parsed.modelTier as ModelTier;
   const hasAttachments = Array.isArray(parsed.attachments) && parsed.attachments.some((a) => a?.url);
 
   // An image sent with no caption is a perfectly normal message ("what do you think of this?").
@@ -531,12 +509,15 @@ export async function prepareMessagesTurn(
   }
 
   const routing = await resolveSolAiRouting(resolved.userId);
+  if ("error" in routing) return { ok: false, status: routing.status, body: { error: routing.error } };
+  // Free accounts on Plexo's AI run on Basic — the same rule as every AI feature (solEngine).
+  modelTier = tierFor(routing.route, routing.plan, modelTier as ConcreteTier) as ModelTier;
 
   // BYOK turns are billed to the account's own provider key directly — Plexo's credit
   // balance is never consulted for them, so this pre-flight check (and the mid-loop
   // budgetGuard below) only applies to System AI turns.
   if (!routing.isByok) {
-    const requiredCredits = estimateWorstCaseAgentTurnCost(modelTier, text.length);
+    const requiredCredits = estimateWorstCaseAgentTurnCost(modelTier, text.length, maxAnswerTokensFor(routing.route, routing.plan));
     const preflightBalance = await ensureCreditPeriod(resolved.userId);
     if (preflightBalance.total < requiredCredits) {
       return { ok: false, status: 402, body: { error: "insufficient_credits", requiredCredits, availableCredits: preflightBalance.total } };
@@ -589,11 +570,12 @@ export async function prepareMessagesTurn(
         // tool-using turn can, in principle, exhaust credits the generous up-front
         // worst-case estimate still passed. Always true for BYOK — see the pre-flight
         // check above.
+        maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan),
         budgetGuard: routing.isByok
           ? async () => true
           : async () => {
               const balance = await ensureCreditPeriod(resolved.userId);
-              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", text.length);
+              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", text.length, maxAnswerTokensFor(routing.route, routing.plan));
               return balance.total >= perCallEstimate;
             },
       };
@@ -676,8 +658,9 @@ export async function prepareConfirmTurn(
     decision = parsed.decision;
   }
 
-  const modelTier = (conversation.modelTier as ModelTier) ?? "BASIC";
   const routing = await resolveSolAiRouting(resolved.userId);
+  if ("error" in routing) return { ok: false, status: routing.status, body: { error: routing.error } };
+  const modelTier = tierFor(routing.route, routing.plan, ((conversation.modelTier as ModelTier) ?? "BASIC") as ConcreteTier) as ModelTier;
   await ensureCreditPeriod(resolved.userId);
   const { memoryEnabled, facts: memoryFacts } = await loadMemoryContext(resolved.userId);
   const userTextForMemory = findPrecedingUserText(messages, pendingMessage.createdAt);
@@ -712,11 +695,12 @@ export async function prepareConfirmTurn(
         memoryFacts,
         appContext: conversation.appId ? await buildSolAppContext(conversation.appId, resolved).catch(() => undefined) : undefined,
         ...callbacks,
+        maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan),
         budgetGuard: routing.isByok
           ? async () => true
           : async () => {
               const balance = await ensureCreditPeriod(resolved.userId);
-              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", approxInputChars);
+              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", approxInputChars, maxAnswerTokensFor(routing.route, routing.plan));
               return balance.total >= perCallEstimate;
             },
       };

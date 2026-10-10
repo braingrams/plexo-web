@@ -143,6 +143,39 @@ jobs:
             esac
           done
 
+      # The assets bucket has autoDeleteObjects, but that empties it once, when its custom
+      # resource is deleted. If the PR's own deploy is still uploading when the PR merges
+      # (pr-109, 2026-10-10), files land AFTER that and the bucket delete fails with
+      # "bucket not empty", leaving the stack DELETE_FAILED. A re-run then fails the same
+      # way (CloudFormation only retries the bucket). Emptying it here, by the stack's own
+      # resource lookup (works in DELETE_FAILED too), makes teardown and re-runs reliable.
+      # STACK_ID was already checked against pr-<number>-plexo above.
+      - name: Empty the PR's assets bucket
+        # Never blocks the destroy: if this role can't empty it, teardown behaves as before.
+        continue-on-error: true
+        run: |
+          BUCKET=$(aws cloudformation describe-stack-resources --stack-name "${STACK_ID}-compute-stack" \
+            --query "StackResources[?ResourceType=='AWS::S3::Bucket' && starts_with(LogicalResourceId, 'AssetsBucket')].PhysicalResourceId | [0]" \
+            --output text 2>/dev/null || true)
+          if [ -z "$BUCKET" ] || [ "$BUCKET" = "None" ]; then
+            echo "No assets bucket to empty."
+            exit 0
+          fi
+          case "$BUCKET" in
+            "${STACK_ID}"*) ;;
+            *) echo "::error::Bucket '$BUCKET' doesn't belong to $STACK_ID — refusing to empty it."; exit 1 ;;
+          esac
+          if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+            if aws s3 rm "s3://$BUCKET" --recursive --only-show-errors; then
+              echo "Emptied $BUCKET"
+            else
+              echo "::warning::Couldn't empty $BUCKET (does github-actions-plexo-deploy have s3:ListBucket/s3:DeleteObject on pr-*-plexo-* buckets?)"
+              exit 1
+            fi
+          else
+            echo "Bucket $BUCKET is already gone."
+          fi
+
       - name: Destroy the PR's compute stack only — never --all, never the data stack
         working-directory: ./cdk
         env:

@@ -11,14 +11,18 @@ export const PLAN_PRICE_ENV: Record<"PRO" | "ULTRA", string> = {
 
 export interface TopupPack {
   priceEnv: string;
-  credits: number;
-  label: string;
 }
 
+/**
+ * Credit packs. Their credits aren't fixed here: a pack grants half of what it costs as AI
+ * value (lib/credits/value.ts — creditsForTopupPayment), so changing a pack's price in Stripe
+ * changes its credits too. See topupOffer() for the amount shown before buying, and the Stripe
+ * webhook for the amount granted (from what was actually paid).
+ */
 export const TOPUP_PACKS: Record<"SMALL" | "MEDIUM" | "LARGE", TopupPack> = {
-  SMALL: { priceEnv: "STRIPE_PRICE_TOPUP_SMALL", credits: 5_000, label: "5,000 credits" },
-  MEDIUM: { priceEnv: "STRIPE_PRICE_TOPUP_MEDIUM", credits: 25_000, label: "25,000 credits" },
-  LARGE: { priceEnv: "STRIPE_PRICE_TOPUP_LARGE", credits: 120_000, label: "120,000 credits" },
+  SMALL: { priceEnv: "STRIPE_PRICE_TOPUP_SMALL" },
+  MEDIUM: { priceEnv: "STRIPE_PRICE_TOPUP_MEDIUM" },
+  LARGE: { priceEnv: "STRIPE_PRICE_TOPUP_LARGE" },
 };
 
 export function resolvePriceId(envVar: string): string {

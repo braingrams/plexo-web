@@ -517,6 +517,13 @@ export class PublishedSitesStack extends cdk.Stack {
     // "did you know your next lesson is ready" nudge.
     scheduledRoute("LmsDripReminder", "/api/internal/lms-drip-reminder", events.Schedule.cron({ minute: "0", hour: "14" }));
 
+    // Plan lifecycle backstop (lib/plan/sweep.ts): trials and admin grants that ran out for
+    // someone who hasn't been back, subscriptions recorded before statuses were tracked
+    // (checked with Stripe), and "your trial ends in 3 days" emails. Hourly so an expired
+    // trial never lingers long; everything a person or visitor touches is already handled
+    // the instant they do (lib/plan/lifecycle.ts).
+    scheduledRoute("PlanLifecycle", "/api/internal/plan-lifecycle", events.Schedule.rate(cdk.Duration.hours(1)));
+
     new cdk.CfnOutput(this, "ConnectionGroupRoutingEndpoint", { value: connectionGroup.attrRoutingEndpoint });
     new cdk.CfnOutput(this, "PrimaryDistributionId", { value: primaryDistribution.attrId, exportName: `${this.stackName}-PrimaryDistributionId` });
     new cdk.CfnOutput(this, "ConnectionGroupId", { value: connectionGroup.attrId, exportName: `${this.stackName}-ConnectionGroupId` });

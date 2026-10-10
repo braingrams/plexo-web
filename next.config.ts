@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+// The self-hosted code editor's version — its files live at /monaco/<version>/vs
+// (scripts/copy-monaco.mjs), and the app editor loads from that address.
+const monacoVersion: string = JSON.parse(readFileSync(join(process.cwd(), "node_modules/monaco-editor/package.json"), "utf8")).version;
 
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_MONACO_VERSION: monacoVersion },
   reactStrictMode: true,
   // playwright-core: even connectOverCDP (no local browser launch) touches its coreBundle,
   // which does a relative-path require of browsers.json — bundling it (Turbopack's default)

@@ -186,6 +186,19 @@ function IconCommerce() {
   );
 }
 
+function IconApps() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <path d="M3 9h18" />
+      <circle cx="6.5" cy="6.5" r="0.6" fill="currentColor" />
+      <circle cx="9" cy="6.5" r="0.6" fill="currentColor" />
+      <rect x="7" y="12.5" width="4.5" height="4" rx="1" />
+      <path d="M14.5 13h3M14.5 16h2" />
+    </svg>
+  );
+}
+
 function IconFunnels() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -204,6 +217,7 @@ function IconChevronDown() {
 
 const NAV_ICONS: Record<string, React.ReactNode> = {
   "/dashboard": <IconOverview />,
+  "/dashboard/apps": <IconApps />,
   "/dashboard/templates": <IconTemplates />,
   "/dashboard/pages": <IconPages />,
   "/dashboard/blog": <IconBlog />,

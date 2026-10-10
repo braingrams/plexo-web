@@ -98,7 +98,10 @@ export function useSolStream() {
             if (!exists) {
               return [...prev, { type: "tool_use", id: frame.id, name: frame.name, input: frame.args, status: "awaiting_confirmation" } as ToolUseBlock];
             }
-            return prev.map((b) => (isToolUseBlock(b) && b.id === frame.id ? { ...b, status: "awaiting_confirmation" } : b));
+            // The block may be the empty placeholder from tool_call_preparing — take the
+            // finished input too, or a question arrives with nothing to show and the chat
+            // looks frozen.
+            return prev.map((b) => (isToolUseBlock(b) && b.id === frame.id ? { ...b, input: frame.args, status: "awaiting_confirmation" } : b));
           });
           setAwaitingMessageId(frame.messageId);
           break;

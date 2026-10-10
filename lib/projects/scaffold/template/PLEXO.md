@@ -29,9 +29,35 @@ installs, builds and hosts it — there's nothing to configure.
   default and denies everything until a policy allows it).
 - Secrets (API keys) never go in `src/` — everything in `src/` is shipped to browsers. Use a
   server function and read the key from `env`.
-- Add npm packages by adding them to `package.json` `dependencies`.
+- Add npm packages by adding them to `package.json` `dependencies`. Keep them small: big
+  server SDKs (`stripe`, `aws-sdk`, `firebase-admin`, `googleapis`…) make the build run out of
+  time and are refused — call those services' HTTP APIs with `fetch` from a server function.
 - Make every page responsive (it should look right on a phone) and give every async view
   a loading state and an empty state.
+
+## Design
+
+This app should look like a premium product a real company would ship — never a template.
+
+- **Its own identity.** Pick a palette that fits the business and set it in `src/index.css`
+  (`--primary`, `--accent`, `--background`…). Pair a characterful heading font with a clean
+  body font from Google Fonts: add the `<link>` to `index.html`, then set them in
+  `src/index.css` (`--font-heading`, `--font-sans` in `@theme`).
+- **Its own icon.** Replace `public/favicon.svg` with a simple, bold mark that fits the
+  business, in the app's colours and legible at 16px; set `<title>` and the meta description
+  in `index.html`.
+- **Full pages.** A striking hero — bold headline, a specific benefit-led subheading, a clear
+  main action and a strong visual — then the sections a real page of this kind has
+  (benefits, how it works, social proof, pricing, FAQ, closing call to action, footer).
+- **Real photos.** Use `app_find_photos` (Unsplash, Pexels, Pixabay) with a specific, visual
+  search; credit the photographer in a small caption or the footer. Or compose a product mock
+  from the UI components. Never a broken or random placeholder image.
+- **Depth and motion.** Soft gradients or mesh backgrounds, layered low-opacity shadows, cards
+  with real hierarchy; `motion` for gentle entrance and hover effects
+  (`import { motion } from "motion/react"`); `lucide-react` icons.
+- **Real words.** Specific copy for this business — no lorem ipsum or "Company Name".
+- **Every state designed.** Empty states get an icon, a friendly line and an action; loading
+  states get skeletons. Everything looks right at phone width.
 
 ## Data
 
@@ -85,3 +111,43 @@ const { data: link } = await plexo.storage.from("documents").createSignedUrl(`${
   view a file by its URL). Every other bucket is **private**: only the person who uploaded a
   file can open it, through `createSignedUrl`.
 - Files a server function writes (`ctx.db` has full access) can go anywhere.
+
+## Payments
+
+Take payments with Stripe Checkout from a server function — `fetch`, no Stripe package. The
+owner adds their key in Plexo → your app → Secret keys as `STRIPE_SECRET_KEY`.
+
+```ts
+// functions/create-checkout.ts
+import type { PlexoFunction } from "./types";
+
+const handler: PlexoFunction = async (req, { user, env }) => {
+  if (!user) return Response.json({ error: "Sign in first" }, { status: 401 });
+  const { origin } = new URL(req.url);
+  const body = new URLSearchParams({
+    mode: "payment",
+    "line_items[0][price_data][currency]": "usd",
+    "line_items[0][price_data][product_data][name]": "Premium access",
+    "line_items[0][price_data][unit_amount]": "4900", // cents
+    "line_items[0][quantity]": "1",
+    client_reference_id: user.id,
+    success_url: `${origin}/thanks?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${origin}/pricing`,
+  });
+  const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const session = await res.json();
+  if (!res.ok) return Response.json({ error: session.error?.message ?? "Payment couldn't start" }, { status: 400 });
+  return Response.json({ url: session.url });
+};
+export default handler;
+```
+
+In the app: `const { data } = await plexo.functions.invoke("create-checkout"); location.assign(data.url);`
+
+To confirm a payment, have another server function fetch
+`https://api.stripe.com/v1/checkout/sessions/<session_id>` (same `Authorization` header) on the
+thanks page and record it when `payment_status` is `"paid"` — never trust the browser alone.

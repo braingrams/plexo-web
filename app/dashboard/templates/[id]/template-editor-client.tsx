@@ -8,6 +8,7 @@
  * via the next/dynamic wrapper in template-editor-dynamic.tsx (ssr: false).
  */
 
+import { SolOutOfCredits } from "../../_components/sol/SolTopUp";
 import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -17,6 +18,7 @@ import {
   type CommentTarget,
 } from "@charisol/plexo-sdk";
 import "@charisol/plexo-sdk/dist/plexo-sdk.css";
+import { SitePlanNotice } from "../../_components/SitePlanNotice";
 import { PagesPanel } from "./PagesPanel";
 import { CommentLayer } from "./comments/CommentLayer";
 import { BuyDomainFlow } from "../../domains/domains-client";
@@ -683,6 +685,8 @@ export function TemplateEditorClient({
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // The builder's SOL actions ran out of AI credits → SOL's top-up card over the editor.
+  const [solOutOfCredits, setSolOutOfCredits] = useState(false);
   const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(
     initialHasUnpublishedChanges,
   );
@@ -1074,6 +1078,9 @@ export function TemplateEditorClient({
           onNavigate={(pageId) => void handleNavigateToPage(pageId)}
         />
       )}
+      {templateKind === "LANDING_PAGE" && !isBlogLayout && (
+        <SitePlanNotice templateId={templateId} refreshKey={isPublishing} />
+      )}
       {isBlogLayout && (
         <div
           style={{
@@ -1094,10 +1101,16 @@ export function TemplateEditorClient({
           go live.
         </div>
       )}
+      {solOutOfCredits && (
+        <div style={{ position: "fixed", right: 20, bottom: 20, zIndex: 60, width: "min(380px, calc(100vw - 32px))" }}>
+          <SolOutOfCredits onDismiss={() => setSolOutOfCredits(false)} onToppedUp={() => setSolOutOfCredits(false)} />
+        </div>
+      )}
       <div style={{ flex: 1, overflow: "hidden", background: "#0a0c15" }}>
         <PlexoBuilder
           ref={builderRef}
           apiKey="workspace-internal"
+          onAiCreditsExhausted={() => setSolOutOfCredits(true)}
           mode={isEmail ? "email" : "landing_page"}
           isBlogLayout={isBlogLayout}
           commerceEnabled={commerceEnabled}

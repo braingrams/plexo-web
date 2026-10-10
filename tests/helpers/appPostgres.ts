@@ -44,7 +44,8 @@ export async function startTestPostgres(): Promise<TestPostgres> {
   };
   await superQuery("CREATE ROLE rds_iam NOLOGIN");
   await superQuery("CREATE ROLE plexo_admin LOGIN PASSWORD 'admin' CREATEROLE CREATEDB");
-  await superQuery("GRANT rds_iam TO plexo_admin WITH ADMIN OPTION");
+  // Like the RDS master: may grant rds_iam to others without being signed in through it.
+  await superQuery("GRANT rds_iam TO plexo_admin WITH ADMIN OPTION, INHERIT FALSE, SET FALSE");
   // Trusted extensions need CREATE on the database; on RDS the master has it via rds_superuser.
   await superQuery("GRANT pg_read_all_settings TO plexo_admin");
 

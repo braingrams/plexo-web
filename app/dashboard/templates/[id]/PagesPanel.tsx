@@ -15,6 +15,9 @@ type PageNode = {
 	order: number;
 	updatedAt: string;
 	sourceType: SourceType;
+	/** false = saved but not on the live site (e.g. kept from a paid plan). */
+	isPublished?: boolean;
+	archivedByPlan?: boolean;
 };
 
 type Props = {
@@ -327,6 +330,7 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 					rootId={rootId}
 					currentId={templateId}
 					isUltra={isUltra}
+					homeOnly={getTierFeatures(subscriptionPlan).maxPublishedPagesPerSite === 1}
 					domainPreview={domainPreview}
 					onClose={() => setManageOpen(false)}
 					onNavigate={(id) => { setManageOpen(false); onNavigate(id); }}
@@ -348,6 +352,7 @@ function ManagePagesModal({
 	rootId,
 	currentId,
 	isUltra,
+	homeOnly,
 	domainPreview,
 	onClose,
 	onNavigate,
@@ -359,6 +364,8 @@ function ManagePagesModal({
 	rootId: string;
 	currentId: string;
 	isUltra: boolean;
+	/** The plan publishes only the homepage (Free). */
+	homeOnly: boolean;
 	domainPreview: string | null;
 	onClose: () => void;
 	onNavigate: (id: string) => void;
@@ -723,6 +730,18 @@ function ManagePagesModal({
 											padding: "0.1rem 0.4rem", borderRadius: 4, verticalAlign: "middle",
 										}}>
 											HTML
+										</span>
+									)}
+									{!isHome && (node.isPublished === false || homeOnly) && (
+										<span
+											title={homeOnly || node.archivedByPlan ? "Saved, not published — upgrade to publish it" : "Saved, not published"}
+											style={{
+												marginLeft: "0.4rem", fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.04em",
+												textTransform: "uppercase", color: "#fbbf24", background: "rgba(245,183,74,0.1)",
+												padding: "0.1rem 0.4rem", borderRadius: 4, verticalAlign: "middle",
+											}}
+										>
+											Not live
 										</span>
 									)}
 								</span>

@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
+import { lockedTierFor } from "@/lib/ai/solEngine";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { SolConversation, SolMessage } from "@/lib/db/solEntities";
 import { SolChatView } from "../_components/SolChatView";
@@ -55,5 +56,5 @@ export default async function SolConversationPage({ params }: { params: Promise<
     }));
 
   const userName = session.user.name ?? session.user.email?.split("@")[0] ?? null;
-  return <SolChatView conversation={conversation} initialMessages={initialMessages} userName={userName} />;
+  return <SolChatView conversation={conversation} initialMessages={initialMessages} userName={userName} lockedModelTier={await lockedTierFor(session.user.id)} />;
 }

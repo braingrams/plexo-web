@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 // Only the pure SQL builders are used here; the DynamoDB bookkeeping around them isn't.
 vi.mock("@/lib/db/appEntities", () => ({ AppDatabase: {} }));
 
-import { provisioningSteps } from "@/lib/appData/provision";
+import { dropSteps, provisioningSteps } from "@/lib/appData/provision";
 import { wrapOwnerSql } from "@/lib/appData/migrations";
 import { runRequest } from "@/lambda/app-db/runner";
 import type { DbRequest } from "@/lib/appData/dbProtocol";
@@ -33,6 +33,15 @@ async function provision(database: string) {
     }
   }
 }
+
+// The admin's usable memberships in app roles — must always be none (see provision.ts).
+const adminAppMemberships = async () =>
+  (
+    await pgt.superQuery(`
+      SELECT r.rolname FROM pg_auth_members m
+      JOIN pg_roles r ON r.oid = m.roleid JOIN pg_roles u ON u.oid = m.member
+      WHERE u.rolname = 'plexo_admin' AND r.rolname LIKE 'a\\_%' AND (m.set_option OR m.inherit_option)`)
+  ).rows;
 
 const userA = randomUUID();
 const userB = randomUUID();
@@ -70,6 +79,28 @@ COMMIT;
 describe("provisioning", () => {
   it("is re-runnable", async () => {
     await expect(provision(dbA)).resolves.toBeUndefined();
+  });
+
+  // On Aurora any login with a membership path to rds_iam — inherited or not — must sign in
+  // with IAM, so if plexo_admin stayed a member of an app role its password (which the Data
+  // API uses) stopped working cluster-wide (staging, twice). Provisioning runs as plexo_admin
+  // here, as it does there.
+
+  it("leaves the admin a member of no app role, and the app's logins on IAM", async () => {
+    expect(await adminAppMemberships()).toEqual([]);
+    const { rows } = await pgt.superQuery(`
+      SELECT r.rolname FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.member JOIN pg_roles g ON g.oid = m.roleid
+      WHERE g.rolname = 'rds_iam' AND r.rolname LIKE '${dbA}\\_%' ORDER BY 1`);
+    expect(rows.map((r) => r.rolname)).toEqual([`${dbA}_api`, `${dbA}_owner`, `${dbA}_system`]);
+  });
+
+  it("cleans up a database the old provisioning left the admin stuck in", async () => {
+    // Staging's state, made the way the old provisioning made it (as the admin itself): the
+    // logins already in rds_iam and the admin still a member.
+    await pgt.adminExec(`GRANT "${dbA}_owner", "${dbA}_system" TO CURRENT_USER WITH INHERIT FALSE, SET TRUE`);
+    expect((await adminAppMemberships()).length).toBe(2);
+    await provision(dbA);
+    expect(await adminAppMemberships()).toEqual([]);
   });
 
   it("installs the plexo schema with the helper functions", async () => {
@@ -167,4 +198,43 @@ describe("limits", () => {
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.kind).toBe("timeout");
   }, 10_000);
+});
+
+// Deleting an app must remove its database and logins — whoever owns the database (older app
+// databases are owned by their _owner login; Bellaskincare's were, and a failed delete left
+// them behind on staging) — without ever making the admin a member of a role in rds_iam.
+describe("deleting an app's database", () => {
+  const exists = async (database: string) => {
+    const dbs = await pgt.superQuery(`SELECT 1 FROM pg_database WHERE datname = '${database}'`);
+    const roles = await pgt.superQuery(`SELECT 1 FROM pg_roles WHERE rolname LIKE '${database}\\_%'`);
+    return { database: dbs.rowCount, logins: roles.rowCount };
+  };
+  const drop = async (database: string) => {
+    for (const step of dropSteps(database)) await pgt.adminExec(step.sql, step.database);
+  };
+
+  it("removes the database and its three logins", async () => {
+    const db = `a_${randomUUID().replace(/-/g, "")}_dev`;
+    await provision(db);
+    expect(await exists(db)).toEqual({ database: 1, logins: 3 });
+    await drop(db);
+    expect(await exists(db)).toEqual({ database: 0, logins: 0 });
+    expect(await adminAppMemberships()).toEqual([]);
+  });
+
+  it("works when the app's own login owns the database (older apps)", async () => {
+    const db = `a_${randomUUID().replace(/-/g, "")}_live`;
+    await provision(db);
+    await pgt.superQuery(`ALTER DATABASE "${db}" OWNER TO "${db}_owner"`);
+    await drop(db);
+    expect(await exists(db)).toEqual({ database: 0, logins: 0 });
+  });
+
+  it("is safe to run again, or when there was nothing to delete", async () => {
+    const db = `a_${randomUUID().replace(/-/g, "")}_dev`;
+    await expect(drop(db)).resolves.toBeUndefined();
+    await provision(db);
+    await drop(db);
+    await expect(drop(db)).resolves.toBeUndefined();
+  });
 });

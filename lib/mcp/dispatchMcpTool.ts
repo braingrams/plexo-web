@@ -20,6 +20,7 @@ import { WP_MIGRATION_MCP_TOOLS, WP_MIGRATION_TOOL_NAMES, handleWpMigrationTool 
 import { DONATION_MCP_TOOLS, DONATION_TOOL_NAMES, handleDonationTool } from "./donationTools";
 import { FORM_MCP_TOOLS, FORM_TOOL_NAMES, handleFormTool } from "./formTools";
 import { APP_MCP_TOOLS, APP_TOOL_NAMES, handleAppTool } from "./appTools";
+import { coerceToolArgs } from "./coerceArgs";
 import { deleteTemplateAndContents } from "@/lib/sites/deleteTemplate";
 import { linkDomainToTemplate, SUBDOMAIN_REGEX, DOMAIN_REGEX, RESERVED_SUBDOMAINS } from "@/lib/sites/linkDomain";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
@@ -786,7 +787,9 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
  * (a no-op in effect anyway: a bare Lambda invocation has no Next.js page cache to
  * invalidate in the first place).
  */
-export async function dispatchMcpTool(toolName: string, args: any, resolved: ResolvedUser, revalidateBlogPost?: RevalidateFn): Promise<any> {
+export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: ResolvedUser, revalidateBlogPost?: RevalidateFn): Promise<any> {
+  // Lists/objects sent as JSON text are unwrapped against the tool's own schema first.
+  const args: any = coerceToolArgs(rawArgs, PLEXO_MCP_TOOLS.find((t) => t.name === toolName)?.inputSchema as never);
   let toolResult: any;
   switch (toolName) {
     case "publish_landing_page": {
@@ -1563,14 +1566,23 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
             id: userRow.id,
             name: userRow.name,
             email: userRow.email,
-            subscriptionPlan: userRow.subscriptionPlan,
+            subscriptionPlan: resolved.subscriptionPlan,
             allowanceBalance: userRow.allowanceBalance,
             topupBalance: userRow.topupBalance,
             customDomainLimit: userRow.customDomainLimit ?? null,
           }
         : null;
       const features = getTierFeatures(user?.subscriptionPlan);
-      toolResult = { user, features, limit: getDomainLimit(user?.subscriptionPlan ?? "FREE", user?.customDomainLimit ?? null) };
+      toolResult = {
+        user,
+        features,
+        limit: getDomainLimit(user?.subscriptionPlan ?? "FREE", user?.customDomainLimit ?? null),
+        // So an assistant knows up front what publishing will allow, instead of learning it from a refusal.
+        publishing:
+          features.maxPublishedSites === null
+            ? "Every site and every page can be live."
+            : `Free plan: ${features.maxPublishedSites} live site, homepage only, on a Plexo address (no custom domain). Other pages stay saved as drafts.`,
+      };
       break;
     }
 

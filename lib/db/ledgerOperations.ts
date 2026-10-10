@@ -3,7 +3,8 @@ import { EntityItem } from "electrodb";
 import { docClient } from "./client";
 import { User } from "./coreEntities";
 import { CreditLedgerEntry, StripeEvent } from "./ledgerEntities";
-import { PLAN_MONTHLY_CREDITS, type SubscriptionPlan } from "@/lib/subscription";
+import type { SubscriptionPlan } from "@/lib/subscription";
+import { planMonthlyCredits } from "@/lib/credits/value";
 import { computeCostUsd, creditsForUsd } from "@/lib/credits/pricing";
 import { MAX_TOKENS } from "@/lib/ai/generate";
 import type { AiActionMode, AiProvider, ConcreteTier, GenerateOutcome } from "@/lib/ai/types";
@@ -231,7 +232,7 @@ export async function ensureCreditPeriod(userId: string): Promise<CreditBalance>
     return { allowanceBalance, topupBalance, total: allowanceBalance + topupBalance, allowanceResetAt };
   }
 
-  const grant = PLAN_MONTHLY_CREDITS[subscriptionPlan];
+  const grant = planMonthlyCredits(subscriptionPlan);
   const nextResetAt = new Date(now.getTime() + ALLOWANCE_PERIOD_MS).toISOString();
 
   const updateUser = User.patch({ id: userId })
@@ -282,7 +283,7 @@ export async function grantPlanChangeAllowance(userId: string, newPlan: Subscrip
   const topupBalance = user.topupBalance ?? 0;
   const previousAllowanceResetAt = user.allowanceResetAt ?? new Date(0).toISOString();
 
-  const grant = PLAN_MONTHLY_CREDITS[newPlan];
+  const grant = planMonthlyCredits(newPlan);
   const nextResetAt = new Date(Date.now() + ALLOWANCE_PERIOD_MS).toISOString();
 
   const updateUser = User.patch({ id: userId })

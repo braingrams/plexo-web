@@ -33,7 +33,7 @@ type TreeNode = { name: string; path: string; folder: boolean; children: TreeNod
 type Dialog = { kind: "new"; value: string; error?: string; busy?: boolean } | { kind: "rename"; from: string; value: string; error?: string; busy?: boolean } | { kind: "delete"; path: string; error?: string; busy?: boolean };
 
 const AUTOSAVE_MS = 1500;
-const NARROW_PX = 700;
+const NARROW_PX = 560;
 
 const isDirty = (t: Tab) => t.kind === "text" && t.value !== t.saved;
 const modelUri = (path: string) => `file:///${path}`;
@@ -112,7 +112,7 @@ function buildTree(files: FileEntry[]): TreeNode[] {
   return root.children;
 }
 
-export function CodePane(props: { appId: string; openRequest?: { path: string; line?: number; nonce: number } | null; refreshKey?: number; onSaved?: () => void }) {
+export function CodePane(props: { appId: string; openRequest?: { path: string; line?: number; nonce: number } | null; refreshKey?: number; onSaved?: () => void; previewUpdating?: boolean }) {
   const { appId, openRequest, refreshKey, onSaved } = props;
   ensureMonaco();
   const monaco = useMonaco();
@@ -562,7 +562,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
     if (activeTab.saving) status = { text: "Saving…", tone: C.muted };
     else if (activeTab.saveError) status = { text: "Not saved", tone: C.danger };
     else if (isDirty(activeTab)) status = { text: "Unsaved changes", tone: C.warning };
-    else if (activeTab.savedAt) status = { text: "Saved", tone: C.success };
+    else if (activeTab.savedAt) status = props.previewUpdating ? { text: "Saved · updating preview…", tone: C.muted } : { text: "Saved", tone: C.success };
   }
 
   return (
@@ -581,7 +581,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
             <PanelLeft size={14} aria-hidden /> Files
           </Button>
         )}
-        <span style={{ fontSize: "0.72rem", color: C.muted }}>Code Mode · edits here don&apos;t use AI credits</span>
+
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {status && (
             <span role="status" aria-live="polite" style={{ fontSize: "0.72rem", color: status.tone }}>
@@ -645,6 +645,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
                 </ul>
               )}
             </div>
+            <p style={{ margin: 0, padding: "0.6rem 0.8rem", borderTop: `1px solid ${C.border}`, fontSize: "0.72rem", color: C.muted, lineHeight: 1.5 }}>Edits here don&rsquo;t use AI credits.</p>
           </aside>
         )}
 
