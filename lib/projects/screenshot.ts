@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { chromium } from "playwright-core";
+import type { Browser } from "playwright-core";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { BrowserbaseNotConfiguredError } from "@/lib/siteImport/browserbaseClient";
@@ -61,12 +61,17 @@ async function viaOwnBrowser(url: string, opts: { viewport?: Viewport; fullPage?
   return { ...body, image: Buffer.from(body.image, "base64") } as PageCheck;
 }
 
+// playwright-core is loaded only when a browser is actually opened (below), never when this
+// module is imported: many functions reach this file through long import chains (the build
+// finaliser did, via app runtime → plans → AI → SOL tools) and don't ship playwright-core,
+// so a top-level import crashed them on start-up ("Cannot find module 'playwright-core'").
 async function viaBrowserbase(url: string, opts: { viewport?: Viewport; fullPage?: boolean }): Promise<PageCheck> {
   const apiKey = process.env.BROWSERBASE_API_KEY;
   if (!apiKey) throw new BrowserbaseNotConfiguredError();
   const session = await openSession(apiKey);
-  let browser: Awaited<ReturnType<typeof chromium.connectOverCDP>> | null = null;
+  let browser: Browser | null = null;
   try {
+    const { chromium } = await import("playwright-core");
     browser = await chromium.connectOverCDP(session.connectUrl, { timeout: 30_000 });
     const context = browser.contexts()[0] ?? (await browser.newContext());
     const page = context.pages()[0] ?? (await context.newPage());

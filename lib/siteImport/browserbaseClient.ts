@@ -1,4 +1,4 @@
-import { chromium } from "playwright-core";
+import type { Browser } from "playwright-core";
 
 // Managed headless-browser provider for site-import's Wix/thin-shell rendering fallback —
 // see headlessFetch.ts for why a managed provider was chosen over self-hosting Chromium on
@@ -52,8 +52,10 @@ export async function renderViaBrowserbase(url: string, timeoutMs = 30_000): Pro
   }
   const session = (await createRes.json()) as CreateSessionResponse;
 
-  let browser: Awaited<ReturnType<typeof chromium.connectOverCDP>> | null = null;
+  let browser: Browser | null = null;
   try {
+    // Loaded only when a browser is opened — see lib/projects/screenshot.ts for why.
+    const { chromium } = await import("playwright-core");
     browser = await chromium.connectOverCDP(session.connectUrl, { timeout: timeoutMs });
     const context = browser.contexts()[0] ?? (await browser.newContext());
     const page = context.pages()[0] ?? (await context.newPage());
