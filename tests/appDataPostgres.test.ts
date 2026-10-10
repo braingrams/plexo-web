@@ -72,16 +72,33 @@ describe("provisioning", () => {
     await expect(provision(dbA)).resolves.toBeUndefined();
   });
 
-  // On Aurora every app login is in rds_iam, and any role that inherits rds_iam must sign in
-  // with IAM — so if plexo_admin inherited an app role, its password (which the Data API uses)
-  // would stop working cluster-wide. Provisioning runs as plexo_admin here, as it does there.
-  it("never lets the admin inherit an app's roles", async () => {
+  // On Aurora any login with a membership path to rds_iam — inherited or not — must sign in
+  // with IAM, so if plexo_admin stayed a member of an app role its password (which the Data
+  // API uses) stopped working cluster-wide (staging, twice). Provisioning runs as plexo_admin
+  // here, as it does there.
+  const adminAppMemberships = async () =>
+    (
+      await pgt.superQuery(`
+        SELECT r.rolname FROM pg_auth_members m
+        JOIN pg_roles r ON r.oid = m.roleid JOIN pg_roles u ON u.oid = m.member
+        WHERE u.rolname = 'plexo_admin' AND r.rolname LIKE 'a\\_%' AND (m.set_option OR m.inherit_option)`)
+    ).rows;
+
+  it("leaves the admin a member of no app role, and the app's logins on IAM", async () => {
+    expect(await adminAppMemberships()).toEqual([]);
     const { rows } = await pgt.superQuery(`
-      SELECT r.rolname, m.inherit_option FROM pg_auth_members m
-      JOIN pg_roles r ON r.oid = m.roleid JOIN pg_roles u ON u.oid = m.member
-      WHERE u.rolname = 'plexo_admin' AND r.rolname LIKE 'a\\_%'`);
-    expect(rows.length).toBeGreaterThan(0);
-    expect(rows.filter((row) => row.inherit_option)).toEqual([]);
+      SELECT r.rolname FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.member JOIN pg_roles g ON g.oid = m.roleid
+      WHERE g.rolname = 'rds_iam' AND r.rolname LIKE '${dbA}\\_%' ORDER BY 1`);
+    expect(rows.map((r) => r.rolname)).toEqual([`${dbA}_api`, `${dbA}_owner`, `${dbA}_system`]);
+  });
+
+  it("cleans up a database the old provisioning left the admin stuck in", async () => {
+    // Staging's state, made the way the old provisioning made it (as the admin itself): the
+    // logins already in rds_iam and the admin still a member.
+    await pgt.adminExec(`GRANT "${dbA}_owner", "${dbA}_system" TO CURRENT_USER WITH INHERIT FALSE, SET TRUE`);
+    expect((await adminAppMemberships()).length).toBe(2);
+    await provision(dbA);
+    expect(await adminAppMemberships()).toEqual([]);
   });
 
   it("installs the plexo schema with the helper functions", async () => {
