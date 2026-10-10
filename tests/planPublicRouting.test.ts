@@ -31,7 +31,7 @@ vi.mock("@/lib/db/commerceEntities", () => ({
 vi.mock("@/lib/db/opsEntities", () => ({ PageView: { create: () => ({ go: async () => ({}) }) } }));
 vi.mock("@/lib/db/coreEntities", () => ({ User: {}, Organization: {} }));
 vi.mock("@/lib/db/projectEntities", () => ({
-  ProjectBuild: { get: () => ({ go: async () => ({ data: { id: "b1", templateId: "app", outputPrefix: "site/b1" } }) }) },
+  ProjectBuild: { get: () => ({ go: async () => ({ data: { id: "b1", templateId: "home", outputPrefix: "site/b1" } }) }) },
 }));
 vi.mock("@/lib/db/appEntities", () => ({ AppSettings: { get: () => ({ go: async () => ({ data: null }) }) } }));
 vi.mock("@/lib/projects/blobStore", () => ({
