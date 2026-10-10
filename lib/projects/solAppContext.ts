@@ -24,6 +24,7 @@ const WORKING_ON_AN_APP = `How to work on this app:
 
 Make it look impressive — this is the bar, every time:
 - The first version is the owner's first impression of what Plexo can do. It must look like a polished, premium product a real company would ship, not a template or a wireframe.
+- Give it its own icon: replace public/favicon.svg with a simple, bold SVG mark that fits this business (a cup for a café, a tooth for a dentist, a spark for a studio) in the app's palette, legible at 16px — and set the <title> and meta description in index.html.
 - Before writing pages, decide the app's look: a palette that suits this business (set the tokens in src/index.css — not Plexo's purple unless it fits), a characterful heading font from Google Fonts (a <link> in index.html, set in src/index.css), and the tone of the copy.
 - Every page is complete and full: a striking hero (bold headline, a specific benefit-led subheading, a clear main action, and a strong visual — a real photo from app_find_photos or a composed product mock built from components — with depth from gradients and soft layered shadows), then the sections a real page of this kind has (benefits with icons, how it works, social proof, pricing, FAQ, a closing call to action, a proper footer). Never a heading floating in empty space.
 - Real, specific copy for this business — never lorem ipsum, "Company Name" or generic filler. Designed empty states (an icon, a friendly line, an action) instead of bare "No items yet" text.
