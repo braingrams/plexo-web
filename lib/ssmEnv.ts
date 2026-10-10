@@ -87,6 +87,11 @@ const APP_SECRET_KEYS = [
   "PUSHER_SECRET",
   "PUSHER_CLUSTER",
   "BROWSERBASE_API_KEY",
+  // Plexo's stock-photo accounts: SOL's app_find_photos (lib/media/stockPhotos.ts) and the
+  // dashboard's image picker.
+  "UNSPLASH_KEY",
+  "PEXELS_KEY",
+  "PIXABAY_KEY",
   // Not a secret (a bucket name), but published to the same /plexo/<env>/* SSM path by
   // cdk/lib/data-stack.ts and read through this same loader rather than inventing a
   // second config-loading mechanism for one value.

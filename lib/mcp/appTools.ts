@@ -17,6 +17,7 @@ import { functionLogs } from "@/lib/appFunctions/invoke";
 import { AppRuntimeError, AppSettings } from "@/lib/db/appEntities";
 import { ProjectBuild } from "@/lib/db/projectEntities";
 import { getSignedDownloadUrl } from "@/lib/storage";
+import { findStockPhotos } from "@/lib/media/stockPhotos";
 import { getAppSettings, forgetAppContext } from "@/lib/appRuntime/context";
 
 type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
@@ -127,6 +128,20 @@ export const APP_MCP_TOOLS = [
         fullPage: { type: "boolean", description: "Capture the whole scrolling page instead of the first screen." },
       },
       required: ["appId"],
+    },
+  },
+  {
+    name: "app_find_photos",
+    description:
+      "Finds real, high-quality stock photos for the app (Unsplash, Pexels, Pixabay) — on topic for the business, never random placeholders. Search with a specific, visual description (\"barista pouring latte art\", \"modern dental clinic reception\"), not a generic word. Returns image URLs to use directly in <img src> or CSS backgrounds, plus a credit for each — show credits unobtrusively (a small caption or the footer).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What the photo should show, specific and visual." },
+        count: { type: "number", description: "How many (1–12, default 6)." },
+        orientation: { type: "string", enum: ["landscape", "portrait", "any"], description: "landscape for heroes and banners, portrait for tall cards; default any." },
+      },
+      required: ["query"],
     },
   },
   {
@@ -311,6 +326,12 @@ export async function handleAppTool(toolName: string, args: any, resolved: Resol
       const report = await buildReport(String(args.buildId));
       if (!report) throw new Error("That build doesn't exist.");
       return present(report.pending ? await waitForReport(report.buildId, waitBudget()) : report);
+    }
+    case "app_find_photos": {
+      const photos = await findStockPhotos(String(args?.query ?? ""), { count: Number(args?.count) || undefined, orientation: args?.orientation });
+      return photos.length
+        ? { photos: photos.map(({ url, alt, credit, sourceUrl }) => ({ url, alt, credit, sourceUrl })) }
+        : { photos: [], note: "No photos found for that. Try a different, more visual description — or design the section without a photo (illustration, gradient, icons)." };
     }
     case "app_screenshot": {
       const app = await ownApp(resolved, args?.appId);

@@ -35,6 +35,27 @@ installs, builds and hosts it — there's nothing to configure.
 - Make every page responsive (it should look right on a phone) and give every async view
   a loading state and an empty state.
 
+## Design
+
+This app should look like a premium product a real company would ship — never a template.
+
+- **Its own identity.** Pick a palette that fits the business and set it in `src/index.css`
+  (`--primary`, `--accent`, `--background`…). Pair a characterful heading font with a clean
+  body font from Google Fonts: add the `<link>` to `index.html`, then set them in
+  `src/index.css` (`--font-heading`, `--font-sans` in `@theme`).
+- **Full pages.** A striking hero — bold headline, a specific benefit-led subheading, a clear
+  main action and a strong visual — then the sections a real page of this kind has
+  (benefits, how it works, social proof, pricing, FAQ, closing call to action, footer).
+- **Real photos.** Use `app_find_photos` (Unsplash, Pexels, Pixabay) with a specific, visual
+  search; credit the photographer in a small caption or the footer. Or compose a product mock
+  from the UI components. Never a broken or random placeholder image.
+- **Depth and motion.** Soft gradients or mesh backgrounds, layered low-opacity shadows, cards
+  with real hierarchy; `motion` for gentle entrance and hover effects
+  (`import { motion } from "motion/react"`); `lucide-react` icons.
+- **Real words.** Specific copy for this business — no lorem ipsum or "Company Name".
+- **Every state designed.** Empty states get an icon, a friendly line and an action; loading
+  states get skeletons. Everything looks right at phone width.
+
 ## Data
 
 ```ts
