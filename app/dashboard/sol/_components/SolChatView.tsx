@@ -392,7 +392,9 @@ export function SolChatView({
         }
       }
     } else if (stream.outcome === "error") {
-      rollbackOptimisticUserMessage();
+      // Take the message back (and put it in the box to resend) only if nothing happened.
+      // After SOL has done work, the work is saved — resending would redo it from scratch.
+      if (stream.blocks.length === 0) rollbackOptimisticUserMessage();
       setInlineError(stream.errorMessage);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

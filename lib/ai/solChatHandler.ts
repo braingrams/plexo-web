@@ -4,6 +4,7 @@ import { describeAttachedImages } from "@/lib/ai/solImageDescriptions";
 import type { ResolvedUser } from "@/lib/mcp/dispatchMcpTool";
 import { maxAnswerTokensFor, solRouteForUser, tierFor, type SolRefusal, type SolRoute } from "@/lib/ai/solEngine";
 import { ensureCreditPeriod, chargeUsage, estimateWorstCaseCost } from "@/lib/db/ledgerOperations";
+import { sumUsageSince } from "@/lib/ai/solTurnUsage";
 import { estimateWorstCaseAgentTurnCost } from "@/lib/credits/agentTurnEstimate";
 import { SolConversation, SolMessage, SolMemoryFact, SolPreferences } from "@/lib/db/solEntities";
 import { bumpConversationActivity } from "@/lib/db/solConversationActivity";
@@ -142,25 +143,6 @@ async function loadLastMessage(conversationId: string): Promise<{ id: string; cr
   return message ? { id: message.id, createdAt: message.createdAt } : null;
 }
 
-/** Sums the usage of every SolMessage persisted in this conversation at or after `sinceIso` —
- * used to recover "how much was actually consumed" when InsufficientCreditsError aborts a
- * turn mid-loop. solAgent.ts's continueLoop persists each assistant message (with its real
- * `usage`) BEFORE the next iteration's budgetGuard check can throw, but the thrown error
- * itself carries no usage payload — so the persisted rows are the only source of truth for
- * what to actually charge for. */
-async function sumUsageSince(conversationId: string, sinceIso: string): Promise<{ inputTokens: number; outputTokens: number }> {
-  const { data: messages } = await SolMessage.query.primary({ conversationId }).go({ order: "desc", limit: 20 });
-  let inputTokens = 0;
-  let outputTokens = 0;
-  for (const message of messages) {
-    if (message.createdAt < sinceIso) break; // chronological desc — everything after this predates the turn
-    if (message.role === "assistant" && message.usage) {
-      inputTokens += message.usage.inputTokens ?? 0;
-      outputTokens += message.usage.outputTokens ?? 0;
-    }
-  }
-  return { inputTokens, outputTokens };
-}
 
 /** Fire-and-forget per lib/solAnalytics.ts's own documented convention — a failed analytics
  * write must never affect the real response (already sent/streamed by the time this fires)
@@ -420,6 +402,19 @@ async function settleTurn(
             ? err.message
             : "SOL hit an unexpected error. Try sending your message again.";
     console.error("SOL chat turn failed:", err);
+    // The rounds that ran before the failure did real work (their results are saved) and are
+    // charged like any other — a turn that stopped partway used to cost nothing at all. A
+    // model call that itself failed has no usage, so it's never charged.
+    const partialUsage = await sumUsageSince(ctx.conversationId, ctx.turnStartedAt).catch(() => ({ inputTokens: 0, outputTokens: 0 }));
+    let creditsCharged = 0;
+    // Own-key accounts are billed by their provider, never in credits.
+    if (!ctx.isByok && (partialUsage.inputTokens > 0 || partialUsage.outputTokens > 0)) {
+      const charged = await chargeUsage(ctx.userId, { provider: ctx.provider, tier: ctx.modelTier, mode: "agent_chat", usage: partialUsage }).catch((chargeErr) => {
+        console.error("settleTurn: failed to charge the rounds that ran before an error:", chargeErr);
+        return null;
+      });
+      creditsCharged = charged?.creditsCharged ?? 0;
+    }
     // Same reasoning as the pendingConfirmation branch above: the user's own message (at
     // minimum) was already persisted before this failed, so messageCount is stale without
     // this — best-effort, never worth failing the error response itself over.
@@ -433,9 +428,9 @@ async function settleTurn(
       conversationId: ctx.conversationId,
       provider: ctx.provider,
       tier: ctx.modelTier,
-      inputTokens: 0,
-      outputTokens: 0,
-      creditsCharged: 0,
+      inputTokens: partialUsage.inputTokens,
+      outputTokens: partialUsage.outputTokens,
+      creditsCharged,
       latencyMs: Date.now() - startedAtMs,
       outcome: err instanceof AgentIterationLimitError ? "timeout" : "error",
       errorCode: err instanceof Error ? err.name : "unknown",

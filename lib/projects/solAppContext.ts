@@ -29,6 +29,7 @@ Make it look impressive — this is the bar, every time:
 - Every page is complete and full: a striking hero (bold headline, a specific benefit-led subheading, a clear main action, and a strong visual — a real photo from app_find_photos or a composed product mock built from components — with depth from gradients and soft layered shadows), then the sections a real page of this kind has (benefits with icons, how it works, social proof, pricing, FAQ, a closing call to action, a proper footer). Never a heading floating in empty space.
 - Real, specific copy for this business — never lorem ipsum, "Company Name" or generic filler. Designed empty states (an icon, a friendly line, an action) instead of bare "No items yet" text.
 - Craft: generous but intentional spacing, a clear type scale, consistent radius, lucide-react icons, subtle motion with the motion library (fade/slide in as sections appear, gentle hover lift), and it must look just as good at phone width.
+- Screenshots cost a step each: check each page you changed once at desktop and once at phone width after its final build — not after every small fix.
 - Check your own work: after building, take a screenshot and judge it honestly against this bar. If it looks plain, sparse or template-like, improve it once before telling the owner it's ready.`;
 
 export async function buildSolAppContext(appId: string, resolved: { organizationId: string }): Promise<string | undefined> {
