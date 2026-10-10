@@ -279,7 +279,7 @@ export function EmptyHero({ title, body, children, art, tint = "#8b5cf6" }: { ti
         gridTemplateColumns: art ? "minmax(0, 1fr) minmax(0, 0.85fr)" : "minmax(0, 1fr)",
         gap: "2rem",
         alignItems: "center",
-        padding: "2.2rem",
+        padding: "clamp(1.2rem, 4.5vw, 2.2rem)",
         borderRadius: 20,
         border: `1px solid ${C.border}`,
         background: `radial-gradient(70% 90% at 100% 0%, ${tint}24, transparent 60%), radial-gradient(60% 80% at 0% 100%, rgba(139,92,246,0.08), transparent 60%), rgba(255,255,255,0.015)`,
@@ -287,7 +287,7 @@ export function EmptyHero({ title, body, children, art, tint = "#8b5cf6" }: { ti
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "1.2rem", minWidth: 0 }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: "1.35rem", fontWeight: 750, letterSpacing: "-0.01em", color: C.text }}>{title}</h3>
+          <h3 style={{ margin: 0, fontSize: "clamp(1.1rem, 4.2vw, 1.35rem)", fontWeight: 750, letterSpacing: "-0.01em", color: C.text }}>{title}</h3>
           <div style={{ margin: "0.45rem 0 0", fontSize: "0.88rem", color: C.muted, lineHeight: 1.6, maxWidth: 560 }}>{body}</div>
         </div>
         {children}
@@ -309,7 +309,7 @@ export function StatCard({ label, value, color, icon: Icon }: { label: string; v
         <Icon size={19} />
       </span>
       <span style={{ minWidth: 0 }}>
-        <span style={{ display: "block", fontSize: "1.35rem", fontWeight: 750, lineHeight: 1.15, color: C.text }}>{value}</span>
+        <span style={{ display: "block", fontSize: "clamp(1.1rem, 4.2vw, 1.35rem)", fontWeight: 750, lineHeight: 1.15, color: C.text }}>{value}</span>
         <span style={{ display: "block", fontSize: "0.76rem", color: C.muted, marginTop: 2 }}>{label}</span>
       </span>
     </div>
