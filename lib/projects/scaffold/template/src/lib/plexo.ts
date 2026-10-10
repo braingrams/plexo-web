@@ -196,13 +196,14 @@ const auth = {
 // ------------------------------------------------------------------ functions
 
 const functions = {
-  /** Calls a server function from functions/<name>.ts. */
+  /** Calls a server function from functions/<name>.ts. `data` is exactly what the function
+   *  returned (e.g. Response.json({ url }) gives data.url). */
   async invoke<T = any>(name: string, options: { body?: unknown; method?: "POST" | "GET" } = {}) {
     const res = await request<T>(`/fn/${encodeURIComponent(name)}`, {
       method: options.method ?? "POST",
       body: options.body === undefined || options.method === "GET" ? undefined : JSON.stringify(options.body),
     });
-    return { data: res.data, error: res.error };
+    return { data: res.error ? null : ((res.raw ?? null) as T | null), error: res.error };
   },
 };
 
