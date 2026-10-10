@@ -4,6 +4,7 @@ import { ProjectBuild, type ProjectBuildError } from "@/lib/db/projectEntities";
 import { listFiles, snapshotVersion, getVersionManifest, diffManifests, type VersionSource, type FileDiff } from "./fileStore";
 import { getBlob } from "./blobStore";
 import { startBuild, getBuild, waitForBuild, isFinished, recordLatestBuild, type ProjectBuildItem } from "./builds";
+import { settle } from "./settle";
 import { previewUrl } from "./previewHost";
 import { applyMigrations, migrationFilesFrom, type MigrationOutcome } from "@/lib/appData/migrations";
 import { deployFunctions, type DeployOutcome, type FunctionBundle } from "@/lib/appFunctions/deploy";
@@ -241,13 +242,21 @@ export function toReport(build: ProjectBuildItem, previewHost: string | undefine
   };
 }
 
-/** Waits for a build to finish (and its post-build steps), up to waitMs. */
+/** Waits for a build to finish — including its post-build steps (database changes, server
+ * functions, going live) — up to waitMs. Those steps are often run by the build finaliser
+ * rather than here; this used to return "Finishing up…" the moment it saw them in progress,
+ * and SOL then polled app_build_status over and over, each poll a paid round. */
 export async function waitForReport(buildId: string, waitMs: number): Promise<BuildReport> {
+  // One budget for the whole wait: the build, then its post-build steps.
+  const deadline = Date.now() + waitMs;
   const build = await waitForBuild(buildId, waitMs);
-  const finalized = isFinished(build) ? await finalizeBuild(build) : build;
   const { data: template } = await Template.get({ id: build.templateId }).go({ attributes: ["previewHost"] });
-  return toReport(finalized, template?.previewHost);
+  return settle(async () => {
+    const latest = (await getBuild(buildId)) ?? build;
+    return toReport(isFinished(latest) ? await finalizeBuild(latest) : latest, template?.previewHost);
+  }, deadline);
 }
+
 
 // ------------------------------------------------------------------ blocking helpers (SOL)
 

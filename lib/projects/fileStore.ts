@@ -121,21 +121,98 @@ export async function editFile(templateId: string, rawPath: string, edits: FileE
   const current = await readTextFile(templateId, path);
   if (current === null) throw new ProjectFileError(`${path} doesn't exist. Create it with a full write instead of an edit.`);
   if (!Array.isArray(edits) || edits.length === 0) throw new ProjectFileError("No edits were given.");
+  const next = applyEdits(current, edits, path);
+  const [entry] = await writeFiles(templateId, [{ path, content: next }], updatedBy);
+  return entry;
+}
+
+/** Applies find/replace edits to a file's text, in order. A `find` that matches exactly is
+ * used as is; failing that, one that matches line for line apart from indentation and
+ * trailing spaces (the usual reason an edit misses) is used if it's unique. If it still isn't
+ * there, the error carries the closest part of the current file, with line numbers, so the
+ * next attempt can copy the real text instead of spending a round re-reading the file. */
+export function applyEdits(current: string, edits: FileEdit[], path: string): string {
   let next = current;
   edits.forEach((edit, i) => {
     if (typeof edit?.find !== "string" || edit.find === "") throw new ProjectFileError(`Edit ${i + 1} on ${path} has no text to find.`);
     if (typeof edit.replace !== "string") throw new ProjectFileError(`Edit ${i + 1} on ${path} has no replacement text.`);
     const count = next.split(edit.find).length - 1;
-    if (count === 0) {
-      throw new ProjectFileError(`Edit ${i + 1} on ${path}: the text to find isn't in the file (it must match exactly, including spaces and line breaks). Read the file again and copy the exact lines.`);
-    }
     if (count > 1 && !edit.all) {
       throw new ProjectFileError(`Edit ${i + 1} on ${path}: the text to find appears ${count} times. Include more surrounding lines so it matches once, or set all: true to replace every one.`);
     }
-    next = edit.all ? next.split(edit.find).join(edit.replace) : next.replace(edit.find, () => edit.replace);
+    if (count >= 1) {
+      next = edit.all ? next.split(edit.find).join(edit.replace) : next.replace(edit.find, () => edit.replace);
+      return;
+    }
+    const loose = looseMatches(next, edit.find);
+    if (loose.length === 1) {
+      const [start, end] = loose[0];
+      next = next.slice(0, start) + edit.replace + next.slice(end);
+      return;
+    }
+    if (loose.length > 1 && !edit.all) {
+      throw new ProjectFileError(`Edit ${i + 1} on ${path}: the text to find appears ${loose.length} times (ignoring indentation). Include more surrounding lines so it matches once.`);
+    }
+    if (loose.length > 1) {
+      for (const [start, end] of loose.reverse()) next = next.slice(0, start) + edit.replace + next.slice(end);
+      return;
+    }
+    throw new ProjectFileError(`Edit ${i + 1} on ${path}: the text to find isn't in the file. ${closestRegion(next, edit.find)}`);
   });
-  const [entry] = await writeFiles(templateId, [{ path, content: next }], updatedBy);
-  return entry;
+  return next;
+}
+
+const norm = (line: string) => line.trim().replace(/\s+/g, " ");
+
+/** [start, end) character ranges of the file whose lines equal `find`'s lines once each line
+ *  is trimmed and its inner whitespace collapsed (blank lines at either end of `find` ignored). */
+function looseMatches(text: string, find: string): Array<[number, number]> {
+  const want = find.split("\n").map(norm);
+  while (want.length && want[0] === "") want.shift();
+  while (want.length && want[want.length - 1] === "") want.pop();
+  if (!want.length) return [];
+  const lines = text.split("\n");
+  const starts: number[] = [];
+  let offset = 0;
+  for (const line of lines) {
+    starts.push(offset);
+    offset += line.length + 1;
+  }
+  const out: Array<[number, number]> = [];
+  for (let i = 0; i + want.length <= lines.length; i++) {
+    let ok = true;
+    for (let j = 0; j < want.length && ok; j++) ok = norm(lines[i + j]) === want[j];
+    if (ok) {
+      const last = i + want.length - 1;
+      out.push([starts[i], starts[last] + lines[last].length]);
+      i = last;
+    }
+  }
+  return out;
+}
+
+/** The part of the file most like `find`, numbered, for the error message. */
+function closestRegion(text: string, find: string): string {
+  const lines = text.split("\n");
+  const probes = find.split("\n").map(norm).filter((l) => l.length > 3);
+  if (!probes.length) return "Read the file again and copy the exact lines.";
+  // Word overlap, so a line that differs by a word or two still counts as close.
+  const words = (l: string) => new Set(l.toLowerCase().split(/[^a-z0-9_$]+/).filter(Boolean));
+  const probeWords = probes.map(words);
+  let best = -1;
+  let bestScore = 0;
+  lines.forEach((line, i) => {
+    const lw = words(line);
+    if (!lw.size) return;
+    const score = Math.max(...probeWords.map((pw) => [...pw].filter((w) => lw.has(w)).length / Math.max(pw.size, lw.size)));
+    if (score > bestScore) [best, bestScore] = [i, score];
+  });
+  if (best < 0 || bestScore < 0.3) return "Nothing in the file looks like it — read the file again before editing.";
+  const from = Math.max(0, best - 6);
+  const to = Math.min(lines.length, best + Math.max(probes.length, 1) + 6);
+  const width = String(to).length;
+  const shown = lines.slice(from, to).map((l, k) => `${String(from + k + 1).padStart(width)}| ${l}`).join("\n");
+  return `The closest part of the file right now (lines ${from + 1}–${to}) is:\n${shown}\nCopy the find text exactly from these lines (without the line numbers).`;
 }
 
 export async function deleteFiles(templateId: string, rawPaths: string[]): Promise<string[]> {
