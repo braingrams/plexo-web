@@ -1,5 +1,6 @@
 "use client";
 
+import { UpgradeModal } from "../_components/UpgradeModal";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -309,9 +310,10 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   // redirect to, which was the OLDER hosted-Checkout response shape — that route now
   // always creates an embedded-mode session (ui_mode: "embedded_page") and only ever
   // returns `clientSecret`, never `url`, so this unconditionally failed.
+  // Now opens the shared upgrade prompt, which also offers the free trial when it's available.
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   function startUpgradeCheckout(): void {
-    setUpgradeRedirecting(true);
-    window.location.href = "/dashboard/settings/subscription?upgrade=PRO&returnTo=" + encodeURIComponent("/dashboard/domains");
+    setUpgradeOpen(true);
   }
 
   const handleCopy = (text: string, field: string) => {
@@ -1605,6 +1607,17 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
           100% { background-position: -200% 0; }
         }
       `}</style>
+      <UpgradeModal
+        open={upgradeOpen}
+        onClose={() => {
+          setUpgradeOpen(false);
+          setUpgradeRedirecting(false);
+        }}
+        title="Custom domains are part of Pro"
+        message="Put your site on your own address (yourname.com) and remove the Plexo bar."
+        targetPlan="PRO"
+        returnTo="/dashboard/domains"
+      />
     </>
   );
 }

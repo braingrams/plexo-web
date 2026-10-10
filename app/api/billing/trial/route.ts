@@ -3,7 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { PlanLifecycleError, startTrial } from "@/lib/plan/lifecycle";
-import { TRIAL_PLANS, type TrialPlan } from "@/lib/plan/entitlement";
+import { TRIAL_DAYS, TRIAL_PLANS, canStartTrial, type TrialPlan } from "@/lib/plan/entitlement";
+
+/** GET — whether this account can still start its one free trial (powers every "Try free" button). */
+export async function GET(): Promise<NextResponse> {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ available: false, trialDays: TRIAL_DAYS });
+  const { data: user } = await User.get({ id: session.user.id }).go();
+  return NextResponse.json({ available: !!user && canStartTrial(user), trialDays: TRIAL_DAYS }, { headers: { "Cache-Control": "no-store" } });
+}
 
 /**
  * POST /api/billing/trial

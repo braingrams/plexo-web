@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { accessDaysLeft, effectivePlan, paidAccess, planSyncAction, shouldOfferTrial } from "@/lib/plan/entitlement";
+import { accessDaysLeft, canStartTrial, effectivePlan, paidAccess, planSyncAction, shouldOfferTrial } from "@/lib/plan/entitlement";
 import { chooseSiteToKeep, findSecondaryPageLinks, planFreeLimits, planRestore, type PlanSite } from "@/lib/plan/siteLimits";
 import { getTierFeatures, isHomePageOnlyPlan } from "@/lib/subscription";
 
@@ -76,6 +76,19 @@ describe("the trial offer after signup", () => {
     expect(shouldOfferTrial({ ...fresh, createdAt: days(-60) }, NOW)).toBe(false);
     expect(shouldOfferTrial({ ...fresh, stripeSubscriptionId: "s" }, NOW)).toBe(false);
     expect(shouldOfferTrial({ ...fresh, planDowngradedAt: days(-2) }, NOW)).toBe(false);
+  });
+});
+
+describe("starting the trial any time (once)", () => {
+  it("any Free account that's never trialled can start it — old accounts and downgraded ones too", () => {
+    expect(canStartTrial({ subscriptionPlan: "FREE", createdAt: days(-400) } as never, NOW)).toBe(true);
+    expect(canStartTrial({ subscriptionPlan: "FREE", planDowngradedAt: days(-3) }, NOW)).toBe(true);
+    expect(canStartTrial({ subscriptionPlan: "FREE", trialOfferSeenAt: days(-30) } as never, NOW)).toBe(true);
+  });
+  it("never twice, and not while paying", () => {
+    expect(canStartTrial({ subscriptionPlan: "FREE", trialStartedAt: days(-60) }, NOW)).toBe(false);
+    expect(canStartTrial({ subscriptionPlan: "PRO", stripeSubscriptionId: "s", subscriptionStatus: "ACTIVE" }, NOW)).toBe(false);
+    expect(canStartTrial({ subscriptionPlan: "PRO", planKeptByAdmin: true }, NOW)).toBe(false);
   });
 });
 
