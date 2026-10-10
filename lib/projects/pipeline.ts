@@ -5,6 +5,7 @@ import { listFiles, snapshotVersion, getVersionManifest, diffManifests, type Ver
 import { getBlob } from "./blobStore";
 import { startBuild, getBuild, waitForBuild, isFinished, recordLatestBuild, type ProjectBuildItem } from "./builds";
 import { settle } from "./settle";
+import { upgradeAppClient } from "./clientUpgrade";
 import { previewUrl } from "./previewHost";
 import { applyMigrations, migrationFilesFrom, type MigrationOutcome } from "@/lib/appData/migrations";
 import { deployFunctions, type DeployOutcome, type FunctionBundle } from "@/lib/appFunctions/deploy";
@@ -90,12 +91,14 @@ async function appTemplate(templateId: string) {
 
 export async function startPreview(templateId: string, actor: Actor, opts: { message?: string; source?: VersionSource } = {}): Promise<ProjectBuildItem> {
   const template = await appTemplate(templateId);
+  await upgradeAppClient(templateId, actor.userId).catch((err) => console.warn("[apps] client upgrade skipped:", err));
   const { versionId } = await ensureVersion(templateId, { message: opts.message, source: opts.source ?? "editor", authorId: actor.userId, authorName: actor.userName });
   return startBuild({ templateId, organizationId: template.organizationId, versionId, requestedBy: actor.userId, mode: "preview" });
 }
 
 export async function startPublish(templateId: string, actor: Actor, opts: { subdomain?: string } = {}): Promise<ProjectBuildItem> {
   const template = await appTemplate(templateId);
+  await upgradeAppClient(templateId, actor.userId).catch((err) => console.warn("[apps] client upgrade skipped:", err));
   const { versionId } = await ensureVersion(templateId, { message: "Published", source: "editor", authorId: actor.userId, authorName: actor.userName });
   return startBuild({ templateId, organizationId: template.organizationId, versionId, requestedBy: actor.userId, mode: "release", publishSubdomain: opts.subdomain?.trim().toLowerCase() || undefined });
 }
