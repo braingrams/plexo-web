@@ -16,6 +16,11 @@ function client(): RDSDataClient {
   return rds;
 }
 
+/** Whether this environment has an app-database cluster at all (local dev may not). */
+export function clusterConfigured(): boolean {
+  return !!(process.env.APP_DB_CLUSTER_ARN && process.env.APP_DB_ADMIN_SECRET_ARN && process.env.APP_DB_CLUSTER_ID);
+}
+
 export function clusterConfig(): { clusterArn: string; secretArn: string; clusterId: string } {
   const clusterArn = process.env.APP_DB_CLUSTER_ARN;
   const secretArn = process.env.APP_DB_ADMIN_SECRET_ARN;
