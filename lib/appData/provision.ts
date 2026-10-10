@@ -13,11 +13,16 @@ import { databaseName } from "./db";
 // plexo_anon / plexo_authenticated are cluster-wide NOLOGIN roles; what they can touch is
 // decided per database by grants and row-level-security policies.
 //
-// The admin (plexo_admin, password sign-in through the RDS Data API) must never INHERIT an app
-// role: they're members of rds_iam, and on Aurora any login that inherits rds_iam is forced
-// onto IAM sign-in — the admin would lock itself out of the whole cluster (it did, on
-// staging). It may only SET ROLE to them, to create objects as them; and it owns each app
-// database itself, so it can always drop it.
+// The admin (plexo_admin, password sign-in through the RDS Data API) must never be a member —
+// inherited or not — of a role that's in rds_iam: on Aurora any login with a membership path
+// to rds_iam is forced onto IAM sign-in, and the admin is locked out of the whole cluster (it
+// was, on staging; non-inherited membership wasn't enough). But it must SET ROLE to the owner
+// and system roles to create objects as them. So the order is what keeps it safe:
+//   1. the logins are created WITHOUT rds_iam (on a re-run, rds_iam is taken away first);
+//   2. the admin joins owner/system, sets everything up as them, then leaves;
+//   3. only then do the logins get rds_iam.
+// A run that stops partway leaves the admin a member only of roles without rds_iam, so it can
+// never lock itself out. The admin owns each app database, so it can always drop it.
 
 export const roleName = (database: string, login: "owner" | "api" | "system") => `${database}_${login}`;
 
@@ -86,9 +91,9 @@ export function provisioningSteps(database: string): ProvisioningStep[] {
     IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${system}') THEN
       CREATE ROLE ${ident(system)} LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS CONNECTION LIMIT 10; END IF;
   END $$`);
-  step(`GRANT rds_iam TO ${ident(owner)}, ${ident(api)}, ${ident(system)}`);
   step(`GRANT plexo_anon, plexo_authenticated TO ${ident(api)}`);
-  // SET only — never INHERIT (see the note at the top of this file).
+  // Steps 1–2 of the note at the top: no IAM sign-in while the admin is a member.
+  step(`REVOKE rds_iam FROM ${ident(owner)}, ${ident(system)}`);
   step(`GRANT ${ident(owner)}, ${ident(system)} TO CURRENT_USER WITH INHERIT FALSE, SET TRUE`);
   stepIgnoringExists(`CREATE DATABASE ${db}`);
   step(`REVOKE ALL ON DATABASE ${db} FROM PUBLIC`);
@@ -185,5 +190,9 @@ export function provisioningSteps(database: string): ProvisioningStep[] {
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO plexo_anon, plexo_authenticated;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO plexo_anon, plexo_authenticated;
   END $$`, database);
+
+  // Step 3: the admin leaves, and only then can the logins sign in with IAM.
+  step(`REVOKE ${ident(owner)}, ${ident(system)} FROM CURRENT_USER`);
+  step(`GRANT rds_iam TO ${ident(owner)}, ${ident(api)}, ${ident(system)}`);
   return steps;
 }
