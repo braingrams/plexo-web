@@ -43,6 +43,9 @@ This app should look like a premium product a real company would ship — never 
   (`--primary`, `--accent`, `--background`…). Pair a characterful heading font with a clean
   body font from Google Fonts: add the `<link>` to `index.html`, then set them in
   `src/index.css` (`--font-heading`, `--font-sans` in `@theme`).
+- **Its own icon.** Replace `public/favicon.svg` with a simple, bold mark that fits the
+  business, in the app's colours and legible at 16px; set `<title>` and the meta description
+  in `index.html`.
 - **Full pages.** A striking hero — bold headline, a specific benefit-led subheading, a clear
   main action and a strong visual — then the sections a real page of this kind has
   (benefits, how it works, social proof, pricing, FAQ, closing call to action, footer).
