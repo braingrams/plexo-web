@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/server/authDynamo";
@@ -28,7 +29,7 @@ async function resolveSdkBranding(
   if (!owner) return undefined;
 
   const { data: ownerUser } = await User.get({ id: owner.userId }).go();
-  const plan = ownerUser?.subscriptionPlan ?? "FREE";
+  const plan = effectivePlan(ownerUser);
   if (!canWhiteLabel(plan)) return undefined;
 
   const { data: org } = await Organization.get({ id: organizationId }).go();
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      subscriptionPlan = user.subscriptionPlan ?? "FREE";
+      subscriptionPlan = effectivePlan(user);
       manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user.manageLandingPagePublishing ?? false);
 
       // ApiKey has no createdAt-sorted index for "this user's keys" (byUser's SK is `id`,
@@ -134,7 +135,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
       const { data: user } = await User.get({ id: apiKey.userId }).go();
 
-      subscriptionPlan = user?.subscriptionPlan ?? "FREE";
+      subscriptionPlan = effectivePlan(user);
       manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user?.manageLandingPagePublishing ?? false);
       useAi = apiKey.useAi ?? false;
       aiProvider = apiKey.aiProvider ?? "openai";

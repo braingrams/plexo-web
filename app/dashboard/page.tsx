@@ -9,6 +9,7 @@ import { listMarketplaceTemplates } from "@/lib/marketplace";
 import { OverviewClient, type NeedsAttentionItem, type ActivityItem, type OverviewTemplateRow } from "./overview-client";
 import { OverviewSetup, type StarterTemplate } from "./_components/OverviewSetup";
 import { PageContainer } from "./_components/PageContainer";
+import { effectivePlan, shouldOfferTrial } from "@/lib/plan/entitlement";
 
 export default async function OverviewPage() {
   const session = await auth();
@@ -35,6 +36,11 @@ export default async function OverviewPage() {
   // directly regardless of whether the user ever passes through this page.
   if (user.pendingPlan && user.pendingPlan !== user.subscriptionPlan) {
     redirect("/auth/complete-subscription");
+  }
+
+  // A brand-new account is offered the 14-day trial once (app/welcome).
+  if (shouldOfferTrial(user)) {
+    redirect("/welcome");
   }
 
   // A user who's picked SOL (the AI agent chat) as their landing surface skips the normal
@@ -225,7 +231,7 @@ export default async function OverviewPage() {
     <PageContainer>
       <OverviewClient
         organizationName={orgResolution.organizationName}
-        plan={user.subscriptionPlan ?? "FREE"}
+        plan={effectivePlan(user)}
         templatesCount={templatesCount}
         liveTemplatesCount={liveTemplatesCount}
         domainsCount={domainsCount}

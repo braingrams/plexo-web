@@ -69,6 +69,8 @@ type DomainRecord = {
   certificateValidationName?: string;
   certificateValidationValue?: string;
   noindex?: boolean;
+  /** Switched off by the plan (Free keeps one live site, on a Plexo address) — kept, not removed. */
+  pausedByPlan?: boolean;
   registration?: DomainRegistration;
 };
 
@@ -244,7 +246,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   // stored copy of this straight from the domains list (see DomainRecord's
   // certificateValidationName/Value) instead of this transient form-local state.
   const [justAddedCertValidation, setJustAddedCertValidation] = useState<{ name: string; value: string } | null>(null);
-  const [count, setCount] = useState<number>(initialDomains.length);
+  const [count, setCount] = useState<number>(initialDomains.filter((d) => !d.pausedByPlan).length);
   const [limit, setLimit] = useState<number>(25);
 
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -269,6 +271,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
         certificateValidationName: d.certificateValidationName,
         certificateValidationValue: d.certificateValidationValue,
         noindex: d.noindex,
+        pausedByPlan: !!d.planDisabledAt,
         registration: d.registration,
       })));
     }
@@ -482,6 +485,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
           certificateStatus: d.certificateStatus,
           certificateValidationName: d.certificateValidationName,
           certificateValidationValue: d.certificateValidationValue,
+          pausedByPlan: !!d.planDisabledAt,
         })));
       }
       if (updatedData.count !== undefined) setCount(updatedData.count);
@@ -898,7 +902,14 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                           )}
                         </td>
                         <td style={{ padding: "1.1rem 1.5rem" }}>
-                          {item.type === "SUBDOMAIN" ? (
+                          {item.pausedByPlan ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                              <span style={{ color: "#f59e0b", fontWeight: 600, fontSize: "0.8rem" }}>Paused on Free</span>
+                              <a href="/dashboard/settings/subscription" style={{ color: "var(--brand)", fontSize: "0.75rem", fontWeight: 600, textDecoration: "none" }}>
+                                Upgrade to bring it back →
+                              </a>
+                            </div>
+                          ) : item.type === "SUBDOMAIN" ? (
                             <span style={{ color: "#10b981", display: "inline-flex", alignItems: "center", gap: "0.3rem", fontWeight: 500 }}>
                               <IconCheck /> Active
                             </span>

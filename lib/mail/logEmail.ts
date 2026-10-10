@@ -36,7 +36,9 @@ export type EmailDeliveryContext =
   // Sign-in emails sent on behalf of an app built on Plexo (lib/appAuth/emails.ts), and
   // emails its server functions send (ctx.sendEmail).
   | "app_auth"
-  | "app_function_email";
+  | "app_function_email"
+  // Trial ending soon / plan ended (lib/plan/lifecycle.ts).
+  | "plan_lifecycle";
 
 /**
  * Fire-and-forget write to EmailLog — mirrors this codebase's established

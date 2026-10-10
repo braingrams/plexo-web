@@ -1,5 +1,6 @@
 "use client";
 
+import { SitePlanNotice } from "../../_components/SitePlanNotice";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, ChevronDown, Code2, ExternalLink, MessageSquare, AppWindow, MousePointerClick, RotateCw, Undo2, Eye, Wrench, X } from "lucide-react";
@@ -658,6 +659,7 @@ export function AppEditor(props: {
           </button>
         </div>
       </header>
+      <SitePlanNotice templateId={appId} refreshKey={summary.liveUrl ?? null} />
 
       {/* Mobile switcher */}
       <div className="ed-mobile" style={{ display: "none", padding: "0.4rem 0.6rem", gap: 6, borderBottom: `1px solid ${C.border}` }}>

@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
@@ -24,7 +25,7 @@ export default async function ProfilePage() {
         userId={user.id}
         initialName={user.name ?? ""}
         email={user.email ?? ""}
-        subscriptionPlan={user.subscriptionPlan ?? "FREE"}
+        subscriptionPlan={effectivePlan(user)}
         memberSince={user.createdAt ?? new Date().toISOString()}
         initialHideBranding={user.hideBranding ?? false}
       />

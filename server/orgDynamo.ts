@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { cookies } from "next/headers";
 import { randomUUID } from "node:crypto";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
@@ -38,7 +39,7 @@ export async function getOrganizationOwnerPlanDynamo(organizationId: string): Pr
   const ownerUserId = owner[0]?.userId;
   if (!ownerUserId) return "FREE";
   const { data: ownerUser } = await User.get({ id: ownerUserId }).go();
-  return ownerUser?.subscriptionPlan ?? "FREE";
+  return effectivePlan(ownerUser);
 }
 
 export async function getOrgBrandDynamo(

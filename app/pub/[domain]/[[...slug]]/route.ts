@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import type { EntityItem } from "electrodb";
 import { parseUserAgent, extractGeoFromHeaders } from "@/server/analytics";
-import { resolveHideBranding, canWhiteLabel } from "@/lib/subscription";
+import { resolveHideBranding, canWhiteLabel, isHomePageOnlyPlan } from "@/lib/subscription";
 import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
@@ -72,6 +72,52 @@ function suspendedResponse(): NextResponse {
     { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", "X-Content-Type-Options": "nosniff" } }
   );
 }
+
+// An address the owner's plan has switched off (lib/plan/lifecycle.ts — Free keeps one
+// live site, on a Plexo address). Nothing is deleted: it comes back the moment the owner
+// upgrades. A custom domain gets a calm landing screen — visitors typed a real brand's
+// address and deserve to know the site still exists; a Plexo address just 404s.
+function inactiveDomainResponse(domain: string, domainType: "SUBDOMAIN" | "CUSTOM"): NextResponse {
+  if (domainType === "SUBDOMAIN") return notFoundResponse();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  return new NextResponse(
+    `<!DOCTYPE html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <title>${escapeHtmlAttr(domain)} is taking a break</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="robots" content="noindex">
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0b0f19; color: #f0f2ff; display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 0 16px; text-align: center; }
+          .container { max-width: 520px; }
+          .mark { width: 56px; height: 56px; margin: 0 auto 1.5rem; border-radius: 16px; display: grid; place-items: center; background: rgba(129, 140, 248, 0.12); border: 1px solid rgba(129, 140, 248, 0.3); }
+          h1 { font-size: 1.9rem; margin: 0 0 0.75rem; letter-spacing: -0.02em; }
+          p { color: rgba(240, 242, 255, 0.65); line-height: 1.6; margin: 0 0 1.75rem; }
+          .domain { color: #c7d2fe; font-weight: 600; }
+          a { color: #c7d2fe; font-size: 0.85rem; text-decoration: none; border-bottom: 1px solid rgba(199, 210, 254, 0.35); }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="mark"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M10 15V9M14 15V9"/></svg></div>
+          <h1>This site is taking a break</h1>
+          <p><span class="domain">${escapeHtmlAttr(domain)}</span> isn't available right now. Please check back soon.</p>
+          <a href="${appUrl}/auth/login?redirectTo=%2Fdashboard%2Fsettings%2Fsubscription">Own this site? Sign in to bring it back</a>
+        </div>
+      </body>
+    </html>`,
+    { status: 404, headers: { "Content-Type": "text/html; charset=utf-8", "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store" } },
+  );
+}
+
+/** Free serves only a site's homepage: anything else sends the visitor home. Never cached,
+ * so the page is back the moment the owner upgrades. */
+function homePageRedirect(request: NextRequest): NextResponse {
+  return NextResponse.redirect(new URL("/", request.url), { status: 302, headers: { "Cache-Control": "no-store" } });
+}
+
+const NON_HTML_FILE = /\.(css|js|mjs|map|json|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot|mp4|webm|mp3|wav|pdf|zip|txt|xml)$/i;
 
 // Gives a nested RAW_UPLOAD page's relative asset references (href="style.css", etc.) a
 // correct resolution base without needing the visited URL to have a trailing slash — see
@@ -389,7 +435,14 @@ export async function GET(
   if (siteResult.status === "suspended") {
     return suspendedResponse();
   }
+  if (siteResult.status === "inactive") {
+    return inactiveDomainResponse(siteResult.domain, siteResult.domainType);
+  }
   const published = siteResult.published;
+  // Free (published.user.subscriptionPlan is the plan the owner is entitled to right now):
+  // only the homepage is served — sub-pages, the blog, the store and product pages all send
+  // the visitor back to "/", and an app answers its first screen only.
+  const homeOnly = isHomePageOnlyPlan(published.user.subscriptionPlan);
   if (published.template.sourceType === "REACT_PROJECT") {
     return serveProject(request, {
       template: published.template,
@@ -398,6 +451,7 @@ export async function GET(
       noindex: published.noindex ?? false,
       owner: published.user,
       organization: published.organization,
+      homeOnly,
     });
   }
   const slugSegments = params.slug ?? [];
@@ -425,7 +479,8 @@ export async function GET(
   // request to /pub/{domain}/blog the same way it rewrote this one, and we relay its
   // response back verbatim as our own. The client's original request/URL never changes.
   if (slugSegments.length === 0) {
-    const { data: blogSite } = await BlogSite.get({ templateId: published.templateId }).go();
+    // (On Free the blog isn't served, so the homepage shows the site's own page instead.)
+    const { data: blogSite } = homeOnly ? { data: null } : await BlogSite.get({ templateId: published.templateId }).go();
     if (blogSite?.enabled && blogSite.showOnHomepage) {
       const blogResponse = await fetch(new URL("/blog", request.url));
       // Relaying a fetch() response's headers verbatim is a known footgun: fetch already
@@ -460,6 +515,8 @@ export async function GET(
   // image files without colliding with another page's same-named files.
   let cursor: TemplateItem = published.template;
   let matchedSegments = 0;
+  // Any page on the way down being unpublished hides everything beneath it too.
+  let unpublishedOnPath = false;
   for (const segment of slugSegments) {
     let child = await findChildBySlug(cursor.id, segment);
     // A zip's own nav links a sibling page as "about.html" (that's the literal href baked
@@ -473,8 +530,19 @@ export async function GET(
     if (!child) break;
     cursor = child;
     matchedSegments++;
+    if (child.isPublished === false) unpublishedOnPath = true;
   }
   const remainingSegments = slugSegments.slice(matchedSegments);
+
+  // A real page of this site that the plan or the owner has taken off it. On Free every
+  // page but the homepage sends visitors home (its own files, e.g. a stylesheet, are a
+  // plain 404 — redirecting a stylesheet to HTML would only confuse the browser); a page
+  // the owner unpublished is a 404.
+  if (matchedSegments > 0) {
+    const last = slugSegments[slugSegments.length - 1] ?? "";
+    if (homeOnly) return remainingSegments.length > 0 && NON_HTML_FILE.test(last) ? notFoundResponse() : homePageRedirect(request);
+    if (unpublishedOnPath) return notFoundResponse();
+  }
 
   // A raw-uploaded page's own root document is never itself a TemplateAsset — the zip
   // importer always excludes it, storing it as this Template's compiledHtml instead (see
@@ -675,6 +743,7 @@ export async function GET(
         // every other slug/name lookup this migration uses for that entity.
         const { data: products } = await CommerceProduct.query.primary({ templateId: published.templateId }).go({ pages: "all" });
         const product = products.find((p) => p.slug === candidateSlug && p.active && p.kind === "PHYSICAL");
+        if (product && homeOnly) return homePageRedirect(request);
         if (product) {
           let html = injectProductSeo(productDetailTemplate.compiledHtml, {
             name: product.name,
@@ -722,6 +791,8 @@ export async function GET(
     (await resolveBlogRedirect(published.templateId, fullRequestedPath)) ??
     (decodedFullPath !== fullRequestedPath ? await resolveBlogRedirect(published.templateId, decodedFullPath) : null);
   if (redirectTo) {
+    // On Free the new home of an old link isn't served either — send the visitor home.
+    if (homeOnly) return homePageRedirect(request);
     return NextResponse.redirect(new URL(redirectTo, request.url), 301);
   }
 
@@ -733,7 +804,7 @@ export async function GET(
       : null;
     if (!own) {
       const body = remainingSegments[0] === "sitemap.xml"
-        ? await buildSiteSitemap(published.template, rawDomain)
+        ? await buildSiteSitemap(published.template, rawDomain, { homeOnly })
         : buildSiteRobotsTxt(rawDomain, published.noindex ?? false);
       return new NextResponse(body, {
         headers: {

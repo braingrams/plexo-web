@@ -3,6 +3,7 @@ import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { getDomainLimit } from "@/lib/domainLimit";
 import { requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
 import { getPagesDomain } from "@/server/pagesDomain";
+import { assertCanPutSiteLive } from "@/lib/plan/publishGuard";
 
 // Connecting a domain (a *.pages subdomain or a custom domain) to a site. Shared by the MCP
 // tools (lib/mcp/dispatchMcpTool.ts) and app publishing (lib/projects/pipeline.ts) — its
@@ -73,10 +74,15 @@ export async function linkDomainToTemplate(
   // PublishedDomain has no org-wide index (only templateId-primary and byDomain-GSI1,
   // see contentEntities.ts) — fan out per org root template, same bound every other
   // ported org-wide domain count uses (app/api/v1/domains/route.ts, publish/route.ts).
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+  // Plan first: Free can't use a custom domain, and keeps one site live at a time.
+  await assertCanPutSiteLive(resolved, templateId, domainType);
+
+  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all", attributes: ["id", "parentId"] });
   const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
   const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go({ pages: "all" })));
-  const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);
+  // Addresses a downgrade switched off are kept (so an upgrade brings them back) but don't
+  // use up the limit — otherwise a downgraded account couldn't publish anything at all.
+  const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.filter((d) => !d.planDisabledAt).length, 0);
   const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
   if (currentDomainCount >= domainLimit) {
     throw new Error(`Published domain limit reached (${domainLimit}). Unlink an existing domain to publish a new one.`);

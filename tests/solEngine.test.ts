@@ -8,7 +8,7 @@ vi.mock("@/lib/crypto", () => ({
     return `plain:${v}`;
   },
 }));
-vi.mock("@/lib/db/coreEntities", () => ({ User: { get: () => ({ go: async () => ({ data: { subscriptionPlan: plan } }) }) } }));
+vi.mock("@/lib/db/coreEntities", () => ({ User: { get: () => ({ go: async () => ({ data: { subscriptionPlan: plan, stripeSubscriptionId: "sub_1", subscriptionStatus: "ACTIVE" } }) }) } }));
 vi.mock("@/lib/ai/resolveUserAiKey", () => ({ resolveActiveApiKeyForUser: async () => activeKey }));
 vi.mock("@/lib/db/ledgerOperations", () => ({ chargeUsage: vi.fn(), ensureCreditPeriod: async () => ({ total: 100 }), estimateWorstCaseCost: () => 500 }));
 

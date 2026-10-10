@@ -10,6 +10,8 @@ import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
 import { publishTemplateDraft } from "@/lib/templateVersions";
 import { Template } from "@/lib/db/contentEntities";
 import { Member, User } from "@/lib/db/coreEntities";
+import { assertCanPublishPage, PlanLimitError, planLimitResponse } from "@/lib/plan/publishGuard";
+import { setPagePublishFlags } from "@/lib/plan/sitesStore";
 
 /**
  * POST /api/templates/:id/publish
@@ -51,6 +53,14 @@ export async function POST(
     if (scopeError) return scopeError;
   }
 
+  // Free publishes one page per site — the homepage (lib/plan/publishGuard.ts).
+  try {
+    assertCanPublishPage(resolved.subscriptionPlan, existing);
+  } catch (err) {
+    if (err instanceof PlanLimitError) return planLimitResponse(err);
+    throw err;
+  }
+
   const designJson = existing.draftJson ?? existing.designJson;
 
   // Same "never trust a client-supplied compile" rule as the update route this draft came
@@ -73,6 +83,11 @@ export async function POST(
     designJson,
     compiledHtml,
   );
+
+  // Publishing a page that was unpublished puts it back on the site.
+  if (existing.parentId && existing.isPublished === false) {
+    await setPagePublishFlags(existing.id, true, null);
+  }
 
   await onTemplateSaved(existing.id);
 

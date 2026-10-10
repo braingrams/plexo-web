@@ -78,6 +78,10 @@ export interface PageTreeNode {
   order: number;
   updatedAt: string;
   sourceType: "BUILDER" | "RAW_UPLOAD" | "REACT_PROJECT";
+  /** false = not on the live site (unpublished by the owner or by a plan downgrade). */
+  isPublished: boolean;
+  /** Unpublished by a plan downgrade — comes back on upgrade. */
+  archivedByPlan: boolean;
 }
 
 function toNode(t: {
@@ -88,6 +92,8 @@ function toNode(t: {
   order?: number;
   updatedAt?: string;
   sourceType?: "BUILDER" | "RAW_UPLOAD" | "REACT_PROJECT";
+  isPublished?: boolean;
+  planArchivedAt?: string;
 }): PageTreeNode {
   return {
     id: t.id,
@@ -97,6 +103,8 @@ function toNode(t: {
     order: t.order ?? 0,
     updatedAt: t.updatedAt ?? new Date().toISOString(),
     sourceType: t.sourceType ?? "BUILDER",
+    isPublished: t.isPublished !== false,
+    archivedByPlan: !!t.planArchivedAt,
   };
 }
 

@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
@@ -73,7 +74,7 @@ export default async function BlogOverviewPage() {
       User.get({ id: session.user.id }).go(),
     ]);
   const publishedLimit = getTierFeatures(
-    currentUser?.subscriptionPlan ?? "FREE",
+    effectivePlan(currentUser),
   ).maxPublishedBlogPosts;
 
   const blogs: {

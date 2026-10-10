@@ -101,6 +101,34 @@ export const User = new Entity(
       // actually was, so admin doesn't just see a timestamp with no idea what it means.
       lastActiveAt: { type: "string" },
       lastActiveContext: { type: "string" },
+      // ── Plan lifecycle (lib/plan) ────────────────────────────────────────────────
+      // Mirrors the Stripe subscription behind subscriptionPlan (webhooks/stripe). PAST_DUE
+      // keeps the plan while Stripe retries the card; CANCELED means the payment has ended.
+      subscriptionStatus: { type: ["ACTIVE", "TRIALING", "PAST_DUE", "CANCELED"] as const },
+      // Paid access that isn't a subscription: the 14-day trial, or an admin grant with an
+      // end date. The plan drops to Free once this passes (unless planKeptByAdmin).
+      planAccessUntil: { type: "string" },
+      planAccessSource: { type: ["TRIAL", "ADMIN"] as const },
+      // One trial per account, ever. trialOfferSeenAt: the post-signup offer was shown.
+      trialStartedAt: { type: "string" },
+      trialOfferSeenAt: { type: "string" },
+      // The "your access ends in a few days" email for the current planAccessUntil was sent.
+      planAccessReminderSentAt: { type: "string" },
+      // The admin console's "Keep on plan" switch: this account keeps subscriptionPlan
+      // indefinitely, with no payment, and is never downgraded automatically.
+      planKeptByAdmin: { type: "boolean", default: false },
+      // Set while the account is on Free after having had a paid plan — what the dashboard
+      // explains, and what tells the lifecycle there's an archive to restore on upgrade.
+      planDowngradedAt: { type: "string" },
+      planDowngradeReason: { type: ["PAYMENT_ENDED", "TRIAL_ENDED", "GRANT_ENDED", "NO_PAYMENT", "ADMIN"] as const },
+      planBeforeDowngrade: { type: ["PRO", "ULTRA"] as const },
+      // When Free's limits (one live site, homepage only, no custom domain) were last
+      // applied to this account's sites. Cleared on upgrade, so a later downgrade re-applies.
+      freeLimitsAppliedAt: { type: "string" },
+      // Last time a subscription with no recorded status was checked against Stripe.
+      subscriptionCheckedAt: { type: "string" },
+      // Short lease so two requests never run the same downgrade/restore at once.
+      planSyncLockUntil: { type: "string" },
     },
     indexes: {
       primary: {

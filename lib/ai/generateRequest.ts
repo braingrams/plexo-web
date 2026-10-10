@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { createHash } from "node:crypto";
 
 import { classifyPromptComplexity } from "@/lib/ai/complexity";
@@ -66,7 +67,7 @@ export async function resolveAiKeyForUser(userId: string): Promise<{ key: Resolv
   if (!activeKey) return { error: "No active API key configured for this account.", status: 400 };
   const { data: user } = await User.get({ id: activeKey.userId }).go();
   if (!user) return { error: "No active API key configured for this account.", status: 400 };
-  return { key: toResolvedAiKey(activeKey, user.subscriptionPlan ?? "FREE") };
+  return { key: toResolvedAiKey(activeKey, effectivePlan(user)) };
 }
 
 /** An API caller (SDK, integrations) presenting a raw key. */
@@ -77,7 +78,7 @@ export async function resolveAiKeyByRawKey(rawKey: string): Promise<{ key: Resol
   if (!activeKey) return { error: BAD_API_KEY, status: 403 };
   const { data: user } = await User.get({ id: activeKey.userId }).go();
   if (!user) return { error: BAD_API_KEY, status: 403 };
-  return { key: toResolvedAiKey(activeKey as NonNullable<ApiKeyItem>, user.subscriptionPlan ?? "FREE") };
+  return { key: toResolvedAiKey(activeKey as NonNullable<ApiKeyItem>, effectivePlan(user)) };
 }
 
 export interface GenerateInput {

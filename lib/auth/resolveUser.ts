@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { effectivePlan, planSyncAction } from "@/lib/plan/entitlement";
+import { syncPlanLifecycle } from "@/lib/plan/lifecycle";
 import { type NextRequest, after } from "next/server";
 
 import { auth } from "@/server/authDynamo";
@@ -20,6 +22,11 @@ import type { EntityItem } from "electrodb";
 const ACTIVITY_THROTTLE_MS = 60 * 60 * 1000;
 
 function touchUserActivity(user: EntityItem<typeof User>, pathname: string): void {
+  // The plan lifecycle heals on any API call too (an AI assistant may be the only thing
+  // using the account) — after the response; limits here already use the effective plan.
+  if (planSyncAction(user)) {
+    after(() => syncPlanLifecycle(user.id).then(() => undefined).catch((err) => console.error("plan lifecycle (api):", err)));
+  }
   const isStale = !user.lastActiveAt || Date.now() - new Date(user.lastActiveAt).getTime() > ACTIVITY_THROTTLE_MS;
   if (!isStale) return;
   const lastActiveContext = describeActivity(pathname);
@@ -82,10 +89,10 @@ export async function resolveUser(
         userId: user.id,
         organizationId: orgResolution.organizationId,
         role: orgResolution.role,
-        subscriptionPlan: user.subscriptionPlan ?? "FREE",
+        subscriptionPlan: effectivePlan(user),
         customDomainLimit: user.customDomainLimit ?? null,
         manageLandingPagePublishing: resolveManageLandingPagePublishing(
-          user.subscriptionPlan ?? "FREE",
+          effectivePlan(user),
           user.manageLandingPagePublishing ?? false,
         ),
       };
@@ -119,10 +126,10 @@ export async function resolveUser(
     userId: apiKey.userId,
     organizationId: apiKey.organizationId,
     role: null,
-    subscriptionPlan: user.subscriptionPlan ?? "FREE",
+    subscriptionPlan: effectivePlan(user),
     customDomainLimit: user.customDomainLimit ?? null,
     manageLandingPagePublishing: resolveManageLandingPagePublishing(
-      user.subscriptionPlan ?? "FREE",
+      effectivePlan(user),
       user.manageLandingPagePublishing ?? false,
     ),
   };

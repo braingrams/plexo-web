@@ -38,6 +38,9 @@ export async function GET(
   if (siteResult.status === "suspended") {
     return NextResponse.json({ error: "This site is unavailable." }, { status: 403 });
   }
+  if (siteResult.status === "inactive") {
+    return NextResponse.json({ error: "This site isn't available right now." }, { status: 404 });
+  }
   const { templateId } = siteResult.published;
 
   const { data: contentTypes } = await CustomContentType.query.primary({ templateId }).go();
