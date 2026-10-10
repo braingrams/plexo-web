@@ -36,7 +36,7 @@ function Tile({ icon: Icon, title, body, on, onClick }: { icon: LucideIcon; titl
         <Icon size={19} />
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: "block", fontSize: 16, fontWeight: 700 }}>{title}</span>
+        <span style={{ display: "block", fontSize: "clamp(14px, 3.9vw, 16px)", fontWeight: 700 }}>{title}</span>
         <span style={{ display: "block", fontSize: 13, color: muted }}>{body}</span>
       </span>
       <span style={{ width: 24, height: 24, borderRadius: 99, flexShrink: 0, display: "grid", placeItems: "center", background: on ? accent : "transparent", border: on ? "none" : `1.5px solid ${border}`, color: "#fff" }}>
@@ -47,7 +47,7 @@ function Tile({ icon: Icon, title, body, on, onClick }: { icon: LucideIcon; titl
 }
 
 const primaryButton = (enabled: boolean): CSSProperties => ({
-  display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit", fontSize: 15, fontWeight: 700, padding: "14px 24px", borderRadius: 13, border: "none",
+  display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit", fontSize: "clamp(13.5px, 3.7vw, 15px)", fontWeight: 700, padding: "14px 24px", borderRadius: 13, border: "none",
   background: enabled ? brandGradient : fill(14), color: enabled ? "#fff" : muted, cursor: enabled ? "pointer" : "default", transition: "background 0.2s", boxShadow: enabled ? "0 8px 24px var(--brand-glow)" : "none",
 });
 const secondaryButton: CSSProperties = { fontFamily: "inherit", fontSize: 14.5, fontWeight: 600, padding: "13px 18px", borderRadius: 13, border: `1px solid ${border}`, background: surface, color: ink, cursor: "pointer" };
@@ -152,8 +152,8 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
         <div className={props.fontClassName} style={{ display: "flex", flexDirection: "column", gap: 22, color: ink }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <Link href="/dashboard/apps" aria-label="Back" style={{ display: "inline-flex", color: muted }}><ArrowLeft size={20} /></Link>
-            <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}>All apps</h1>
-            <span style={{ color: muted, fontSize: 15 }}>{props.apps.length}</span>
+            <h1 style={{ margin: 0, fontSize: "clamp(21px, 5.4vw, 28px)", fontWeight: 800, letterSpacing: "-0.02em" }}>All apps</h1>
+            <span style={{ color: muted, fontSize: "clamp(13.5px, 3.7vw, 15px)" }}>{props.apps.length}</span>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 14 }}>
             {props.apps.map((app) => <AppCard key={app.id} app={app} large />)}
@@ -183,7 +183,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
         {hasApps ? (
           <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 16 }}>
-              <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em" }}>{props.userName ? `Welcome back, ${props.userName}` : "Welcome back"}</h1>
+              <h1 style={{ margin: 0, fontSize: "clamp(21px, 5.4vw, 28px)", fontWeight: 800, letterSpacing: "-0.02em" }}>{props.userName ? `Welcome back, ${props.userName}` : "Welcome back"}</h1>
               <Link href="/dashboard/apps?view=all" style={{ fontSize: 13.5, fontWeight: 600, color: "var(--brand)", textDecoration: "none", whiteSpace: "nowrap" }}>All apps ({props.apps.length}) →</Link>
             </div>
             <div style={eyebrow}>Continue where you left off</div>
@@ -193,16 +193,16 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
           </section>
         ) : (
           <div>
-            <h1 style={{ margin: 0, fontSize: 34, fontWeight: 800, letterSpacing: "-0.02em" }}>Let&rsquo;s make your first app</h1>
-            <p style={{ margin: "8px 0 0", fontSize: 16, color: muted }}>Three quick questions and we&rsquo;ll build it. You can change anything later.</p>
+            <h1 style={{ margin: 0, fontSize: "clamp(24px, 6.4vw, 34px)", fontWeight: 800, letterSpacing: "-0.02em" }}>Let&rsquo;s make your first app</h1>
+            <p style={{ margin: "8px 0 0", fontSize: "clamp(14px, 3.9vw, 16px)", color: muted }}>Three quick questions and we&rsquo;ll build it. You can change anything later.</p>
           </div>
         )}
 
         {!composing ? (
           <button type="button" onClick={() => setComposing(true)} className="ah-create" style={{ minHeight: 420, fontFamily: "inherit", color: ink, cursor: "pointer", border: `2px dashed ${tint(accent, 40)}`, borderRadius: 22, background: `radial-gradient(50% 70% at 20% 0%, ${tint("#c084fc", 10)}, transparent 70%), radial-gradient(60% 80% at 85% 100%, ${tint(accent, 16)}, transparent 70%), ${surface}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
             <span style={{ width: 64, height: 64, borderRadius: 18, background: brandGradient, color: "#fff", display: "grid", placeItems: "center", boxShadow: "0 12px 32px var(--brand-glow)" }}><Plus size={30} /></span>
-            <span style={{ fontSize: 24, fontWeight: 800, letterSpacing: "-0.01em" }}>Create a new app</span>
-            <span style={{ fontSize: 15, color: muted }}>Answer three quick questions and we&rsquo;ll build it.</span>
+            <span style={{ fontSize: "clamp(19px, 5vw, 24px)", fontWeight: 800, letterSpacing: "-0.01em" }}>Create a new app</span>
+            <span style={{ fontSize: "clamp(13.5px, 3.7vw, 15px)", color: muted }}>Answer three quick questions and we&rsquo;ll build it.</span>
           </button>
         ) : (
         <section className="ah-builder ah-fade" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr)", borderRadius: 22, border: `1px solid ${border}`, background: surface, overflow: "hidden", minHeight: hasApps ? 540 : 600 }}>
@@ -212,11 +212,11 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
                 e.preventDefault();
                 if (description.trim()) void create(description.trim(), description.trim().split(/\s+/).slice(0, 4).join(" ").replace(/[^\w\s-]/g, "") || "My app");
               }}
-              style={{ padding: "32px 36px", display: "flex", flexDirection: "column", gap: 20 }}
+              style={{ padding: "clamp(20px, 5vw, 32px) clamp(18px, 5vw, 36px)", display: "flex", flexDirection: "column", gap: 20 }}
             >
               <div>
-                <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-0.02em" }}>Describe your app</div>
-                <div style={{ fontSize: 15, color: muted, marginTop: 6 }}>Say who it&rsquo;s for and what they should be able to do.</div>
+                <div style={{ fontSize: "clamp(21px, 5.6vw, 30px)", fontWeight: 800, letterSpacing: "-0.02em" }}>Describe your app</div>
+                <div style={{ fontSize: "clamp(13.5px, 3.7vw, 15px)", color: muted, marginTop: 6 }}>Say who it&rsquo;s for and what they should be able to do.</div>
               </div>
               <textarea
                 autoFocus
@@ -225,7 +225,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
                 onChange={(e) => setDescription(e.target.value)}
                 rows={7}
                 placeholder="A booking app for my salon where clients pick a stylist and a time, pay a deposit and get a reminder the day before…"
-                style={{ width: "100%", resize: "vertical", padding: 16, borderRadius: 14, border: `1px solid ${border}`, background: surface, color: ink, fontSize: 16, lineHeight: 1.55, fontFamily: "inherit", outline: "none" }}
+                style={{ width: "100%", resize: "vertical", padding: 16, borderRadius: 14, border: `1px solid ${border}`, background: surface, color: ink, fontSize: "clamp(14px, 3.9vw, 16px)", lineHeight: 1.55, fontFamily: "inherit", outline: "none" }}
               />
               {error && <p role="alert" style={{ margin: 0, fontSize: 13.5, color: "#f87171" }}>{error}</p>}
               <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 12 }}>
@@ -237,7 +237,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
               </div>
             </form>
           ) : (
-            <div style={{ padding: "32px 36px", display: "flex", flexDirection: "column", gap: 22, minWidth: 0 }}>
+            <div style={{ padding: "clamp(20px, 5vw, 32px) clamp(18px, 5vw, 36px)", display: "flex", flexDirection: "column", gap: 22, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: muted, whiteSpace: "nowrap" }}>Step {step} of 3</div>
                 <div style={{ flex: 1, display: "flex", gap: 6 }}>
@@ -258,8 +258,8 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
               )}
 
               <div key={step} className="ah-fade">
-                <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-0.02em" }}>{question.title}</div>
-                <div style={{ fontSize: 15, color: muted, marginTop: 6 }}>{question.hint}</div>
+                <div style={{ fontSize: "clamp(21px, 5.6vw, 30px)", fontWeight: 800, letterSpacing: "-0.02em" }}>{question.title}</div>
+                <div style={{ fontSize: "clamp(13.5px, 3.7vw, 15px)", color: muted, marginTop: 6 }}>{question.hint}</div>
               </div>
 
               {step === 1 && (
@@ -280,7 +280,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
                       value={other}
                       onChange={(e) => setOther(e.target.value)}
                       placeholder="e.g. choose which stylist they want"
-                      style={{ padding: "14px 16px", borderRadius: 14, border: `1px solid ${border}`, background: surface, color: ink, fontSize: 15, fontFamily: "inherit", outline: "none" }}
+                      style={{ padding: "14px 16px", borderRadius: 14, border: `1px solid ${border}`, background: surface, color: ink, fontSize: "clamp(13.5px, 3.7vw, 15px)", fontFamily: "inherit", outline: "none" }}
                     />
                   )}
                 </div>
@@ -294,7 +294,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
                   onChange={(e) => setName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && onContinue()}
                   maxLength={60}
-                  style={{ padding: "18px 20px", borderRadius: 16, border: `2px solid ${accent}`, background: surface, color: ink, fontSize: 22, fontWeight: 700, fontFamily: "inherit", outline: "none" }}
+                  style={{ padding: "18px 20px", borderRadius: 16, border: `2px solid ${accent}`, background: surface, color: ink, fontSize: "clamp(17px, 4.6vw, 22px)", fontWeight: 700, fontFamily: "inherit", outline: "none" }}
                 />
               )}
 

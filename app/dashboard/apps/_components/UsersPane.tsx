@@ -157,10 +157,10 @@ export function UsersPane(props: { appId: string }) {
           ))}
         </div>
       ) : noOneYet ? (
-        <section className="ppl-empty" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.8fr)", gap: "2rem", alignItems: "center", padding: "2.2rem", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(70% 90% at 100% 0%, rgba(99,102,241,0.12), transparent 60%), radial-gradient(60% 80% at 0% 100%, rgba(139,92,246,0.1), transparent 60%), rgba(255,255,255,0.015)" }}>
+        <section className="ppl-empty" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.8fr)", gap: "2rem", alignItems: "center", padding: "clamp(1.2rem, 4.5vw, 2.2rem)", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(70% 90% at 100% 0%, rgba(99,102,241,0.12), transparent 60%), radial-gradient(60% 80% at 0% 100%, rgba(139,92,246,0.1), transparent 60%), rgba(255,255,255,0.015)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "1.2rem", minWidth: 0 }}>
             <div>
-              <h3 style={{ margin: 0, fontSize: "1.35rem", fontWeight: 750, letterSpacing: "-0.01em" }}>No one has signed up yet</h3>
+              <h3 style={{ margin: 0, fontSize: "clamp(1.1rem, 4.2vw, 1.35rem)", fontWeight: 750, letterSpacing: "-0.01em" }}>No one has signed up yet</h3>
               <p style={{ margin: "0.45rem 0 0", fontSize: "0.88rem", color: C.muted, lineHeight: 1.6, maxWidth: 520 }}>
                 When people create an account on your app, they&rsquo;ll show up here. You can change what they&rsquo;re allowed to do, pause them, or remove them. Want someone in right away? Send them an invite — they get a one-click sign-in link.
               </p>
@@ -179,7 +179,7 @@ export function UsersPane(props: { appId: string }) {
                     <Icon size={19} />
                   </span>
                   <span>
-                    <span style={{ display: "block", fontSize: "1.45rem", fontWeight: 750, lineHeight: 1.1 }}>{value.toLocaleString()}</span>
+                    <span style={{ display: "block", fontSize: "clamp(1.15rem, 4.4vw, 1.45rem)", fontWeight: 750, lineHeight: 1.1 }}>{value.toLocaleString()}</span>
                     <span style={{ display: "block", fontSize: "0.76rem", color: C.muted, marginTop: 2 }}>{label}</span>
                   </span>
                 </div>

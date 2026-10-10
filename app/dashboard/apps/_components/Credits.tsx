@@ -122,7 +122,7 @@ export function CreditsPanel({ credits, monthly, onPick, onClose }: { credits: n
   return (
     <div ref={ref} role="dialog" aria-label="AI credits" style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 360, zIndex: 80, padding: "1rem", borderRadius: 16, background: C.panelSolid, border: `1px solid ${C.borderStrong}`, boxShadow: "0 24px 60px -20px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-        <span style={{ fontSize: "1.6rem", fontWeight: 800 }}>{credits === null ? "—" : n(Math.max(0, credits))}</span>
+        <span style={{ fontSize: "clamp(1.25rem, 4.8vw, 1.6rem)", fontWeight: 800 }}>{credits === null ? "—" : n(Math.max(0, credits))}</span>
         <span style={{ fontSize: "0.76rem", color: C.muted }}>AI credits left</span>
       </div>
       {credits !== null && <Bar credits={credits} monthly={monthly} height={8} />}
