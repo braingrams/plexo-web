@@ -335,6 +335,14 @@ const STEP_LIMIT_NOTE =
   "You've reached this turn's step limit. Don't call any more tools. In two or three short, plain sentences, tell the owner what you finished, what's left (if anything), and that they can say “continue” for you to carry on.";
 const STEP_LIMIT_FALLBACK = "I've done a lot in this turn and paused here so you can check in. Everything so far is saved — say “continue” and I'll pick up where I left off.";
 
+/** One line per model call, so a slow step can be traced to the AI service (on staging one
+ *  call took ~5 minutes for a 2.6k-token answer that normally takes ~15 seconds). */
+function logModelCall(conversationId: string, round: number, ms: number, result: { usage: { inputTokens: number; outputTokens: number }; stopReason?: string }): void {
+  const line = JSON.stringify({ sol: "model_call", conversationId, round, ms, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, stopReason: result.stopReason });
+  if (ms > 60_000) console.warn(`[sol] slow model call ${line}`);
+  else console.log(`[sol] ${line}`);
+}
+
 const ANSWER_CUT_OFF_NOTE =
   "Your last answer was too long and was cut off before it finished, so nothing in it ran. Continue from where you were, in smaller steps: write at most 2–3 files per app_write_files call (split big files across calls), and keep any text short.";
 
@@ -356,6 +364,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       throw new InsufficientCreditsError();
     }
 
+    const callStarted = Date.now();
     const result = await generateWithTools({
       model,
       apiKey: ctx.apiKey,
@@ -366,6 +375,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       onTextDelta: ctx.onTextDelta,
       onToolInputProgress: ctx.onToolCallPreparing,
     });
+    logModelCall(ctx.conversationId, iteration, Date.now() - callStarted, result);
 
     totals.inputTokens += result.usage.inputTokens;
     totals.outputTokens += result.usage.outputTokens;
