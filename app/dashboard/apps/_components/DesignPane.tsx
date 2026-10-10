@@ -331,9 +331,9 @@ export function DesignPane(props: {
     const busyWith = creating?.busy ? creating.name : null;
     return (
       <div style={{ position: "absolute", inset: 0, overflow: "auto" }}>
-        <div style={{ padding: "2.75rem 3rem 3rem", display: "flex", flexDirection: "column", gap: "2.25rem" }}>
+        <div style={{ padding: "clamp(1.3rem, 5vw, 2.75rem) clamp(1rem, 5vw, 3rem) 3rem", display: "flex", flexDirection: "column", gap: "2.25rem" }}>
           <header style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <h2 style={{ margin: 0, fontSize: "1.75rem", fontWeight: 750, letterSpacing: "-0.02em" }}>Design a page your way</h2>
+            <h2 style={{ margin: 0, fontSize: "clamp(1.3rem, 5.2vw, 1.75rem)", fontWeight: 750, letterSpacing: "-0.02em" }}>Design a page your way</h2>
             <p style={{ margin: 0, fontSize: "0.95rem", color: C.muted, lineHeight: 1.6, maxWidth: 640 }}>
               Pick a starting point. You&rsquo;ll drag in sections, text, images and buttons, and everything saves as you go.
             </p>

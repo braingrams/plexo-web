@@ -52,7 +52,7 @@ function AppBanner({ summary }: { summary: AppSummary | null }) {
   const address = summary.domains.find((d) => d.verified)?.domain ?? summary.liveUrl?.replace(/^https:\/\//, "") ?? null;
   return (
     <section style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "1.2rem 1.4rem", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(60% 140% at 100% 0%, rgba(139,92,246,0.2), transparent 60%), radial-gradient(50% 120% at 0% 100%, rgba(99,102,241,0.12), transparent 60%), rgba(255,255,255,0.015)" }}>
-      <span aria-hidden style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, display: "grid", placeItems: "center", background: hueGradient(summary.name), color: "#fff", fontSize: "1.4rem", fontWeight: 800, boxShadow: "0 10px 28px rgba(139,92,246,0.3)" }}>
+      <span aria-hidden style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, display: "grid", placeItems: "center", background: hueGradient(summary.name), color: "#fff", fontSize: "clamp(1.15rem, 4.2vw, 1.4rem)", fontWeight: 800, boxShadow: "0 10px 28px rgba(139,92,246,0.3)" }}>
         {summary.name.charAt(0).toUpperCase()}
       </span>
       <div style={{ flex: "1 1 240px", minWidth: 0 }}>

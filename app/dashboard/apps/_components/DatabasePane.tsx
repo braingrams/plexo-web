@@ -115,10 +115,10 @@ const DATA_IDEAS: { icon: typeof Database; color: string; title: string; prompt:
 /** Nothing saved yet: what will appear here, and one tap to set something up with SOL. */
 function DataEmpty({ onAskAi }: { onAskAi?: (text: string) => void }) {
   return (
-    <section className="plx-data-empty" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.9fr)", gap: "2rem", alignItems: "center", padding: "2.2rem", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(70% 90% at 100% 0%, rgba(139,92,246,0.14), transparent 60%), rgba(255,255,255,0.015)" }}>
+    <section className="plx-data-empty" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.9fr)", gap: "2rem", alignItems: "center", padding: "clamp(1.2rem, 4.5vw, 2.2rem)", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(70% 90% at 100% 0%, rgba(139,92,246,0.14), transparent 60%), rgba(255,255,255,0.015)" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: "1.2rem", minWidth: 0 }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: "1.35rem", fontWeight: 750, letterSpacing: "-0.01em" }}>Nothing saved yet</h3>
+          <h3 style={{ margin: 0, fontSize: "clamp(1.1rem, 4.2vw, 1.35rem)", fontWeight: 750, letterSpacing: "-0.01em" }}>Nothing saved yet</h3>
           <p style={{ margin: "0.45rem 0 0", fontSize: "0.88rem", color: C.muted, lineHeight: 1.6, maxWidth: 520 }}>
             When your app keeps track of things — sign-ups, orders, messages — you&rsquo;ll see them here and can edit them. Pick one to have SOL set it up:
           </p>
