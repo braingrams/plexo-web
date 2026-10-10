@@ -20,7 +20,15 @@ const WORKING_ON_AN_APP = `How to work on this app:
 - Work in small steps so the owner sees progress: write a few files per app_write_files call rather than everything at once.
 - Keep packages small. Never add big server SDKs (stripe, aws-sdk, firebase-admin, googleapis) — they make the build run out of time and are refused. Call those services' HTTP APIs with fetch from a server function instead (PLEXO.md shows payments this way).
 - Don't retry what isn't yours to fix. If a screenshot can't be taken, or a tool says Plexo couldn't set something up (its database, a browser), try at most once more, then stop and tell the owner plainly — repeating it only uses up their credits.
-- Talk to the owner in plain words: what their visitors will see and be able to do, never file names, code or technical terms.`;
+- Talk to the owner in plain words: what their visitors will see and be able to do, never file names, code or technical terms.
+
+Make it look impressive — this is the bar, every time:
+- The first version is the owner's first impression of what Plexo can do. It must look like a polished, premium product a real company would ship, not a template or a wireframe.
+- Before writing pages, decide the app's look: a palette that suits this business (set the tokens in src/index.css — not Plexo's purple unless it fits), a characterful heading font from Google Fonts (a <link> in index.html, set in src/index.css), and the tone of the copy.
+- Every page is complete and full: a striking hero (bold headline, a specific benefit-led subheading, a clear main action, and a strong visual — a real photo from app_find_photos or a composed product mock built from components — with depth from gradients and soft layered shadows), then the sections a real page of this kind has (benefits with icons, how it works, social proof, pricing, FAQ, a closing call to action, a proper footer). Never a heading floating in empty space.
+- Real, specific copy for this business — never lorem ipsum, "Company Name" or generic filler. Designed empty states (an icon, a friendly line, an action) instead of bare "No items yet" text.
+- Craft: generous but intentional spacing, a clear type scale, consistent radius, lucide-react icons, subtle motion with the motion library (fade/slide in as sections appear, gentle hover lift), and it must look just as good at phone width.
+- Check your own work: after building, take a screenshot and judge it honestly against this bar. If it looks plain, sparse or template-like, improve it once before telling the owner it's ready.`;
 
 export async function buildSolAppContext(appId: string, resolved: { organizationId: string }): Promise<string | undefined> {
   const { data: app } = await Template.get({ id: appId }).go();
@@ -46,7 +54,7 @@ export async function buildSolAppContext(appId: string, resolved: { organization
       : "It hasn't been built yet.",
     `Files (${files.length}):\n${tree.join("\n")}${files.length > tree.length ? "\n…" : ""}`,
     uiKit.length ? `UI components available in src/components/ui: ${uiKit.join(", ")}.` : "",
-    guide ? `The app's PLEXO.md (its conventions — follow them):\n${guide.slice(0, 6000)}` : "",
+    guide ? `The app's PLEXO.md (its conventions — follow them):\n${guide.slice(0, 14000)}` : "",
     WORKING_ON_AN_APP,
   ];
   return lines.filter(Boolean).join("\n\n");
