@@ -63,7 +63,7 @@ export const APP_MCP_TOOLS = [
   {
     name: "app_write_files",
     description:
-      "Creates or completely replaces files (up to 50 per call). Use for new files or full rewrites; for changing part of an existing file use app_edit_file instead (cheaper, and can't accidentally drop code). Paths are from the project root, e.g. src/pages/Dashboard.tsx, db/migrations/0002_tasks.sql, functions/send-invoice.ts. Changes aren't visible until app_build.",
+      "Creates or completely replaces files (up to 50 per call). Use for new files or full rewrites; for changing part of an existing file use app_edit_file instead (cheaper, and can't accidentally drop code). Before fully rewriting a file that already exists, read it with app_read_files in this same turn so nothing in it is lost. Pass files as a list of { path, content } objects. Paths are from the project root, e.g. src/pages/Dashboard.tsx, db/migrations/0002_tasks.sql, functions/send-invoice.ts. Changes aren't visible until app_build.",
     inputSchema: {
       type: "object",
       properties: {
@@ -80,7 +80,7 @@ export const APP_MCP_TOOLS = [
   {
     name: "app_edit_file",
     description:
-      "Changes part of one file with exact find/replace edits. Each `find` must match the file exactly (spaces and line breaks included) and exactly once — include a few surrounding lines to make it unique, or set all: true to replace every occurrence. Read the file first.",
+      "Changes part of one file with find/replace edits. Read the file with app_read_files earlier in this same turn and copy each `find` from what you read — never from memory or an earlier turn (the file may have changed). Each `find` must match exactly once — include a few surrounding lines to make it unique, or set all: true to replace every occurrence. Small indentation/spacing differences are tolerated; if a find still isn't there, the error shows the current lines to copy from — fix it from that rather than re-reading.",
     inputSchema: {
       type: "object",
       properties: {
@@ -107,12 +107,12 @@ export const APP_MCP_TOOLS = [
   {
     name: "app_build",
     description:
-      "Saves the current files as a version and builds the preview: compiles the app, type-checks it, applies new db/migrations to the preview database, and deploys server functions. Returns every problem with file:line and a hint. Fix ALL errors (and type problems) and build again until it's clean, then check it with app_screenshot. If it's still running when this returns, call app_build_status with the buildId.",
+      "Saves the current files as a version and builds the preview: compiles the app, type-checks it, applies new db/migrations to the preview database, and deploys server functions. Returns every problem with file:line and a hint. Fix ALL errors (and type problems) and build again until it's clean, then check it with app_screenshot. It waits for the whole build (including database changes and server functions) before answering — don't call app_build_status after it unless it says it's still pending.",
     inputSchema: { type: "object", properties: { appId, message: { type: "string", description: "One line describing the change, for the version history." } }, required: ["appId"] },
   },
   {
     name: "app_build_status",
-    description: "The result of a build or publish started earlier (when app_build/app_publish returned pending).",
+    description: "Only when app_build/app_publish returned pending (still running after waiting several minutes): waits again for that build and returns its result. Never call it right after a build that already returned a result.",
     inputSchema: { type: "object", properties: { appId, buildId: { type: "string" } }, required: ["appId", "buildId"] },
   },
   {
