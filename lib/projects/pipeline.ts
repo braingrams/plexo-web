@@ -146,7 +146,22 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
 
     // A failed live migration means the new code may not match the live database: keep the
     // current live version serving rather than switch to something broken.
+    let liveDomains: string[] = [];
+    let domainError: string | null = null;
     if (!migrationResult?.failed) {
+      // Publishing: the live address must exist before the server functions are deployed —
+      // each one is given its app's address to call back to (lib/appFunctions/deploy.ts
+      // apiBase). On a first publish the address used to be registered only after the
+      // functions, so they got a made-up one and every live function call failed ("This app
+      // doesn't exist or isn't published") until the app was published again. Registering an
+      // address doesn't switch visitors over; setting liveBuildId below does.
+      if (build.mode === "release") {
+        try {
+          liveDomains = await ensureDomain(build.templateId, template.name, build.requestedBy ?? template.userId, template.organizationId, build.publishSubdomain);
+        } catch (err) {
+          domainError = err instanceof Error ? err.message : String(err);
+        }
+      }
       const bundles = (build.functionBundles ?? {}) as Record<string, FunctionBundle>;
       functionResult = await deployFunctions({ templateId: build.templateId, organizationId: template.organizationId, env, buildId: build.id, bundles }).catch((err) => ({
         deployed: [],
@@ -161,12 +176,9 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
       } else {
         await Template.patch({ id: build.templateId }).set({ liveBuildId: build.id }).go();
         forgetAppContext(build.templateId);
-        try {
-          const domains = await ensureDomain(build.templateId, template.name, build.requestedBy ?? template.userId, template.organizationId, build.publishSubdomain);
-          publishResult = { liveUrl: domains[0] ? `https://${domains[0]}` : null, domains, switched: true };
-        } catch (err) {
-          publishResult = { liveUrl: null, domains: [], switched: true, error: err instanceof Error ? err.message : String(err) };
-        }
+        publishResult = domainError
+          ? { liveUrl: null, domains: [], switched: true, error: domainError }
+          : { liveUrl: liveDomains[0] ? `https://${liveDomains[0]}` : null, domains: liveDomains, switched: true };
       }
     } else {
       await recordLatestBuild(build);
