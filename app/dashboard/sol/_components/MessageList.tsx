@@ -172,10 +172,11 @@ export function MessageList({
               its text while it decides what to do next. A step that's being written or run
               has its own spinner. */}
           {streaming && !lastBlockShowsActivity(pendingBlocks) && (
-            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", paddingLeft: "2.6rem" }}>
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", paddingLeft: "2.6rem", flexWrap: "wrap" }}>
               <span className="sol-typing-dot" style={{ animationDelay: "0ms" }} />
               <span className="sol-typing-dot" style={{ animationDelay: "150ms" }} />
               <span className="sol-typing-dot" style={{ animationDelay: "300ms" }} />
+              <QuietNote activity={activityMark(pendingBlocks)} />
               <style>{`
                 .sol-typing-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(196,181,253,0.7); display: inline-block; animation: sol-typing-bounce 1.1s infinite ease-in-out; }
                 @keyframes sol-typing-bounce { 0%, 80%, 100% { transform: translateY(0); opacity: 0.5; } 40% { transform: translateY(-4px); opacity: 1; } }
@@ -216,6 +217,31 @@ export function MessageList({
         </button>
       )}
     </div>
+  );
+}
+
+/** Changes whenever anything new arrives in the turn, so the note below can tell how long
+ *  SOL has been quiet. */
+function activityMark(blocks: ContentBlock[] | null): string {
+  if (!blocks?.length) return "0";
+  const last = blocks[blocks.length - 1] as { type?: string; text?: string; characters?: number; status?: string };
+  return `${blocks.length}:${last.text?.length ?? 0}:${last.characters ?? 0}:${last.status ?? ""}`;
+}
+
+/** After a long quiet spell, say so — three dots alone for minutes looks frozen. */
+function QuietNote({ activity }: { activity: string }) {
+  const [quietFor, setQuietFor] = useState(0);
+  useEffect(() => {
+    setQuietFor(0);
+    const started = Date.now();
+    const timer = setInterval(() => setQuietFor(Date.now() - started), 5_000);
+    return () => clearInterval(timer);
+  }, [activity]);
+  if (quietFor < 45_000) return null;
+  return (
+    <span role="status" style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.55)" }}>
+      {quietFor < 120_000 ? "Still working — this step is taking longer than usual." : "Still working — the AI service is slow right now. Nothing is lost; SOL will carry on."}
+    </span>
   );
 }
 
