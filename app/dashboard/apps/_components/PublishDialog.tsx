@@ -53,11 +53,13 @@ export function PublishDialog(props: { appId: string; summary: AppSummary | null
     dialogRef.current?.focus();
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && phase !== "running" && props.onClose();
     window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      abort.current?.abort();
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [phase, props]);
+
+  // Stop following the publish only when the dialog goes away. (In the effect above, this
+  // ran on every phase change — including the click that starts publishing — so the dialog
+  // stopped checking at once and sat on "Building a clean copy" while the app went live.)
+  useEffect(() => () => abort.current?.abort(), []);
 
   const step: Step = !report || report.status !== "SUCCEEDED" ? "build" : report.pending ? "database" : "live";
 
