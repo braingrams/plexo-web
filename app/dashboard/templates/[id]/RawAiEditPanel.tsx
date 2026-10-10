@@ -110,11 +110,9 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
   }
 
   const canSubmit = prompt.trim().length > 0 && !generating;
-  // Rough, deliberately approximate size read — the whole page is sent as context and the
-  // model returns the whole page back (mode "edit_raw_html" has the largest MAX_TOKENS
-  // ceiling of any AI action for exactly this reason), so credit cost scales with page size
-  // in a way no other AI action in the app does. ~50KB is a generous "this is a real page,
-  // not a stub" threshold, not a precise token count.
+  // Rough, deliberately approximate size read — SOL writes back only the changes, but it
+  // still reads the whole page each time, so a big page costs more per edit than a small
+  // one. ~50KB is a generous "this is a real page, not a stub" threshold, not a token count.
   const pageSizeKb = Math.round(currentHtml.length / 1024);
   const isLargePage = currentHtml.length > 50_000;
 
@@ -214,8 +212,8 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
           }}>
             {isLargePage && <IconWarning />}
             {isLargePage
-              ? `This page is fairly large (~${pageSizeKb}KB) — SOL reads and rewrites the whole page, so this edit will use a lot of AI credits.`
-              : "SOL edits the whole page and shows you the result before anything is saved. Larger pages use more AI credits per edit."}
+              ? `This page is fairly large (~${pageSizeKb}KB) — SOL reads all of it for each edit, so edits here use more AI credits than on a small page.`
+              : "SOL changes only what you ask for and shows you the result before anything is saved."}
           </p>
           <SolHandoff draft={prompt} />
         </div>
