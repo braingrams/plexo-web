@@ -60,6 +60,7 @@ const OPEN_NEXT_DIR = path.join(__dirname, "..", "..", ".open-next");
 // bundling) — resolved, no longer the raw-source-zip gap the original TODO(infra) here
 // used to flag.
 const SOL_CHAT_ENTRY = path.join(__dirname, "..", "..", "lambda", "sol-chat", "index.ts");
+const BROWSER_ENTRY = path.join(__dirname, "..", "..", "lambda", "browser", "index.ts");
 
 // Same naming convention as data-stack.ts's own nameFor() — production keeps the bare
 // literal table names ("plexo-core", etc.) it's already deployed with; every other
@@ -773,6 +774,38 @@ export class ComputeStack extends cdk.Stack {
     // lib/appStorage listFiles); the object-level grants above don't cover ListBucket.
     for (const fn of [serverFn, solChatFn]) {
       fn.addToRolePolicy(new iam.PolicyStatement({ actions: ["s3:ListBucket"], resources: ["arn:aws:s3:::plexo-user-content*"] }));
+    }
+
+    // Plexo's own browser (lambda/browser): Chromium in a Lambda, which SOL and the MCP use to
+    // look at an app's preview (lib/projects/screenshot.ts) — no third-party browser service or
+    // shared limit; Browserbase stays as the backup. It only opens public https pages and
+    // returns the screenshot, so its role has nothing beyond logging.
+    const browserFn = new NodejsFunction(this, "BrowserFn", {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      // @sparticuz/chromium ships an x86_64 build of Chromium for Lambda.
+      architecture: lambda.Architecture.X86_64,
+      entry: BROWSER_ENTRY,
+      handler: "handler",
+      projectRoot: path.join(__dirname, "..", ".."),
+      depsLockFilePath: path.join(__dirname, "..", "..", "package-lock.json"),
+      bundling: {
+        tsconfig: path.join(__dirname, "..", "..", "tsconfig.json"),
+        minify: false,
+        sourceMap: true,
+        // Chromium's compressed binaries ship as files inside the package, and playwright-core
+        // can't be bundled (optional native/bidi modules) — both go in as real dependencies.
+        nodeModules: ["@sparticuz/chromium", "playwright-core"],
+      },
+      // Chromium wants memory (more memory also means more CPU on Lambda) and unpacks itself
+      // into /tmp on a cold start.
+      memorySize: 2048,
+      ephemeralStorageSize: cdk.Size.mebibytes(1024),
+      timeout: cdk.Duration.seconds(90),
+      logGroup: buildLogGroup(this, "BrowserFn"),
+    });
+    for (const fn of [serverFn, solChatFn]) {
+      browserFn.grantInvoke(fn);
+      fn.addEnvironment("SCREENSHOT_FUNCTION_NAME", browserFn.functionName);
     }
 
     const revalidationFn = new lambda.Function(this, "RevalidationFn", {
