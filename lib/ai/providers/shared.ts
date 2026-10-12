@@ -80,3 +80,45 @@ export function toolResultText(content: unknown): string {
   }
   return JSON.stringify(content ?? null);
 }
+
+/**
+ * Prompt-caching breakpoints on the conversation itself. Inside one agent turn (and across
+ * turns minutes apart) the replayed history is append-only, so marking the end of the latest
+ * message — plus the end of the previous user-side message, so a long round can't fall outside
+ * the cache's look-back window — lets every call after the first read the old part from the
+ * cache at a tenth of the price and write only what's new. Returns copies; nothing stored changes.
+ */
+export function withHistoryCacheBreakpoints<T extends { role: "user" | "assistant"; content: any }>(history: T[]): T[] {
+  if (history.length === 0) return history;
+  const out = history.slice();
+  const mark = (index: number) => {
+    const entry = out[index];
+    const blocks: any[] = Array.isArray(entry.content) ? entry.content.slice() : [{ type: "text", text: String(entry.content ?? "") }];
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const block = blocks[i];
+      // Empty text and thinking blocks can't carry a breakpoint.
+      if (!block || block.type === "thinking" || block.type === "redacted_thinking" || (block.type === "text" && !String(block.text ?? "").trim())) continue;
+      blocks[i] = { ...block, cache_control: { type: "ephemeral" } };
+      out[index] = { ...entry, content: blocks };
+      return;
+    }
+  };
+  mark(out.length - 1);
+  for (let i = out.length - 2; i >= 0; i--) {
+    if (out[i].role === "user") {
+      mark(i);
+      break;
+    }
+  }
+  return out;
+}
+
+/**
+ * What a model call's input really cost, in ordinary input tokens: cached reads are billed at
+ * 10% and cache writes at 125% of the normal rate, and the API reports them separately from
+ * `input_tokens`. Counting only `input_tokens` would hide most of the real input.
+ */
+export function billableInputTokens(usage: { input_tokens?: number | null; cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null } | undefined): number {
+  if (!usage) return 0;
+  return Math.round((usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) * 1.25 + (usage.cache_read_input_tokens ?? 0) * 0.1);
+}

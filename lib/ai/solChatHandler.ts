@@ -564,6 +564,7 @@ export async function prepareMessagesTurn(
         userMessageContent,
         memoryFacts,
         appContext: conversation.appId ? await buildSolAppContext(conversation.appId, resolved).catch(() => undefined) : undefined,
+        boundAppId: conversation.appId ?? undefined,
         ...callbacks,
         onUserMessageSaved: (key) => userMessageSaved(key),
         // Re-checked before EVERY loop iteration, not just once up front — a long
@@ -694,6 +695,7 @@ export async function prepareConfirmTurn(
         answers,
         memoryFacts,
         appContext: conversation.appId ? await buildSolAppContext(conversation.appId, resolved).catch(() => undefined) : undefined,
+        boundAppId: conversation.appId ?? undefined,
         ...callbacks,
         maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan),
         budgetGuard: routing.isByok

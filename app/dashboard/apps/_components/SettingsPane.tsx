@@ -856,6 +856,9 @@ function DangerZone({ appId, summary }: { appId: string; summary: AppSummary | n
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const name = summary?.name ?? "";
+  // Names can hold double spaces or odd casing the page collapses on screen, so what the owner
+  // sees is what they can type: compare ignoring case and repeated spaces.
+  const same = (a: string, b: string) => a.replace(/\s+/g, " ").trim().toLowerCase() === b.replace(/\s+/g, " ").trim().toLowerCase();
 
   useEffect(() => {
     if (open) inputRef.current?.focus();
@@ -863,7 +866,7 @@ function DangerZone({ appId, summary }: { appId: string; summary: AppSummary | n
 
   const remove = async (e: FormEvent) => {
     e.preventDefault();
-    if (typed.trim() !== name) return;
+    if (!same(typed, name)) return;
     setDeleting(true);
     setError(null);
     try {
@@ -896,7 +899,7 @@ function DangerZone({ appId, summary }: { appId: string; summary: AppSummary | n
             <input ref={inputRef} value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} style={inputStyle} />
           </label>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-            <Button type="submit" variant="danger" disabled={deleting || typed.trim() !== name}>
+            <Button type="submit" variant="danger" disabled={deleting || !same(typed, name)}>
               {deleting ? "Deleting…" : "Delete forever"}
             </Button>
             <Button

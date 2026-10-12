@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Check, ChevronDown, Code2, ExternalLink, MessageSquare, AppWindow, MousePointerClick, RotateCw, Undo2, Eye, Wrench, X } from "lucide-react";
 import { SolChatView } from "../../sol/_components/SolChatView";
-import type { ConversationSummary, SolMessage } from "../../sol/_components/types";
+import type { ConversationSummary, ModelTier, SolMessage } from "../../sol/_components/types";
 import { appsApi, pollBuild, ApiError, type AppSummary, type BuildReport, type BuildError } from "./api";
 import { C, Button } from "./ui";
 import { PreviewPane, type Viewport, type SelectedElement, type PreviewError } from "./PreviewPane";
@@ -21,6 +21,7 @@ import { PublishDialog } from "./PublishDialog";
 import { GitHubPane } from "./GitHubPane";
 import { DesignPane } from "./DesignPane";
 import { CreditsMeter, CreditsPanel, OutOfCreditsCard, TopUpSheet, useCredits, type Pack } from "./Credits";
+import { takeHandoff, describeExtras, type StartHandoff } from "./startHandoff";
 import { AppPreview, buildSteps, decodePlan, brandGradient, gradientFor } from "./appPlan";
 
 // The app editor (wireframes E, F, F2): chat with SOL on the left; the app on the right with
@@ -107,7 +108,13 @@ export function AppEditor(props: {
   const [outOfCredits, setOutOfCredits] = useState<{ resend: () => void; midTurn: boolean } | null>(null);
 
   // First build of a new app: the sketch + checklist (wireframe E).
-  const plan = useMemo(() => decodePlan(props.initialPlan), [props.initialPlan]);
+  // The brief + files the owner gave on the Apps home arrive through the browser (startHandoff),
+  // not the address bar; ?prompt= is still honoured for older links.
+  const [handoff, setHandoff] = useState<StartHandoff | null>(null);
+  const handoffTaken = useRef(false);
+  const handoffRef = useRef<StartHandoff | null>(null);
+  const extrasRef = useRef("");
+  const plan = useMemo(() => decodePlan(handoff?.plan ?? props.initialPlan), [handoff, props.initialPlan]);
   const steps = useMemo(() => buildSteps(plan), [plan]);
   const [firstBuild, setFirstBuild] = useState(!!props.initialPrompt && props.initialMessages.length === 0);
   const [writes, setWrites] = useState(0);
@@ -117,7 +124,7 @@ export function AppEditor(props: {
   // "Since you were last here"
   const [since, setSince] = useState<{ visits: number; problems: number; signups: number | null } | null>(null);
 
-  const sendRef = useRef<((text: string) => void) | null>(null);
+  const sendRef = useRef<((text: string, attachments?: Array<{ type: "image" | "pdf" | "document"; url: string; filename?: string }>, modelTier?: ModelTier) => void) | null>(null);
   const turnBaseVersion = useRef<string | null>(summary.headVersionId);
   const buildAbort = useRef<AbortController | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -192,7 +199,19 @@ export function AppEditor(props: {
   );
 
   useEffect(() => {
-    if (!summary.latestBuild && !building) void runBuild("First build");
+    // A new app with a brief is built by SOL — don't also build the empty starter beside it.
+    if (!handoffTaken.current) {
+      handoffTaken.current = true;
+      if (props.initialMessages.length === 0) {
+        handoffRef.current = takeHandoff(appId) ?? (props.initialPrompt ? { prompt: props.initialPrompt, plan: props.initialPlan, notes: "", files: [] } : null);
+      }
+    }
+    if (handoffRef.current) {
+      setHandoff(handoffRef.current);
+      setFirstBuild(true);
+    } else if (!summary.latestBuild && !building) {
+      void runBuild("First build");
+    }
     return () => buildAbort.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -263,7 +282,10 @@ export function AppEditor(props: {
   );
 
   const transformOutgoing = useCallback(
-    (text: string) => {
+    (typed: string) => {
+      // The owner's logo / notes / file roles ride along with the first message only.
+      const text = extrasRef.current ? `${typed}\n\n${extrasRef.current}` : typed;
+      extrasRef.current = "";
       setTurnRunning(true);
       setHasChatted(true);
       setOutOfCredits(null);
@@ -294,17 +316,18 @@ export function AppEditor(props: {
   // Opened from the Apps home with the first request already written.
   const sentInitial = useRef(false);
   useEffect(() => {
-    if (!props.initialPrompt || sentInitial.current || props.initialMessages.length) return;
+    if (!handoff || sentInitial.current || props.initialMessages.length) return;
     const timer = setInterval(() => {
       if (sendRef.current) {
         clearInterval(timer);
         sentInitial.current = true;
-        sendRef.current(props.initialPrompt!);
+        extrasRef.current = describeExtras(handoff);
+        sendRef.current(handoff.prompt, handoff.files.map((f) => ({ type: f.type, url: f.url, filename: f.name })), handoff.modelTier);
         window.history.replaceState(null, "", `/dashboard/apps/${appId}`);
       }
     }, 100);
     return () => clearInterval(timer);
-  }, [props.initialPrompt, props.initialMessages.length, appId]);
+  }, [handoff, props.initialMessages.length, appId]);
 
   // ------------------------------------------------------------------ preview events
 

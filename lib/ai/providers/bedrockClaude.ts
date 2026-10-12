@@ -5,6 +5,7 @@ import type {
   GenerateWithToolsParams,
   GenerateWithToolsResult,
 } from "./shared";
+import { withHistoryCacheBreakpoints, billableInputTokens } from "./shared";
 
 // Amazon Bedrock's Anthropic Messages API is wire-compatible with the direct
 // Anthropic API — `AnthropicBedrock` (from `@anthropic-ai/bedrock-sdk`) extends the
@@ -104,8 +105,8 @@ export async function generateWithTools({
   // cached prefix at a fraction of the cost and meaningfully faster. A cache breakpoint
   // caches everything up to and including the marked block, so marking the system
   // prompt and the LAST tool definition is enough to cover the whole shared prefix —
-  // the actual conversation history (which does change every turn) is deliberately left
-  // uncached, since caching a moving target buys nothing.
+  // the conversation history gets its own breakpoints below (withHistoryCacheBreakpoints):
+  // it only ever grows at the end, so each call reads what the last one wrote.
   const cachedTools =
     tools && tools.length > 0
       ? tools.map((tool, i) =>
@@ -125,7 +126,7 @@ export async function generateWithTools({
         cache_control: { type: "ephemeral" },
       },
     ],
-    messages: conversationHistory,
+    messages: withHistoryCacheBreakpoints(conversationHistory),
     ...(cachedTools ? { tools: cachedTools } : {}),
   });
 
@@ -156,7 +157,7 @@ export async function generateWithTools({
     content: finalMessage.content,
     stopReason: finalMessage.stop_reason ?? "end_turn",
     usage: {
-      inputTokens: finalMessage.usage?.input_tokens ?? 0,
+      inputTokens: billableInputTokens(finalMessage.usage),
       outputTokens: finalMessage.usage?.output_tokens ?? 0,
     },
   };
