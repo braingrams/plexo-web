@@ -153,16 +153,16 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // an ungated check here would redirect the dashboard's own known host to itself,
   // an infinite loop.
   if (isSubdomainOrCustom && (hostname === pagesDomain || hostname === `www.${pagesDomain}`)) {
-    // Preserve the original path and query string so utm_source and other marketing
-    // parameters survive the redirect (previously dropped by passing only baseAppUrl).
+    // Always redirect to the main app's homepage, preserving only the query string.
+    // The path is intentionally dropped: plexopages.com and plexo.charisol.io are separate
+    // apps, so apex paths have no equivalent on the main app and preserving them risks 404s.
     // Cache-Control: no-store prevents CloudFront from caching this response: the page
     // cache policy only keys on ?p=, so a cached redirect for "/" (no query string) would
     // otherwise be served to every "/?utm_source=X" visitor — even after this fix. With
     // minTtl=0 on pageCachePolicy, CloudFront honours the origin's no-store directive and
-    // never stores the response, so every apex hit generates a fresh redirect with the
-    // correct query string. Status 307 (not 301/308) avoids browsers permanently caching
-    // the redirect, which would trap UTM values in the visitor's own browser cache.
-    const dest = new URL(request.nextUrl.pathname + request.nextUrl.search, baseAppUrl);
+    // never stores the response. Status 307 (not 301/308) avoids browsers permanently
+    // caching the redirect, which would trap UTM values in the visitor's own browser cache.
+    const dest = new URL("/" + request.nextUrl.search, baseAppUrl);
     const res = NextResponse.redirect(dest.toString(), { status: 307 });
     res.headers.set("Cache-Control", "no-store");
     return res;
