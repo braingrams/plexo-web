@@ -16,6 +16,7 @@ import { SellerLedgerEntry, StripeEvent } from "@/lib/db/ledgerEntities";
 import { handleLmsAddonSlotSubscriptionUpdate, handleLmsAddonSlotSubscriptionDeleted } from "@/lib/lms/activateFunnelAddonSlot";
 import { reconcileFunnelSlotsForOrg } from "@/lib/lms/funnelSlots";
 import { mapStripeStatus, syncPlanLifecycle } from "@/lib/plan/lifecycle";
+import { isSettled, recordStripeCharge, sendReceiptEmail } from "@/lib/billing/payments";
 
 // DynamoDB-stack port of this file — Plexo's own SaaS-billing Stripe webhook (distinct
 // from app/api/webhooks/stripe/commerce/route.ts, which handles Plexo-hosted Commerce
@@ -205,6 +206,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       break;
     }
 
+    // Plexo's own record of every payment (lib/billing/payments.ts) — what receipts, the
+    // owner's payment history and the admin console read. Not event-claimed: recording is
+    // idempotent (the row is keyed by the charge id), and a failure should make Stripe retry.
+    case "charge.succeeded":
+    case "charge.failed":
+    case "charge.refunded":
+    case "charge.updated": {
+      const charge = event.data.object as Stripe.Charge;
+      const recorded = await recordStripeCharge(stripe, charge);
+      // Email the receipt once, automatically — only for payments made in the last two days,
+      // so a refund event for an old charge never sends a surprise receipt for it.
+      const recent = Date.now() - charge.created * 1000 < 2 * 86_400_000;
+      if (recorded && recent && isSettled(recorded.payment.status) && !recorded.payment.receiptEmailedAt) {
+        await sendReceiptEmail(recorded.payment, { onceOnly: true }).catch((err) => console.error(`receipt email for ${charge.id} failed`, err));
+      }
+      break;
+    }
+
     case "customer.subscription.created":
     case "customer.subscription.updated": {
       if (!(await claimStripeEvent(event.id))) break;
@@ -247,8 +266,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // changed their mind and paid for a different plan) — requiring an exact match would
       // create a stuck "never lets them in" state instead. A paid subscription also ends
       // any trial or time-limited grant: from here the subscription is what counts.
+      const periodEnd = subscription.items?.data?.[0]?.current_period_end;
       await User.patch({ id: plexoUserId })
-        .set({ subscriptionPlan: plan, stripeSubscriptionId: subscription.id, subscriptionStatus: status })
+        .set({
+          subscriptionPlan: plan,
+          stripeSubscriptionId: subscription.id,
+          subscriptionStatus: status,
+          ...(subscription.start_date ? { subscriptionStartedAt: new Date(subscription.start_date * 1000).toISOString() } : {}),
+          subscriptionCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+          ...(periodEnd ? { subscriptionPeriodEnd: new Date(periodEnd * 1000).toISOString() } : {}),
+        })
         .remove(["pendingPlan", "planAccessUntil", "planAccessSource", "planAccessReminderSentAt"])
         .go();
 

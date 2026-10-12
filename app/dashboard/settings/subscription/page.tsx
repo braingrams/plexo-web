@@ -9,6 +9,8 @@ import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { SettingsShell } from "../../_components/SettingsShell";
 import { PageHeader } from "../../_components/PageHeader";
 import { BillingSection } from "../billing-section";
+import { PaymentHistory } from "../payment-history";
+import { listPaymentsForUser } from "@/lib/billing/payments";
 import { accessDaysLeft, canStartTrial, effectivePlan, paidAccess } from "@/lib/plan/entitlement";
 
 export default async function SubscriptionPage() {
@@ -27,9 +29,10 @@ export default async function SubscriptionPage() {
   // balance shown below is always current even without a cron job.
   const balance = await ensureCreditPeriod(session.user.id);
 
-  const [{ data: user }, { data: recentActivity }] = await Promise.all([
+  const [{ data: user }, { data: recentActivity }, payments] = await Promise.all([
     User.get({ id: session.user.id }).go(),
     CreditLedgerEntry.query.primary({ userId: session.user.id }).go({ order: "desc", limit: 10 }),
+    listPaymentsForUser(session.user.id),
   ]);
   if (!user) throw new Error(`Session user ${session.user.id} has no matching User record`);
 
@@ -72,6 +75,30 @@ export default async function SubscriptionPage() {
           description: entry.description ?? "",
           createdAt: entry.createdAt ?? new Date().toISOString(),
         }))}
+      />
+      <PaymentHistory
+        payments={payments.map((p) => ({
+          id: p.id,
+          paidAt: p.paidAt,
+          description: p.description,
+          detail: p.detail ?? null,
+          amountCents: p.amountCents,
+          refundedCents: p.refundedCents ?? 0,
+          currency: p.currency,
+          status: p.status,
+          receiptNumber: p.receiptNumber ?? null,
+          cardBrand: p.cardBrand ?? null,
+          cardLast4: p.cardLast4 ?? null,
+          failureReason: p.failureReason ?? null,
+        }))}
+        summary={{
+          cardBrand: user.billingCardBrand ?? null,
+          cardLast4: user.billingCardLast4 ?? null,
+          cardExpMonth: user.billingCardExpMonth ?? null,
+          cardExpYear: user.billingCardExpYear ?? null,
+          renewsAt: paying && !user.subscriptionCancelAtPeriodEnd ? (user.subscriptionPeriodEnd ?? null) : null,
+          endsAt: paying && user.subscriptionCancelAtPeriodEnd ? (user.subscriptionPeriodEnd ?? null) : null,
+        }}
       />
     </SettingsShell>
   );

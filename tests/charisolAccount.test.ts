@@ -61,10 +61,10 @@ describe("resolveCharisolUser", () => {
     expect(await resolveCharisolUser(verifiedClaims())).toEqual({ id: "plexo-2", email: "ada@example.com", name: "Ada", image: "http://img" });
   });
 
-  it("refuses a suspended account (by legacy_user_id and by email)", async () => {
+  it("refuses a suspended account (by legacy_user_id and by email), saying so", async () => {
     store.set("s1", { id: "s1", email: "ada@example.com", name: "Ada", isConfirmed: true, suspendedAt: "2026-01-01" });
-    expect(await resolveCharisolUser(verifiedClaims({ legacy_user_id: "s1" }))).toBeNull();
-    expect(await resolveCharisolUser(verifiedClaims())).toBeNull();
+    await expect(resolveCharisolUser(verifiedClaims({ legacy_user_id: "s1" }))).rejects.toThrow("account suspended");
+    await expect(resolveCharisolUser(verifiedClaims())).rejects.toThrow("account suspended");
   });
 
   it("does not touch an already-confirmed account's password", async () => {
