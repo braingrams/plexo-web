@@ -101,8 +101,8 @@ export type SolChatEmbedding = {
   /** Text shown in the empty state instead of the greeting. */
   emptyTitle?: string;
   emptySuggestions?: string[];
-  /** Lets the host send a message itself (Select & Edit, "Fix with AI"). */
-  registerSend?: (send: (text: string) => void) => void;
+  /** Lets the host send a message itself (Select & Edit, "Fix with AI", the brief an app starts from). */
+  registerSend?: (send: (text: string, attachments?: ChatAttachment[], modelTier?: ModelTier) => void) => void;
   /** Called once per tool call that finishes in this session (e.g. a build → refresh the preview). */
   onToolFinished?: (call: { name: string; status: string; result: unknown }) => void;
   /** Rendered just above the composer (e.g. the element picked with Select & Edit). */
@@ -437,7 +437,10 @@ export function SolChatView({
     }
   }
 
-  async function handleSend(typed: string, attachments: ChatAttachment[]) {
+  async function handleSend(typed: string, attachments: ChatAttachment[], tierOverride?: ModelTier) {
+    // A host can pick the tier for this message (the app wizard's Standard / Advanced choice); a locked plan stays locked.
+    const tier = lockedModelTier ? lockedModelTier.tier : (tierOverride ?? modelTier);
+    if (tier !== modelTier) handleModelTierChange(tier);
     const text = embedded?.transformOutgoing ? embedded.transformOutgoing(typed) : typed;
     setInlineError(null);
     // "" (not undefined) actually empties the box: a message put back after running out of
@@ -455,14 +458,14 @@ export function SolChatView({
       { id: optimisticId, role: "user", content: [{ type: "text", text: typed }, ...mediaBlocks], createdAt: new Date().toISOString() },
     ]);
 
-    void stream.sendMessage(target.id, text, attachments, modelTier);
+    void stream.sendMessage(target.id, text, attachments, tier);
   }
 
   // Embedded hosts can send on the person's behalf; always the latest handleSend.
   const handleSendRef = useRef(handleSend);
   handleSendRef.current = handleSend;
   useEffect(() => {
-    embedded?.registerSend?.((text: string) => void handleSendRef.current(text, []));
+    embedded?.registerSend?.((text: string, attachments?: ChatAttachment[], tier?: ModelTier) => void handleSendRef.current(text, attachments ?? [], tier));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const reportedToolCallsRef = useRef(new Set<string>());

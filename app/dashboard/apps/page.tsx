@@ -4,6 +4,7 @@ import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { Template } from "@/lib/db/contentEntities";
 import { ProjectBuild } from "@/lib/db/projectEntities";
 import { previewUrl } from "@/lib/projects/previewHost";
+import { lockedTierFor } from "@/lib/ai/solEngine";
 import { AppsHome, type HomeApp } from "./_components/AppsHome";
 
 export const dynamic = "force-dynamic";
@@ -36,5 +37,7 @@ export default async function AppsPage({ searchParams }: { searchParams: Promise
     }),
   );
 
-  return <AppsHome apps={apps} userName={session.user.name?.split(" ")[0] ?? null} showAll={query.view === "all"} />;
+  const lockedModelTier = await lockedTierFor(session.user.id);
+
+  return <AppsHome lockedModelTier={lockedModelTier} apps={apps} userName={session.user.name?.split(" ")[0] ?? null} showAll={query.view === "all"} />;
 }

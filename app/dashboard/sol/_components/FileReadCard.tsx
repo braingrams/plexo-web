@@ -46,7 +46,7 @@ export function FileReadCard({ kind, url: storedUrl, filename, description }: { 
   }
 
   return (
-    <StepCard icon={kind === "image" ? ImageIcon : FileText} title={name} subtitle={kind === "image" ? "Image" : "Document"} status="success">
+    <StepCard fill icon={kind === "image" ? ImageIcon : FileText} title={name} subtitle={kind === "image" ? "Image" : "Document"} status="success">
       {url && (
         <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: "0.72rem", color: "var(--brand)", textDecoration: "none", alignSelf: "flex-start" }}>
           Open file

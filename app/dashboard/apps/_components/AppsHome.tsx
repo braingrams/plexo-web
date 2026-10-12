@@ -7,6 +7,9 @@ import { ArrowLeft, ArrowRight, Check, Loader2, PenLine, Plus, X, type LucideIco
 import { api, ApiError } from "./api";
 import { timeAgo } from "./ui";
 import { PageContainer } from "../../_components/PageContainer";
+import { AttachFiles, MoreDetails, NotesField, QualityChoice, useStartContext } from "./StartContext";
+import { saveHandoff } from "./startHandoff";
+import type { ModelTier } from "../../sol/_components/types";
 
 // The Apps home (wireframe "D"): pick up where you left off, or answer three quick questions —
 // one at a time — while a preview of the app takes shape beside them. Plain words only.
@@ -46,6 +49,12 @@ function Tile({ icon: Icon, title, body, on, onClick }: { icon: LucideIcon; titl
   );
 }
 
+/** A short, tidy name from the first line of a pasted brief ("RUKKY & DOLAPO\nWEDDING WEBSITE" → "RUKKY DOLAPO WEDDING"). */
+function nameFromDescription(text: string): string {
+  const firstLine = text.split(/\r?\n/).find((l) => l.trim()) ?? "";
+  return firstLine.replace(/[^\w\s-]/g, " ").split(/\s+/).filter(Boolean).slice(0, 4).join(" ") || "My app";
+}
+
 const primaryButton = (enabled: boolean): CSSProperties => ({
   display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit", fontSize: "clamp(13.5px, 3.7vw, 15px)", fontWeight: 700, padding: "14px 24px", borderRadius: 13, border: "none",
   background: enabled ? brandGradient : fill(14), color: enabled ? "#fff" : muted, cursor: enabled ? "pointer" : "default", transition: "background 0.2s", boxShadow: enabled ? "0 8px 24px var(--brand-glow)" : "none",
@@ -79,9 +88,9 @@ function AppCard({ app, large }: { app: HomeApp; large?: boolean }) {
 
 // ------------------------------------------------------------------ the page
 
-export function AppsHome(props: { apps: HomeApp[]; userName: string | null; showAll: boolean; fontClassName?: string }) {
+export function AppsHome(props: { lockedModelTier?: { tier: "BASIC"; note: string } | null; apps: HomeApp[]; userName: string | null; showAll: boolean; fontClassName?: string }) {
   const router = useRouter();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [audience, setAudience] = useState<AudienceId | null>(null);
   const [features, setFeatures] = useState<FeatureId[]>([]);
   const [other, setOther] = useState("");
@@ -90,6 +99,8 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const context = useStartContext();
+  const [modelTier, setModelTier] = useState<ModelTier>("MEDIUM");
 
   const hasApps = props.apps.length > 0;
   // Owners with apps see a "Create a new app" button first; the questions open on click.
@@ -99,11 +110,17 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
 
   async function create(prompt: string, appName: string, plan?: string) {
     if (creating) return;
+    if (context.uploading) return setError("Your files are still uploading — one moment.");
+    if (context.failed) return setError("One of your files didn't upload. Remove it or add it again, then build.");
     setCreating(true);
     setError(null);
     try {
-      const res = await api<{ id: string }>("/api/v1/apps", { method: "POST", json: { name: appName } });
-      router.push(`/dashboard/apps/${res.id}?prompt=${encodeURIComponent(prompt)}${plan ? `&plan=${encodeURIComponent(plan)}` : ""}`);
+      // SOL builds this app from scratch, so skip the empty starter preview (it only cost a build).
+      const res = await api<{ id: string }>("/api/v1/apps", { method: "POST", json: { name: appName, build: false } });
+      // The brief and files go to the editor through the browser, not the address — a long
+      // brief in the URL is what used to end in a "414" error page.
+      saveHandoff(res.id, { prompt, plan: plan ?? null, notes: context.notes, modelTier: props.lockedModelTier ? "BASIC" : modelTier, files: context.ready });
+      router.push(`/dashboard/apps/${res.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "We couldn't start your app. Please try again.");
       setCreating(false);
@@ -115,7 +132,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
     setAudience(id);
   };
   const toggleFeature = (id: FeatureId) => setFeatures((f) => (f.includes(id) ? f.filter((x) => x !== id) : [...f, id]));
-  const goTo = (next: 1 | 2 | 3) => {
+  const goTo = (next: 1 | 2 | 3 | 4) => {
     if (next === 3 && !name.trim()) setName(suggestName(features));
     setStep(next);
   };
@@ -128,6 +145,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
     setOther("");
     setName("");
     setError(null);
+    context.reset();
   };
   const startFrom = (s: (typeof STARTERS)[number]) => {
     setDescribing(false);
@@ -140,7 +158,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
   const canContinue = step === 1 ? !!audience : step === 2 ? features.length > 0 && (!features.includes("other") || other.trim().length > 0) : name.trim().length > 0;
   const onContinue = () => {
     if (!canContinue) return;
-    if (step < 3) return goTo((step + 1) as 2 | 3);
+    if (step < 4) return goTo((step + 1) as 2 | 3 | 4);
     void create(describeAnswers(audience!, features, other, name), name.trim(), encodePlan({ audience: audience!, features, other, name: name.trim() }));
   };
 
@@ -171,7 +189,9 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
   if (step > 2 && features.length) answers.push({ label: `${features.length} thing${features.length > 1 ? "s" : ""} they can do`, step: 2 });
 
   const question =
-    step === 1
+    step === 4
+      ? { title: "Anything else we should know?", hint: "Optional. The more SOL has to work from, the less it has to guess." }
+      : step === 1
       ? { title: "Who is it for?", hint: "This helps us shape what your app does." }
       : step === 2
         ? { title: "What should they be able to do?", hint: "Pick as many as you like." }
@@ -210,7 +230,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (description.trim()) void create(description.trim(), description.trim().split(/\s+/).slice(0, 4).join(" ").replace(/[^\w\s-]/g, "") || "My app");
+                if (description.trim()) void create(description.trim(), nameFromDescription(description));
               }}
               style={{ padding: "clamp(20px, 5vw, 32px) clamp(18px, 5vw, 36px)", display: "flex", flexDirection: "column", gap: 20 }}
             >
@@ -225,12 +245,15 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
                 onChange={(e) => setDescription(e.target.value)}
                 rows={7}
                 placeholder="A booking app for my salon where clients pick a stylist and a time, pay a deposit and get a reminder the day before…"
-                style={{ width: "100%", resize: "vertical", padding: 16, borderRadius: 14, border: `1px solid ${border}`, background: surface, color: ink, fontSize: "clamp(14px, 3.9vw, 16px)", lineHeight: 1.55, fontFamily: "inherit", outline: "none" }}
+                style={{ width: "100%", boxSizing: "border-box", resize: "vertical", padding: 16, borderRadius: 14, border: `1px solid ${border}`, background: surface, color: ink, fontSize: "clamp(14px, 3.9vw, 16px)", lineHeight: 1.55, fontFamily: "inherit", outline: "none" }}
               />
+              <AttachFiles ctx={context} />
+              <MoreDetails ctx={context} />
+              <QualityChoice value={modelTier} onChange={setModelTier} locked={props.lockedModelTier} />
               {error && <p role="alert" style={{ margin: 0, fontSize: 13.5, color: "#f87171" }}>{error}</p>}
               <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-                <button type="submit" disabled={!description.trim() || creating} style={primaryButton(!!description.trim() && !creating)}>
-                  {creating ? <><Loader2 size={16} className="ah-spin" /> Starting…</> : "Build my app"}
+                <button type="submit" disabled={!description.trim() || creating || context.uploading} style={primaryButton(!!description.trim() && !creating && !context.uploading)}>
+                  {creating ? <><Loader2 size={16} className="ah-spin" /> Starting…</> : context.uploading ? "Uploading files…" : "Build my app"}
                 </button>
                 {hasApps && <button type="button" onClick={cancel} style={{ ...linkButton, color: muted }}>Cancel</button>}
                 <button type="button" onClick={() => setDescribing(false)} style={{ ...linkButton, marginLeft: "auto" }}>Answer three quick questions instead</button>
@@ -239,9 +262,9 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
           ) : (
             <div style={{ padding: "clamp(20px, 5vw, 32px) clamp(18px, 5vw, 36px)", display: "flex", flexDirection: "column", gap: 22, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: muted, whiteSpace: "nowrap" }}>Step {step} of 3</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: muted, whiteSpace: "nowrap" }}>Step {step} of 4</div>
                 <div style={{ flex: 1, display: "flex", gap: 6 }}>
-                  {[1, 2, 3].map((i) => <span key={i} style={{ flex: 1, height: 6, borderRadius: 99, background: i <= step ? brandGradient : fill(12), transition: "background 0.3s" }} />)}
+                  {[1, 2, 3, 4].map((i) => <span key={i} style={{ flex: 1, height: 6, borderRadius: 99, background: i <= step ? brandGradient : fill(12), transition: "background 0.3s" }} />)}
                 </div>
                 {hasApps && <button type="button" onClick={cancel} style={{ ...linkButton, color: muted, display: "inline-flex", alignItems: "center", gap: 4 }}><X size={14} /> Cancel</button>}
               </div>
@@ -298,12 +321,21 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
                 />
               )}
 
+              {step === 4 && (
+                <div className="ah-fade" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <NotesField ctx={context} />
+                  <AttachFiles ctx={context} />
+                  <MoreDetails ctx={context} hideNotes />
+                  <QualityChoice value={modelTier} onChange={setModelTier} locked={props.lockedModelTier} />
+                </div>
+              )}
+
               {error && <p role="alert" style={{ margin: 0, fontSize: 13.5, color: "#f87171" }}>{error}</p>}
 
               <div style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                {step > 1 && <button type="button" onClick={() => setStep((step - 1) as 1 | 2)} style={secondaryButton}>Back</button>}
-                <button type="button" onClick={onContinue} disabled={!canContinue || creating} style={primaryButton(canContinue && !creating)}>
-                  {creating ? <><Loader2 size={16} className="ah-spin" /> Starting…</> : step === 3 ? <>Build my app <ArrowRight size={16} /></> : "Continue"}
+                {step > 1 && <button type="button" onClick={() => setStep((step - 1) as 1 | 2 | 3)} style={secondaryButton}>Back</button>}
+                <button type="button" onClick={onContinue} disabled={!canContinue || creating || context.uploading} style={primaryButton(canContinue && !creating && !context.uploading)}>
+                  {creating ? <><Loader2 size={16} className="ah-spin" /> Starting…</> : context.uploading ? "Uploading files…" : step === 4 ? <>Build my app <ArrowRight size={16} /></> : "Continue"}
                 </button>
                 <button type="button" onClick={() => setDescribing(true)} style={{ ...linkButton, marginLeft: "auto" }}>Rather describe it in your own words?</button>
               </div>
@@ -316,7 +348,7 @@ export function AppsHome(props: { apps: HomeApp[]; userName: string | null; show
                 We&rsquo;ll show your app here as soon as it&rsquo;s built.
               </div>
             ) : (
-              <AppPreview audience={audience} features={features} other={other} name={step === 3 ? name : ""} />
+              <AppPreview audience={audience} features={features} other={other} name={step >= 3 ? name : ""} />
             )}
             <div style={{ fontSize: 12.5, color: muted, textAlign: "center" }}>A preview of what we&rsquo;ll build</div>
           </div>
