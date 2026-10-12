@@ -821,3 +821,59 @@ export function buildPlanEndedEmail(input: {
     `,
   });
 }
+
+// ── Payment receipts (lib/billing/payments.ts) ──────────────────────────────────────────
+
+const CARD_BRANDS: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "Amex", discover: "Discover", jcb: "JCB", diners: "Diners", unionpay: "UnionPay" };
+
+function money(cents: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
+  } catch {
+    return `${currency.toUpperCase()} ${(cents / 100).toFixed(2)}`;
+  }
+}
+
+export function buildPaymentReceiptEmail(input: {
+  receiptNumber: string;
+  name: string | null;
+  description: string;
+  detail: string | null;
+  amountCents: number;
+  refundedCents: number;
+  currency: string;
+  paidAt: string;
+  card: { brand: string; last4: string } | null;
+  downloadUrl: string;
+  historyUrl: string;
+}): string {
+  const date = new Date(input.paidAt).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+  const row = (label: string, value: string) => `
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#64748b;text-align:left;">${label}</td>
+      <td style="padding:6px 0;font-size:13px;color:#0f172a;text-align:right;font-weight:600;">${value}</td>
+    </tr>`;
+  return emailShell({
+    title: `Your Plexo receipt ${input.receiptNumber}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">
+        Thanks${input.name ? `, ${esc(input.name.split(" ")[0])}` : ""} — payment received
+      </h1>
+      <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Here's your receipt for ${esc(money(input.amountCents, input.currency))}. Keep it for your records — you can download it again any time from your account.
+      </p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">
+        ${row("Receipt", esc(input.receiptNumber))}
+        ${row("Date", esc(date))}
+        ${row("For", esc(input.description) + (input.detail ? `<br /><span style="font-weight:400;color:#64748b;">${esc(input.detail)}</span>` : ""))}
+        ${input.card ? row("Paid with", `${esc(CARD_BRANDS[input.card.brand] ?? input.card.brand)} •••• ${esc(input.card.last4)}`) : ""}
+        ${input.refundedCents > 0 ? row("Refunded", `−${esc(money(input.refundedCents, input.currency))}`) : ""}
+        ${row("Total paid", esc(money(input.amountCents - input.refundedCents, input.currency)))}
+      </table>
+      ${CTA_BUTTON(input.downloadUrl, "Download receipt (PDF)")}
+      <p style="margin:0;font-size:12px;color:#64748b;line-height:1.5;text-align:center;">
+        All your receipts live under <a href="${input.historyUrl}" style="color:#8b5cf6;text-decoration:none;">Settings → Subscription</a>.
+      </p>
+    `,
+  });
+}

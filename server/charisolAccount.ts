@@ -96,8 +96,19 @@ async function recordCharisolLink(id: string, existing: { charisolSub?: string; 
   if (Object.keys(changes).length > 0) await User.patch({ id }).set(changes).go();
 }
 
+// A real, correctly-identified person whose account an admin has suspended — said plainly
+// (instead of "wrong password") so they know to contact support. Only thrown once their
+// identity is proven, so it never reveals that an account exists to someone who isn't them.
+// Plain Error here (no next-auth import in this module); the two sign-in entry points turn
+// it into server/passwordSignIn.ts's SuspendedAccountError, which the login page understands.
+export class SuspendedAccountSignal extends Error {
+  constructor() {
+    super("account suspended");
+  }
+}
+
 async function signInExisting(existing: UserRecord, email: string, link: CharisolLink): Promise<CharisolLocalUser | null> {
-  if (existing.suspendedAt) return null;
+  if (existing.suspendedAt) throw new SuspendedAccountSignal();
 
   const changes: Record<string, unknown> = linkChanges(existing, link);
   // Pre-registration takeover fix: /api/auth/register lets anyone create an UNCONFIRMED

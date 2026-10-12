@@ -2,7 +2,8 @@ import { Entity, Service } from "electrodb";
 import { docClient, TABLES } from "./client";
 
 // plexo-ledger: CreditLedgerEntry, SellerLedgerEntry, WithdrawalRequest, StripeEvent,
-// PaystackWebhookEvent — field shapes ported 1:1 from prisma/schema.prisma. This table
+// PaystackWebhookEvent — field shapes ported 1:1 from prisma/schema.prisma — plus Payment
+// and ReceiptSequence (Plexo's own record of every platform charge, lib/billing/payments.ts). This table
 // alone gets point-in-time recovery and a customer-managed KMS key (cdk/lib/data-stack.ts)
 // since it's the only one holding financial data.
 
@@ -157,7 +158,88 @@ export const PaystackWebhookEvent = new Entity(
   { table, client: docClient },
 );
 
+// One row per Stripe charge on Plexo's platform account — subscriptions, credit top-ups,
+// domain purchases/renewals, marketplace templates, funnel slots. Written only by
+// lib/billing/payments.ts from the charge.* webhooks (and scripts/backfill-payments.ts),
+// so receipts, the owner's payment history and the admin console all read Plexo's own
+// record instead of Stripe. `id` IS the Stripe charge id: a webhook retry or a later
+// refund lands on the same row, no lookup index needed. Mirrored in plexo-admin.
+export const PAYMENT_KINDS = ["SUBSCRIPTION", "FUNNEL_SLOT", "CREDIT_TOPUP", "DOMAIN_PURCHASE", "DOMAIN_RENEWAL", "TEMPLATE_PURCHASE", "OTHER"] as const;
+export const PAYMENT_STATUSES = ["PENDING", "PAID", "FAILED", "REFUNDED", "PARTIALLY_REFUNDED"] as const;
+
+export const Payment = new Entity(
+  {
+    model: { entity: "payment", version: "1", service: "plexoLedger" },
+    attributes: {
+      id: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      kind: { type: PAYMENT_KINDS, required: true },
+      status: { type: PAYMENT_STATUSES, required: true },
+      /** What the receipt's line item says, e.g. "Plexo Pro — monthly". */
+      description: { type: "string", required: true },
+      /** Second line, e.g. the billing period, the domain, the credit pack. */
+      detail: { type: "string" },
+      amountCents: { type: "number", required: true },
+      refundedCents: { type: "number", default: 0 },
+      currency: { type: "string", required: true },
+      failureReason: { type: "string" },
+      cardBrand: { type: "string" },
+      cardLast4: { type: "string" },
+      cardExpMonth: { type: "number" },
+      cardExpYear: { type: "number" },
+      billingName: { type: "string" },
+      billingEmail: { type: "string" },
+      /** PLX-000123 — assigned once, the first time the payment is PAID. */
+      receiptNumber: { type: "string" },
+      /** Unguessable token in the receipt download link (emails, admin), so the link works without signing in. */
+      receiptToken: { type: "string", required: true },
+      receiptEmailedAt: { type: "string" },
+      periodStart: { type: "string" },
+      periodEnd: { type: "string" },
+      stripeCustomerId: { type: "string" },
+      stripePaymentIntentId: { type: "string" },
+      stripeInvoiceId: { type: "string" },
+      stripeSubscriptionId: { type: "string" },
+      paidAt: { type: "string", required: true },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["id"], template: "PAYMENT#${id}" },
+        sk: { field: "sk", composite: [], template: "PAYMENT" },
+      },
+      // A user's payment history, newest first.
+      byUser: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["userId"], template: "USER#${userId}" },
+        sk: { field: "GSI1SK", composite: ["paidAt", "id"], template: "PAYMENT#${paidAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Single counter row behind Payment.receiptNumber — an atomic ADD, so two payments landing
+// at once can never share a receipt number.
+export const ReceiptSequence = new Entity(
+  {
+    model: { entity: "receiptSequence", version: "1", service: "plexoLedger" },
+    attributes: {
+      name: { type: "string", required: true },
+      value: { type: "number", default: 0 },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["name"], template: "SEQUENCE#${name}" },
+        sk: { field: "sk", composite: [], template: "SEQUENCE" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoLedgerService = new Service(
-  { CreditLedgerEntry, SellerLedgerEntry, WithdrawalRequest, StripeEvent, PaystackWebhookEvent },
+  { CreditLedgerEntry, SellerLedgerEntry, WithdrawalRequest, StripeEvent, PaystackWebhookEvent, Payment, ReceiptSequence },
   { table, client: docClient },
 );

@@ -1,10 +1,10 @@
+import { isUserSuspended } from "@/server/suspension";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { DynamoDBAdapter } from "@auth/dynamodb-adapter";
 import { CognitoJwtVerifier } from "aws-jwt-verify";
 
 import { docClient, TABLES } from "@/lib/db/client";
-import { resolveCharisolUser } from "@/server/charisolAccount";
 import { authorizePassword } from "@/server/passwordSignIn";
 
 // Verifies Charisol/Cognito-issued ID tokens server-side before trusting any claim in
@@ -68,7 +68,9 @@ export {
   GoogleAccountOnlyError,
   PasswordResetRequiredError,
   SignInUnavailableError,
+  SuspendedAccountError,
 } from "@/server/passwordSignIn";
+import { resolveCharisolUserOrSuspended } from "@/server/passwordSignIn";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: dynamoAdapter,
@@ -112,7 +114,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // verified email, refuses suspended accounts, confirms a previously-unconfirmed
         // account and rotates its password hash (pre-registration takeover fix), and creates
         // new users with a verified email and no usable password.
-        return resolveCharisolUser(claims);
+        return resolveCharisolUserOrSuspended(claims);
       },
     }),
     // Plexo's own email + password form. Checked by Charisol Auth first (one password
@@ -143,8 +145,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // Every call site across the app (server/orgDynamo.ts, /api/org/*, etc.) reads
     // session.user.id — under jwt strategy the session callback receives `token`, not
     // `user` (token.sub is the user id, set from authorize()'s returned `id` on login).
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user?.id) token.sub = user.id;
+      // A suspended account's session ends here: returning null makes Auth.js treat the
+      // session as gone and clear its cookie, so the very next request is signed out.
+      // (server/suspension.ts keeps this to ~one small read per user per 30s.)
+      if (token.sub && (await isUserSuspended(token.sub))) return null;
       return token;
     },
     session({ session, token }) {

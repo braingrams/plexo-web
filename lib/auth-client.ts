@@ -47,6 +47,7 @@ export const authClient = {
           google_account_only: { status: 409, message: "This account uses Google sign-in — there's no password to check." },
           // server/passwordSignIn.ts: Charisol Auth needs a new password; a code has been emailed.
           password_reset_required: { status: 428, message: "For your security, please choose a new password. We've emailed you a code." },
+          account_suspended: { status: 403, message: "This account has been suspended, so you can't sign in right now. If you think that's a mistake, contact Plexo support." },
           sign_in_unavailable: { status: 503, message: "Sign-in is temporarily unavailable. Please try again in a few minutes." },
         };
         const { status, message } = (code && known[code]) || { status: 401, message: "Incorrect email or password." };
@@ -68,6 +69,9 @@ export const authClient = {
     async charisol({ idToken }: { idToken: string }): Promise<AuthResult> {
       const result = await nextAuthSignIn("charisol", { idToken, redirect: false });
       if (result?.error) {
+        if ((result as { code?: string }).code === "account_suspended") {
+          return { error: { status: 403, message: "This account has been suspended, so you can't sign in right now. If you think that's a mistake, contact Plexo support.", code: "account_suspended" } };
+        }
         return { error: { status: 401, message: "Could not complete Google sign-in." } };
       }
       return { data: {} };
