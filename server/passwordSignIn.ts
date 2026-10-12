@@ -4,7 +4,7 @@ import { verifyPassword } from "@better-auth/utils/password";
 
 import { User } from "@/lib/db/coreEntities";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
-import { isEmailVerifiedClaim, resolveCharisolUser, type CharisolClaims, type CharisolLocalUser } from "@/server/charisolAccount";
+import { SuspendedAccountSignal, isEmailVerifiedClaim, resolveCharisolUser, type CharisolClaims, type CharisolLocalUser } from "@/server/charisolAccount";
 import { passwordSignIn, sendResetCode, type PasswordSignInResult } from "@/server/charisolCognito";
 
 // Plexo's email + password sign-in. The person always types into PLEXO's own form; the
@@ -61,6 +61,23 @@ export class SignInUnavailableError extends CredentialsSignin {
   code = "sign_in_unavailable";
 }
 
+// A real, correctly-identified person whose account an admin suspended — said plainly
+// (instead of "wrong password") so they know to contact support. Only thrown once their
+// identity is proven, so it never reveals that an account exists to someone who isn't them.
+export class SuspendedAccountError extends CredentialsSignin {
+  code = "account_suspended";
+}
+
+/** resolveCharisolUser, with a suspended account reported as SuspendedAccountError. */
+export async function resolveCharisolUserOrSuspended(...args: Parameters<typeof resolveCharisolUser>): ReturnType<typeof resolveCharisolUser> {
+  try {
+    return await resolveCharisolUser(...args);
+  } catch (err) {
+    if (err instanceof SuspendedAccountSignal) throw new SuspendedAccountError();
+    throw err;
+  }
+}
+
 const GOOGLE_REVEAL_LIMIT = 5;
 
 export interface PasswordSignInDeps {
@@ -99,7 +116,7 @@ export async function authorizePassword(
         return null;
       }
       if (!isEmailVerifiedClaim(claims.email_verified)) throw new UnverifiedEmailError();
-      return resolveCharisolUser(claims, { viaPassword: true });
+      return resolveCharisolUserOrSuspended(claims, { viaPassword: true });
     }
     case "reset_required":
       await (deps.sendResetCode ?? sendResetCode)(email).catch(() => undefined);
@@ -142,7 +159,7 @@ async function localPasswordCheck(
   if (password.trim().toLowerCase() === user.email.toLowerCase()) return null;
 
   if (!user.isConfirmed) throw new UnverifiedEmailError();
-  if (user.suspendedAt) return null;
+  if (user.suspendedAt) throw new SuspendedAccountError();
 
   return { id: user.id, email: user.email, name: user.name ?? user.email.split("@")[0], image: user.image ?? null };
 }

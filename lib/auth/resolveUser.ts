@@ -79,6 +79,7 @@ export async function resolveUser(
   const session = await auth();
   if (session?.user) {
     const { data: user } = await User.get({ id: session.user.id }).go();
+    if (user?.suspendedAt) return null;
     if (user) {
       const orgResolution = await ensureActiveOrganization(session.user.id);
       if (orgResolution.status === "needs-choice") return null;
@@ -118,7 +119,7 @@ export async function resolveUser(
   if (!apiKey) return null;
 
   const { data: user } = await User.get({ id: apiKey.userId }).go();
-  if (!user) return null;
+  if (!user || user.suspendedAt) return null; // a suspended account's API keys stop working too
 
   touchUserActivity(user, request.nextUrl.pathname);
 

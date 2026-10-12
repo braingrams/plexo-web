@@ -129,6 +129,17 @@ export const User = new Entity(
       subscriptionCheckedAt: { type: "string" },
       // Short lease so two requests never run the same downgrade/restore at once.
       planSyncLockUntil: { type: "string" },
+      // ── Billing snapshot (lib/billing/payments.ts, webhooks/stripe) ─────────────────
+      // The card most recently charged successfully — brand + last 4 + expiry only, never
+      // anything more — and the current plan subscription's period, so the dashboard and
+      // the admin console can show them without calling Stripe.
+      billingCardBrand: { type: "string" },
+      billingCardLast4: { type: "string" },
+      billingCardExpMonth: { type: "number" },
+      billingCardExpYear: { type: "number" },
+      subscriptionStartedAt: { type: "string" },
+      subscriptionPeriodEnd: { type: "string" },
+      subscriptionCancelAtPeriodEnd: { type: "boolean" },
     },
     indexes: {
       primary: {
