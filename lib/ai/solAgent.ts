@@ -14,10 +14,43 @@ import { MAX_TOKENS } from "@/lib/ai/generate";
 import { MAX_TOOL_ITERATIONS, MAX_APP_TOOL_ITERATIONS } from "@/lib/credits/agentTurnEstimate";
 import type { AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { SolMessage } from "@/lib/db/solEntities";
+import { trimOldToolWork } from "@/lib/ai/solHistoryTrim";
 import { createAttachmentResolver, publishAttachedImage, PRIVATE_ATTACHMENT_PATH } from "@/lib/ai/solAttachments";
 
 /** A tool call SOL runs itself (see solToolSchema.ts) or a Plexo MCP tool. */
-async function runSolTool(name: string, input: any, user: ResolvedUser, history: HistoryEntry[]): Promise<unknown> {
+// Per-turn limits on the costly app tools: each screenshot and build adds to what every later
+// step re-reads, and a fix loop can otherwise repeat them dozens of times.
+const MAX_SCREENSHOTS_PER_TURN = 8;
+const MAX_BUILDS_PER_TURN = 12;
+
+interface TurnGuard {
+  /** The app this chat belongs to, when it is an app's builder chat. */
+  boundAppId?: string;
+  counts: Map<string, number>;
+}
+
+/** Refuses a call that would work on the wrong app or burn credits in a loop. The message goes
+ *  back to SOL as the tool's error, so it corrects itself. */
+function guardTool(name: string, input: any, guard: TurnGuard): void {
+  if (guard.boundAppId) {
+    if (name === "create_app") {
+      throw new Error(`This chat belongs to the app ${guard.boundAppId}. Build inside it with the app_* tools and appId ${guard.boundAppId} — don't create another app.`);
+    }
+    if (name.startsWith("app_") && typeof input?.appId === "string" && input.appId !== guard.boundAppId) {
+      throw new Error(`This chat belongs to the app ${guard.boundAppId}, not ${input.appId}. Use appId ${guard.boundAppId}.`);
+    }
+  }
+  const limit = name === "app_screenshot" ? MAX_SCREENSHOTS_PER_TURN : name === "app_build" ? MAX_BUILDS_PER_TURN : 0;
+  if (!limit) return;
+  const used = (guard.counts.get(name) ?? 0) + 1;
+  guard.counts.set(name, used);
+  if (used > limit) {
+    throw new Error(`That's ${limit} ${name === "app_screenshot" ? "screenshots" : "builds"} in this turn — enough. Stop checking, and tell the owner what you did, what looks right, and anything still open. They can say "continue" to carry on.`);
+  }
+}
+
+async function runSolTool(name: string, input: any, user: ResolvedUser, history: HistoryEntry[], guard: TurnGuard): Promise<unknown> {
+  guardTool(name, input, guard);
   if (name === USE_ATTACHED_IMAGE_TOOL_NAME) return publishAttachedImage(user.userId, input?.attachment, history);
   // A chat attachment's address is private: in a page, it's a broken image for every
   // visitor (what happened before use_attached_image worked — SOL then said it was done).
@@ -91,6 +124,8 @@ export interface AgentTurnDeps {
   memoryFacts: string[];
   /** When the conversation is an app's builder chat: what SOL needs to know about that app. */
   appContext?: string;
+  /** The app this conversation is bound to (an app builder chat) — SOL may only work on that one. */
+  boundAppId?: string;
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
   /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
@@ -146,6 +181,7 @@ export interface ResumeAgentTurnDeps {
   answers?: AskUserAnswer[];
   memoryFacts: string[];
   appContext?: string;
+  boundAppId?: string;
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
   /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
@@ -308,6 +344,7 @@ interface LoopContext {
   apiKey?: string;
   memoryFacts: string[];
   appContext?: string;
+  boundAppId?: string;
   history: HistoryEntry[];
   onTextDelta: (delta: string) => void;
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
@@ -355,6 +392,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
   // Stored attachment blocks point at private uploads; the model needs their bytes inline.
   const resolveAttachments = createAttachmentResolver(ctx.resolvedUser.userId);
   const totals = { inputTokens: 0, outputTokens: 0 };
+  const guard: TurnGuard = { boundAppId: ctx.boundAppId, counts: new Map() };
 
   // Building an app takes many rounds (write → build → fix → screenshot); once a turn is
   // working on an app it gets the larger allowance. Every round is still balance-checked.
@@ -369,7 +407,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       model,
       apiKey: ctx.apiKey,
       systemPrompt,
-      conversationHistory: await resolveAttachments(pairToolCalls(ctx.history)),
+      conversationHistory: await resolveAttachments(trimOldToolWork(pairToolCalls(ctx.history))),
       tools,
       maxTokens: ctx.maxOutputTokens ?? MAX_TOKENS.agent_chat,
       onTextDelta: ctx.onTextDelta,
@@ -476,7 +514,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
     for (const block of toolUseBlocks) {
       ctx.onToolCallStart({ id: block.id, name: block.name, args: block.input });
       try {
-        const toolResult = await runSolTool(block.name, block.input, ctx.resolvedUser, ctx.history);
+        const toolResult = await runSolTool(block.name, block.input, ctx.resolvedUser, ctx.history, guard);
         ctx.onToolCallResult({ id: block.id, name: block.name, status: "success", result: toolResult });
         resultBlocks.push(buildToolResultBlock(block.id, toolResult, false));
       } catch (err) {
@@ -518,7 +556,7 @@ async function wrapUpAtStepLimit(
         model: call.model,
         apiKey: ctx.apiKey,
         systemPrompt: call.systemPrompt,
-        conversationHistory: await call.resolveAttachments(pairToolCalls(history)),
+        conversationHistory: await call.resolveAttachments(trimOldToolWork(pairToolCalls(history))),
         tools: call.tools,
         maxTokens: 1024,
         onTextDelta: ctx.onTextDelta,
@@ -571,6 +609,7 @@ export async function runAgentTurn(deps: AgentTurnDeps): Promise<RunAgentTurnRes
     apiKey: deps.apiKey,
     memoryFacts: deps.memoryFacts,
     appContext: deps.appContext,
+    boundAppId: deps.boundAppId,
     history,
     onTextDelta: deps.onTextDelta,
     onToolCallStart: deps.onToolCallStart,
@@ -645,7 +684,7 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     if (runsNow) {
       deps.onToolCallStart({ id: block.id, name: block.name, args: block.input });
       try {
-        const toolResult = await runSolTool(block.name, block.input, deps.resolvedUser, history);
+        const toolResult = await runSolTool(block.name, block.input, deps.resolvedUser, history, { boundAppId: deps.boundAppId, counts: new Map() });
         deps.onToolCallResult({ id: block.id, name: block.name, status: "success", result: toolResult });
         resultBlocks.push(buildToolResultBlock(block.id, toolResult, false));
       } catch (err) {
@@ -699,6 +738,7 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     apiKey: deps.apiKey,
     memoryFacts: deps.memoryFacts,
     appContext: deps.appContext,
+    boundAppId: deps.boundAppId,
     history,
     onTextDelta: deps.onTextDelta,
     onToolCallStart: deps.onToolCallStart,

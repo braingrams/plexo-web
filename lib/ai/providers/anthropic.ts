@@ -5,6 +5,7 @@ import type {
   GenerateWithToolsParams,
   GenerateWithToolsResult,
 } from "./shared";
+import { withHistoryCacheBreakpoints, billableInputTokens } from "./shared";
 
 // `client.messages.create` request/response shape verified against the current
 // Anthropic API reference (claude-api skill), including current model IDs in
@@ -100,7 +101,7 @@ export async function generateWithTools({
         cache_control: { type: "ephemeral" },
       },
     ],
-    messages: conversationHistory,
+    messages: withHistoryCacheBreakpoints(conversationHistory),
     ...(cachedTools ? { tools: cachedTools } : {}),
   });
 
@@ -131,7 +132,7 @@ export async function generateWithTools({
     content: finalMessage.content,
     stopReason: finalMessage.stop_reason ?? "end_turn",
     usage: {
-      inputTokens: finalMessage.usage?.input_tokens ?? 0,
+      inputTokens: billableInputTokens(finalMessage.usage),
       outputTokens: finalMessage.usage?.output_tokens ?? 0,
     },
   };
