@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
 import { withoutOrderSecrets, orderDeliveryDetails } from "@/lib/commerce/bankTransfer";
+import { orderDeleteBlocker } from "@/lib/commerce/orderDeletion";
 import { CommerceOrder, CommerceOrderItem, CommerceBooking, CommerceDigitalDelivery, CommerceProduct } from "@/lib/db/commerceEntities";
 
 const PAGE_SIZE = 25;
@@ -66,6 +67,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
         // The same rows the dashboard's "Delivery info" column shows: delivery/pickup,
         // address, phone, and the site's own checkout-question answers.
         deliveryDetails: orderDeliveryDetails(order),
+        // Why this order can't be deleted, or null if it can — the Orders screen's single source.
+        deleteBlocker: orderDeleteBlocker(order),
       };
     }),
   );

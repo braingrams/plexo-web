@@ -23,6 +23,8 @@ export type OrderSummary = {
   refundReason: string | null;
   refundedAt: string | null;
   bankTransferRejectReason: string | null;
+  // Why this order can't be deleted (shown instead of the delete button), or null if it can.
+  deleteBlocker: string | null;
 };
 
 /** How many delivery-info rows fit in the table cell before "+N more" (→ drawer). */
@@ -136,6 +138,10 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
   const [transferBusy, setTransferBusy] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirmNumber, setDeleteConfirmNumber] = useState("");
+  const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   function openOrder(order: OrderSummary | null) {
     setSelected(order);
@@ -147,6 +153,9 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
     setRefundAcknowledged(false);
     setRejectOpen(false);
     setRejectReason("");
+    setDeleteOpen(false);
+    setDeleteConfirmNumber("");
+    setDeleteAcknowledged(false);
   }
 
   function patchOrder(id: string, patch: Partial<OrderSummary>) {
@@ -193,6 +202,7 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
             refundReason: o.refundReason ?? null,
             refundedAt: o.refundedAt ?? null,
             bankTransferRejectReason: o.bankTransferRejectReason ?? null,
+            deleteBlocker: o.deleteBlocker ?? null,
           })),
         );
       }
@@ -259,6 +269,26 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
       setActionError(err instanceof Error ? err.message : "Refund failed.");
     } finally {
       setRefunding(false);
+    }
+  }
+
+  async function handleDelete(order: OrderSummary) {
+    setDeleting(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/v1/commerce/${templateId}/orders/${order.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmOrderNumber: deleteConfirmNumber }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Couldn't delete this order.");
+      setOrders((prev) => prev.filter((o) => o.id !== order.id));
+      openOrder(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Couldn't delete this order.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -539,51 +569,145 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
 
             {/* Destructive actions live behind a deliberate extra click — a refund used to be a
                 big red button right under the fulfilment dropdown, one mis-tap away. */}
-            {selected.status === "PAID" && (
-              <div style={{ marginTop: "1.5rem", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "0.75rem" }}>
-                <button
-                  type="button" aria-expanded={moreOpen} onClick={() => { setMoreOpen((v) => !v); setRefundOpen(false); }}
-                  style={{ background: "none", border: "none", padding: 0, color: "rgba(240,242,255,0.45)", fontSize: "0.76rem", cursor: "pointer", fontFamily: "inherit" }}
-                >
-                  More actions {moreOpen ? "▴" : "▾"}
-                </button>
+            <div style={{ marginTop: "1.5rem", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "0.75rem" }}>
+              <button
+                type="button" aria-expanded={moreOpen} onClick={() => { setMoreOpen((v) => !v); setRefundOpen(false); setDeleteOpen(false); setActionError(null); }}
+                style={{ background: "none", border: "none", padding: 0, color: "rgba(240,242,255,0.45)", fontSize: "0.76rem", cursor: "pointer", fontFamily: "inherit" }}
+              >
+                More actions {moreOpen ? "▴" : "▾"}
+              </button>
 
-                {moreOpen && !refundOpen && (
-                  <div style={{ marginTop: "0.6rem", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "0.75rem 0.9rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
-                    <div>
-                      <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#f0f2ff" }}>Refund this order</div>
-                      <div style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.45)", marginTop: 2 }}>Returns {formatMoney(selected.amountMinor, selected.currency)} to the customer. Can&apos;t be undone.</div>
+              {moreOpen && !refundOpen && !deleteOpen && (
+                <div style={{ marginTop: "0.6rem", display: "grid", gap: "0.5rem" }}>
+                  {selected.status === "PAID" && (
+                    <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "0.75rem 0.9rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+                      <div>
+                        <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#f0f2ff" }}>Refund this order</div>
+                        <div style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.45)", marginTop: 2 }}>Returns {formatMoney(selected.amountMinor, selected.currency)} to the customer. Can&apos;t be undone.</div>
+                      </div>
+                      <button
+                        type="button" onClick={() => setRefundOpen(true)}
+                        style={{ flexShrink: 0, padding: "0.4rem 0.75rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)", background: "transparent", color: "#f87171", cursor: "pointer", fontFamily: "inherit", fontSize: "0.76rem", fontWeight: 600 }}
+                      >
+                        Start refund…
+                      </button>
                     </div>
-                    <button
-                      type="button" onClick={() => setRefundOpen(true)}
-                      style={{ flexShrink: 0, padding: "0.4rem 0.75rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)", background: "transparent", color: "#f87171", cursor: "pointer", fontFamily: "inherit", fontSize: "0.76rem", fontWeight: 600 }}
-                    >
-                      Start refund…
-                    </button>
+                  )}
+                  <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "0.75rem 0.9rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+                    <div>
+                      <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#f0f2ff" }}>Delete this order</div>
+                      <div style={{ fontSize: "0.72rem", color: selected.deleteBlocker ? "rgba(251,191,36,0.85)" : "rgba(240,242,255,0.45)", marginTop: 2, lineHeight: 1.45 }}>
+                        {selected.deleteBlocker ?? "Removes it from your store for good — handy for test orders. Can't be recovered."}
+                      </div>
+                    </div>
+                    {!selected.deleteBlocker && (
+                      <button
+                        type="button" onClick={() => setDeleteOpen(true)}
+                        style={{ flexShrink: 0, padding: "0.4rem 0.75rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)", background: "transparent", color: "#f87171", cursor: "pointer", fontFamily: "inherit", fontSize: "0.76rem", fontWeight: 600 }}
+                      >
+                        Delete…
+                      </button>
+                    )}
                   </div>
-                )}
+                </div>
+              )}
 
-                {refundOpen && (
-                  <RefundPanel
-                    order={selected}
-                    reason={refundReason}
-                    onReasonChange={setRefundReason}
-                    confirmNumber={refundConfirmNumber}
-                    onConfirmNumberChange={setRefundConfirmNumber}
-                    acknowledged={refundAcknowledged}
-                    onAcknowledgedChange={setRefundAcknowledged}
-                    busy={refunding}
-                    onCancel={() => { setRefundOpen(false); setActionError(null); }}
-                    onSubmit={() => void handleRefund(selected)}
-                  />
-                )}
-              </div>
-            )}
+              {refundOpen && (
+                <RefundPanel
+                  order={selected}
+                  reason={refundReason}
+                  onReasonChange={setRefundReason}
+                  confirmNumber={refundConfirmNumber}
+                  onConfirmNumberChange={setRefundConfirmNumber}
+                  acknowledged={refundAcknowledged}
+                  onAcknowledgedChange={setRefundAcknowledged}
+                  busy={refunding}
+                  onCancel={() => { setRefundOpen(false); setActionError(null); }}
+                  onSubmit={() => void handleRefund(selected)}
+                />
+              )}
+
+              {deleteOpen && (
+                <DeletePanel
+                  order={selected}
+                  confirmNumber={deleteConfirmNumber}
+                  onConfirmNumberChange={setDeleteConfirmNumber}
+                  acknowledged={deleteAcknowledged}
+                  onAcknowledgedChange={setDeleteAcknowledged}
+                  busy={deleting}
+                  onCancel={() => { setDeleteOpen(false); setDeleteConfirmNumber(""); setDeleteAcknowledged(false); setActionError(null); }}
+                  onSubmit={() => void handleDelete(selected)}
+                />
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {drawerOrder && <DeliveryInfoDrawer order={drawerOrder} onClose={() => setDrawerOrder(null)} />}
+    </div>
+  );
+}
+
+/**
+ * Permanent delete: says plainly what disappears (and what happens to stock, bookings and
+ * download links), that it can't be recovered, then needs the order number typed back plus a
+ * tick — the server re-checks the number, so this can't be skipped by a direct API call.
+ */
+function DeletePanel({
+  order, confirmNumber, onConfirmNumberChange, acknowledged, onAcknowledgedChange, busy, onCancel, onSubmit,
+}: {
+  order: OrderSummary;
+  confirmNumber: string;
+  onConfirmNumberChange: (v: string) => void;
+  acknowledged: boolean;
+  onAcknowledgedChange: (v: boolean) => void;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  const amount = formatMoney(order.amountMinor, order.currency);
+  const numberMatches = confirmNumber.trim().toUpperCase() === order.orderNumber.toUpperCase();
+  const ready = numberMatches && acknowledged && !busy;
+  const consequences: string[] = [];
+  if (order.status === "PAID") consequences.push(`It's marked paid, so your sales totals will no longer include ${amount}.`);
+  if (order.status === "PENDING") consequences.push("It's still waiting for payment — the stock it's holding goes back on the shelf. If the customer already paid you, refund them yourself first.");
+  if (order.digitalDeliveries.length > 0) consequences.push("Any download or access links already sent to the customer will stop working.");
+  if (order.booking) consequences.push("Its booked time slot becomes available again.");
+  consequences.push("The customer isn't notified.");
+  const field: React.CSSProperties = { width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 9, color: "#f0f2ff", padding: "0.5rem 0.7rem", fontSize: "0.82rem", fontFamily: "inherit" };
+  return (
+    <div style={{ marginTop: "0.6rem", border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", borderRadius: 12, padding: "1rem", display: "grid", gap: "0.75rem" }}>
+      <div>
+        <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "#fecaca" }}>Delete order {order.orderNumber} forever?</div>
+        <p style={{ fontSize: "0.78rem", color: "#fecaca", margin: "0.35rem 0 0", lineHeight: 1.5, fontWeight: 600 }}>
+          This can&apos;t be recovered. The order, its items and {order.customerName ?? "the customer"}&apos;s details are removed from your store for good.
+        </p>
+        <ul style={{ fontSize: "0.76rem", color: "rgba(254,202,202,0.75)", margin: "0.4rem 0 0", paddingLeft: "1.1rem", listStyle: "disc", lineHeight: 1.55 }}>
+          {consequences.map((c) => <li key={c}>{c}</li>)}
+        </ul>
+      </div>
+      <label style={{ display: "block" }}>
+        <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.3rem" }}>
+          Type <span style={{ fontFamily: "ui-monospace, monospace", color: "#f0f2ff" }}>{order.orderNumber}</span> to confirm
+        </span>
+        <input type="text" value={confirmNumber} onChange={(e) => onConfirmNumberChange(e.target.value)} autoComplete="off" spellCheck={false} style={{ ...field, fontFamily: "ui-monospace, monospace" }} />
+      </label>
+      <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "0.76rem", color: "rgba(240,242,255,0.7)", cursor: "pointer" }}>
+        <input type="checkbox" checked={acknowledged} onChange={(e) => onAcknowledgedChange(e.target.checked)} style={{ marginTop: 2 }} />
+        I understand this order will be deleted permanently and can&apos;t be brought back.
+      </label>
+      <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+        <button type="button" onClick={onCancel} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "none", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>
+          Keep order
+        </button>
+        <button
+          type="button" disabled={!ready} onClick={onSubmit}
+          style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.4)", background: ready ? "rgba(239,68,68,0.2)" : "rgba(239,68,68,0.06)", color: "#f87171", fontWeight: 700, fontSize: "0.8rem", cursor: ready ? "pointer" : "not-allowed", opacity: ready ? 1 : 0.55, fontFamily: "inherit" }}
+        >
+          {busy ? "Deleting…" : "Delete forever"}
+        </button>
+      </div>
     </div>
   );
 }

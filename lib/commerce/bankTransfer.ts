@@ -1,15 +1,10 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { adjustStockForOrderItems } from "@/lib/commerce/stock";
 import type { EntityItem } from "electrodb";
 import { Template } from "@/lib/db/contentEntities";
 import { User, NotificationPreferences } from "@/lib/db/coreEntities";
 import {
   CommerceOrder,
-  CommerceOrderItem,
-  CommerceProduct,
   CommerceBooking,
-  CommerceBookingSlotLock,
-  CommerceDiscountCode,
   CommerceSettings,
 } from "@/lib/db/commerceEntities";
 import { handleOrderPaid } from "@/lib/db/commerceWebhookOperations";
@@ -20,6 +15,7 @@ import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { getOrgBrandDynamo } from "@/server/orgDynamo";
 import { OrderActionError } from "@/lib/commerce/orderStatusActions";
+import { releaseOrderHolds } from "@/lib/commerce/orderHolds";
 import type { CheckoutFieldAnswer } from "@/lib/commerce/checkoutFields";
 
 type OrderItem = EntityItem<typeof CommerceOrder>;
@@ -169,25 +165,6 @@ export async function notifyBankTransferPlaced(order: OrderItem, settings: Setti
 
 function isConditionalCheckFailure(err: unknown): boolean {
   return (err as { name?: string })?.name === "ConditionalCheckFailedException";
-}
-
-/** Releases everything an unpaid order was holding — same as the stale-hold sweeper and
- * the gateway-failure rollback: restock, free the booking slot (deleted, never
- * status-flipped — see checkoutDynamo.ts), un-claim the discount use. */
-async function releaseOrderHolds(order: OrderItem): Promise<void> {
-  const { data: items } = await CommerceOrderItem.query.primary({ templateId: order.templateId, orderId: order.id }).go({ pages: "all" });
-  await adjustStockForOrderItems(order.templateId, items, 1);
-  const { data: booking } = await CommerceBooking.get({ templateId: order.templateId, orderId: order.id }).go();
-  if (booking && booking.status === "PENDING_PAYMENT") {
-    await Promise.all([
-      CommerceBooking.remove({ templateId: order.templateId, orderId: order.id }).go(),
-      CommerceBookingSlotLock.remove({ productId: booking.productId, scheduledStart: booking.scheduledStart }).go(),
-    ]);
-  }
-  if (order.discountCode) {
-    const { data: matches } = await CommerceDiscountCode.query.byCode({ templateId: order.templateId, code: order.discountCode }).go({ pages: "all" });
-    if (matches[0]) await CommerceDiscountCode.patch({ templateId: order.templateId, id: matches[0].id }).add({ usedCount: -1 }).go().catch(() => undefined);
-  }
 }
 
 /**
