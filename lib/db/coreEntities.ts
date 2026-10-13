@@ -37,6 +37,11 @@ export const User = new Entity(
       allowanceBalance: { type: "number", default: 0 },
       topupBalance: { type: "number", default: 0 },
       allowanceResetAt: { type: "string", default: () => new Date().toISOString() },
+      // Credits held for AI turns that are running right now — { [turnId]: { credits, expiresAt } },
+      // with heldCredits the cached sum of the live ones. See holdCredits in
+      // lib/db/ledgerOperations.ts: it's what stops two chats at once spending the same credits.
+      creditHolds: { type: "any" },
+      heldCredits: { type: "number" },
       // Marketplace seller earnings (cents) — reserved at withdrawal request, not at
       // processing time, same semantics as today (see docs comment on the Prisma field).
       sellerBalanceCents: { type: "number", default: 0 },

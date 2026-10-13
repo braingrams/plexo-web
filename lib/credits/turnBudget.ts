@@ -3,15 +3,15 @@ import { MAX_TOKENS } from "@/lib/ai/generate";
 import type { AiProvider, ConcreteTier } from "@/lib/ai/types";
 
 /**
- * Whether SOL may start another model round in the current turn.
+ * The most a SOL turn could still bill if it makes one more model call: what its earlier
+ * rounds have already used (not yet billed — a turn is billed once, at the end) plus the
+ * next round's worst case. The turn holds exactly that much on the account before each call
+ * (holdCredits in lib/db/ledgerOperations.ts); if the hold can't be placed it stops there.
  *
- * A turn is billed once, when it ends — so the saved balance doesn't move while the turn is
- * running. A check that only reads that balance sees the full allowance on every round and
- * can never say stop: one long turn on a 200-credit Free account ran up 422 credits of real
- * Bedrock cost before the end-of-turn bill landed (a -222 balance, paid for by Plexo). So the
- * check must take what THIS turn has already spent off the balance first, and size the next
- * round by what it will really send — the whole conversation, the system prompt and every
- * tool definition are resent each round, not just the user's latest message.
+ * Two things this has to get right, both of which an earlier check got wrong (a Free user,
+ * 200 credits, ran up 422): the spend so far counts even though it isn't billed yet, and the
+ * next round is sized by what it will really send — the whole conversation, the system prompt
+ * and every tool definition are resent each round, not just the user's latest message.
  */
 export type TokenUsage = { inputTokens: number; outputTokens: number };
 
@@ -30,16 +30,14 @@ export type TurnProgress = {
 // Same conservative ~3 characters per token estimateWorstCaseCost uses.
 const CHARS_PER_TOKEN = 3;
 
-export function canAffordNextRound(params: {
+export function turnCreditCeiling(params: {
   provider: AiProvider;
   tier: ConcreteTier;
-  /** The account's saved balance (allowance + top-ups). */
-  balanceTotal: number;
   progress: TurnProgress;
   /** The turn's usual per-round output ceiling (shorter for Free accounts on Plexo's AI). */
   maxOutputTokens?: number;
-}): boolean {
-  const { provider, tier, balanceTotal, progress } = params;
+}): number {
+  const { provider, tier, progress } = params;
   const spentCredits = creditsForUsd(computeCostUsd(provider, tier, progress.spent));
   const fromText = Math.ceil(progress.nextInputChars / CHARS_PER_TOKEN);
   const fromLastRound = progress.lastRound ? progress.lastRound.inputTokens + progress.lastRound.outputTokens : 0;
@@ -49,5 +47,5 @@ export function canAffordNextRound(params: {
       outputTokens: progress.maxOutputTokens ?? params.maxOutputTokens ?? MAX_TOKENS.agent_chat,
     }),
   );
-  return balanceTotal - spentCredits >= nextRoundCredits;
+  return spentCredits + nextRoundCredits;
 }

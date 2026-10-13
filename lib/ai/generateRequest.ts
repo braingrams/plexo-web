@@ -192,7 +192,7 @@ export async function creditCheck(key: ResolvedAiKey, input: GenerateInput): Pro
   const tier = tierFor(route, key.subscriptionPlan, input.concreteTier);
   const balance = await ensureCreditPeriod(key.userId);
   const estimatedCredits = estimateWorstCaseCost(route.provider, tier, input.mode, approxInputChars(input));
-  const enough = balance.total >= estimatedCredits;
+  const enough = balance.available >= estimatedCredits;
   return { paidBy: "plexo", enough, estimatedCredits, balance: balance.total, ...(enough ? {} : { message: NOT_ENOUGH_CREDITS }) };
 }
 
@@ -222,7 +222,7 @@ export async function runGeneration(
       ? async (maxTokens, attempt) => {
           if (attempt === 1) return; // checked in planGeneration, just before this
           const balance = await ensureCreditPeriod(key.userId);
-          if (balance.total < estimateWorstCaseCost(plan.provider, input.concreteTier, input.mode, approxInputChars(input), maxTokens)) {
+          if (balance.available < estimateWorstCaseCost(plan.provider, input.concreteTier, input.mode, approxInputChars(input), maxTokens)) {
             throw new GenerationStoppedError(
               "Your page needed a longer answer than your remaining AI credits cover. Top up in Settings → Subscription, or try a shorter description.",
             );

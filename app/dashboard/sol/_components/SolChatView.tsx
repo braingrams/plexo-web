@@ -6,6 +6,7 @@ import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import { Greeting } from "./Greeting";
 import { CreditExhaustedModal } from "./CreditExhaustedModal";
+import { CreditOverdraftNotice } from "./CreditOverdraftNotice";
 import { AskUserQuestionOverlay } from "./AskUserQuestionCard";
 import { pausingCall } from "./pausingCall";
 import { ArtifactCanvas, ArtifactCard, type ActiveArtifact } from "./ArtifactCanvas";
@@ -565,6 +566,7 @@ export function SolChatView({
           {inlineError}
         </div>
       )}
+      {stream.overdraft && <CreditOverdraftNotice balance={stream.overdraft.balance} />}
       <Composer
         streaming={streaming}
         disabled={disabled}

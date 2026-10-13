@@ -67,7 +67,7 @@ export function tierFor(route: SolRoute, plan: string, requested: ConcreteTier):
 export async function checkCanAfford(userId: string, route: SolRoute, tier: ConcreteTier, mode: AiActionMode, approxInputChars: number): Promise<SolRefusal | null> {
   if (route.paidBy !== "plexo") return null;
   const balance = await ensureCreditPeriod(userId);
-  return balance.total < estimateWorstCaseCost(route.provider, tier, mode, approxInputChars) ? { error: SOL_NOT_ENOUGH_CREDITS, status: 402 } : null;
+  return balance.available < estimateWorstCaseCost(route.provider, tier, mode, approxInputChars) ? { error: SOL_NOT_ENOUGH_CREDITS, status: 402 } : null;
 }
 
 /** Rule 3, after — charge what was actually used (Plexo's AI only). */
