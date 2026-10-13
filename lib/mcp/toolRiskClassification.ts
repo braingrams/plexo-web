@@ -56,6 +56,7 @@ export const DESTRUCTIVE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "delete_commerce_delivery_method", // "Permanently deletes" a checkout delivery option
   "delete_commerce_discount", // "Permanently deletes" a discount code
   "refund_commerce_order", // moves real money back to a paying customer through Paystack
+  "delete_commerce_order", // permanently deletes an order and its customer details — no undo
   "request_commerce_withdrawal", // reserves/moves real money out of the store's wallet immediately
 
   // --- lib/mcp/lmsTools.ts (Funnel/LMS) ---

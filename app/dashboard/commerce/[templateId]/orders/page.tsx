@@ -1,5 +1,6 @@
 import { CommerceOrder, CommerceOrderItem, CommerceBooking, CommerceDigitalDelivery, CommerceProduct } from "@/lib/db/commerceEntities";
 import { orderDeliveryDetails } from "@/lib/commerce/bankTransfer";
+import { orderDeleteBlocker } from "@/lib/commerce/orderDeletion";
 import { OrdersClient, type OrderSummary } from "./OrdersClient";
 
 export default async function CommerceOrdersPage({ params }: { params: Promise<{ templateId: string }> }) {
@@ -48,6 +49,7 @@ export default async function CommerceOrdersPage({ params }: { params: Promise<{
         refundReason: o.refundReason ?? null,
         refundedAt: o.refundedAt ?? null,
         bankTransferRejectReason: o.bankTransferRejectReason ?? null,
+        deleteBlocker: orderDeleteBlocker(o),
       };
     }),
   );

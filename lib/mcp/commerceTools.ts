@@ -11,7 +11,7 @@ import { resolveCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { resendDigitalDelivery } from "@/lib/commerce/digitalDeliveryDynamo";
 import { sendCommerceStripeAccessRequestNotificationEmail, sendCommerceWithdrawalRequestNotificationEmail } from "@/lib/email";
 import { resolveCommerceCustomers } from "@/lib/commerce/customers";
-import { updateOrderFulfillmentStatus, refundCommerceOrder } from "@/lib/commerce/orderStatusActions";
+import { updateOrderFulfillmentStatus, refundCommerceOrder, deleteCommerceOrder } from "@/lib/commerce/orderStatusActions";
 import { resolveBankTransferOrder, withoutOrderSecrets } from "@/lib/commerce/bankTransfer";
 import { applyCheckoutSettingsInput, checkoutSettingsView } from "@/lib/commerce/checkoutSettings";
 import { Template } from "@/lib/db/contentEntities";
@@ -486,6 +486,19 @@ export const COMMERCE_MCP_TOOLS = [
         confirmOrderNumber: { type: "string", description: "The order's human-facing number (e.g. ORD-4F2A9C1B), exactly as the owner confirmed it. Must match the order or the refund is refused." },
       },
       required: ["templateId", "orderId", "reason", "confirmOrderNumber"],
+    },
+  },
+  {
+    name: "delete_commerce_order",
+    description: "PERMANENTLY deletes an order and its items, booking slot and download links. IRREVERSIBLE and unrecoverable — only call this when the site owner has explicitly asked to delete THIS specific order in the current conversation (typically a test order); never as a guess or a clean-up suggestion. First show them the order (get_commerce_order) and tell them it can't be recovered. Refused for orders still waiting on a card payment and for sales processed through Plexo's own payment processing (those must stay on record — refund instead; the error explains). A bank-transfer order still awaiting payment has its stock/slot released. The customer is not notified. Not a refund: if the customer paid, refund them first (refund_commerce_order).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        orderId: { type: "string" },
+        confirmOrderNumber: { type: "string", description: "The order's human-facing number (e.g. ORD-4F2A9C1B), exactly as the owner confirmed it. Must match the order or the delete is refused." },
+      },
+      required: ["templateId", "orderId", "confirmOrderNumber"],
     },
   },
   {
@@ -1236,6 +1249,14 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         refundedBy: `mcp:${resolved.userId}`,
       });
       return { success: true, order: withoutOrderSecrets(order) };
+    }
+
+    case "delete_commerce_order": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
+      if (!orderId) throw new Error("orderId is required.");
+      const { orderNumber } = await deleteCommerceOrder(siteId, orderId, { confirmOrderNumber: args.confirmOrderNumber, deletedBy: `mcp:${resolved.userId}` });
+      return { success: true, deleted: true, orderNumber };
     }
 
     case "resolve_bank_transfer_order": {

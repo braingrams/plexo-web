@@ -10,7 +10,17 @@ import { buildOrderStatusEmail, type OrderStatusEvent } from "@/lib/mail/templat
 import { refundStripePayment } from "@/lib/commerce/stripeClient";
 import { isDonationOrder, resolveDonationGateway } from "@/lib/commerce/donations";
 import { Template } from "@/lib/db/contentEntities";
-import { CommerceDonationCampaign, CommerceOrder, CommerceOrderItem, CommerceSettings } from "@/lib/db/commerceEntities";
+import { orderDeleteBlocker } from "@/lib/commerce/orderDeletion";
+import { releaseOrderHolds } from "@/lib/commerce/orderHolds";
+import {
+  CommerceBooking,
+  CommerceBookingSlotLock,
+  CommerceDigitalDelivery,
+  CommerceDonationCampaign,
+  CommerceOrder,
+  CommerceOrderItem,
+  CommerceSettings,
+} from "@/lib/db/commerceEntities";
 
 export const FULFILLMENT_STATUSES = new Set(["UNFULFILLED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "COMPLETED"]);
 
@@ -205,4 +215,64 @@ export async function refundCommerceOrder(
 
   await sendOrderStatusEmail(templateId, organizationId, orderId, "REFUNDED");
   return updated;
+}
+
+export type DeleteOrderRequest = { confirmOrderNumber: unknown; deletedBy: string };
+
+/**
+ * Permanently deletes an order and everything that hangs off it (line items, booking and its
+ * time slot, digital-delivery links), so no orphaned rows or live download links are left
+ * behind. There is no undo — which is why every caller (dashboard, REST, MCP) must type the
+ * order number back exactly, same bar as a refund. Which orders may go at all is decided in
+ * lib/commerce/orderDeletion.ts.
+ *
+ * Inventory: an order still waiting on a bank transfer is holding stock/a slot/a discount use,
+ * so those are handed back first. For any other order, stock is left alone — whether sold
+ * goods return to the shelf is the owner's call, same as for a refund.
+ * A paid donation is taken back out of its campaign's totals, as a refund does.
+ */
+export async function deleteCommerceOrder(templateId: string, orderId: string, request: DeleteOrderRequest): Promise<{ orderNumber: string }> {
+  const { data: order } = await CommerceOrder.get({ templateId, id: orderId }).go();
+  if (!order) throw new OrderActionError("Order not found.", 404);
+
+  const blocker = orderDeleteBlocker(order);
+  if (blocker) throw new OrderActionError(blocker, 409);
+
+  const typed = typeof request.confirmOrderNumber === "string" ? request.confirmOrderNumber.trim().toUpperCase() : "";
+  if (typed !== order.orderNumber.toUpperCase()) {
+    throw new OrderActionError(`To confirm, type the order number exactly: ${order.orderNumber}. Deleting an order can't be undone.`, 400);
+  }
+
+  if ((order.status ?? "PENDING") === "PENDING") {
+    await releaseOrderHolds(order);
+  } else {
+    const { data: booking } = await CommerceBooking.get({ templateId, orderId }).go();
+    if (booking) {
+      await Promise.all([
+        CommerceBooking.remove({ templateId, orderId }).go(),
+        CommerceBookingSlotLock.remove({ productId: booking.productId, scheduledStart: booking.scheduledStart }).go(),
+      ]);
+    }
+  }
+
+  const campaignId = order.status === "PAID" && isDonationOrder(order) ? (order.metadata as { campaignId?: string }).campaignId : undefined;
+  if (campaignId) {
+    await CommerceDonationCampaign.patch({ templateId, id: campaignId })
+      .add({ raisedMinor: -order.amountMinor, donationCount: -1 })
+      .go()
+      .catch((err) => console.error("Donations: campaign total adjust on order delete failed", err));
+  }
+
+  const [{ data: items }, { data: deliveries }] = await Promise.all([
+    CommerceOrderItem.query.primary({ templateId, orderId }).go({ pages: "all" }),
+    CommerceDigitalDelivery.query.primary({ orderId }).go({ pages: "all" }),
+  ]);
+  if (items.length) await CommerceOrderItem.delete(items.map((i) => ({ templateId, orderId, id: i.id }))).go();
+  if (deliveries.length) await CommerceDigitalDelivery.delete(deliveries.map((d) => ({ orderId, productId: d.productId }))).go();
+  // The order itself goes last: if anything above fails the order is still there to retry from,
+  // rather than leaving invisible leftovers behind a vanished order.
+  await CommerceOrder.delete({ templateId, id: orderId }).go();
+
+  console.info(`Commerce: order ${order.orderNumber} (${orderId}, site ${templateId}) permanently deleted by ${request.deletedBy}`);
+  return { orderNumber: order.orderNumber };
 }
