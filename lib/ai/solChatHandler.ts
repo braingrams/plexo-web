@@ -4,6 +4,7 @@ import { describeAttachedImages } from "@/lib/ai/solImageDescriptions";
 import type { ResolvedUser } from "@/lib/mcp/dispatchMcpTool";
 import { maxAnswerTokensFor, solRouteForUser, tierFor, type SolRefusal, type SolRoute } from "@/lib/ai/solEngine";
 import { ensureCreditPeriod, chargeUsage, estimateWorstCaseCost } from "@/lib/db/ledgerOperations";
+import { canAffordNextRound } from "@/lib/credits/turnBudget";
 import { sumUsageSince } from "@/lib/ai/solTurnUsage";
 import { estimateWorstCaseAgentTurnCost } from "@/lib/credits/agentTurnEstimate";
 import { SolConversation, SolMessage, SolMemoryFact, SolPreferences } from "@/lib/db/solEntities";
@@ -574,10 +575,11 @@ export async function prepareMessagesTurn(
         maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan),
         budgetGuard: routing.isByok
           ? async () => true
-          : async () => {
+          : async (progress) => {
+              // Takes this turn's own not-yet-billed spend off the saved balance, and sizes the next
+              // round by what it will really send — see lib/credits/turnBudget.ts.
               const balance = await ensureCreditPeriod(resolved.userId);
-              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", text.length, maxAnswerTokensFor(routing.route, routing.plan));
-              return balance.total >= perCallEstimate;
+              return canAffordNextRound({ provider: routing.provider, tier: modelTier, balanceTotal: balance.total, progress, maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan) });
             },
       };
 
@@ -700,10 +702,11 @@ export async function prepareConfirmTurn(
         maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan),
         budgetGuard: routing.isByok
           ? async () => true
-          : async () => {
+          : async (progress) => {
+              // Takes this turn's own not-yet-billed spend off the saved balance, and sizes the next
+              // round by what it will really send — see lib/credits/turnBudget.ts.
               const balance = await ensureCreditPeriod(resolved.userId);
-              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", approxInputChars, maxAnswerTokensFor(routing.route, routing.plan));
-              return balance.total >= perCallEstimate;
+              return canAffordNextRound({ provider: routing.provider, tier: modelTier, balanceTotal: balance.total, progress, maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan) });
             },
       };
 

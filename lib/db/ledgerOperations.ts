@@ -90,9 +90,13 @@ export async function grantTopup(userId: string, credits: number, stripeEventId:
 
 /**
  * Shared debit path for chargeUsage and chargeFlatCredits — allowance bucket first, then
- * top-up, same order as the Postgres version. Left unclamped on overdraft for the same
- * reason as the original: a deficit here means the pre-flight estimate undershot real
- * usage, and should be visible rather than silently floored at zero.
+ * top-up. An account is only ever charged what it has: if the real cost overshoots the
+ * balance (the pre-flight estimate undershot), the account is charged down to zero and the
+ * rest is Plexo's own cost, recorded as `shortfallCredits` on the ledger entry and in the
+ * logs. This used to push the balance negative instead — a Free user then saw "-222 credits",
+ * owed an imaginary debt that even sat in the top-up bucket and survived the monthly refresh,
+ * while Plexo paid the provider either way. The overshoot is still visible; it just isn't
+ * pinned on the customer.
  */
 async function debitCredits(
   userId: string,
@@ -100,7 +104,7 @@ async function debitCredits(
   type: "AI_USAGE",
   description: string,
   metadata?: Record<string, unknown>,
-): Promise<{ allowanceBalance: number; topupBalance: number }> {
+): Promise<{ allowanceBalance: number; topupBalance: number; shortfallCredits: number }> {
   for (let attempt = 0; attempt < MAX_OPTIMISTIC_RETRIES; attempt++) {
     const { data } = await User.get({ id: userId }).go();
     if (!data || !("id" in data)) throw new Error(`debitCredits: user ${userId} not found`);
@@ -108,8 +112,13 @@ async function debitCredits(
     const topupBalance = user.topupBalance ?? 0;
     const allowanceBalance = user.allowanceBalance ?? 0;
 
-    const fromAllowance = Math.min(allowanceBalance, credits);
-    const fromTopup = credits - fromAllowance;
+    // A bucket that's already negative (balances written before the clamp) has nothing left to give.
+    const availableAllowance = Math.max(0, allowanceBalance);
+    const availableTopup = Math.max(0, topupBalance);
+    const charged = Math.min(credits, availableAllowance + availableTopup);
+    const shortfallCredits = credits - charged;
+    const fromAllowance = Math.min(availableAllowance, charged);
+    const fromTopup = charged - fromAllowance;
     const nextAllowance = allowanceBalance - fromAllowance;
     const nextTopup = topupBalance - fromTopup;
     const ledgerEntryId = crypto.randomUUID();
@@ -128,15 +137,16 @@ async function debitCredits(
       id: ledgerEntryId,
       userId,
       type,
-      amount: -credits,
+      amount: -charged,
       balanceAfter: nextAllowance + nextTopup,
       description,
-      metadata,
+      metadata: shortfallCredits > 0 ? { ...metadata, shortfallCredits, realCostCredits: credits } : metadata,
     }).params();
 
     try {
       await docClient.send(buildTransactWrite(updateUser, createEntry));
-      return { allowanceBalance: nextAllowance, topupBalance: nextTopup };
+      if (shortfallCredits > 0) console.warn(`[credits] user ${userId}: ${description} cost ${credits} credits but only ${charged} were left — Plexo absorbed ${shortfallCredits}`);
+      return { allowanceBalance: nextAllowance, topupBalance: nextTopup, shortfallCredits };
     } catch (err) {
       if (isConditionalCheckFailure(err) && attempt < MAX_OPTIMISTIC_RETRIES - 1) continue;
       throw err;
@@ -173,7 +183,7 @@ export async function chargeFlatCredits(
   userId: string,
   credits: number,
   description: string,
-): Promise<{ allowanceBalance: number; topupBalance: number }> {
+): Promise<{ allowanceBalance: number; topupBalance: number; shortfallCredits: number }> {
   return debitCredits(userId, credits, "AI_USAGE", description);
 }
 
@@ -186,7 +196,7 @@ export async function chargeFlatCredits(
 export async function chargeUsage(
   userId: string,
   params: { provider: AiProvider; tier: ConcreteTier; mode: AiActionMode; usage: GenerateOutcome["usage"] },
-): Promise<{ creditsCharged: number; allowanceBalance: number; topupBalance: number }> {
+): Promise<{ creditsCharged: number; allowanceBalance: number; topupBalance: number; shortfallCredits: number }> {
   const usd = computeCostUsd(params.provider, params.tier, params.usage);
   const credits = creditsForUsd(usd);
   const description = `${params.mode} (${params.provider}/${params.tier})`;
@@ -198,8 +208,10 @@ export async function chargeUsage(
     outputTokens: params.usage?.outputTokens ?? null,
     costUsd: usd,
   };
-  const { allowanceBalance, topupBalance } = await debitCredits(userId, credits, "AI_USAGE", description, metadata);
-  return { creditsCharged: credits, allowanceBalance, topupBalance };
+  // creditsCharged stays the REAL cost of the call (usage analytics, cost reporting); what the
+  // account actually paid is capped at what it had — shortfallCredits is the part Plexo absorbed.
+  const { allowanceBalance, topupBalance, shortfallCredits } = await debitCredits(userId, credits, "AI_USAGE", description, metadata);
+  return { creditsCharged: credits, allowanceBalance, topupBalance, shortfallCredits };
 }
 
 export interface CreditBalance {
