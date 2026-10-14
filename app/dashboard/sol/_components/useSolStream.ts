@@ -15,6 +15,7 @@ type StreamFrame =
   | { type: "message_done"; messageId: string | null; usage: { inputTokens: number; outputTokens: number } }
   | { type: "title_generated"; title: string }
   | { type: "credit_exhausted"; requiredCredits: number; availableCredits: number }
+  | { type: "credits_overdrawn"; overdrawnBy: number; balance: number }
   | { type: "error"; message: string };
 
 export type StreamOutcome = "idle" | "streaming" | "done" | "awaiting_confirmation" | "error" | "credit_exhausted";
@@ -36,6 +37,8 @@ export function useSolStream() {
   const [outcome, setOutcome] = useState<StreamOutcome>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [creditInfo, setCreditInfo] = useState<CreditInfo | null>(null);
+  // Set when a step that was already running as credits ran out was allowed to finish, leaving the balance below zero.
+  const [overdraft, setOverdraft] = useState<{ overdrawnBy: number; balance: number } | null>(null);
   const [usage, setUsage] = useState<{ inputTokens: number; outputTokens: number } | null>(null);
   const [finalMessageId, setFinalMessageId] = useState<string | null>(null);
   // The PENDING SolMessage's own id, carried directly in the tool_call_awaiting_confirmation
@@ -66,6 +69,7 @@ export function useSolStream() {
     setOutcomeBoth("idle");
     setErrorMessage(null);
     setCreditInfo(null);
+    setOverdraft(null);
     setUsage(null);
     setFinalMessageId(null);
     setAwaitingMessageId(null);
@@ -142,6 +146,10 @@ export function useSolStream() {
           setOutcomeBoth("credit_exhausted");
           break;
         }
+        case "credits_overdrawn": {
+          setOverdraft({ overdrawnBy: frame.overdrawnBy, balance: frame.balance });
+          break;
+        }
         case "error": {
           setErrorMessage(frame.message);
           setOutcomeBoth("error");
@@ -157,6 +165,7 @@ export function useSolStream() {
       setOutcomeBoth("streaming");
       setErrorMessage(null);
       setCreditInfo(null);
+      setOverdraft(null);
       const controller = new AbortController();
       abortRef.current = controller;
 
@@ -285,5 +294,5 @@ export function useSolStream() {
     abortRef.current?.abort();
   }, []);
 
-  return { blocks, outcome, errorMessage, creditInfo, usage, finalMessageId, awaitingMessageId, generatedTitle, imageDescriptions, sendMessage, confirmToolCall, submitAnswers, stop, reset };
+  return { blocks, outcome, errorMessage, creditInfo, overdraft, usage, finalMessageId, awaitingMessageId, generatedTitle, imageDescriptions, sendMessage, confirmToolCall, submitAnswers, stop, reset };
 }

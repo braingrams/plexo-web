@@ -364,6 +364,13 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
             <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)" }}>Never expires</p>
           </div>
         </div>
+        {total < 0 && (
+          <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: "#fcd34d", background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, padding: "0.7rem 0.9rem" }}>
+            <strong style={{ color: "#fde68a" }}>Why is my balance below zero?</strong>{" "}Your credits ran out while SOL was partway through a step.
+            We let it finish rather than stop, so your work wasn&apos;t left half-done. That amount is taken off your next monthly credits or
+            top-up first; until you&apos;re back above zero, SOL waits for you to add credits.
+          </p>
+        )}
 
         {/* Plan actions */}
         <div>

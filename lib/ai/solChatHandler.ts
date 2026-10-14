@@ -3,7 +3,8 @@ import { friendlyProviderError } from "@/lib/ai/providerErrors";
 import { describeAttachedImages } from "@/lib/ai/solImageDescriptions";
 import type { ResolvedUser } from "@/lib/mcp/dispatchMcpTool";
 import { maxAnswerTokensFor, solRouteForUser, tierFor, type SolRefusal, type SolRoute } from "@/lib/ai/solEngine";
-import { ensureCreditPeriod, chargeUsage, estimateWorstCaseCost } from "@/lib/db/ledgerOperations";
+import { ensureCreditPeriod, chargeUsage, estimateWorstCaseCost, holdCredits, releaseHold } from "@/lib/db/ledgerOperations";
+import { turnCreditCeiling } from "@/lib/credits/turnBudget";
 import { sumUsageSince } from "@/lib/ai/solTurnUsage";
 import { estimateWorstCaseAgentTurnCost } from "@/lib/credits/agentTurnEstimate";
 import { SolConversation, SolMessage, SolMemoryFact, SolPreferences } from "@/lib/db/solEntities";
@@ -56,6 +57,8 @@ export type StreamFrame =
   | { type: "title_generated"; title: string }
   | { type: "attachment_described"; url: string; description: string }
   | { type: "credit_exhausted"; requiredCredits: number; availableCredits: number }
+  /** A step that was already running when credits ran out finished and took the balance below zero. */
+  | { type: "credits_overdrawn"; overdrawnBy: number; balance: number }
   | { type: "error"; message: string };
 
 /** A caller-supplied sink for a streaming turn's output — the one thing that genuinely
@@ -212,11 +215,13 @@ function buildCallbacks(emit: (frame: StreamFrame) => void) {
  * (no charge yet), or a mid-loop credit exhaustion (charge the real partial usage,
  * credit_exhausted). Also records a SolUsageEvent analytics row for every outcome except a
  * paused confirmation, which isn't a completed turn yet. */
-async function settleTurn(
+async function settleTurnBody(
   emitter: TurnEmitter,
   turnPromise: Promise<{ finalText: string; usage: { inputTokens: number; outputTokens: number }; pendingConfirmation?: unknown }>,
   ctx: {
     userId: string;
+    /** This turn's credit hold (holdCredits) — dropped in the same write that bills the turn. */
+    holdId?: string;
     organizationId: string;
     conversationId: string;
     modelTier: ModelTier;
@@ -260,6 +265,14 @@ async function settleTurn(
 ): Promise<void> {
   const startedAtMs = new Date(ctx.turnStartedAt).getTime();
 
+  // A step that was already running when the credits ran out finishes rather than being cut
+  // off (an app left half-built is worse than a small overdraft), so the balance can end up
+  // below zero. Say so plainly — the chat shows why, instead of a surprise negative number.
+  function noteOverdraft(charged: { overdrawnBy: number; allowanceBalance: number; topupBalance: number } | null | undefined) {
+    if (!charged || charged.overdrawnBy <= 0) return;
+    emitter.emit({ type: "credits_overdrawn", overdrawnBy: charged.overdrawnBy, balance: charged.allowanceBalance + charged.topupBalance });
+  }
+
   // Runs at every single exit from this function, regardless of outcome — a paused
   // confirmation/question, a completed answer, credit exhaustion, or a hard error all
   // still deserve a shot at surfacing the title the instant it's ready, since the promise
@@ -295,16 +308,18 @@ async function settleTurn(
 
     // BYOK turns are billed to the account's own provider key directly — never touch
     // Plexo's credit ledger for them, same as the page-builder AI feature's own BYOK path.
-    const creditsCharged = ctx.isByok
-      ? 0
-      : (
-          await chargeUsage(ctx.userId, {
-            provider: ctx.provider,
-            tier: ctx.modelTier,
-            mode: "agent_chat",
-            usage: result.usage,
-          })
-        ).creditsCharged;
+    let creditsCharged = 0;
+    if (!ctx.isByok) {
+      const charged = await chargeUsage(ctx.userId, {
+        provider: ctx.provider,
+        tier: ctx.modelTier,
+        mode: "agent_chat",
+        usage: result.usage,
+        releaseHoldId: ctx.holdId,
+      });
+      creditsCharged = charged.creditsCharged;
+      noteOverdraft(charged);
+    }
 
     await bumpConversationActivity(ctx.userId, ctx.conversationId);
 
@@ -358,11 +373,13 @@ async function settleTurn(
           tier: ctx.modelTier,
           mode: "agent_chat",
           usage: partialUsage,
+          releaseHoldId: ctx.holdId,
         }).catch((chargeErr) => {
           console.error("settleTurn: failed to charge partial usage after credit exhaustion:", chargeErr);
           return null;
         });
         creditsCharged = charged?.creditsCharged ?? 0;
+        noteOverdraft(charged);
       }
       await bumpConversationActivity(ctx.userId, ctx.conversationId).catch(() => {});
 
@@ -409,11 +426,12 @@ async function settleTurn(
     let creditsCharged = 0;
     // Own-key accounts are billed by their provider, never in credits.
     if (!ctx.isByok && (partialUsage.inputTokens > 0 || partialUsage.outputTokens > 0)) {
-      const charged = await chargeUsage(ctx.userId, { provider: ctx.provider, tier: ctx.modelTier, mode: "agent_chat", usage: partialUsage }).catch((chargeErr) => {
+      const charged = await chargeUsage(ctx.userId, { provider: ctx.provider, tier: ctx.modelTier, mode: "agent_chat", usage: partialUsage, releaseHoldId: ctx.holdId }).catch((chargeErr) => {
         console.error("settleTurn: failed to charge the rounds that ran before an error:", chargeErr);
         return null;
       });
       creditsCharged = charged?.creditsCharged ?? 0;
+      noteOverdraft(charged);
     }
     // Same reasoning as the pendingConfirmation branch above: the user's own message (at
     // minimum) was already persisted before this failed, so messageCount is stale without
@@ -439,6 +457,20 @@ async function settleTurn(
       attachmentTypes: ctx.attachmentTypes,
       prompt: ctx.prompt,
     });
+  }
+}
+
+/**
+ * Settles a turn and — whatever happened — makes sure its credit hold is gone afterwards: billing
+ * releases it in the same write, but a turn that paused for a confirmation, or had nothing to
+ * bill, still has to let go. (A hold nobody releases would expire on its own, but not instantly.)
+ */
+async function settleTurn(...args: Parameters<typeof settleTurnBody>): Promise<void> {
+  const [, , ctx] = args;
+  try {
+    await settleTurnBody(...args);
+  } finally {
+    if (ctx.holdId && !ctx.isByok) await releaseHold(ctx.userId, ctx.holdId).catch((err) => console.error("settleTurn: couldn't release the credit hold:", err));
   }
 }
 
@@ -519,8 +551,8 @@ export async function prepareMessagesTurn(
   if (!routing.isByok) {
     const requiredCredits = estimateWorstCaseAgentTurnCost(modelTier, text.length, maxAnswerTokensFor(routing.route, routing.plan));
     const preflightBalance = await ensureCreditPeriod(resolved.userId);
-    if (preflightBalance.total < requiredCredits) {
-      return { ok: false, status: 402, body: { error: "insufficient_credits", requiredCredits, availableCredits: preflightBalance.total } };
+    if (preflightBalance.available < requiredCredits) {
+      return { ok: false, status: 402, body: { error: "insufficient_credits", requiredCredits, availableCredits: Math.max(0, preflightBalance.available) } };
     }
   }
 
@@ -555,6 +587,8 @@ export async function prepareMessagesTurn(
         savedKey,
         emit: emitter.emit,
       });
+      // One hold per run of a turn (a resumed turn after a confirmation gets its own) — see holdCredits.
+      const holdId = crypto.randomUUID();
       const deps: AgentTurnDeps = {
         conversationId,
         resolvedUser: resolved,
@@ -574,10 +608,13 @@ export async function prepareMessagesTurn(
         maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan),
         budgetGuard: routing.isByok
           ? async () => true
-          : async () => {
-              const balance = await ensureCreditPeriod(resolved.userId);
-              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", text.length, maxAnswerTokensFor(routing.route, routing.plan));
-              return balance.total >= perCallEstimate;
+          : async (progress) => {
+              // Holds the most this turn could still bill (what it has used so far + the next step's
+              // worst case — lib/credits/turnBudget.ts) against the account's FREE credits, i.e. after every
+              // other running chat's hold too. If it can't be held, the turn stops before the step.
+              await ensureCreditPeriod(resolved.userId);
+              const ceiling = turnCreditCeiling({ provider: routing.provider, tier: modelTier, progress, maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan) });
+              return (await holdCredits(resolved.userId, holdId, ceiling)).held;
             },
       };
 
@@ -586,6 +623,7 @@ export async function prepareMessagesTurn(
       void turn.then(() => userMessageSaved(null), () => userMessageSaved(null));
       await settleTurn(emitter, turn, {
         userId: resolved.userId,
+        holdId,
         organizationId: resolved.organizationId,
         conversationId,
         modelTier,
@@ -684,6 +722,7 @@ export async function prepareConfirmTurn(
     ok: true,
     run: async (emitter) => {
       const { callbacks, toolCalls } = buildCallbacks(emitter.emit);
+      const holdId = crypto.randomUUID();
       const deps: ResumeAgentTurnDeps = {
         conversationId,
         resolvedUser: resolved,
@@ -700,15 +739,19 @@ export async function prepareConfirmTurn(
         maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan),
         budgetGuard: routing.isByok
           ? async () => true
-          : async () => {
-              const balance = await ensureCreditPeriod(resolved.userId);
-              const perCallEstimate = estimateWorstCaseCost(routing.provider, modelTier, "agent_chat", approxInputChars, maxAnswerTokensFor(routing.route, routing.plan));
-              return balance.total >= perCallEstimate;
+          : async (progress) => {
+              // Holds the most this turn could still bill (what it has used so far + the next step's
+              // worst case — lib/credits/turnBudget.ts) against the account's FREE credits, i.e. after every
+              // other running chat's hold too. If it can't be held, the turn stops before the step.
+              await ensureCreditPeriod(resolved.userId);
+              const ceiling = turnCreditCeiling({ provider: routing.provider, tier: modelTier, progress, maxOutputTokens: maxAnswerTokensFor(routing.route, routing.plan) });
+              return (await holdCredits(resolved.userId, holdId, ceiling)).held;
             },
       };
 
       await settleTurn(emitter, resumeAgentTurn(deps), {
         userId: resolved.userId,
+        holdId,
         provider: routing.provider,
         isByok: routing.isByok,
         organizationId: resolved.organizationId,

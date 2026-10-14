@@ -12,6 +12,7 @@ import { getAllSolTools, ASK_USER_QUESTION_TOOL_NAME, USE_ATTACHED_IMAGE_TOOL_NA
 import { resolveModel } from "@/lib/ai/modelRegistry";
 import { MAX_TOKENS } from "@/lib/ai/generate";
 import { MAX_TOOL_ITERATIONS, MAX_APP_TOOL_ITERATIONS } from "@/lib/credits/agentTurnEstimate";
+import type { TurnProgress, TokenUsage } from "@/lib/credits/turnBudget";
 import type { AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { SolMessage } from "@/lib/db/solEntities";
 import { trimOldToolWork } from "@/lib/ai/solHistoryTrim";
@@ -140,7 +141,7 @@ export interface AgentTurnDeps {
   /** Re-checks credit balance before each model call; false stops the loop. */
   /** The new user message's key once it's saved (e.g. to add its images' descriptions). */
   onUserMessageSaved?: (key: { id: string; createdAt: string }) => void;
-  budgetGuard: () => Promise<boolean>;
+  budgetGuard: (progress: TurnProgress) => Promise<boolean>;
   /** Longest answer per round (output tokens) — shorter for Free accounts on Plexo's AI
    *  (lib/ai/solEngine.ts maxAnswerTokensFor). Defaults to MAX_TOKENS.agent_chat. */
   maxOutputTokens?: number;
@@ -188,7 +189,7 @@ export interface ResumeAgentTurnDeps {
   onToolCallPreparing?: (progress: { id: string; name: string; characters: number }) => void;
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
-  budgetGuard: () => Promise<boolean>;
+  budgetGuard: (progress: TurnProgress) => Promise<boolean>;
   /** Longest answer per round (output tokens) — shorter for Free accounts on Plexo's AI
    *  (lib/ai/solEngine.ts maxAnswerTokensFor). Defaults to MAX_TOKENS.agent_chat. */
   maxOutputTokens?: number;
@@ -352,7 +353,7 @@ interface LoopContext {
   onToolCallPreparing?: (progress: { id: string; name: string; characters: number }) => void;
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
-  budgetGuard: () => Promise<boolean>;
+  budgetGuard: (progress: TurnProgress) => Promise<boolean>;
   /** Longest answer per round (output tokens) — shorter for Free accounts on Plexo's AI
    *  (lib/ai/solEngine.ts maxAnswerTokensFor). Defaults to MAX_TOKENS.agent_chat. */
   maxOutputTokens?: number;
@@ -392,13 +393,17 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
   // Stored attachment blocks point at private uploads; the model needs their bytes inline.
   const resolveAttachments = createAttachmentResolver(ctx.resolvedUser.userId);
   const totals = { inputTokens: 0, outputTokens: 0 };
+  // Everything resent on every round besides the conversation: the budget check below sizes
+  // the next call by it (see lib/credits/turnBudget.ts).
+  const fixedInputChars = systemPrompt.length + JSON.stringify(tools).length;
+  let lastRound: TokenUsage | null = null;
   const guard: TurnGuard = { boundAppId: ctx.boundAppId, counts: new Map() };
 
   // Building an app takes many rounds (write → build → fix → screenshot); once a turn is
   // working on an app it gets the larger allowance. Every round is still balance-checked.
   let iterationLimit = MAX_TOOL_ITERATIONS;
   for (let iteration = 0; iteration < iterationLimit; iteration++) {
-    if (!(await ctx.budgetGuard())) {
+    if (!(await ctx.budgetGuard({ spent: totals, lastRound, nextInputChars: fixedInputChars + JSON.stringify(ctx.history).length }))) {
       throw new InsufficientCreditsError();
     }
 
@@ -417,6 +422,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
 
     totals.inputTokens += result.usage.inputTokens;
     totals.outputTokens += result.usage.outputTokens;
+    lastRound = { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens };
 
     const toolUseBlocks = Array.isArray(result.content) ? result.content.filter((block) => block?.type === "tool_use") : [];
     if (toolUseBlocks.some((b) => b.name === "create_app" || String(b.name).startsWith("app_"))) iterationLimit = MAX_APP_TOOL_ITERATIONS;
@@ -546,7 +552,7 @@ async function wrapUpAtStepLimit(
 ): Promise<{ finalText: string; usage: { inputTokens: number; outputTokens: number } }> {
   let text = STEP_LIMIT_FALLBACK;
   let usage: GenerateWithToolsResult["usage"] | undefined;
-  if (await ctx.budgetGuard()) {
+  if (await ctx.budgetGuard({ spent: totals, lastRound: null, nextInputChars: call.systemPrompt.length + JSON.stringify(call.tools).length + JSON.stringify(ctx.history).length, maxOutputTokens: 1024 })) {
     const last = ctx.history[ctx.history.length - 1];
     const note = { type: "text", text: STEP_LIMIT_NOTE };
     // The note rides in the last tool-results message (a second user message in a row isn't allowed).
