@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { compileToHTML } from "@/lib/compiler";
-import { sanitizeHtml } from "@/server/sanitizer";
-import { getEnabledSiteLayoutRows, spliceLayoutRows } from "@/lib/siteLayoutCore";
 import { Template } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
+import { DEFAULT_STORE_LINKS, buildProductDetailV2 } from "@/lib/v2/layoutDesigns";
+import { chromeFor, compileGenerated, siteInfo } from "@/lib/v2/siteFormat";
+import { getStorefrontPath } from "@/lib/commerce/storefrontLayout";
 
 /**
  * The reusable "Product Detail" layout Template (CommerceSettings.productDetailTemplateId) —
@@ -69,11 +69,16 @@ export async function ensureProductDetailLayout(templateId: string, organization
   const { data: existingSettings } = await CommerceSettings.get({ templateId }).go();
   if (existingSettings?.productDetailTemplateId) return existingSettings.productDetailTemplateId;
 
-  const layout = await getEnabledSiteLayoutRows(templateId);
-  const spliced = spliceLayoutRows(PRODUCT_DETAIL_STARTER_DESIGN_JSON, layout);
-  const compiledHtml = sanitizeHtml(compileToHTML(spliced));
+  // A classic site keeps the classic starter (unchanged). A new-editor site gets the same one
+  // page as editable sections, with its "Back to the shop" button pointing at the real shop.
+  const { format, name } = await siteInfo(templateId);
+  const designJson =
+    format === "v2"
+      ? buildProductDetailV2(await chromeFor(templateId, name), { ...DEFAULT_STORE_LINKS, shopPath: (await getStorefrontPath(templateId)) ?? DEFAULT_STORE_LINKS.shopPath })
+      : PRODUCT_DETAIL_STARTER_DESIGN_JSON;
 
   const layoutTemplateId = randomUUID();
+  const compiledHtml = await compileGenerated(templateId, { id: layoutTemplateId, name: "Product Detail Layout", designFormat: format, designJson });
   await Template.create({
     id: layoutTemplateId,
     userId,
@@ -81,7 +86,8 @@ export async function ensureProductDetailLayout(templateId: string, organization
     name: "Product Detail Layout",
     kind: "LANDING_PAGE",
     isCommerceLayout: true,
-    designJson: PRODUCT_DETAIL_STARTER_DESIGN_JSON,
+    ...(format === "v2" ? { designFormat: "v2" as const } : {}),
+    designJson,
     compiledHtml,
   }).go();
 

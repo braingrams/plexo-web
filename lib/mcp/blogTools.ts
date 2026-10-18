@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { compileToHTML } from "@/lib/compiler";
+import { designFormatOf, V2_PAGE_NEEDS_NEW_TOOLS } from "@/lib/v2/design";
 import {
   TemplateJSONSchema,
   hydrateStructuralDefaults,
@@ -989,6 +990,10 @@ export async function handleBlogTool(
         siteId,
         kind,
       );
+      // A layout on the new editor holds a new-editor design: this classic tool must not
+      // overwrite it with a classic one (it would corrupt the layout).
+      const { data: layoutRow } = await Template.get({ id: layoutTemplateId }).go();
+      if (designFormatOf(layoutRow) === "v2") throw new Error(V2_PAGE_NEEDS_NEW_TOOLS);
       const requiredMarker: BlogMarkerName =
         kind === "post" ? "content" : "postList";
       const hasRequired = hasBlogMarker(compiledHtml, requiredMarker);
