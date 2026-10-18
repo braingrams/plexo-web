@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { designFormatOf } from "@/lib/v2/design";
 import { Template, BlogSite } from "@/lib/db/contentEntities";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
+import { buildBlogListingLayoutV2, buildBlogPostLayoutV2 } from "@/lib/v2/layoutDesigns";
+import { chromeFor, compileGenerated, siteInfo } from "@/lib/v2/siteFormat";
+import type { DesignFormat } from "@/lib/v2/design";
 
 const BLANK_TEMPLATE_SHELL = {
   body: {
@@ -103,6 +107,7 @@ export async function POST(
   let name = kind === "post" ? "Blog Post Layout" : "Blog Listing Layout";
   let designJson: object = BLANK_TEMPLATE_SHELL;
   let compiledHtml = "";
+  let designFormat: DesignFormat = "v1";
 
   if (sourceLayoutTemplateId) {
     // Never trust a bare template id from the client — re-verify it the same way GET
@@ -122,6 +127,18 @@ export async function POST(
     name = source.name;
     designJson = source.designJson as object;
     compiledHtml = source.compiledHtml;
+    designFormat = designFormatOf(source);
+  } else {
+    // A site on the new editor starts from a ready, editable layout (the article / the post
+    // list as managed sections) instead of an empty page, so "Design custom layout" opens
+    // on something that already works. A classic site keeps the empty classic page.
+    const site = await siteInfo(resolved.context.templateId);
+    if (site.format === "v2") {
+      const chrome = await chromeFor(resolved.context.templateId, site.name);
+      designJson = kind === "post" ? buildBlogPostLayoutV2(chrome) : buildBlogListingLayoutV2(chrome);
+      designFormat = "v2";
+      compiledHtml = await compileGenerated(resolved.context.templateId, { id: "new-blog-layout", name, designFormat, designJson });
+    }
   }
 
   const layoutId = randomUUID();
@@ -132,6 +149,7 @@ export async function POST(
     name,
     kind: "LANDING_PAGE",
     isBlogLayout: true,
+    ...(designFormat === "v2" ? { designFormat } : {}),
     designJson,
     compiledHtml,
   }).go();

@@ -75,7 +75,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // admin can freely rearrange/restyle it afterward; the one thing that keeps it working is
   // the data-plexo-lms-signup marker itself, which Funnel Settings can always hand out
   // again ("Embed your signup form") if it's ever removed.
-  const { designJson, compiledHtml } = await compileFunnelStarterDesign(template.name, templateId);
+  const { designJson, compiledHtml, designFormat } = await compileFunnelStarterDesign(template.name, templateId);
   await Promise.all([
     LmsFunnel.create({
       id: funnelId,
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Labels this site as a Funnel in /dashboard/templates (filterable, badged) without
     // excluding it from that list the way isCommerceLayout/isBlogLayout do — a funnel is
     // still an ordinary site there.
-    Template.patch({ id: templateId }).set({ isLmsFunnel: true, designJson, compiledHtml }).go(),
+    Template.patch({ id: templateId }).set({ isLmsFunnel: true, designFormat, designJson, compiledHtml }).go(),
   ]);
 
   // Seed a single Welcome page so "New Funnel" always lands on something real rather than

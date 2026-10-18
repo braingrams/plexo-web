@@ -1,6 +1,6 @@
-import { compileToHTML } from "@/lib/compiler";
-import { sanitizeHtml } from "@/server/sanitizer";
-import { getEnabledSiteLayoutRows, spliceLayoutRows } from "@/lib/siteLayoutCore";
+import { buildFunnelStarterV2 } from "@/lib/v2/layoutDesigns";
+import { compileGenerated, siteInfo } from "@/lib/v2/siteFormat";
+import type { DesignFormat } from "@/lib/v2/design";
 import { lmsSignupEmbedSnippet } from "./embedSnippet";
 
 /**
@@ -51,10 +51,18 @@ export function buildFunnelStarterDesignJson(funnelName: string, templateId: str
   };
 }
 
-export async function compileFunnelStarterDesign(funnelName: string, templateId: string): Promise<{ designJson: object; compiledHtml: string }> {
-  const designJson = buildFunnelStarterDesignJson(funnelName, templateId);
-  const layout = await getEnabledSiteLayoutRows(templateId);
-  const spliced = spliceLayoutRows(designJson, layout);
-  const compiledHtml = sanitizeHtml(compileToHTML(spliced));
-  return { designJson, compiledHtml };
+/**
+ * `designFormat` says which editor owns the funnel's page: a classic (v1) site gets the
+ * classic starter above, unchanged; a new-editor (v2) site gets the same "heading + working
+ * signup form" as one editable Sign-up section (its form is the same `data-plexo-lms-signup`
+ * marker, so public/lms-signup.js needs nothing new). Callers store `designFormat` with it.
+ */
+export async function compileFunnelStarterDesign(
+  funnelName: string,
+  templateId: string,
+): Promise<{ designJson: object; compiledHtml: string; designFormat: DesignFormat }> {
+  const { format } = await siteInfo(templateId);
+  const designJson = format === "v2" ? buildFunnelStarterV2(funnelName) : buildFunnelStarterDesignJson(funnelName, templateId);
+  const compiledHtml = await compileGenerated(templateId, { id: templateId, name: funnelName, designFormat: format, designJson });
+  return { designJson, compiledHtml, designFormat: format };
 }
