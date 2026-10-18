@@ -52,6 +52,9 @@ const APP_SECRET_KEYS = [
   // Production only: one GitHub App serves both environments, so production passes
   // staging's webhooks and install redirects on (lib/projects/github/relay.ts).
   "PLEXO_GITHUB_RELAY_ORIGIN",
+  // Plain on/off flag ("true" to enable) for server/passwordSignIn.ts; set directly in SSM
+  // like the relay origin above. Leave unset until Charisol has approved legacy-verify.
+  "CHARISOL_PASSWORD_ENFORCED",
   "MAILDRIP_API_URL",
   "MAILDRIP_API_KEY",
   "STRIPE_SECRET_KEY",
