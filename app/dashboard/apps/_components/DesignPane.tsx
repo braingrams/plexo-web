@@ -345,6 +345,13 @@ export function DesignPane(props: {
     void open(slug);
   };
 
+  const loadMedia = useCallback(async () => {
+    const res = await fetch("/api/v1/media");
+    const data = await res.json().catch(() => []);
+    if (!res.ok || !Array.isArray(data)) throw new Error("Couldn't load your images");
+    return data.map((m: { id: string; name: string; url: string }) => ({ id: m.id, name: m.name, url: m.url }));
+  }, []);
+
   const uploadImage = useCallback(async (file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -497,6 +504,8 @@ export function DesignPane(props: {
               return "Got it — I've opened the chat so you can follow along. I'll answer there and make any change to the design.";
             }}
             onUpload={uploadImage}
+            // The images already uploaded to the project, listed when the Images panel opens.
+            loadMedia={loadMedia}
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
             strata={strataOn ? strata : undefined}
             onSave={() => save()}
