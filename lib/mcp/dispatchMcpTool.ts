@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { compileTemplate } from "@/lib/compileTemplate";
+import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutCore";
+import { recompileCopiedV2Page } from "@/lib/v2/copy";
+import { blankV2Design, defaultDesignFormat, designFormatOf, V2_PAGE_NEEDS_NEW_TOOLS } from "@/lib/v2/design";
 import { uploadObject } from "@/lib/storage";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
@@ -933,6 +937,9 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       if (existing.sourceType === "RAW_UPLOAD") {
         throw new Error(`"${existing.name}" was created via raw upload (create_raw_landing_page/publish_raw_landing_page) — use update_raw_landing_page to edit its HTML instead.`);
       }
+      if (designFormatOf(existing) === "v2") {
+        throw new Error(V2_PAGE_NEEDS_NEW_TOOLS);
+      }
 
       let rawDesignJson = args.designJson;
       if (typeof rawDesignJson === "string") {
@@ -1000,23 +1007,33 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
           rawDesignJson = null;
         }
       }
-      if (!rawDesignJson || typeof rawDesignJson !== "object") {
-        throw new Error("designJson object is required to create a landing page.");
-      }
-
-      const designJson = validateDesignJson(rawDesignJson);
-      if (designJson.body.style) {
-        designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
-      }
-      const compiledHtml = sanitizeHtml(compileToHTML(designJson));
-
       const createdId = randomUUID();
+      let designJson: any;
+      let compiledHtml: string;
+      let createdFormat: "v1" | "v2" = "v1";
+      if ((!rawDesignJson || typeof rawDesignJson !== "object") && defaultDesignFormat() === "v2") {
+        // New-editor creation is on and no classic design was given: start a blank new-editor page.
+        createdFormat = "v2";
+        designJson = blankV2Design();
+        compiledHtml = await compileTemplate({ designFormat: "v2", designJson, kind: "LANDING_PAGE", id: createdId, name });
+      } else {
+        if (!rawDesignJson || typeof rawDesignJson !== "object") {
+          throw new Error("designJson object is required to create a landing page.");
+        }
+        designJson = validateDesignJson(rawDesignJson);
+        if (designJson.body.style) {
+          designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+        }
+        compiledHtml = sanitizeHtml(compileToHTML(designJson));
+      }
+
       await Template.create({
         id: createdId,
         userId: resolved.userId,
         organizationId: resolved.organizationId,
         name,
         kind: "LANDING_PAGE",
+        designFormat: createdFormat,
         designJson,
         compiledHtml,
       }).go();
@@ -1216,6 +1233,12 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       let designJson: any;
       let compiledHtml: string;
       let sourceType: "BUILDER" | "RAW_UPLOAD" = "BUILDER";
+      // A site never mixes editors by accident: a page under a new-editor site is a new-editor page.
+      const subpageFormat = sourceType === "BUILDER" ? designFormatOf(parent) : "v1";
+      const newPageId = randomUUID();
+      if (subpageFormat === "v2" && rawDesignJson && typeof rawDesignJson === "object") {
+        throw new Error(V2_PAGE_NEEDS_NEW_TOOLS);
+      }
       if (rawHtmlContent) {
         try {
           validateRawHtmlContent(rawHtmlContent);
@@ -1233,22 +1256,29 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
           designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
         }
         compiledHtml = sanitizeHtml(compileToHTML(designJson));
+      } else if (subpageFormat === "v2") {
+        designJson = blankV2Design();
+        compiledHtml = ""; // built below, once the page's own place in the site tree exists
       } else {
         designJson = { body: { style: { background: "#0b0f19", padding: "24px" }, rows: [] } };
         compiledHtml = "";
       }
+      const createdFormat = sourceType === "BUILDER" && !rawHtmlContent ? subpageFormat : "v1";
 
       const slug = await ensureUniqueSlug(parentTemplateId, (typeof args.slug === "string" && args.slug.trim()) || name);
       const { data: siblings } = await Template.query.byParent({ parentId: parentTemplateId }).go({ pages: "all" });
       const nextOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
 
-      const newPageId = randomUUID();
+      if (createdFormat === "v2") {
+        compiledHtml = await compileTemplateWithSiteLayout({ id: newPageId, parentId: parentTemplateId, kind: "LANDING_PAGE", name, designFormat: "v2" }, designJson);
+      }
       await Template.create({
         id: newPageId,
         userId: resolved.userId,
         organizationId: resolved.organizationId,
         name,
         kind: "LANDING_PAGE",
+        designFormat: createdFormat,
         sourceType,
         parentId: parentTemplateId,
         slug,
@@ -1497,6 +1527,7 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
         organizationId: resolved.organizationId,
         name,
         kind: existing.kind,
+        designFormat: designFormatOf(existing),
         sourceType: existing.sourceType,
         parentId: existing.parentId,
         slug,
@@ -1504,6 +1535,7 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
         designJson: existing.designJson,
         compiledHtml: existing.compiledHtml,
       }).go();
+      await recompileCopiedV2Page(newId);
       const { data: duplicate } = await Template.get({ id: newId }).go();
       if (!duplicate) throw new Error(`Template ${newId} vanished immediately after being created`);
 

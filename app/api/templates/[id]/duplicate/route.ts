@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { recompileCopiedV2Page } from "@/lib/v2/copy";
 import { NextRequest, NextResponse } from "next/server";
 import { uploadObject } from "@/lib/storage";
 
@@ -99,6 +100,7 @@ export async function POST(
     organizationId: resolved.organizationId,
     name,
     kind: existing.kind,
+    designFormat: existing.designFormat ?? "v1",
     sourceType: existing.sourceType,
     parentId: existing.parentId,
     slug,
@@ -106,6 +108,7 @@ export async function POST(
     designJson: existing.designJson,
     compiledHtml: existing.compiledHtml,
   }).go();
+  await recompileCopiedV2Page(newId);
   const { data: duplicate } = await Template.get({ id: newId }).go();
   if (!duplicate) throw new Error(`Template ${newId} vanished immediately after being created`);
 

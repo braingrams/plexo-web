@@ -96,6 +96,7 @@ export async function submitTemplateForMarketplace(
     organizationId,
     name: source.name,
     kind: source.kind,
+    designFormat: source.designFormat ?? "v1",
     sourceType: source.sourceType,
     designJson: source.designJson,
     compiledHtml: source.compiledHtml,

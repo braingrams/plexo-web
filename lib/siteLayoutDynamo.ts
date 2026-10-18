@@ -25,6 +25,8 @@ export {
   getEnabledSiteLayoutRows,
   spliceLayoutRows,
   compileWithSiteLayout,
+  compileTemplateWithSiteLayout,
+  layoutSectionsOf,
   recompileSiteLayoutDependents,
   onTemplateSaved,
 } from "./siteLayoutCore";

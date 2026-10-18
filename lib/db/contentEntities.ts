@@ -38,6 +38,13 @@ export const Template = new Entity(
       latestBuildId: { type: "string" },
       headVersionId: { type: "string" },
       previewHost: { type: "string" },
+      // Which editor/compiler owns designJson, draftJson and compiledHtml: "v1" is the classic
+      // builder's TemplateJSON ({ body: { rows } }); "v2" is the new visual editor's payload
+      // ({ format: "plexo-v2@1", pages: [PageDefinition], designSystem?, customJs?, meta? } —
+      // lib/v2/design.ts, docs/v2-templates.md). Rows written before this attribute existed
+      // have none: ALWAYS read it through designFormatOf() (missing = "v1"). EMAIL templates
+      // are always v1.
+      designFormat: { type: ["v1", "v2"] as const, default: "v1" },
       designJson: { type: "any", required: true },
       compiledHtml: { type: "string", required: true },
       // Draft/Publish model: designJson/compiledHtml above are always the LIVE, currently-
@@ -172,6 +179,9 @@ export const TemplateRevision = new Entity(
     attributes: {
       id: { type: "string", required: true },
       templateId: { type: "string", required: true },
+      // The format designJson is in. Optional (not defaulted) so old rows stay untouched;
+      // read through designFormatOf(). Restoring a revision restores this with the design.
+      designFormat: { type: ["v1", "v2"] as const },
       designJson: { type: "any", required: true },
       compiledHtml: { type: "string", required: true },
       sdkVersion: { type: "string", required: true },

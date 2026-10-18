@@ -59,6 +59,9 @@ const APP_SECRET_KEYS = [
   // Plain on/off flag ("true" to enable) for server/passwordSignIn.ts; set directly in SSM
   // like the relay origin above. Leave unset until Charisol has approved legacy-verify.
   "CHARISOL_PASSWORD_ENFORCED",
+  // Runtime flag (not a secret): "true" creates NEW landing pages in the new editor's V2 format
+  // (lib/v2/design.ts defaultDesignFormat). Unset/anything else = classic V1.
+  "TEMPLATES_V2_NEW",
   "MAILDRIP_API_URL",
   "MAILDRIP_API_KEY",
   "STRIPE_SECRET_KEY",

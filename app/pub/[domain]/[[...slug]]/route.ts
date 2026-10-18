@@ -619,7 +619,9 @@ export async function GET(
       siteName: published.template.name || rawDomain,
     });
     html = optimizeImages(html);
-    if (cursor.sourceType !== "RAW_UPLOAD") {
+    // New-editor (V2) pages have their custom script baked into compiledHtml at compile time
+    // (lib/v2/compile.ts); only classic pages re-inject it from designJson here.
+    if (cursor.sourceType !== "RAW_UPLOAD" && cursor.designFormat !== "v2") {
       html = injectCustomJs(html, (cursor.designJson as { body?: { style?: { customJs?: string } } } | null)?.body?.style?.customJs);
     }
 

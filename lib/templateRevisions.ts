@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { TemplateRevision } from "@/lib/db/contentEntities";
+import { designFormatOf } from "@/lib/v2/design";
 
 // Retention cap — a generous undo window ("instant rollbacks", app/new/feature-grid.tsx)
 // without letting a template's revision history grow unbounded in plexo-content.
@@ -19,6 +20,7 @@ const MAX_REVISIONS_PER_TEMPLATE = 20;
  */
 export async function snapshotTemplateRevision(template: {
   id: string;
+  designFormat?: string | null;
   designJson: unknown;
   compiledHtml: string;
   sdkVersion?: string | null;
@@ -26,6 +28,7 @@ export async function snapshotTemplateRevision(template: {
   await TemplateRevision.create({
     id: randomUUID(),
     templateId: template.id,
+    designFormat: designFormatOf(template),
     designJson: template.designJson,
     compiledHtml: template.compiledHtml,
     // Template.sdkVersion is optional (nothing in the live DynamoDB-stack code path sets

@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { sanitizeHtml } from "@/server/sanitizer";
-import { compileToHTML } from "@/lib/compiler";
 
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
-import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
+import { compileTemplateWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
 import { publishTemplateDraft } from "@/lib/templateVersions";
+import { V2DesignError } from "@/lib/v2/design";
 import { Template } from "@/lib/db/contentEntities";
 import { Member, User } from "@/lib/db/coreEntities";
 import { assertCanPublishPage, PlanLimitError, planLimitResponse } from "@/lib/plan/publishGuard";
@@ -68,11 +67,15 @@ export async function POST(
   // rather than trusting draftHtml, since draftHtml was compiled without that awareness.
   let compiledHtml = existing.draftHtml ?? existing.compiledHtml;
   if (existing.kind === "LANDING_PAGE") {
-    const forCompile = await compileWithSiteLayout(
-      { id: existing.id, parentId: existing.parentId ?? null },
-      designJson,
-    );
-    compiledHtml = sanitizeHtml(compileToHTML(forCompile));
+    try {
+      compiledHtml = await compileTemplateWithSiteLayout(
+        { id: existing.id, parentId: existing.parentId ?? null, kind: existing.kind, name: existing.name, designFormat: existing.designFormat },
+        designJson,
+      );
+    } catch (err) {
+      if (err instanceof V2DesignError) return NextResponse.json({ error: err.message }, { status: 400 });
+      throw err;
+    }
   }
 
   const { data: user } = await User.get({ id: resolved.userId }).go();

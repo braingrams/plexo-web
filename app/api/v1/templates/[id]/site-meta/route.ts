@@ -3,9 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
-import { compileWithSiteLayout } from "@/lib/siteLayoutDynamo";
-import { compileToHTML } from "@/lib/compiler";
-import { sanitizeHtml } from "@/server/sanitizer";
+import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutDynamo";
+import { designFormatOf, isV2Design } from "@/lib/v2/design";
 import { Template } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
 
@@ -38,7 +37,7 @@ type SiteMetaBody = {
 async function resolveRootTemplate(
   request: NextRequest,
   id: string,
-): Promise<{ error: NextResponse; template?: undefined } | { error?: undefined; template: { id: string; organizationId: string; parentId?: string | null; designJson: unknown } }> {
+): Promise<{ error: NextResponse; template?: undefined } | { error?: undefined; template: { id: string; name: string; kind: "EMAIL" | "LANDING_PAGE"; organizationId: string; parentId?: string | null; designFormat?: string | null; designJson: unknown } }> {
   const resolved = await resolveUser(request);
   if (!resolved) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
 
@@ -55,7 +54,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const result = await resolveRootTemplate(request, id);
   if (result.error) return result.error;
 
-  const style = (result.template.designJson as any)?.body?.style ?? {};
+  const style = isV2Design(result.template.designJson) ? (result.template.designJson.meta ?? {}) : ((result.template.designJson as any)?.body?.style ?? {});
   return NextResponse.json({
     htmlTitle: style.htmlTitle ?? "",
     favicon: style.favicon ?? "",
@@ -67,7 +66,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 async function resolveUpdatableRootTemplate(
   request: NextRequest,
   id: string,
-): Promise<{ error: NextResponse; template?: undefined } | { error?: undefined; template: { id: string; organizationId: string; parentId?: string | null; designJson: unknown } }> {
+): Promise<{ error: NextResponse; template?: undefined } | { error?: undefined; template: { id: string; name: string; kind: "EMAIL" | "LANDING_PAGE"; organizationId: string; parentId?: string | null; designFormat?: string | null; designJson: unknown } }> {
   const resolved = await resolveUser(request);
   if (!resolved) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
 
@@ -96,17 +95,30 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
   const body = (await request.json().catch(() => ({}))) as SiteMetaBody;
 
-  const designJson = JSON.parse(JSON.stringify(template.designJson ?? { body: { style: {}, rows: [] } }));
-  designJson.body = designJson.body ?? { style: {}, rows: [] };
-  designJson.body.style = designJson.body.style ?? {};
+  const isV2 = designFormatOf(template) === "v2";
+  const designJson = JSON.parse(JSON.stringify(template.designJson ?? (isV2 ? {} : { body: { style: {}, rows: [] } })));
+  // Classic pages keep these in body.style; new-editor pages in design.meta (lib/v2/design.ts).
+  let target: Record<string, any>;
+  if (isV2) {
+    designJson.meta = designJson.meta ?? {};
+    target = designJson.meta;
+  } else {
+    designJson.body = designJson.body ?? { style: {}, rows: [] };
+    designJson.body.style = designJson.body.style ?? {};
+    target = designJson.body.style;
+  }
 
-  if (body.htmlTitle !== undefined) designJson.body.style.htmlTitle = body.htmlTitle.trim().slice(0, 200);
-  if (body.favicon !== undefined) designJson.body.style.favicon = body.favicon.trim();
-  if (body.metaDescription !== undefined) designJson.body.style.metaDescription = body.metaDescription.trim().slice(0, 300);
-  if (body.ogImageUrl !== undefined) designJson.body.style.ogImageUrl = body.ogImageUrl.trim();
+  if (body.htmlTitle !== undefined) target.htmlTitle = body.htmlTitle.trim().slice(0, 200);
+  if (body.favicon !== undefined) target.favicon = body.favicon.trim();
+  if (body.metaDescription !== undefined) target.metaDescription = body.metaDescription.trim().slice(0, 300);
+  if (body.ogImageUrl !== undefined) target.ogImageUrl = body.ogImageUrl.trim();
 
-  const spliced = await compileWithSiteLayout({ id: template.id, parentId: null }, designJson);
-  const compiledHtml = sanitizeHtml(compileToHTML(spliced));
+  let compiledHtml: string;
+  try {
+    compiledHtml = await compileTemplateWithSiteLayout(template, designJson);
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "This page couldn't be rebuilt." }, { status: 400 });
+  }
 
   await Template.patch({ id: template.id })
     .set({ designJson, compiledHtml, compiledAt: new Date().toISOString() })
