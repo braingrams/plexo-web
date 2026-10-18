@@ -4,7 +4,6 @@ import "@charisol/plexo-sdk/dist/plexo-sdk.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Plus, Trash2, Code2, MessageSquare, ExternalLink, SlidersHorizontal } from "lucide-react";
-import { ChatDot } from "./ChatDock";
 import type { V2EditorRef } from "@charisol/plexo-sdk/v2";
 import type { DesignSystem, PageDefinition } from "@charisol/plexo-sdk/v2/compile";
 import { appsApi, ApiError, type DesignSave, type DesignSummary } from "./api";
@@ -48,14 +47,7 @@ export function DesignPane(props: {
   /** Full screen: the app's chat and top bar are hidden so the page gets the room. */
   fullScreen: boolean;
   onToggleFullScreen: () => void;
-  /** Back to the list of apps. */
-  onExit: () => void;
   onAskSol: (text: string) => void;
-  /** Open (or close) the chat with SOL, which sits out of the way while designing. */
-  onOpenChat: () => void;
-  /** SOL is working on something, or has an answer the owner hasn't opened yet. */
-  chatBusy: boolean;
-  chatUnread: boolean;
   onOpenCode: (path: string) => void;
   onPreview: (route: string) => void;
 }) {
@@ -517,9 +509,10 @@ export function DesignPane(props: {
               onCreate: ({ name: pageName, templateId }) => startFrom(templateId, pageName.trim() || defaultPageName(templateId)),
               onDelete: () => remove(),
             }}
+            // A simple top bar: no back button (the app's own bar has the way home), no page picker (Pages is in the left rail),
+            // no SOL button (SOL is in the left rail), no Design/Code switch.
+            features={{ pageSwitcher: false, viewSwitch: false, headerSol: false, codeView: false }}
             shell={{
-              onExit: props.onExit,
-              exitLabel: "My apps",
               sidebarHidden: props.fullScreen,
               onToggleSidebar: props.onToggleFullScreen,
               hideLabel: "Full screen",
@@ -546,11 +539,6 @@ export function DesignPane(props: {
             }
             headerRight={
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, whiteSpace: "nowrap" }}>
-                <button type="button" onClick={props.onOpenChat} title="Chat with SOL" aria-label="Chat with SOL" style={{ ...fieldStyle, ...iconButton }}>
-                  <MessageSquare size={14} />
-                  <span className="dp-label">Chat with SOL</span>
-                  <ChatDot working={props.chatBusy} unread={props.chatUnread} />
-                </button>
                 {current && (
                   <button type="button" onClick={() => props.onPreview(current.route)} title="See this page in your running app" aria-label="View in app" style={{ ...fieldStyle, ...iconButton }}>
                     <ExternalLink size={14} />

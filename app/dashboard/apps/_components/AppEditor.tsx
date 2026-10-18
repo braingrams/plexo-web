@@ -3,7 +3,6 @@
 import { SitePlanNotice } from "../../_components/SitePlanNotice";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, ChevronDown, Code2, ExternalLink, MessageSquare, AppWindow, MousePointerClick, RotateCw, Undo2, Eye, Wrench, X } from "lucide-react";
 import { SolChatView } from "../../sol/_components/SolChatView";
 import type { ConversationSummary, ModelTier, SolMessage } from "../../sol/_components/types";
@@ -101,7 +100,6 @@ export function AppEditor(props: {
   const [toast, setToast] = useState<string | null>(null);
   const [codePreviewHidden, setCodePreviewHidden] = useState(false);
   // Full screen for the design canvas: hides the chat and this top bar so the page gets the room. Remembered per browser.
-  const router = useRouter();
   const [designFocus, setDesignFocus] = useState(false);
   useEffect(() => {
     try {
@@ -787,11 +785,7 @@ export function AppEditor(props: {
                       onSaved={onDesignSaved}
                       fullScreen={designFocus}
                       onToggleFullScreen={toggleDesignFocus}
-                      onExit={() => router.push("/dashboard/apps")}
                       onAskSol={sendToSol}
-                      onOpenChat={drawer.toggleDrawer}
-                      chatBusy={turnRunning}
-                      chatUnread={drawer.unread}
                       onOpenCode={(path) => {
                         setCodeOpen({ path, nonce: Date.now() });
                         setCodeMode(true);
