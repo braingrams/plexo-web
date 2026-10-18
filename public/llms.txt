@@ -1,6 +1,6 @@
 # Plexo
 
-> Plexo is a drag-and-drop visual builder for email campaigns and landing pages. It offers AI-powered generation (bring-your-own-key or Plexo's own system AI), an embeddable SDK (`@charisol/plexo-sdk`) for adding the builder to a third-party product, MCP (Model Context Protocol) support so agents like Claude and ChatGPT can build and publish templates directly, a REST API, custom domains for published pages, and a free tier.
+> Plexo is a drag-and-drop visual builder for email campaigns and landing pages. It offers AI-powered generation (bring-your-own-key or Plexo's own system AI), an embeddable SDK (`@charisol/plexo-sdk`) for adding a visual website builder to a third-party product (SDK 2 `V2Editor` is current; the classic `PlexoBuilder` keeps working), MCP (Model Context Protocol) support so agents like Claude and ChatGPT can build and publish templates directly, a REST API, custom domains for published pages, and a free tier.
 
 ## Product
 
@@ -10,7 +10,8 @@
 ## Developers
 
 - [Developer hub](https://plexo.charisol.io/developers): SDK, MCP, and API overview.
-- [SDK](https://plexo.charisol.io/sdk): embed the visual builder in your own app via `@charisol/plexo-sdk`.
+- [SDK](https://plexo.charisol.io/sdk): embed the visual builder in your own app via `@charisol/plexo-sdk`. SDK 2: `<V2Editor />` from `@charisol/plexo-sdk/v2` (section-by-section page editing, design system with Strata sync, `formAction` for forms, `pageSource` for your own page list, `features` to trim the interface, `applyCommands`/`describeDesign` for AI edits); `@charisol/plexo-sdk/v2/compile` turns pages into clean HTML or React on a server. The classic `<PlexoBuilder />` is documented in the same page under "Classic (V1) builder" and is unchanged.
+- [Compile API](https://plexo.charisol.io/sdk): `POST /api/v1/compile-v2` with an `x-api-key` header and `{ page | pages, designSystem?, options? }` returns `{ html, css, script, document, warnings }` (up to 50 pages / 2 MB per request). The classic `POST /api/v1/compile` is unchanged.
 - [MCP integration](https://plexo.charisol.io/mcp): connect Claude, ChatGPT, or Cursor to build/publish templates through natural-language tool calls.
 - [OpenAPI spec](https://plexo.charisol.io/openapi.json): the full REST API surface.
 
