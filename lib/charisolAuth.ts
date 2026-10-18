@@ -1,4 +1,5 @@
 import { CharisolAuth } from "@charisol/auth-sdk-web";
+import { clearStrataConnect } from "@/lib/strataConnect";
 
 // Called at module scope, not inside a component's useEffect — per the SDK's own
 // onboarding guide, a child component's effect (e.g. this callback page's getSession()
@@ -40,6 +41,8 @@ export const POST_LOGIN_REDIRECT_KEY = "plexo_post_login_redirect";
 // afterwards, then hand off to Google.
 export async function triggerGoogleSignIn(callbackURL: string): Promise<void> {
   window.sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, callbackURL);
+  // A normal sign-in is never a "Connect Strata" one, whatever an abandoned popup left behind.
+  clearStrataConnect(window.sessionStorage);
   // identity_provider=Google skips the Charisol sign-in page and opens Google's account
   // picker directly ("Google" is the provider's name on the Charisol user pool).
   await CharisolAuth.signIn({ idp: "Google" });

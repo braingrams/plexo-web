@@ -37,7 +37,8 @@ const OLD_APP = SCAFFOLD_APP.replace(/\nimport \{ designRoutes \}.*\n/, "\n").re
 
 // A small hand-built page: a section holding a heading and a paragraph.
 function samplePage(text = "Welcome home") {
-  const node = (id: string, type: string, extra: Record<string, unknown> = {}) => ({ id, type, name: id, styles: {}, ...extra });
+  type TestNode = { id: string; type: string; name: string; styles: Record<string, unknown>; content?: string; children?: TestNode[] };
+  const node = (id: string, type: string, extra: Partial<TestNode> = {}): TestNode => ({ id, type, name: id, styles: {}, ...extra });
   const rootNode = node("root", "page", {
     children: [
       node("sec", "section", {
@@ -174,10 +175,10 @@ describe("designs", () => {
 
   it("rejects an invalid page with the SDK's plain message and writes nothing", async () => {
     const bad = samplePage();
-    (bad.rootNode.children![0] as { type: string }).type = "marquee";
+    bad.rootNode.children![0].type = "marquee";
     await expect(saveDesign("app1", "x", { name: "x", route: "/x", page: bad })).rejects.toThrow(/This design can't be opened/);
     const dup = samplePage();
-    (dup.rootNode.children![0] as { children: Array<{ id: string }> }).children[1].id = "h";
+    (dup.rootNode.children![0].children![1]).id = "h";
     await expect(saveDesign("app1", "x", { name: "x", route: "/x", page: dup })).rejects.toThrow(/share the same id/);
     await expect(saveDesign("app1", "x", { name: "x", route: "/x", ...input({ designSystem: { nope: true } }) })).rejects.toThrow(/design system couldn't be read/);
     expect([...files.keys()]).toEqual(["src/App.tsx"]);

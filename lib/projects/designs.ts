@@ -95,15 +95,16 @@ function parseDoc(content: string | undefined, slug: string): DesignDoc | null {
     if (!raw || typeof raw !== "object") return null;
     if (raw.format === DESIGN_FORMAT && raw.page && typeof raw.page === "object") return raw as DesignDoc;
     if (isLegacyDesign(raw)) {
-      const name = typeof raw.name === "string" && raw.name.trim() ? raw.name : slug;
+      const meta = raw as unknown as Record<string, unknown>;
+      const name = typeof meta.name === "string" && meta.name.trim() ? meta.name : slug;
       const page = convertLegacyDesign(raw, { name, slug });
       return {
         format: DESIGN_FORMAT,
         name,
-        route: typeof raw.route === "string" ? raw.route : `/${slug}`,
+        route: typeof meta.route === "string" ? meta.route : `/${slug}`,
         page: page.rootNode,
-        generatedSha: typeof raw.generatedSha === "string" ? raw.generatedSha : undefined,
-        updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : new Date().toISOString(),
+        generatedSha: typeof meta.generatedSha === "string" ? meta.generatedSha : undefined,
+        updatedAt: typeof meta.updatedAt === "string" ? meta.updatedAt : new Date().toISOString(),
       };
     }
     return null;

@@ -189,6 +189,33 @@ export const UserEmailLock = new Entity(
   { table, client: docClient },
 );
 
+// A person's Strata (Charisol design system) session — what lets the editor's Branding panel
+// read and update their Strata projects on their behalf (lib/strata). One row per Plexo
+// user. The token is a Strata session JWT (~24h), stored ENCRYPTED (lib/crypto.ts
+// encryptStrataToken) and never sent back to the browser; connectedAt is when Strata issued
+// it, which is how "expired" is told apart from "never connected". Only a primary-key lookup
+// is ever needed, so no GSI.
+export const StrataSession = new Entity(
+  {
+    model: { entity: "strataSession", version: "1", service: "plexoCore" },
+    attributes: {
+      userId: { type: "string", required: true },
+      ciphertext: { type: "string", required: true },
+      // Who the Strata account is — shown as "Connected as …", never used for access decisions.
+      strataEmail: { type: "string" },
+      strataName: { type: "string" },
+      connectedAt: { type: "string", required: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["userId"], template: "USER#${userId}" },
+        sk: { field: "sk", composite: [], template: "STRATASESSION" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const Organization = new Entity(
   {
     model: { entity: "organization", version: "1", service: "plexoCore" },
@@ -499,6 +526,7 @@ export const plexoCoreService = new Service(
   {
     User,
     UserEmailLock,
+    StrataSession,
     Organization,
     Member,
     ApiKey,
