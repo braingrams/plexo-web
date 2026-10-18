@@ -29,6 +29,8 @@ import { convertWordPressHtmlToTiptapJson } from "@/lib/blogImport/htmlToTiptap"
 import { assertPublishedBlogPostQuota } from "@/lib/blog/publishQuota";
 import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogFontPresets";
 import { hasBlogMarker, type BlogMarkerName } from "@/lib/pub/blogLayoutRender";
+import { designFormatOf } from "@/lib/v2/design";
+import { v2TargetMessage } from "./deprecation";
 import {
   Template,
   BlogSite,
@@ -980,6 +982,16 @@ export async function handleBlogTool(
         throw new Error(
           "designJson object is required to design a blog layout.",
         );
+      }
+
+      // A layout built with the visual (V2) editor is changed with blog_layout_edit, never overwritten with classic JSON.
+      {
+        const { data: blogRow } = await BlogSite.get({ templateId: siteId }).go();
+        const existingLayoutId = kind === "post" ? blogRow?.postLayoutTemplateId : blogRow?.listingLayoutTemplateId;
+        if (existingLayoutId) {
+          const { data: existingLayout } = await Template.get({ id: existingLayoutId }).go();
+          if (existingLayout && designFormatOf(existingLayout) === "v2") throw new Error(v2TargetMessage("design_blog_layout"));
+        }
       }
 
       const designJson = validateBlogDesignJson(rawDesignJson);
