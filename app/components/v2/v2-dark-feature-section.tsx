@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowRight, Cpu } from "lucide-react";
 import { Reveal } from "@/app/scroll-fx";
+import { SDK_V2_SHORT } from "@/app/sdk/v2-snippets";
 
 export function V2DarkFeatureSection({ isDark }: { isDark: boolean }) {
   return (
@@ -31,7 +32,7 @@ export function V2DarkFeatureSection({ isDark }: { isDark: boolean }) {
 
               <Reveal delay={0.2}>
                 <p className="text-slate-400 text-base sm:text-lg font-medium max-w-lg leading-relaxed">
-                  Take total control with <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-sm text-purple-300">@charisol/plexo-sdk</code> and MCP integrations, built for developer-first workflows.
+                  Add a visual website builder to your own product with <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-sm text-purple-300">@charisol/plexo-sdk</code>, and let AI assistants build through MCP. Already on the classic builder? It keeps working.
                 </p>
               </Reveal>
 
@@ -56,22 +57,11 @@ export function V2DarkFeatureSection({ isDark }: { isDark: boolean }) {
                         <span key={c} className="h-2.5 w-2.5 rounded-full opacity-70" style={{ background: c }} />
                       ))}
                     </div>
-                    <span className="font-mono text-[0.75rem] text-slate-400">app/page-builder.tsx</span>
+                    <span className="font-mono text-[0.75rem] text-slate-400">app/site-editor.tsx</span>
                     <span className="w-10" />
                   </div>
                   <pre className="overflow-x-auto p-5 font-mono text-[0.78rem] leading-relaxed text-slate-300">
-                    <code>{`import { PlexoBuilder } from "@charisol/plexo-sdk";
-
-export default function MySaaSPage() {
-  return (
-    <PlexoBuilder
-      mode="landing_page"
-      apiKey={process.env.NEXT_PUBLIC_PLEXO_API_KEY}
-      useAi
-      onSave={({ json, html }) => console.log("Saved:", html)}
-    />
-  );
-}`}</code>
+                    <code>{SDK_V2_SHORT}</code>
                   </pre>
                 </div>
               </Reveal>
@@ -87,7 +77,7 @@ export default function MySaaSPage() {
                   <span className="text-3xl font-extrabold text-slate-800/50 font-mono select-none">zero</span>
                 </div>
                 <h3 className="text-xl sm:text-2xl font-extrabold text-white leading-snug mt-6">
-                  Free tier with full visual drag-and-drop builder
+                  Section-by-section editing that non-designers can use
                 </h3>
               </div>
             </Reveal>
@@ -99,11 +89,11 @@ export default function MySaaSPage() {
                   <div className="flex items-center gap-1.5 text-xs font-mono font-bold">
                     <span className="text-purple-400">&lt;html&gt;</span>
                     <span className="text-cyan-400">&lt;css&gt;</span>
-                    <span className="text-emerald-400">&lt;mjml&gt;</span>
+                    <span className="text-emerald-400">&lt;react&gt;</span>
                   </div>
                 </div>
                 <h3 className="text-xl sm:text-2xl font-extrabold text-white leading-snug mt-6">
-                  Production-ready HTML5 &amp; MJML code export
+                  Compile to clean HTML or React on your server
                 </h3>
               </div>
             </Reveal>

@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useRef } from "react";
-import { ArrowRight, Gauge, SlidersHorizontal, DollarSign } from "lucide-react";
+import { ArrowRight, Gauge, SlidersHorizontal, Server } from "lucide-react";
 import { Reveal, gsap, useGSAP, useReducedMotion } from "../scroll-fx";
 import { Kicker } from "./ui";
 
 const RELIABILITY_CARDS = [
-  { n: "01", icon: Gauge, title: "100% uptime & support", desc: "Unmatched reliability, backed by a team that actually answers.", color: "text-brand-400" },
-  { n: "02", icon: SlidersHorizontal, title: "Highly customizable", desc: "Tweak every pixel, token, and block — nothing is locked down.", color: "text-fuchsia-400" },
-  { n: "03", icon: DollarSign, title: "Incredible value for money", desc: "Enterprise-grade features at startup-friendly pricing.", color: "text-cyan-400" },
+  { n: "01", icon: Gauge, title: "Clean HTML or React out", desc: "Compile any page on your server, with no editor or React needed.", color: "text-brand-400" },
+  { n: "02", icon: SlidersHorizontal, title: "Your brand, in sync", desc: "One design system for every page, kept in step with Strata.", color: "text-fuchsia-400" },
+  { n: "03", icon: Server, title: "Your server, your data", desc: "Forms and saves go to your own addresses. Classic customers change nothing.", color: "text-cyan-400" },
 ];
 
 export function DarkSdkSection() {
@@ -34,8 +34,9 @@ export function DarkSdkSection() {
               Powered by the Plexo SDK.
             </h2>
             <p className="mb-7 max-w-[440px] text-[0.98rem] leading-relaxed text-white/60">
-              Take total control with <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[0.85em]">@charisol/plexo-sdk</code>{" "}
-              and MCP integrations, built for developer-first workflows.
+              Add a visual website builder to your own product with{" "}
+              <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[0.85em]">@charisol/plexo-sdk</code>. Your users edit pages section by section,
+              and you compile them to clean HTML or React. The classic builder keeps working.
             </p>
             <Link href="/sdk" className="inline-flex items-center gap-1.5 text-[0.9rem] font-semibold text-brand-400 hover:text-brand-300">
               View SDK docs <ArrowRight size={15} />
@@ -54,12 +55,12 @@ export function DarkSdkSection() {
                 <span className="w-10" />
               </div>
               <pre className="overflow-x-auto p-5 font-mono text-[0.78rem] leading-relaxed text-white/80">
-                <code>{`import { PlexoBuilder } from "@charisol/plexo-sdk";
+                <code>{`import { V2Editor } from "@charisol/plexo-sdk/v2";
 
-<PlexoBuilder
-  mode="landing_page"
-  apiKey={process.env.PLEXO_API_KEY}
-  useAi
+<V2Editor
+  pages={savedPages}
+  onSave={async (pages) => save(pages)}
+  formAction={(id) => \`/api/forms/\${id}\`}
 />`}</code>
               </pre>
             </div>
