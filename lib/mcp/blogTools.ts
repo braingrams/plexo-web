@@ -29,7 +29,6 @@ import { convertWordPressHtmlToTiptapJson } from "@/lib/blogImport/htmlToTiptap"
 import { assertPublishedBlogPostQuota } from "@/lib/blog/publishQuota";
 import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogFontPresets";
 import { hasBlogMarker, type BlogMarkerName } from "@/lib/pub/blogLayoutRender";
-import { designFormatOf } from "@/lib/v2/design";
 import { v2TargetMessage } from "./deprecation";
 import {
   Template,
