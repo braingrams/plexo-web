@@ -3,7 +3,6 @@
 import { SitePlanNotice } from "../../_components/SitePlanNotice";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, ChevronDown, Code2, ExternalLink, MessageSquare, AppWindow, MousePointerClick, RotateCw, Undo2, Eye, Wrench, X } from "lucide-react";
 import { SolChatView } from "../../sol/_components/SolChatView";
 import type { ConversationSummary, ModelTier, SolMessage } from "../../sol/_components/types";
@@ -21,6 +20,7 @@ import { HistoryPane } from "./HistoryPane";
 import { PublishDialog } from "./PublishDialog";
 import { GitHubPane } from "./GitHubPane";
 import { DesignPane } from "./DesignPane";
+import { ChatDock, ChatDot, useChatDrawer } from "./ChatDock";
 import { CreditsMeter, CreditsPanel, OutOfCreditsCard, TopUpSheet, useCredits, type Pack } from "./Credits";
 import { takeHandoff, describeExtras, type StartHandoff } from "./startHandoff";
 import { AppPreview, buildSteps, decodePlan, brandGradient, gradientFor } from "./appPlan";
@@ -100,7 +100,6 @@ export function AppEditor(props: {
   const [toast, setToast] = useState<string | null>(null);
   const [codePreviewHidden, setCodePreviewHidden] = useState(false);
   // Full screen for the design canvas: hides the chat and this top bar so the page gets the room. Remembered per browser.
-  const router = useRouter();
   const [designFocus, setDesignFocus] = useState(false);
   useEffect(() => {
     try {
@@ -136,6 +135,9 @@ export function AppEditor(props: {
   const [firstBuild, setFirstBuild] = useState(!!props.initialPrompt && props.initialMessages.length === 0);
   const [writes, setWrites] = useState(0);
   const [checked, setChecked] = useState(false);
+  // Design and Code need the room: the chat becomes a drawer there (and stays docked everywhere else).
+  const chatOverlay = !firstBuild && (codeMode || tab === "design");
+  const drawer = useChatDrawer(chatOverlay);
   const stepsDone = firstBuild ? (checked ? steps.length - 1 : Math.min(steps.length - 1, writes)) : steps.length;
 
   // "Since you were last here"
@@ -290,6 +292,7 @@ export function AppEditor(props: {
   const onTurnEnd = useCallback(
     (outcome: string) => {
       setTurnRunning(false);
+      drawer.noteArrival();
       void refreshCredits();
       if (firstBuild && outcome !== "credit_exhausted" && outcome !== "awaiting_confirmation") {
         setFirstBuild(false);
@@ -297,7 +300,7 @@ export function AppEditor(props: {
         void refreshSummary();
       }
     },
-    [firstBuild, refreshCredits, refreshSummary],
+    [firstBuild, refreshCredits, refreshSummary, drawer.noteArrival],
   );
 
   const transformOutgoing = useCallback(
@@ -306,6 +309,8 @@ export function AppEditor(props: {
       const text = extrasRef.current ? `${typed}\n\n${extrasRef.current}` : typed;
       extrasRef.current = "";
       setTurnRunning(true);
+      // Sent from Design or Code (e.g. "Ask SOL"): show the chat so the answer isn't missed.
+      drawer.openDrawer();
       setHasChatted(true);
       setOutOfCredits(null);
       turnBaseVersion.current = summary.headVersionId;
@@ -316,13 +321,14 @@ export function AppEditor(props: {
       const where = el.file ? `${el.file}${el.line ? `:${el.line}` : ""}` : "unknown file";
       return `${text}\n\n[Selected element: <${el.tag}> in ${where} on page ${el.path}${el.text ? ` — its text: "${el.text.slice(0, 160)}"` : ""}${el.classes ? ` — classes: "${el.classes.slice(0, 200)}"` : ""}. Change this element.]`;
     },
-    [summary.headVersionId],
+    [summary.headVersionId, drawer.openDrawer],
   );
 
   const sendToSol = useCallback((text: string) => {
     setMobileView("chat");
+    drawer.openDrawer();
     sendRef.current?.(text);
-  }, []);
+  }, [drawer.openDrawer]);
 
   const fixWithAi = useCallback(
     (error: { message: string; stack?: string | null; url?: string | null; file?: string; line?: number }) => {
@@ -677,6 +683,11 @@ export function AppEditor(props: {
           >
             <Code2 size={14} /> Code
           </button>
+          {chatOverlay && (
+            <button type="button" aria-expanded={drawer.open} onClick={drawer.toggleDrawer} title="Open the chat with SOL" style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "0.45rem 0.8rem", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 600, whiteSpace: "nowrap", border: `1px solid ${drawer.open ? C.text : C.border}`, background: "transparent", color: C.text }}>
+              <MessageSquare size={14} /> Chat with SOL <ChatDot working={turnRunning} unread={drawer.unread} />
+            </button>
+          )}
         </nav>}
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
@@ -713,8 +724,8 @@ export function AppEditor(props: {
         ))}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
-        <aside className={`ed-chat ${mobileView === "chat" ? "is-active" : ""}`} style={{ width: 420, flexShrink: 0, borderRight: `1px solid ${C.border}`, minHeight: 0, display: focusing ? "none" : "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", position: "relative" }}>
+        <ChatDock overlay={chatOverlay} open={drawer.open} mobileActive={mobileView === "chat"} onClose={drawer.closeDrawer}>
           {since && !firstBuild && (
             <div style={{ padding: "0.9rem 1.2rem", borderBottom: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.faint }}>Since you were last here</div>
@@ -727,7 +738,7 @@ export function AppEditor(props: {
             </div>
           )}
           <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>{chat}</div>
-        </aside>
+        </ChatDock>
 
         <main className={`ed-main ${mobileView === "app" ? "is-active" : ""}`} style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
@@ -774,7 +785,6 @@ export function AppEditor(props: {
                       onSaved={onDesignSaved}
                       fullScreen={designFocus}
                       onToggleFullScreen={toggleDesignFocus}
-                      onExit={() => router.push("/dashboard/apps")}
                       onAskSol={sendToSol}
                       onOpenCode={(path) => {
                         setCodeOpen({ path, nonce: Date.now() });

@@ -2,7 +2,8 @@
 
 import "@charisol/plexo-sdk/dist/plexo-sdk.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, Code2, MessageSquare } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Plus, Trash2, Code2, MessageSquare, ExternalLink, SlidersHorizontal } from "lucide-react";
 import type { V2EditorRef } from "@charisol/plexo-sdk/v2";
 import type { DesignSystem, PageDefinition } from "@charisol/plexo-sdk/v2/compile";
 import { appsApi, ApiError, type DesignSave, type DesignSummary } from "./api";
@@ -46,8 +47,6 @@ export function DesignPane(props: {
   /** Full screen: the app's chat and top bar are hidden so the page gets the room. */
   fullScreen: boolean;
   onToggleFullScreen: () => void;
-  /** Back to the list of apps. */
-  onExit: () => void;
   onAskSol: (text: string) => void;
   onOpenCode: (path: string) => void;
   onPreview: (route: string) => void;
@@ -346,6 +345,13 @@ export function DesignPane(props: {
     void open(slug);
   };
 
+  const loadMedia = useCallback(async () => {
+    const res = await fetch("/api/v1/media");
+    const data = await res.json().catch(() => []);
+    if (!res.ok || !Array.isArray(data)) throw new Error("Couldn't load your images");
+    return data.map((m: { id: string; name: string; url: string }) => ({ id: m.id, name: m.name, url: m.url }));
+  }, []);
+
   const uploadImage = useCallback(async (file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -442,6 +448,7 @@ export function DesignPane(props: {
   }
 
   const fieldStyle = { padding: "0.3rem 0.5rem", borderRadius: 8, border: "1px solid rgba(128,128,128,0.35)", background: "transparent", color: "inherit", fontSize: "0.78rem" } as const;
+  const iconButton = { cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0, whiteSpace: "nowrap" } as const;
   const V2Editor = sdk.V2Editor;
   const askAbout = current ? `the "${current.name}" design, page ${current.route}` : "this new page";
 
@@ -475,7 +482,9 @@ export function DesignPane(props: {
         </div>
       )}
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
-        <div style={{ position: "absolute", inset: 0 }}>
+        {/* The editor's width decides whether the header buttons show their words (see .dp-label). */}
+        <div style={{ position: "absolute", inset: 0, containerType: "inline-size" }}>
+          <style>{`.dp-label { display: none; } @container (min-width: 1180px) { .dp-label { display: inline; } }`}</style>
           <V2Editor
             key={loaded.key}
             ref={editorRef}
@@ -492,9 +501,11 @@ export function DesignPane(props: {
             onAskSol={async (question, context) => {
               const about = context.nodeType ? ` (about the selected ${context.nodeType.toLowerCase()} on ${askAbout})` : ` (on ${askAbout})`;
               props.onAskSol(`${question}${about}`);
-              return "I've picked this up in the chat on the left — I'll answer there and make any change to the design.";
+              return "Got it — I've opened the chat so you can follow along. I'll answer there and make any change to the design.";
             }}
             onUpload={uploadImage}
+            // The images already uploaded to the project, listed when the Images panel opens.
+            loadMedia={loadMedia}
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
             strata={strataOn ? strata : undefined}
             onSave={() => save()}
@@ -507,29 +518,43 @@ export function DesignPane(props: {
               onCreate: ({ name: pageName, templateId }) => startFrom(templateId, pageName.trim() || defaultPageName(templateId)),
               onDelete: () => remove(),
             }}
+            // A simple top bar: no back button (the app's own bar has the way home), no page picker (Pages is in the left rail),
+            // no SOL button (SOL is in the left rail), no Design/Code switch.
+            features={{ pageSwitcher: false, viewSwitch: false, headerSol: false, codeView: false }}
             shell={{
-              onExit: props.onExit,
-              exitLabel: "My apps",
               sidebarHidden: props.fullScreen,
               onToggleSidebar: props.onToggleFullScreen,
               hideLabel: "Full screen",
-              showLabel: "Show chat",
+              showLabel: "Exit full screen",
             }}
             headerLeft={
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                <input aria-label="Page name" value={name} onChange={(e) => { setName(e.target.value); markDirty(); }} style={{ ...fieldStyle, width: 130 }} />
-                <input aria-label="Page address" title="Use / to make this your home page (it replaces the current one)" value={route} onChange={(e) => { setRoute(e.target.value); setRouteTaken(false); markDirty(); }} style={{ ...fieldStyle, width: 110, fontFamily: C.mono }} />
-                <button type="button" title="Delete this design" aria-label="Delete this design" disabled={!current} onClick={() => void remove()} style={{ ...fieldStyle, cursor: "pointer", display: "inline-flex" }}>
-                  <Trash2 size={14} />
-                </button>
-              </div>
+              <PageSettings
+                name={name}
+                route={route}
+                canDelete={!!current}
+                routeProblem={routeTaken ? problem : null}
+                fieldStyle={fieldStyle}
+                onName={(v) => {
+                  setName(v);
+                  markDirty();
+                }}
+                onRoute={(v) => {
+                  setRoute(v);
+                  setRouteTaken(false);
+                  markDirty();
+                }}
+                onDelete={() => void remove()}
+              />
             }
             headerRight={
-              current ? (
-                <button type="button" onClick={() => props.onPreview(current.route)} title="See this page in your running app" style={{ ...fieldStyle, cursor: "pointer" }}>
-                  View in app
-                </button>
-              ) : undefined
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, whiteSpace: "nowrap" }}>
+                {current && (
+                  <button type="button" onClick={() => props.onPreview(current.route)} title="See this page in your running app" aria-label="View in app" style={{ ...fieldStyle, ...iconButton }}>
+                    <ExternalLink size={14} />
+                    <span className="dp-label">View in app</span>
+                  </button>
+                )}
+              </div>
             }
           />
         </div>
@@ -616,4 +641,80 @@ function PickThumb({ kind, accent }: { kind: string; accent: string }) {
 
 function Centered({ children }: { children: React.ReactNode }) {
   return <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem" }}>{children}</div>;
+}
+
+/** The page's name, address and delete, tucked into one small popover so the editor's top bar stays clear. */
+function PageSettings(props: {
+  name: string;
+  route: string;
+  canDelete: boolean;
+  routeProblem: string | null;
+  fieldStyle: React.CSSProperties;
+  onName: (v: string) => void;
+  onRoute: (v: string) => void;
+  onDelete: () => void;
+}) {
+  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+  const open = !!at;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (!popRef.current?.contains(t) && !buttonRef.current?.contains(t)) setAt(null);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setAt(null);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (open) return setAt(null);
+    const r = buttonRef.current?.getBoundingClientRect();
+    setAt({ top: (r?.bottom ?? 40) + 8, left: Math.max(8, Math.min(r?.left ?? 8, window.innerWidth - 328)) });
+  };
+  const label = { display: "flex", flexDirection: "column", gap: 4, fontSize: "0.76rem", fontWeight: 600, color: C.muted } as const;
+  const field = { ...props.fieldStyle, width: "100%", boxSizing: "border-box", padding: "0.45rem 0.6rem", fontSize: "0.84rem", color: C.text } as const;
+
+  return (
+    <>
+      <button ref={buttonRef} type="button" title="Page settings" aria-label="Page settings" aria-haspopup="dialog" aria-expanded={open} onClick={toggle} style={{ ...props.fieldStyle, cursor: "pointer", display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
+        <SlidersHorizontal size={14} />
+      </button>
+      {open &&
+        createPortal(
+          <div ref={popRef} role="dialog" aria-label="Page settings" style={{ position: "fixed", top: at!.top, left: at!.left, zIndex: 1000, width: 320, maxWidth: "calc(100vw - 16px)", boxSizing: "border-box", padding: 14, borderRadius: 12, background: C.panelSolid, color: C.text, border: `1px solid ${C.borderStrong}`, boxShadow: "0 24px 60px -20px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ fontSize: "0.84rem", fontWeight: 700 }}>Page settings</div>
+            <label style={label}>
+              Page name
+              <input aria-label="Page name" value={props.name} onChange={(e) => props.onName(e.target.value)} style={field} />
+            </label>
+            <label style={label}>
+              Page address
+              <input aria-label="Page address" value={props.route} onChange={(e) => props.onRoute(e.target.value)} style={{ ...field, fontFamily: C.mono }} />
+              <span style={{ fontWeight: 400, color: C.faint }}>Use / to make this your home page (it replaces the current one).</span>
+              {props.routeProblem && <span role="alert" style={{ fontWeight: 500, color: C.danger }}>{props.routeProblem}</span>}
+            </label>
+            <button
+              type="button"
+              disabled={!props.canDelete}
+              onClick={() => {
+                setAt(null);
+                props.onDelete();
+              }}
+              style={{ ...props.fieldStyle, alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6, cursor: props.canDelete ? "pointer" : "default", color: C.danger, padding: "0.4rem 0.7rem" }}
+            >
+              <Trash2 size={14} /> Delete page
+            </button>
+          </div>,
+          document.body,
+        )}
+    </>
+  );
 }
