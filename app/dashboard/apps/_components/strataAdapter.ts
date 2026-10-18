@@ -17,10 +17,22 @@ export type StrataAdapterWindow = {
   removeEventListener: (type: "message", listener: (event: MessageEvent) => void) => void;
 };
 
-export type StrataAdapterOptions = { win?: StrataAdapterWindow; fetchFn?: typeof fetch };
+export type StrataAdapterOptions = {
+  win?: StrataAdapterWindow;
+  fetchFn?: typeof fetch;
+  /** The app being designed. With it, the editor's "Keep my website up to date" switch is wired to this app's server-side updates. */
+  appId?: string;
+};
 export type PlexoStrataAdapter = StrataAdapter & {
   /** False when this Plexo has no Strata configured — the editor then leaves Strata out. */
   available: () => Promise<boolean>;
+};
+export type AutoUpdateState = {
+  enabled: boolean;
+  status: "active" | "needs-reconnect" | "off";
+  lastCheckedAt: string | null;
+  lastResult: string | null;
+  lastResultKind: "updated" | "up-to-date" | "needs-review" | "error" | "reconnect" | null;
 };
 
 const KINDS = new Set<StrataErrorKind>(["expired", "forbidden", "not_found", "conflict", "invalid", "network", "server"]);
@@ -37,7 +49,7 @@ export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoSt
   async function call<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
     let res: Response;
     try {
-      res = await doFetch(`/api/v1/strata${path}`, {
+      res = await doFetch(path.startsWith("/api/") ? path : `/api/v1/strata${path}`, {
         method: init.method ?? "GET",
         headers: init.body !== undefined ? { "Content-Type": "application/json" } : undefined,
         body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
@@ -112,6 +124,18 @@ export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoSt
       if (availability === undefined) await status().catch(() => undefined);
       return availability === true;
     },
+    // Automatic updates run on Plexo's server (it holds a read-only Strata key), so the editor's switch asks the server.
+    ...(options.appId
+      ? {
+          async setAutoUpdate(_projectId: string, enabled: boolean) {
+            await call<AutoUpdateState>(`/api/v1/apps/${encodeURIComponent(options.appId!)}/strata-auto-update`, { method: enabled ? "POST" : "DELETE" });
+          },
+          async autoUpdateStatus() {
+            const state = await call<AutoUpdateState>(`/api/v1/apps/${encodeURIComponent(options.appId!)}/strata-auto-update`);
+            return { enabled: state.enabled, ok: state.status === "active" && (state.lastResultKind === null || state.lastResultKind === "updated" || state.lastResultKind === "up-to-date"), message: state.lastResult ?? undefined };
+          },
+        }
+      : {}),
     async disconnect() {
       await call("/session", { method: "DELETE" });
     },

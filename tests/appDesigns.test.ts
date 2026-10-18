@@ -29,7 +29,7 @@ vi.mock("@/lib/projects/fileStore", () => {
 });
 vi.mock("@/lib/projects/blobStore", () => ({ sha256: (s: string) => sha(s) }));
 
-import { saveDesign, listDesigns, getDesign, deleteDesign, wireDesignRoutes, renderRoutesFile, slugForName, normalizeRoute, DesignConflictError, DesignError } from "@/lib/projects/designs";
+import { applyDesignSystem, saveDesign, listDesigns, getDesign, deleteDesign, wireDesignRoutes, renderRoutesFile, slugForName, normalizeRoute, DesignConflictError, DesignError } from "@/lib/projects/designs";
 import { createDefaultDesignSystem } from "@charisol/plexo-sdk/v2/compile";
 
 const SCAFFOLD_APP = readFileSync("lib/projects/scaffold/template/src/App.tsx", "utf8");
@@ -224,3 +224,23 @@ describe("designs", () => {
     });
   });
 });
+
+describe("applyDesignSystem (Strata auto-update)", () => {
+  it("stores the system, recompiles every design and skips pages edited in code", async () => {
+    await saveDesign("app1", "home", { name: "Home", route: "/", ...input() });
+    await saveDesign("app1", "about", { name: "About us", route: "/about", ...input() });
+    files.set("src/plexo-canvas/AboutPage.tsx", `${files.get("src/plexo-canvas/AboutPage.tsx")}\n// hand edit`);
+    const system = createDefaultDesignSystem();
+    system.tokens = system.tokens.map((t, i) => (i === 0 ? { ...t, value: "#123456" } : t));
+    const before = files.get("src/plexo-canvas/HomePage.tsx");
+    const result = await applyDesignSystem("app1", system);
+    expect(result).toEqual({ recompiled: ["Home"], skipped: ["About us"] });
+    expect(JSON.parse(files.get("src/plexo-canvas/design-system.json")!).tokens[0].value).toBe("#123456");
+    expect(files.get("src/plexo-canvas/AboutPage.tsx")).toContain("// hand edit");
+    expect(files.get("src/plexo-canvas/HomePage.tsx")).toBeDefined();
+    expect(before).toBeDefined();
+    // Recompiled pages are no longer "edited in code".
+    expect((await listDesigns("app1")).designs.find((d) => d.slug === "home")?.codeEdited).toBe(false);
+  });
+});
+

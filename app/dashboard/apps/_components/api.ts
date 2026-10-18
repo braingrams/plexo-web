@@ -101,6 +101,22 @@ export const appsApi = {
   conversation: (id: string) => api<{ conversationId: string; modelTier: "BASIC" | "MEDIUM" | "HIGH" }>(`/api/v1/apps/${id}/conversation`, { method: "POST" }),
 };
 
+/** "Keep my website up to date with Strata" for one app (the server holds the key; none ever reaches the browser). */
+export type StrataAutoUpdateState = {
+  available?: boolean;
+  enabled: boolean;
+  status: "active" | "needs-reconnect" | "off";
+  lastCheckedAt: string | null;
+  /** Plain language, ready to show. */
+  lastResult: string | null;
+  lastResultKind: "updated" | "up-to-date" | "needs-review" | "error" | "reconnect" | null;
+};
+export const strataAutoUpdateApi = {
+  get: (id: string) => api<StrataAutoUpdateState>(`/api/v1/apps/${id}/strata-auto-update`),
+  enable: (id: string) => api<StrataAutoUpdateState>(`/api/v1/apps/${id}/strata-auto-update`, { method: "POST" }),
+  disable: (id: string) => api<StrataAutoUpdateState>(`/api/v1/apps/${id}/strata-auto-update`, { method: "DELETE" }),
+};
+
 /** Polls a build until it (and its post-build steps) finish. */
 export async function pollBuild(appId: string, buildId: string, onUpdate?: (r: BuildReport) => void, signal?: AbortSignal): Promise<BuildReport> {
   let delay = 900;

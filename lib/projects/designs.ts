@@ -12,6 +12,7 @@ import {
   type PageDefinition,
 } from "@charisol/plexo-sdk/v2/compile";
 import { sha256 } from "./blobStore";
+import { slugForName } from "./designTemplates";
 import { PROJECT_LIMITS } from "./paths";
 import { listFiles, readFiles, writeFiles, deleteFiles, ProjectFileError, type FileWrite } from "./fileStore";
 
@@ -60,14 +61,7 @@ export const designPath = (slug: string) => `${DESIGN_DIR}/${slug}.canvas.json`;
 export const pageComponentName = (slug: string) => `${componentNameFor(slug)}Page`;
 const codePath = (slug: string) => `${DESIGN_DIR}/${pageComponentName(slug)}.tsx`;
 
-/** A file-safe id for a new design, from its name ("About us" → "about-us"). */
-export function slugForName(name: string, taken: Iterable<string> = []): string {
-  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "page";
-  const used = new Set(taken);
-  let slug = RESERVED_SLUGS.has(base) ? `${base}-page` : base;
-  for (let i = 2; used.has(slug); i++) slug = `${base}-${i}`;
-  return slug;
-}
+export { slugForName };
 
 export function normalizeRoute(raw: string): string {
   let route = String(raw ?? "").trim();
@@ -231,6 +225,17 @@ export async function getDesign(appId: string, slug: string): Promise<{ design: 
   return { design: summarize(slug, doc, codeEdited(slug, doc)), page: pageFor(slug, doc), designSystem };
 }
 
+/** Every design with its page, in route order — what SOL reads and edits. */
+export async function getAllDesigns(appId: string): Promise<{ designs: DesignSummary[]; pages: PageDefinition[]; designSystem: DesignSystem }> {
+  const { docs, designSystem, codeEdited } = await loadAll(appId);
+  const entries = [...docs.entries()].sort((a, b) => a[1].route.localeCompare(b[1].route));
+  return {
+    designs: entries.map(([slug, doc]) => summarize(slug, doc, codeEdited(slug, doc))),
+    pages: entries.map(([slug, doc]) => pageFor(slug, doc)),
+    designSystem,
+  };
+}
+
 export type SaveDesignInput = {
   name: string;
   route: string;
@@ -338,4 +343,39 @@ export async function deleteDesign(appId: string, slug: string, updatedBy?: stri
   docs.delete(slug);
   await writeFiles(appId, [{ path: ROUTES_PATH, content: renderRoutesFile([...docs.entries()].map(([s, d]) => ({ slug: s, route: d.route }))) }], updatedBy);
   await deleteFiles(appId, [designPath(slug), codePath(slug)]);
+}
+
+export type ApplyDesignSystemResult = { recompiled: string[]; skipped: string[] };
+
+/**
+ * Saves a new design system for the whole app without a person in the editor (the Strata
+ * auto-update job): writes design-system.json and recompiles every design the same way a
+ * design save does, except pages whose code was hand-edited, which are left alone and
+ * reported in `skipped`. `recompile: false` only stores the system (e.g. flipping a setting).
+ */
+export async function applyDesignSystem(appId: string, system: unknown, updatedBy?: string, opts: { recompile?: boolean } = {}): Promise<ApplyDesignSystemResult> {
+  if (JSON.stringify(system ?? null).length > MAX_DESIGN_SYSTEM_BYTES) throw new DesignError("The design system is too large to save.");
+  const designSystem = asDesignSystem(system);
+  if (!designSystem) throw new DesignError("The design system couldn't be read.");
+  const { docs, codeEdited } = await loadAll(appId);
+  const writes: FileWrite[] = [{ path: DESIGN_SYSTEM_PATH, content: `${JSON.stringify(designSystem, null, 2)}\n` }];
+  const recompiled: string[] = [];
+  const skipped: string[] = [];
+  if (opts.recompile !== false) {
+    for (const [slug, doc] of docs) {
+      if (codeEdited(slug, doc)) {
+        skipped.push(doc.name);
+        continue;
+      }
+      try {
+        const code = compileDesign(slug, doc, designSystem).code;
+        writes.push({ path: codePath(slug), content: code }, { path: designPath(slug), content: `${JSON.stringify({ ...doc, generatedSha: sha256(code) }, null, 2)}\n` });
+        recompiled.push(doc.name);
+      } catch {
+        skipped.push(doc.name);
+      }
+    }
+  }
+  for (let i = 0; i < writes.length; i += PROJECT_LIMITS.maxFilesPerWrite) await writeFiles(appId, writes.slice(i, i + PROJECT_LIMITS.maxFilesPerWrite), updatedBy);
+  return { recompiled, skipped };
 }

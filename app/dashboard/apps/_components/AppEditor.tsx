@@ -3,6 +3,7 @@
 import { SitePlanNotice } from "../../_components/SitePlanNotice";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, ChevronDown, Code2, ExternalLink, MessageSquare, AppWindow, MousePointerClick, RotateCw, Undo2, Eye, Wrench, X } from "lucide-react";
 import { SolChatView } from "../../sol/_components/SolChatView";
 import type { ConversationSummary, ModelTier, SolMessage } from "../../sol/_components/types";
@@ -53,7 +54,7 @@ const SUGGESTIONS = ["Change the colours", "Add a new page", "Make it look great
 
 // Tools whose completion means the preview (and the files/data panes) changed.
 const REFRESHING_TOOLS = new Set(["app_build", "app_build_status", "app_restore_version", "app_publish", "app_sql", "app_update_auth_settings"]);
-const WRITING_TOOLS = new Set(["app_write_files", "app_edit_file", "app_delete_files", "app_rename_file"]);
+const WRITING_TOOLS = new Set(["app_write_files", "app_edit_file", "app_delete_files", "app_rename_file", "app_design_edit"]);
 
 const seg = (active: boolean) => ({
   padding: "0.42rem 0.8rem", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: "0.82rem", whiteSpace: "nowrap" as const,
@@ -98,6 +99,22 @@ export function AppEditor(props: {
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [codePreviewHidden, setCodePreviewHidden] = useState(false);
+  // Full screen for the design canvas: hides the chat and this top bar so the page gets the room. Remembered per browser.
+  const router = useRouter();
+  const [designFocus, setDesignFocus] = useState(false);
+  useEffect(() => {
+    try {
+      setDesignFocus(localStorage.getItem("plexo.design.focus") === "1");
+    } catch {}
+  }, []);
+  const toggleDesignFocus = useCallback(() => {
+    setDesignFocus((v) => {
+      try {
+        localStorage.setItem("plexo.design.focus", v ? "0" : "1");
+      } catch {}
+      return !v;
+    });
+  }, []);
   const [turnRunning, setTurnRunning] = useState(false);
   const [hasChatted, setHasChatted] = useState(props.initialMessages.length > 0);
 
@@ -250,6 +267,8 @@ export function AppEditor(props: {
     (call: { name: string; status: string; result: unknown }) => {
       if (WRITING_TOOLS.has(call.name)) setWrites((w) => w + 1);
       if (call.name === "app_screenshot") setChecked(true);
+      // SOL changed a designed page: the Design tab picks the new version up (unless the owner has unsaved edits open).
+      if (call.name === "app_design_edit") setRefreshKey((k) => k + 1);
       if (!REFRESHING_TOOLS.has(call.name)) return;
       setRefreshKey((k) => k + 1);
       const result = call.result as { ok?: boolean; pending?: boolean; buildId?: string } | undefined;
@@ -601,6 +620,7 @@ export function AppEditor(props: {
     </div>
   );
 
+  const focusing = designFocus && tab === "design" && !codeMode;
   const moreActive = MORE_TABS.find((t) => t.id === tab && !codeMode);
   const publishable = !firstBuild && !!summary.latestBuild;
 
@@ -609,7 +629,7 @@ export function AppEditor(props: {
   return (
     <div className={`app-editor ${props.fontClassName ?? ""}`} style={{ height: "100dvh", display: "flex", flexDirection: "column", background: C.bg, color: C.text }}>
       {/* Top bar */}
-      <header className="ed-top" style={{ display: "flex", alignItems: "center", gap: 14, padding: "0 1.1rem", borderBottom: `1px solid ${C.border}`, minHeight: 60 }}>
+      {!focusing && <header className="ed-top" style={{ display: "flex", alignItems: "center", gap: 14, padding: "0 1.1rem", borderBottom: `1px solid ${C.border}`, minHeight: 60 }}>
         <Link href="/dashboard/apps" aria-label="Back to apps" style={{ color: C.muted, display: "inline-flex" }}>
           <ArrowLeft size={18} />
         </Link>
@@ -681,8 +701,8 @@ export function AppEditor(props: {
             {summary.published ? "Publish changes" : "Publish"}
           </button>
         </div>
-      </header>
-      <SitePlanNotice templateId={appId} refreshKey={summary.liveUrl ?? null} />
+      </header>}
+      {!focusing && <SitePlanNotice templateId={appId} refreshKey={summary.liveUrl ?? null} />}
 
       {/* Mobile switcher */}
       <div className="ed-mobile" style={{ display: "none", padding: "0.4rem 0.6rem", gap: 6, borderBottom: `1px solid ${C.border}` }}>
@@ -694,7 +714,7 @@ export function AppEditor(props: {
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
-        <aside className={`ed-chat ${mobileView === "chat" ? "is-active" : ""}`} style={{ width: 420, flexShrink: 0, borderRight: `1px solid ${C.border}`, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <aside className={`ed-chat ${mobileView === "chat" ? "is-active" : ""}`} style={{ width: 420, flexShrink: 0, borderRight: `1px solid ${C.border}`, minHeight: 0, display: focusing ? "none" : "flex", flexDirection: "column" }}>
           {since && !firstBuild && (
             <div style={{ padding: "0.9rem 1.2rem", borderBottom: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.faint }}>Since you were last here</div>
@@ -752,6 +772,9 @@ export function AppEditor(props: {
                       refreshKey={refreshKey}
                       stockKeys={props.stockKeys}
                       onSaved={onDesignSaved}
+                      fullScreen={designFocus}
+                      onToggleFullScreen={toggleDesignFocus}
+                      onExit={() => router.push("/dashboard/apps")}
                       onAskSol={sendToSol}
                       onOpenCode={(path) => {
                         setCodeOpen({ path, nonce: Date.now() });
