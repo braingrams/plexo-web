@@ -86,7 +86,7 @@ function ResetPasswordForm() {
       <h1 className="auth-title">{securityReset ? "Choose a new password" : "Reset Password"}</h1>
       <p className="auth-subtitle">
         {securityReset
-          ? "For your security, your account needs a new password before you can sign in. We've emailed you a 6-digit code."
+          ? "Your Charisol password may have been set in another app, or needs to be stronger. We've emailed you a 6-digit code so you can set one password for every Charisol app."
           : codeMode
             ? `Enter the 6-digit code we emailed to ${email || "you"} and choose a new password.`
             : "Create a fresh credential for your account."}

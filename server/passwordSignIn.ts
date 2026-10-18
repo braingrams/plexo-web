@@ -21,6 +21,20 @@ import { passwordSignIn, sendResetCode, type PasswordSignInResult } from "@/serv
 //   unavailable           | no                                      | Plexo's own password decides
 //   must choose a new one | —                                       | code emailed → reset page
 //
+// With CHARISOL_PASSWORD_ENFORCED=true (set only once Charisol has approved legacy-verify, so
+// existing users are moved across on first sign-in) the first account on Charisol Auth wins
+// and Plexo's own password never signs anyone in:
+//
+//   Charisol says…        | typed password = old Plexo password? | outcome
+//   ----------------------|--------------------------------------|-----------------------------
+//   correct               | —                                    | signed in
+//   wrong / not switched  | yes (stale local password)           | NOT signed in; code emailed →
+//     on yet              |                                      | reset page (one password everywhere)
+//   wrong / not switched  | no                                   | wrong password (generic)
+//     on yet              |                                      |
+//   unavailable           | held by Charisol or not              | "try again shortly" (fail closed)
+//   must choose a new one | —                                    | code emailed → reset page
+//
 // Existing users move across on their first sign-in: Charisol doesn't know them, so it asks
 // Plexo's /api/charisol/legacy-verify whether the password is right, and if so creates their
 // Charisol account with it. Until that endpoint is registered and approved in Charisol's
@@ -107,6 +121,7 @@ export async function authorizePassword(
   const heldByCharisol = Boolean(user?.charisolPasswordAt);
 
   const charisol = await (deps.passwordSignIn ?? passwordSignIn)(email, password);
+  const enforced = isCharisolPasswordEnforced();
   switch (charisol.kind) {
     case "ok": {
       let claims: CharisolClaims;
@@ -126,16 +141,38 @@ export async function authorizePassword(
     case "rate_limited":
       throw new TooManyLoginAttemptsError();
     case "wrong_password":
-      if (heldByCharisol) return null;
+    case "not_enabled":
+      if (enforced) return resetIfStaleLocalPassword(user, password, email, deps);
+      if (charisol.kind === "wrong_password" && heldByCharisol) return null;
       break;
     case "unavailable":
-      if (heldByCharisol) throw new SignInUnavailableError();
-      break;
-    case "not_enabled":
+      if (enforced || heldByCharisol) throw new SignInUnavailableError();
       break;
   }
 
   return localPasswordCheck(user, password, request);
+}
+
+function isCharisolPasswordEnforced(): boolean {
+  return process.env.CHARISOL_PASSWORD_ENFORCED?.trim().toLowerCase() === "true";
+}
+
+/**
+ * Enforced mode: Plexo's old password never signs in. If it is nevertheless the one typed,
+ * the person is on a stale password (usually set before their Charisol account existed in
+ * another app) — email a reset code so they set one password everywhere. No session is made.
+ */
+async function resetIfStaleLocalPassword(
+  user: EntityItem<typeof User> | undefined,
+  password: string,
+  email: string,
+  deps: Partial<PasswordSignInDeps>,
+): Promise<null> {
+  if (!user?.passwordHash || !user.isConfirmed) return null;
+  if (password.trim().toLowerCase() === user.email.toLowerCase()) return null;
+  if (!(await verifyPassword(user.passwordHash, password))) return null;
+  await (deps.sendResetCode ?? sendResetCode)(email).catch(() => undefined);
+  throw new PasswordResetRequiredError();
 }
 
 /** Plexo's own stored password — for accounts Charisol doesn't hold a password for yet. */
