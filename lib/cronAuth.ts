@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest } from "next/server";
 
 // Deliberately NOT an "authorization: Bearer <token>" header — this was tried first
@@ -12,5 +13,8 @@ import { NextRequest } from "next/server";
 export function isCronRequest(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET;
   const provided = request.headers.get("x-cron-secret");
-  return !!cronSecret && provided === cronSecret;
+  if (!cronSecret || !provided) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(cronSecret);
+  return a.length === b.length && timingSafeEqual(a, b);
 }

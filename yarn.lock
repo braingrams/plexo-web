@@ -1238,10 +1238,10 @@
   resolved "https://registry.npmjs.org/@charisol/auth-sdk-web/-/auth-sdk-web-0.2.1.tgz"
   integrity sha512-tk5iPw3X3w9Z14W+IF8+ATVsYoEGlU4HjSifO2eMeaOFnJQXi6K2uALkzp5ou3ttpnXQyfxPOXNJelwZWKdIOw==
 
-"@charisol/plexo-sdk@^1.4.42":
-  version "1.4.42"
-  resolved "https://registry.npmjs.org/@charisol/plexo-sdk/-/plexo-sdk-1.4.42.tgz"
-  integrity sha512-nIC3nK5HaC8o9CjZ7u4HpQrcMrbi+pDPxwPdBQxQWpIPWEgX/o2L5kcAhGrKtXpOx+gt/tQ1n8UHa+1rFSe9rw==
+"@charisol/plexo-sdk@^2.0.1":
+  version "2.0.1"
+  resolved "https://registry.npmjs.org/@charisol/plexo-sdk/-/plexo-sdk-2.0.1.tgz"
+  integrity sha512-e2V4VUc/hXUIRYFDJy91iByK5E2efXzxQ3MG+UKRizEfc3R/pfcfzix+m8xxidrfCh/aDjkaA/+XmJf8ysSlOw==
   dependencies:
     "@dnd-kit/core" "^6.3.1"
     "@dnd-kit/sortable" "^10.0.0"
@@ -5836,12 +5836,7 @@ node-releases@^2.0.51:
   resolved "https://registry.npmjs.org/node-releases/-/node-releases-2.0.51.tgz"
   integrity sha512-wRNIrw4DmVLKQlbgOMdkMx27Wrpzes2hh5Jtbi2bjPd+4wJstWIqP5A+lscnqbm0xxmT5Bpg8Lec5ItEBwx6BQ==
 
-"nodemailer@^7.0.7 || ^8.0.5":
-  version "8.0.11"
-  resolved "https://registry.npmjs.org/nodemailer/-/nodemailer-8.0.11.tgz"
-  integrity sha512-nrO/pDAUKl+wXX+lx16tDLbnm0fW6sK/x8mgohaCpg+CdCEl482bD4tCuAZk2DyliruiNTIZxRCoWkDqJEnAiA==
-
-nodemailer@^9.0.3:
+"nodemailer@^7.0.7 || ^8.0.5", nodemailer@^9.0.3:
   version "9.0.3"
   resolved "https://registry.npmjs.org/nodemailer/-/nodemailer-9.0.3.tgz"
   integrity sha512-n+YP+NKwR5zRWa60k3GiQ6Q3B4KXCoAw40dAKeCtYn020iNN74aWK2liXIC3ZEATeGql7we3tE3t8QwhY0eskw==

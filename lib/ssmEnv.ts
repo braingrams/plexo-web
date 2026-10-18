@@ -39,6 +39,10 @@ const APP_SECRET_KEYS = [
   // the app-visitor Cognito pool for zero-setup "Sign in with Google" (lib/appAuth/oauth.ts;
   // the three APP_SIGNIN_* values are written by cdk/lib/app-data-stack.ts).
   "APP_SECRETS_ENCRYPTION_SECRET",
+  // Connecting a person's Strata account from the editor's Branding panel (lib/strata): the key
+  // that encrypts their Strata session at rest, and Strata's API root (incl. /v1).
+  "STRATA_TOKEN_ENCRYPTION_SECRET",
+  "STRATA_API_URL",
   "APP_SIGNIN_COGNITO_CLIENT_ID",
   "APP_SIGNIN_COGNITO_USER_POOL_ID",
   "APP_SIGNIN_COGNITO_DOMAIN",

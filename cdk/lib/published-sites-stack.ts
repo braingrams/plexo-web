@@ -511,6 +511,12 @@ export class PublishedSitesStack extends cdk.Stack {
     // bound by, not the actually-desired cadence.
     scheduledRoute("CommerceExpireStaleHolds", "/api/internal/commerce/expire-stale-holds", events.Schedule.rate(cdk.Duration.minutes(15)));
 
+    // "Keep my website up to date with Strata": pulls Strata changes for every app that turned
+    // it on and rebuilds/republishes when they're safe to apply (lib/strata/autoUpdate.ts).
+    // Every 15 minutes: a brand change should reach visitors the same day without anyone
+    // opening the editor; an unchanged revision costs one tiny request per app.
+    scheduledRoute("StrataAutoUpdate", "/api/internal/strata-auto-update", events.Schedule.rate(cdk.Duration.minutes(15)));
+
     // Optional, non-blocking backstop for the Funnel/LMS module's time-based (drip) page
     // unlocks — see that route's own doc comment. Unlocking itself never depends on this
     // (evaluatePageUnlock runs at read time on every portal visit); daily is plenty for a

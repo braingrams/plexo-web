@@ -9,6 +9,7 @@ These are the steps only a person with account access can do, once per environme
 | Secret | What it is |
 | --- | --- |
 | `APP_SECRETS_ENCRYPTION_SECRET` | 32+ random bytes (e.g. `openssl rand -base64 48`). Encrypts app owners' secrets. Never rotate without re-encrypting. |
+| `STRATA_TOKEN_ENCRYPTION_SECRET`, `STRATA_API_URL` | Optional: lets people connect Strata from the editor's Branding panel. The secret (32+ random bytes) encrypts each person's Strata session; the URL is Strata's API root including `/v1`. Plexo's Cognito app client id must also be in Strata's `CHARISOL_TRUSTED_CLIENT_IDS`. |
 | `PLEXO_GITHUB_APP_ID`, `PLEXO_GITHUB_APP_SLUG`, `PLEXO_GITHUB_APP_PRIVATE_KEY`, `PLEXO_GITHUB_APP_WEBHOOK_SECRET`, `PLEXO_GITHUB_APP_CLIENT_ID`, `PLEXO_GITHUB_APP_CLIENT_SECRET` | The Plexo GitHub App (step 4). |
 | `BROWSERBASE_API_KEY` | Already used by site import; SOL's `app_screenshot` uses it too. |
 

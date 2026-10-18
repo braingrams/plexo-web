@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { EntityItem } from "electrodb";
 
+import { SOL_SYSTEM_PROMPT } from "@charisol/plexo-sdk/v2/compile";
 import { dispatchMcpTool, type ResolvedUser } from "@/lib/mcp/dispatchMcpTool";
 import { isDestructiveTool } from "@/lib/mcp/toolRiskClassification";
 import { generateWithTools as bedrockGenerateWithTools } from "@/lib/ai/providers/bedrockClaude";
@@ -332,7 +333,9 @@ How to build an app well:
 - Anything secret (API keys) goes in a server function (functions/<name>.ts), never in src/. Use app_request_secret to get a key from the owner — never ask for one in chat.
 - Write in sensible chunks with app_write_files; change existing code with app_edit_file. Then app_build. Fix every error and type problem it reports and build again until it's clean.
 - After a clean build, check it with app_screenshot — the main page and at least one other, and on mobile. Fix anything that looks broken or wrong before telling the owner it's ready.
-- Pages in src/plexo-canvas/ were designed visually in the editor's Design tab (<name>.canvas.json is the design; <Name>Page.tsx is generated from it). For small content or style changes to a designed page, suggest the Design tab; if you do edit its .tsx, say so — the Design tab will ask the owner before replacing your edit. Never edit src/plexo-canvas/routes.tsx or brand.json, and keep the designRoutes line in src/App.tsx.
+- Pages in src/plexo-canvas/ were designed visually in the editor's Design tab (<name>.canvas.json is the design; <Name>Page.tsx is generated from it). To change one, do NOT edit the generated .tsx: call app_design_describe to see its sections, then app_design_edit with section commands (add, update, move, duplicate or remove a section, change the brand, add or rename a page — and addPage with a templateId gives a complete, filled-in page). Each command is checked and saved on its own, so read the results and fix any that failed. That keeps the page editable in the Design tab afterwards. If a page was edited in code (app_design_edit says so), tell the owner and either edit the .tsx with app_edit_file or ask before replacing their code edits. For something a section can't express, you may edit the .tsx — say so, because the Design tab will then ask the owner before replacing your edit. Never edit src/plexo-canvas/routes.tsx or design-system.json, and keep the designRoutes line in src/App.tsx. Run app_build after design edits.
+- How to write good design commands (the Design tab's own guidance — with app_design_edit pass the commands as the tool's commands array rather than a fenced block, and use pageId = the page's slug):
+${SOL_SYSTEM_PROMPT}
 - When a message includes a selected element (a file and line from the editor's Select & Edit), change exactly that element. When it includes an error from the app ("Fix with AI"), find the cause in the code — read the file it points to — fix it, rebuild and verify.
 - Finish with a short summary: what you built, the preview link, how to try it (e.g. "sign up with any email"), and two or three good next steps. Don't publish unless they ask — app_publish asks for their confirmation first.${appContext ? `\n\n## The app you're working on\n\n${appContext}` : ""}${memoryBlock}`;
 }

@@ -22,6 +22,7 @@ const WORKING_ON_AN_APP = `How to work on this app:
 - Work in small steps so the owner sees progress: write a few files per app_write_files call rather than everything at once.
 - Keep packages small. Never add big server SDKs (stripe, aws-sdk, firebase-admin, googleapis) — they make the build run out of time and are refused. Call those services' HTTP APIs with fetch from a server function instead (PLEXO.md shows payments this way).
 - Don't retry what isn't yours to fix. If a screenshot can't be taken, or a tool says Plexo couldn't set something up (its database, a browser), try at most once more, then stop and tell the owner plainly — repeating it only uses up their credits.
+- Pages designed in the Design tab (listed above as "Designed pages") are edited with app_design_describe + app_design_edit (section by section), not by rewriting their generated .tsx. Use app_design_edit's addPage with a templateId to add a complete page (home, landing, about, services, contact, pricing).
 - Talk to the owner in plain words: what their visitors will see and be able to do, never file names, code or technical terms.
 
 Make it look impressive — this is the bar, every time:
@@ -50,6 +51,10 @@ export async function buildSolAppContext(appId: string, resolved: { organization
     .slice(0, 400);
   const uiKit = files.filter((f) => f.path.startsWith("src/components/ui/")).map((f) => f.path.replace("src/components/ui/", "").replace(/\.tsx?$/, ""));
 
+  const designed = files
+    .map((f) => /^src\/plexo-canvas\/([a-z0-9-]+)\.canvas\.json$/.exec(f.path)?.[1])
+    .filter((slug): slug is string => !!slug && slug !== "design-system");
+
   const lines = [
     `App: "${app.name}" — appId ${app.id} (use this id with every app_* tool; don't ask for it).`,
     `Preview: ${app.previewHost ? previewUrl(app.previewHost) : "not built yet"}. ${app.liveBuildId ? "It's published." : "Not published yet."}`,
@@ -57,6 +62,7 @@ export async function buildSolAppContext(appId: string, resolved: { organization
       ? `Last preview build: ${latest.summary ?? latest.status}.${latest.status === "FAILED" ? `\n${formatBuildErrors((latest.errors ?? []) as ProjectBuildError[], 10)}` : ""}`
       : "It hasn't been built yet.",
     `Files (${files.length}):\n${tree.join("\n")}${files.length > tree.length ? "\n…" : ""}`,
+    designed.length ? `Designed pages (edit with app_design_edit; slugs): ${designed.join(", ")}.` : "",
     uiKit.length ? `UI components available in src/components/ui: ${uiKit.join(", ")}.` : "",
     guide ? `The app's PLEXO.md (its conventions — follow them):\n${guide.slice(0, 14000)}` : "",
     WORKING_ON_AN_APP,

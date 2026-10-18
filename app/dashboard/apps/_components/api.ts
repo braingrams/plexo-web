@@ -3,6 +3,8 @@
 // Client for the app editor: thin, typed wrappers over /api/v1/apps/* (see those routes for
 // the full contract). Every call throws ApiError with the server's plain-language message.
 
+import type { DesignSystem, PageDefinition } from "@charisol/plexo-sdk/v2/compile";
+
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number, public readonly hint?: string, public readonly extra?: Record<string, unknown>) {
     super(message);
@@ -64,8 +66,9 @@ export type BuildReport = {
 export type FileEntry = { path: string; size: number; contentType: string; sha: string };
 
 export type DesignSummary = { slug: string; name: string; route: string; file: string; codeFile: string; codeEdited: boolean; updatedAt: string };
-export type DesignSave = { name: string; route: string; nodes: unknown; pageOrder: string[]; brand?: Record<string, unknown> | null };
-export type DesignSaveResult = { design: DesignSummary; routesWired: boolean; recompiled: string[]; skipped: string[] };
+// `page` is the editor's PageDefinition; `designSystem` is sent only when it changed.
+export type DesignSave = { name: string; route: string; page: PageDefinition; designSystem?: DesignSystem | null };
+export type DesignSaveResult = { design: DesignSummary; routesWired: boolean; recompiled: string[]; skipped: string[]; warnings: string[] };
 
 export const appsApi = {
   summary: (id: string) => api<AppSummary>(`/api/v1/apps/${id}`),
@@ -90,12 +93,28 @@ export const appsApi = {
       `/api/v1/apps/${id}/versions/${versionId}/diff?against=${encodeURIComponent(against)}${path ? `&path=${encodeURIComponent(path)}` : ""}`,
     ),
   runtimeErrors: (id: string, minutes = 30) => api<{ errors: Array<{ kind: string; message: string; stack: string | null; url: string | null; lastAt: string; count: number }> }>(`/api/v1/apps/${id}/runtime-errors?minutes=${minutes}`),
-  designs: (id: string) => api<{ designs: DesignSummary[]; brand: Record<string, unknown> | null }>(`/api/v1/apps/${id}/designs`),
-  design: (id: string, slug: string) => api<{ design: DesignSummary; nodes: Record<string, unknown>; pageOrder: string[]; brand: Record<string, unknown> | null }>(`/api/v1/apps/${id}/designs/${slug}`),
+  designs: (id: string) => api<{ designs: DesignSummary[]; designSystem: DesignSystem }>(`/api/v1/apps/${id}/designs`),
+  design: (id: string, slug: string) => api<{ design: DesignSummary; page: PageDefinition; designSystem: DesignSystem }>(`/api/v1/apps/${id}/designs/${slug}`),
   createDesign: (id: string, body: DesignSave) => api<DesignSaveResult>(`/api/v1/apps/${id}/designs`, { method: "POST", json: body }),
   saveDesign: (id: string, slug: string, body: DesignSave & { overwrite?: boolean }) => api<DesignSaveResult>(`/api/v1/apps/${id}/designs/${slug}`, { method: "PUT", json: body }),
   deleteDesign: (id: string, slug: string) => api(`/api/v1/apps/${id}/designs/${slug}`, { method: "DELETE" }),
   conversation: (id: string) => api<{ conversationId: string; modelTier: "BASIC" | "MEDIUM" | "HIGH" }>(`/api/v1/apps/${id}/conversation`, { method: "POST" }),
+};
+
+/** "Keep my website up to date with Strata" for one app (the server holds the key; none ever reaches the browser). */
+export type StrataAutoUpdateState = {
+  available?: boolean;
+  enabled: boolean;
+  status: "active" | "needs-reconnect" | "off";
+  lastCheckedAt: string | null;
+  /** Plain language, ready to show. */
+  lastResult: string | null;
+  lastResultKind: "updated" | "up-to-date" | "needs-review" | "error" | "reconnect" | null;
+};
+export const strataAutoUpdateApi = {
+  get: (id: string) => api<StrataAutoUpdateState>(`/api/v1/apps/${id}/strata-auto-update`),
+  enable: (id: string) => api<StrataAutoUpdateState>(`/api/v1/apps/${id}/strata-auto-update`, { method: "POST" }),
+  disable: (id: string) => api<StrataAutoUpdateState>(`/api/v1/apps/${id}/strata-auto-update`, { method: "DELETE" }),
 };
 
 /** Polls a build until it (and its post-build steps) finish. */
