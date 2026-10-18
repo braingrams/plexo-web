@@ -5,6 +5,7 @@ import { Template, BlogSite } from "@/lib/db/contentEntities";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 
 import { TemplatesClient } from "./templates-client";
+import { defaultDesignFormat } from "@/lib/v2/design";
 import { PagesShell } from "../_components/PagesShell";
 
 // Always fetch fresh — this route sits behind the always-visible "Templates" nav link, which
@@ -79,7 +80,7 @@ export default async function TemplatesDashboardPage() {
 
   return (
     <PagesShell>
-      <TemplatesClient initialTemplates={templates} />
+      <TemplatesClient initialTemplates={templates} pageDesignsForNew={defaultDesignFormat() === "v2"} />
     </PagesShell>
   );
 }

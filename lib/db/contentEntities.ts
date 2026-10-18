@@ -45,6 +45,10 @@ export const Template = new Entity(
       // have none: ALWAYS read it through designFormatOf() (missing = "v1"). EMAIL templates
       // are always v1.
       designFormat: { type: ["v1", "v2"] as const, default: "v1" },
+      // Set while a page that was moved from the classic editor to the new one can still go
+      // back: the TemplateRevision (made by POST /api/templates/:id/convert-to-v2) holding its
+      // classic design. Cleared when the owner goes back.
+      classicBackupId: { type: "string" },
       designJson: { type: "any", required: true },
       compiledHtml: { type: "string", required: true },
       // Draft/Publish model: designJson/compiledHtml above are always the LIVE, currently-
@@ -184,6 +188,10 @@ export const TemplateRevision = new Entity(
       designFormat: { type: ["v1", "v2"] as const },
       designJson: { type: "any", required: true },
       compiledHtml: { type: "string", required: true },
+      // Only on the backup made when a page moves to the new editor: the unpublished working
+      // copy it had at that moment, so going back to the classic editor loses nothing.
+      draftJson: { type: "any" },
+      draftHtml: { type: "string" },
       sdkVersion: { type: "string", required: true },
       // Left optional (not required) rather than backfilled, since pre-existing revision
       // rows (every auto-snapshot taken before this attribute existed, and anything the

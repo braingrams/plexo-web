@@ -220,7 +220,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
   let designFormat: DesignFormat = "v1";
   if (rawHtmlContent === null && kind === "LANDING_PAGE") {
-    designFormat = parent ? parent.designFormat : (requested ?? defaultDesignFormat());
+    // A dashboard call can name the editor for a sub-page too (a new-editor page opened inside a
+    // classic site adds its next page in the new editor); otherwise it matches its site.
+    designFormat = requested ?? (parent ? parent.designFormat : defaultDesignFormat());
   }
 
   const id = crypto.randomUUID();

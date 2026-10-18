@@ -54,3 +54,15 @@ the page at compile time only (V1 splices rows, V2 splices sections) and never s
 
 No V2 MailDrip embed (no equivalent), commerce accent colour is not derived from a V2 design system yet, V1 -> V2
 conversion is a later opt-in step (`convertV1Design`), Dynamo's 400 KB item cap is guarded only by the size limits above.
+
+## Phase 2: the editor
+
+- `app/dashboard/templates/[id]/page.tsx` branches on `designFormatOf(row)`: v1 renders the classic `PlexoBuilder` untouched,
+  v2 renders `v2/V2TemplateEditor.tsx` (SDK `V2Editor`) inside the same page chrome (Publish, Comments, plan notice, publish dialog).
+- Pages = the site's rows. Switching saves the open page, then opens that row (`router.push`); new pages go through `POST /api/templates`
+  (`designFormat:"v2"`, `pageTemplate`); rename/delete use the existing `/api/templates/:id` routes.
+- Saves post `{format, pages:[page], designSystem?, customJs?, meta?}` to the autosave route. A customised designSystem rides along on every
+  save (a save replaces the whole design); only the untouched built-in one is left out.
+- Moving a classic page: `POST /api/templates/:id/convert-to-v2` (server converts the stored design with `lib/v2/convertV1.ts`, snapshots a
+  v1 `TemplateRevision` incl. the working copy, sets `Template.classicBackupId`, flips the format, leaves live `compiledHtml` alone) and
+  `POST /api/templates/:id/revert-to-classic` restores it. The dialog previews the same conversion client-side first.

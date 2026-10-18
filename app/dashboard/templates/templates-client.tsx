@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "../_components/PageHeader";
 import { MarketplaceBrowseModal } from "./MarketplaceBrowseModal";
+import { PageDesignPicker } from "./PageDesignPicker";
 import { TemplateCard, IconMail, IconLayout, type TemplateKind, type TemplateSummary } from "./TemplateCard";
 
 type CreatePayload = {
@@ -13,6 +14,8 @@ type CreatePayload = {
 
 type Props = {
   initialTemplates: TemplateSummary[];
+  // Server-rendered: new landing pages are offered ready-made page designs.
+  pageDesignsForNew?: boolean;
 };
 
 function IconPlus() {
@@ -62,7 +65,7 @@ function IconUpload() {
 type FilterKind = "ALL" | TemplateKind | "FUNNEL";
 type ModalStep = "choose" | "blank";
 
-export function TemplatesClient({ initialTemplates }: Props) {
+export function TemplatesClient({ initialTemplates, pageDesignsForNew = false }: Props) {
   const router = useRouter();
   const [templates, setTemplates] = useState<TemplateSummary[]>(initialTemplates);
   const [filter, setFilter] = useState<FilterKind>("ALL");
@@ -72,6 +75,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [templateKind, setTemplateKind] = useState<TemplateKind>("EMAIL");
+  const [pageDesign, setPageDesign] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -143,7 +147,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
       const response = await fetch("/api/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: templateName, kind: templateKind }),
+        body: JSON.stringify({ name: templateName, kind: templateKind, ...(pageDesignsForNew && templateKind === "LANDING_PAGE" && pageDesign ? { pageTemplate: pageDesign } : {}) }),
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -154,6 +158,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
       setModalOpen(false);
       setTemplateName("");
       setTemplateKind("EMAIL");
+      setPageDesign("");
       router.push(`/dashboard/templates/${payload.template.id}`);
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Unable to create template.");
@@ -549,6 +554,15 @@ export function TemplatesClient({ initialTemplates }: Props) {
                     })}
                   </div>
                 </div>
+
+                {pageDesignsForNew && templateKind === "LANDING_PAGE" && (
+                  <div style={{ marginBottom: "1.25rem" }}>
+                    <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.5rem" }}>
+                      Start from
+                    </p>
+                    <PageDesignPicker value={pageDesign} onChange={setPageDesign} compact />
+                  </div>
+                )}
 
                 {error && (
                   <p style={{

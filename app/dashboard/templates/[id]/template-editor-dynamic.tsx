@@ -9,6 +9,7 @@
  */
 import dynamic from "next/dynamic";
 import type { TemplateJSON } from "@charisol/plexo-sdk";
+import type { V2Design } from "@/lib/v2/design";
 
 type AiTier = "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
 
@@ -37,6 +38,12 @@ export type TemplateEditorProps = {
   commerceEnabled?: boolean;
   maildripConnected?: boolean;
   rootTemplateId: string;
+  // "v1" = the classic builder, "v2" = the new visual editor. Decided on the server.
+  designFormat?: "v1" | "v2";
+  initialV2Design?: V2Design | null;
+  canTryNewEditor?: boolean;
+  canGoBackToClassic?: boolean;
+  templateSlug?: string | null;
 };
 
 function EditorSkeleton() {
