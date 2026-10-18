@@ -66,7 +66,7 @@ export function ArtifactCanvas({ artifact, onClose }: { artifact: ActiveArtifact
     setLoading(true);
     setError(null);
     setPage(null);
-    fetch(`/api/templates/${artifact.templateId}`)
+    fetch(`/api/templates/${artifact.templateId}?draft=1`)
       .then(async (res) => {
         if (!res.ok) throw new Error("Couldn't load this page.");
         const data = (await res.json()) as { page: ArtifactPage };
