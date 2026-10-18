@@ -2,9 +2,8 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
-import { compileToHTML } from "@/lib/compiler";
-import { sanitizeHtml } from "@/server/sanitizer";
-import { getEnabledSiteLayoutRows, spliceLayoutRows } from "@/lib/siteLayoutDynamo";
+import { compileGenerated } from "@/lib/v2/siteFormat";
+import { designFormatOf } from "@/lib/v2/design";
 import { ensureProductDetailLayout } from "@/lib/commerce/productDetailLayout";
 import { Template } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
@@ -100,11 +99,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   // Splice this site's own header/footer in at creation time (rather than leaving it
   // unspliced until the layout is first opened and saved in the builder) so a brand-new
   // layout looks and works right immediately, before anyone's touched it.
-  const layout = await getEnabledSiteLayoutRows(templateId);
-  const spliced = spliceLayoutRows(designJson, layout);
-  const compiledHtml = sanitizeHtml(compileToHTML(spliced));
-
+  // (A copy keeps its source's editor: a new-editor layout stays new-editor.)
+  const designFormat = designFormatOf(sourceTemplate);
   const layoutTemplateId = randomUUID();
+  const compiledHtml = await compileGenerated(templateId, { id: layoutTemplateId, name, designFormat, designJson });
+
   await Template.create({
     id: layoutTemplateId,
     userId,
@@ -112,6 +111,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
     name,
     kind: "LANDING_PAGE",
     isCommerceLayout: true,
+    ...(designFormat === "v2" ? { designFormat } : {}),
     designJson,
     compiledHtml,
   }).go();

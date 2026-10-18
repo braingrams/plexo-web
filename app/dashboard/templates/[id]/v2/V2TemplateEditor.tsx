@@ -1,0 +1,346 @@
+"use client";
+
+import "@charisol/plexo-sdk/dist/plexo-sdk.css";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import type { CommentTarget, V2EditorRef } from "@charisol/plexo-sdk/v2";
+
+import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
+import type { V2Design, V2Meta } from "@/lib/v2/design";
+import { PageSettings } from "./PageSettings";
+import { buildV2SavePayload, leaveAfterSaving, newPageBody, pageSourcePages, postV2Draft, stockProviders, type TreePage } from "./logic";
+
+// The new visual editor (<V2Editor> from @charisol/plexo-sdk/v2) for a template page. One Template
+// row is one page; the site's other pages are other rows, so "switching pages" opens that row
+// (after saving this one), exactly like the classic editor's Pages panel does. Saving goes to the
+// same autosave route the classic editor uses, and Publish stays the page's own Publish button
+// (the parent passes it in as `headerRight`), so there is one way to publish.
+
+type SdkV2 = typeof import("@charisol/plexo-sdk/v2");
+const AUTOSAVE_MS = 1500;
+
+export type V2TemplateEditorHandle = {
+  /** Saves what's on the canvas now (even if nothing looks changed) and returns what was saved. */
+  flush: () => Promise<V2Design>;
+  getNodeRect: (nodeId: string) => DOMRect | null;
+};
+
+type Props = {
+  templateId: string;
+  templateName: string;
+  rootTemplateId: string;
+  initialDesign: V2Design;
+  readOnly: boolean;
+  commentMode: boolean;
+  onRequestComment: (target: CommentTarget) => void;
+  stockKeys: { unsplash?: string; pexels?: string; pixabay?: string };
+  /** The page's own Comments / Publish buttons (the parent owns publishing). */
+  headerRight: ReactNode;
+  onBack: () => void;
+  onSaved: (design: V2Design) => void;
+  /** Present while this page can still go back to the classic editor. */
+  canGoBack: boolean;
+};
+
+export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(function V2TemplateEditor(props, ref) {
+  const { templateId, initialDesign, readOnly } = props;
+  const router = useRouter();
+  const [sdk, setSdk] = useState<SdkV2 | null>(null);
+  const [sdkError, setSdkError] = useState(false);
+  const [tree, setTree] = useState<TreePage[] | null>(null);
+  const [rootId, setRootId] = useState(props.rootTemplateId);
+  const [name, setName] = useState(props.templateName);
+  const [meta, setMeta] = useState<V2Meta>(initialDesign.meta ?? {});
+  const [customJs, setCustomJs] = useState(initialDesign.customJs ?? "");
+  const [dirty, setDirty] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [strataOn, setStrataOn] = useState(false);
+
+  const editorRef = useRef<V2EditorRef>(null);
+  const editVersion = useRef(0);
+  const systemDirty = useRef(false);
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+  // Read at save time, so a save never sends the script or details from an older render.
+  const extras = useRef({ meta, customJs });
+  extras.current = { meta, customJs };
+  const strata = useMemo(() => createStrataAdapter(), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    import("@charisol/plexo-sdk/v2")
+      .then((mod) => !cancelled && setSdk(mod))
+      .catch(() => !cancelled && setSdkError(true));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void strata.available().then((on) => !cancelled && setStrataOn(on));
+    return () => {
+      cancelled = true;
+    };
+  }, [strata]);
+
+  const loadTree = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/templates/${templateId}/pages`);
+      if (!res.ok) throw new Error("pages");
+      const data = (await res.json()) as { rootId: string; pages: TreePage[] };
+      setTree(data.pages);
+      setRootId(data.rootId);
+    } catch {
+      setTree((t) => t ?? []);
+    }
+  }, [templateId]);
+  useEffect(() => {
+    void loadTree();
+  }, [loadTree]);
+
+  const markDirty = useCallback(() => {
+    editVersion.current += 1;
+    setDirty(true);
+    setSaveState("idle");
+  }, []);
+
+  /** One save at a time, in order: a later save never overtakes an earlier one. */
+  const saveNow = useCallback((): Promise<V2Design> => {
+    const run = async (): Promise<V2Design> => {
+      const editor = editorRef.current;
+      if (!editor) throw new Error("The editor isn't ready yet.");
+      const version = editVersion.current;
+      setSaveState("saving");
+      const design = buildV2SavePayload({
+        page: editor.getPages()[0],
+        designSystem: editor.getDesignSystem(),
+        includeDesignSystem: systemDirty.current || !!initialDesign.designSystem,
+        customJs: extras.current.customJs,
+        meta: extras.current.meta,
+      });
+      try {
+        await postV2Draft(templateId, design);
+      } catch (err) {
+        setSaveState("error");
+        setNotice(err instanceof Error ? err.message : "Couldn't save this page.");
+        throw err;
+      }
+      setNotice(null);
+      props.onSaved(design);
+      if (editVersion.current === version) {
+        setDirty(false);
+        setSaveState("saved");
+      } else {
+        setSaveState("idle");
+      }
+      return design;
+    };
+    const next = queue.current.then(run, run);
+    queue.current = next.catch(() => undefined);
+    return next;
+    // props.onSaved is stable enough (a state setter wrapper); saving reads everything else from refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateId, initialDesign.designSystem]);
+
+  useImperativeHandle(ref, () => ({ flush: saveNow, getNodeRect: (id) => editorRef.current?.getNodeRect(id) ?? null }), [saveNow]);
+
+  // Autosave a moment after the last change.
+  useEffect(() => {
+    if (!dirty || readOnly) return;
+    const timer = setTimeout(() => void saveNow().catch(() => undefined), AUTOSAVE_MS);
+    return () => clearTimeout(timer);
+  }, [dirty, readOnly, saveNow]);
+
+  // Closing the tab with a change still waiting: ask first.
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (dirtyRef.current) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+
+  const openPage = useCallback(
+    async (id: string) => {
+      if (id === templateId) return;
+      const left = await leaveAfterSaving({ dirty: dirtyRef.current, save: async () => void (await saveNow()), leave: () => router.push(`/dashboard/templates/${id}`) });
+      if (!left) setNotice("This page couldn't be saved, so it stayed open. Fix the problem above, then try again.");
+    },
+    [templateId, router, saveNow],
+  );
+
+  const createPage = useCallback(
+    async ({ name: pageName, templateId: pageTemplate }: { name: string; templateId: string }) => {
+      try {
+        const res = await fetch("/api/templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newPageBody({ name: pageName, rootId, templateId: pageTemplate })) });
+        const data = (await res.json().catch(() => ({}))) as { error?: string; template?: { id: string } };
+        if (!res.ok || !data.template) throw new Error(data.error ?? "Couldn't add the page.");
+        await openPage(data.template.id);
+      } catch (err) {
+        setNotice(err instanceof Error ? err.message : "Couldn't add the page.");
+      }
+    },
+    [rootId, openPage],
+  );
+
+  const renamePage = useCallback(
+    async (id: string, next: { name?: string; slug?: string }): Promise<string | null> => {
+      const res = await fetch(`/api/templates/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(next) });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) return data.error ?? "Couldn't save that change.";
+      if (id === templateId && next.name) setName(next.name);
+      await loadTree();
+      return null;
+    },
+    [templateId, loadTree],
+  );
+
+  const deletePage = useCallback(
+    async (id: string) => {
+      const page = tree?.find((p) => p.id === id);
+      if (!page) return;
+      const isHome = !page.parentId;
+      const sure = window.confirm(
+        isHome
+          ? `Delete the whole site "${page.name}" and all of its pages? This can't be undone.`
+          : `Delete the page "${page.name}"? This can't be undone.`,
+      );
+      if (!sure) return;
+      const res = await fetch(`/api/templates/${id}`, { method: "DELETE" });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) return setNotice(data.error ?? "Couldn't delete the page.");
+      if (id !== templateId) return void (await loadTree());
+      dirtyRef.current = false;
+      router.refresh();
+      router.push(isHome ? "/dashboard/templates" : `/dashboard/templates/${page.parentId}`);
+    },
+    [tree, templateId, router, loadTree],
+  );
+
+  const goBackToClassic = useCallback(async (): Promise<string | null> => {
+    const res = await fetch(`/api/templates/${templateId}/revert-to-classic`, { method: "POST" });
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) return data.error ?? "Couldn't go back to the classic editor.";
+    dirtyRef.current = false;
+    // The page is served fresh as a classic page now.
+    window.location.assign(`/dashboard/templates/${templateId}`);
+    return null;
+  }, [templateId]);
+
+  const uploadImage = useCallback(async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/v1/media/upload", { method: "POST", body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.url) throw new Error(data?.error ?? "Upload failed");
+    return data.url as string;
+  }, []);
+
+  const loadMedia = useCallback(async () => {
+    const res = await fetch("/api/v1/media");
+    const data = await res.json().catch(() => []);
+    return Array.isArray(data) ? (data as { id: string; name: string; url: string }[]) : [];
+  }, []);
+
+  const providers = stockProviders(props.stockKeys);
+  const searchStock = useCallback(
+    async (query: string, provider: string) => {
+      const headers: Record<string, string> = {};
+      if (props.stockKeys.unsplash) headers["x-unsplash-key"] = props.stockKeys.unsplash;
+      if (props.stockKeys.pexels) headers["x-pexels-key"] = props.stockKeys.pexels;
+      if (props.stockKeys.pixabay) headers["x-pixabay-key"] = props.stockKeys.pixabay;
+      const res = await fetch(`/api/v1/media/stock?query=${encodeURIComponent(query)}&provider=${encodeURIComponent(provider)}`, { headers });
+      const data = await res.json().catch(() => []);
+      return Array.isArray(data) ? data.map((r) => ({ id: r.id, src: r.src, alt: r.alt, credit: r.credit, provider: r.provider })) : [];
+    },
+    [props.stockKeys],
+  );
+
+  if (sdkError) return <Centered>The page editor couldn&rsquo;t load. Check your connection and reload the page.</Centered>;
+  if (!sdk || !tree) return <Centered>Opening your page…</Centered>;
+
+  const V2Editor = sdk.V2Editor;
+  const current = tree.find((p) => p.id === templateId);
+  const slug = current ? current.slug : null;
+  const listed = pageSourcePages(tree);
+  const stateForEditor = saveState === "idle" ? (dirty ? "dirty" : "idle") : saveState;
+
+  return (
+    <div style={{ position: "relative", width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
+      {notice && (
+        <div role="alert" style={{ padding: "0.5rem 1rem", background: "rgba(248,113,113,0.12)", borderBottom: "1px solid rgba(248,113,113,0.3)", color: "#fca5a5", fontSize: "0.8rem", display: "flex", gap: 12, alignItems: "center" }}>
+          <span style={{ flex: 1 }}>{notice}</span>
+          <button type="button" onClick={() => setNotice(null)} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: "0.78rem", fontWeight: 600 }}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+        <div style={{ position: "absolute", inset: 0 }}>
+          <V2Editor
+            ref={editorRef}
+            pages={initialDesign.pages}
+            designSystem={initialDesign.designSystem}
+            apiKey="workspace-internal"
+            templateId={rootId}
+            readOnly={readOnly}
+            commentMode={props.commentMode}
+            onRequestComment={props.onRequestComment}
+            onChange={() => markDirty()}
+            onDesignSystemChange={() => {
+              systemDirty.current = true;
+              markDirty();
+            }}
+            onUpload={uploadImage}
+            loadMedia={loadMedia}
+            stockImages={providers.length ? { providers, search: searchStock } : undefined}
+            strata={strataOn ? strata : undefined}
+            onSave={readOnly ? undefined : () => saveNow().then(() => undefined)}
+            saveState={stateForEditor}
+            pageSource={{
+              pages: listed,
+              currentId: templateId,
+              onSelect: (id) => openPage(id),
+              onCreate: readOnly ? undefined : createPage,
+              onRename: readOnly ? undefined : async (id, next) => {
+                const problem = await renamePage(id, { name: next });
+                if (problem) setNotice(problem);
+              },
+              onDelete: readOnly ? undefined : (id) => deletePage(id),
+            }}
+            shell={{ onExit: props.onBack, exitLabel: "Back to site" }}
+            features={{ pageSwitcher: false, viewSwitch: false, headerSol: false, codeView: false }}
+            headerLeft={
+              <PageSettings
+                name={name}
+                slug={slug}
+                meta={meta}
+                customJs={customJs}
+                readOnly={readOnly}
+                onRename={(next) => renamePage(templateId, next)}
+                onMeta={(m) => {
+                  setMeta(m);
+                  markDirty();
+                }}
+                onCustomJs={(code) => {
+                  setCustomJs(code);
+                  markDirty();
+                }}
+                onDelete={() => void deletePage(templateId)}
+                onGoBack={props.canGoBack ? goBackToClassic : undefined}
+              />
+            }
+            headerRight={props.headerRight}
+          />
+        </div>
+      </div>
+    </div>
+  );
+});
+
+function Centered({ children }: { children: ReactNode }) {
+  return <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem", color: "rgba(240,242,255,0.6)", fontSize: "0.85rem" }}>{children}</div>;
+}

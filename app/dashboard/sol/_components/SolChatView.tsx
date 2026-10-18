@@ -42,6 +42,9 @@ const CANVAS_TOOL_NAMES = new Set([
   "publish_raw_landing_page",
   "update_template",
   "update_raw_landing_page",
+  "page_create_from_template",
+  "page_edit",
+  "page_publish",
 ]);
 
 function artifactFromResult(name: string, result: { templateId?: string; name?: string; publishedUrl?: string | null } | undefined): ActiveArtifact | null {

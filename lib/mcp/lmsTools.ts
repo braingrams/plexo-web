@@ -229,10 +229,10 @@ export async function handleLmsTool(toolName: string, args: any, resolved: Resol
       }
 
       const funnelId = randomUUID();
-      const { designJson, compiledHtml } = await compileFunnelStarterDesign(template.name, siteId);
+      const { designJson, compiledHtml, designFormat } = await compileFunnelStarterDesign(template.name, siteId);
       await Promise.all([
         LmsFunnel.create({ id: funnelId, templateId: siteId, organizationId: resolved.organizationId, userId: resolved.userId }).go(),
-        Template.patch({ id: siteId }).set({ isLmsFunnel: true, designJson, compiledHtml }).go(),
+        Template.patch({ id: siteId }).set({ isLmsFunnel: true, designFormat, designJson, compiledHtml }).go(),
       ]);
       await LmsPage.create({
         id: randomUUID(),

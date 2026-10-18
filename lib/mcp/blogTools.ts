@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { compileToHTML } from "@/lib/compiler";
+import { designFormatOf, V2_PAGE_NEEDS_NEW_TOOLS } from "@/lib/v2/design";
 import {
   TemplateJSONSchema,
   hydrateStructuralDefaults,
@@ -28,6 +29,9 @@ import { convertWordPressHtmlToTiptapJson } from "@/lib/blogImport/htmlToTiptap"
 import { assertPublishedBlogPostQuota } from "@/lib/blog/publishQuota";
 import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogFontPresets";
 import { hasBlogMarker, type BlogMarkerName } from "@/lib/pub/blogLayoutRender";
+import { v2TargetMessage } from "./deprecation";
+import { buildBlogListingLayoutV2, buildBlogPostLayoutV2 } from "@/lib/v2/layoutDesigns";
+import { chromeFor, compileGenerated, siteInfo } from "@/lib/v2/siteFormat";
 import {
   Template,
   BlogSite,
@@ -220,17 +224,29 @@ async function ensureBlogLayoutTemplate(
   if (existingId) return existingId;
 
   const layoutId = randomUUID();
+  const layoutName = kind === "post" ? "Blog Post Layout" : "Blog Listing Layout";
+  // A site on the new editor gets a ready, editable layout (same starter the dashboard makes);
+  // a classic site keeps the empty classic page.
+  const siteDetails = await siteInfo(siteId);
+  let layoutDesign: object = { body: { style: { background: "#ffffff", padding: "24px" }, rows: [] } };
+  let layoutHtml = "";
+  let layoutFormat: "v1" | "v2" = "v1";
+  if (siteDetails.format === "v2") {
+    const chrome = await chromeFor(siteId, siteDetails.name);
+    layoutDesign = kind === "post" ? buildBlogPostLayoutV2(chrome) : buildBlogListingLayoutV2(chrome);
+    layoutFormat = "v2";
+    layoutHtml = await compileGenerated(siteId, { id: "new-blog-layout", name: layoutName, designFormat: "v2", designJson: layoutDesign });
+  }
   await Template.create({
     id: layoutId,
     userId: resolved.userId,
     organizationId: resolved.organizationId,
-    name: kind === "post" ? "Blog Post Layout" : "Blog Listing Layout",
+    name: layoutName,
     kind: "LANDING_PAGE",
     isBlogLayout: true,
-    designJson: {
-      body: { style: { background: "#ffffff", padding: "24px" }, rows: [] },
-    },
-    compiledHtml: "",
+    ...(layoutFormat === "v2" ? { designFormat: "v2" as const } : {}),
+    designJson: layoutDesign,
+    compiledHtml: layoutHtml,
   }).go();
 
   const layoutField =
@@ -981,6 +997,16 @@ export async function handleBlogTool(
         );
       }
 
+      // A layout built with the visual (V2) editor is changed with blog_layout_edit, never overwritten with classic JSON.
+      {
+        const { data: blogRow } = await BlogSite.get({ templateId: siteId }).go();
+        const existingLayoutId = kind === "post" ? blogRow?.postLayoutTemplateId : blogRow?.listingLayoutTemplateId;
+        if (existingLayoutId) {
+          const { data: existingLayout } = await Template.get({ id: existingLayoutId }).go();
+          if (existingLayout && designFormatOf(existingLayout) === "v2") throw new Error(v2TargetMessage("design_blog_layout"));
+        }
+      }
+
       const designJson = validateBlogDesignJson(rawDesignJson);
       const compiledHtml = sanitizeHtml(compileToHTML(designJson));
 
@@ -989,6 +1015,10 @@ export async function handleBlogTool(
         siteId,
         kind,
       );
+      // A layout on the new editor holds a new-editor design: this classic tool must not
+      // overwrite it with a classic one (it would corrupt the layout).
+      const { data: layoutRow } = await Template.get({ id: layoutTemplateId }).go();
+      if (designFormatOf(layoutRow) === "v2") throw new Error(V2_PAGE_NEEDS_NEW_TOOLS);
       const requiredMarker: BlogMarkerName =
         kind === "post" ? "content" : "postList";
       const hasRequired = hasBlogMarker(compiledHtml, requiredMarker);

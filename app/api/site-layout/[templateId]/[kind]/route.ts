@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveSiteLayoutAdmin, recompileSiteLayoutDependents } from "@/lib/siteLayoutDynamo";
 import { Template, SiteLayout } from "@/lib/db/contentEntities";
+import { buildSiteFooterV2, buildSiteHeaderV2 } from "@/lib/v2/layoutDesigns";
+import { designFormatOf, type DesignFormat } from "@/lib/v2/design";
+import { siteInfo } from "@/lib/v2/siteFormat";
+import { getStorefrontPath } from "@/lib/commerce/storefrontLayout";
 
 const BLANK_TEMPLATE_SHELL = {
   body: {
@@ -90,6 +94,7 @@ export async function POST(
   let name = kind === "header" ? "Site Header" : "Site Footer";
   let designJson: object = BLANK_TEMPLATE_SHELL;
   let compiledHtml = "";
+  let designFormat: DesignFormat = "v1";
 
   if (sourceFragmentTemplateId) {
     // Never trust a bare template id from the client — re-verify it the same way GET
@@ -107,6 +112,18 @@ export async function POST(
     name = source.name;
     designJson = source.designJson as object;
     compiledHtml = source.compiledHtml;
+    designFormat = designFormatOf(source);
+  } else {
+    // A site on the new editor gets a working header/footer (its name, a Home link, and the
+    // shop when it has one) rather than an empty page to fill — every page picks it up at once.
+    // The classic site keeps the empty classic fragment, exactly as before. (Compiled HTML
+    // stays empty: a fragment is only ever spliced into pages, never served.)
+    const site = await siteInfo(resolved.context.templateId);
+    if (site.format === "v2") {
+      const shopPath = await getStorefrontPath(resolved.context.templateId);
+      designJson = kind === "header" ? buildSiteHeaderV2(site.name, shopPath) : buildSiteFooterV2(site.name, shopPath);
+      designFormat = "v2";
+    }
   }
 
   const fragmentTemplateId = randomUUID();
@@ -117,6 +134,7 @@ export async function POST(
     name,
     kind: "LANDING_PAGE",
     isSiteLayoutFragment: true,
+    ...(designFormat === "v2" ? { designFormat } : {}),
     designJson,
     compiledHtml,
   }).go();

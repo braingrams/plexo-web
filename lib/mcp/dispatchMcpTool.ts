@@ -1,4 +1,8 @@
 import { randomUUID } from "node:crypto";
+import { compileTemplate } from "@/lib/compileTemplate";
+import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutCore";
+import { recompileCopiedV2Page } from "@/lib/v2/copy";
+import { blankV2Design, defaultDesignFormat, designFormatOf } from "@/lib/v2/design";
 import { uploadObject } from "@/lib/storage";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
@@ -20,6 +24,9 @@ import { WP_MIGRATION_MCP_TOOLS, WP_MIGRATION_TOOL_NAMES, handleWpMigrationTool 
 import { DONATION_MCP_TOOLS, DONATION_TOOL_NAMES, handleDonationTool } from "./donationTools";
 import { FORM_MCP_TOOLS, FORM_TOOL_NAMES, handleFormTool } from "./formTools";
 import { APP_MCP_TOOLS, APP_TOOL_NAMES, handleAppTool } from "./appTools";
+import { PAGE_MCP_TOOLS, PAGE_TOOL_NAMES, handlePageTool } from "./pageTools";
+import { PageToolError, convertLegacyDesign, createV2Page, editableUrlFor, publishPage, summarizeSections } from "./v2Pages";
+import { deprecationNotice, isDeprecatedTool, markDeprecated, v2TargetMessage } from "./deprecation";
 import { coerceToolArgs } from "./coerceArgs";
 import { deleteTemplateAndContents } from "@/lib/sites/deleteTemplate";
 import { linkDomainToTemplate, SUBDOMAIN_REGEX, DOMAIN_REGEX, RESERVED_SUBDOMAINS } from "@/lib/sites/linkDomain";
@@ -767,7 +774,54 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   ...DONATION_MCP_TOOLS,
   ...FORM_MCP_TOOLS,
   ...APP_MCP_TOOLS,
-];
+  ...PAGE_MCP_TOOLS,
+].map(markDeprecated);
+
+/**
+ * With TEMPLATES_V2_NEW on, the classic create/publish tools build a V2 page too, so even an
+ * old client ends up with something the visual editor can keep editing. A classic-shaped
+ * designJson is converted (the SDK's convertV1Design) as a FALLBACK, and the result says so;
+ * with no design at all the owner gets the complete "landing" page template.
+ */
+async function createV2FromClassicInput(resolved: ResolvedUser, args: any) {
+  const name = typeof args.name === "string" && args.name.trim() ? args.name.trim() : "AI Landing Page";
+  let rawDesignJson = args.designJson;
+  if (typeof rawDesignJson === "string") {
+    try {
+      rawDesignJson = JSON.parse(rawDesignJson);
+    } catch {
+      rawDesignJson = null;
+    }
+  }
+  try {
+    if (rawDesignJson && typeof rawDesignJson === "object") {
+      const converted = convertLegacyDesign(validateDesignJson(rawDesignJson), name);
+      const created = await createV2Page(resolved, { name }, { design: converted.design });
+      return {
+        created,
+        extra: {
+          designFormat: "v2",
+          convertedFromClassic: true,
+          conversionFidelity: converted.fidelity,
+          conversionWarnings: converted.warnings,
+          conversionNote: `Your classic design was converted to the new visual editor (${converted.fidelity} match${converted.warnings.length ? "; see conversionWarnings" : ""}). Build new pages with page_create_from_template and change them with page_edit.`,
+        },
+      };
+    }
+    const created = await createV2Page(resolved, { name, templateId: "landing" });
+    return {
+      created,
+      extra: {
+        designFormat: "v2",
+        sections: summarizeSections(created.design),
+        conversionNote: "This page is built with the new visual editor from the \"landing\" template, with sample wording. Use page_describe and page_edit to write the business's real copy.",
+      },
+    };
+  } catch (err) {
+    if (err instanceof PageToolError) throw new Error(err.message);
+    throw err;
+  }
+}
 
 /**
  * The full MCP tool-dispatch switch, extracted verbatim from handleMcpJsonRpc's
@@ -793,6 +847,30 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
   let toolResult: any;
   switch (toolName) {
     case "publish_landing_page": {
+      if (defaultDesignFormat() === "v2") {
+        const { created, extra } = await createV2FromClassicInput(resolved, args);
+        const row = created.row;
+        const v2Url = editableUrlFor(row.id);
+        const v2Domain = typeof args.domain === "string" ? args.domain.trim().toLowerCase() : "";
+        if (!v2Domain) {
+          toolResult = { success: true, templateId: row.id, name: row.name, editableUrl: v2Url, publishedUrl: null, ...extra };
+          break;
+        }
+        const linked = await linkDomainToTemplate(resolved, row.id, v2Domain, args.type as "SUBDOMAIN" | "CUSTOM" | undefined);
+        toolResult = {
+          success: true,
+          templateId: row.id,
+          name: row.name,
+          domain: linked.finalDomain,
+          publishedUrl: linked.publishedUrl,
+          editableUrl: v2Url,
+          routingEndpoint: linked.routingEndpoint,
+          certificateValidationName: linked.certificateValidationName,
+          certificateValidationValue: linked.certificateValidationValue,
+          ...extra,
+        };
+        break;
+      }
       const features = getTierFeatures(resolved.subscriptionPlan);
       {
         const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
@@ -933,6 +1011,9 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       if (existing.sourceType === "RAW_UPLOAD") {
         throw new Error(`"${existing.name}" was created via raw upload (create_raw_landing_page/publish_raw_landing_page) — use update_raw_landing_page to edit its HTML instead.`);
       }
+      if (designFormatOf(existing) === "v2") {
+        throw new Error(v2TargetMessage("update_template"));
+      }
 
       let rawDesignJson = args.designJson;
       if (typeof rawDesignJson === "string") {
@@ -981,6 +1062,19 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
     }
 
     case "create_landing_page": {
+      if (defaultDesignFormat() === "v2") {
+        const { created, extra } = await createV2FromClassicInput(resolved, args);
+        toolResult = {
+          success: true,
+          templateId: created.row.id,
+          name: created.row.name,
+          editableUrl: editableUrlFor(created.row.id),
+          publishedUrl: null,
+          message: "Landing page created without publishing. Call page_publish (or publish_existing_landing_page) with this templateId and a domain when ready to go live.",
+          ...extra,
+        };
+        break;
+      }
       const features = getTierFeatures(resolved.subscriptionPlan);
       {
         // Root/home pages only — a page's sub-pages don't count against this limit.
@@ -1000,23 +1094,33 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
           rawDesignJson = null;
         }
       }
-      if (!rawDesignJson || typeof rawDesignJson !== "object") {
-        throw new Error("designJson object is required to create a landing page.");
-      }
-
-      const designJson = validateDesignJson(rawDesignJson);
-      if (designJson.body.style) {
-        designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
-      }
-      const compiledHtml = sanitizeHtml(compileToHTML(designJson));
-
       const createdId = randomUUID();
+      let designJson: any;
+      let compiledHtml: string;
+      let createdFormat: "v1" | "v2" = "v1";
+      if ((!rawDesignJson || typeof rawDesignJson !== "object") && defaultDesignFormat() === "v2") {
+        // New-editor creation is on and no classic design was given: start a blank new-editor page.
+        createdFormat = "v2";
+        designJson = blankV2Design();
+        compiledHtml = await compileTemplate({ designFormat: "v2", designJson, kind: "LANDING_PAGE", id: createdId, name });
+      } else {
+        if (!rawDesignJson || typeof rawDesignJson !== "object") {
+          throw new Error("designJson object is required to create a landing page.");
+        }
+        designJson = validateDesignJson(rawDesignJson);
+        if (designJson.body.style) {
+          designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+        }
+        compiledHtml = sanitizeHtml(compileToHTML(designJson));
+      }
+
       await Template.create({
         id: createdId,
         userId: resolved.userId,
         organizationId: resolved.organizationId,
         name,
         kind: "LANDING_PAGE",
+        designFormat: createdFormat,
         designJson,
         compiledHtml,
       }).go();
@@ -1120,6 +1224,9 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       if (!existing || existing.organizationId !== resolved.organizationId) {
         throw new Error(`No template found with id "${templateId}" in this account. Use list_landing_pages to look up the correct id.`);
       }
+      if (designFormatOf(existing) === "v2") {
+        throw new Error(v2TargetMessage("update_raw_landing_page"));
+      }
       if (existing.sourceType !== "RAW_UPLOAD") {
         throw new Error(`"${existing.name}" was created via the drag-and-drop builder — use update_template to edit its content instead.`);
       }
@@ -1159,6 +1266,17 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       const { data: template } = await Template.get({ id: templateId }).go();
       if (!template || template.organizationId !== resolved.organizationId || template.kind !== "LANDING_PAGE") {
         throw new Error(`No landing page template found with id "${templateId}" in this account. Use list_landing_pages to look up the correct id.`);
+      }
+
+      if (designFormatOf(template) === "v2" && template.sourceType !== "RAW_UPLOAD") {
+        // A V2 page's edits wait in its working copy until published — do both in one step.
+        try {
+          toolResult = await publishPage(resolved, { templateId: template.id, domain: rawDomain, type: args.type });
+        } catch (err) {
+          if (err instanceof PageToolError) throw new Error(err.message);
+          throw err;
+        }
+        break;
       }
 
       const domainType = args.type === "SUBDOMAIN" || args.type === "CUSTOM" ? args.type : undefined;
@@ -1216,6 +1334,12 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       let designJson: any;
       let compiledHtml: string;
       let sourceType: "BUILDER" | "RAW_UPLOAD" = "BUILDER";
+      // A site never mixes editors by accident: a page under a new-editor site is a new-editor page.
+      const subpageFormat = sourceType === "BUILDER" ? designFormatOf(parent) : "v1";
+      const newPageId = randomUUID();
+      if (subpageFormat === "v2" && rawDesignJson && typeof rawDesignJson === "object") {
+        throw new Error(v2TargetMessage("create_landing_page_subpage"));
+      }
       if (rawHtmlContent) {
         try {
           validateRawHtmlContent(rawHtmlContent);
@@ -1233,22 +1357,29 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
           designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
         }
         compiledHtml = sanitizeHtml(compileToHTML(designJson));
+      } else if (subpageFormat === "v2") {
+        designJson = blankV2Design();
+        compiledHtml = ""; // built below, once the page's own place in the site tree exists
       } else {
         designJson = { body: { style: { background: "#0b0f19", padding: "24px" }, rows: [] } };
         compiledHtml = "";
       }
+      const createdFormat = sourceType === "BUILDER" && !rawHtmlContent ? subpageFormat : "v1";
 
       const slug = await ensureUniqueSlug(parentTemplateId, (typeof args.slug === "string" && args.slug.trim()) || name);
       const { data: siblings } = await Template.query.byParent({ parentId: parentTemplateId }).go({ pages: "all" });
       const nextOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
 
-      const newPageId = randomUUID();
+      if (createdFormat === "v2") {
+        compiledHtml = await compileTemplateWithSiteLayout({ id: newPageId, parentId: parentTemplateId, kind: "LANDING_PAGE", name, designFormat: "v2" }, designJson);
+      }
       await Template.create({
         id: newPageId,
         userId: resolved.userId,
         organizationId: resolved.organizationId,
         name,
         kind: "LANDING_PAGE",
+        designFormat: createdFormat,
         sourceType,
         parentId: parentTemplateId,
         slug,
@@ -1497,6 +1628,7 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
         organizationId: resolved.organizationId,
         name,
         kind: existing.kind,
+        designFormat: designFormatOf(existing),
         sourceType: existing.sourceType,
         parentId: existing.parentId,
         slug,
@@ -1504,6 +1636,7 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
         designJson: existing.designJson,
         compiledHtml: existing.compiledHtml,
       }).go();
+      await recompileCopiedV2Page(newId);
       const { data: duplicate } = await Template.get({ id: newId }).go();
       if (!duplicate) throw new Error(`Template ${newId} vanished immediately after being created`);
 
@@ -1640,8 +1773,17 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
         toolResult = await handleAppTool(toolName, args, resolved);
         break;
       }
+      if (PAGE_TOOL_NAMES.has(toolName)) {
+        toolResult = await handlePageTool(toolName, args, resolved);
+        break;
+      }
       throw new Error(`Unknown tool: ${toolName}`);
     }
+  }
+  // Deprecated classic tools keep working, but every successful result says what replaces them.
+  if (isDeprecatedTool(toolName) && toolResult && typeof toolResult === "object" && !Array.isArray(toolResult) && !toolResult.deprecation) {
+    const notice = deprecationNotice(toolName, toolResult.conversionNote);
+    if (notice) toolResult = { ...toolResult, deprecation: notice };
   }
   return toolResult;
 }

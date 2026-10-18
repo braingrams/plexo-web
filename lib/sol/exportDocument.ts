@@ -143,7 +143,17 @@ function toPastTense(infinitive: string): string {
 /** Maps a snake_case tool name to a readable {infinitive, past, noun} triple, e.g.
  * "delete_commerce_product" -> {infinitive: "delete", past: "deleted", noun: "commerce
  * product"}. Simple prefix-based humanization, not an exhaustive per-tool mapping. */
+const VISUAL_PAGE_TOOL_LABELS: Record<string, { infinitive: string; past: string; noun: string }> = {
+  page_describe: { infinitive: "look at", past: "looked at", noun: "page" },
+  page_edit: { infinitive: "edit", past: "edited", noun: "page" },
+  page_create_from_template: { infinitive: "create", past: "created", noun: "page" },
+  page_publish: { infinitive: "publish", past: "published", noun: "page" },
+  blog_layout_describe: { infinitive: "look at", past: "looked at", noun: "blog layout" },
+  blog_layout_edit: { infinitive: "edit", past: "edited", noun: "blog layout" },
+};
+
 function humanizeToolName(name: string): { infinitive: string; past: string; noun: string } {
+  if (VISUAL_PAGE_TOOL_LABELS[name]) return VISUAL_PAGE_TOOL_LABELS[name];
   const parts = name.split("_").filter(Boolean);
   const first = parts[0]?.toLowerCase();
   if (first && KNOWN_VERB_PREFIXES.includes(first) && parts.length > 1) {

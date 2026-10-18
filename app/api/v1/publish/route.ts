@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
+import { compileTemplate } from "@/lib/compileTemplate";
+import { defaultDesignFormat, isV2Design, parseV2Design } from "@/lib/v2/design";
 import { getTierFeatures } from "@/lib/subscription";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { getDomainLimit } from "@/lib/domainLimit";
@@ -73,34 +75,62 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Same strict schema the dashboard's own save endpoint enforces (server/sanitizer.ts) —
-  // every row must already be a fully hydrated { columns: [{ elements: [...] }] } tree.
-  // We reject rather than guess: a caller (MCP server, ChatGPT Custom Action, agent) gets
-  // one clean, actionable error to retry against instead of a silently mangled page.
-  const hydrated = hydrateStructuralDefaults(rawDesignJson);
-  const validation = TemplateJSONSchema.safeParse(hydrated);
-  if (!validation.success) {
+  // The page's id is chosen up front: a new-editor page's forms post to its own site id.
+  const templateId = randomUUID();
+
+  // A new-editor (V2) payload creates a V2 page — only while new-editor creation is switched
+  // on (TEMPLATES_V2_NEW) and only for landing pages (email stays classic forever).
+  const payloadIsV2 = isV2Design(rawDesignJson);
+  if (payloadIsV2 && (kind === "EMAIL" || defaultDesignFormat() !== "v2")) {
     return NextResponse.json(
-      { error: `designJson failed schema validation: ${formatValidationIssues(validation.error)}` },
-      { status: 400 }
+      { error: kind === "EMAIL" ? "Email templates use the classic design format." : "The new page editor isn't switched on for your account yet. Send a classic design (body.rows) instead." },
+      { status: 400 },
     );
-  }
-  const designJson = validation.data;
-  if (designJson.body.style) {
-    designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
   }
 
-  // compiledHtml is always derived server-side from the validated designJson (never trusted
-  // from the caller) so the published page can never drift from what's editable in the
-  // dashboard, and so a third-party AI client can't hand us raw HTML/script to serve.
+  let designJson: any;
   let compiledHtml: string;
-  try {
-    compiledHtml = sanitizeHtml(compileToHTML(designJson));
-  } catch (err) {
-    return NextResponse.json(
-      { error: `Failed to compile designJson into HTML: ${err instanceof Error ? err.message : "Malformed structure"}` },
-      { status: 400 }
-    );
+  const designFormat: "v1" | "v2" = payloadIsV2 ? "v2" : "v1";
+  if (payloadIsV2) {
+    const parsed = parseV2Design(rawDesignJson);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    designJson = parsed.design;
+    try {
+      compiledHtml = await compileTemplate({ designFormat, designJson, kind, id: templateId, name });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "This page couldn't be built." }, { status: 400 });
+    }
+  } else {
+    // Same strict schema the dashboard's own save endpoint enforces (server/sanitizer.ts) —
+    // every row must already be a fully hydrated { columns: [{ elements: [...] }] } tree.
+    // We reject rather than guess: a caller (MCP server, ChatGPT Custom Action, agent) gets
+    // one clean, actionable error to retry against instead of a silently mangled page.
+    const hydrated = hydrateStructuralDefaults(rawDesignJson);
+    const validation = TemplateJSONSchema.safeParse(hydrated);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: `designJson failed schema validation: ${formatValidationIssues(validation.error)}` },
+        { status: 400 }
+      );
+    }
+    designJson = validation.data;
+    if (designJson.body.style) {
+      designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+    }
+
+    // compiledHtml is always derived server-side from the validated designJson (never trusted
+    // from the caller) so the published page can never drift from what's editable in the
+    // dashboard, and so a third-party AI client can't hand us raw HTML/script.
+    try {
+      compiledHtml = kind === "LANDING_PAGE"
+        ? await compileTemplate({ designFormat, designJson, kind, id: templateId, name })
+        : sanitizeHtml(compileToHTML(designJson)); // email templates: legacy path, unchanged
+    } catch (err) {
+      return NextResponse.json(
+        { error: `Failed to compile designJson into HTML: ${err instanceof Error ? err.message : "Malformed structure"}` },
+        { status: 400 }
+      );
+    }
   }
 
   // Plan check BEFORE anything is created, so a refused publish leaves nothing behind.
@@ -148,9 +178,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // 1. Create the template
-  const templateId = randomUUID();
   await Template.create({
     id: templateId,
+    designFormat,
     userId: resolved.userId,
     organizationId: resolved.organizationId,
     name,

@@ -1,5 +1,6 @@
 import { Entity, Service } from "electrodb";
 import { docClient, TABLES } from "./client";
+import { packHtml, packJson, unpackHtml, unpackJson } from "./packed";
 
 // plexo-content. Field shapes ported 1:1 from schema.prisma. Most entities scope by
 // templateId (co-located, matches how they're actually queried — "everything for this
@@ -38,16 +39,27 @@ export const Template = new Entity(
       latestBuildId: { type: "string" },
       headVersionId: { type: "string" },
       previewHost: { type: "string" },
-      designJson: { type: "any", required: true },
-      compiledHtml: { type: "string", required: true },
+      // Which editor/compiler owns designJson, draftJson and compiledHtml: "v1" is the classic
+      // builder's TemplateJSON ({ body: { rows } }); "v2" is the new visual editor's payload
+      // ({ format: "plexo-v2@1", pages: [PageDefinition], designSystem?, customJs?, meta? } —
+      // lib/v2/design.ts, docs/v2-templates.md). Rows written before this attribute existed
+      // have none: ALWAYS read it through designFormatOf() (missing = "v1"). EMAIL templates
+      // are always v1.
+      designFormat: { type: ["v1", "v2"] as const, default: "v1" },
+      // Set while a page that was moved from the classic editor to the new one can still go
+      // back: the TemplateRevision (made by POST /api/templates/:id/convert-to-v2) holding its
+      // classic design. Cleared when the owner goes back.
+      classicBackupId: { type: "string" },
+      designJson: { type: "any", required: true, set: (v: unknown) => packJson(v), get: (v: unknown) => unpackJson(v) },
+      compiledHtml: { type: "string", required: true, set: (v: string | undefined) => packHtml(v) ?? undefined, get: (v: string | undefined) => unpackHtml(v) ?? undefined },
       // Draft/Publish model: designJson/compiledHtml above are always the LIVE, currently-
       // published content (what app/pub actually serves) — draftJson/draftHtml are the
       // working-copy state the editor's autosave writes to instead. Null draftJson means
       // "no unpublished changes" (draft === live). Publishing (lib/templateVersions.ts)
       // snapshots the draft into an immutable TemplateRevision, copies it into the live
       // fields, and clears these two back to null.
-      draftJson: { type: "any" },
-      draftHtml: { type: "string" },
+      draftJson: { type: "any", set: (v: unknown) => packJson(v), get: (v: unknown) => unpackJson(v) },
+      draftHtml: { type: "string", set: (v: string | undefined) => packHtml(v) ?? undefined, get: (v: string | undefined) => unpackHtml(v) ?? undefined },
       // The TemplateRevision.id currently live — the "active version pointer" restore/
       // delete/version-history all key off. Null until this template has been published
       // at least once.
@@ -172,8 +184,15 @@ export const TemplateRevision = new Entity(
     attributes: {
       id: { type: "string", required: true },
       templateId: { type: "string", required: true },
-      designJson: { type: "any", required: true },
-      compiledHtml: { type: "string", required: true },
+      // The format designJson is in. Optional (not defaulted) so old rows stay untouched;
+      // read through designFormatOf(). Restoring a revision restores this with the design.
+      designFormat: { type: ["v1", "v2"] as const },
+      designJson: { type: "any", required: true, set: (v: unknown) => packJson(v), get: (v: unknown) => unpackJson(v) },
+      compiledHtml: { type: "string", required: true, set: (v: string | undefined) => packHtml(v) ?? undefined, get: (v: string | undefined) => unpackHtml(v) ?? undefined },
+      // Only on the backup made when a page moves to the new editor: the unpublished working
+      // copy it had at that moment, so going back to the classic editor loses nothing.
+      draftJson: { type: "any", set: (v: unknown) => packJson(v), get: (v: unknown) => unpackJson(v) },
+      draftHtml: { type: "string", set: (v: string | undefined) => packHtml(v) ?? undefined, get: (v: string | undefined) => unpackHtml(v) ?? undefined },
       sdkVersion: { type: "string", required: true },
       // Left optional (not required) rather than backfilled, since pre-existing revision
       // rows (every auto-snapshot taken before this attribute existed, and anything the

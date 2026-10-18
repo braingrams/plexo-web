@@ -7,6 +7,8 @@ import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { Template } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
+import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutDynamo";
+import { designFormatOf, parseV2Design } from "@/lib/v2/design";
 
 type UpdateTemplateBody = {
   designJson?: unknown;
@@ -50,25 +52,39 @@ export async function POST(
 
   const body = (await request.json().catch(() => ({}))) as UpdateTemplateBody;
 
-  let sanitizedPayload;
-  try {
-    sanitizedPayload = sanitizePlexoPayload({
-      designJson: body.designJson,
-      compiledHtml: body.compiledHtml,
-    });
-  } catch (err) {
-    return NextResponse.json(
-      {
-        error:
-          err instanceof Error ? err.message : "Security validation failed.",
-      },
-      { status: 400 },
-    );
-  }
-
   const { data: existing } = await Template.get({ id: params.id }).go();
   if (!existing || existing.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: "Template not found." }, { status: 404 });
+  }
+
+  let sanitizedPayload: { designJson: unknown; compiledHtml: string };
+  if (designFormatOf(existing) === "v2") {
+    // New-editor pages: validate the V2 payload and compile the draft preview on the server
+    // (never trust a client-sent compiledHtml, and never run V2 output through V1's sanitiser).
+    const parsed = parseV2Design(body.designJson);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    let draftHtml: string;
+    try {
+      draftHtml = await compileTemplateWithSiteLayout(existing, parsed.design);
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "This page couldn't be built." }, { status: 400 });
+    }
+    sanitizedPayload = { designJson: parsed.design, compiledHtml: draftHtml };
+  } else {
+    try {
+      sanitizedPayload = sanitizePlexoPayload({
+        designJson: body.designJson,
+        compiledHtml: body.compiledHtml,
+      });
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error:
+            err instanceof Error ? err.message : "Security validation failed.",
+        },
+        { status: 400 },
+      );
+    }
   }
 
   await Template.patch({ id: existing.id })

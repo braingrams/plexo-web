@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveLmsAdmin } from "@/lib/lms/adminAuthDynamo";
 import { LmsPage, Template } from "@/lib/db/contentEntities";
+import { blankV2Design } from "@/lib/v2/design";
+import { siteInfo } from "@/lib/v2/siteFormat";
 
 const BLANK_TEMPLATE_SHELL = { body: { style: { background: "#0b0f19", padding: "24px" }, rows: [] } };
 
@@ -39,6 +41,8 @@ export async function POST(
   }
 
   const designTemplateId = randomUUID();
+  // A funnel on the new editor gets its page designs in the new editor too.
+  const isV2 = (await siteInfo(templateId)).format === "v2";
   await Template.create({
     id: designTemplateId,
     userId,
@@ -46,7 +50,8 @@ export async function POST(
     name: `${page.title} design`,
     kind: "LANDING_PAGE",
     isLmsPageDesign: true,
-    designJson: BLANK_TEMPLATE_SHELL,
+    ...(isV2 ? { designFormat: "v2" as const } : {}),
+    designJson: isV2 ? blankV2Design() : BLANK_TEMPLATE_SHELL,
     compiledHtml: "",
   }).go();
 
