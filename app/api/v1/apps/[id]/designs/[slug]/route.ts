@@ -6,8 +6,8 @@ type Ctx = { params: Promise<{ id: string; slug: string }> };
 
 /**
  * One visual design.
- *   GET    → { design, nodes, pageOrder, brand }
- *   PUT    { name, route, nodes, pageOrder, brand?, overwrite? } → saves and recompiles its page.
+ *   GET    → { design, page, designSystem }   (page is a PageDefinition)
+ *   PUT    { name, route, page, designSystem?, overwrite? } → saves and recompiles its page.
  *          409 { code: "code_edited" } when the page's code was hand-edited (resend with
  *          overwrite: true to replace it), or { code: "route_taken" }.
  *   DELETE → removes the design and its page
@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest, { params }: Ctx): Promise<NextRe
   try {
     const body = await readBody(request);
     return NextResponse.json(
-      await saveDesign(id, slug, { name: body.name, route: body.route, nodes: body.nodes, pageOrder: body.pageOrder, brand: body.brand, overwrite: body.overwrite === true }, loaded.resolved.userId),
+      await saveDesign(id, slug, { name: body.name, route: body.route, page: body.page, designSystem: body.designSystem, overwrite: body.overwrite === true }, loaded.resolved.userId),
     );
   } catch (err) {
     if (err instanceof DesignConflictError) return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
