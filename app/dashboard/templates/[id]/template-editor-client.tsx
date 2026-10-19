@@ -632,7 +632,8 @@ function EditorHeaderRight({
         onClick={onPublish}
         disabled={isPublishing}
         style={{
-          display: "inline-flex",
+          // The new editor has one Save button with Draft / Publish in its menu, so this one is only for the classic editor.
+          display: compact ? "none" : "inline-flex",
           alignItems: "center",
           gap: "0.45rem",
           padding: "0.5rem 1rem",
@@ -952,7 +953,7 @@ export function TemplateEditorClient({
   async function handlePublish(): Promise<void> {
     if (!(isV2 ? v2Ref.current : builderRef.current)) {
       setPublishError("Builder is not ready yet.");
-      return;
+      throw new Error("Builder is not ready yet.");
     }
     setPublishError(null);
     setPublishMessage(null);
@@ -1006,6 +1007,8 @@ export function TemplateEditorClient({
       setPublishError(
         error instanceof Error ? error.message : "Unable to publish template.",
       );
+      // The new editor's Save menu shows "couldn't publish" from this; the message above stays in the header too.
+      throw error;
     } finally {
       setIsPublishing(false);
     }
@@ -1102,7 +1105,7 @@ export function TemplateEditorClient({
       isPublishing={isPublishing}
       publishMessage={publishMessage}
       publishError={publishError}
-      onPublish={() => void handlePublish()}
+      onPublish={() => void handlePublish().catch(() => undefined)}
       commentsOpen={commentsOpen}
       onToggleComments={() => {
         setCommentsOpen((v) => !v);
@@ -1187,6 +1190,7 @@ export function TemplateEditorClient({
             }}
             stockKeys={{ unsplash: unsplashKey, pexels: pexelsKey, pixabay: pixabayKey }}
             headerRight={headerRightNode}
+            onPublish={handlePublish}
             onBack={() => router.push(`/dashboard/templates/${rootTemplateId}/detail`)}
             onSaved={() => {
               setSaveError(null);

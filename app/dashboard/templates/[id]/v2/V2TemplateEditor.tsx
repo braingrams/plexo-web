@@ -36,6 +36,8 @@ type Props = {
   stockKeys: { unsplash?: string; pexels?: string; pixabay?: string };
   /** The page's own Comments / Publish buttons (the parent owns publishing). */
   headerRight: ReactNode;
+  /** Puts the page live (saves what is on the canvas first). Rejects when it fails, so the editor's Save menu can say so. */
+  onPublish: () => Promise<void>;
   onBack: () => void;
   onSaved: (design: V2Design) => void;
   /** Present while this page can still go back to the classic editor. */
@@ -312,6 +314,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
             strata={strataOn ? strata : undefined}
             onSave={readOnly ? undefined : () => saveNow().then(() => undefined)}
+            onPublish={readOnly ? undefined : props.onPublish}
             saveState={stateForEditor}
             pageSource={{
               pages: listed,
