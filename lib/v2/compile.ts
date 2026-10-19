@@ -1,5 +1,6 @@
 import { userContentOrigin } from "@/lib/storage";
 import {
+  stripWorkspace,
   compilePageToEmail,
   compilePageToHtml,
   prepareCustomJs,

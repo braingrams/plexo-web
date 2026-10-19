@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildPageFromTemplate, createDefaultDesignSystem, type DocumentNode, type PageDefinition } from "@charisol/plexo-sdk/v2/compile";
+import { buildPageFromTemplate, createDefaultDesignSystem, ensureWorkspace, workspaceOf, type DocumentNode, type PageDefinition } from "@charisol/plexo-sdk/v2/compile";
 
 import { compileToHTML } from "@/lib/compiler";
 import { sanitizeHtml } from "@/server/sanitizer";
@@ -90,6 +90,25 @@ describe("parseV2Design", () => {
     const huge = parseV2Design(design(page(node("paragraph", { text: "x".repeat(5_100_000) }, "big"))));
     expect(huge).toMatchObject({ ok: false });
     expect((huge as { error: string }).error).toMatch(/larger than Plexo can save/);
+  });
+});
+
+describe("the editor's canvas workspace (things parked beside the page)", () => {
+  it("is saved with the page but never published, and its forms don't count as the page's", async () => {
+    const text = (id: string, content: string): DocumentNode => ({ id, type: "paragraph", name: id, content, styles: {} }) as DocumentNode;
+    const p = page(text("on", "On the page"));
+    const withWs: PageDefinition = { ...p, rootNode: ensureWorkspace(p.rootNode) };
+    workspaceOf(withWs.rootNode)!.children = [
+      text("parked", "PARKED-SECRET"),
+      node("form", { fields: [{ id: "f1", label: "Parked form", type: "text" }], submitLabel: "Send" }, "parkedform"),
+    ];
+    const parsed = parseV2Design(design(withWs));
+    expect(parsed.ok).toBe(true);
+    expect(JSON.stringify((parsed as { design: unknown }).design)).toContain("PARKED-SECRET"); // kept for the editor
+    const html = await compileTemplate({ designFormat: "v2", designJson: design(withWs), kind: "LANDING_PAGE", id: "p1", name: "Home" });
+    expect(html).toContain("On the page");
+    expect(html).not.toContain("PARKED-SECRET");
+    expect(html).not.toContain("Parked form");
   });
 });
 
