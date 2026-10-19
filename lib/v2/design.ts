@@ -39,16 +39,14 @@ export type V2Design = {
   meta?: V2Meta;
 };
 
-// A Template row is ONE DynamoDB item (400 KB) that also carries the draft copy and both
-// compiled documents, so the design alone is held well under that.
-export const MAX_V2_DESIGN_CHARS = 120_000;
-// The built-in design system alone is ~84 KB of JSON, so it is never stored when unchanged
-// (the compiler falls back to it); a customised one has its own cap. A design system brought in
-// from Strata (hundreds of tokens and component variants) is several times that, so the cap is
-// generous: rows are stored gzipped (lib/db/packed.ts, JSON shrinks ~10x), which keeps the live +
-// draft copies well inside DynamoDB's 400 KB item limit.
-export const MAX_V2_DESIGN_SYSTEM_CHARS = 450_000;
-export const MAX_V2_HTML_CHARS = 200_000;
+// Size limits. None of them is about the database: a row can hold a value of any size (lib/db/largeValues.ts moves big text
+// out of the 400 KB DynamoDB item into storage and back). These are only the most one request can carry (a serverless request or
+// response is capped at 6 MB), kept a little under it, so a page, its brand or its compiled HTML above this fails with a plain
+// message instead of a cut-off request. The brand's own cap also holds the built-in system (~84 KB), which is never stored when
+// unchanged (the compiler falls back to it).
+export const MAX_V2_DESIGN_CHARS = 5_000_000;
+export const MAX_V2_DESIGN_SYSTEM_CHARS = 5_000_000;
+export const MAX_V2_HTML_CHARS = 5_000_000;
 
 export class V2DesignError extends Error {
   constructor(message: string) {
@@ -105,7 +103,7 @@ export function parseV2Design(raw: unknown): { ok: true; design: V2Design } | { 
     return { ok: false, error: "This page's design can't be read." };
   }
   if (size > MAX_V2_DESIGN_CHARS) {
-    return { ok: false, error: "This page is too large to save. Remove some content, or use pictures from your media library instead of embedding them." };
+    return { ok: false, error: "This page is larger than Plexo can save in one go (over 5 MB). Remove some content, or use pictures from your media library instead of embedding them." };
   }
 
   const parsed = parsePages(raw.pages);
@@ -120,7 +118,7 @@ export function parseV2Design(raw: unknown): { ok: true; design: V2Design } | { 
     if (!isRecord(ds) || !Array.isArray(ds.tokens)) return { ok: false, error: "This site's colours and fonts aren't in the right shape." };
     const repaired = repairDesignSystem(ds as DesignSystem);
     const json = JSON.stringify(repaired);
-    if (json.length > MAX_V2_DESIGN_SYSTEM_CHARS) return { ok: false, error: "This site's colours and fonts are too large to save." };
+    if (json.length > MAX_V2_DESIGN_SYSTEM_CHARS) return { ok: false, error: "This site's colours and fonts are larger than Plexo can save in one go (over 5 MB). Remove unused colours or components in Branding." };
     // Unchanged built-in system: store nothing, the compiler uses it by default.
     if (json !== defaultSystemJson()) designSystem = repaired;
   }

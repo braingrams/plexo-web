@@ -1,5 +1,6 @@
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocument } from "@aws-sdk/lib-dynamodb";
+import { withLargeValues } from "./largeValues";
 
 // DynamoDBDocument (not the separate DynamoDBDocumentClient wrapper) — this is the type
 // @auth/dynamodb-adapter specifically requires (see server/authDynamo.ts), and it works
@@ -11,9 +12,13 @@ import { DynamoDBDocument } from "@aws-sdk/lib-dynamodb";
 // and rate-limits the client instead of surfacing "Throughput exceeds…" to the user.
 const ddb = new DynamoDB({ region: process.env.AWS_REGION || "us-east-1", maxAttempts: 10, retryMode: "adaptive" });
 
-export const docClient = DynamoDBDocument.from(ddb, {
-  marshallOptions: { removeUndefinedValues: true },
-});
+// Big text values (a page, a design system, a long conversation…) move out of the row into storage and come back on read, so a
+// DynamoDB item's 400 KB limit never limits what a person can save. See lib/db/largeValues.ts.
+export const docClient = withLargeValues(
+  DynamoDBDocument.from(ddb, {
+    marshallOptions: { removeUndefinedValues: true },
+  }),
+);
 
 // Table names come from the environment rather than being recomputed here from the CDK
 // naming convention (base name, or `${base}-${stackID}` for non-prod) — that convention
