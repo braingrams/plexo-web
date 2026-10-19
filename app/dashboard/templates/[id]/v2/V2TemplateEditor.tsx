@@ -9,6 +9,7 @@ import type { DesignSystem } from "@charisol/plexo-sdk/v2/compile";
 import { EDITOR_THEME } from "@/lib/theme";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import type { V2Design, V2Meta } from "@/lib/v2/design";
+import { askSolStreaming } from "@/lib/ai/clientAssist";
 import { PageSettings } from "./PageSettings";
 import { BRAND_EMBED_MAX_CHARS, fetchBrand, uploadBrand } from "@/lib/v2/brandClient";
 import type { DesignSystemRef } from "@/lib/v2/design";
@@ -384,16 +385,18 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             // table markup, so it has neither.
             features={{ pageSwitcher: props.kind !== "EMAIL", viewSwitch: props.kind !== "EMAIL", codeView: props.kind !== "EMAIL", headerSol: false }}
             // SOL lives in the left rail (and on the element toolbar), so the top bar doesn't repeat it (headerSol: false).
-            // SOL in the editor is the real SOL: the question opens in SOL's own chat (new tab, question ready to send) with the page
-            // and the selected element named, so the editor stays open as it is. Emails are edited by hand, so no SOL there.
+            // SOL in the editor answers right here: the reply streams into the panel and each change it writes is made on the
+            // page as it arrives (one Undo takes the whole answer back). Emails are edited by hand, so no SOL there.
+            solAutoApply
             onAskSol={
               props.kind === "EMAIL"
                 ? undefined
-                : async (question, context) => {
-                    const about = context.nodeType ? ` (about the selected ${context.nodeType.toLowerCase()} on the page "${name}")` : ` (about the page "${name}")`;
-                    window.open(`/dashboard/sol?new=1&draft=${encodeURIComponent(`${question}${about}`)}`, "_blank", "noopener");
-                    return "Opened SOL in a new tab with your question ready. Send it there and SOL can answer and change the page.";
-                  }
+                : (question, context, io) =>
+                    askSolStreaming(
+                      { question, context: { nodeType: context.nodeType, nodeName: context.nodeName, pageId: context.pageId, design: context.design, catalog: context.catalog }, history: context.history },
+                      io.onText,
+                      io.signal,
+                    )
             }
             pageSettings={
               <PageSettings
