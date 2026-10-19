@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Star, Sparkles, Send, CheckCircle2, ArrowLeft, Heart, MessageSquare } from "lucide-react";
 import { Mulish } from "next/font/google";
 
-import { BRAND } from "@/lib/theme";
 const mulish = Mulish({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700", "800", "900"],
@@ -108,7 +107,7 @@ export default function TestimonialSubmitPage() {
               <div className="pt-4">
                 <Link
                   href="/"
-                  className={`bg-[${BRAND.primary}] hover:bg-[${BRAND.deep}] text-white font-extrabold text-sm px-8 py-3.5 rounded-2xl shadow-lg inline-block transition-all`}
+                  className={`bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white font-extrabold text-sm px-8 py-3.5 rounded-2xl shadow-lg inline-block transition-all`}
                 >
                   Return to Home
                 </Link>
@@ -229,7 +228,7 @@ export default function TestimonialSubmitPage() {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className={`w-full bg-[${BRAND.primary}] hover:bg-[${BRAND.deep}] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
+                  className={`w-full bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
                 >
                   {isSubmitting ? (
                     <span>Submitting review...</span>

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Sparkles, Palette, Layers, ArrowRight, Check } from "lucide-react";
 import { Reveal } from "@/app/scroll-fx";
 
-import { BRAND } from "@/lib/theme";
 export function V2StrataSection({ isDark }: { isDark: boolean }) {
   const [projectId, setProjectId] = useState("strata_proj_88491a");
 
@@ -164,7 +163,7 @@ export function V2StrataSection({ isDark }: { isDark: boolean }) {
                     This component was generated using your exact Strata color variables and typography hierarchy without manual CSS overrides.
                   </p>
 
-                  <button className={`w-full bg-[${BRAND.primary}] hover:bg-[${BRAND.deep}] text-white font-extrabold text-xs py-3.5 rounded-xl shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 transition-all`}>
+                  <button className={`w-full bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white font-extrabold text-xs py-3.5 rounded-xl shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 transition-all`}>
                     <span>Explore Component Library</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>

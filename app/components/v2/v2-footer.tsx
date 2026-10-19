@@ -4,7 +4,6 @@ import Link from "next/link";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { ArrowRight, BookOpen } from "lucide-react";
 
-import { BRAND } from "@/lib/theme";
 export function V2Footer({ isDark }: { isDark: boolean }) {
   return (
     <footer className={`pt-20 pb-12 overflow-hidden border-t transition-colors duration-500 font-['Mulish',sans-serif] ${
@@ -21,7 +20,7 @@ export function V2Footer({ isDark }: { isDark: boolean }) {
         <div className="flex flex-wrap items-center justify-center gap-4">
           <Link
             href="/auth/register"
-            className={`bg-[${BRAND.primary}] hover:bg-[${BRAND.deep}] text-white px-8 py-4 rounded-2xl font-extrabold text-base shadow-xl hover:shadow-2xl transition-all inline-flex items-center gap-3`}
+            className={`bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white px-8 py-4 rounded-2xl font-extrabold text-base shadow-xl hover:shadow-2xl transition-all inline-flex items-center gap-3`}
           >
             <span>Start Building — It&apos;s free</span>
             <ArrowRight className="w-5 h-5" />

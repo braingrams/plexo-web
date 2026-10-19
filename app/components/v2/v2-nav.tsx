@@ -4,7 +4,6 @@ import Link from "next/link";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { Sun, Moon, ArrowRight } from "lucide-react";
 
-import { BRAND } from "@/lib/theme";
 export function V2Nav({
   isDark,
   onToggleTheme,
@@ -66,7 +65,7 @@ export function V2Nav({
           {/* Primary Action Button */}
           <Link
             href="/auth/register"
-            className={`bg-[${BRAND.primary}] hover:bg-[${BRAND.deep}] text-white text-xs font-extrabold px-5 py-3 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5 active:translate-y-0 inline-flex items-center gap-2`}
+            className={`bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white text-xs font-extrabold px-5 py-3 rounded-2xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5 active:translate-y-0 inline-flex items-center gap-2`}
           >
             <span>Start Free</span>
             <ArrowRight className="w-3.5 h-3.5" />

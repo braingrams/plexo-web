@@ -22,6 +22,9 @@ vi.mock("@/lib/commerceRateLimitDynamo", () => ({
   clientIp: () => "203.0.113.7",
 }));
 
+const saved = vi.hoisted(() => vi.fn(async (_userId: string, _token: string) => undefined));
+vi.mock("@/lib/charisolLink", () => ({ saveCharisolRefresh: saved }));
+
 import { authorizePassword } from "@/server/passwordSignIn";
 import type { PasswordSignInResult } from "@/server/charisolCognito";
 
@@ -51,6 +54,19 @@ describe("authorizePassword — Charisol accepts the password", () => {
     expect(user?.id).toBe("u1");
     expect(store.get("u1")).toMatchObject({ charisolSub: "charisol-sub-1" });
     expect(store.get("u1")?.charisolPasswordAt).toBeTruthy();
+  });
+
+  it("keeps the Charisol sign-in (server-side) so Strata can be connected without another login, and never fails the sign-in over it", async () => {
+    await seed();
+    saved.mockClear();
+    const user = await authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "ok", idToken: "t", refreshToken: "refresh.tok" }));
+    expect(user?.id).toBe("u1");
+    expect(saved).toHaveBeenCalledWith("u1", "refresh.tok");
+    saved.mockRejectedValueOnce(new Error("db down"));
+    expect((await authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "ok", idToken: "t", refreshToken: "r2" })))?.id).toBe("u1");
+    saved.mockClear();
+    await authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "ok", idToken: "t" })); // Charisol gave no refresh token: nothing to keep
+    expect(saved).not.toHaveBeenCalled();
   });
 
   it("matches the existing account by legacy_user_id (moved across via Plexo's verifier)", async () => {

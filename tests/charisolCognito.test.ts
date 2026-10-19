@@ -21,6 +21,11 @@ afterEach(() => {
 });
 
 describe("passwordSignIn", () => {
+  it("also returns Charisol's refresh token when it gives one", async () => {
+    vi.stubGlobal("fetch", respond(200, { AuthenticationResult: { IdToken: "id.t", RefreshToken: "refresh.t" } }));
+    expect(await passwordSignIn("ada@example.com", "pw")).toEqual({ kind: "ok", idToken: "id.t", refreshToken: "refresh.t" });
+  });
+
   it("returns the ID token on success, calling Cognito with Plexo's client and USER_PASSWORD_AUTH", async () => {
     const fetchMock = respond(200, { AuthenticationResult: { IdToken: "id.token.here" } });
     vi.stubGlobal("fetch", fetchMock);

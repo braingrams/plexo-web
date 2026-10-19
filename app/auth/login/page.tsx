@@ -8,8 +8,8 @@ import { authClient } from "@/lib/auth-client";
 import { Mulish } from "next/font/google";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
+import { DashboardSkeleton } from "@/app/auth/charisol/callback/dashboard-skeleton";
 
-import { BRAND } from "@/lib/theme";
 const mulish = Mulish({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700", "800", "900"],
@@ -25,6 +25,8 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Signed in, on the way to the dashboard: its first render takes a moment, so the page shows the dashboard's own outline instead of freezing.
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(() => params.get("error"));
 
   // A failed Charisol/Google sign-in routes back here with ?error=... (see
@@ -35,6 +37,12 @@ function LoginForm() {
     const url = new URL(window.location.href);
     url.searchParams.delete("error");
     router.replace(`${url.pathname}${url.search}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Start loading the dashboard while the person types, so it is ready sooner when sign-in succeeds.
+  useEffect(() => {
+    router.prefetch(params.get("redirectTo") ?? "/dashboard");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -84,6 +92,7 @@ function LoginForm() {
         return;
       }
 
+      if (redirectTo.startsWith("/dashboard")) setRedirecting(true);
       router.push(redirectTo);
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Invalid credentials.";
@@ -91,6 +100,15 @@ function LoginForm() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (redirecting) {
+    // Covers the whole screen (the sign-in layout's own panels included) until the dashboard replaces it.
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 100, overflow: "auto", background: "#0b0f19" }}>
+        <DashboardSkeleton />
+      </div>
+    );
   }
 
   return (
@@ -191,7 +209,7 @@ function LoginForm() {
             id="login-submit"
             type="submit"
             disabled={loading}
-            className={`w-full bg-[${BRAND.primary}] hover:bg-[${BRAND.deep}] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
+            className={`w-full bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
           >
             {loading ? <span>Signing in...</span> : <span>Sign In</span>}
           </button>
