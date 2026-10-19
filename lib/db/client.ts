@@ -14,11 +14,11 @@ const ddb = new DynamoDB({ region: process.env.AWS_REGION || "us-east-1", maxAtt
 
 // Big text values (a page, a design system, a long conversation…) move out of the row into storage and come back on read, so a
 // DynamoDB item's 400 KB limit never limits what a person can save. See lib/db/largeValues.ts.
-export const docClient = withLargeValues(
-  DynamoDBDocument.from(ddb, {
-    marshallOptions: { removeUndefinedValues: true },
-  }),
-);
+/** The client with no layer on it: what the stored-value cleanup reads (markers and all). Everything else uses `docClient`. */
+export const rawDocClient = DynamoDBDocument.from(ddb, {
+  marshallOptions: { removeUndefinedValues: true },
+});
+export const docClient = withLargeValues(rawDocClient);
 
 // Table names come from the environment rather than being recomputed here from the CDK
 // naming convention (base name, or `${base}-${stackID}` for non-prod) — that convention

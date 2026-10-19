@@ -4,11 +4,14 @@ import "@charisol/plexo-sdk/dist/plexo-sdk.css";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { CommentTarget, V2EditorRef } from "@charisol/plexo-sdk/v2";
+import type { DesignSystem } from "@charisol/plexo-sdk/v2/compile";
 
 import { EDITOR_THEME } from "@/lib/theme";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import type { V2Design, V2Meta } from "@/lib/v2/design";
 import { PageSettings } from "./PageSettings";
+import { BRAND_EMBED_MAX_CHARS, fetchBrand, uploadBrand } from "@/lib/v2/brandClient";
+import type { DesignSystemRef } from "@/lib/v2/design";
 import { buildV2SavePayload, leaveAfterSaving, newPageBody, pageSourcePages, postV2Draft, stockProviders, type TreePage } from "./logic";
 
 // The new visual editor (<V2Editor> from @charisol/plexo-sdk/v2) for a template page. One Template
@@ -65,6 +68,14 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
   const editorRef = useRef<V2EditorRef>(null);
   const editVersion = useRef(0);
   const systemDirty = useRef(false);
+  // A big brand lives in storage: the editor loads it itself (it can be larger than the page's own response may be) and, when it
+  // changes, uploads it straight back, then saves the page with only a small reference.
+  const brandRef = useRef<DesignSystemRef | undefined>(initialDesign.designSystemRef);
+  const systemEdits = useRef(0);
+  const [brand, setBrand] = useState<{ state: "ready" | "loading" | "error"; ds?: DesignSystem; message?: string }>(() =>
+    initialDesign.designSystem || !initialDesign.designSystemRef ? { state: "ready", ds: initialDesign.designSystem } : { state: "loading" },
+  );
+  const [brandTry, setBrandTry] = useState(0);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
@@ -90,6 +101,23 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
       cancelled = true;
     };
   }, [strata]);
+
+  useEffect(() => {
+    if (brand.state !== "loading") return;
+    const url = initialDesign.designSystemUrl;
+    if (!url) {
+      setBrand({ state: "error", message: "This site's colours and fonts couldn't be loaded. Reload the page to try again." });
+      return;
+    }
+    let cancelled = false;
+    fetchBrand(url).then(
+      (ds) => !cancelled && setBrand({ state: "ready", ds }),
+      (err) => !cancelled && setBrand({ state: "error", message: err instanceof Error ? err.message : "Couldn't load this site's colours and fonts." }),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [brand.state, brandTry, initialDesign.designSystemUrl]);
 
   const loadTree = useCallback(async () => {
     try {
@@ -119,29 +147,36 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
       if (!editor) throw new Error("The editor isn't ready yet.");
       const version = editVersion.current;
       setSaveState("saving");
-      const design = buildV2SavePayload({
-        page: editor.getPages()[0],
-        designSystem: editor.getDesignSystem(),
-        includeDesignSystem: systemDirty.current || !!initialDesign.designSystem,
-        customJs: extras.current.customJs,
-        meta: extras.current.meta,
-      });
+      const editsAtStart = systemEdits.current;
+      const brandNow = editor.getDesignSystem();
       try {
+        // A big brand that changed goes straight to storage first; the page then carries only its reference.
+        if (systemDirty.current && JSON.stringify(brandNow).length > BRAND_EMBED_MAX_CHARS) brandRef.current = await uploadBrand(brandNow);
+        else if (systemDirty.current) brandRef.current = undefined;
+        const design = buildV2SavePayload({
+          page: editor.getPages()[0],
+          designSystem: brandNow,
+          includeDesignSystem: systemDirty.current || !!initialDesign.designSystem,
+          designSystemRef: brandRef.current,
+          customJs: extras.current.customJs,
+          meta: extras.current.meta,
+        });
         await postV2Draft(templateId, design);
+        if (brandRef.current && systemEdits.current === editsAtStart) systemDirty.current = false; // stored: later saves just repeat the reference
+        setNotice(null);
+        props.onSaved(design);
+        if (editVersion.current === version) {
+          setDirty(false);
+          setSaveState("saved");
+        } else {
+          setSaveState("idle");
+        }
+        return design;
       } catch (err) {
         setSaveState("error");
         setNotice(err instanceof Error ? err.message : "Couldn't save this page.");
         throw err;
       }
-      setNotice(null);
-      props.onSaved(design);
-      if (editVersion.current === version) {
-        setDirty(false);
-        setSaveState("saved");
-      } else {
-        setSaveState("idle");
-      }
-      return design;
     };
     const next = queue.current.then(run, run);
     queue.current = next.catch(() => undefined);
@@ -277,7 +312,17 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
   );
 
   if (sdkError) return <Centered>The page editor couldn&rsquo;t load. Check your connection and reload the page.</Centered>;
-  if (!sdk || !tree) return <Centered>Opening your page…</Centered>;
+  if (brand.state === "error") {
+    return (
+      <Centered>
+        <span style={{ display: "grid", gap: 12, justifyItems: "center", textAlign: "center" }}>
+          <span>{brand.message}</span>
+          <button type="button" onClick={() => { setBrand({ state: "loading" }); setBrandTry((n) => n + 1); }} style={{ padding: "0.5rem 1rem", borderRadius: 10, border: "1px solid rgba(255,255,255,0.18)", background: "transparent", color: "inherit", cursor: "pointer" }}>Try again</button>
+        </span>
+      </Centered>
+    );
+  }
+  if (!sdk || !tree || brand.state === "loading") return <Centered>{brand.state === "loading" ? "Loading your site's colours and fonts…" : "Opening your page…"}</Centered>;
 
   const V2Editor = sdk.V2Editor;
   const current = tree.find((p) => p.id === templateId);
@@ -300,7 +345,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
           <V2Editor
             ref={editorRef}
             pages={initialDesign.pages}
-            designSystem={initialDesign.designSystem}
+            designSystem={brand.ds}
             apiKey="workspace-internal"
             templateId={rootId}
             readOnly={readOnly}
@@ -309,6 +354,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             onChange={() => markDirty()}
             onDesignSystemChange={() => {
               systemDirty.current = true;
+              systemEdits.current += 1;
               markDirty();
             }}
             onUpload={uploadImage}

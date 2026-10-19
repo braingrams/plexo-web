@@ -101,6 +101,11 @@ function formActionFor(ctx: CompileV2Context, names: Map<string, string>, own: M
   };
 }
 
+/** A design whose brand is only a reference was not resolved first (resolveDesignSystem): compiling it would quietly use the default brand. */
+function assertBrandLoaded(design: V2Design): void {
+  if (design.designSystemRef && !design.designSystem) throw new V2DesignError("This site's colours and fonts couldn't be loaded, so the page wasn't built. Please try again.");
+}
+
 /**
  * V2 design JSON -> the complete, sanitised HTML document stored as Template.compiledHtml
  * (what /pub serves). Throws V2DesignError (plain-language message) for a design that can't
@@ -111,6 +116,7 @@ function formActionFor(ctx: CompileV2Context, names: Map<string, string>, own: M
  */
 export function compileV2Design(rawDesign: unknown, ctx: CompileV2Context): string {
   const base = requireV2Design(rawDesign);
+  assertBrandLoaded(base);
   const own = formsOf(base.pages[0]);
   const design = spliceLayoutSections(base, ctx.layout);
   const page = design.pages[0];
@@ -150,6 +156,7 @@ export function compileV2Design(rawDesign: unknown, ctx: CompileV2Context): stri
  */
 export function compileV2Email(rawDesign: unknown, ctx: { name: string; subject?: string; preheader?: string }): string {
   const design = requireV2Design(rawDesign);
+  assertBrandLoaded(design);
   let html: string;
   try {
     html = compilePageToEmail(design.pages[0], { designSystem: design.designSystem, title: ctx.subject || ctx.name, preheader: ctx.preheader }).html;

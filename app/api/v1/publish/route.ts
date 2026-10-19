@@ -5,6 +5,7 @@ import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { compileTemplate } from "@/lib/compileTemplate";
 import { defaultDesignFormat, isV2Design, parseV2Design } from "@/lib/v2/design";
+import { externalizeDesignSystem } from "@/lib/v2/designSystemStore";
 import { getTierFeatures } from "@/lib/subscription";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { getDomainLimit } from "@/lib/domainLimit";
@@ -97,6 +98,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     designJson = parsed.design;
     try {
       compiledHtml = await compileTemplate({ designFormat, designJson, kind, id: templateId, name });
+      designJson = await externalizeDesignSystem(parsed.design); // a big brand is stored once, outside the row
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "This page couldn't be built." }, { status: 400 });
     }

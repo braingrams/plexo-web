@@ -29,11 +29,21 @@ export type V2Meta = {
   ogImageUrl?: string;
 };
 
+/** A design system kept in storage (lib/v2/designSystemStore.ts) instead of in the page's row: where it is, and how big. */
+export type DesignSystemRef = { hash: string; size: number };
+
+export const isDesignSystemRef = (v: unknown): v is DesignSystemRef =>
+  !!v && typeof v === "object" && typeof (v as DesignSystemRef).hash === "string" && /^[a-f0-9]{64}$/.test((v as DesignSystemRef).hash) && Number.isFinite((v as DesignSystemRef).size) && (v as DesignSystemRef).size >= 0;
+
 export type V2Design = {
   format: typeof V2_FORMAT;
   /** Exactly one page per Template row — a multi-page site is several rows (parentId tree), like V1. */
   pages: PageDefinition[];
   designSystem?: DesignSystem;
+  /** Instead of `designSystem` for a big brand: where it is stored. `resolveDesignSystem` brings it back wherever the brand is needed. */
+  designSystemRef?: DesignSystemRef;
+  /** Transient, never stored: a short-lived link the editor loads a big brand from (set when the page is opened, not by anything that saves). */
+  designSystemUrl?: string;
   /** The owner's own script for this page (V1's "custom code"). Owner code, never sanitised, contained at compile. */
   customJs?: string;
   meta?: V2Meta;
@@ -122,6 +132,8 @@ export function parseV2Design(raw: unknown): { ok: true; design: V2Design } | { 
     // Unchanged built-in system: store nothing, the compiler uses it by default.
     if (json !== defaultSystemJson()) designSystem = repaired;
   }
+  // A big brand arrives as a reference to where it is stored (only when none is embedded).
+  const designSystemRef = !designSystem && isDesignSystemRef(raw.designSystemRef) ? { hash: raw.designSystemRef.hash, size: raw.designSystemRef.size } : undefined;
 
   let customJs: string | undefined;
   if (raw.customJs !== undefined && raw.customJs !== null && raw.customJs !== "") {
@@ -139,6 +151,7 @@ export function parseV2Design(raw: unknown): { ok: true; design: V2Design } | { 
       format: V2_FORMAT,
       pages: parsed.pages,
       ...(designSystem ? { designSystem } : {}),
+      ...(designSystemRef ? { designSystemRef } : {}),
       ...(customJs ? { customJs } : {}),
       ...(meta ? { meta } : {}),
     },

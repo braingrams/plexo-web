@@ -18,6 +18,7 @@ import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { compileTemplate } from "@/lib/compileTemplate";
 import { compileTemplateWithSiteLayout, findRootTemplateId, onTemplateSaved } from "@/lib/siteLayoutCore";
 import { publishTemplateDraft } from "@/lib/templateVersions";
+import { externalizeDesignSystem, resolveDesignSystem } from "@/lib/v2/designSystemStore";
 import { designFormatOf, parseV2Design, V2DesignError, v2DesignFromTemplate, V2_FORMAT, type V2Design } from "@/lib/v2/design";
 import { getTierFeatures } from "@/lib/subscription";
 import { ensureUniqueSlug, pathForPage } from "@/server/slugDynamo";
@@ -108,8 +109,9 @@ async function resolveTargetRow(resolved: ResolvedUser, id: unknown, slug: unkno
 }
 
 /** The design as the owner would see it now: the working draft when there is one, else the live one. */
-function currentDesign(row: Row): V2Design {
-  const parsed = parseV2Design(row.draftJson ?? row.designJson);
+async function currentDesign(row: Row): Promise<V2Design> {
+  // A big brand lives in storage with a reference in the row: bring it back so the tools see the whole design.
+  const parsed = parseV2Design(await resolveDesignSystem(row.draftJson ?? row.designJson));
   if (!parsed.ok) throw new PageToolError(`I can't read the design of "${row.name}" (${parsed.error}). Open it in the dashboard editor to check it.`);
   return parsed.design;
 }
@@ -135,7 +137,7 @@ export async function describePages(resolved: ResolvedUser, args: { templateId?:
   let page: Record<string, unknown>;
   let brand: unknown;
   if (target === "v2") {
-    const design = currentDesign(row);
+    const design = await currentDesign(row);
     const summary = describeDesign(design.pages, systemOf(design));
     brand = summary.brand;
     const p = summary.pages[0];
@@ -266,7 +268,7 @@ export async function editPage(resolved: ResolvedUser, args: { templateId?: unkn
 
 /** Applies commands to a V2 row and saves (draft for pages, live for layout fragments). */
 export async function saveEdit(row: Row, commands: unknown[], opts: { live: boolean }) {
-  const before = currentDesign(row);
+  const before = await currentDesign(row);
   const applied = applyToDesign(before, commands);
 
   if (!applied.anyOk) {
@@ -290,14 +292,15 @@ export async function saveEdit(row: Row, commands: unknown[], opts: { live: bool
   }
 
   const name = applied.renamed ? checked.design.pages[0].name : undefined;
+  const toStore = await externalizeDesignSystem(checked.design); // a big brand is kept in storage, once, not in every row
   if (opts.live) {
     await Template.patch({ id: row.id })
-      .set({ designFormat: "v2", designJson: checked.design, compiledHtml: checked.html, ...(name ? { name } : {}) })
+      .set({ designFormat: "v2", designJson: toStore, compiledHtml: checked.html, ...(name ? { name } : {}) })
       .remove(["draftJson", "draftHtml"])
       .go();
   } else {
     await Template.patch({ id: row.id })
-      .set({ draftJson: checked.design, draftHtml: checked.html, ...(name ? { name } : {}) })
+      .set({ draftJson: toStore, draftHtml: checked.html, ...(name ? { name } : {}) })
       .go();
   }
 
@@ -481,7 +484,7 @@ export async function publishPage(resolved: ResolvedUser, args: { templateId?: u
     throw new PageToolError(err instanceof Error ? err.message : "This page can't be published on the current plan.");
   }
 
-  const design = currentDesign(row);
+  const design = await currentDesign(row);
   let html: string;
   try {
     html = await compileTemplateWithSiteLayout({ id: row.id, parentId: row.parentId ?? null, kind: "LANDING_PAGE", name: row.name, designFormat: "v2" }, design);

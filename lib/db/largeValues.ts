@@ -160,7 +160,10 @@ export async function rehydrateLargeValues<T>(output: T): Promise<T> {
  */
 export function withLargeValues<C extends { send: (command: any, ...rest: any[]) => Promise<any> }>(doc: C): C {
   const original = doc.send.bind(doc);
-  doc.send = (async (command: { input?: unknown }, ...rest: unknown[]) => {
+  // A layer over the client, not a change to it: the original stays available (the cleanup reads raw rows through it, markers and all).
+  // Every operation method (put, get, query…) calls `this.send`, so they pick the layer up through the prototype chain.
+  const layered = Object.create(doc) as C;
+  layered.send = (async (command: { input?: unknown }, ...rest: unknown[]) => {
     // A document command builds its low-level twin from its input when constructed, so a changed input needs a new command.
     let toSend: unknown = command;
     if (command && command.input !== undefined) {
@@ -169,5 +172,5 @@ export function withLargeValues<C extends { send: (command: any, ...rest: any[])
     }
     return rehydrateLargeValues(await original(toSend, ...rest));
   }) as C["send"];
-  return doc;
+  return layered;
 }

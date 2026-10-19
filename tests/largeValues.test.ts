@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocument } from "@aws-sdk/lib-dynamodb";
 import { HttpResponse } from "@smithy/protocol-http";
+import { Entity } from "electrodb";
 import { OFFLOAD_MIN_CHARS, markerFor, setValueBackend, withLargeValues, type ValueBackend } from "@/lib/db/largeValues";
 
 // "No row is ever too big": big text values leave the row for storage and come back whole on read, through the real
@@ -23,8 +24,9 @@ const fakeHandler = {
     const body = JSON.parse(request.body);
     wire.push({ target, body });
     let out: unknown = {};
-    if (target === "PutItem") table.set(body.Item.id.S, body.Item);
-    else if (target === "GetItem") out = { Item: table.get(body.Key.id.S) };
+    const keyOf = (o: any) => (o.pk ?? o.id).S as string;
+    if (target === "PutItem") table.set(keyOf(body.Item), body.Item);
+    else if (target === "GetItem") out = { Item: table.get(keyOf(body.Key)) };
     else if (target === "Query") out = { Items: [...table.values()], Count: table.size };
     else if (target === "UpdateItem") {
       const row: Record<string, unknown> = table.get(body.Key.id.S) ?? { id: body.Key.id };
@@ -119,5 +121,26 @@ describe("big values leave the row and come back whole", () => {
     const db = client();
     table.set("m", { id: { S: "m" }, designJson: { S: markerFor("a".repeat(64), 123) } });
     await expect(db.get({ TableName: "t", Key: { id: "m" } })).rejects.toThrow(/missing from storage|couldn't be loaded/);
+  });
+});
+
+describe("through ElectroDB, which is how the app really talks to the table", () => {
+  it("an entity saves and reads a multi-megabyte attribute whole, and the row stays tiny", async () => {
+    const db = client();
+    const Page = new Entity(
+      {
+        model: { entity: "page", version: "1", service: "test" },
+        attributes: { id: { type: "string", required: true }, name: { type: "string" }, designJson: { type: "any" } },
+        indexes: { primary: { pk: { field: "pk", composite: ["id"] }, sk: { field: "sk", composite: [] } } },
+      },
+      { table: "t", client: db },
+    );
+    const designJson = { rows: Array.from({ length: 60_000 }, (_, i) => ({ id: `row-${i}`, text: "lorem ipsum ".repeat(5) })) };
+    expect(JSON.stringify(designJson).length).toBeGreaterThan(5_000_000);
+    await Page.put({ id: "pg1", name: "Home", designJson: JSON.stringify(designJson) }).go();
+    expect(JSON.stringify(wire.at(-1)!.body).length).toBeLessThan(3000);
+    const { data } = await Page.get({ id: "pg1" }).go();
+    expect(JSON.parse(data!.designJson as string)).toEqual(designJson);
+    expect(data!.name).toBe("Home");
   });
 });

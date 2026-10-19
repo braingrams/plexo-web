@@ -17,6 +17,10 @@ import { RawFileEditor } from "./raw-file-editor";
 import { migratedPreviewBase } from "@/lib/wpMigration/previewBase";
 import { canMoveToV2 } from "@/lib/v2/convertV1";
 import { designFormatOf, parseV2Design } from "@/lib/v2/design";
+import { designSystemDownloadUrl, resolveDesignSystem } from "@/lib/v2/designSystemStore";
+
+/** Up to this many characters of brand are handed to the editor with the page; beyond it the browser loads the brand itself. */
+const BRAND_INLINE_MAX_CHARS = 2_000_000;
 
 function isTemplateJson(value: unknown): value is TemplateJSON {
   if (typeof value !== "object" || value === null) {
@@ -117,6 +121,22 @@ export default async function TemplateEditorPage(props: {
       );
     }
     initialV2Design = parsed.design;
+    // A big brand lives in storage: a modest one is loaded here and handed over as usual; a very large one is left for the browser
+    // to fetch straight from storage (it can be larger than this page's own response may be).
+    const ref = parsed.design.designSystemRef;
+    if (ref) {
+      try {
+        if (ref.size <= BRAND_INLINE_MAX_CHARS) initialV2Design = await resolveDesignSystem(parsed.design);
+        else initialV2Design = { ...parsed.design, designSystemUrl: await designSystemDownloadUrl(ref.hash) };
+      } catch (err) {
+        return (
+          <div style={{ padding: "3rem 1.5rem", maxWidth: 560, margin: "0 auto", textAlign: "center", color: "rgba(240,242,255,0.8)" }}>
+            <h1 style={{ fontSize: "1.2rem", fontWeight: 800 }}>This page can&rsquo;t be opened right now</h1>
+            <p style={{ fontSize: "0.9rem", lineHeight: 1.6 }}>{err instanceof Error ? err.message : "Its colours and fonts couldn't be loaded."} Nothing has been changed. Please try again in a moment.</p>
+          </div>
+        );
+      }
+    }
   }
 
   const liveDesignJson = isTemplateJson(template.designJson)
