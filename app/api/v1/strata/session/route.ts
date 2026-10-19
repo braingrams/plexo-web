@@ -3,6 +3,7 @@ import { User } from "@/lib/db/coreEntities";
 import { getCharisolVerifier } from "@/server/charisolVerifier";
 import { isEmailVerifiedClaim } from "@/server/charisolAccount";
 import { authorizeStrata, exchangeCharisolIdToken, loginToStrataWithPassword, readJson, strataApiUrl, strataFail } from "@/lib/strata/server";
+import { freshCharisolIdToken } from "@/lib/charisolLink";
 import { deleteStrataSession, getStrataConnection, saveStrataSession } from "@/lib/strata/session";
 import { resolveUser } from "@/lib/auth/resolveUser";
 
@@ -12,6 +13,8 @@ import { resolveUser } from "@/lib/auth/resolveUser";
  *   POST   { idToken } → connects with the person's own Charisol sign-in: verifies the ID token (same verifier as
  *          sign-in), requires its email to be the signed-in Plexo user's (unless `anotherAccount`: they chose to use a
  *          different Strata account), trades it for a Strata session and stores that encrypted.
+ *   POST   { silent: true } → the same, using the Charisol sign-in Plexo kept when they signed in (no window, no password);
+ *          409 { kind: "needs_sign_in" } when there isn't one.
  *   POST   { email, password } → connects by signing in to Strata with that account (any Strata account — this is how
  *          someone uses a different one). The password is passed to Strata and never kept.
  *          Both → { available, connected, expired, user }
@@ -45,7 +48,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const anotherAccount = body?.anotherAccount === true;
-  const idToken = typeof body?.idToken === "string" ? body.idToken : "";
+  let idToken = typeof body?.idToken === "string" ? body.idToken : "";
+  // "Connect" with no sign-in step: Charisol is one sign-in for every Charisol product, so use the one the person already made.
+  if (!idToken && body?.silent === true) {
+    idToken = (await freshCharisolIdToken(caller.userId)) ?? "";
+    if (!idToken) return NextResponse.json({ error: "Your Charisol sign-in has ended. Sign in once to connect Strata.", kind: "needs_sign_in" }, { status: 409 });
+  }
   if (!idToken) return NextResponse.json({ error: "The Charisol sign-in didn't finish. Please try connecting again.", kind: "invalid" }, { status: 400 });
 
   let claims: Record<string, unknown>;

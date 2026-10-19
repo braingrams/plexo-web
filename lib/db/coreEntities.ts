@@ -216,6 +216,27 @@ export const StrataSession = new Entity(
   { table, client: docClient },
 );
 
+// The person's Charisol sign-in, kept on the server (encrypted) so another Charisol product — Strata today — can be opened as
+// them without asking them to sign in again: Charisol's own browser session only lasts about an hour, but this renews a fresh
+// ID token whenever it's needed (lib/charisolLink.ts). Never returned to the browser; removed when they sign out of Plexo.
+export const CharisolLink = new Entity(
+  {
+    model: { entity: "charisolLink", version: "1", service: "plexoCore" },
+    attributes: {
+      userId: { type: "string", required: true },
+      ciphertext: { type: "string", required: true },
+      storedAt: { type: "string", required: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["userId"], template: "USER#${userId}" },
+        sk: { field: "sk", composite: [], template: "CHARISOLLINK" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 // "Keep my website up to date with Strata" (lib/strata/autoUpdate.ts): one row per app that has
 // automatic updates on. It holds a read-only Strata integration key (scope design-system:read,
 // limited to the one linked project), stored ENCRYPTED and never sent to the browser, so a
@@ -561,6 +582,7 @@ export const plexoCoreService = new Service(
     User,
     UserEmailLock,
     StrataSession,
+    CharisolLink,
     Organization,
     Member,
     ApiKey,

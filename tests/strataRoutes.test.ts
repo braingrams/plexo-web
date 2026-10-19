@@ -8,6 +8,7 @@ import { NextRequest } from "next/server";
 const state = vi.hoisted(() => ({
   userId: "u1" as string | null,
   userEmail: "ada@example.com",
+  links: new Map<string, { userId: string; ciphertext: string; storedAt: string }>(),
   rows: new Map<string, { userId: string; ciphertext: string; strataEmail?: string; strataName?: string; connectedAt: string }>(),
   claims: { email: "ada@example.com", email_verified: true } as Record<string, unknown>,
   verifyFails: false,
@@ -20,6 +21,11 @@ vi.mock("@/lib/auth/resolveUser", () => ({
 vi.mock("@/lib/commerceRateLimitDynamo", () => ({ checkCommerceRateLimit: async () => !state.rateLimited }));
 vi.mock("@/lib/db/coreEntities", () => ({
   User: { get: () => ({ go: async () => ({ data: { id: state.userId, email: state.userEmail } }) }) },
+  CharisolLink: {
+    get: ({ userId }: { userId: string }) => ({ go: async () => ({ data: state.links.get(userId) ?? null }) }),
+    upsert: (item: { userId: string; ciphertext: string; storedAt: string }) => ({ go: async () => { state.links.set(item.userId, item); return { data: item }; } }),
+    delete: ({ userId }: { userId: string }) => ({ go: async () => void state.links.delete(userId) }),
+  },
   StrataSession: {
     get: ({ userId }: { userId: string }) => ({ go: async () => ({ data: state.rows.get(userId) ?? null }) }),
     upsert: (item: { userId: string; ciphertext: string; connectedAt: string }) => ({
@@ -58,6 +64,45 @@ const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 function connectedRow(ageMs = 0) {
   return { userId: "u1", ciphertext: "x", strataEmail: "ada@example.com", strataName: "Ada L", connectedAt: new Date(Date.now() - ageMs).toISOString() };
 }
+describe("connecting with the Charisol sign-in Plexo kept (no window)", () => {
+  const cognito = (status: number, body: unknown = {}) => (url: string) => (url.includes("/oauth2/token") ? json(status, body) : json(200, { status: true, data: { token: SECRET_TOKEN, user: { email: "ada@example.com", firstName: "Ada" } } }));
+
+  it("turns the saved sign-in into a Strata session, with nothing typed", async () => {
+    const { saveCharisolRefresh } = await import("@/lib/charisolLink");
+    await saveCharisolRefresh("u1", "refresh.tok");
+    strataHandler = cognito(200, { id_token: "fresh.id" });
+    const res = await postSession(req("/session", "POST", { silent: true }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ connected: true, user: { email: "ada@example.com" } });
+    const refresh = strataCalls.find((c) => c.url.includes("/oauth2/token"))!;
+    expect(String(refresh.init.body)).toContain("grant_type=refresh_token");
+    expect(await loadStrataToken("u1")).toBe(SECRET_TOKEN);
+  });
+
+  it("asks for one sign-in when there is none saved", async () => {
+    const res = await postSession(req("/session", "POST", { silent: true }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).kind).toBe("needs_sign_in");
+  });
+
+  it("forgets a sign-in Charisol no longer honours", async () => {
+    const { saveCharisolRefresh } = await import("@/lib/charisolLink");
+    await saveCharisolRefresh("u1", "refresh.tok");
+    strataHandler = cognito(400, { error: "invalid_grant" });
+    expect((await postSession(req("/session", "POST", { silent: true }))).status).toBe(409);
+    expect(state.links.has("u1")).toBe(false);
+  });
+
+  it("never connects Strata as someone else: the renewed token must carry this person's email", async () => {
+    const { saveCharisolRefresh } = await import("@/lib/charisolLink");
+    await saveCharisolRefresh("u1", "someone-elses.refresh");
+    state.claims = { email: "mallory@example.com", email_verified: true };
+    strataHandler = cognito(200, { id_token: "their.id" });
+    expect((await postSession(req("/session", "POST", { silent: true }))).status).toBe(403);
+    expect(state.rows.size).toBe(0);
+  });
+});
+
 describe("connecting with an email and password (another Strata account)", () => {
   it("signs in to Strata with them, stores only the session, and never keeps the password", async () => {
     strataHandler = () => json(200, { status: true, data: { token: SECRET_TOKEN, user: { email: "other@example.com", firstName: "Oto" } } });
@@ -102,6 +147,7 @@ beforeEach(() => {
   process.env.STRATA_TOKEN_ENCRYPTION_SECRET = "test-secret-for-strata-tokens";
   Object.assign(state, { userId: "u1", userEmail: "ada@example.com", claims: { email: "ada@example.com", email_verified: true }, verifyFails: false, rateLimited: false });
   state.rows.clear();
+  state.links.clear();
   strataCalls.length = 0;
   vi.stubGlobal(
     "fetch",

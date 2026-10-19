@@ -215,8 +215,8 @@ export function SolModeSwitch({
         type="button"
         onClick={(e) => (goingTo === "sol" ? enterSol(e) : void exitToPlexo())}
         disabled={switching}
-        aria-label={goingTo === "sol" ? "Switch to SOL" : "Switch to Plexo dashboard"}
-        title={goingTo === "sol" ? "Switch to SOL" : "Switch to Plexo dashboard"}
+        aria-label={goingTo === "sol" ? "Ask SOL" : "Switch to Plexo dashboard"}
+        title={goingTo === "sol" ? "Ask SOL" : "Switch to Plexo dashboard"}
         style={{
           display: "flex",
           alignItems: "center",
@@ -224,15 +224,17 @@ export function SolModeSwitch({
           width: 32,
           height: 32,
           borderRadius: 9,
-          border: active === "sol" ? "1px solid rgba(var(--brand-rgb),0.28)" : "1px solid rgba(255,255,255,0.08)",
-          background: active === "sol" ? "linear-gradient(135deg, rgba(var(--brand-rgb),0.18), rgba(var(--brand-deep-rgb),0.1))" : "rgba(255,255,255,0.04)",
-          color: active === "sol" ? "#e9d5ff" : "rgba(240,242,255,0.6)",
+          // The button that takes you INTO SOL wears SOL's own mark (it used to be a generic grid icon, so a folded menu
+          // looked like it had no SOL at all); the one that takes you back wears the dashboard grid.
+          border: "1px solid rgba(var(--brand-rgb),0.35)",
+          background: "linear-gradient(135deg, rgba(var(--brand-rgb),0.22), rgba(var(--brand-deep-rgb),0.14))",
+          color: "#f3e8ff",
           cursor: "pointer",
           flexShrink: 0,
           opacity: switching ? 0.6 : 1,
         }}
       >
-        {active === "sol" ? <SolIcon size={15} /> : <LayoutGrid size={14} />}
+        {goingTo === "sol" ? <SolIcon size={16} /> : <LayoutGrid size={14} />}
       </button>
     );
   }
