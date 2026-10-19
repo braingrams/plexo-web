@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 
+import { BRAND } from "@/lib/theme";
 type Props = {
   size?: number;
   showText?: boolean;
@@ -20,10 +21,10 @@ export function PlexoLogo({ size = 34, showText = true, href = "/", textStyle }:
           width: size,
           height: size,
           borderRadius: Math.round(size * 0.26),
-          background: "linear-gradient(135deg, #8b5cf6, #6d28d9)",
+          background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND[700]})`,
           display: "grid",
           placeItems: "center",
-          boxShadow: "0 0 16px rgba(139,92,246,0.45)",
+          boxShadow: "0 0 16px rgba(var(--brand-rgb), 0.45)",
           flexShrink: 0,
         }}
       >

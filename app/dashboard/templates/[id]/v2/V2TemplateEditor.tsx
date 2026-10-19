@@ -5,6 +5,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { useRouter } from "next/navigation";
 import type { CommentTarget, V2EditorRef } from "@charisol/plexo-sdk/v2";
 
+import { EDITOR_THEME } from "@/lib/theme";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import type { V2Design, V2Meta } from "@/lib/v2/design";
 import { PageSettings } from "./PageSettings";
@@ -31,11 +32,15 @@ type Props = {
   rootTemplateId: string;
   initialDesign: V2Design;
   readOnly: boolean;
+  /** An email is edited in the editor's email mode: only what email apps can draw, and no web-page details (address, search, scripts). */
+  kind: "EMAIL" | "LANDING_PAGE";
   commentMode: boolean;
   onRequestComment: (target: CommentTarget) => void;
   stockKeys: { unsplash?: string; pexels?: string; pixabay?: string };
   /** The page's own Comments / Publish buttons (the parent owns publishing). */
   headerRight: ReactNode;
+  /** Puts the page live (saves what is on the canvas first). Rejects when it fails, so the editor's Save menu can say so. */
+  onPublish: () => Promise<void>;
   onBack: () => void;
   onSaved: (design: V2Design) => void;
   /** Present while this page can still go back to the classic editor. */
@@ -263,6 +268,8 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
       if (props.stockKeys.pexels) headers["x-pexels-key"] = props.stockKeys.pexels;
       if (props.stockKeys.pixabay) headers["x-pixabay-key"] = props.stockKeys.pixabay;
       const res = await fetch(`/api/v1/media/stock?query=${encodeURIComponent(query)}&provider=${encodeURIComponent(provider)}`, { headers });
+      // A failed search says so (the picker shows a plain "couldn't load photos" message) instead of passing for "no results".
+      if (!res.ok) throw new Error("Photo search failed");
       const data = await res.json().catch(() => []);
       return Array.isArray(data) ? data.map((r) => ({ id: r.id, src: r.src, alt: r.alt, credit: r.credit, provider: r.provider })) : [];
     },
@@ -308,8 +315,11 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             onUploadFont={uploadFont}
             loadMedia={loadMedia}
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
+            // Plexo purple on Plexo's own background, so the editor looks like the rest of the app (and follows lib/theme.ts).
+            theme={EDITOR_THEME}
             strata={strataOn ? strata : undefined}
             onSave={readOnly ? undefined : () => saveNow().then(() => undefined)}
+            onPublish={readOnly ? undefined : props.onPublish}
             saveState={stateForEditor}
             pageSource={{
               pages: listed,
@@ -322,12 +332,14 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
               },
               onDelete: readOnly ? undefined : (id) => deletePage(id),
             }}
-            shell={{ onExit: props.onBack, exitLabel: "Back to site" }}
+            mode={props.kind === "EMAIL" ? "email" : undefined}
+            shell={{ onExit: props.onBack, exitLabel: props.kind === "EMAIL" ? "Back to emails" : "Back to site" }}
             features={{ pageSwitcher: false, viewSwitch: false, headerSol: false, codeView: false }}
-            headerLeft={
+            pageSettings={
               <PageSettings
                 name={name}
                 slug={slug}
+                email={props.kind === "EMAIL"}
                 meta={meta}
                 customJs={customJs}
                 readOnly={readOnly}

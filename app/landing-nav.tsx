@@ -40,6 +40,18 @@ function ThemeToggle() {
 export function LandingNav() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  // These public pages are static, so the server can't tell who is looking; ask once after load so a signed-in
+  // owner sees "Dashboard" instead of being invited to sign in again.
+  const [signedIn, setSignedIn] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((s) => { if (!cancelled && s?.user) setSignedIn(true); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setIsScrolled(window.scrollY > 24);
@@ -96,12 +108,20 @@ export function LandingNav() {
             style={{ display: "none", alignItems: "center", gap: "1rem" }}
           >
             <ThemeToggle />
-            <Link href="/auth/login" style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text-main)", textDecoration: "none" }}>
-              Sign In
-            </Link>
-            <Link href="/auth/register" className="btn-brand" style={{ padding: "0.6rem 1.3rem", fontSize: "0.85rem" }}>
-              Get Started Free
-            </Link>
+            {signedIn ? (
+              <Link href="/dashboard" className="btn-brand" style={{ padding: "0.6rem 1.3rem", fontSize: "0.85rem" }}>
+                Go to dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/auth/login" style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text-main)", textDecoration: "none" }}>
+                  Sign In
+                </Link>
+                <Link href="/auth/register" className="btn-brand" style={{ padding: "0.6rem 1.3rem", fontSize: "0.85rem" }}>
+                  Get Started Free
+                </Link>
+              </>
+            )}
           </div>
 
           <div className="nav-mobile-actions" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
@@ -153,12 +173,20 @@ export function LandingNav() {
             Releases
           </Link>
           <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem", width: "80%", maxWidth: 280 }}>
-            <Link href="/auth/login" onClick={() => setIsMenuOpen(false)} className="btn-ghost" style={{ justifyContent: "center" }}>
-              Sign In
-            </Link>
-            <Link href="/auth/register" onClick={() => setIsMenuOpen(false)} className="btn-brand" style={{ justifyContent: "center" }}>
-              Get Started Free
-            </Link>
+            {signedIn ? (
+              <Link href="/dashboard" onClick={() => setIsMenuOpen(false)} className="btn-brand" style={{ justifyContent: "center" }}>
+                Go to dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/auth/login" onClick={() => setIsMenuOpen(false)} className="btn-ghost" style={{ justifyContent: "center" }}>
+                  Sign In
+                </Link>
+                <Link href="/auth/register" onClick={() => setIsMenuOpen(false)} className="btn-brand" style={{ justifyContent: "center" }}>
+                  Get Started Free
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

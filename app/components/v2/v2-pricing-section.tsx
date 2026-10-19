@@ -5,6 +5,7 @@ import { Check, Sparkles, Zap } from "lucide-react";
 import { Reveal } from "@/app/scroll-fx";
 import { planMonthlyCredits } from "@/lib/credits/value";
 
+import { BRAND } from "@/lib/theme";
 type Plan = {
   name: string;
   planKey: "FREE" | "PRO" | "ULTRA";
@@ -167,7 +168,7 @@ export function V2PricingSection({ isDark }: { isDark: boolean }) {
                     href={plan.ctaHref}
                     className={`w-full py-4 rounded-2xl font-extrabold text-sm text-center block transition-all shadow-md ${
                       plan.popular
-                        ? "bg-[#6b3bf9] hover:bg-[#5b2be6] text-white shadow-purple-600/30"
+                        ? `bg-[${BRAND.primary}] hover:bg-[${BRAND.deep}] text-white shadow-purple-600/30`
                         : isDark
                         ? "bg-slate-800 hover:bg-slate-700 text-white border border-slate-700"
                         : "bg-slate-900 hover:bg-slate-800 text-white"

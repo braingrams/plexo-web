@@ -4,6 +4,7 @@ import {
   buildPageFromTemplate,
   createDefaultDesignSystem,
   parsePages,
+  starterEmailPages,
   templateSeed,
   repairDesignSystem,
   type DesignSystem,
@@ -156,6 +157,11 @@ const defaultSystemJson = (): string => (cachedDefaultJson ??= JSON.stringify(cr
 /** A brand-new, empty page (no designSystem: the built-in one applies until the owner customises it). */
 export function blankV2Design(): V2Design {
   return { format: V2_FORMAT, pages: blankPages() };
+}
+
+/** A new email in the new editor: header, main message, highlights, a button and a footer, ready to change. */
+export function starterV2EmailDesign(): V2Design {
+  return { format: V2_FORMAT, pages: starterEmailPages() };
 }
 
 /** A page started from one of the SDK's page templates ("home", "pricing", ...). `seed` (the new row's id) keeps node ids unique across a site's pages. */

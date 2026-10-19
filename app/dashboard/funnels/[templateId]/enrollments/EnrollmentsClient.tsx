@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { BRAND } from "@/lib/theme";
 type Enrollment = {
   email: string;
   name: string | null;
@@ -85,7 +86,7 @@ export function EnrollmentsClient({
               <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.55)" }}>{e.paymentStatus === "FREE" ? "Free" : e.paymentStatus === "PAID" ? "Paid" : "Refunded"}</td>
               <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.4)" }}>{new Date(e.enrolledAt).toLocaleDateString()}</td>
               <td style={{ padding: "10px 0", textAlign: "right", whiteSpace: "nowrap" }}>
-                <a href={`mailto:${e.email}`} style={{ fontSize: "0.78rem", color: "var(--brand, #a78bfa)", textDecoration: "none", marginRight: "0.9rem" }}>
+                <a href={`mailto:${e.email}`} style={{ fontSize: "0.78rem", color: `var(--brand, ${BRAND[400]})`, textDecoration: "none", marginRight: "0.9rem" }}>
                   Email
                 </a>
                 {e.status === "ACTIVE" && (
@@ -93,7 +94,7 @@ export function EnrollmentsClient({
                     type="button"
                     onClick={() => resendLink(e.email)}
                     disabled={resendState[e.email] === "sending"}
-                    style={{ fontSize: "0.78rem", color: resendState[e.email] === "error" ? "#f87171" : "var(--brand, #a78bfa)", background: "none", border: "none", cursor: "pointer", padding: 0, marginRight: "0.9rem" }}
+                    style={{ fontSize: "0.78rem", color: resendState[e.email] === "error" ? "#f87171" : `var(--brand, ${BRAND[400]})`, background: "none", border: "none", cursor: "pointer", padding: 0, marginRight: "0.9rem" }}
                   >
                     {resendState[e.email] === "sending" ? "Sending…" : resendState[e.email] === "sent" ? "Sent!" : resendState[e.email] === "error" ? "Failed — retry" : "Resend link"}
                   </button>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BRAND } from "@/lib/theme";
 import { LandingNav } from "../landing-nav";
 import {
   SDK_V2_API, SDK_V2_COMPILE, SDK_V2_EMBED, SDK_V2_INSTALL, SDK_V2_NEXT, SDK_V2_PAGES, SDK_V2_SOL,
@@ -215,7 +216,7 @@ export default function PublicSdkPage() {
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", textAlign: "left" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)", color: "#a78bfa" }}>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)", color: BRAND[400] }}>
                   <th style={{ padding: "0.75rem" }}>Prop</th>
                   <th style={{ padding: "0.75rem" }}>Type</th>
                   <th style={{ padding: "0.75rem" }}>What it does</th>
@@ -236,11 +237,11 @@ export default function PublicSdkPage() {
 
         {/* Classic */}
         <section id="classic" style={{ borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "3rem", marginBottom: "2rem" }}>
-          <div style={{ display: "inline-flex", padding: "0.3rem 0.8rem", borderRadius: 999, background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.3)", color: "#a78bfa", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1rem" }}>
+          <div style={{ display: "inline-flex", padding: "0.3rem 0.8rem", borderRadius: 999, background: "rgba(167,139,250,0.12)", border: "1px solid rgba(167,139,250,0.3)", color: BRAND[400], fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "1rem" }}>
             Classic (V1) builder
           </div>
           <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.8rem", fontWeight: 800, color: "#fff", margin: "0 0 0.75rem" }}>
-            Already using <code style={{ fontFamily: "monospace", color: "#a78bfa" }}>&lt;PlexoBuilder /&gt;</code>? Nothing changes for you.
+            Already using <code style={{ fontFamily: "monospace", color: BRAND[400] }}>&lt;PlexoBuilder /&gt;</code>? Nothing changes for you.
           </h2>
           <p style={{ ...LEAD, maxWidth: 820, marginBottom: "2rem" }}>
             The classic builder (the main export of the same package) for emails and landing pages keeps working exactly as before, with the same API key,
@@ -321,7 +322,7 @@ export function TemplateEditor() {
         mode="landing_page"
         useAi={true}
         aiTier="AUTO"
-        themeBgColor="#8b5cf6"
+        themeBgColor={BRAND.primary}
       />
     </div>
   );
@@ -355,6 +356,7 @@ import dynamic from 'next/dynamic';
 import type { PlexoBuilderRef } from '@charisol/plexo-sdk';
 import '@charisol/plexo-sdk/dist/plexo-sdk.css';
 
+import { BRAND } from "@/lib/theme";
 const PlexoBuilder = dynamic(
   () => import('@charisol/plexo-sdk').then((m) => ({ default: m.PlexoBuilder })),
   { ssr: false, loading: () => <p>Loading Plexo Visual Editor…</p> }
@@ -381,7 +383,7 @@ export function TemplateEditorWrapper() {
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", textAlign: "left" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)", color: "#a78bfa" }}>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)", color: BRAND[400] }}>
                   <th style={{ padding: "0.75rem" }}>Prop</th>
                   <th style={{ padding: "0.75rem" }}>Type</th>
                   <th style={{ padding: "0.75rem" }}>Default</th>
@@ -416,7 +418,7 @@ export function TemplateEditorWrapper() {
                 <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                   <td style={{ padding: "0.75rem", fontFamily: "monospace", color: "#38bdf8" }}>themeBgColor</td>
                   <td style={{ padding: "0.75rem", fontFamily: "monospace" }}>string</td>
-                  <td style={{ padding: "0.75rem" }}>'#8b5cf6'</td>
+                  <td style={{ padding: "0.75rem" }}>BRAND.primary</td>
                   <td style={{ padding: "0.75rem" }}>Primary brand accent color for active elements & selection bounds</td>
                 </tr>
                 <tr>

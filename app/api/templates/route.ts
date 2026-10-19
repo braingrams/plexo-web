@@ -10,7 +10,8 @@ import { validateRawHtmlContent, RawUploadValidationError } from "@/server/rawUp
 import { rawUploadLimitMessage } from "@/server/rawUploadLimit";
 import { isTemplateNameTaken } from "@/server/templateNameDynamo";
 import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutDynamo";
-import { blankV2Design, defaultDesignFormat, designFormatOf, v2DesignFromTemplate, type DesignFormat } from "@/lib/v2/design";
+import { compileTemplate } from "@/lib/compileTemplate";
+import { blankV2Design, defaultDesignFormat, designFormatOf, starterV2EmailDesign, v2DesignFromTemplate, type DesignFormat } from "@/lib/v2/design";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
@@ -210,15 +211,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (limited) return NextResponse.json({ error: limited }, { status: 429 });
   }
 
-  // Which editor owns the new page. Raw HTML and email are never V2. A sub-page always matches
+  // Which editor owns the new page. Raw HTML is never V2. An email is V2 only when the dashboard asks for it (or the
+  // TEMPLATES_V2_NEW switch is on): the classic email tools used by the API and MCP keep making classic emails. A sub-page always matches
   // its site (a site never mixes editors by accident). Otherwise: an explicit choice from the
   // dashboard's own signed-in call, else the TEMPLATES_V2_NEW switch (off = classic).
   const fromDashboard = !request.headers.get("authorization");
   const requested = fromDashboard && (body.designFormat === "v1" || body.designFormat === "v2") ? body.designFormat : null;
-  if (requested === "v2" && kind === "EMAIL") {
-    return NextResponse.json({ error: "Email templates use the classic editor." }, { status: 400 });
-  }
   let designFormat: DesignFormat = "v1";
+  if (rawHtmlContent === null && kind === "EMAIL" && fromDashboard && !parent) {
+    designFormat = requested ?? defaultDesignFormat();
+  }
   if (rawHtmlContent === null && kind === "LANDING_PAGE") {
     // A dashboard call can name the editor for a sub-page too (a new-editor page opened inside a
     // classic site adds its next page in the new editor); otherwise it matches its site.
@@ -229,9 +231,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let v2Design: ReturnType<typeof blankV2Design> | null = null;
   let v2Html = "";
   if (designFormat === "v2") {
-    v2Design = body.pageTemplate ? v2DesignFromTemplate(body.pageTemplate, { name, slug: slug ?? undefined, seed: `${id}` }) : blankV2Design();
+    v2Design = kind === "EMAIL" ? starterV2EmailDesign() : body.pageTemplate ? v2DesignFromTemplate(body.pageTemplate, { name, slug: slug ?? undefined, seed: `${id}` }) : blankV2Design();
     try {
-      v2Html = await compileTemplateWithSiteLayout({ id, parentId, kind, name, designFormat }, v2Design);
+      v2Html = kind === "EMAIL" ? await compileTemplate({ id, kind, name, designFormat, designJson: v2Design }) : await compileTemplateWithSiteLayout({ id, parentId, kind, name, designFormat }, v2Design);
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "This page couldn't be built." }, { status: 400 });
     }

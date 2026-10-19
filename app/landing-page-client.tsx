@@ -10,6 +10,7 @@ import {
 import { Reveal, OpenReveal, useReducedMotion, gsap, useGSAP } from "./scroll-fx";
 import { planMonthlyCredits } from "@/lib/credits/value";
 
+import { BRAND } from "@/lib/theme";
 /* ─────────────────────────────────────────────────────────────
    HERO — interactive product mock, scales/fades away as you scroll past it
    ("scroll away to collapse").
@@ -238,7 +239,7 @@ const ECOSYSTEM_CARDS = [
     icon: LayoutTemplate,
     title: "Studio Platform",
     desc: "The visual drag-and-drop builder for email and landing page templates — compile to clean HTML, publish to a subdomain or your own custom domain, and track visits in real time.",
-    color: "#8b5cf6",
+    color: BRAND.primary,
   },
   {
     icon: Code2,

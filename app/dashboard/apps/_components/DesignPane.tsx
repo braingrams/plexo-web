@@ -2,8 +2,7 @@
 
 import "@charisol/plexo-sdk/dist/plexo-sdk.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { Plus, Trash2, Code2, MessageSquare, ExternalLink, SlidersHorizontal } from "lucide-react";
+import { Plus, Trash2, Code2, MessageSquare, ExternalLink } from "lucide-react";
 import type { V2EditorRef } from "@charisol/plexo-sdk/v2";
 import type { DesignSystem, PageDefinition } from "@charisol/plexo-sdk/v2/compile";
 import { appsApi, ApiError, type DesignSave, type DesignSummary } from "./api";
@@ -11,19 +10,20 @@ import { createStrataAdapter } from "./strataAdapter";
 import { C, Button, Notice } from "./ui";
 import { BLANK_TEMPLATE, defaultPageName, defaultRoute, freeRoute, pageFromTemplate, slugForName, templates } from "@/lib/projects/designTemplates";
 
+import { BRAND, EDITOR_THEME } from "@/lib/theme";
 const CODE_CHANGED_NOTE = "This page was changed in code since you last designed it. Saving here replaces those code changes.";
 
 /** How each ready-made page looks on its card. Templates not listed here still get a card, with the default look. */
 const PICK_LOOKS: Record<string, { hint: string; accent: string; bg: string }> = {
-  home: { hint: "A welcoming front page for your site", accent: "#8b5cf6", bg: "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(236,72,153,0.1))" },
-  landing: { hint: "One page that sells, from hello to sign-up", accent: "#8b5cf6", bg: "linear-gradient(135deg, rgba(139,92,246,0.28), rgba(192,132,252,0.12))" },
-  about: { hint: "Your story, your numbers and your team", accent: "#a78bfa", bg: "linear-gradient(135deg, rgba(167,139,250,0.22), rgba(109,40,217,0.08))" },
+  home: { hint: "A welcoming front page for your site", accent: BRAND.primary, bg: "linear-gradient(135deg, rgba(var(--brand-rgb), 0.3), rgba(236,72,153,0.1))" },
+  landing: { hint: "One page that sells, from hello to sign-up", accent: BRAND.primary, bg: "linear-gradient(135deg, rgba(var(--brand-rgb), 0.28), rgba(192,132,252,0.12))" },
+  about: { hint: "Your story, your numbers and your team", accent: BRAND[400], bg: "linear-gradient(135deg, rgba(167,139,250,0.22), rgba(109,40,217,0.08))" },
   services: { hint: "What you offer and how it works", accent: "#06b6d4", bg: "linear-gradient(135deg, rgba(6,182,212,0.2), rgba(99,102,241,0.1))" },
   pricing: { hint: "Plans side by side", accent: "#6366f1", bg: "linear-gradient(135deg, rgba(99,102,241,0.22), rgba(196,181,253,0.08))" },
-  contact: { hint: "A way to get in touch", accent: "#7c3aed", bg: "linear-gradient(135deg, rgba(124,58,237,0.24), rgba(139,92,246,0.08))" },
+  contact: { hint: "A way to get in touch", accent: BRAND.deep, bg: "linear-gradient(135deg, rgba(var(--brand-deep-rgb), 0.24), rgba(var(--brand-rgb), 0.08))" },
   blank: { hint: "Start from nothing", accent: "#94a3b8", bg: "rgba(255,255,255,0.02)" },
 };
-const DEFAULT_LOOK = { hint: "", accent: "#8b5cf6", bg: "linear-gradient(135deg, rgba(139,92,246,0.22), rgba(192,132,252,0.08))" };
+const DEFAULT_LOOK = { hint: "", accent: BRAND.primary, bg: "linear-gradient(135deg, rgba(var(--brand-rgb), 0.22), rgba(192,132,252,0.08))" };
 
 // The Design tab: design app pages visually in the Plexo editor (<V2Editor> from
 // @charisol/plexo-sdk/v2). Each design is one page; saving compiles it to real React code in
@@ -384,6 +384,8 @@ export function DesignPane(props: {
       if (props.stockKeys.pexels) headers["x-pexels-key"] = props.stockKeys.pexels;
       if (props.stockKeys.pixabay) headers["x-pixabay-key"] = props.stockKeys.pixabay;
       const res = await fetch(`/api/v1/media/stock?query=${encodeURIComponent(query)}&provider=${encodeURIComponent(provider)}`, { headers });
+      // A failed search says so (the picker shows a plain "couldn't load photos" message) instead of passing for "no results".
+      if (!res.ok) throw new Error("Photo search failed");
       const data = await res.json().catch(() => []);
       return Array.isArray(data) ? data.map((r) => ({ id: r.id, src: r.src, alt: r.alt, credit: r.credit, provider: r.provider })) : [];
     },
@@ -435,7 +437,7 @@ export function DesignPane(props: {
                     cursor: busyWith ? "default" : "pointer",
                     color: C.text,
                     background: C.panel,
-                    border: `1px solid ${busy ? "rgba(139,92,246,0.6)" : C.border}`,
+                    border: `1px solid ${busy ? "rgba(var(--brand-rgb), 0.6)" : C.border}`,
                     opacity: busyWith && !busy ? 0.5 : 1,
                   }}
                 >
@@ -452,7 +454,7 @@ export function DesignPane(props: {
           </div>
           <p style={{ margin: 0, fontSize: "0.8rem", color: C.faint }}>You can rename any page or change its web address later.</p>
         </div>
-        <style>{`.design-pick { transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s; } .design-pick:not(:disabled):hover { transform: translateY(-3px); border-color: rgba(139,92,246,0.55) !important; box-shadow: 0 16px 40px rgba(139,92,246,0.18); } @media (prefers-reduced-motion: reduce) { .design-pick:hover { transform: none !important; } }`}</style>
+        <style>{`.design-pick { transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s; } .design-pick:not(:disabled):hover { transform: translateY(-3px); border-color: rgba(var(--brand-rgb), 0.55) !important; box-shadow: 0 16px 40px rgba(var(--brand-rgb), 0.18); } @media (prefers-reduced-motion: reduce) { .design-pick:hover { transform: none !important; } }`}</style>
       </div>
     );
   }
@@ -518,6 +520,8 @@ export function DesignPane(props: {
             // The images already uploaded to the project, listed when the Images panel opens.
             loadMedia={loadMedia}
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
+            // Plexo purple on Plexo's own background, so the editor looks like the rest of the app (and follows lib/theme.ts).
+            theme={EDITOR_THEME}
             strata={strataOn ? strata : undefined}
             onSave={() => save()}
             saveState={saveState === "saving" || saveState === "error" || saveState === "saved" ? saveState : dirty ? "dirty" : "idle"}
@@ -538,7 +542,7 @@ export function DesignPane(props: {
               hideLabel: "Full screen",
               showLabel: "Exit full screen",
             }}
-            headerLeft={
+            pageSettings={
               <PageSettings
                 name={name}
                 route={route}
@@ -594,7 +598,7 @@ function PickThumb({ kind, accent }: { kind: string; accent: string }) {
       </div>
       {(kind === "landing" || kind === "home") && (
         <>
-          <div style={{ flex: 1, borderRadius: 8, background: `linear-gradient(135deg, ${accent}, #c084fc)`, padding: 10, display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>
+          <div style={{ flex: 1, borderRadius: 8, background: `linear-gradient(135deg, ${accent}, ${BRAND[300]})`, padding: 10, display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>
             {line("60%", 0.9, 8)}
             {line("40%", 0.55, 5)}
             <span style={{ width: 44, height: 14, borderRadius: 5, background: "#fff", marginTop: 2 }} />
@@ -622,7 +626,7 @@ function PickThumb({ kind, accent }: { kind: string; accent: string }) {
           {line("80%", 0.2, 4)}
           {line("70%", 0.2, 4)}
           <div style={{ display: "flex", gap: 8, marginTop: "auto" }}>
-            {[accent, "#6d28d9", "#c4b5fd"].map((c) => <span key={c} style={{ width: 26, height: 26, borderRadius: 99, background: c }} />)}
+            {[accent, BRAND[700], "#c4b5fd"].map((c) => <span key={c} style={{ width: 26, height: 26, borderRadius: 99, background: c }} />)}
           </div>
         </>
       )}
@@ -665,67 +669,30 @@ function PageSettings(props: {
   onRoute: (v: string) => void;
   onDelete: () => void;
 }) {
-  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-  const open = !!at;
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (!popRef.current?.contains(t) && !buttonRef.current?.contains(t)) setAt(null);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setAt(null);
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  const toggle = () => {
-    if (open) return setAt(null);
-    const r = buttonRef.current?.getBoundingClientRect();
-    setAt({ top: (r?.bottom ?? 40) + 8, left: Math.max(8, Math.min(r?.left ?? 8, window.innerWidth - 328)) });
-  };
   const label = { display: "flex", flexDirection: "column", gap: 4, fontSize: "0.76rem", fontWeight: 600, color: C.muted } as const;
   const field = { ...props.fieldStyle, width: "100%", boxSizing: "border-box", padding: "0.45rem 0.6rem", fontSize: "0.84rem", color: C.text } as const;
 
+  // Shown in the editor's own "Page settings" panel (left rail): no button or popover of its own.
   return (
-    <>
-      <button ref={buttonRef} type="button" title="Page settings" aria-label="Page settings" aria-haspopup="dialog" aria-expanded={open} onClick={toggle} style={{ ...props.fieldStyle, cursor: "pointer", display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
-        <SlidersHorizontal size={14} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, color: C.text }}>
+      <label style={label}>
+        Page name
+        <input aria-label="Page name" value={props.name} onChange={(e) => props.onName(e.target.value)} style={field} />
+      </label>
+      <label style={label}>
+        Page address
+        <input aria-label="Page address" value={props.route} onChange={(e) => props.onRoute(e.target.value)} style={{ ...field, fontFamily: C.mono }} />
+        <span style={{ fontWeight: 400, color: C.faint }}>Use / to make this your home page (it replaces the current one).</span>
+        {props.routeProblem && <span role="alert" style={{ fontWeight: 500, color: C.danger }}>{props.routeProblem}</span>}
+      </label>
+      <button
+        type="button"
+        disabled={!props.canDelete}
+        onClick={props.onDelete}
+        style={{ ...props.fieldStyle, alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6, cursor: props.canDelete ? "pointer" : "default", color: C.danger, padding: "0.4rem 0.7rem" }}
+      >
+        <Trash2 size={14} /> Delete page
       </button>
-      {open &&
-        createPortal(
-          <div ref={popRef} role="dialog" aria-label="Page settings" style={{ position: "fixed", top: at!.top, left: at!.left, zIndex: 1000, width: 320, maxWidth: "calc(100vw - 16px)", boxSizing: "border-box", padding: 14, borderRadius: 12, background: C.panelSolid, color: C.text, border: `1px solid ${C.borderStrong}`, boxShadow: "0 24px 60px -20px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ fontSize: "0.84rem", fontWeight: 700 }}>Page settings</div>
-            <label style={label}>
-              Page name
-              <input aria-label="Page name" value={props.name} onChange={(e) => props.onName(e.target.value)} style={field} />
-            </label>
-            <label style={label}>
-              Page address
-              <input aria-label="Page address" value={props.route} onChange={(e) => props.onRoute(e.target.value)} style={{ ...field, fontFamily: C.mono }} />
-              <span style={{ fontWeight: 400, color: C.faint }}>Use / to make this your home page (it replaces the current one).</span>
-              {props.routeProblem && <span role="alert" style={{ fontWeight: 500, color: C.danger }}>{props.routeProblem}</span>}
-            </label>
-            <button
-              type="button"
-              disabled={!props.canDelete}
-              onClick={() => {
-                setAt(null);
-                props.onDelete();
-              }}
-              style={{ ...props.fieldStyle, alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6, cursor: props.canDelete ? "pointer" : "default", color: C.danger, padding: "0.4rem 0.7rem" }}
-            >
-              <Trash2 size={14} /> Delete page
-            </button>
-          </div>,
-          document.body,
-        )}
-    </>
+    </div>
   );
 }

@@ -1,3 +1,4 @@
+import { BRAND } from "@/lib/theme";
 // Serve-time HTML injection shared by every kind of published site — builder pages,
 // raw uploads (app/pub/[domain]/[[...slug]]/route.ts) and React projects
 // (lib/projects/serve.ts) — so a platform-level tag behaves identically everywhere.
@@ -52,7 +53,7 @@ export function insertBeforeBodyEnd(html: string, fragment: string): string {
 export function injectBrandingBar(html: string, ctaHref: string): string {
   const bar = `<div style="position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;gap:12px;padding:10px 16px;background:#0b0f19;color:#f0f2ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;line-height:1;border-top:1px solid rgba(255,255,255,0.08);box-shadow:0 -4px 20px rgba(0,0,0,0.35);">
   <span>Hosted with <strong>Plexo</strong>.</span>
-  <a href="${ctaHref}" target="_blank" rel="noopener" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff;padding:6px 14px;border-radius:8px;font-weight:700;text-decoration:none;">Host yours now</a>
+  <a href="${ctaHref}" target="_blank" rel="noopener" style="background:linear-gradient(135deg,${BRAND.primary},${BRAND.deep});color:#fff;padding:6px 14px;border-radius:8px;font-weight:700;text-decoration:none;">Host yours now</a>
 </div>`;
   return insertBeforeBodyEnd(html, bar);
 }

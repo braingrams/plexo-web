@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Card } from "@/app/dashboard/_components/Card";
 
+import { BRAND } from "@/lib/theme";
 type BrandDisplayMode = "LOGO_ONLY" | "NAME_ONLY" | "BOTH";
 
 const DISPLAY_MODE_OPTIONS: Array<{ value: BrandDisplayMode; label: string; description: string }> = [
@@ -60,7 +61,7 @@ export function BrandingForm({
   const [displayMode, setDisplayMode] = useState<BrandDisplayMode>(initialBrandDisplayMode);
   // A real hex literal, not var(--brand) — this is form DATA (what gets saved / fed to an
   // <input type="color">, which requires a literal #rrggbb value), not a CSS style.
-  const [brandColor, setBrandColor] = useState(initialBrandColor ?? "#8b5cf6");
+  const [brandColor, setBrandColor] = useState(initialBrandColor ?? BRAND.primary);
   const [whiteLabelOn, setWhiteLabelOn] = useState(initialWhiteLabelEnabled);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -322,7 +323,7 @@ export function BrandingForm({
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <input
               type="color"
-              value={/^#[0-9a-fA-F]{6}$/.test(brandColor) ? brandColor : "#8b5cf6"}
+              value={/^#[0-9a-fA-F]{6}$/.test(brandColor) ? brandColor : BRAND.primary}
               onChange={(e) => setBrandColor(e.target.value)}
               disabled={disabled}
               style={{ width: 44, height: 44, padding: 0, border: "none", borderRadius: 8, background: "none" }}

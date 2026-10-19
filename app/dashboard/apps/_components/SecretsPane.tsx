@@ -5,6 +5,7 @@ import { Clock, Eye, EyeOff, Globe, KeyRound, Lock, PenLine, Plus, ShieldCheck, 
 import { api, ApiError } from "./api";
 import { Button, C, EmptyHero, IconButton, Notice, PaneHeader, Pill, ProblemState, Shimmer, StatCard, StateStyles, hueGradient, inputStyle, timeAgo } from "./ui";
 
+import { BRAND } from "@/lib/theme";
 // Private keys the app's server code reads (a payment key, an email service key…). Values are
 // write-only: once saved they're never sent back — only the last few characters, so the owner
 // can tell two keys apart.
@@ -22,7 +23,7 @@ const NAME_RE = /^[A-Z][A-Z0-9_]{0,63}$/;
 
 // Purple family only for decoration; green is reserved for "set / working".
 const PREVIEW_COLOR = "#c4b5fd";
-const LIVE_COLOR = "#c084fc";
+const LIVE_COLOR = BRAND[300];
 
 function nameProblem(name: string): string | null {
   if (!name) return null;
@@ -212,7 +213,7 @@ export function SecretsPane({ appId, addName }: { appId: string; addName?: strin
         )
       ) : secrets.length === 0 ? (
         <EmptyHero
-          tint="#8b5cf6"
+          tint={BRAND.primary}
           title="Keep your app's private keys here"
           body="Private keys your app needs, like a payment or email service key. They're stored encrypted, only your app's server code can read them, and they never appear in your app's pages. SOL will ask you when your app needs one."
           art={<VaultIllustration />}
@@ -222,15 +223,15 @@ export function SecretsPane({ appId, addName }: { appId: string; addName?: strin
       ) : (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
-            <StatCard label={secrets.length === 1 ? "Key saved" : "Keys saved"} value={secrets.length} color="#8b5cf6" icon={KeyRound} />
+            <StatCard label={secrets.length === 1 ? "Key saved" : "Keys saved"} value={secrets.length} color={BRAND.primary} icon={KeyRound} />
             <StatCard label="Ready for your live app" value={liveCount} color="#6366f1" icon={Globe} />
-            <StatCard label="Last changed" value={timeAgo(lastChanged)} color="#c084fc" icon={Clock} />
+            <StatCard label="Last changed" value={timeAgo(lastChanged)} color={BRAND[300]} icon={Clock} />
           </div>
 
           {adding && (
-            <section style={{ padding: "1.2rem 1.3rem", borderRadius: 18, border: "1px solid rgba(139,92,246,0.35)", background: "radial-gradient(60% 120% at 100% 0%, rgba(139,92,246,0.14), transparent 60%), rgba(139,92,246,0.05)", display: "flex", flexDirection: "column", gap: 12 }}>
+            <section style={{ padding: "1.2rem 1.3rem", borderRadius: 18, border: "1px solid rgba(var(--brand-rgb), 0.35)", background: "radial-gradient(60% 120% at 100% 0%, rgba(var(--brand-rgb), 0.14), transparent 60%), rgba(var(--brand-rgb), 0.05)", display: "flex", flexDirection: "column", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(139,92,246,0.22)", color: "#c4b5fd" }}>
+                <span style={{ width: 34, height: 34, borderRadius: 10, display: "grid", placeItems: "center", background: "rgba(var(--brand-rgb), 0.22)", color: "#c4b5fd" }}>
                   <KeyRound size={17} />
                 </span>
                 <span style={{ flex: 1, fontSize: "0.95rem", fontWeight: 700 }}>{replacing ? "Replace a key" : "Add a key"}</span>
@@ -311,8 +312,8 @@ function KeyForm(props: {
   return (
     <form onSubmit={props.onSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
       {solAsked && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.6rem 0.8rem", borderRadius: 12, border: "1px solid rgba(139,92,246,0.45)", background: "rgba(139,92,246,0.12)", fontSize: "0.8rem", color: C.text }}>
-          <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: "grid", placeItems: "center", background: "linear-gradient(135deg, #8b5cf6, #6d28d9)", color: "#fff" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.6rem 0.8rem", borderRadius: 12, border: "1px solid rgba(var(--brand-rgb), 0.45)", background: "rgba(var(--brand-rgb), 0.12)", fontSize: "0.8rem", color: C.text }}>
+          <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: "grid", placeItems: "center", background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND[700]})`, color: "#fff" }}>
             <KeyRound size={14} />
           </span>
           <span>
@@ -332,7 +333,7 @@ function KeyForm(props: {
             spellCheck={false}
             aria-invalid={!!problem}
             aria-describedby={problem ? "secret-name-problem" : undefined}
-            style={{ ...inputStyle, fontFamily: C.mono, borderColor: problem ? "rgba(248,113,113,0.5)" : solAsked ? "rgba(139,92,246,0.55)" : C.border }}
+            style={{ ...inputStyle, fontFamily: C.mono, borderColor: problem ? "rgba(248,113,113,0.5)" : solAsked ? "rgba(var(--brand-rgb), 0.55)" : C.border }}
           />
           {problem && (
             <span id="secret-name-problem" style={{ fontSize: "0.7rem", color: C.danger }}>
@@ -394,7 +395,7 @@ function ScopeChooser({ value, onChange }: { value: Scope; onChange: (s: Scope) 
             role="radio"
             aria-checked={on}
             onClick={() => onChange(c.value)}
-            style={{ padding: "0.5rem 0.75rem", fontSize: "0.76rem", fontWeight: 600, border: "none", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit", background: on ? "rgba(139,92,246,0.28)" : "transparent", color: on ? C.text : C.muted }}
+            style={{ padding: "0.5rem 0.75rem", fontSize: "0.76rem", fontWeight: 600, border: "none", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit", background: on ? "rgba(var(--brand-rgb), 0.28)" : "transparent", color: on ? C.text : C.muted }}
           >
             {c.label}
           </button>
@@ -442,8 +443,8 @@ function KeysSkeleton() {
 /** A friendly picture of a locked safe holding a few hidden keys. */
 function VaultIllustration() {
   const rows = [
-    { c: "#8b5cf6", w: "62%" },
-    { c: "#c084fc", w: "48%" },
+    { c: BRAND.primary, w: "62%" },
+    { c: BRAND[300], w: "48%" },
     { c: "#6366f1", w: "56%" },
   ];
   return (
@@ -454,7 +455,7 @@ function VaultIllustration() {
       <div style={{ borderRadius: 16, background: "rgba(11,15,25,0.6)", border: `1px solid ${C.borderStrong}`, padding: "28px 16px 16px", display: "flex", flexDirection: "column", gap: 12, boxShadow: "0 24px 60px rgba(0,0,0,0.35)", transform: "rotate(-1.5deg)" }}>
         {rows.map((row, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 11, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.border}` }}>
-            <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: "grid", placeItems: "center", background: `linear-gradient(135deg, ${row.c}, #6d28d9)`, color: "#fff" }}>
+            <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, display: "grid", placeItems: "center", background: `linear-gradient(135deg, ${row.c}, ${BRAND[700]})`, color: "#fff" }}>
               <KeyRound size={13} />
             </span>
             <span style={{ width: row.w, height: 7, borderRadius: 99, background: "rgba(255,255,255,0.3)" }} />
@@ -471,7 +472,7 @@ function VaultIllustration() {
 
 function Tile({ children, style }: { children: ReactNode; style?: CSSProperties }) {
   return (
-    <span style={{ width: 64, height: 64, borderRadius: 18, display: "grid", placeItems: "center", background: "linear-gradient(135deg, #8b5cf6, #6d28d9)", color: "#fff", border: "3px solid #0b0f19", boxShadow: "0 14px 34px rgba(124,58,237,0.45)", ...style }}>
+    <span style={{ width: 64, height: 64, borderRadius: 18, display: "grid", placeItems: "center", background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND[700]})`, color: "#fff", border: "3px solid #0b0f19", boxShadow: "0 14px 34px rgba(var(--brand-deep-rgb), 0.45)", ...style }}>
       {children}
     </span>
   );

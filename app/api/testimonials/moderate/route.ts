@@ -1,3 +1,4 @@
+import { BRAND } from "@/lib/theme";
 import { NextResponse } from "next/server";
 import { Testimonial } from "@/lib/db/contentEntities";
 import { verifyModerationToken } from "@/lib/email";
@@ -118,7 +119,7 @@ function renderHtmlCard(title: string, bodyText: string, isSuccess: boolean): st
           }
           .btn {
             display: inline-block;
-            background-color: #6b3bf9;
+            background-color: ${BRAND.primary};
             color: #ffffff;
             font-weight: 800;
             text-decoration: none;
@@ -128,7 +129,7 @@ function renderHtmlCard(title: string, bodyText: string, isSuccess: boolean): st
             transition: background-color 0.2s;
           }
           .btn:hover {
-            background-color: #5b2be6;
+            background-color: ${BRAND.deep};
           }
         </style>
       </head>

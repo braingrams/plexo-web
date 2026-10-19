@@ -4,6 +4,7 @@ import { GeistMono } from "geist/font/mono";
 import { ThemeProvider } from "next-themes";
 
 import "./globals.css";
+import { themeCss } from "@/lib/theme";
 
 // Figtree is the site's typeface (headings and body); Geist Mono stays for code. globals.css
 // maps --font-figtree/--font-geist-mono onto the --font-heading/--font-body/--font-mono
@@ -124,6 +125,10 @@ export default function RootLayout({
     // can resolve them — set on <body> they were invisible to :root, and every page fell back
     // to the system font.
     <html lang="en" suppressHydrationWarning className={`${figtree.variable} ${GeistMono.variable}`}>
+      <head>
+        {/* Every colour variable the site uses, generated from lib/theme.ts: change the theme there and it changes everywhere. */}
+        <style id="plexo-theme" dangerouslySetInnerHTML={{ __html: themeCss() }} />
+      </head>
       <body>
         <script
           type="application/ld+json"

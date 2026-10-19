@@ -30,6 +30,7 @@ import { api, ApiError, type AppEnv } from "./api";
 import { Button, C, Empty, EnvSwitch, Notice, PaneHeader, Panel, inputStyle, timeAgo } from "./ui";
 import { ensureMonaco, EDITOR_THEME } from "./monaco";
 
+import { BRAND } from "@/lib/theme";
 // Mirrors lib/appData/overview.ts (kept local so this client bundle doesn't pull server code).
 type SecurityFinding = { level: "danger" | "warning" | "info"; table: string; message: string; fix: string };
 type Column = { name: string; type: string; nullable: boolean; hasDefault: boolean; primaryKey: boolean; references: string | null };
@@ -106,16 +107,16 @@ const rowKey = (row: Row, pk: string[]) => JSON.stringify(pk.map((c) => row[c]))
 const keyObject = (row: Row, pk: string[]) => Object.fromEntries(pk.map((c) => [c, row[c]]));
 
 const DATA_IDEAS: { icon: typeof Database; color: string; title: string; prompt: string }[] = [
-  { icon: Mail, color: "#7c3aed", title: "Contact form messages", prompt: "Save messages people send through a contact form, and show them to me in a list" },
-  { icon: Heart, color: "#c084fc", title: "Favourites", prompt: "Let signed-in people save their favourite items and see them on their own page" },
-  { icon: ShoppingBag, color: "#a78bfa", title: "Products", prompt: "Keep a list of products with a name, price and photo that I can edit" },
+  { icon: Mail, color: BRAND.deep, title: "Contact form messages", prompt: "Save messages people send through a contact form, and show them to me in a list" },
+  { icon: Heart, color: BRAND[300], title: "Favourites", prompt: "Let signed-in people save their favourite items and see them on their own page" },
+  { icon: ShoppingBag, color: BRAND[400], title: "Products", prompt: "Keep a list of products with a name, price and photo that I can edit" },
   { icon: Users, color: "#6366f1", title: "Newsletter sign-ups", prompt: "Collect email addresses for a newsletter with a simple sign-up box" },
 ];
 
 /** Nothing saved yet: what will appear here, and one tap to set something up with SOL. */
 function DataEmpty({ onAskAi }: { onAskAi?: (text: string) => void }) {
   return (
-    <section className="plx-data-empty" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.9fr)", gap: "2rem", alignItems: "center", padding: "clamp(1.2rem, 4.5vw, 2.2rem)", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(70% 90% at 100% 0%, rgba(139,92,246,0.14), transparent 60%), rgba(255,255,255,0.015)" }}>
+    <section className="plx-data-empty" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.9fr)", gap: "2rem", alignItems: "center", padding: "clamp(1.2rem, 4.5vw, 2.2rem)", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(70% 90% at 100% 0%, rgba(var(--brand-rgb), 0.14), transparent 60%), rgba(255,255,255,0.015)" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: "1.2rem", minWidth: 0 }}>
         <div>
           <h3 style={{ margin: 0, fontSize: "clamp(1.1rem, 4.2vw, 1.35rem)", fontWeight: 750, letterSpacing: "-0.01em" }}>Nothing saved yet</h3>
@@ -144,9 +145,9 @@ function DataEmpty({ onAskAi }: { onAskAi?: (text: string) => void }) {
 /** A friendly picture of a filled-in table. */
 function DataIllustration() {
   const rows = [
-    { c: "#8b5cf6", w: ["58%", "34%"] },
-    { c: "#c084fc", w: ["44%", "48%"] },
-    { c: "#a78bfa", w: ["66%", "26%"] },
+    { c: BRAND.primary, w: ["58%", "34%"] },
+    { c: BRAND[300], w: ["44%", "48%"] },
+    { c: BRAND[400], w: ["66%", "26%"] },
     { c: "#6366f1", w: ["50%", "40%"] },
   ];
   return (
@@ -186,8 +187,8 @@ function DataSkeleton() {
 function DataProblem({ message, onRetry }: { message: string; onRetry: () => void }) {
   const waking = message.startsWith(WAKING_MESSAGE);
   return (
-    <section style={{ display: "flex", alignItems: "center", gap: "1.2rem", flexWrap: "wrap", padding: "1.8rem 2rem", borderRadius: 20, border: `1px solid ${waking ? "rgba(139,92,246,0.3)" : "rgba(251,191,36,0.3)"}`, background: waking ? "rgba(139,92,246,0.06)" : "rgba(251,191,36,0.05)" }}>
-      <span style={{ width: 48, height: 48, borderRadius: 14, display: "grid", placeItems: "center", background: waking ? "rgba(139,92,246,0.16)" : "rgba(251,191,36,0.14)", color: waking ? "#c4b5fd" : C.warning, flexShrink: 0 }}>
+    <section style={{ display: "flex", alignItems: "center", gap: "1.2rem", flexWrap: "wrap", padding: "1.8rem 2rem", borderRadius: 20, border: `1px solid ${waking ? "rgba(var(--brand-rgb), 0.3)" : "rgba(251,191,36,0.3)"}`, background: waking ? "rgba(var(--brand-rgb), 0.06)" : "rgba(251,191,36,0.05)" }}>
+      <span style={{ width: 48, height: 48, borderRadius: 14, display: "grid", placeItems: "center", background: waking ? "rgba(var(--brand-rgb), 0.16)" : "rgba(251,191,36,0.14)", color: waking ? "#c4b5fd" : C.warning, flexShrink: 0 }}>
         {waking ? <LoaderCircle size={22} className="plx-spin" /> : <CloudOff size={22} />}
       </span>
       <div style={{ flex: "1 1 320px", minWidth: 0 }}>
@@ -207,7 +208,7 @@ const RESPONSIVE_CSS = `
 .plx-skel { background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.09), rgba(255,255,255,0.04)); background-size: 200% 100%; animation: plx-shimmer 1.4s ease-in-out infinite; }
 @keyframes plx-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 .plx-data-idea { transition: border-color 0.15s, background 0.15s, transform 0.15s; }
-.plx-data-idea:hover { border-color: rgba(139,92,246,0.5) !important; background: rgba(139,92,246,0.08) !important; transform: translateY(-1px); }
+.plx-data-idea:hover { border-color: rgba(var(--brand-rgb), 0.5) !important; background: rgba(var(--brand-rgb), 0.08) !important; transform: translateY(-1px); }
 @media (max-width: 1000px) { .plx-data-empty { grid-template-columns: minmax(0, 1fr) !important; } .plx-data-art { display: none !important; } }
 @media (prefers-reduced-motion: reduce) { .plx-skel { animation: none; } .plx-data-idea:hover { transform: none; } }
 .plx-db-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 0.85rem; align-items: start; }
@@ -396,7 +397,7 @@ function TableList(props: { tables: TableOverview[] | null; loading: boolean; se
                     border: "none",
                     cursor: "pointer",
                     textAlign: "left",
-                    background: active ? "rgba(139,92,246,0.18)" : "transparent",
+                    background: active ? "rgba(var(--brand-rgb), 0.18)" : "transparent",
                     color: active ? C.text : C.muted,
                     fontSize: "0.8rem",
                   }}

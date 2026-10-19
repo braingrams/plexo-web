@@ -1238,10 +1238,10 @@
   resolved "https://registry.npmjs.org/@charisol/auth-sdk-web/-/auth-sdk-web-0.2.1.tgz"
   integrity sha512-tk5iPw3X3w9Z14W+IF8+ATVsYoEGlU4HjSifO2eMeaOFnJQXi6K2uALkzp5ou3ttpnXQyfxPOXNJelwZWKdIOw==
 
-"@charisol/plexo-sdk@^2.0.4":
-  version "2.0.4"
-  resolved "https://registry.npmjs.org/@charisol/plexo-sdk/-/plexo-sdk-2.0.4.tgz"
-  integrity sha512-k42HsOoIk+pb04Ob/Gd6zcBWeaNEJV6eyMKojw70LiwgR5GkYeeMNVlXV2PqvIIXFZYG2u5DUISfS1BR5i9bIg==
+"@charisol/plexo-sdk@^2.0.8":
+  version "2.0.8"
+  resolved "https://registry.npmjs.org/@charisol/plexo-sdk/-/plexo-sdk-2.0.8.tgz"
+  integrity sha512-9X0lnwaD7VJU/vzdkGREpQ/snH3ZtqZVZzS0aUwq1HRxMQVAo5c3iLAbLnhTMDd3iddXxpe/Q50/NcCkm7JcKw==
   dependencies:
     "@dnd-kit/core" "^6.3.1"
     "@dnd-kit/sortable" "^10.0.0"

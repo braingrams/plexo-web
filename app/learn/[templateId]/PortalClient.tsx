@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { BRAND } from "@/lib/theme";
 type PageSummary = { id: string; order: number; kind: "WELCOME" | "VIDEO" | "DOCUMENT" | "IMAGE"; title: string; unlocked: boolean; completed: boolean; awaitingApproval: boolean };
 type PageContent = {
   id: string;
@@ -89,7 +90,7 @@ export function PortalClient({ templateId, funnelName, showWelcome }: { template
               style={{
                 display: "flex", alignItems: "center", gap: "0.6rem", width: "100%", textAlign: "left",
                 padding: "0.6rem 0.5rem", borderRadius: 9, marginBottom: "0.15rem", border: "none",
-                background: isActive ? "rgba(139,92,246,0.16)" : "transparent",
+                background: isActive ? "rgba(var(--brand-rgb), 0.16)" : "transparent",
                 color: page.unlocked ? "#f0f2ff" : "rgba(240,242,255,0.35)",
                 cursor: page.unlocked ? "pointer" : "not-allowed",
                 fontSize: "0.83rem", fontWeight: isActive ? 600 : 500,
@@ -106,7 +107,7 @@ export function PortalClient({ templateId, funnelName, showWelcome }: { template
 
       <main style={{ flex: 1, padding: "2rem", maxWidth: 760, margin: "0 auto" }}>
         {showBanner && (
-          <div style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.3)", borderRadius: 12, padding: "0.8rem 1.1rem", marginBottom: "1.5rem", fontSize: "0.85rem", color: "#c4b5fd", display: "flex", justifyContent: "space-between", gap: "1rem" }}>
+          <div style={{ background: "rgba(var(--brand-rgb), 0.1)", border: "1px solid rgba(var(--brand-rgb), 0.3)", borderRadius: 12, padding: "0.8rem 1.1rem", marginBottom: "1.5rem", fontSize: "0.85rem", color: "#c4b5fd", display: "flex", justifyContent: "space-between", gap: "1rem" }}>
             <span>You're in! Bookmark this page to come back anytime.</span>
             <button type="button" onClick={() => setShowBanner(false)} style={{ background: "none", border: "none", color: "#c4b5fd", cursor: "pointer" }}>×</button>
           </div>
@@ -153,7 +154,7 @@ export function PortalClient({ templateId, funnelName, showWelcome }: { template
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={content.assetUrl} alt={content.title} style={{ maxWidth: "100%", borderRadius: 12, marginBottom: "1.5rem" }} />
               ) : (
-                <a href={content.assetUrl} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.7rem 1.1rem", borderRadius: 10, background: "rgba(139,92,246,0.15)", color: "var(--brand, #c4b5fd)", textDecoration: "none", marginBottom: "1.5rem", fontSize: "0.88rem", fontWeight: 600 }}>
+                <a href={content.assetUrl} target="_blank" rel="noopener noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.7rem 1.1rem", borderRadius: 10, background: "rgba(var(--brand-rgb), 0.15)", color: "var(--brand, #c4b5fd)", textDecoration: "none", marginBottom: "1.5rem", fontSize: "0.88rem", fontWeight: 600 }}>
                   Open {content.assetFileName ?? "document"}
                 </a>
               )
@@ -163,7 +164,7 @@ export function PortalClient({ templateId, funnelName, showWelcome }: { template
               type="button"
               onClick={markComplete}
               disabled={completing}
-              style={{ padding: "0.65rem 1.3rem", borderRadius: 10, fontSize: "0.88rem", fontWeight: 700, background: "var(--brand, #8b5cf6)", color: "#fff", border: "none", cursor: "pointer" }}
+              style={{ padding: "0.65rem 1.3rem", borderRadius: 10, fontSize: "0.88rem", fontWeight: 700, background: `var(--brand, ${BRAND.primary})`, color: "#fff", border: "none", cursor: "pointer" }}
             >
               {completing ? "Saving…" : "Mark complete & continue"}
             </button>

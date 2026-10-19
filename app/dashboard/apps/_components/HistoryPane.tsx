@@ -5,6 +5,7 @@ import { Bot, CalendarClock, Code2, Eye, FileText, Flag, GitMerge, Hammer, Histo
 import { appsApi, ApiError, type BuildReport } from "./api";
 import { C, Button, Notice, PaneHeader, StateStyles, Shimmer, ListSkeleton, ProblemState, EmptyHero, StatCard, Pill, timeAgo } from "./ui";
 
+import { BRAND } from "@/lib/theme";
 // Every version of the app (each SOL turn, code edit, publish, go-back, import) with one-click
 // go-back, plus the log of every preview refresh and publish.
 
@@ -14,12 +15,12 @@ type IconType = ComponentType<{ size?: number }>;
 
 // Who or what made each version, in the owner's words — each with its own colour on the timeline.
 const SOURCE: Record<string, { label: string; color: string; icon: IconType }> = {
-  ai: { label: "SOL", color: "#8b5cf6", icon: Bot },
+  ai: { label: "SOL", color: BRAND.primary, icon: Bot },
   editor: { label: "Code edit", color: "#6366f1", icon: Code2 },
-  deploy: { label: "Published", color: "#7c3aed", icon: Rocket },
-  restore: { label: "Went back", color: "#c084fc", icon: Undo2 },
-  scaffold: { label: "App created", color: "#a78bfa", icon: Flag },
-  git: { label: "Imported", color: "#6d28d9", icon: GitMerge },
+  deploy: { label: "Published", color: BRAND.deep, icon: Rocket },
+  restore: { label: "Went back", color: BRAND[300], icon: Undo2 },
+  scaffold: { label: "App created", color: BRAND[400], icon: Flag },
+  git: { label: "Imported", color: BRAND[700], icon: GitMerge },
 };
 const sourceOf = (s: string) => SOURCE[s] ?? { label: "Saved", color: "#c4b5fd", icon: History };
 
@@ -112,7 +113,7 @@ export function HistoryPane(props: { appId: string; refreshKey?: number; onResto
         ) : versions.length === 0 ? (
           <EmptyHero
             title="No versions yet"
-            tint="#8b5cf6"
+            tint={BRAND.primary}
             body="Every change you or SOL make to your app is saved here automatically, so you can see what changed and go back to any earlier version anytime. Ask SOL to build something and your first version will show up here."
             art={<TimelineIllustration />}
           />
@@ -148,7 +149,7 @@ function ViewSwitch({ value, onChange }: { value: "versions" | "builds"; onChang
           role="tab"
           aria-selected={value === id}
           onClick={() => onChange(id)}
-          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0.4rem 0.8rem", fontSize: "0.76rem", fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit", background: value === id ? "rgba(139,92,246,0.25)" : "transparent", color: value === id ? C.text : C.muted }}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0.4rem 0.8rem", fontSize: "0.76rem", fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit", background: value === id ? "rgba(var(--brand-rgb), 0.25)" : "transparent", color: value === id ? C.text : C.muted }}
         >
           <Icon size={14} /> {label}
         </button>
@@ -160,8 +161,8 @@ function ViewSwitch({ value, onChange }: { value: "versions" | "builds"; onChang
 function VersionTimeline({ versions, busy, onRestore, onViewChanges }: { versions: Version[]; busy: string | null; onRestore: (v: Version) => void; onViewChanges?: (versionId: string, against: string) => void }) {
   const weekAgo = Date.now() - 7 * 86_400_000;
   const stats = [
-    { label: versions.length === 1 ? "Version saved" : "Versions saved", value: versions.length, color: "#8b5cf6", icon: History },
-    { label: "Made by SOL", value: versions.filter((v) => v.source === "ai").length, color: "#c084fc", icon: Bot },
+    { label: versions.length === 1 ? "Version saved" : "Versions saved", value: versions.length, color: BRAND.primary, icon: History },
+    { label: "Made by SOL", value: versions.filter((v) => v.source === "ai").length, color: BRAND[300], icon: Bot },
     { label: "This week", value: versions.filter((v) => Date.parse(v.createdAt) > weekAgo).length, color: "#6366f1", icon: CalendarClock },
   ];
 
@@ -175,7 +176,7 @@ function VersionTimeline({ versions, busy, onRestore, onViewChanges }: { version
       <section style={{ border: `1px solid ${C.border}`, borderRadius: 18, background: C.panel, padding: "0.6rem 1rem 0.8rem" }}>
         <ol style={{ listStyle: "none", margin: 0, padding: 0, position: "relative" }}>
           {/* The timeline's spine, running behind every dot. */}
-          <span aria-hidden style={{ position: "absolute", left: 19, top: 22, bottom: 22, width: 2, borderRadius: 2, background: "linear-gradient(180deg, rgba(139,92,246,0.6), rgba(192,132,252,0.3) 50%, rgba(255,255,255,0.06))" }} />
+          <span aria-hidden style={{ position: "absolute", left: 19, top: 22, bottom: 22, width: 2, borderRadius: 2, background: "linear-gradient(180deg, rgba(var(--brand-rgb), 0.6), rgba(192,132,252,0.3) 50%, rgba(255,255,255,0.06))" }} />
           {versions.map((v, i) => {
             const previous = versions[i + 1];
             const day = dayLabel(v.createdAt);
@@ -204,7 +205,7 @@ function VersionTimeline({ versions, busy, onRestore, onViewChanges }: { version
                     <div style={{ flex: "1 1 260px", minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontSize: "0.88rem", fontWeight: 600, color: C.text, lineHeight: 1.4, overflowWrap: "anywhere" }}>{v.message}</span>
-                        {current && <Pill color="#8b5cf6">Current version</Pill>}
+                        {current && <Pill color={BRAND.primary}>Current version</Pill>}
                         {v.isLive && <Pill color={C.success}>Live on your site</Pill>}
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: "0.75rem", color: C.muted }}>
@@ -274,14 +275,14 @@ function TimelineSkeleton() {
 /** A little timeline of coloured versions, the newest glowing at the top. */
 function TimelineIllustration() {
   const steps = [
-    { c: "#8b5cf6", w: "64%" },
-    { c: "#c084fc", w: "48%" },
+    { c: BRAND.primary, w: "64%" },
+    { c: BRAND[300], w: "48%" },
     { c: "#6366f1", w: "56%" },
-    { c: "#a78bfa", w: "40%" },
+    { c: BRAND[400], w: "40%" },
   ];
   return (
     <div style={{ position: "relative", borderRadius: 16, background: "rgba(11,15,25,0.6)", border: `1px solid ${C.borderStrong}`, padding: "18px 18px 18px 16px", boxShadow: "0 24px 60px rgba(0,0,0,0.35)", transform: "rotate(-1.5deg)", display: "flex", flexDirection: "column", gap: 12 }}>
-      <span style={{ position: "absolute", left: 30, top: 30, bottom: 30, width: 2, background: "linear-gradient(180deg, rgba(139,92,246,0.7), rgba(196,181,253,0.2))" }} />
+      <span style={{ position: "absolute", left: 30, top: 30, bottom: 30, width: 2, background: "linear-gradient(180deg, rgba(var(--brand-rgb), 0.7), rgba(196,181,253,0.2))" }} />
       {steps.map((s, i) => (
         <div key={i} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ width: 28, height: 28, borderRadius: 99, flexShrink: 0, background: `linear-gradient(135deg, ${s.c}, ${s.c}99)`, border: "3px solid #0b0f19", boxShadow: i === 0 ? `0 0 0 3px ${s.c}40` : "none" }} />
@@ -306,7 +307,7 @@ const STATUS: Record<string, { label: string; color: string }> = {
   SUCCEEDED: { label: "Worked", color: C.success },
   FAILED: { label: "Had a problem", color: C.danger },
   CANCELLED: { label: "Stopped", color: C.muted },
-  BUILDING: { label: "In progress", color: "#a78bfa" },
+  BUILDING: { label: "In progress", color: BRAND[400] },
   QUEUED: { label: "Waiting", color: C.warning },
 };
 
@@ -318,14 +319,14 @@ function BuildList({ builds, selected, onOpen }: { builds: BuildRow[]; selected:
           const status = STATUS[b.status] ?? { label: b.status.toLowerCase(), color: C.muted };
           const publish = b.mode === "release";
           const Icon = publish ? Rocket : Eye;
-          const tint = publish ? "#7c3aed" : "#6366f1";
+          const tint = publish ? BRAND.deep : "#6366f1";
           return (
             <li key={b.id} className="plx-history-build" style={{ borderBottom: `1px solid ${C.border}` }}>
               <button
                 type="button"
                 className="plx-row"
                 onClick={() => onOpen(b.id)}
-                style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "0.75rem 1rem", border: "none", borderLeft: `3px solid ${selected === b.id ? C.brand : "transparent"}`, background: selected === b.id ? "rgba(139,92,246,0.08)" : "transparent", color: C.text, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "0.75rem 1rem", border: "none", borderLeft: `3px solid ${selected === b.id ? C.brand : "transparent"}`, background: selected === b.id ? "rgba(var(--brand-rgb), 0.08)" : "transparent", color: C.text, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}
               >
                 <span aria-hidden style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center", background: `${tint}26`, color: tint }}>
                   <Icon size={16} />
@@ -352,7 +353,7 @@ function BuildDetail({ report }: { report: BuildReport }) {
   return (
     <section style={{ flex: "2 1 440px", minWidth: 0, border: `1px solid ${C.border}`, borderRadius: 18, background: C.panel, padding: "1.1rem 1.2rem", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <span aria-hidden style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: "grid", placeItems: "center", background: report.mode === "release" ? "rgba(124,58,237,0.2)" : "rgba(99,102,241,0.2)", color: report.mode === "release" ? "#a78bfa" : "#c4b5fd" }}>
+        <span aria-hidden style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: "grid", placeItems: "center", background: report.mode === "release" ? "rgba(var(--brand-deep-rgb), 0.2)" : "rgba(99,102,241,0.2)", color: report.mode === "release" ? BRAND[400] : "#c4b5fd" }}>
           {report.mode === "release" ? <Rocket size={18} /> : <Eye size={18} />}
         </span>
         <div style={{ minWidth: 0 }}>

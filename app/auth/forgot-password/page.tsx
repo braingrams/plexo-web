@@ -8,7 +8,7 @@ import { authClient } from "@/lib/auth-client";
 
 function PlexoLogoMark() {
   return (
-    <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", display: "grid", placeItems: "center", boxShadow: "0 0 14px rgba(139,92,246,0.4)", flexShrink: 0 }}>
+    <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", display: "grid", placeItems: "center", boxShadow: "0 0 14px rgba(var(--brand-rgb), 0.4)", flexShrink: 0 }}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
         <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
         <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />

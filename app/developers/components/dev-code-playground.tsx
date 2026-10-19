@@ -5,6 +5,7 @@ import { Code, Check, Copy } from "lucide-react";
 import { Reveal } from "@/app/scroll-fx";
 import { SDK_V2_COMPILE, SDK_V2_EMBED } from "@/app/sdk/v2-snippets";
 
+import { BRAND } from "@/lib/theme";
 type Tab = "sdk" | "classic" | "compile" | "mcp" | "api";
 
 const CODE_EXAMPLES: Record<Tab, { title: string; filename: string; language: string; code: string }> = {
@@ -126,7 +127,7 @@ export function DevCodePlayground({ isDark }: { isDark: boolean }) {
                 onClick={() => setActiveTab(id)}
                 className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
                   activeTab === id
-                    ? "bg-[#6b3bf9] text-white shadow-lg shadow-purple-600/30"
+                    ? `bg-[${BRAND.primary}] text-white shadow-lg shadow-purple-600/30`
                     : isDark
                     ? "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
                     : "bg-white text-slate-700 hover:text-slate-950 border border-slate-200"

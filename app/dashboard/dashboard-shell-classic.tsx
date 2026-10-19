@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { NAV_ITEMS } from "./nav-items";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
@@ -362,10 +362,25 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
     router.push("/auth/login");
   }
 
+  // The editor wants every pixel it can get, so entering it folds the menu down to icons (and hands it back, the way the
+  // person had it, when they leave). The chevron still opens it again for as long as they stay.
+  const beforeEditor = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (isEditorRoute && beforeEditor.current === null) {
+      beforeEditor.current = collapsed;
+      setCollapsed(true);
+    } else if (!isEditorRoute && beforeEditor.current !== null) {
+      setCollapsed(beforeEditor.current);
+      beforeEditor.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the route change should fold the menu, not the person's own toggling
+  }, [isEditorRoute]);
+
   const sidebarWidth = collapsed ? 64 : 250;
   // Extra breathing room between the fixed sidebar and the main content column —
   // without it, page content butts directly against the sidebar's right edge.
-  const contentGutter = 24;
+  // The editor sits flush against the menu: a gap there is just dead space.
+  const contentGutter = isEditorRoute ? 0 : 24;
 
   // Close the mobile drawer whenever the route changes (navigating counts as "done").
   useEffect(() => {
@@ -586,6 +601,8 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
         }}>
           <div style={{
             display: "flex", alignItems: "center",
+            // Collapsed, the menu is one icon wide: Feedback and notifications stack instead of squeezing side by side.
+            flexDirection: collapsed ? "column" : "row",
             justifyContent: collapsed ? "center" : "space-between",
             gap: "0.4rem", marginBottom: "0.5rem",
           }}>

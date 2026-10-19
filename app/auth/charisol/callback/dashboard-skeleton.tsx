@@ -1,3 +1,4 @@
+import { BRAND } from "@/lib/theme";
 // Loading placeholder shown while the Charisol code exchange + Plexo session creation
 // are in flight (see ../page.tsx) — shaped like the real dashboard shell (fixed left
 // sidebar + main content, see app/dashboard/dashboard-shell-classic.tsx's own
@@ -31,7 +32,7 @@ export function DashboardSkeleton() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-          <div className="animate-pulse rounded-lg" style={{ width: 28, height: 28, background: "linear-gradient(135deg, #8b5cf6, #6d28d9)" }} />
+          <div className="animate-pulse rounded-lg" style={{ width: 28, height: 28, background: `linear-gradient(135deg, ${BRAND.primary}, ${BRAND[700]})` }} />
           <Bar width={70} height={14} />
         </div>
 
@@ -56,7 +57,7 @@ export function DashboardSkeleton() {
       <main style={{ marginLeft: 250, flex: 1, padding: "2rem 2.5rem", display: "flex", flexDirection: "column", gap: "1.75rem" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Bar width={180} height={22} />
-          <div className="animate-pulse rounded-lg" style={{ width: 120, height: 34, background: "rgba(139,92,246,0.25)" }} />
+          <div className="animate-pulse rounded-lg" style={{ width: 120, height: 34, background: "rgba(var(--brand-rgb), 0.25)" }} />
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "1rem" }}>

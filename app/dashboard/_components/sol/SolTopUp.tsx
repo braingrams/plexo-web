@@ -5,6 +5,7 @@ import Link from "next/link";
 import { OutOfCreditsCard, TopUpSheet, useCredits, type Pack } from "../../apps/_components/Credits";
 import { SolIcon } from "../../sol/_components/SolIcon";
 
+import { BRAND } from "@/lib/theme";
 // The SOL experience every AI feature shares (lib/ai/solEngine.ts is the engine behind it):
 // the same "out of credits" card with an in-page top-up, and a hand-off into the full SOL
 // chat for anything bigger than a one-off edit.
@@ -39,7 +40,7 @@ export function SolOutOfCredits({ onToppedUp, onDismiss }: { onToppedUp?: () => 
 export function SolHandoff({ draft, label = "Bigger change? Continue with SOL" }: { draft: string; label?: string }) {
   const href = `/dashboard/sol?new=1${draft.trim() ? `&draft=${encodeURIComponent(draft.trim().slice(0, 2000))}` : ""}`;
   return (
-    <Link href={href} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.78rem", color: "var(--brand-light, #a78bfa)", textDecoration: "none" }}>
+    <Link href={href} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: "0.78rem", color: `var(--brand-light, ${BRAND[400]})`, textDecoration: "none" }}>
       <SolIcon size={14} /> {label} →
     </Link>
   );
