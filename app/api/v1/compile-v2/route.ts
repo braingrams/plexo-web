@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { NextRequest, NextResponse } from "next/server";
+import { userContentOrigin } from "@/lib/storage";
 import { compilePageToHtml, parsePages, repairDesignSystem, sanitizeCss, sanitizeV2Html, type CompileOptions } from "@charisol/plexo-sdk/v2/compile";
 
 import { auth } from "@/server/authDynamo";
@@ -136,7 +137,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const built = buildOptions(body.options, designSystem);
   if (!built.ok) return fail(built.error, 400);
 
-  const sanitizeOpts = { allowEmbedScripts: built.opts.allowEmbedScripts };
+  const fontOrigin = userContentOrigin();
+  const sanitizeOpts = { allowEmbedScripts: built.opts.allowEmbedScripts, ...(fontOrigin ? { fontOrigins: [fontOrigin] } : {}) };
   let compiled: Array<{ id: string; name: string; slug: string; html: string; css: string; script: string; document: string; warnings: string[] }>;
   try {
     compiled = parsed.pages.map((page) => {

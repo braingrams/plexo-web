@@ -26,6 +26,16 @@ function publicUrlFor(key: string): string {
   return `https://${bucketName()}.s3.${REGION}.amazonaws.com/${key}`;
 }
 
+/** The origin user uploads are served from, or null when storage isn't configured (tests, local). Used to
+ * allow the owner's own uploaded font files in compiled pages' @font-face rules. */
+export function userContentOrigin(): string | null {
+  try {
+    return `https://${bucketName()}.s3.${REGION}.amazonaws.com`;
+  } catch {
+    return null;
+  }
+}
+
 /** Extracts the S3 key from a URL this module minted (publicUrlFor's inverse). Throws on
  * a URL from a different bucket/format — every real caller only ever passes back a URL
  * this module itself produced. */

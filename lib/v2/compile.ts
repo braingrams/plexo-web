@@ -1,3 +1,4 @@
+import { userContentOrigin } from "@/lib/storage";
 import {
   compilePageToHtml,
   prepareCustomJs,
@@ -126,7 +127,8 @@ export function compileV2Design(rawDesign: unknown, ctx: CompileV2Context): stri
     throw new V2DesignError(`This page couldn't be built: ${err instanceof Error ? err.message : "something in its design isn't valid"}.`);
   }
 
-  let html = sanitizeV2Html(compiled.document);
+  const origin = userContentOrigin();
+  let html = sanitizeV2Html(compiled.document, origin ? { fontOrigins: [origin] } : undefined);
   html = injectV2Head(html, design.meta);
 
   const custom = prepareCustomJs(design.customJs);
