@@ -40,12 +40,6 @@ function LoginForm() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Start loading the dashboard while the person types, so it is ready sooner when sign-in succeeds.
-  useEffect(() => {
-    router.prefetch(params.get("redirectTo") ?? "/dashboard");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setError(null);
@@ -57,7 +51,9 @@ function LoginForm() {
 
     setLoading(true);
 
-    const redirectTo = params.get("redirectTo") ?? "/dashboard";
+    // Only ever a path on this site (never another address someone put in the link).
+    const wanted = params.get("redirectTo") ?? "/dashboard";
+    const redirectTo = wanted.startsWith("/") && !wanted.startsWith("//") ? wanted : "/dashboard";
 
     try {
       const result = await authClient.signIn.email({
@@ -93,7 +89,9 @@ function LoginForm() {
       }
 
       if (redirectTo.startsWith("/dashboard")) setRedirecting(true);
-      router.push(redirectTo);
+      // A full page load, not a client-side push: the sign-in cookie is fresh, and a client-side push can reuse a copy of the
+      // destination fetched while signed out (which just bounces back here) and leave the person on this screen for good.
+      window.location.assign(redirectTo);
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Invalid credentials.";
       setError(message);
