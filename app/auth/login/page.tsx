@@ -8,6 +8,7 @@ import { authClient } from "@/lib/auth-client";
 import { Mulish } from "next/font/google";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
+import { DashboardSkeleton } from "@/app/auth/charisol/callback/dashboard-skeleton";
 
 const mulish = Mulish({
   subsets: ["latin"],
@@ -24,6 +25,8 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Signed in, on the way to the dashboard: its first render takes a moment, so the page shows the dashboard's own outline instead of freezing.
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(() => params.get("error"));
 
   // A failed Charisol/Google sign-in routes back here with ?error=... (see
@@ -34,6 +37,12 @@ function LoginForm() {
     const url = new URL(window.location.href);
     url.searchParams.delete("error");
     router.replace(`${url.pathname}${url.search}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Start loading the dashboard while the person types, so it is ready sooner when sign-in succeeds.
+  useEffect(() => {
+    router.prefetch(params.get("redirectTo") ?? "/dashboard");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -83,6 +92,7 @@ function LoginForm() {
         return;
       }
 
+      if (redirectTo.startsWith("/dashboard")) setRedirecting(true);
       router.push(redirectTo);
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Invalid credentials.";
@@ -90,6 +100,15 @@ function LoginForm() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (redirecting) {
+    // Covers the whole screen (the sign-in layout's own panels included) until the dashboard replaces it.
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 100, overflow: "auto", background: "#0b0f19" }}>
+        <DashboardSkeleton />
+      </div>
+    );
   }
 
   return (
