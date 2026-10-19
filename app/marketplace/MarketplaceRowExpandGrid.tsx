@@ -14,7 +14,16 @@ import { TemplatePreviewModal } from "./TemplatePreviewModal";
  *
  * The picture is a live, scaled-down copy of the template's own compiled page (rendered at 4x and shrunk to 25%).
  */
-export function MarketplaceRowExpandGrid({ templates }: { templates: MarketplaceListItem[] }) {
+export function MarketplaceRowExpandGrid({
+  templates,
+  onSelect,
+  busyId,
+}: {
+  templates: MarketplaceListItem[];
+  /** When given, picking a card calls this (e.g. the new-site wizard) instead of opening the template's page. */
+  onSelect?: (t: MarketplaceListItem) => void;
+  busyId?: string | null;
+}) {
   const [previewingModalId, setPreviewingModalId] = useState<string | null>(null);
 
   return (
@@ -25,7 +34,17 @@ export function MarketplaceRowExpandGrid({ templates }: { templates: Marketplace
 
         return (
           <article key={t.id} className="group relative flex flex-col">
-            <Link href={`/marketplace/${t.id}`} className="absolute inset-0 z-10 rounded-2xl" aria-label={`${t.name}: open template`} />
+            {onSelect ? (
+              <button
+                type="button"
+                onClick={() => onSelect(t)}
+                disabled={!!busyId}
+                className="absolute inset-0 z-10 rounded-2xl cursor-pointer disabled:cursor-wait"
+                aria-label={`Use ${t.name}`}
+              />
+            ) : (
+              <Link href={`/marketplace/${t.id}`} className="absolute inset-0 z-10 rounded-2xl" aria-label={`${t.name}: open template`} />
+            )}
 
             <div className="relative aspect-[4/3] rounded-2xl border border-[var(--surface-border)] bg-white overflow-hidden transition-all duration-300 group-hover:border-[var(--brand-glow)] group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-[var(--brand-glow)]">
               {t.compiledHtml ? (
@@ -49,7 +68,7 @@ export function MarketplaceRowExpandGrid({ templates }: { templates: Marketplace
               </span>
               <span className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center p-3 opacity-0 translate-y-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 focus-within:opacity-100">
                 <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--brand)] text-xs font-bold text-white shadow-lg">
-                  Use this template <ArrowRight className="w-3.5 h-3.5" />
+                  {busyId === t.id ? "Setting up…" : <>Use this template <ArrowRight className="w-3.5 h-3.5" /></>}
                 </span>
               </span>
             </div>
