@@ -10,7 +10,7 @@ import type { AssistFrame } from "@/lib/ai/pageAssist";
 
 export interface AssistRequest {
   question: string;
-  context: { nodeType?: string; nodeName?: string; pageId?: string; design?: unknown; catalog?: unknown };
+  context: { nodeId?: string; nodeType?: string; nodeName?: string; pageId?: string; design?: unknown; catalog?: unknown };
   history?: Array<{ role: "you" | "sol"; text: string }>;
 }
 

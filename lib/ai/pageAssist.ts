@@ -32,10 +32,12 @@ export const PAGE_ASSIST_NOTES = `Where you are: you are inside the owner's visu
 - Your changes are applied to the page the moment you write them and the owner can undo them in one click, so make each change small and focused, and say in your first sentence what you are about to change.
 - Write the sentence first, then the changes block. Never write more than one block.
 - "Refine", "improve" or "polish" means real, specific edits, not advice. Answer in plain words only when they asked a question.
-- If the selected section was designed by hand and its content cannot be edited, say so kindly and offer to add a new section, restyle or move it instead.`;
+- Sections marked freeForm were designed by hand (premium templates): they have no fields, but you CAN change their headlines, paragraphs, buttons and pictures with updateElement, using the ids in that section's "elements". Never say a hand-built section can't be edited; edit the element.
+- When the owner selected an element, its id is given as "Selected element id": change that element.`;
 
 export interface AssistInput {
   question: string;
+  nodeId?: string;
   nodeType?: string;
   nodeName?: string;
   pageId?: string;
@@ -61,6 +63,7 @@ export function parseAssistBody(body: unknown): { input: AssistInput } | AssistR
     : [];
   const input: AssistInput = {
     question,
+    nodeId: clean(context.nodeId, 120),
     nodeType: clean(context.nodeType, 60),
     nodeName: clean(context.nodeName, 120),
     pageId: clean(context.pageId, 120),
@@ -77,7 +80,7 @@ export function parseAssistBody(body: unknown): { input: AssistInput } | AssistR
 function userPromptFor(input: AssistInput): string {
   const about = input.nodeType ? `the selected ${input.nodeType}${input.nodeName ? ` ("${input.nodeName}")` : ""}` : "the whole page";
   const past = input.history.length ? `Earlier in this chat:\n${input.history.map((h) => `${h.role === "you" ? "Owner" : "SOL"}: ${h.text}`).join("\n")}\n\n` : "";
-  return `${past}catalog:\n${JSON.stringify(input.catalog ?? null)}\n\ndesign:\n${JSON.stringify(input.design ?? null)}\n\nOpen page id: ${input.pageId ?? "(unknown)"}\nAsking about: ${about}\n\nOwner's request: ${input.question}`;
+  return `${past}catalog:\n${JSON.stringify(input.catalog ?? null)}\n\ndesign:\n${JSON.stringify(input.design ?? null)}\n\nOpen page id: ${input.pageId ?? "(unknown)"}\nAsking about: ${about}${input.nodeId ? `\nSelected element id: ${input.nodeId}` : ""}\n\nOwner's request: ${input.question}`;
 }
 
 /**
