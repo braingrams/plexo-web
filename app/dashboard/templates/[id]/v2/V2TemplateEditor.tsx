@@ -334,7 +334,18 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             }}
             mode={props.kind === "EMAIL" ? "email" : undefined}
             shell={{ onExit: props.onBack, exitLabel: props.kind === "EMAIL" ? "Back to emails" : "Back to site" }}
-            features={{ pageSwitcher: false, viewSwitch: false, headerSol: false, codeView: false }}
+            features={{ pageSwitcher: false, viewSwitch: false, codeView: false }}
+            // SOL in the editor is the real SOL: the question opens in SOL's own chat (new tab, question ready to send) with the page
+            // and the selected element named, so the editor stays open as it is. Emails are edited by hand, so no SOL there.
+            onAskSol={
+              props.kind === "EMAIL"
+                ? undefined
+                : async (question, context) => {
+                    const about = context.nodeType ? ` (about the selected ${context.nodeType.toLowerCase()} on the page "${name}")` : ` (about the page "${name}")`;
+                    window.open(`/dashboard/sol?new=1&draft=${encodeURIComponent(`${question}${about}`)}`, "_blank", "noopener");
+                    return "Opened SOL in a new tab with your question ready. Send it there and SOL can answer and change the page.";
+                  }
+            }
             pageSettings={
               <PageSettings
                 name={name}
