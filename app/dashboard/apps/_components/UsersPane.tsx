@@ -5,6 +5,7 @@ import { api, ApiError, type AppEnv } from "./api";
 import { CloudOff, LogIn, Mail, Pause, Play, RefreshCw, Search, Trash2, UserPlus, Users } from "lucide-react";
 import { C, Button, Notice, Empty, EnvSwitch, PaneHeader, IconButton, Pill, StateStyles, HUES, hueGradient, inputStyle, timeAgo } from "./ui";
 
+import { BRAND } from "@/lib/theme";
 // The app's own visitor accounts — people who signed up to the app, not Plexo users.
 
 type AppUser = {
@@ -100,11 +101,11 @@ export function UsersPane(props: { appId: string }) {
   const wholeList = !!data && !query && data.total <= PAGE && offset === 0;
   const stats = data && data.total > 0 && !query
     ? [
-        { label: env === "dev" ? "People in Preview" : "People", value: data.total, color: "#8b5cf6", icon: Users },
+        { label: env === "dev" ? "People in Preview" : "People", value: data.total, color: BRAND.primary, icon: Users },
         ...(wholeList
           ? [
               { label: "Joined this week", value: data.users.filter((u) => Date.parse(u.created_at) > weekAgo).length, color: "#6366f1", icon: Sparkline },
-              { label: "Signed in this week", value: data.users.filter((u) => u.lastSignInAt && Date.parse(u.lastSignInAt) > weekAgo).length, color: "#7c3aed", icon: LogIn },
+              { label: "Signed in this week", value: data.users.filter((u) => u.lastSignInAt && Date.parse(u.lastSignInAt) > weekAgo).length, color: BRAND.deep, icon: LogIn },
             ]
           : []),
       ]
@@ -157,7 +158,7 @@ export function UsersPane(props: { appId: string }) {
           ))}
         </div>
       ) : noOneYet ? (
-        <section className="ppl-empty" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.8fr)", gap: "2rem", alignItems: "center", padding: "clamp(1.2rem, 4.5vw, 2.2rem)", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(70% 90% at 100% 0%, rgba(99,102,241,0.12), transparent 60%), radial-gradient(60% 80% at 0% 100%, rgba(139,92,246,0.1), transparent 60%), rgba(255,255,255,0.015)" }}>
+        <section className="ppl-empty" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.8fr)", gap: "2rem", alignItems: "center", padding: "clamp(1.2rem, 4.5vw, 2.2rem)", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(70% 90% at 100% 0%, rgba(99,102,241,0.12), transparent 60%), radial-gradient(60% 80% at 0% 100%, rgba(var(--brand-rgb), 0.1), transparent 60%), rgba(255,255,255,0.015)" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: "1.2rem", minWidth: 0 }}>
             <div>
               <h3 style={{ margin: 0, fontSize: "clamp(1.1rem, 4.2vw, 1.35rem)", fontWeight: 750, letterSpacing: "-0.01em" }}>No one has signed up yet</h3>
@@ -187,7 +188,7 @@ export function UsersPane(props: { appId: string }) {
             </div>
           )}
           {inviting && (
-            <section style={{ padding: "1.1rem 1.2rem", borderRadius: 16, border: "1px solid rgba(139,92,246,0.3)", background: "rgba(139,92,246,0.06)", display: "flex", flexDirection: "column", gap: 10 }}>
+            <section style={{ padding: "1.1rem 1.2rem", borderRadius: 16, border: "1px solid rgba(var(--brand-rgb), 0.3)", background: "rgba(var(--brand-rgb), 0.06)", display: "flex", flexDirection: "column", gap: 10 }}>
               <div style={{ fontSize: "0.9rem", fontWeight: 700 }}>Invite someone</div>
               {inviteForm}
             </section>
@@ -263,9 +264,9 @@ export function UsersPane(props: { appId: string }) {
 /** A friendly picture of people joining. */
 function PeopleIllustration() {
   const people = [
-    { c: "#8b5cf6", x: 0, y: 18, s: 64 },
-    { c: "#c084fc", x: 52, y: 0, s: 56 },
-    { c: "#a78bfa", x: 98, y: 30, s: 60 },
+    { c: BRAND.primary, x: 0, y: 18, s: 64 },
+    { c: BRAND[300], x: 52, y: 0, s: 56 },
+    { c: BRAND[400], x: 98, y: 30, s: 60 },
     { c: "#6366f1", x: 40, y: 62, s: 52 },
   ];
   return (
@@ -276,7 +277,7 @@ function PeopleIllustration() {
         ))}
       </div>
       <div style={{ width: "100%", maxWidth: 260, borderRadius: 14, background: "rgba(11,15,25,0.6)", border: `1px solid ${C.borderStrong}`, padding: "0.8rem 0.9rem", display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ width: 30, height: 30, borderRadius: 99, background: "rgba(139,92,246,0.2)", display: "grid", placeItems: "center", color: "#c4b5fd" }}>
+        <span style={{ width: 30, height: 30, borderRadius: 99, background: "rgba(var(--brand-rgb), 0.2)", display: "grid", placeItems: "center", color: "#c4b5fd" }}>
           <Mail size={15} />
         </span>
         <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>

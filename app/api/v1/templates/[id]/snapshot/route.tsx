@@ -1,6 +1,7 @@
 import { ImageResponse } from 'next/og';
 import { Template } from "@/lib/db/contentEntities";
 
+import { BRAND } from "@/lib/theme";
 export async function GET(
   request: Request,
   context: { params: Promise<{ id: string }> }
@@ -29,7 +30,7 @@ export async function GET(
             justifyContent: 'center',
             backgroundColor: '#080c14',
             backgroundImage: isEmail 
-              ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(252, 6, 148, 0.05) 100%)'
+              ? 'linear-gradient(135deg, rgba(var(--brand-rgb), 0.2) 0%, rgba(252, 6, 148, 0.05) 100%)'
               : 'linear-gradient(135deg, rgba(129, 140, 248, 0.2) 0%, rgba(129, 140, 248, 0.05) 100%)',
             fontFamily: 'sans-serif',
           }}
@@ -44,7 +45,7 @@ export async function GET(
             background: 'rgba(255, 255, 255, 0.1)',
             marginBottom: 20,
           }}>
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={isEmail ? "#a78bfa" : "#818cf8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={isEmail ? BRAND[400] : "#818cf8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               {isEmail ? (
                 <g>
                   <rect x="2" y="4" width="20" height="16" rx="3"/>
@@ -76,7 +77,7 @@ export async function GET(
             marginTop: 10,
             fontSize: 16,
             fontWeight: 600,
-            color: isEmail ? '#a78bfa' : '#818cf8',
+            color: isEmail ? BRAND[400] : '#818cf8',
             letterSpacing: '0.1em',
             textTransform: 'uppercase',
           }}>

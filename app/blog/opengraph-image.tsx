@@ -20,7 +20,7 @@ export default function BlogOgImage() {
           alignItems: "center",
           justifyContent: "center",
           background: "#0b0f19",
-          backgroundImage: `radial-gradient(circle at 30% 20%, ${BRAND.subtle}, transparent 60%), radial-gradient(circle at 80% 80%, rgba(139,92,246,0.12), transparent 55%)`,
+          backgroundImage: `radial-gradient(circle at 30% 20%, ${BRAND.subtle}, transparent 60%), radial-gradient(circle at 80% 80%, rgba(var(--brand-rgb), 0.12), transparent 55%)`,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 24 }}>

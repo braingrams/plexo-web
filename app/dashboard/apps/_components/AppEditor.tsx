@@ -425,7 +425,7 @@ export function AppEditor(props: {
         // Free plans on Plexo's AI run on Basic (the server enforces it — lib/ai/solEngine.ts).
         lockedModelTier: props.lockedModelTier ?? undefined,
         afterMessages: firstBuild ? (
-          <div style={{ width: "100%", boxSizing: "border-box", maxWidth: 760, margin: "0.5rem auto 1rem", border: "1px solid rgba(139,92,246,0.28)", background: "linear-gradient(180deg, rgba(139,92,246,0.10), rgba(139,92,246,0.03))", borderRadius: 14, padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+          <div style={{ width: "100%", boxSizing: "border-box", maxWidth: 760, margin: "0.5rem auto 1rem", border: "1px solid rgba(var(--brand-rgb), 0.28)", background: "linear-gradient(180deg, rgba(var(--brand-rgb), 0.10), rgba(var(--brand-rgb), 0.03))", borderRadius: 14, padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
             <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.faint }}>What I&rsquo;m doing</div>
             {steps.map((label, i) => {
               const state = i < stepsDone ? "done" : i === stepsDone ? "active" : "todo";
@@ -481,7 +481,7 @@ export function AppEditor(props: {
               </div>
             )}
             {selected && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "0.45rem 0.6rem", borderRadius: 10, background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.35)", fontSize: "0.76rem", color: C.text }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "0.45rem 0.6rem", borderRadius: 10, background: "rgba(var(--brand-rgb), 0.12)", border: "1px solid rgba(var(--brand-rgb), 0.35)", fontSize: "0.76rem", color: C.text }}>
                 <MousePointerClick size={14} color={C.brand} />
                 <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   Changing this {selected.tag === "img" ? "picture" : selected.tag === "button" || selected.tag === "a" ? "button" : "part"}
@@ -568,7 +568,7 @@ export function AppEditor(props: {
         {plan ? (
           <AppPreview audience={plan.audience} features={plan.features} other={plan.other} name={plan.name} />
         ) : (
-          <div style={{ flex: 1, borderRadius: 16, border: `1px solid ${C.border}`, display: "grid", placeItems: "center", color: C.muted, fontSize: "0.86rem", background: "radial-gradient(60% 50% at 30% 20%, rgba(192,132,252,0.12), transparent 70%), radial-gradient(60% 60% at 75% 80%, rgba(139,92,246,0.18), transparent 70%)" }}>
+          <div style={{ flex: 1, borderRadius: 16, border: `1px solid ${C.border}`, display: "grid", placeItems: "center", color: C.muted, fontSize: "0.86rem", background: "radial-gradient(60% 50% at 30% 20%, rgba(192,132,252,0.12), transparent 70%), radial-gradient(60% 60% at 75% 80%, rgba(var(--brand-rgb), 0.18), transparent 70%)" }}>
             Your app appears here as it&rsquo;s built.
           </div>
         )}
@@ -709,7 +709,7 @@ export function AppEditor(props: {
           <button type="button" disabled={!publishable || !summary.previewUrl} onClick={copyPreviewLink} title="Copy a link anyone can open" style={{ padding: "0.5rem 0.85rem", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: publishable ? C.text : C.faint, fontFamily: "inherit", fontSize: "0.8rem", cursor: publishable ? "pointer" : "default" }}>
             {copied ? "Link copied" : "Share"}
           </button>
-          <button type="button" disabled={!publishable} onClick={() => setPublishOpen(true)} style={{ padding: "0.5rem 0.95rem", borderRadius: 10, border: "none", background: publishable ? brandGradient : "rgba(255,255,255,0.12)", color: publishable ? "#fff" : C.faint, boxShadow: publishable ? "0 6px 20px rgba(139,92,246,0.35)" : "none", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 700, cursor: publishable ? "pointer" : "default" }}>
+          <button type="button" disabled={!publishable} onClick={() => setPublishOpen(true)} style={{ padding: "0.5rem 0.95rem", borderRadius: 10, border: "none", background: publishable ? brandGradient : "rgba(255,255,255,0.12)", color: publishable ? "#fff" : C.faint, boxShadow: publishable ? "0 6px 20px rgba(var(--brand-rgb), 0.35)" : "none", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 700, cursor: publishable ? "pointer" : "default" }}>
             {summary.published ? "Publish changes" : "Publish"}
           </button>
         </div>

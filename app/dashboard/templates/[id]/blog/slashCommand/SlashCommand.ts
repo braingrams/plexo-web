@@ -2,6 +2,7 @@ import { Extension } from "@tiptap/core";
 import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
 import { buildSlashCommandItems, type SlashCommandItem } from "./items";
 
+import { BRAND } from "@/lib/theme";
 const MENU_STYLE: Partial<CSSStyleDeclaration> = {
   background: "#161a26",
   border: "1px solid rgba(255,255,255,0.12)",
@@ -40,7 +41,7 @@ function renderMenu(items: SlashCommandItem[], selectedIndex: number, onPick: (i
     row.style.border = "none";
     row.style.cursor = "pointer";
     row.style.background = i === selectedIndex ? "rgba(var(--brand-rgb),0.15)" : "transparent";
-    row.style.color = i === selectedIndex ? "#a78bfa" : "#f0f2ff";
+    row.style.color = i === selectedIndex ? BRAND[400] : "#f0f2ff";
 
     const title = document.createElement("div");
     title.textContent = item.title;

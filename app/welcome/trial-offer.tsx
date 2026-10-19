@@ -7,6 +7,7 @@ import { Check, Globe, Layers, LayoutTemplate, MessageSquare, ShoppingBag, Rocke
 import { PlexoLogo } from "@/app/plexo-logo";
 import { planMonthlyCredits } from "@/lib/credits/value";
 
+import { BRAND } from "@/lib/theme";
 const mulish = Mulish({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800", "900"], display: "swap" });
 
 type TrialPlan = "PRO" | "ULTRA";
@@ -126,7 +127,7 @@ export function TrialOffer({ firstName, highlighted, trialDays }: { firstName: s
                       disabled={busy !== null}
                       onClick={() => void choose(key)}
                       className={`mt-7 w-full rounded-2xl py-3.5 text-sm font-extrabold transition-all disabled:opacity-60 ${
-                        isHighlighted ? "bg-[#6b3bf9] text-white shadow-md shadow-purple-600/30 hover:bg-[#5b2be6]" : "border border-slate-700 bg-slate-800 text-white hover:bg-slate-700"
+                        isHighlighted ? `bg-[${BRAND.primary}] text-white shadow-md shadow-purple-600/30 hover:bg-[${BRAND.deep}]` : "border border-slate-700 bg-slate-800 text-white hover:bg-slate-700"
                       }`}
                     >
                       {busy === key ? "Starting your trial…" : `Try ${plan.name} free`}

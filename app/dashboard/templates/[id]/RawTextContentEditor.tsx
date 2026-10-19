@@ -7,6 +7,7 @@ import type { ExtractedColorNode } from "@/lib/htmlColorExtraction";
 import { ScriptAccessControl } from "./ScriptAccessControl";
 import { ColorSwatchPicker } from "./ColorSwatchPicker";
 
+import { BRAND } from "@/lib/theme";
 export type RawTextContentEditorHandle = {
   save: () => Promise<void>;
 };
@@ -971,7 +972,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                                   marginLeft: "auto", width: 26, height: 26, borderRadius: 6,
                                   border: "1px solid rgba(255,255,255,0.1)",
                                   background: lockAspect[node.id] ? "rgba(var(--brand-rgb),0.18)" : "rgba(255,255,255,0.04)",
-                                  color: lockAspect[node.id] ? "#a78bfa" : "rgba(240,242,255,0.4)",
+                                  color: lockAspect[node.id] ? BRAND[400] : "rgba(240,242,255,0.4)",
                                   cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0,
                                 }}
                               >

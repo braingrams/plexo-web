@@ -1,3 +1,4 @@
+import { BRAND } from "@/lib/theme";
 export const metadata = {
   title: "Acceptable Use Policy — Plexo",
 };
@@ -35,7 +36,7 @@ const SECTIONS: { title: string; body: string[] }[] = [
 export default function AcceptableUsePage() {
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "4rem 1.5rem", color: "#f0f2ff", fontFamily: "inherit" }}>
-      <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand, #8b5cf6)", marginBottom: "0.5rem" }}>
+      <p style={{ fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: `var(--brand, ${BRAND.primary})`, marginBottom: "0.5rem" }}>
         Legal
       </p>
       <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "2rem", fontWeight: 800, letterSpacing: "-0.02em", marginBottom: "0.5rem" }}>

@@ -6,6 +6,7 @@ import {
   LogIn, MessagesSquare, Newspaper, PenLine, Search, Share2, Star, TrendingUp, Users, type LucideIcon,
 } from "lucide-react";
 
+import { BRAND } from "@/lib/theme";
 // The three questions on the Apps home, what they turn into (the prompt SOL builds from, the
 // plain-words build checklist) and the sketch of the app they describe — shared by the Apps
 // home and the editor, so the sketch an owner sees while answering is the one they watch turn
@@ -25,7 +26,7 @@ export const brandGradient = "linear-gradient(135deg, var(--brand-light), var(--
 
 /** Colours for app thumbnails and choice icons, picked per name so an app keeps its colour. */
 // Plexo's purple family only (never a rainbow): brand, orchid, lavender, indigo, deep violet.
-export const HUES = ["#8b5cf6", "#c084fc", "#6366f1", "#7c3aed", "#a78bfa", "#6d28d9", "#9333ea", "#818cf8"];
+export const HUES = [BRAND.primary, BRAND[300], "#6366f1", BRAND.deep, BRAND[400], BRAND[700], "#9333ea", "#818cf8"];
 export function hueFor(key: string): string {
   let h = 0;
   for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -164,9 +165,9 @@ function Block({ id, other }: { id: FeatureId; other: string }) {
     case "signin":
       return <div style={box}><Bar w="45%" o={22} /><span style={{ height: 14, borderRadius: 5, border: `1px solid ${border}` }} /><span style={{ height: 14, borderRadius: 5, border: `1px solid ${border}` }} />{button("Sign in")}</div>;
     case "remind":
-      return <div style={box}>{[0, 1, 2].map((i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}><Bell size={11} color="#a78bfa" /><Bar w={`${70 - i * 15}%`} /></div>)}</div>;
+      return <div style={box}>{[0, 1, 2].map((i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}><Bell size={11} color={BRAND[400]} /><Bar w={`${70 - i * 15}%`} /></div>)}</div>;
     case "reviews":
-      return <div style={box}><div style={{ display: "flex", gap: 2 }}>{[0, 1, 2, 3, 4].map((i) => <Star key={i} size={12} fill={i < 4 ? "currentColor" : "none"} color="#a78bfa" />)}</div><Bar w="85%" /><Bar w="60%" /></div>;
+      return <div style={box}><div style={{ display: "flex", gap: 2 }}>{[0, 1, 2, 3, 4].map((i) => <Star key={i} size={12} fill={i < 4 ? "currentColor" : "none"} color={BRAND[400]} />)}</div><Bar w="85%" /><Bar w="60%" /></div>;
     case "tasks":
       return <div style={box}>{[1, 1, 0, 0].map((d, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}><span style={{ width: 10, height: 10, borderRadius: 3, background: d ? "#6366f1" : "transparent", border: `1.5px solid ${d ? "#6366f1" : border}` }} /><Bar w={`${75 - i * 10}%`} /></div>)}</div>;
     case "files":
@@ -210,7 +211,7 @@ export function AppPreview({ audience, features, other, name }: { audience: Audi
         <span style={{ marginLeft: 10, padding: "3px 10px", borderRadius: 99, fontSize: 11, color: muted, background: fill(6), overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{slug(title)}.plexopages.com</span>
       </div>
       {!audience ? (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: 24, textAlign: "center", background: `radial-gradient(70% 60% at 30% 20%, ${tint("#c084fc", 14)}, transparent 70%), radial-gradient(70% 60% at 75% 80%, ${tint(accent, 20)}, transparent 70%)` }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: 24, textAlign: "center", background: `radial-gradient(70% 60% at 30% 20%, ${tint(BRAND[300], 14)}, transparent 70%), radial-gradient(70% 60% at 75% 80%, ${tint(accent, 20)}, transparent 70%)` }}>
           <span style={{ width: 52, height: 52, borderRadius: 16, background: brandGradient, boxShadow: "0 10px 30px var(--brand-glow)" }} />
           <span style={{ fontSize: 14, fontWeight: 700, color: ink }}>Your app will appear here</span>
           <span style={{ fontSize: 12.5, color: muted, maxWidth: 240 }}>It takes shape as you answer.</span>

@@ -1,6 +1,7 @@
+import { EMAIL_COLORS } from "@/lib/theme";
 import { emailShell, type EmailBrand } from "./maildrip";
 
-export const CTA_BUTTON = (href: string, label: string, color = "#8b5cf6", colorDeep = "#7c3aed") => `
+export const CTA_BUTTON = (href: string, label: string, color = EMAIL_COLORS.brand, colorDeep = EMAIL_COLORS.brandDeep) => `
   <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 32px auto;">
     <tr>
       <td style="border-radius:10px;background:linear-gradient(135deg,${color},${colorDeep});text-align:center;">
@@ -11,7 +12,7 @@ export const CTA_BUTTON = (href: string, label: string, color = "#8b5cf6", color
     </tr>
   </table>`;
 
-const FALLBACK_LINK = (href: string, color = "#8b5cf6") => `
+const FALLBACK_LINK = (href: string, color = EMAIL_COLORS.brand) => `
   <p style="margin:0 0 8px;font-size:12px;color:#64748b;line-height:1.5;text-align:center;">
     If the button doesn't work, copy and paste this link into your browser:
   </p>
@@ -28,7 +29,7 @@ export function buildVerificationEmail(actionUrl: string): string {
         Welcome to Plexo — the visual email &amp; template builder. Before your first login, please confirm your email address so we can secure your workspace.
       </p>
       <p style="margin:0 0 28px;font-size:14px;color:#64748b;line-height:1.6;text-align:center;">
-        Click the button below to verify your account. This link is valid for <strong style="color:#8b5cf6;">60 minutes</strong>.
+        Click the button below to verify your account. This link is valid for <strong style="color:${EMAIL_COLORS.brand};">60 minutes</strong>.
       </p>
       ${CTA_BUTTON(actionUrl, "Verify Email Address")}
       ${FALLBACK_LINK(actionUrl)}
@@ -49,7 +50,7 @@ export function buildPasswordResetEmail(actionUrl: string): string {
         &#9888;&#65039; If you did not request this, please ignore this email.
       </p>
       <p style="margin:0 0 28px;font-size:14px;color:#64748b;line-height:1.6;text-align:center;">
-        This link expires in <strong style="color:#8b5cf6;">15 minutes</strong>.
+        This link expires in <strong style="color:${EMAIL_COLORS.brand};">15 minutes</strong>.
       </p>
       ${CTA_BUTTON(actionUrl, "Reset Password")}
       ${FALLBACK_LINK(actionUrl)}
@@ -116,7 +117,7 @@ export function buildInviteEmail(input: {
 }): string {
   const roleLabel = ROLE_LABELS[input.role] ?? input.role;
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `Join ${input.orgName} on ${productName}`,
     bodyHtml: `
@@ -125,7 +126,7 @@ export function buildInviteEmail(input: {
         <strong>${input.inviterName}</strong> invited you to join <strong>${input.orgName}</strong> on ${productName} as a
       </p>
       <p style="margin:0 0 28px;text-align:center;">
-        <span style="display:inline-block;background:#ede9fe;color:#7c3aed;font-size:13px;font-weight:700;padding:6px 14px;border-radius:9999px;letter-spacing:0.2px;">${roleLabel}</span>
+        <span style="display:inline-block;background:${EMAIL_COLORS.brandTint};color:${EMAIL_COLORS.brandDeep};font-size:13px;font-weight:700;padding:6px 14px;border-radius:9999px;letter-spacing:0.2px;">${roleLabel}</span>
       </p>
       ${CTA_BUTTON(input.acceptUrl, "Accept Invitation", accent)}
       ${FALLBACK_LINK(input.acceptUrl, accent)}
@@ -144,7 +145,7 @@ export function buildSiteTransferEmail(input: {
   brand?: EmailBrand;
 }): string {
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `${input.senderName} wants to transfer "${input.siteName}" to you on ${productName}`,
     bodyHtml: `
@@ -175,7 +176,7 @@ export function buildMentionEmail(input: {
   brand?: EmailBrand;
 }): string {
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `${input.mentionerName} mentioned you on ${productName}`,
     bodyHtml: `
@@ -202,7 +203,7 @@ export function buildNewBlogCommentEmail(input: {
   brand?: EmailBrand;
 }): string {
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `New comment on "${input.postTitle}" — ${productName}`,
     bodyHtml: `
@@ -228,7 +229,7 @@ export function buildCommentReplyEmail(input: {
   brand?: EmailBrand;
 }): string {
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `${input.replierName} replied on ${productName}`,
     bodyHtml: `
@@ -257,7 +258,7 @@ export function buildFormSubmissionEmail(input: {
   brand?: EmailBrand;
 }): string {
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const fieldsHtml = input.fieldsPreview
     .map(
       ([key, value]) => `
@@ -295,7 +296,7 @@ export function buildPaymentReceivedEmail(input: {
   brand?: EmailBrand;
 }): string {
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `Payment received on ${input.siteName} — ${productName}`,
     bodyHtml: `
@@ -338,7 +339,7 @@ export function buildOrderStatusEmail(input: {
   brand?: EmailBrand;
 }): { subject: string; html: string } {
   const copy = ORDER_STATUS_COPY[input.event];
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const formatMinor = (minor: number) =>
     new Intl.NumberFormat(undefined, { style: "currency", currency: input.currency }).format((minor || 0) / 100);
 
@@ -406,7 +407,7 @@ export function buildBankTransferOwnerEmail(input: {
   confirmUrl: string;
   brand?: EmailBrand;
 }): { subject: string; html: string } {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const html = emailShell({
     title: `Bank transfer to confirm — ${input.orderNumber}`,
     bodyHtml: `
@@ -441,7 +442,7 @@ export function buildBankTransferCustomerEmail(input: {
   orderUrl: string;
   brand?: EmailBrand;
 }): { subject: string; html: string } {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const html = emailShell({
     title: `Order received — ${input.siteName}`,
     bodyHtml: `
@@ -471,7 +472,7 @@ export function buildBankTransferRejectedEmail(input: {
   storeUrl: string;
   brand?: EmailBrand;
 }): { subject: string; html: string } {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const html = emailShell({
     title: `Order cancelled — ${input.siteName}`,
     bodyHtml: `
@@ -500,7 +501,7 @@ export function buildDigitalFileDeliveryEmail(input: {
   expiresAt?: string | null; // pre-formatted, e.g. "March 12, 2026"
   brand?: EmailBrand;
 }): string {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `Your download: ${input.productName}`,
     bodyHtml: `
@@ -526,7 +527,7 @@ export function buildDigitalExternalLinkEmail(input: {
   accessUrl: string; // our own token route, not the raw external URL — see digitalDelivery.ts
   brand?: EmailBrand;
 }): string {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `Your access link: ${input.productName}`,
     bodyHtml: `
@@ -549,7 +550,7 @@ export function buildDigitalAccessGrantedEmail(input: {
   accessUrl: string; // "see it again" page — same content as this email
   brand?: EmailBrand;
 }): string {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `Your access: ${input.productName}`,
     bodyHtml: `
@@ -591,7 +592,7 @@ export function buildDomainTransferCodeEmail(input: {
   transferEligibleAt?: string | null;
   brand?: EmailBrand;
 }): string {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const eligibleNote =
     input.transferEligibleAt && new Date(input.transferEligibleAt).getTime() > Date.now()
       ? `<p style="margin:0 0 20px;font-size:14px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 16px;line-height:1.6;text-align:left;">
@@ -635,7 +636,7 @@ export function buildDomainRenewalFailedEmail(input: {
   manageUrl: string;
   brand?: EmailBrand;
 }): string {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: input.expired ? `${input.domain} has expired` : `Renewal payment failed for ${input.domain}`,
     bodyHtml: `
@@ -679,7 +680,7 @@ export function buildDonationReceiptEmail(input: {
   manageUrl: string | null;
   brand?: EmailBrand;
 }): { subject: string; html: string } {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const greeting = input.donorName ? `Dear ${esc(input.donorName.split(" ")[0])},` : "Thank you,";
   const date = new Date(input.dateIso).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const message = input.thankYouMessage
@@ -872,7 +873,7 @@ export function buildPaymentReceiptEmail(input: {
       </table>
       ${CTA_BUTTON(input.downloadUrl, "Download receipt (PDF)")}
       <p style="margin:0;font-size:12px;color:#64748b;line-height:1.5;text-align:center;">
-        All your receipts live under <a href="${input.historyUrl}" style="color:#8b5cf6;text-decoration:none;">Settings → Subscription</a>.
+        All your receipts live under <a href="${input.historyUrl}" style="color:${EMAIL_COLORS.brand};text-decoration:none;">Settings → Subscription</a>.
       </p>
     `,
   });

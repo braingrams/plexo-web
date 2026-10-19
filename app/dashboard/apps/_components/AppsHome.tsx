@@ -23,6 +23,7 @@ import {
 } from "./appPlan";
 
 
+import { BRAND } from "@/lib/theme";
 // ------------------------------------------------------------------ small pieces
 
 function Tile({ icon: Icon, title, body, on, onClick }: { icon: LucideIcon; title: string; body: string; on: boolean; onClick: () => void }) {
@@ -219,7 +220,7 @@ export function AppsHome(props: { lockedModelTier?: { tier: "BASIC"; note: strin
         )}
 
         {!composing ? (
-          <button type="button" onClick={() => setComposing(true)} className="ah-create" style={{ minHeight: 420, fontFamily: "inherit", color: ink, cursor: "pointer", border: `2px dashed ${tint(accent, 40)}`, borderRadius: 22, background: `radial-gradient(50% 70% at 20% 0%, ${tint("#c084fc", 10)}, transparent 70%), radial-gradient(60% 80% at 85% 100%, ${tint(accent, 16)}, transparent 70%), ${surface}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
+          <button type="button" onClick={() => setComposing(true)} className="ah-create" style={{ minHeight: 420, fontFamily: "inherit", color: ink, cursor: "pointer", border: `2px dashed ${tint(accent, 40)}`, borderRadius: 22, background: `radial-gradient(50% 70% at 20% 0%, ${tint(BRAND[300], 10)}, transparent 70%), radial-gradient(60% 80% at 85% 100%, ${tint(accent, 16)}, transparent 70%), ${surface}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
             <span style={{ width: 64, height: 64, borderRadius: 18, background: brandGradient, color: "#fff", display: "grid", placeItems: "center", boxShadow: "0 12px 32px var(--brand-glow)" }}><Plus size={30} /></span>
             <span style={{ fontSize: "clamp(19px, 5vw, 24px)", fontWeight: 800, letterSpacing: "-0.01em" }}>Create a new app</span>
             <span style={{ fontSize: "clamp(13.5px, 3.7vw, 15px)", color: muted }}>Answer three quick questions and we&rsquo;ll build it.</span>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 
+import { BRAND } from "@/lib/theme";
 export type OrderSummary = {
   id: string;
   orderNumber: string;
@@ -48,7 +49,7 @@ const STATUS_COLORS: Record<OrderSummary["status"], string> = {
   PENDING: "#fbbf24",
   PAID: "#34d399",
   FAILED: "#f87171",
-  REFUNDED: "#a78bfa",
+  REFUNDED: BRAND[400],
   CANCELLED: "rgba(240,242,255,0.4)",
 };
 

@@ -5,6 +5,7 @@ import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRe
 import { useRouter } from "next/navigation";
 import type { CommentTarget, V2EditorRef } from "@charisol/plexo-sdk/v2";
 
+import { EDITOR_THEME } from "@/lib/theme";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import type { V2Design, V2Meta } from "@/lib/v2/design";
 import { PageSettings } from "./PageSettings";
@@ -312,6 +313,8 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             onUploadFont={uploadFont}
             loadMedia={loadMedia}
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
+            // Plexo purple on Plexo's own background, so the editor looks like the rest of the app (and follows lib/theme.ts).
+            theme={EDITOR_THEME}
             strata={strataOn ? strata : undefined}
             onSave={readOnly ? undefined : () => saveNow().then(() => undefined)}
             onPublish={readOnly ? undefined : props.onPublish}

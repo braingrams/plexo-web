@@ -10,19 +10,20 @@ import { createStrataAdapter } from "./strataAdapter";
 import { C, Button, Notice } from "./ui";
 import { BLANK_TEMPLATE, defaultPageName, defaultRoute, freeRoute, pageFromTemplate, slugForName, templates } from "@/lib/projects/designTemplates";
 
+import { BRAND, EDITOR_THEME } from "@/lib/theme";
 const CODE_CHANGED_NOTE = "This page was changed in code since you last designed it. Saving here replaces those code changes.";
 
 /** How each ready-made page looks on its card. Templates not listed here still get a card, with the default look. */
 const PICK_LOOKS: Record<string, { hint: string; accent: string; bg: string }> = {
-  home: { hint: "A welcoming front page for your site", accent: "#8b5cf6", bg: "linear-gradient(135deg, rgba(139,92,246,0.3), rgba(236,72,153,0.1))" },
-  landing: { hint: "One page that sells, from hello to sign-up", accent: "#8b5cf6", bg: "linear-gradient(135deg, rgba(139,92,246,0.28), rgba(192,132,252,0.12))" },
-  about: { hint: "Your story, your numbers and your team", accent: "#a78bfa", bg: "linear-gradient(135deg, rgba(167,139,250,0.22), rgba(109,40,217,0.08))" },
+  home: { hint: "A welcoming front page for your site", accent: BRAND.primary, bg: "linear-gradient(135deg, rgba(var(--brand-rgb), 0.3), rgba(236,72,153,0.1))" },
+  landing: { hint: "One page that sells, from hello to sign-up", accent: BRAND.primary, bg: "linear-gradient(135deg, rgba(var(--brand-rgb), 0.28), rgba(192,132,252,0.12))" },
+  about: { hint: "Your story, your numbers and your team", accent: BRAND[400], bg: "linear-gradient(135deg, rgba(167,139,250,0.22), rgba(109,40,217,0.08))" },
   services: { hint: "What you offer and how it works", accent: "#06b6d4", bg: "linear-gradient(135deg, rgba(6,182,212,0.2), rgba(99,102,241,0.1))" },
   pricing: { hint: "Plans side by side", accent: "#6366f1", bg: "linear-gradient(135deg, rgba(99,102,241,0.22), rgba(196,181,253,0.08))" },
-  contact: { hint: "A way to get in touch", accent: "#7c3aed", bg: "linear-gradient(135deg, rgba(124,58,237,0.24), rgba(139,92,246,0.08))" },
+  contact: { hint: "A way to get in touch", accent: BRAND.deep, bg: "linear-gradient(135deg, rgba(var(--brand-deep-rgb), 0.24), rgba(var(--brand-rgb), 0.08))" },
   blank: { hint: "Start from nothing", accent: "#94a3b8", bg: "rgba(255,255,255,0.02)" },
 };
-const DEFAULT_LOOK = { hint: "", accent: "#8b5cf6", bg: "linear-gradient(135deg, rgba(139,92,246,0.22), rgba(192,132,252,0.08))" };
+const DEFAULT_LOOK = { hint: "", accent: BRAND.primary, bg: "linear-gradient(135deg, rgba(var(--brand-rgb), 0.22), rgba(192,132,252,0.08))" };
 
 // The Design tab: design app pages visually in the Plexo editor (<V2Editor> from
 // @charisol/plexo-sdk/v2). Each design is one page; saving compiles it to real React code in
@@ -436,7 +437,7 @@ export function DesignPane(props: {
                     cursor: busyWith ? "default" : "pointer",
                     color: C.text,
                     background: C.panel,
-                    border: `1px solid ${busy ? "rgba(139,92,246,0.6)" : C.border}`,
+                    border: `1px solid ${busy ? "rgba(var(--brand-rgb), 0.6)" : C.border}`,
                     opacity: busyWith && !busy ? 0.5 : 1,
                   }}
                 >
@@ -453,7 +454,7 @@ export function DesignPane(props: {
           </div>
           <p style={{ margin: 0, fontSize: "0.8rem", color: C.faint }}>You can rename any page or change its web address later.</p>
         </div>
-        <style>{`.design-pick { transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s; } .design-pick:not(:disabled):hover { transform: translateY(-3px); border-color: rgba(139,92,246,0.55) !important; box-shadow: 0 16px 40px rgba(139,92,246,0.18); } @media (prefers-reduced-motion: reduce) { .design-pick:hover { transform: none !important; } }`}</style>
+        <style>{`.design-pick { transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s; } .design-pick:not(:disabled):hover { transform: translateY(-3px); border-color: rgba(var(--brand-rgb), 0.55) !important; box-shadow: 0 16px 40px rgba(var(--brand-rgb), 0.18); } @media (prefers-reduced-motion: reduce) { .design-pick:hover { transform: none !important; } }`}</style>
       </div>
     );
   }
@@ -519,6 +520,8 @@ export function DesignPane(props: {
             // The images already uploaded to the project, listed when the Images panel opens.
             loadMedia={loadMedia}
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
+            // Plexo purple on Plexo's own background, so the editor looks like the rest of the app (and follows lib/theme.ts).
+            theme={EDITOR_THEME}
             strata={strataOn ? strata : undefined}
             onSave={() => save()}
             saveState={saveState === "saving" || saveState === "error" || saveState === "saved" ? saveState : dirty ? "dirty" : "idle"}
@@ -595,7 +598,7 @@ function PickThumb({ kind, accent }: { kind: string; accent: string }) {
       </div>
       {(kind === "landing" || kind === "home") && (
         <>
-          <div style={{ flex: 1, borderRadius: 8, background: `linear-gradient(135deg, ${accent}, #c084fc)`, padding: 10, display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>
+          <div style={{ flex: 1, borderRadius: 8, background: `linear-gradient(135deg, ${accent}, ${BRAND[300]})`, padding: 10, display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>
             {line("60%", 0.9, 8)}
             {line("40%", 0.55, 5)}
             <span style={{ width: 44, height: 14, borderRadius: 5, background: "#fff", marginTop: 2 }} />
@@ -623,7 +626,7 @@ function PickThumb({ kind, accent }: { kind: string; accent: string }) {
           {line("80%", 0.2, 4)}
           {line("70%", 0.2, 4)}
           <div style={{ display: "flex", gap: 8, marginTop: "auto" }}>
-            {[accent, "#6d28d9", "#c4b5fd"].map((c) => <span key={c} style={{ width: 26, height: 26, borderRadius: 99, background: c }} />)}
+            {[accent, BRAND[700], "#c4b5fd"].map((c) => <span key={c} style={{ width: 26, height: 26, borderRadius: 99, background: c }} />)}
           </div>
         </>
       )}

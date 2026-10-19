@@ -5,6 +5,7 @@ import { ArrowLeftRight, ArrowUpRight, Clock, Download, ExternalLink, GitBranch,
 import { api, ApiError } from "./api";
 import { C, Button, Notice, PaneHeader, Pill, ProblemState, Shimmer, StateStyles, EmptyHero, StatCard, inputStyle, timeAgo } from "./ui";
 
+import { BRAND } from "@/lib/theme";
 // Two-way GitHub sync: every Plexo version becomes a commit, and pushes to the branch come
 // back into Plexo and rebuild the preview. Owners see it as "a copy of your app's code in your
 // own GitHub account that stays in step both ways", so the page avoids git words wherever it can.
@@ -18,7 +19,7 @@ type Status = {
 };
 
 // Plexo purples for decoration; green / amber / red only ever mean a status.
-const P = { brand: "#8b5cf6", deep: "#7c3aed", deeper: "#6d28d9", lavender: "#a78bfa", pale: "#c4b5fd", orchid: "#c084fc", indigo: "#6366f1" };
+const P = { brand: BRAND.primary, deep: BRAND.deep, deeper: BRAND[700], lavender: BRAND[400], pale: "#c4b5fd", orchid: BRAND[300], indigo: "#6366f1" };
 
 const GITHUB_CSS = `
 @keyframes gh-flow { from { background-position: 0 0; } to { background-position: 28px 0; } }
@@ -27,7 +28,7 @@ const GITHUB_CSS = `
 @keyframes gh-spin { to { transform: rotate(360deg); } }
 .gh-spin { animation: gh-spin 0.9s linear infinite; }
 .gh-choice { transition: border-color 0.15s, background 0.15s; }
-.gh-choice:hover { border-color: rgba(139,92,246,0.45) !important; }
+.gh-choice:hover { border-color: rgba(var(--brand-rgb), 0.45) !important; }
 .gh-choice:focus-within { outline: 2px solid ${P.brand}; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .gh-flow, .gh-spin { animation: none; } }
 `;

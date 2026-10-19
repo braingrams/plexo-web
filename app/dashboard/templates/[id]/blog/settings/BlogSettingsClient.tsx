@@ -7,6 +7,7 @@ import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogTheme";
 import { PageContainer } from "../../../../_components/PageContainer";
 import { CustomSelect } from "../../../../../_components/CustomSelect";
 
+import { BRAND } from "@/lib/theme";
 type Category = { id: string; name: string; slug: string };
 type Tag = { id: string; name: string; slug: string };
 type Author = { id: string; name: string };
@@ -344,7 +345,7 @@ export function BlogSettingsClient({
             <label style={FIELD_LABEL}>Accent color</label>
             <input
               type="color"
-              value={site.accentColor || "#6d28d9"}
+              value={site.accentColor || BRAND[700]}
               onChange={(e) => setSite({ ...site, accentColor: e.target.value })}
               style={{ width: 56, height: 36, borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", cursor: "pointer" }}
             />

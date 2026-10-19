@@ -28,7 +28,7 @@ export default async function BlogPostOgImage({ params }: { params: Promise<{ sl
           justifyContent: "space-between",
           padding: "72px 80px",
           background: "#0b0f19",
-          backgroundImage: `radial-gradient(circle at 20% 15%, ${BRAND.subtle}, transparent 55%), radial-gradient(circle at 85% 90%, rgba(139,92,246,0.14), transparent 55%)`,
+          backgroundImage: `radial-gradient(circle at 20% 15%, ${BRAND.subtle}, transparent 55%), radial-gradient(circle at 85% 90%, rgba(var(--brand-rgb), 0.14), transparent 55%)`,
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>

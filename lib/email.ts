@@ -1,3 +1,4 @@
+import { EMAIL_COLORS } from "@/lib/theme";
 import nodemailer from "nodemailer";
 import { createHmac } from "node:crypto";
 
@@ -150,7 +151,7 @@ export async function sendTestimonialNotificationEmail(testimonial: SendTestimon
   const html = emailShell({
     title: "New Testimonial Submitted",
     bodyHtml: `
-      ${badge("New Testimonial Submitted", "#ede9fe", "#7c3aed")}
+      ${badge("New Testimonial Submitted", EMAIL_COLORS.brandTint, EMAIL_COLORS.brandDeep)}
       <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A new review requires your approval</h1>
       <p style="margin:0 0 8px;font-size:15px;color:#334155;line-height:1.6;font-style:italic;background:#f1f5f9;border-radius:10px;padding:16px 20px;text-align:left;">
         &ldquo;${escapeHtml(testimonial.quote)}&rdquo;
@@ -159,7 +160,7 @@ export async function sendTestimonialNotificationEmail(testimonial: SendTestimon
         detailRow("Author", escapeHtml(testimonial.name)),
         detailRow("Role &amp; Company", `${escapeHtml(testimonial.role)}${testimonial.company ? ` at ${escapeHtml(testimonial.company)}` : ""}`),
         detailRow("Rating", `${"&#9733;".repeat(testimonial.rating)} (${testimonial.rating}/5)`),
-        testimonial.avatarUrl ? detailRow("Avatar URL", `<a href="${escapeHtml(testimonial.avatarUrl)}" style="color:#7c3aed;">${escapeHtml(testimonial.avatarUrl)}</a>`) : "",
+        testimonial.avatarUrl ? detailRow("Avatar URL", `<a href="${escapeHtml(testimonial.avatarUrl)}" style="color:${EMAIL_COLORS.brandDeep};">${escapeHtml(testimonial.avatarUrl)}</a>`) : "",
       ].filter(Boolean).join(""))}
       ${twoButtonRow(approveUrl, "Approve & Publish", "#10b981", rejectUrl, "Reject", "#ef4444")}
     `,
@@ -193,7 +194,7 @@ export async function sendFeedbackNotificationEmail(feedback: SendFeedbackEmailP
   const html = emailShell({
     title: "New Feedback",
     bodyHtml: `
-      ${badge("New Feedback", "#ede9fe", "#7c3aed")}
+      ${badge("New Feedback", EMAIL_COLORS.brandTint, EMAIL_COLORS.brandDeep)}
       <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A user submitted feedback</h1>
       ${detailsBlock([
         detailRow("From", `${escapeHtml(feedback.userName)} (${escapeHtml(feedback.userEmail)})`),
@@ -236,7 +237,7 @@ export async function sendWithdrawalRequestNotificationEmail(withdrawal: SendWit
   const html = emailShell({
     title: "New Withdrawal Request",
     bodyHtml: `
-      ${badge("New Withdrawal Request", "#ede9fe", "#7c3aed")}
+      ${badge("New Withdrawal Request", EMAIL_COLORS.brandTint, EMAIL_COLORS.brandDeep)}
       <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A seller has requested a payout</h1>
       ${detailsBlock([
         detailRow("Requested by", `${escapeHtml(withdrawal.userName)} (${escapeHtml(withdrawal.userEmail)})`),
@@ -279,7 +280,7 @@ export async function sendScriptAccessRequestNotificationEmail(req: SendScriptAc
   const html = emailShell({
     title: "Full Script Preview Requested",
     bodyHtml: `
-      ${badge("Full Script Preview Requested", "#ede9fe", "#7c3aed")}
+      ${badge("Full Script Preview Requested", EMAIL_COLORS.brandTint, EMAIL_COLORS.brandDeep)}
       <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A user wants scripts enabled in their template preview</h1>
       ${detailsBlock([
         detailRow("Requested by", `${escapeHtml(req.userName)} (${escapeHtml(req.userEmail)})`),
@@ -325,7 +326,7 @@ export async function sendCommerceStripeAccessRequestNotificationEmail(req: Send
   const html = emailShell({
     title: "Platform Stripe Requested",
     bodyHtml: `
-      ${badge("Platform Stripe Requested", "#ede9fe", "#7c3aed")}
+      ${badge("Platform Stripe Requested", EMAIL_COLORS.brandTint, EMAIL_COLORS.brandDeep)}
       <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">An org wants platform-hosted Stripe for Commerce</h1>
       ${detailsBlock([
         detailRow("Organization", escapeHtml(req.organizationName)),
@@ -374,7 +375,7 @@ export async function sendCommerceWithdrawalRequestNotificationEmail(req: SendCo
   const html = emailShell({
     title: "New Commerce Withdrawal Request",
     bodyHtml: `
-      ${badge("New Commerce Withdrawal Request", "#ede9fe", "#7c3aed")}
+      ${badge("New Commerce Withdrawal Request", EMAIL_COLORS.brandTint, EMAIL_COLORS.brandDeep)}
       <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A Commerce wallet payout has been requested</h1>
       ${detailsBlock([
         detailRow("Organization", escapeHtml(req.organizationName)),

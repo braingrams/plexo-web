@@ -1,3 +1,4 @@
+import { EMAIL_COLORS } from "@/lib/theme";
 import { darken } from "@/lib/color";
 import { decryptMaildripKey } from "@/lib/crypto";
 import { logEmailDelivery, type EmailDeliveryContext } from "./logEmail";
@@ -116,8 +117,8 @@ export function emailShell(input: {
   footerHtml?: string;
   brand?: EmailBrand;
 }): string {
-  const accent = input.brand?.color ?? "#8b5cf6";
-  const accentDeep = input.brand?.color ? darken(accent, 0.12) : "#7c3aed";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
+  const accentDeep = input.brand?.color ? darken(accent, 0.12) : EMAIL_COLORS.brandDeep;
   const brandName = input.brand?.name ?? "Plexo";
   // Plexo's own default mark uses app/icon.tsx's real rendered PNG (already hosted at this
   // exact URL -- see app/layout.tsx's JSON-LD logo field for the same reference) rather than
