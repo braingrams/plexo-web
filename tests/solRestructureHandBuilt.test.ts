@@ -34,7 +34,7 @@ describe("SOL restructuring a hand-built template section (published SDK)", () =
     expect(parsed.commands).toHaveLength(3);
     const out = applyCommands(pages(), ds, parsed.commands!);
     expect(out.results.every((r) => r.ok)).toBe(true);
-    const grid = (out.pages[0].rootNode.children![0].children as Array<{ id: string; styles: Record<string, unknown>; children: Array<{ id: string; content?: string; responsive?: unknown }> }>)[0];
+    const grid = (out.pages[0].rootNode.children![0].children as unknown as Array<{ id: string; styles: Record<string, unknown>; children: Array<{ id: string; content?: string; responsive?: unknown }> }>)[0];
     expect(grid.styles.gridColumns).toBe(3);
     expect(grid.children.map((c) => c.id).slice(0, 2)).toEqual(["headline", "photo"]);
     expect(grid.children).toHaveLength(3);
