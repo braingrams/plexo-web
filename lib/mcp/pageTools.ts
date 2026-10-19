@@ -4,6 +4,7 @@ import { catalogSchema, createDefaultDesignSystem, describeDesign } from "@chari
 import type { resolveUser } from "@/lib/auth/resolveUser";
 import { BlogSite, Template } from "@/lib/db/contentEntities";
 import { hasBlogMarker, type BlogMarkerName } from "@/lib/pub/blogLayoutRender";
+import { resolveDesignSystem } from "@/lib/v2/designSystemStore";
 import { blankV2Design, designFormatOf, parseV2Design } from "@/lib/v2/design";
 import {
   PageToolError,
@@ -181,7 +182,7 @@ async function describeBlogLayout(resolved: ResolvedUser, args: { templateId?: u
       message: "This layout was built in the classic editor. blog_layout_edit with startFresh:true replaces it with a visual-editor layout (ask the owner first); get_blog_layout still reads it.",
     };
   }
-  const parsed = parseV2Design(row.draftJson ?? row.designJson);
+  const parsed = parseV2Design(await resolveDesignSystem(row.draftJson ?? row.designJson));
   if (!parsed.ok) throw new PageToolError(`I can't read this blog layout (${parsed.error}).`);
   const summary = describeDesign(parsed.design.pages, parsed.design.designSystem ?? createDefaultDesignSystem());
   return {

@@ -73,13 +73,13 @@ describe("parseV2Design", () => {
     const kept = parseV2Design({ ...blankV2Design(), designSystem: custom }) as { design: { designSystem?: { name: string } } };
     expect(kept.design.designSystem?.name).toBe("Acme");
   });
-  it("keeps a design system brought in from Strata (hundreds of tokens and variants), and still refuses an absurd one", () => {
+  it("keeps a design system brought in from Strata (thousands of tokens and variants) and a page far past the old 120 KB limit, and still refuses an absurd one", () => {
     const big = createDefaultDesignSystem();
     big.tokens = [...big.tokens, ...Array.from({ length: 1400 }, (_, i) => ({ key: `--color-strata-${i}`, name: `Strata ${i}`, value: "#123456", type: "color", unit: null, layer: "brand" as const, comment: "from Strata" }))];
     expect(JSON.stringify(big).length).toBeGreaterThan(120_000);
     expect(parseV2Design({ ...blankV2Design(), designSystem: big })).toMatchObject({ ok: true });
-    const absurd = { ...big, tokens: [...big.tokens, ...Array.from({ length: 6000 }, (_, i) => ({ ...big.tokens[0], key: `--x-${i}` }))] };
-    expect((parseV2Design({ ...blankV2Design(), designSystem: absurd }) as { error: string }).error).toMatch(/too large/);
+    const absurd = { ...big, tokens: [...big.tokens, ...Array.from({ length: 40_000 }, (_, i) => ({ ...big.tokens[0], key: `--x-${i}` }))] };
+    expect((parseV2Design({ ...blankV2Design(), designSystem: absurd }) as { error: string }).error).toMatch(/larger than Plexo can save/);
   });
   it("rejects with plain messages", () => {
     expect(parseV2Design({ body: { rows: [] } })).toMatchObject({ ok: false });
@@ -87,9 +87,9 @@ describe("parseV2Design", () => {
     const two = parseV2Design({ format: V2_FORMAT, pages: [page(), { ...page(), id: "p2" }] });
     expect(two.ok).toBe(false);
     expect(parseV2Design(design({ ...page(), rootNode: { id: "r", type: "bogus", name: "x", styles: {} } as never }))).toMatchObject({ ok: false });
-    const huge = parseV2Design(design(page(node("paragraph", { text: "x".repeat(130_000) }, "big"))));
+    const huge = parseV2Design(design(page(node("paragraph", { text: "x".repeat(5_100_000) }, "big"))));
     expect(huge).toMatchObject({ ok: false });
-    expect((huge as { error: string }).error).toMatch(/too large/);
+    expect((huge as { error: string }).error).toMatch(/larger than Plexo can save/);
   });
 });
 

@@ -53,7 +53,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const failures: Record<string, string> = {};
     const refused = (p: string, status: number, body: string) => {
       console.error(`[stock] ${p} search failed: HTTP ${status} ${body.slice(0, 200)}`);
-      failures[p] = status === 429 || /rate limit/i.test(body) ? `${p[0].toUpperCase()}${p.slice(1)} has reached its hourly limit. Try Pexels or Pixabay, or try again later.` : `${p[0].toUpperCase()}${p.slice(1)} isn't responding right now. Try Pexels or Pixabay.`;
+      const name = `${p[0].toUpperCase()}${p.slice(1)}`;
+      // 401 = the key Plexo holds for this service is wrong or revoked: not something the site owner can fix, and not "try later".
+      if (status === 401) failures[p] = `${name} isn't set up properly on Plexo yet, so its photos can't be shown. Try Pexels or Pixabay.`;
+      else failures[p] = status === 429 || /rate limit/i.test(body) ? `${p[0].toUpperCase()}${p.slice(1)} has reached its hourly limit. Try Pexels or Pixabay, or try again later.` : `${p[0].toUpperCase()}${p.slice(1)} isn't responding right now. Try Pexels or Pixabay.`;
     };
 
     // Query and fetch all providers concurrently using Promise.all

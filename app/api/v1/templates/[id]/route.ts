@@ -7,6 +7,7 @@ import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { compileTemplateWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
 import { snapshotTemplateRevision } from "@/lib/templateRevisions";
+import { externalizeDesignSystem, resolveDesignSystem } from "@/lib/v2/designSystemStore";
 import { designFormatOf, isV2Design, parseV2Design, V1_PAGE_NEEDS_CLASSIC_PAYLOAD, V2_PAGE_NEEDS_NEW_TOOLS } from "@/lib/v2/design";
 
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     isBlogLayout: template.isBlogLayout ?? false,
     parentTemplateId: template.parentId ?? null,
     slug: template.slug ?? null,
-    designJson: template.designJson,
+    designJson: await resolveDesignSystem(template.designJson),
     editableUrl: `${baseAppUrl}/dashboard/templates/${template.id}`,
     publishedUrl,
   });
@@ -125,7 +126,8 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
     designJson = parsed.design;
     try {
-      compiledHtml = await compileTemplateWithSiteLayout({ ...existing, name }, designJson);
+      compiledHtml = await compileTemplateWithSiteLayout({ ...existing, name }, await resolveDesignSystem(parsed.design));
+      designJson = await externalizeDesignSystem(parsed.design); // a big brand is stored once, outside the row
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "This page couldn't be built." }, { status: 400 });
     }

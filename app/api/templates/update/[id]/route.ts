@@ -9,6 +9,7 @@ import { Template } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
 import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutDynamo";
 import { designFormatOf, parseV2Design } from "@/lib/v2/design";
+import { externalizeDesignSystem, resolveDesignSystem } from "@/lib/v2/designSystemStore";
 
 type UpdateTemplateBody = {
   designJson?: unknown;
@@ -64,12 +65,15 @@ export async function POST(
     const parsed = parseV2Design(body.designJson);
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
     let draftHtml: string;
+    let stored: typeof parsed.design;
     try {
-      draftHtml = await compileTemplateWithSiteLayout(existing, parsed.design);
+      // The page is built with the real brand (loaded if it's a reference), and stored with a big brand moved out of the row.
+      draftHtml = await compileTemplateWithSiteLayout(existing, await resolveDesignSystem(parsed.design));
+      stored = await externalizeDesignSystem(parsed.design);
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "This page couldn't be built." }, { status: 400 });
     }
-    sanitizedPayload = { designJson: parsed.design, compiledHtml: draftHtml };
+    sanitizedPayload = { designJson: stored, compiledHtml: draftHtml };
   } else {
     try {
       sanitizedPayload = sanitizePlexoPayload({

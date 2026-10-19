@@ -1,3 +1,4 @@
+import { resolveDesignSystem } from "@/lib/v2/designSystemStore";
 import type { TemplateKind } from "@/lib/db/contentEntities";
 
 import { compileDesignJsonForKind } from "@/lib/compileForKind";
@@ -31,8 +32,10 @@ export type CompileTemplateContext = {
  */
 export async function compileTemplate(template: CompilableTemplate, ctx: CompileTemplateContext = {}): Promise<string> {
   if (designFormatOf(template) === "v2") {
-    if (template.kind === "EMAIL") return compileV2Email(template.designJson, { name: template.name ?? "" });
-    return compileV2Design(template.designJson, {
+    // A big brand is kept in storage and the row holds a reference: bring it back before compiling.
+    const designJson = await resolveDesignSystem(template.designJson);
+    if (template.kind === "EMAIL") return compileV2Email(designJson, { name: template.name ?? "" });
+    return compileV2Design(designJson, {
       rootTemplateId: ctx.rootTemplateId ?? template.id ?? "",
       pageTemplateId: template.id ?? "",
       name: template.name ?? "",

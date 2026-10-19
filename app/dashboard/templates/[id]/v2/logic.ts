@@ -1,6 +1,6 @@
 import type { DesignSystem, PageDefinition } from "@charisol/plexo-sdk/v2/compile";
 
-import { V2_FORMAT, type V2Design, type V2Meta } from "@/lib/v2/design";
+import { V2_FORMAT, type DesignSystemRef, type V2Design, type V2Meta } from "@/lib/v2/design";
 
 // The decisions the template editor makes for a new-editor (V2) page, kept free of React so they
 // can be tested: what a save sends, how the site's pages are listed, and "save first, then move".
@@ -20,6 +20,8 @@ export function buildV2SavePayload(input: {
    * save; only the untouched built-in one (~84 KB) is left out and the server falls back to it.
    */
   includeDesignSystem: boolean;
+  /** A big brand already in storage: the page is saved with this reference instead of carrying the brand itself. */
+  designSystemRef?: DesignSystemRef;
   customJs?: string;
   meta?: V2Meta;
 }): V2Design {
@@ -28,7 +30,7 @@ export function buildV2SavePayload(input: {
   return {
     format: V2_FORMAT,
     pages: [input.page],
-    ...(input.includeDesignSystem && input.designSystem ? { designSystem: input.designSystem } : {}),
+    ...(input.designSystemRef ? { designSystemRef: input.designSystemRef } : input.includeDesignSystem && input.designSystem ? { designSystem: input.designSystem } : {}),
     ...(customJs ? { customJs } : {}),
     ...(meta ? { meta } : {}),
   };
