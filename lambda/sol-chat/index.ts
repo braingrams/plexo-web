@@ -1,6 +1,7 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
 import { prepareMessagesTurn, prepareConfirmTurn, type StreamFrame, type TurnEmitter } from "@/lib/ai/solChatHandler";
+import { prepareAssist, type AssistFrame } from "@/lib/ai/pageAssist";
 import { prepareStreamedGeneration, type GenerationFrame } from "@/lib/ai/streamGeneration";
 import { loadSecretsFromSsm } from "@/lib/ssmEnv";
 import { resolveSessionUser, parseCookies } from "./sessionAuth";
@@ -124,6 +125,8 @@ const MESSAGES_RE = /^\/api\/v1\/sol\/chat\/conversations\/([^/]+)\/messages\/?$
 // AI page generation, streamed (lib/ai/streamGeneration.ts) — its own CloudFront path
 // (api/v1/ai/stream/*) pointed at this same streaming Lambda.
 const AI_GENERATE_RE = /^\/api\/v1\/ai\/stream\/generate\/?$/;
+// SOL inside the visual editor (lib/ai/pageAssist.ts) — same CloudFront path, same Lambda.
+const AI_ASSIST_RE = /^\/api\/v1\/ai\/stream\/assist\/?$/;
 const CONFIRM_RE = /^\/api\/v1\/sol\/chat\/conversations\/([^/]+)\/messages\/([^/]+)\/confirm\/?$/;
 
 export const handler = awslambda.streamifyResponse(async (event: APIGatewayProxyEventV2, responseStream: awslambda.HttpResponseStream) => {
@@ -147,6 +150,11 @@ export const handler = awslambda.streamifyResponse(async (event: APIGatewayProxy
 
   if (AI_GENERATE_RE.test(request.path)) {
     await handleAiGenerate(request, responseStream);
+    return;
+  }
+
+  if (AI_ASSIST_RE.test(request.path)) {
+    await handleAiAssist(request, responseStream);
     return;
   }
 
@@ -218,5 +226,28 @@ async function handleAiGenerate(request: ParsedRequest, responseStream: awslambd
     // Only reachable before the stream opened (run() reports its own failures as frames).
     console.error("AI generation failed before streaming began:", err);
     sendJson(responseStream, 500, { error: "Something went wrong starting the AI. Try again." });
+  }
+}
+
+async function handleAiAssist(request: ParsedRequest, responseStream: awslambda.HttpResponseStream): Promise<void> {
+  try {
+    await ensureSecrets();
+    const user = await resolveSessionUser(request.cookies);
+    if (!user) {
+      sendJson(responseStream, 401, { error: "You're signed out. Sign in again, then try once more." });
+      return;
+    }
+    const prepared = await prepareAssist(user.userId, request.body);
+    if ("refused" in prepared) {
+      sendJson(responseStream, prepared.refused.status, { error: prepared.refused.error });
+      return;
+    }
+    const httpStream = openNdjsonStream(responseStream);
+    await prepared.run((frame: AssistFrame) => httpStream.write(`${JSON.stringify(frame)}\n`));
+    httpStream.end();
+  } catch (err) {
+    // Only reachable before the stream opened (run() reports its own failures as frames).
+    console.error("SOL page assistant failed before streaming began:", err);
+    sendJson(responseStream, 500, { error: "Something went wrong starting SOL. Try again." });
   }
 }
