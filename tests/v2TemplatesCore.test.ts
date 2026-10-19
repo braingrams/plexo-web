@@ -121,8 +121,9 @@ describe("compileTemplate dispatcher", () => {
     expect(html).not.toContain("onerror");
   });
 
-  it("v2 email is refused (email stays classic)", async () => {
-    await expect(compileTemplate({ designFormat: "v2", designJson: blankV2Design(), kind: "EMAIL" })).rejects.toBeInstanceOf(V2DesignError);
+  it("v2 email compiles to a real email document", async () => {
+    const html = await compileTemplate({ designFormat: "v2", designJson: blankV2Design(), kind: "EMAIL" });
+    expect(String(html)).toMatch(/^<!doctype html>/);
   });
 
   it("v2 bad design -> plain error", async () => {

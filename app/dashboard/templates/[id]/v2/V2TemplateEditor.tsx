@@ -32,6 +32,8 @@ type Props = {
   rootTemplateId: string;
   initialDesign: V2Design;
   readOnly: boolean;
+  /** An email is edited in the editor's email mode: only what email apps can draw, and no web-page details (address, search, scripts). */
+  kind: "EMAIL" | "LANDING_PAGE";
   commentMode: boolean;
   onRequestComment: (target: CommentTarget) => void;
   stockKeys: { unsplash?: string; pexels?: string; pixabay?: string };
@@ -330,12 +332,14 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
               },
               onDelete: readOnly ? undefined : (id) => deletePage(id),
             }}
-            shell={{ onExit: props.onBack, exitLabel: "Back to site" }}
+            mode={props.kind === "EMAIL" ? "email" : undefined}
+            shell={{ onExit: props.onBack, exitLabel: props.kind === "EMAIL" ? "Back to emails" : "Back to site" }}
             features={{ pageSwitcher: false, viewSwitch: false, headerSol: false, codeView: false }}
             pageSettings={
               <PageSettings
                 name={name}
                 slug={slug}
+                email={props.kind === "EMAIL"}
                 meta={meta}
                 customJs={customJs}
                 readOnly={readOnly}

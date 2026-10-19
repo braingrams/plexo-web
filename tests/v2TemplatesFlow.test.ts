@@ -188,7 +188,7 @@ describe("new-template creation honours TEMPLATES_V2_NEW", () => {
     expect(row.designJson.body).toBeDefined();
   });
 
-  it("flag on: a new landing page is a blank v2 page that already compiles; email stays v1", async () => {
+  it("flag on: a new landing page is a blank v2 page that already compiles; an email starts in v2 too", async () => {
     process.env.TEMPLATES_V2_NEW = "true";
     const r = await create({ name: "Site B", kind: "LANDING_PAGE" });
     const row = h.templates.get(r.json.template.id)!;
@@ -196,7 +196,7 @@ describe("new-template creation honours TEMPLATES_V2_NEW", () => {
     expect(row.designJson.format).toBe(V2_FORMAT);
     expect(row.compiledHtml).toMatch(/^<!doctype html>/);
     const e = await create({ name: "Mail", kind: "EMAIL" });
-    expect(h.templates.get(e.json.template.id)!.designFormat ?? "v1").toBe("v1");
+    expect(h.templates.get(e.json.template.id)!.designFormat).toBe("v2");
   });
 
   it("flag on: a page from an SDK page template; sub-pages follow their site's format", async () => {
@@ -220,7 +220,7 @@ describe("new-template creation honours TEMPLATES_V2_NEW", () => {
     const api = await create({ name: "Api", kind: "LANDING_PAGE", designFormat: "v2" }, { authorization: "Bearer plx_key" });
     expect(h.templates.get(api.json.template.id)!.designFormat ?? "v1").toBe("v1");
     const mail = await create({ name: "Mail2", kind: "EMAIL", designFormat: "v2" });
-    expect(mail.status).toBe(400);
+    expect(mail.status).toBe(201);
   });
 });
 

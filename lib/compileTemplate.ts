@@ -1,8 +1,8 @@
 import type { TemplateKind } from "@/lib/db/contentEntities";
 
 import { compileDesignJsonForKind } from "@/lib/compileForKind";
-import { compileV2Design, type V2LayoutSections } from "@/lib/v2/compile";
-import { designFormatOf, V2DesignError } from "@/lib/v2/design";
+import { compileV2Design, compileV2Email, type V2LayoutSections } from "@/lib/v2/compile";
+import { designFormatOf } from "@/lib/v2/design";
 
 /** Whatever carries a design: a Template row, or a payload about to become one. */
 export type CompilableTemplate = {
@@ -26,12 +26,12 @@ export type CompileTemplateContext = {
  *     compiler + V1 sanitiser for landing pages; MJML for email). V1 designJson must already have
  *     any header/footer rows spliced in (siteLayoutCore.compileTemplateWithSiteLayout does that).
  *   - "v2": SDK compilePageToHtml -> sanitizeV2Html -> owner script/head details (lib/v2/compile.ts).
- *     V2 output never touches V1's sanitiser. EMAIL stays V1 forever, so a V2 email is refused.
+ *     V2 output never touches V1's sanitiser. A V2 EMAIL goes through the SDK's email compiler instead (tables + inline styles).
  * Throws on a design that can't be compiled (V2DesignError messages are safe to show the owner).
  */
 export async function compileTemplate(template: CompilableTemplate, ctx: CompileTemplateContext = {}): Promise<string> {
   if (designFormatOf(template) === "v2") {
-    if (template.kind === "EMAIL") throw new V2DesignError("Email templates use the classic editor.");
+    if (template.kind === "EMAIL") return compileV2Email(template.designJson, { name: template.name ?? "" });
     return compileV2Design(template.designJson, {
       rootTemplateId: ctx.rootTemplateId ?? template.id ?? "",
       pageTemplateId: template.id ?? "",

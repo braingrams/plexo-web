@@ -1,5 +1,6 @@
 import { userContentOrigin } from "@/lib/storage";
 import {
+  compilePageToEmail,
   compilePageToHtml,
   prepareCustomJs,
   sanitizeV2Html,
@@ -137,6 +138,26 @@ export function compileV2Design(rawDesign: unknown, ctx: CompileV2Context): stri
 
   if (html.length > MAX_V2_HTML_CHARS) {
     throw new V2DesignError("This page is too large to publish. Remove some content, or use pictures from your media library instead of embedding them.");
+  }
+  return html;
+}
+
+/**
+ * V2 email design JSON -> the email's HTML document (nested tables, inline styles, a dark-mode version for the apps that
+ * follow the phone's setting), stored as Template.compiledHtml like any other template. The compiler escapes everything
+ * and only writes what email apps can draw, so there is no page sanitiser or owner script here; merge tags such as
+ * {{first_name}} are left for the sender to fill in. Throws V2DesignError with a plain message for a design that can't be built.
+ */
+export function compileV2Email(rawDesign: unknown, ctx: { name: string; subject?: string; preheader?: string }): string {
+  const design = requireV2Design(rawDesign);
+  let html: string;
+  try {
+    html = compilePageToEmail(design.pages[0], { designSystem: design.designSystem, title: ctx.subject || ctx.name, preheader: ctx.preheader }).html;
+  } catch (err) {
+    throw new V2DesignError(`This email couldn't be built: ${err instanceof Error ? err.message : "something in its design isn't valid"}.`);
+  }
+  if (html.length > MAX_V2_HTML_CHARS) {
+    throw new V2DesignError("This email is too large to send. Gmail cuts off long emails, so remove some content or use smaller pictures.");
   }
   return html;
 }

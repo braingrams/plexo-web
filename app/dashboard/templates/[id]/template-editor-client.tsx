@@ -1189,6 +1189,7 @@ export function TemplateEditorClient({
               setCommentsOpen(true);
             }}
             stockKeys={{ unsplash: unsplashKey, pexels: pexelsKey, pixabay: pixabayKey }}
+            kind={templateKind}
             headerRight={headerRightNode}
             onPublish={handlePublish}
             onBack={() => router.push(`/dashboard/templates/${rootTemplateId}/detail`)}
