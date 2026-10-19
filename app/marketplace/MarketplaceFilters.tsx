@@ -2,12 +2,11 @@
 
 import { useRouter, usePathname } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
-import { Search, X, Sparkles, Layout, Mail, Layers, Filter } from "lucide-react";
+import { Search, X, Layout, Mail, Layers } from "lucide-react";
 import { CustomSelect } from "@/app/_components/CustomSelect";
 
 export function MarketplaceFilters({
   categories,
-  categoryCounts,
   totalCount,
   current,
   onFilterChange,
@@ -58,10 +57,6 @@ export function MarketplaceFilters({
     [current, pathname, router, searchValue, onFilterChange]
   );
 
-  const hasActiveFilters = Boolean(
-    current.category || current.kind || current.free || current.q
-  );
-
   const clearAllFilters = () => {
     setSearchValue("");
     if (onFilterChange) {
@@ -73,60 +68,23 @@ export function MarketplaceFilters({
     });
   };
 
+  const seg = (on: boolean) =>
+    `flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
+      on ? "bg-[var(--brand)] text-white shadow-sm" : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
+    }`;
+  const kindLabel = current.kind === "LANDING_PAGE" ? "Web pages" : current.kind === "EMAIL" ? "Emails" : null;
+  const priceLabel = current.free === "true" ? "Free" : current.free === "false" ? "Paid" : null;
+  const chips: Array<{ label: string; clear: () => void }> = [
+    ...(current.q ? [{ label: `“${current.q}”`, clear: () => { setSearchValue(""); updateFilters({ q: undefined }); } }] : []),
+    ...(kindLabel ? [{ label: kindLabel, clear: () => updateFilters({ kind: undefined }) }] : []),
+    ...(priceLabel ? [{ label: priceLabel, clear: () => updateFilters({ free: undefined }) }] : []),
+    ...(current.category ? [{ label: current.category, clear: () => updateFilters({ category: undefined }) }] : []),
+  ];
+
   return (
-    <div className="flex flex-col gap-5 w-full">
-      {/* Horizontal Category Navigation Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-        <button
-          type="button"
-          onClick={() => updateFilters({ category: undefined })}
-          className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
-            !current.category
-              ? "bg-[var(--brand)] text-white shadow-lg shadow-[var(--brand-glow)] scale-[1.02]"
-              : "bg-[var(--surface)] text-[var(--text-muted)] border border-[var(--surface-border)] hover:border-[var(--brand-glow)] hover:text-[var(--text-main)]"
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>All Templates</span>
-          {totalCount !== undefined && (
-            <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              !current.category ? "bg-white/20 text-white" : "bg-[var(--surface-border)] text-[var(--text-muted)]"
-            }`}>
-              {totalCount}
-            </span>
-          )}
-        </button>
-
-        {categories.map((cat) => {
-          const isActive = current.category === cat;
-          const count = categoryCounts ? categoryCounts[cat] : undefined;
-          return (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => updateFilters({ category: isActive ? undefined : cat })}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium whitespace-nowrap transition-all duration-200 ${
-                isActive
-                  ? "bg-[var(--brand)] text-white shadow-lg shadow-[var(--brand-glow)] scale-[1.02]"
-                  : "bg-[var(--surface)] text-[var(--text-muted)] border border-[var(--surface-border)] hover:border-[var(--brand-glow)] hover:text-[var(--text-main)]"
-              }`}
-            >
-              <span>{cat}</span>
-              {count !== undefined && (
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  isActive ? "bg-white/20 text-white" : "bg-[var(--surface-border)] text-[var(--text-muted)]"
-                }`}>
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Main Controls Panel */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--surface-border)] backdrop-blur-xl shadow-xl">
-        {/* Search Bar */}
+    <div className={`flex flex-col gap-3 w-full transition-opacity ${isPending ? "opacity-70" : ""}`}>
+      {/* Row 1: say what you're looking for */}
+      <div className="flex flex-col sm:flex-row gap-3">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -134,111 +92,83 @@ export function MarketplaceFilters({
           }}
           className="relative flex-1"
         >
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" />
           <input
-            type="text"
+            type="search"
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
-            placeholder="Search templates by name, keyword or design tag..."
-            className="w-full pl-10 pr-9 py-2.5 rounded-xl bg-[var(--bg-1)] border border-[var(--surface-border)] text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand-glow)] transition-all"
+            placeholder="Search by name or what it's for, like “restaurant” or “portfolio”"
+            aria-label="Search templates"
+            className="w-full pl-11 pr-4 py-3 rounded-xl bg-[var(--surface)] border border-[var(--surface-border)] text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand-glow)] transition-all"
           />
-          {searchValue ? (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchValue("");
-                updateFilters({ q: undefined });
-              }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          ) : (
-            <kbd className="absolute right-3.5 top-1/2 -translate-y-1/2 hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono text-[var(--text-faint)] bg-[var(--surface-border)] border border-[var(--surface-border)]">
-              /
-            </kbd>
-          )}
         </form>
-
-        {/* Filter Controls & Segmented Toggles */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Kind Toggle (All / Landing / Email) */}
-          <div className="flex items-center p-1 rounded-xl bg-[var(--bg-1)] border border-[var(--surface-border)] text-xs">
-            <button
-              type="button"
-              onClick={() => updateFilters({ kind: undefined })}
-              className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
-                !current.kind
-                  ? "bg-[var(--brand)] text-white shadow-sm"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
-              }`}
-            >
-              All Types
-            </button>
-            <button
-              type="button"
-              onClick={() => updateFilters({ kind: "LANDING_PAGE" })}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all ${
-                current.kind === "LANDING_PAGE"
-                  ? "bg-[var(--brand)] text-white shadow-sm"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
-              }`}
-            >
-              <Layout className="w-3 h-3" />
-              Landing
-            </button>
-            <button
-              type="button"
-              onClick={() => updateFilters({ kind: "EMAIL" })}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition-all ${
-                current.kind === "EMAIL"
-                  ? "bg-[var(--brand)] text-white shadow-sm"
-                  : "text-[var(--text-muted)] hover:text-[var(--text-main)]"
-              }`}
-            >
-              <Mail className="w-3 h-3" />
-              Email
-            </button>
-          </div>
-
-          {/* Pricing Select */}
-          <div style={{ minWidth: 130 }}>
-            <CustomSelect
-              value={current.free ?? ""}
-              onChange={(value) => updateFilters({ free: value || undefined })}
-              options={[
-                { label: "All Prices", value: "" },
-                { label: "Free Only", value: "true" },
-                { label: "Paid Only", value: "false" },
-              ]}
-            />
-          </div>
-
-          {/* Sort Select */}
-          <div style={{ minWidth: 150 }}>
-            <CustomSelect
-              value={current.sort}
-              onChange={(value) => updateFilters({ sort: value })}
-              options={[
-                { label: "Most Popular", value: "popular" },
-                { label: "Latest Released", value: "latest" },
-              ]}
-            />
-          </div>
-
-          {/* Clear Filters CTA */}
-          {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={clearAllFilters}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--brand-glow)] bg-[var(--brand-subtle)] text-xs font-medium text-[var(--brand)] hover:bg-[var(--brand-glow)] transition-all"
-            >
-              <X className="w-3.5 h-3.5" />
-              Reset Filters
-            </button>
-          )}
+        <div className="sm:w-52">
+          <CustomSelect
+            value={current.sort}
+            onChange={(value) => updateFilters({ sort: value })}
+            options={[
+              { label: "Newest first", value: "latest" },
+              { label: "Most used", value: "popular" },
+            ]}
+          />
         </div>
       </div>
+
+      {/* Row 2: narrow it down — everything on one wrapping row, nothing scrolls sideways */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div role="group" aria-label="Type" className="flex items-center p-1 rounded-xl bg-[var(--surface)] border border-[var(--surface-border)]">
+          <button type="button" aria-pressed={!current.kind} onClick={() => updateFilters({ kind: undefined })} className={seg(!current.kind)}>
+            <Layers className="w-3.5 h-3.5" /> All
+          </button>
+          <button type="button" aria-pressed={current.kind === "LANDING_PAGE"} onClick={() => updateFilters({ kind: "LANDING_PAGE" })} className={seg(current.kind === "LANDING_PAGE")}>
+            <Layout className="w-3.5 h-3.5" /> Web pages
+          </button>
+          <button type="button" aria-pressed={current.kind === "EMAIL"} onClick={() => updateFilters({ kind: "EMAIL" })} className={seg(current.kind === "EMAIL")}>
+            <Mail className="w-3.5 h-3.5" /> Emails
+          </button>
+        </div>
+
+        <div role="group" aria-label="Price" className="flex items-center p-1 rounded-xl bg-[var(--surface)] border border-[var(--surface-border)]">
+          {([["", "Any price"], ["true", "Free"], ["false", "Paid"]] as const).map(([value, label]) => (
+            <button key={value} type="button" aria-pressed={(current.free ?? "") === value} onClick={() => updateFilters({ free: value || undefined })} className={seg((current.free ?? "") === value)}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {categories.length > 0 && (
+          <div className="min-w-[210px]">
+            <CustomSelect
+              value={current.category ?? ""}
+              onChange={(value) => updateFilters({ category: value || undefined })}
+              options={[
+                { label: "All industries", value: "" },
+                ...[...categories].sort((a, b) => a.localeCompare(b)).map((c) => ({ label: c, value: c })),
+              ]}
+            />
+          </div>
+        )}
+
+        {totalCount !== undefined && (
+          <span className="ml-auto text-xs text-[var(--text-muted)]" aria-live="polite">
+            {totalCount} {totalCount === 1 ? "template" : "templates"}
+          </span>
+        )}
+      </div>
+
+      {/* What is filtered right now, each removable */}
+      {chips.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {chips.map((c) => (
+            <button key={c.label} type="button" onClick={c.clear} className="inline-flex items-center gap-1.5 pl-3 pr-2 py-1 rounded-full bg-[var(--brand-subtle)] border border-[var(--brand-glow)] text-xs font-medium text-[var(--brand)] hover:bg-[var(--brand-glow)] transition-colors" aria-label={`Remove filter ${c.label}`}>
+              {c.label} <X className="w-3 h-3" />
+            </button>
+          ))}
+          <button type="button" onClick={clearAllFilters} className="text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] underline underline-offset-2">
+            Clear all
+          </button>
+        </div>
+      )}
     </div>
   );
 }

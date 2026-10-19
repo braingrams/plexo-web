@@ -103,7 +103,8 @@ export function AppEditor(props: {
   const [designFocus, setDesignFocus] = useState(false);
   useEffect(() => {
     try {
-      setDesignFocus(localStorage.getItem("plexo.design.focus") === "1");
+      // Full screen unless the person turned it off: the design canvas needs the room more than the chat does.
+      setDesignFocus(localStorage.getItem("plexo.design.focus") !== "0");
     } catch {}
   }, []);
   const toggleDesignFocus = useCallback(() => {

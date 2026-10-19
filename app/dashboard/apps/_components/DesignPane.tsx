@@ -2,8 +2,7 @@
 
 import "@charisol/plexo-sdk/dist/plexo-sdk.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { Plus, Trash2, Code2, MessageSquare, ExternalLink, SlidersHorizontal } from "lucide-react";
+import { Plus, Trash2, Code2, MessageSquare, ExternalLink } from "lucide-react";
 import type { V2EditorRef } from "@charisol/plexo-sdk/v2";
 import type { DesignSystem, PageDefinition } from "@charisol/plexo-sdk/v2/compile";
 import { appsApi, ApiError, type DesignSave, type DesignSummary } from "./api";
@@ -384,6 +383,8 @@ export function DesignPane(props: {
       if (props.stockKeys.pexels) headers["x-pexels-key"] = props.stockKeys.pexels;
       if (props.stockKeys.pixabay) headers["x-pixabay-key"] = props.stockKeys.pixabay;
       const res = await fetch(`/api/v1/media/stock?query=${encodeURIComponent(query)}&provider=${encodeURIComponent(provider)}`, { headers });
+      // A failed search says so (the picker shows a plain "couldn't load photos" message) instead of passing for "no results".
+      if (!res.ok) throw new Error("Photo search failed");
       const data = await res.json().catch(() => []);
       return Array.isArray(data) ? data.map((r) => ({ id: r.id, src: r.src, alt: r.alt, credit: r.credit, provider: r.provider })) : [];
     },
@@ -538,7 +539,7 @@ export function DesignPane(props: {
               hideLabel: "Full screen",
               showLabel: "Exit full screen",
             }}
-            headerLeft={
+            pageSettings={
               <PageSettings
                 name={name}
                 route={route}
@@ -665,67 +666,30 @@ function PageSettings(props: {
   onRoute: (v: string) => void;
   onDelete: () => void;
 }) {
-  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-  const open = !!at;
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (!popRef.current?.contains(t) && !buttonRef.current?.contains(t)) setAt(null);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setAt(null);
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  const toggle = () => {
-    if (open) return setAt(null);
-    const r = buttonRef.current?.getBoundingClientRect();
-    setAt({ top: (r?.bottom ?? 40) + 8, left: Math.max(8, Math.min(r?.left ?? 8, window.innerWidth - 328)) });
-  };
   const label = { display: "flex", flexDirection: "column", gap: 4, fontSize: "0.76rem", fontWeight: 600, color: C.muted } as const;
   const field = { ...props.fieldStyle, width: "100%", boxSizing: "border-box", padding: "0.45rem 0.6rem", fontSize: "0.84rem", color: C.text } as const;
 
+  // Shown in the editor's own "Page settings" panel (left rail): no button or popover of its own.
   return (
-    <>
-      <button ref={buttonRef} type="button" title="Page settings" aria-label="Page settings" aria-haspopup="dialog" aria-expanded={open} onClick={toggle} style={{ ...props.fieldStyle, cursor: "pointer", display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
-        <SlidersHorizontal size={14} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, color: C.text }}>
+      <label style={label}>
+        Page name
+        <input aria-label="Page name" value={props.name} onChange={(e) => props.onName(e.target.value)} style={field} />
+      </label>
+      <label style={label}>
+        Page address
+        <input aria-label="Page address" value={props.route} onChange={(e) => props.onRoute(e.target.value)} style={{ ...field, fontFamily: C.mono }} />
+        <span style={{ fontWeight: 400, color: C.faint }}>Use / to make this your home page (it replaces the current one).</span>
+        {props.routeProblem && <span role="alert" style={{ fontWeight: 500, color: C.danger }}>{props.routeProblem}</span>}
+      </label>
+      <button
+        type="button"
+        disabled={!props.canDelete}
+        onClick={props.onDelete}
+        style={{ ...props.fieldStyle, alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6, cursor: props.canDelete ? "pointer" : "default", color: C.danger, padding: "0.4rem 0.7rem" }}
+      >
+        <Trash2 size={14} /> Delete page
       </button>
-      {open &&
-        createPortal(
-          <div ref={popRef} role="dialog" aria-label="Page settings" style={{ position: "fixed", top: at!.top, left: at!.left, zIndex: 1000, width: 320, maxWidth: "calc(100vw - 16px)", boxSizing: "border-box", padding: 14, borderRadius: 12, background: C.panelSolid, color: C.text, border: `1px solid ${C.borderStrong}`, boxShadow: "0 24px 60px -20px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ fontSize: "0.84rem", fontWeight: 700 }}>Page settings</div>
-            <label style={label}>
-              Page name
-              <input aria-label="Page name" value={props.name} onChange={(e) => props.onName(e.target.value)} style={field} />
-            </label>
-            <label style={label}>
-              Page address
-              <input aria-label="Page address" value={props.route} onChange={(e) => props.onRoute(e.target.value)} style={{ ...field, fontFamily: C.mono }} />
-              <span style={{ fontWeight: 400, color: C.faint }}>Use / to make this your home page (it replaces the current one).</span>
-              {props.routeProblem && <span role="alert" style={{ fontWeight: 500, color: C.danger }}>{props.routeProblem}</span>}
-            </label>
-            <button
-              type="button"
-              disabled={!props.canDelete}
-              onClick={() => {
-                setAt(null);
-                props.onDelete();
-              }}
-              style={{ ...props.fieldStyle, alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 6, cursor: props.canDelete ? "pointer" : "default", color: C.danger, padding: "0.4rem 0.7rem" }}
-            >
-              <Trash2 size={14} /> Delete page
-            </button>
-          </div>,
-          document.body,
-        )}
-    </>
+    </div>
   );
 }

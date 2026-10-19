@@ -27,10 +27,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const targetProviders = provider === "all" ? ["unsplash", "pexels", "pixabay"] : [provider];
 
-    // API keys MUST ONLY come from request headers — DO NOT FALL BACK to server environment variables
-    const unsplashKey = (request.headers.get("x-unsplash-key") || "").trim();
-    const pexelsKey = (request.headers.get("x-pexels-key") || "").trim();
-    const pixabayKey = (request.headers.get("x-pixabay-key") || "").trim();
+    // A key sent by the caller (the classic editor's own key) wins; otherwise Plexo's own accounts are used, so the photo
+    // picker works for every signed-in owner without them bringing a key. The keys never leave the server in a response.
+    const unsplashKey = (request.headers.get("x-unsplash-key") || process.env.UNSPLASH_KEY || "").trim();
+    const pexelsKey = (request.headers.get("x-pexels-key") || process.env.PEXELS_KEY || "").trim();
+    const pixabayKey = (request.headers.get("x-pixabay-key") || process.env.PIXABAY_KEY || "").trim();
 
     // Query and fetch all providers concurrently using Promise.all
     const providerPromises = targetProviders.map(async (p): Promise<StockImageResult[]> => {

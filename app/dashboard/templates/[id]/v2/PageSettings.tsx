@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { SlidersHorizontal, Trash2, Undo2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Trash2, Undo2 } from "lucide-react";
 
 import type { V2Meta } from "@/lib/v2/design";
 
-// The one "Page settings" popover in the new editor's top bar: the page's name and address, how
+// The editor's "Page settings" panel (in its left rail, no top-bar button): the page's name and address, how
 // it looks in search and when shared, an owner's own script, and the less common actions. The
 // classic editor kept these in several places; here they are one calm panel.
 
@@ -40,33 +40,16 @@ const hint = { margin: "4px 0 0", fontSize: "0.7rem", color: "rgba(240,242,255,0
 
 export function PageSettings(props: Props) {
   const { slug, readOnly } = props;
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState(props.name);
   const [address, setAddress] = useState(slug ?? "");
   const [error, setError] = useState<string | null>(null);
   const [confirmBack, setConfirmBack] = useState(false);
   const [busy, setBusy] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setName(props.name);
     setAddress(slug ?? "");
   }, [props.name, slug]);
-
-  // Closes on a click outside or Escape.
-  useEffect(() => {
-    if (!open) return;
-    const away = (e: MouseEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
-    };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [open]);
 
   const saveNames = async () => {
     const nextName = name.trim();
@@ -77,22 +60,9 @@ export function PageSettings(props: Props) {
 
   const setMeta = (key: keyof V2Meta, value: string) => props.onMeta({ ...props.meta, [key]: value });
 
+  // Shown inside the editor's own "Page settings" panel (left rail), so there is no button or popover of its own.
   return (
-    <div ref={box} style={{ position: "relative" }}>
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0.4rem 0.7rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: open ? "rgba(255,255,255,0.08)" : "transparent", color: "inherit", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, fontFamily: "inherit" }}
-      >
-        <SlidersHorizontal size={14} /> Page settings
-      </button>
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Page settings"
-          style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 80, width: "min(360px, calc(100vw - 24px))", maxHeight: "min(70vh, 620px)", overflowY: "auto", padding: "1rem", borderRadius: 14, background: "#0d1324", color: "#f0f2ff", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 20px 50px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", gap: 14 }}
-        >
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, color: "#f0f2ff" }}>
           <div>
             <label style={label} htmlFor="ps-name">Page name</label>
             <input id="ps-name" style={field} value={name} disabled={readOnly} onChange={(e) => setName(e.target.value)} onBlur={() => void saveNames()} />
@@ -168,8 +138,6 @@ export function PageSettings(props: Props) {
             </div>
           )}
         </div>
-      )}
-    </div>
   );
 }
 
