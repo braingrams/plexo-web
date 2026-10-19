@@ -334,7 +334,9 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             }}
             mode={props.kind === "EMAIL" ? "email" : undefined}
             shell={{ onExit: props.onBack, exitLabel: props.kind === "EMAIL" ? "Back to emails" : "Back to site" }}
-            features={{ pageSwitcher: false, viewSwitch: false, codeView: false }}
+            // The page picker (left) and the Design | Code switch (middle) are part of editing a site's pages; an email is one page of
+            // table markup, so it has neither.
+            features={{ pageSwitcher: props.kind !== "EMAIL", viewSwitch: props.kind !== "EMAIL", codeView: props.kind !== "EMAIL" }}
             // SOL in the editor is the real SOL: the question opens in SOL's own chat (new tab, question ready to send) with the page
             // and the selected element named, so the editor stays open as it is. Emails are edited by hand, so no SOL there.
             onAskSol={
