@@ -19,7 +19,7 @@ export function MarketplaceBrowse({ children }: { children: React.ReactNode }) {
 /** Null outside the provider (the embedded marketplace modal drives its own loading). */
 export const useMarketplaceBrowse = () => useContext(Ctx);
 
-function SkeletonCard() {
+export function SkeletonCard() {
   return (
     <div className="flex flex-col animate-pulse">
       <div className="aspect-[4/3] rounded-2xl bg-[var(--surface)] border border-[var(--surface-border)]" />
@@ -35,6 +35,15 @@ function SkeletonCard() {
 export function MarketplaceResults({ children }: { children: React.ReactNode }) {
   const b = useMarketplaceBrowse();
   if (!b?.pending) return <>{children}</>;
+  return (
+    <div role="status" aria-label="Loading templates" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-9 w-full">
+      {Array.from({ length: 6 }, (_, i) => <SkeletonCard key={i} />)}
+    </div>
+  );
+}
+
+/** The placeholder grid, for places that load their own results (the dashboard's marketplace modal). */
+export function MarketplaceSkeletonGrid() {
   return (
     <div role="status" aria-label="Loading templates" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-9 w-full">
       {Array.from({ length: 6 }, (_, i) => <SkeletonCard key={i} />)}

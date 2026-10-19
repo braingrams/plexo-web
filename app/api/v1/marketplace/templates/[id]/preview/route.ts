@@ -21,5 +21,5 @@ export async function GET(
     return NextResponse.json({ error: "Template not found." }, { status: 404 });
   }
 
-  return NextResponse.json({ html: template.compiledHtml ?? "", name: template.name });
+  return NextResponse.json({ html: template.compiledHtml ?? "", name: template.name, kind: template.kind });
 }
