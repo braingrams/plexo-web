@@ -9,12 +9,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // the "Connect Strata" popup, which must NOT sign the person in to Plexo again.
 
 const mocks = vi.hoisted(() => ({
+  authError: null as string | null,
   getSession: vi.fn(),
   signInCharisol: vi.fn(),
   push: vi.fn(),
   replace: vi.fn(),
 }));
-vi.mock("@/lib/charisolAuth", () => ({ CharisolAuth: { getSession: mocks.getSession }, POST_LOGIN_REDIRECT_KEY: "plexo_post_login_redirect" }));
+vi.mock("@/lib/charisolAuth", () => ({ CharisolAuth: { getSession: mocks.getSession }, POST_LOGIN_REDIRECT_KEY: "plexo_post_login_redirect", get initialAuthError() { return mocks.authError; } }));
 vi.mock("@/lib/auth-client", () => ({ authClient: { signIn: { charisol: mocks.signInCharisol } } }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push, replace: mocks.replace }) }));
 vi.mock("@/app/auth/charisol/callback/dashboard-skeleton", () => ({ DashboardSkeleton: () => null }));
@@ -34,6 +35,7 @@ async function renderPage() {
 }
 
 beforeEach(() => {
+  mocks.authError = null;
   mocks.getSession.mockReset().mockResolvedValue({ idToken: "id.tok", accessToken: "a" });
   mocks.signInCharisol.mockReset().mockResolvedValue({ error: null });
   mocks.push.mockReset();
@@ -81,6 +83,17 @@ describe("Charisol callback page", () => {
     expect(mocks.push).not.toHaveBeenCalled();
     expect(mocks.replace).not.toHaveBeenCalled();
     Object.defineProperty(window, "opener", { value: null, configurable: true });
+  });
+
+  it("when Charisol had no session to reuse, sends the Strata window to its own sign-in instead of failing", async () => {
+    window.sessionStorage.setItem("plexo_strata_connect", String(Date.now()));
+    mocks.authError = "login_required";
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await renderPage();
+    expect(mocks.replace).toHaveBeenCalledWith("/auth/strata?signin=1");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem("plexo_strata_connect")).toBeNull();
   });
 
   it("reports a failed Strata connection to the opener", async () => {
