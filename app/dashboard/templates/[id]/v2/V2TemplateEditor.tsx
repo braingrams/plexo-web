@@ -269,7 +269,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
       if (props.stockKeys.pixabay) headers["x-pixabay-key"] = props.stockKeys.pixabay;
       const res = await fetch(`/api/v1/media/stock?query=${encodeURIComponent(query)}&provider=${encodeURIComponent(provider)}`, { headers });
       // A failed search says so (the picker shows a plain "couldn't load photos" message) instead of passing for "no results".
-      if (!res.ok) throw new Error("Photo search failed");
+      if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? "Photo search failed");
       const data = await res.json().catch(() => []);
       return Array.isArray(data) ? data.map((r) => ({ id: r.id, src: r.src, alt: r.alt, credit: r.credit, provider: r.provider })) : [];
     },

@@ -43,8 +43,11 @@ export type V2Design = {
 // compiled documents, so the design alone is held well under that.
 export const MAX_V2_DESIGN_CHARS = 120_000;
 // The built-in design system alone is ~84 KB of JSON, so it is never stored when unchanged
-// (the compiler falls back to it); a customised one has its own cap.
-export const MAX_V2_DESIGN_SYSTEM_CHARS = 120_000;
+// (the compiler falls back to it); a customised one has its own cap. A design system brought in
+// from Strata (hundreds of tokens and component variants) is several times that, so the cap is
+// generous: rows are stored gzipped (lib/db/packed.ts, JSON shrinks ~10x), which keeps the live +
+// draft copies well inside DynamoDB's 400 KB item limit.
+export const MAX_V2_DESIGN_SYSTEM_CHARS = 450_000;
 export const MAX_V2_HTML_CHARS = 200_000;
 
 export class V2DesignError extends Error {

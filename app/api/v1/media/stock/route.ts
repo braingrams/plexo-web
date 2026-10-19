@@ -33,6 +33,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const pexelsKey = (request.headers.get("x-pexels-key") || process.env.PEXELS_KEY || "").trim();
     const pixabayKey = (request.headers.get("x-pixabay-key") || process.env.PIXABAY_KEY || "").trim();
 
+    // Why a provider gave nothing (no key, or its service said no), so the picker can say so instead of "no photos found".
+    const failures: Record<string, string> = {};
+    const refused = (p: string, status: number, body: string) => {
+      console.error(`[stock] ${p} search failed: HTTP ${status} ${body.slice(0, 200)}`);
+      failures[p] = status === 429 || /rate limit/i.test(body) ? `${p[0].toUpperCase()}${p.slice(1)} has reached its hourly limit. Try Pexels or Pixabay, or try again later.` : `${p[0].toUpperCase()}${p.slice(1)} isn't responding right now. Try Pexels or Pixabay.`;
+    };
+
     // Query and fetch all providers concurrently using Promise.all
     const providerPromises = targetProviders.map(async (p): Promise<StockImageResult[]> => {
       // 1. Check cache (StockCache — lib/db/opsEntities.ts; provider+query is its whole
@@ -56,7 +63,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=50`,
             { headers: { Authorization: `Client-ID ${unsplashKey}` } }
           );
-          if (res.ok) {
+          if (!res.ok) refused(p, res.status, await res.text().catch(() => ""));
+          else {
             const data = await res.json();
             providerResults = ((data.results as Array<any>) || []).map((item) => ({
               id: `unsplash-${item.id}`,
@@ -74,7 +82,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             `https://api.pexels.com/v1/search?query=${encodeURIComponent(query)}&per_page=50`,
             { headers: { Authorization: pexelsKey } }
           );
-          if (res.ok) {
+          if (!res.ok) refused(p, res.status, await res.text().catch(() => ""));
+          else {
             const data = await res.json();
             providerResults = ((data.photos as Array<any>) || []).map((item) => ({
               id: `pexels-${item.id}`,
@@ -90,7 +99,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           const res = await fetch(
             `https://pixabay.com/api/?key=${pixabayKey}&q=${encodeURIComponent(query)}&image_type=photo&per_page=50`
           );
-          if (res.ok) {
+          if (!res.ok) refused(p, res.status, await res.text().catch(() => ""));
+          else {
             const data = await res.json();
             providerResults = ((data.hits as Array<any>) || []).map((item) => ({
               id: `pixabay-${item.id}`,
@@ -102,8 +112,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
             })).filter((i) => i.src);
           }
         }
+        else failures[p] = `${p[0].toUpperCase()}${p.slice(1)} isn't set up on this Plexo. Try another source.`;
       } catch (fetchErr) {
         console.warn(`Direct fetch failed for provider ${p}:`, fetchErr);
+        failures[p] = `${p[0].toUpperCase()}${p.slice(1)} isn't responding right now. Try another source.`;
       }
 
       // 3. Cache the results if we found any actual data — create-or-refresh, since
@@ -127,6 +139,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     const resultsList = await Promise.all(providerPromises);
     const mergedResults = resultsList.flat();
+    // Everything asked for failed: say why (one provider chosen = that one's reason), rather than an empty list that reads as "no photos".
+    if (mergedResults.length === 0 && Object.keys(failures).length === targetProviders.length) {
+      return NextResponse.json({ error: Object.values(failures)[0] }, { status: 502 });
+    }
 
     return NextResponse.json(mergedResults.slice(0, 150));
   } catch (error) {

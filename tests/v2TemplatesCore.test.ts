@@ -73,6 +73,14 @@ describe("parseV2Design", () => {
     const kept = parseV2Design({ ...blankV2Design(), designSystem: custom }) as { design: { designSystem?: { name: string } } };
     expect(kept.design.designSystem?.name).toBe("Acme");
   });
+  it("keeps a design system brought in from Strata (hundreds of tokens and variants), and still refuses an absurd one", () => {
+    const big = createDefaultDesignSystem();
+    big.tokens = [...big.tokens, ...Array.from({ length: 1400 }, (_, i) => ({ key: `--color-strata-${i}`, name: `Strata ${i}`, value: "#123456", type: "color", unit: null, layer: "brand" as const, comment: "from Strata" }))];
+    expect(JSON.stringify(big).length).toBeGreaterThan(120_000);
+    expect(parseV2Design({ ...blankV2Design(), designSystem: big })).toMatchObject({ ok: true });
+    const absurd = { ...big, tokens: [...big.tokens, ...Array.from({ length: 6000 }, (_, i) => ({ ...big.tokens[0], key: `--x-${i}` }))] };
+    expect((parseV2Design({ ...blankV2Design(), designSystem: absurd }) as { error: string }).error).toMatch(/too large/);
+  });
   it("rejects with plain messages", () => {
     expect(parseV2Design({ body: { rows: [] } })).toMatchObject({ ok: false });
     expect(parseV2Design({ format: V2_FORMAT, pages: [] })).toMatchObject({ ok: false });
