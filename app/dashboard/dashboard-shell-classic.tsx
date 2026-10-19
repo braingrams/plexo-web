@@ -377,10 +377,9 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
   }, [isEditorRoute]);
 
   const sidebarWidth = collapsed ? 64 : 250;
-  // Extra breathing room between the fixed sidebar and the main content column —
-  // without it, page content butts directly against the sidebar's right edge.
-  // The editor sits flush against the menu: a gap there is just dead space.
-  const contentGutter = isEditorRoute ? 0 : 24;
+  // No dead strip between the menu and the page: every page already pads its own content, so a second gap here only
+  // wasted space (it showed on all pages, not just the editor).
+  const contentGutter = 0;
 
   // Close the mobile drawer whenever the route changes (navigating counts as "done").
   useEffect(() => {
