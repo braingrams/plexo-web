@@ -40,7 +40,7 @@ vi.mock("@/lib/ai/generate", () => ({
 
 import { PAGE_ASSIST_NOTES, parseAssistBody, prepareAssist, type AssistFrame } from "@/lib/ai/pageAssist";
 
-const body = { question: "Refine typography hierarchy for mobile", context: { nodeType: "text", nodeName: "Headline", pageId: "p1", design: { pages: [] }, catalog: { kinds: [] } } };
+const body = { question: "Refine typography hierarchy for mobile", context: { nodeId: "el_headline", nodeType: "text", nodeName: "Headline", pageId: "p1", design: { pages: [] }, catalog: { kinds: [] } } };
 
 async function run(b: unknown = body) {
   const prepared = await prepareAssist("u1", b);
@@ -88,6 +88,8 @@ describe("SOL in the editor (page assistant)", () => {
     expect(user).toContain('the selected text ("Headline")');
     expect(user).toContain("Refine typography hierarchy for mobile");
     expect(user).toContain("Open page id: p1");
+    expect(user).toContain("Selected element id: el_headline");
+    expect(system).toContain("updateElement");
   });
 
   it("not enough credits is refused before anything streams, nothing is held", async () => {

@@ -393,7 +393,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
                 ? undefined
                 : (question, context, io) =>
                     askSolStreaming(
-                      { question, context: { nodeType: context.nodeType, nodeName: context.nodeName, pageId: context.pageId, design: context.design, catalog: context.catalog }, history: context.history },
+                      { question, context: { nodeId: context.nodeId, nodeType: context.nodeType, nodeName: context.nodeName, pageId: context.pageId, design: context.design, catalog: context.catalog }, history: context.history },
                       io.onText,
                       io.signal,
                     )
