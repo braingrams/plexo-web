@@ -20,3 +20,6 @@ Published pages only ever contain the tokens they use, so their size doesn't dep
 
 ## Cleanup (`scripts/sweep-stored-values.ts`, `lib/db/valueSweep.ts`)
 Edits leave old objects behind. `npx tsx scripts/sweep-stored-values.ts` (dry run) / `--apply` finds what no row points at and removes it. It reads every row of every table first and stops without deleting if anything fails; only objects older than 7 days are touched, and every save re-writes what it points at. Run it weekly, off-peak.
+
+### Schedule
+`.github/workflows/sweep-stored-values.yml` runs it every Sunday 03:30 UTC (and on demand: Actions → "Cleanup | Stored big values" → Run workflow; manual runs only report unless "apply" is ticked). It runs on GitHub Actions rather than AWS because that is free at this size (production is ~84 MB across 29k rows, a few cents of reads), needs no new deploy, and has no time limit that a growing database could hit (a Lambda stops at 15 minutes). It signs in with `github-actions-plexo-sweep`, a role created by `scripts/aws/create-sweep-role.sh` that can only scan the production tables and list/read/delete the two stored-value prefixes, and only for runs of plexo-web's `main`.
