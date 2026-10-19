@@ -269,7 +269,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
       if (props.stockKeys.pixabay) headers["x-pixabay-key"] = props.stockKeys.pixabay;
       const res = await fetch(`/api/v1/media/stock?query=${encodeURIComponent(query)}&provider=${encodeURIComponent(provider)}`, { headers });
       // A failed search says so (the picker shows a plain "couldn't load photos" message) instead of passing for "no results".
-      if (!res.ok) throw new Error("Photo search failed");
+      if (!res.ok) throw new Error(((await res.json().catch(() => null)) as { error?: string } | null)?.error ?? "Photo search failed");
       const data = await res.json().catch(() => []);
       return Array.isArray(data) ? data.map((r) => ({ id: r.id, src: r.src, alt: r.alt, credit: r.credit, provider: r.provider })) : [];
     },
@@ -334,7 +334,20 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             }}
             mode={props.kind === "EMAIL" ? "email" : undefined}
             shell={{ onExit: props.onBack, exitLabel: props.kind === "EMAIL" ? "Back to emails" : "Back to site" }}
-            features={{ pageSwitcher: false, viewSwitch: false, headerSol: false, codeView: false }}
+            // The page picker (left) and the Design | Code switch (middle) are part of editing a site's pages; an email is one page of
+            // table markup, so it has neither.
+            features={{ pageSwitcher: props.kind !== "EMAIL", viewSwitch: props.kind !== "EMAIL", codeView: props.kind !== "EMAIL" }}
+            // SOL in the editor is the real SOL: the question opens in SOL's own chat (new tab, question ready to send) with the page
+            // and the selected element named, so the editor stays open as it is. Emails are edited by hand, so no SOL there.
+            onAskSol={
+              props.kind === "EMAIL"
+                ? undefined
+                : async (question, context) => {
+                    const about = context.nodeType ? ` (about the selected ${context.nodeType.toLowerCase()} on the page "${name}")` : ` (about the page "${name}")`;
+                    window.open(`/dashboard/sol?new=1&draft=${encodeURIComponent(`${question}${about}`)}`, "_blank", "noopener");
+                    return "Opened SOL in a new tab with your question ready. Send it there and SOL can answer and change the page.";
+                  }
+            }
             pageSettings={
               <PageSettings
                 name={name}

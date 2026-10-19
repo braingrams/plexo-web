@@ -59,6 +59,15 @@ describe("Charisol callback page", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("keeps the Charisol sign-in on the server after signing in, so other Charisol products open without another login", async () => {
+    mocks.getSession.mockResolvedValue({ idToken: "id.tok", accessToken: "a", refreshToken: "refresh.tok" });
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await renderPage();
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/charisol/link", expect.objectContaining({ method: "POST", body: JSON.stringify({ refreshToken: "refresh.tok" }) }));
+    expect(mocks.push).toHaveBeenCalled();
+  });
+
   it("defaults to the dashboard, and still bounces a failed sign-in back to the login page", async () => {
     await renderPage();
     expect(mocks.push).toHaveBeenCalledWith("/dashboard");

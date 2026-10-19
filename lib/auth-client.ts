@@ -85,6 +85,8 @@ export const authClient = {
   async signOut(): Promise<void> {
     // redirect:false — we drive the navigation ourselves below instead of letting
     // next-auth/react send the browser straight back to the current page.
+    // Forget the Charisol sign-in kept for connecting other Charisol products (needs the Plexo session, so first).
+    await fetch("/api/v1/charisol/link", { method: "DELETE" }).catch(() => undefined);
     await nextAuthSignOut({ redirect: false });
     // Single logout: also end the shared auth.charisol.io session, not just Plexo's own
     // cookie. This is a hard redirect (see CharisolAuthClient.signOut()) to Cognito's

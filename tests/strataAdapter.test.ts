@@ -27,14 +27,44 @@ function fakeWindow() {
 
 const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
 let routes: (url: string, init?: RequestInit) => Response;
-const fetchFn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => routes(String(input), init));
+// By default there is no saved Charisol sign-in, so the silent connect (POST /session) is refused and the window opens.
+let silentWorks = false;
+const fetchFn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  if (String(input).endsWith("/session") && init?.method === "POST") return silentWorks ? reply(200, { connected: true }) : reply(409, { error: "Sign in once to connect Strata.", kind: "needs_sign_in" });
+  return routes(String(input), init);
+});
 
 beforeEach(() => {
   vi.useFakeTimers();
   fetchFn.mockClear();
+  silentWorks = false;
   routes = () => reply(200, { available: true, connected: false, expired: false });
 });
 afterEach(() => vi.useRealTimers());
+
+describe("connect() with a saved Charisol sign-in", () => {
+  it("connects with no window at all", async () => {
+    silentWorks = true;
+    routes = () => reply(200, { available: true, connected: true, expired: false, user: { email: "a@b.c" } });
+    const w = fakeWindow();
+    const adapter = createStrataAdapter({ win: w.win, fetchFn: fetchFn as never });
+    await expect(adapter.connect()).resolves.toMatchObject({ connected: true, user: { email: "a@b.c" } });
+    expect(w.raw.open).not.toHaveBeenCalled();
+    expect(JSON.parse(String((fetchFn.mock.calls[0][1] as RequestInit).body))).toEqual({ silent: true });
+  });
+
+  it("choosing another account skips it and opens the window", async () => {
+    silentWorks = true;
+    const w = fakeWindow();
+    const adapter = createStrataAdapter({ win: w.win, fetchFn: fetchFn as never });
+    routes = () => reply(200, { available: true, connected: true, expired: false });
+    const pending = adapter.connect({ switchAccount: true });
+    expect(w.raw.open).toHaveBeenCalled();
+    w.send({ type: "plexo-strata-connected" });
+    await pending;
+    expect(fetchFn.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method === "POST")).toBe(false);
+  });
+});
 
 describe("connect()", () => {
   it("opens a centred popup on the start page and resolves with the status once the popup reports success", async () => {
@@ -42,6 +72,7 @@ describe("connect()", () => {
     const adapter = createStrataAdapter({ win: w.win, fetchFn: fetchFn as never });
     routes = () => reply(200, { available: true, connected: true, expired: false, user: { email: "a@b.c", name: "Ada" } });
     const pending = adapter.connect();
+    await vi.advanceTimersByTimeAsync(0); // the silent attempt is refused first
     expect(w.raw.open).toHaveBeenCalledWith(`${ORIGIN}/auth/strata`, "plexo-strata-connect", expect.stringContaining("width=440"));
     expect(w.raw.open.mock.calls[0]).toBeDefined();
     const features = (w.raw.open.mock.calls[0] as unknown as string[])[2];
@@ -55,6 +86,7 @@ describe("connect()", () => {
     const w = fakeWindow();
     const adapter = createStrataAdapter({ win: w.win, fetchFn: fetchFn as never });
     const pending = adapter.connect();
+    await vi.advanceTimersByTimeAsync(0); // the silent attempt is refused first
     w.send({ type: "plexo-strata-failed", message: "That Charisol account isn't the one you use for Plexo." });
     await expect(pending).rejects.toMatchObject({ message: "That Charisol account isn't the one you use for Plexo.", kind: "invalid" });
     expect(w.listenerCount()).toBe(0);
@@ -71,6 +103,7 @@ describe("connect()", () => {
     const w = fakeWindow();
     const adapter = createStrataAdapter({ win: w.win, fetchFn: fetchFn as never });
     const pending = adapter.connect();
+    await vi.advanceTimersByTimeAsync(0); // the silent attempt is refused first
     const assertion = expect(pending).rejects.toMatchObject({ message: expect.stringMatching(/closed before Strata was connected/), kind: "invalid" });
     w.popup.closed = true;
     await vi.advanceTimersByTimeAsync(2500);
@@ -92,6 +125,7 @@ describe("connect()", () => {
     const adapter = createStrataAdapter({ win: w.win, fetchFn: fetchFn as never });
     routes = () => reply(200, { available: true, connected: true, expired: false });
     const pending = adapter.connect();
+    await vi.advanceTimersByTimeAsync(0); // the silent attempt is refused first
     w.popup.closed = true;
     await vi.advanceTimersByTimeAsync(500);
     await expect(pending).resolves.toMatchObject({ connected: true });
@@ -101,6 +135,7 @@ describe("connect()", () => {
     const w = fakeWindow();
     const adapter = createStrataAdapter({ win: w.win, fetchFn: fetchFn as never });
     const pending = adapter.connect();
+    await vi.advanceTimersByTimeAsync(0); // the silent attempt is refused first
     let settled = false;
     void pending.then(() => (settled = true), () => (settled = true));
     w.send({ type: "plexo-strata-connected" }, { origin: "https://evil.test" });
@@ -109,17 +144,18 @@ describe("connect()", () => {
     w.send("plexo-strata-connected");
     await vi.advanceTimersByTimeAsync(10);
     expect(settled).toBe(false);
-    expect(fetchFn).not.toHaveBeenCalled();
+    expect(fetchFn).toHaveBeenCalledTimes(1); // only the refused silent attempt; nothing else came of the stray messages
     w.send({ type: "plexo-strata-failed" });
     await expect(pending).rejects.toBeInstanceOf(StrataError);
   });
 
-  it("shares one popup between repeated clicks", () => {
+  it("shares one popup between repeated clicks", async () => {
     const w = fakeWindow();
     const adapter = createStrataAdapter({ win: w.win, fetchFn: fetchFn as never });
     const a = adapter.connect();
     const b = adapter.connect();
     expect(a).toBe(b);
+    await vi.advanceTimersByTimeAsync(0);
     expect(w.raw.open).toHaveBeenCalledTimes(1);
     w.send({ type: "plexo-strata-failed" });
     return a.catch(() => undefined);

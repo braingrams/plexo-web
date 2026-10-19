@@ -71,6 +71,24 @@ export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoSt
 
   function connect(options?: { switchAccount?: boolean }): Promise<StrataStatus> {
     if (pendingConnect) return pendingConnect;
+    // One Charisol sign-in covers every Charisol product, so first try to connect as the person already signed in — no window.
+    if (!options?.switchAccount) {
+      const run = (async () => {
+        try {
+          await call("/session", { method: "POST", body: { silent: true } });
+        } catch {
+          return popupConnect(options); // no saved Charisol sign-in (or Strata said no): the sign-in window takes over
+        }
+        return status();
+      })();
+      pendingConnect = run;
+      void run.then(() => undefined, () => undefined).then(() => { if (pendingConnect === run) pendingConnect = undefined; });
+      return run;
+    }
+    return popupConnect(options);
+  }
+
+  function popupConnect(options?: { switchAccount?: boolean }): Promise<StrataStatus> {
     const left = Math.max(0, Math.round(win.screenX + (win.outerWidth - POPUP.width) / 2));
     const top = Math.max(0, Math.round(win.screenY + (win.outerHeight - POPUP.height) / 2));
     const popup = win.open(`${win.location.origin}${options?.switchAccount ? STRATA_SWITCH_POPUP_PATH : STRATA_POPUP_PATH}`, "plexo-strata-connect", `popup=yes,width=${POPUP.width},height=${POPUP.height},left=${left},top=${top}`);

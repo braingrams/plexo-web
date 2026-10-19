@@ -82,6 +82,10 @@ export default function CharisolCallbackPage() {
         return;
       }
 
+      // Keep this Charisol sign-in on the server so other Charisol products (Strata) can open as them without another login.
+      if (session.refreshToken) {
+        await fetch("/api/v1/charisol/link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: session.refreshToken }) }).catch(() => undefined);
+      }
       router.push(redirectTo);
     }
 
