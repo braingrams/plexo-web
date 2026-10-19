@@ -239,6 +239,16 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
     return data.url as string;
   }, []);
 
+  // The owner's own font files: stored beside their images; the editor only needs the address back.
+  const uploadFont = useCallback(async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/v1/media/font", { method: "POST", body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.url) throw new Error(data?.error ?? "Font upload failed");
+    return data.url as string;
+  }, []);
+
   const loadMedia = useCallback(async () => {
     const res = await fetch("/api/v1/media");
     const data = await res.json().catch(() => []);
@@ -295,6 +305,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
               markDirty();
             }}
             onUpload={uploadImage}
+            onUploadFont={uploadFont}
             loadMedia={loadMedia}
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
             strata={strataOn ? strata : undefined}

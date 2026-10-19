@@ -361,6 +361,16 @@ export function DesignPane(props: {
     return data.url as string;
   }, []);
 
+  // The owner's own font files: stored beside their images; the editor only needs the address back.
+  const uploadFont = useCallback(async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/v1/media/font", { method: "POST", body: form });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.url) throw new Error(data?.error ?? "Font upload failed");
+    return data.url as string;
+  }, []);
+
   const providers = [
     props.stockKeys.unsplash ? { id: "unsplash", label: "Unsplash" } : null,
     props.stockKeys.pexels ? { id: "pexels", label: "Pexels" } : null,
@@ -504,6 +514,7 @@ export function DesignPane(props: {
               return "Got it — I've opened the chat so you can follow along. I'll answer there and make any change to the design.";
             }}
             onUpload={uploadImage}
+            onUploadFont={uploadFont}
             // The images already uploaded to the project, listed when the Images panel opens.
             loadMedia={loadMedia}
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
