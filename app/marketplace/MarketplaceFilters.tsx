@@ -2,6 +2,7 @@
 
 import { useRouter, usePathname } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
+import { useMarketplaceBrowse } from "./MarketplaceBrowse";
 import { Search, X, Layout, Mail, Layers } from "lucide-react";
 import { CustomSelect } from "@/app/_components/CustomSelect";
 
@@ -23,7 +24,9 @@ export function MarketplaceFilters({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [isPending, startTransition] = useTransition();
+  const [ownPending, startTransition] = useTransition();
+  const browse = useMarketplaceBrowse();
+  const isPending = ownPending || !!browse?.pending;
 
   const [searchValue, setSearchValue] = useState(current.q ?? "");
 
@@ -50,11 +53,11 @@ export function MarketplaceFilters({
         }
       });
 
-      startTransition(() => {
-        router.push(`${pathname}?${params.toString()}`);
-      });
+      const url = `${pathname}?${params.toString()}`;
+      if (browse) browse.go(url);
+      else startTransition(() => router.push(url));
     },
-    [current, pathname, router, searchValue, onFilterChange]
+    [current, pathname, router, searchValue, onFilterChange, browse]
   );
 
   const clearAllFilters = () => {
@@ -63,9 +66,8 @@ export function MarketplaceFilters({
       onFilterChange({ category: undefined, kind: undefined, free: undefined, q: undefined, sort: current.sort });
       return;
     }
-    startTransition(() => {
-      router.push(pathname);
-    });
+    if (browse) browse.go(pathname);
+    else startTransition(() => router.push(pathname));
   };
 
   const seg = (on: boolean) =>

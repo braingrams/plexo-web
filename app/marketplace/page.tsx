@@ -5,6 +5,7 @@ import { SearchX, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { listMarketplaceTemplates } from "@/lib/marketplace";
 import { LandingNav } from "../landing-nav";
+import { MarketplaceBrowse, MarketplaceResults } from "./MarketplaceBrowse";
 import { MarketplaceFilters } from "./MarketplaceFilters";
 import { MarketplaceRowExpandGrid } from "./MarketplaceRowExpandGrid";
 
@@ -54,6 +55,7 @@ export default async function MarketplacePage({
 
       {/* Main Browse Marketplace Container */}
       <main className="max-w-6xl mx-auto px-6 pt-4 pb-16">
+        <MarketplaceBrowse>
         {/* Filter Controls Panel */}
         <div className="mb-8">
           <MarketplaceFilters
@@ -63,6 +65,7 @@ export default async function MarketplacePage({
           />
         </div>
 
+        <MarketplaceResults>
         {/* Row-Chunked Expandable Grid */}
         {templates.length > 0 ? (
           <MarketplaceRowExpandGrid templates={templates} />
@@ -148,6 +151,8 @@ export default async function MarketplacePage({
             )}
           </div>
         )}
+        </MarketplaceResults>
+        </MarketplaceBrowse>
       </main>
     </div>
   );
