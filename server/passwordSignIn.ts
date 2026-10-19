@@ -5,6 +5,7 @@ import { verifyPassword } from "@better-auth/utils/password";
 import { User } from "@/lib/db/coreEntities";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { SuspendedAccountSignal, isEmailVerifiedClaim, resolveCharisolUser, type CharisolClaims, type CharisolLocalUser } from "@/server/charisolAccount";
+import { saveCharisolRefresh } from "@/lib/charisolLink";
 import { passwordSignIn, sendResetCode, type PasswordSignInResult } from "@/server/charisolCognito";
 
 // Plexo's email + password sign-in. The person always types into PLEXO's own form; the
@@ -131,7 +132,11 @@ export async function authorizePassword(
         return null;
       }
       if (!isEmailVerifiedClaim(claims.email_verified)) throw new UnverifiedEmailError();
-      return resolveCharisolUserOrSuspended(claims, { viaPassword: true });
+      const signedIn = await resolveCharisolUserOrSuspended(claims, { viaPassword: true });
+      // Keep this Charisol sign-in (server-side, encrypted) so connecting Strata needs no second login — the browser sign-in
+      // path does the same from its callback page. Best effort: signing in never fails because of it.
+      if (signedIn && charisol.refreshToken) await saveCharisolRefresh(signedIn.id, charisol.refreshToken).catch(() => undefined);
+      return signedIn;
     }
     case "reset_required":
       await (deps.sendResetCode ?? sendResetCode)(email).catch(() => undefined);

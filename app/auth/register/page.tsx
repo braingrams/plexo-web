@@ -10,7 +10,6 @@ import { Mulish } from "next/font/google";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
 
-import { BRAND } from "@/lib/theme";
 const mulish = Mulish({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700", "800", "900"],
@@ -222,7 +221,7 @@ function RegisterForm() {
             id="register-submit"
             type="submit"
             disabled={loading}
-            className={`w-full bg-[${BRAND.primary}] hover:bg-[${BRAND.deep}] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
+            className={`w-full bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
           >
             {loading ? <span>Creating account...</span> : <span>Create Account</span>}
           </button>

@@ -5,7 +5,6 @@ import { ArrowRight, Cpu } from "lucide-react";
 import { Reveal } from "@/app/scroll-fx";
 import { SDK_V2_SHORT } from "@/app/sdk/v2-snippets";
 
-import { BRAND } from "@/lib/theme";
 export function V2DarkFeatureSection({ isDark }: { isDark: boolean }) {
   return (
     <section className={`py-20 md:py-28 px-4 sm:px-8 md:px-16 transition-colors duration-500 font-['Mulish',sans-serif] ${
@@ -40,7 +39,7 @@ export function V2DarkFeatureSection({ isDark }: { isDark: boolean }) {
               <Reveal delay={0.3}>
                 <Link
                   href="/developers#sdk"
-                  className={`bg-[${BRAND.primary}] hover:bg-[${BRAND.deep}] text-white text-base font-bold px-7 py-3.5 rounded-xl shadow-lg hover:shadow-xl transition-all inline-flex items-center gap-2`}
+                  className={`bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white text-base font-bold px-7 py-3.5 rounded-xl shadow-lg hover:shadow-xl transition-all inline-flex items-center gap-2`}
                 >
                   <span>Explore SDK Docs</span>
                   <ArrowRight className="w-4 h-4" />
