@@ -76,3 +76,25 @@ export async function exchangeCharisolIdToken(base: string, idToken: string): Pr
   if (res.status === 401) throw new StrataError("Strata didn't accept your Charisol sign-in. Try connecting again.", "invalid", 401);
   throw new StrataError("Strata isn't available right now. Please try again in a few minutes.", "server", res.status);
 }
+
+/**
+ * Signs in to Strata with an email and password (Strata's own POST /auth/login) and returns the session. The password goes
+ * straight through and is never stored or logged. Strata's messages are already plain language, so they are passed on.
+ */
+export async function loginToStrataWithPassword(base: string, email: string, password: string): Promise<{ token: string; email?: string; name?: string }> {
+  let res: Response;
+  try {
+    res = await fetch(`${base}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ email, password }) });
+  } catch {
+    throw new StrataError("Couldn't reach Strata. Check your connection and try again.", "network");
+  }
+  const body = (await res.json().catch(() => ({}))) as { message?: string; data?: { token?: unknown; user?: { email?: string; firstName?: string; lastName?: string; name?: string } } };
+  if (res.ok && typeof body.data?.token === "string") {
+    const u = body.data.user ?? {};
+    return { token: body.data.token, email: u.email ?? email, name: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.name };
+  }
+  if (res.status === 429) throw new StrataError("Too many sign-in attempts. Wait a few minutes and try again.", "invalid", 429);
+  if (res.status === 403) throw new StrataError(body.message || "That Strata account can't sign in right now. Contact Charisol support if this keeps happening.", "forbidden", 403);
+  if (res.status === 401 || res.status === 400) throw new StrataError(body.message || "That email and password don't match a Strata account. Check them and try again.", "invalid", 401);
+  throw new StrataError("Strata isn't available right now. Please try again in a few minutes.", "server", res.status);
+}

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { StrataError } from "@charisol/plexo-sdk/v2/strata";
 import { createStrataAdapter, type StrataAdapterWindow } from "@/app/dashboard/apps/_components/strataAdapter";
-import { finishStrataConnect, markStrataConnect, readStrataPopupMessage, takeStrataConnect, STRATA_CONNECT_KEY } from "@/lib/strataConnect";
+import { finishStrataConnect, isAnotherStrataAccount, markStrataConnect, readStrataPopupMessage, takeStrataConnect, STRATA_CONNECT_KEY } from "@/lib/strataConnect";
 
 // The editor-side Strata adapter (popup sign-in + calls to Plexo's /api/v1/strata routes) and the
 // small contract shared with the popup's callback page.
@@ -42,10 +42,10 @@ describe("connect()", () => {
     const adapter = createStrataAdapter({ win: w.win, fetchFn: fetchFn as never });
     routes = () => reply(200, { available: true, connected: true, expired: false, user: { email: "a@b.c", name: "Ada" } });
     const pending = adapter.connect();
-    expect(w.raw.open).toHaveBeenCalledWith(`${ORIGIN}/auth/strata`, "plexo-strata-connect", expect.stringContaining("width=480"));
+    expect(w.raw.open).toHaveBeenCalledWith(`${ORIGIN}/auth/strata`, "plexo-strata-connect", expect.stringContaining("width=440"));
     expect(w.raw.open.mock.calls[0]).toBeDefined();
     const features = (w.raw.open.mock.calls[0] as unknown as string[])[2];
-    expect(features).toContain(`left=${Math.round(100 + (1480 - 480) / 2)}`);
+    expect(features).toContain(`left=${Math.round(100 + (1480 - 440) / 2)}`);
     w.send({ type: "plexo-strata-connected" });
     await expect(pending).resolves.toEqual({ connected: true, expired: false, user: { email: "a@b.c", name: "Ada" } });
     expect(w.listenerCount()).toBe(0);
@@ -73,8 +73,18 @@ describe("connect()", () => {
     const pending = adapter.connect();
     const assertion = expect(pending).rejects.toMatchObject({ message: expect.stringMatching(/closed before Strata was connected/), kind: "invalid" });
     w.popup.closed = true;
-    await vi.advanceTimersByTimeAsync(500);
+    await vi.advanceTimersByTimeAsync(2500);
     await assertion;
+  });
+
+  it("opens the sign-in-as-someone-else window when asked to switch accounts", async () => {
+    const w = fakeWindow();
+    const adapter = createStrataAdapter({ win: w.win, fetchFn: fetchFn as never });
+    routes = () => reply(200, { available: true, connected: true, expired: false, user: { email: "b@c.d" } });
+    const pending = adapter.connect({ switchAccount: true });
+    expect(w.raw.open).toHaveBeenCalledWith(`${ORIGIN}/auth/strata?switch=1`, "plexo-strata-connect", expect.any(String));
+    w.send({ type: "plexo-strata-connected" });
+    await expect(pending).resolves.toMatchObject({ connected: true });
   });
 
   it("still succeeds when the popup closes without a message but the connection went through", async () => {
@@ -177,6 +187,17 @@ describe("the popup's hand-back (finishStrataConnect)", () => {
     expect(f).toHaveBeenCalledWith("/api/v1/strata/session", expect.objectContaining({ method: "POST", body: JSON.stringify({ idToken: "id.tok" }) }));
     expect(opener.postMessage).toHaveBeenCalledWith({ type: "plexo-strata-connected" }, ORIGIN);
     expect(close).toHaveBeenCalled();
+  });
+
+  it("says so when the person chose a different Strata account, and remembers that choice only for that sign-in", async () => {
+    const f = vi.fn(async () => reply(200, { connected: true }));
+    await finishStrataConnect({ getIdToken: async () => "id.tok", fetchFn: f as never, opener: { postMessage: vi.fn() }, origin: ORIGIN, close: vi.fn(), anotherAccount: true });
+    expect(f).toHaveBeenCalledWith("/api/v1/strata/session", expect.objectContaining({ body: JSON.stringify({ idToken: "id.tok", anotherAccount: true }) }));
+    const st = store();
+    markStrataConnect(st, Date.now(), true);
+    expect(isAnotherStrataAccount(st)).toBe(true);
+    markStrataConnect(st);
+    expect(isAnotherStrataAccount(st)).toBe(false);
   });
 
   it("reports the server's message on failure, and a missing sign-in", async () => {

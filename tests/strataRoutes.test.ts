@@ -58,6 +58,40 @@ const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 function connectedRow(ageMs = 0) {
   return { userId: "u1", ciphertext: "x", strataEmail: "ada@example.com", strataName: "Ada L", connectedAt: new Date(Date.now() - ageMs).toISOString() };
 }
+describe("connecting with an email and password (another Strata account)", () => {
+  it("signs in to Strata with them, stores only the session, and never keeps the password", async () => {
+    strataHandler = () => json(200, { status: true, data: { token: SECRET_TOKEN, user: { email: "other@example.com", firstName: "Oto" } } });
+    const res = await postSession(req("/session", "POST", { email: " other@example.com ", password: "hunter22" }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ connected: true, user: { email: "other@example.com", name: "Oto" } });
+    expect(strataCalls[0].url).toBe("https://strata.test/v1/auth/login");
+    expect(JSON.parse(String(strataCalls[0].init.body))).toEqual({ email: "other@example.com", password: "hunter22" });
+    expect(JSON.stringify([...state.rows.values()])).not.toContain("hunter22");
+    expect(await loadStrataToken("u1")).toBe(SECRET_TOKEN);
+  });
+
+  it("says plainly when Strata does not accept them, and needs both fields", async () => {
+    strataHandler = () => json(401, { status: false, message: "Invalid email or password.", data: {} });
+    const bad = await postSession(req("/session", "POST", { email: "a@b.co", password: "nope" }));
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).error).toBe("Invalid email or password.");
+    const half = await postSession(req("/session", "POST", { email: "a@b.co" }));
+    expect(half.status).toBe(400);
+    expect((await half.json()).error).toMatch(/both/i);
+  });
+
+  it("lets a Google sign-in for another Strata account through only when the person chose that", async () => {
+    state.claims = { email: "other@example.com", email_verified: true };
+    strataHandler = () => json(200, { status: true, data: { token: SECRET_TOKEN, user: { email: "other@example.com" } } });
+    expect((await postSession(req("/session", "POST", { idToken: "t" }))).status).toBe(403);
+    expect((await postSession(req("/session", "POST", { idToken: "t", anotherAccount: true }))).status).toBe(200);
+  });
+
+  it("GET tells the sign-in window which Plexo email to start from", async () => {
+    expect(await (await getSession(req("/session"))).json()).toMatchObject({ plexoEmail: "ada@example.com" });
+  });
+});
+
 async function connect() {
   strataHandler = () => json(200, { status: true, data: { token: SECRET_TOKEN, user: { email: "ada@example.com", firstName: "Ada", lastName: "L" } } });
   return postSession(req("/session", "POST", { idToken: "id.token" }));
@@ -149,10 +183,10 @@ describe("POST /api/v1/strata/session", () => {
 
 describe("GET/DELETE /api/v1/strata/session", () => {
   it("reports not connected, connected, then expired after ~23 hours — never the token", async () => {
-    expect(await (await getSession(req("/session"))).json()).toEqual({ available: true, connected: false, expired: false });
+    expect(await (await getSession(req("/session"))).json()).toMatchObject({ available: true, connected: false, expired: false });
     state.rows.set("u1", connectedRow());
     const connected = await (await getSession(req("/session"))).json();
-    expect(connected).toEqual({ available: true, connected: true, expired: false, user: { email: "ada@example.com", name: "Ada L" } });
+    expect(connected).toMatchObject({ available: true, connected: true, expired: false, user: { email: "ada@example.com", name: "Ada L" } });
     state.rows.set("u1", connectedRow(STRATA_SESSION_MAX_AGE_MS + 1000));
     const expired = await (await getSession(req("/session"))).json();
     expect(expired).toMatchObject({ connected: false, expired: true });

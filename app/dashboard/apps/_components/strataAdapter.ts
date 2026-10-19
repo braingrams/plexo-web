@@ -1,5 +1,5 @@
 import { StrataError, type StrataAdapter, type StrataErrorKind, type StrataStatus } from "@charisol/plexo-sdk/v2/strata";
-import { readStrataPopupMessage, STRATA_CONNECTED_MESSAGE, STRATA_POPUP_PATH } from "@/lib/strataConnect";
+import { readStrataPopupMessage, STRATA_CONNECTED_MESSAGE, STRATA_POPUP_PATH, STRATA_SWITCH_POPUP_PATH } from "@/lib/strataConnect";
 
 // The editor's Branding panel talks to Strata through this adapter, which only ever calls
 // Plexo's own routes (/api/v1/strata/*). The Strata session itself lives on the server,
@@ -36,7 +36,7 @@ export type AutoUpdateState = {
 };
 
 const KINDS = new Set<StrataErrorKind>(["expired", "forbidden", "not_found", "conflict", "invalid", "network", "server"]);
-const POPUP = { width: 480, height: 680 };
+const POPUP = { width: 440, height: 600 };
 const POPUP_TIMEOUT_MS = 5 * 60 * 1000;
 const BLOCKED = "Your browser blocked the sign-in window. Allow pop-ups for Plexo and try again.";
 
@@ -69,11 +69,11 @@ export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoSt
     return { connected: !!s.connected, expired: !!s.expired, user: s.user };
   }
 
-  function connect(): Promise<StrataStatus> {
+  function connect(options?: { switchAccount?: boolean }): Promise<StrataStatus> {
     if (pendingConnect) return pendingConnect;
     const left = Math.max(0, Math.round(win.screenX + (win.outerWidth - POPUP.width) / 2));
     const top = Math.max(0, Math.round(win.screenY + (win.outerHeight - POPUP.height) / 2));
-    const popup = win.open(`${win.location.origin}${STRATA_POPUP_PATH}`, "plexo-strata-connect", `popup=yes,width=${POPUP.width},height=${POPUP.height},left=${left},top=${top}`);
+    const popup = win.open(`${win.location.origin}${options?.switchAccount ? STRATA_SWITCH_POPUP_PATH : STRATA_POPUP_PATH}`, "plexo-strata-connect", `popup=yes,width=${POPUP.width},height=${POPUP.height},left=${left},top=${top}`);
     if (!popup) return Promise.reject(new StrataError(BLOCKED, "invalid"));
 
     pendingConnect = new Promise<StrataStatus>((resolve, reject) => {
@@ -104,10 +104,14 @@ export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoSt
         // Closed without a message — some browsers drop the link to the opener after a
         // cross-site sign-in — so check whether the connection went through anyway.
         clearInterval(watcher);
-        status().then(
-          (s) => done(() => (s.connected ? resolve(s) : reject(new StrataError("The sign-in window was closed before Strata was connected. Try again when you're ready.", "invalid")))),
-          () => done(() => reject(new StrataError("The sign-in window was closed before Strata was connected. Try again when you're ready.", "invalid"))),
-        );
+        const closedEarly = () => new StrataError("The sign-in window was closed before Strata was connected. Try again when you're ready.", "invalid");
+        // The window closes the moment the connection is saved, so look a couple of times before deciding nobody connected.
+        const look = (triesLeft: number) =>
+          status().then(
+            (s) => (s.connected ? done(() => resolve(s)) : triesLeft > 0 ? setTimeout(() => look(triesLeft - 1), 600) : done(() => reject(closedEarly()))),
+            () => (triesLeft > 0 ? setTimeout(() => look(triesLeft - 1), 600) : done(() => reject(closedEarly()))),
+          );
+        look(2);
       }, 400);
       const timeout = setTimeout(() => {
         popup.close();

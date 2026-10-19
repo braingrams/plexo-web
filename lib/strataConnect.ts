@@ -20,12 +20,23 @@ export type StrataPopupMessage = { type: typeof STRATA_CONNECTED_MESSAGE | typeo
 
 type Store = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
-export function markStrataConnect(store: Store, now = Date.now()): void {
+/** Set alongside the marker when the person chose to use a different Strata account than their Plexo one. */
+export const STRATA_ANOTHER_KEY = "plexo_strata_another";
+
+export function markStrataConnect(store: Store, now = Date.now(), anotherAccount = false): void {
   store.setItem(STRATA_CONNECT_KEY, String(now));
+  if (anotherAccount) store.setItem(STRATA_ANOTHER_KEY, "1");
+  else store.removeItem(STRATA_ANOTHER_KEY);
 }
 
 export function clearStrataConnect(store: Store): void {
   store.removeItem(STRATA_CONNECT_KEY);
+  store.removeItem(STRATA_ANOTHER_KEY);
+}
+
+/** True when the sign-in in this window is for a different Strata account (read before the marker is taken). */
+export function isAnotherStrataAccount(store: Store): boolean {
+  return store.getItem(STRATA_ANOTHER_KEY) === "1";
 }
 
 /** True (once) when this sign-in was started to connect Strata. Always clears the marker. */
@@ -46,6 +57,8 @@ export function readStrataPopupMessage(event: { origin: string; data: unknown },
 }
 
 export const STRATA_POPUP_PATH = "/auth/strata";
+/** The popup opened to choose another Strata account straight away (no silent attempt first). */
+export const STRATA_SWITCH_POPUP_PATH = "/auth/strata?switch=1";
 
 /**
  * Runs inside the popup once Charisol has sent the person back: sends their ID token to the
@@ -59,6 +72,8 @@ export async function finishStrataConnect(deps: {
   opener: { postMessage: (message: StrataPopupMessage, targetOrigin: string) => void } | null;
   origin: string;
   close: () => void;
+  /** The person chose a different Strata account than their Plexo one. */
+  anotherAccount?: boolean;
 }): Promise<boolean> {
   let message: StrataPopupMessage;
   try {
@@ -66,7 +81,7 @@ export async function finishStrataConnect(deps: {
     if (!idToken) {
       message = { type: STRATA_FAILED_MESSAGE, message: "The Charisol sign-in didn't finish. Please try connecting again." };
     } else {
-      const res = await deps.fetchFn("/api/v1/strata/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
+      const res = await deps.fetchFn("/api/v1/strata/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken, ...(deps.anotherAccount ? { anotherAccount: true } : {}) }) });
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
       message = res.ok ? { type: STRATA_CONNECTED_MESSAGE } : { type: STRATA_FAILED_MESSAGE, message: body?.error ?? "Strata couldn't be connected. Please try again." };
     }

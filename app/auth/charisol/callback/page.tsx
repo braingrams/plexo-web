@@ -2,9 +2,9 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { CharisolAuth, POST_LOGIN_REDIRECT_KEY } from "@/lib/charisolAuth";
+import { CharisolAuth, POST_LOGIN_REDIRECT_KEY, initialAuthError } from "@/lib/charisolAuth";
 import { authClient } from "@/lib/auth-client";
-import { finishStrataConnect, takeStrataConnect } from "@/lib/strataConnect";
+import { clearStrataConnect, finishStrataConnect, isAnotherStrataAccount, takeStrataConnect } from "@/lib/strataConnect";
 import { DashboardSkeleton } from "./dashboard-skeleton";
 
 // redirectUri target registered for Plexo's Charisol app client (Developer Portal) and
@@ -36,12 +36,21 @@ export default function CharisolCallbackPage() {
     // The same callback serves the "Connect Strata" popup (app/auth/strata/page.tsx): there the
     // ID token goes to /api/v1/strata/session and the person is NOT signed in to Plexo again.
     async function completeStrataConnect(): Promise<void> {
+      // Charisol had no signed-in session to reuse (the silent attempt came back empty): ask for the Strata sign-in ourselves.
+      if (initialAuthError && !strataConnectRun) {
+        clearStrataConnect(window.sessionStorage);
+        router.replace("/auth/strata?signin=1");
+        return;
+      }
+      const anotherAccount = isAnotherStrataAccount(window.sessionStorage);
+      clearStrataConnect(window.sessionStorage);
       const handedBack = await (strataConnectRun ??= finishStrataConnect({
         getIdToken: async () => (await CharisolAuth.getSession())?.idToken ?? null,
         fetchFn: (input, init) => fetch(input, init),
         opener: window.opener,
         origin: window.location.origin,
         close: () => window.close(),
+        anotherAccount,
       }));
       // Opened directly rather than as a popup: nobody to tell, so just go back to the app.
       if (!handedBack && !cancelled) router.replace("/dashboard/apps");
