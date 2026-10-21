@@ -23,7 +23,12 @@ export type StrataAdapterOptions = {
   /** The app being designed. With it, the editor's "Keep my website up to date" switch is wired to this app's server-side updates. */
   appId?: string;
 };
+/** A picture or video held in a Strata project (the editor's StrataAsset). */
+export type StrataAssetItem = { id: string; name: string; kind: "image" | "video"; url: string; type?: string; role?: string; mimeType?: string };
 export type PlexoStrataAdapter = StrataAdapter & {
+  listAssets: (projectId: string) => Promise<StrataAssetItem[]>;
+  importAssets: (projectId: string, assetIds: string[]) => Promise<{ added: number }>;
+  sendAssets: (projectId: string, mediaIds: string[]) => Promise<{ sent: number; skipped: number }>;
   /** False when this Plexo has no Strata configured — the editor then leaves Strata out. */
   available: () => Promise<boolean>;
 };
@@ -158,6 +163,15 @@ export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoSt
           },
         }
       : {}),
+    async listAssets(projectId) {
+      return (await call<{ assets: StrataAssetItem[] }>(`/projects/${encodeURIComponent(projectId)}/assets`)).assets;
+    },
+    importAssets(projectId, assetIds) {
+      return call(`/projects/${encodeURIComponent(projectId)}/assets/import`, { method: "POST", body: { ids: assetIds } });
+    },
+    sendAssets(projectId, mediaIds) {
+      return call(`/projects/${encodeURIComponent(projectId)}/assets/send`, { method: "POST", body: { mediaIds } });
+    },
     async disconnect() {
       await call("/session", { method: "DELETE" });
     },

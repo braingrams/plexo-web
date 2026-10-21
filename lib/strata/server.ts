@@ -34,7 +34,7 @@ export function strataFail(err: unknown): NextResponse {
   return NextResponse.json({ error: "Something went wrong talking to Strata. Please try again in a moment.", kind: "server" }, { status: 500 });
 }
 
-export type StrataCaller = { userId: string; client: ReturnType<typeof createStrataClient> };
+export type StrataCaller = { userId: string; organizationId: string; client: ReturnType<typeof createStrataClient> };
 
 /**
  * Signs the caller in (Plexo session or API key), checks Strata is configured and applies the
@@ -51,7 +51,7 @@ export async function authorizeStrata(request: NextRequest, bucket: string, limi
     return NextResponse.json({ error: "That's a lot of requests in a short time. Wait a few minutes and try again.", kind: "rate_limited" }, { status: 429 });
   }
   const userId = resolved.userId;
-  return { userId, client: createStrataClient({ baseUrl: base, getToken: () => loadStrataToken(userId) }) };
+  return { userId, organizationId: resolved.organizationId, client: createStrataClient({ baseUrl: base, getToken: () => loadStrataToken(userId) }) };
 }
 
 export async function readJson(request: NextRequest): Promise<Record<string, unknown> | null> {
