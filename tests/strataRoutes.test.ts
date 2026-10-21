@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   userEmail: "ada@example.com",
   links: new Map<string, { userId: string; ciphertext: string; storedAt: string }>(),
   rows: new Map<string, { userId: string; ciphertext: string; strataEmail?: string; strataName?: string; connectedAt: string }>(),
+  images: [] as Array<{ id: string; userId: string; organizationId: string; name: string; url: string }>,
   claims: { email: "ada@example.com", email_verified: true } as Record<string, unknown>,
   verifyFails: false,
   rateLimited: false,
@@ -36,6 +37,21 @@ vi.mock("@/lib/db/coreEntities", () => ({
     }),
     delete: ({ userId }: { userId: string }) => ({ go: async () => void state.rows.delete(userId) }),
   },
+  UploadedImage: {
+    query: {
+      byUser: ({ userId }: { userId: string }) => ({
+        go: async () => ({
+          data: state.images.filter((i) => i.userId === userId),
+        }),
+      }),
+    },
+    create: (item: { id: string; userId: string; organizationId: string; name: string; url: string }) => ({
+      go: async () => {
+        state.images.push(item);
+        return { data: item };
+      },
+    }),
+  },
 }));
 vi.mock("@/server/charisolVerifier", () => ({
   getCharisolVerifier: () => ({
@@ -46,10 +62,19 @@ vi.mock("@/server/charisolVerifier", () => ({
   }),
 }));
 vi.mock("@/server/charisolAccount", () => ({ isEmailVerifiedClaim: (v: unknown) => v === true || v === "true" }));
+vi.mock("@/lib/siteImport/fetchSafe", () => ({
+  safeFetch: async () => new Response(new Uint8Array([1, 2, 3]), {
+    status: 200,
+    headers: { "content-type": "image/png" },
+  }),
+}));
 
 import { GET as getSession, POST as postSession, DELETE as deleteSession } from "@/app/api/v1/strata/session/route";
 import { GET as listProjects, POST as createProject } from "@/app/api/v1/strata/projects/route";
 import { GET as pull, PUT as push } from "@/app/api/v1/strata/projects/[id]/design-system/route";
+import { GET as getAssets } from "@/app/api/v1/strata/projects/[id]/assets/route";
+import { POST as importAssets } from "@/app/api/v1/strata/projects/[id]/assets/import/route";
+import { POST as sendAssets } from "@/app/api/v1/strata/projects/[id]/assets/send/route";
 import { STRATA_SESSION_MAX_AGE_MS, loadStrataToken } from "@/lib/strata/session";
 
 const SECRET_TOKEN = "strata.jwt.SECRET-VALUE";
@@ -148,6 +173,7 @@ beforeEach(() => {
   Object.assign(state, { userId: "u1", userEmail: "ada@example.com", claims: { email: "ada@example.com", email_verified: true }, verifyFails: false, rateLimited: false });
   state.rows.clear();
   state.links.clear();
+  state.images = [];
   strataCalls.length = 0;
   vi.stubGlobal(
     "fetch",
@@ -342,5 +368,72 @@ describe("Strata project routes", () => {
     const res = await listProjects(req("/projects"));
     expect(res.status).toBe(503);
     expect((await res.json()).kind).toBe("unavailable");
+  });
+});
+
+describe("Strata project asset routes", () => {
+  beforeEach(async () => {
+    await connect();
+    strataCalls.length = 0;
+  });
+
+  it("lists project pictures and videos from Strata", async () => {
+    strataHandler = () =>
+      json(200, {
+        data: [
+          { assetId: "a1", name: "Logo", mimeType: "image/png", cdnUrl: "https://cdn.test/logo.png" },
+          { assetId: "a2", name: "Clip", mimeType: "video/mp4", cdnUrl: "https://cdn.test/clip.mp4" },
+          { assetId: "a3", name: "Doc", mimeType: "application/pdf", cdnUrl: "https://cdn.test/doc.pdf" },
+          { assetId: "a4", name: "Old", mimeType: "image/png", cdnUrl: "https://cdn.test/old.png", status: "DEPRECATED" },
+        ],
+      });
+    const res = await getAssets(req("/projects/p1/assets"), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      assets: [
+        { id: "a1", name: "Logo", kind: "image", url: "https://cdn.test/logo.png", mimeType: "image/png" },
+        { id: "a2", name: "Clip", kind: "video", url: "https://cdn.test/clip.mp4", mimeType: "video/mp4" },
+      ],
+    });
+    expect(strataCalls[0].url).toBe("https://strata.test/v1/projects/p1/assets");
+  });
+
+  it("imports assets into the user's library by link without duplicating", async () => {
+    strataHandler = () =>
+      json(200, {
+        data: [
+          { assetId: "a1", name: "Logo", mimeType: "image/png", cdnUrl: "https://cdn.test/logo.png" },
+          { assetId: "a2", name: "Banner", mimeType: "image/jpeg", cdnUrl: "https://cdn.test/banner.jpg" },
+        ],
+      });
+    state.images.push({ id: "i0", userId: "u1", organizationId: "org1", name: "Old Logo", url: "https://cdn.test/logo.png" });
+
+    const bad = await importAssets(req("/projects/p1/assets/import", "POST", {}), ctx("p1"));
+    expect(bad.status).toBe(400);
+
+    const res = await importAssets(req("/projects/p1/assets/import", "POST", { ids: ["a1", "a2"] }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ added: 1 });
+    expect(state.images).toHaveLength(2);
+    expect(state.images[1].url).toBe("https://cdn.test/banner.jpg");
+  });
+
+  it("sends library images up to Strata, skipping ones already present", async () => {
+    state.images.push(
+      { id: "img1", userId: "u1", organizationId: "org1", name: "Photo", url: "https://cdn.test/photo.png" },
+      { id: "img2", userId: "u1", organizationId: "org1", name: "Existing", url: "https://cdn.test/existing.png" },
+    );
+
+    strataHandler = (url, init) => {
+      if (init?.method === "POST") return json(201, { status: true });
+      return json(200, { data: [{ cdnUrl: "https://cdn.test/existing.png" }] });
+    };
+
+    const empty = await sendAssets(req("/projects/p1/assets/send", "POST", {}), ctx("p1"));
+    expect(empty.status).toBe(400);
+
+    const res = await sendAssets(req("/projects/p1/assets/send", "POST", { mediaIds: ["img1", "img2"] }), ctx("p1"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ sent: 1, skipped: 1 });
   });
 });

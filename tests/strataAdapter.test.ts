@@ -172,6 +172,9 @@ describe("the data calls", () => {
       if (url.endsWith("/projects")) return reply(200, { projects: [{ id: "p1", name: "Acme" }] });
       if (url.endsWith("/design-system") && init?.method === "PUT") return reply(200, { revision: "r2" });
       if (url.endsWith("/design-system")) return reply(200, { revision: "r1", tokens: [], components: [] });
+      if (url.endsWith("/assets") && init?.method === "GET") return reply(200, { assets: [{ id: "a1", name: "Logo", kind: "image", url: "https://cdn/logo.png" }] });
+      if (url.endsWith("/assets/import") && init?.method === "POST") return reply(200, { added: 1 });
+      if (url.endsWith("/assets/send") && init?.method === "POST") return reply(200, { sent: 1, skipped: 0 });
       return reply(200, { available: true, connected: false, expired: false });
     };
     expect(await a.listProjects()).toEqual([{ id: "p1", name: "Acme" }]);
@@ -181,6 +184,14 @@ describe("the data calls", () => {
     expect(fetchFn.mock.calls.at(-1)![0]).toBe("/api/v1/strata/projects/p%2F1/design-system");
     expect(await a.push("p1", { variables: [], components: [] }, "r1")).toEqual({ revision: "r2" });
     expect(JSON.parse(String(fetchFn.mock.calls.at(-1)![1]!.body))).toEqual({ variables: [], components: [], baseRevision: "r1" });
+    expect(await a.listAssets("p1")).toEqual([{ id: "a1", name: "Logo", kind: "image", url: "https://cdn/logo.png" }]);
+    expect(fetchFn.mock.calls.at(-1)![0]).toBe("/api/v1/strata/projects/p1/assets");
+    expect(await a.importAssets("p1", ["a1"])).toEqual({ added: 1 });
+    expect(fetchFn.mock.calls.at(-1)![0]).toBe("/api/v1/strata/projects/p1/assets/import");
+    expect(JSON.parse(String(fetchFn.mock.calls.at(-1)![1]!.body))).toEqual({ ids: ["a1"] });
+    expect(await a.sendAssets("p1", ["m1"])).toEqual({ sent: 1, skipped: 0 });
+    expect(fetchFn.mock.calls.at(-1)![0]).toBe("/api/v1/strata/projects/p1/assets/send");
+    expect(JSON.parse(String(fetchFn.mock.calls.at(-1)![1]!.body))).toEqual({ mediaIds: ["m1"] });
     await a.disconnect();
     expect(fetchFn.mock.calls.at(-1)![1]!.method).toBe("DELETE");
   });
