@@ -42,11 +42,17 @@ export type TierFeatures = {
   hostManagedAiEnabled: boolean;
   /**
    * Whether the account can turn a landing page into a multi-page site
-   * (add sub-pages nested under it, e.g. /about, /blog/post-1). Gated to
-   * Ultra: sub-pages are unlimited per site once enabled (maxLandingPages
-   * only counts root/home pages), so this is the actual scarcity control.
+   * (add sub-pages nested under it, e.g. /about, /blog/post-1). Pro and Ultra:
+   * sub-pages are unlimited per site (maxLandingPages only counts root/home
+   * pages); Free is a single page.
    */
   multiPageSitesEnabled: boolean;
+  /**
+   * Whether the account can move a whole existing site in (WordPress migration,
+   * importing a site from another builder). Pro and Ultra (Free is a single
+   * page). Its own switch so the two can be gated separately again if ever needed.
+   */
+  siteMigrationEnabled: boolean;
   /** Whether the account may link a CUSTOM (non-plexopages.io) domain to a published page. */
   customDomainEnabled: boolean;
   /**
@@ -104,6 +110,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     manageLandingPagePublishingEnabled: false,
     hostManagedAiEnabled: false,
     multiPageSitesEnabled: false,
+    siteMigrationEnabled: false,
     customDomainEnabled: false,
     brandingRemovalEnabled: false,
     whiteLabelEnabled: false,
@@ -122,7 +129,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     sdkAiTier: "MEDIUM",
     manageLandingPagePublishingEnabled: false,
     hostManagedAiEnabled: false,
-    multiPageSitesEnabled: false,
+    multiPageSitesEnabled: true,
+    siteMigrationEnabled: true,
     customDomainEnabled: true,
     brandingRemovalEnabled: true,
     whiteLabelEnabled: true,
@@ -142,6 +150,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     manageLandingPagePublishingEnabled: true,
     hostManagedAiEnabled: true,
     multiPageSitesEnabled: true,
+    siteMigrationEnabled: true,
     customDomainEnabled: true,
     brandingRemovalEnabled: true,
     whiteLabelEnabled: true,

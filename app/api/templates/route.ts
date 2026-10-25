@@ -123,12 +123,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const parentId = body.parentId?.trim() || null;
   let parent: { id: string; kind: TemplateKind; designFormat: DesignFormat } | null = null;
   if (parentId) {
-    // Multi-page sites are an Ultra feature. A page's sub-pages are unlimited
+    // Multi-page sites are a Pro and Ultra feature. A page's sub-pages are unlimited
     // once enabled (see the template-limit check below, which only counts
-    // root/home pages) — Ultra-gating is the actual scarcity control here.
+    // root/home pages); Free stays a single page.
     if (!features.multiPageSitesEnabled) {
       return NextResponse.json(
-        { error: "Multi-page sites require an Ultra subscription plan.", plan: resolved.subscriptionPlan },
+        { error: "Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages.", plan: resolved.subscriptionPlan },
         { status: 403 },
       );
     }

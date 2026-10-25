@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 
 import { BRAND } from "@/lib/theme";
+import { Pagination } from "../../../_components/Pagination";
 export type OrderSummary = {
   id: string;
   orderNumber: string;
@@ -122,8 +123,11 @@ function DeliveryDetailsList({ rows }: { rows: [string, string][] }) {
   );
 }
 
-export function OrdersClient({ templateId, initialOrders }: { templateId: string; initialOrders: OrderSummary[]; initialTotal: number }) {
+export function OrdersClient({ templateId, initialOrders, initialTotal, initialAwaiting, initialPage, initialPageSize }: { templateId: string; initialOrders: OrderSummary[]; initialAwaiting: number; initialTotal: number; initialPage: number; initialPageSize: number }) {
   const [orders, setOrders] = useState(initialOrders);
+  const [total, setTotal] = useState(initialTotal);
+  const [awaitingTotal, setAwaitingTotal] = useState(initialAwaiting);
+  const [paging, setPaging] = useState({ page: initialPage, pageSize: initialPageSize });
   const [selected, setSelected] = useState<OrderSummary | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [q, setQ] = useState("");
@@ -164,18 +168,27 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
     setSelected((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev));
   }
 
-  async function runSearch() {
+  /** Loads a page of orders for the current search and filter; a new search or filter starts back at page 1. */
+  async function runSearch(next: { page?: number; pageSize?: number; status?: string } = {}) {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (statusFilter === "AWAITING_TRANSFER") {
+      const activeStatus = next.status ?? statusFilter;
+      const page = next.page ?? 1;
+      const pageSize = next.pageSize ?? paging.pageSize;
+      params.set("page", String(page));
+      params.set("pageSize", String(pageSize));
+      if (activeStatus === "AWAITING_TRANSFER") {
         params.set("status", "PENDING");
         params.set("paymentMethod", "BANK_TRANSFER");
-      } else if (statusFilter) params.set("status", statusFilter);
+      } else if (activeStatus) params.set("status", activeStatus);
       if (q.trim()) params.set("q", q.trim());
       const res = await fetch(`/api/v1/commerce/${templateId}/orders?${params.toString()}`);
       const data = await res.json();
       if (res.ok) {
+        setTotal(data.total);
+        setAwaitingTotal(data.awaitingTransferCount ?? 0);
+        setPaging({ page: data.page, pageSize: data.pageSize });
         setOrders(
           data.orders.map((o: any) => ({
             id: o.id,
@@ -309,6 +322,7 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
         bankTransferRejectReason: data.order?.bankTransferRejectReason ?? null,
       });
       setRejectOpen(false);
+      setAwaitingTotal((n) => Math.max(0, n - 1));
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Couldn't update this order.");
     } finally {
@@ -316,7 +330,7 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
     }
   }
 
-  const awaitingCount = orders.filter(isAwaitingTransfer).length;
+  const awaitingCount = awaitingTotal;
 
   return (
     <div>
@@ -351,7 +365,7 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
             {awaitingCount === 1 ? "1 bank transfer is" : `${awaitingCount} bank transfers are`} waiting for you to confirm the money arrived.
           </span>
           <button
-            type="button" onClick={() => { setStatusFilter("AWAITING_TRANSFER"); setOrders((prev) => prev.filter(isAwaitingTransfer)); }}
+            type="button" onClick={() => { setStatusFilter("AWAITING_TRANSFER"); void runSearch({ status: "AWAITING_TRANSFER" }); }}
             style={{ padding: "0.35rem 0.8rem", borderRadius: 8, border: "1px solid rgba(96,165,250,0.4)", background: "transparent", color: "#bfdbfe", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
           >
             Show them
@@ -404,6 +418,11 @@ export function OrdersClient({ templateId, initialOrders }: { templateId: string
           </table>
         </div>
       )}
+
+      <Pagination
+        page={paging.page} pageSize={paging.pageSize} total={total} noun="orders" disabled={loading}
+        onChange={(next) => void runSearch(next)}
+      />
 
       {/* ── DETAIL MODAL ────────────────────────── */}
       {selected && (

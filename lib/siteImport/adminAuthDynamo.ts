@@ -36,8 +36,8 @@ export async function resolveSiteImportSite(
     return { error: NextResponse.json({ error: "Site not found." }, { status: 404 }) };
   }
 
-  if (!getTierFeatures(resolved.subscriptionPlan).multiPageSitesEnabled) {
-    return { error: NextResponse.json({ error: "Importing a full website requires the Ultra plan." }, { status: 403 }) };
+  if (!getTierFeatures(resolved.subscriptionPlan).siteMigrationEnabled) {
+    return { error: NextResponse.json({ error: "Importing a full website needs a Pro or Ultra plan." }, { status: 403 }) };
   }
 
   return {

@@ -14,6 +14,9 @@ import {
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
+import { getTierFeatures } from "@/lib/subscription";
+import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
+import { splitHtmlAssetsIntoPages } from "@/lib/rawSite/splitPages";
 
 /**
  * POST /api/v1/templates/:id/replace-upload
@@ -152,5 +155,22 @@ export async function POST(
     void scanPublishedDomain(d.templateId, d.id).catch((err) => console.error("Safe Browsing scan failed:", err));
   }
 
-  return NextResponse.json({ success: true, templateId: template.id, assetCount: uploaded.length });
+  // Extra .html files in the upload (about.html, contact.html…) become real pages of the site, so
+  // they count as pages, show in the dashboard and are editable — same as a fresh multi-page upload.
+  let pages: Awaited<ReturnType<typeof splitHtmlAssetsIntoPages>> | null = null;
+  if (!template.parentId) {
+    if (getTierFeatures(await getOrganizationOwnerPlanDynamo(template.organizationId)).multiPageSitesEnabled) {
+      pages = await splitHtmlAssetsIntoPages(template).catch((err) => {
+        console.error("Splitting replaced upload into pages failed (non-fatal):", err);
+        return null;
+      });
+    }
+  }
+
+  return NextResponse.json({
+    success: true,
+    templateId: template.id,
+    assetCount: uploaded.length - (pages ? pages.created.length + pages.updated.length : 0),
+    ...(pages ? { pagesCreated: pages.created.length, pagesUpdated: pages.updated.length } : {}),
+  });
 }

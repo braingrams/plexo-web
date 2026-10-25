@@ -11,9 +11,11 @@ import { Template, TemplateAsset, BlogSite, PublishedDomain } from "@/lib/db/con
 import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
 import { getStorefrontPath, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
 import { deriveCommerceTheme, type CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
-import { PageView } from "@/lib/db/opsEntities";
+import { FormSettings, PageView } from "@/lib/db/opsEntities";
 import { recordPageViewRollup } from "@/lib/analyticsRollup";
-import { escapeHtmlAttr, injectBrandingBar, injectFavicon, injectSeoTags } from "@/lib/pub/htmlInject";
+import { renderContentBlocks } from "@/lib/customContent/render";
+import { applyActiveNav } from "@/lib/pub/activeNav";
+import { CONTENT_MARKER_ATTR, escapeHtmlAttr, injectBrandingBar, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags } from "@/lib/pub/htmlInject";
 import { serveProject } from "@/lib/projects/serve";
 import { resolvePreviewHost } from "@/lib/projects/previewHost";
 import { User, Organization } from "@/lib/db/coreEntities";
@@ -542,6 +544,12 @@ export async function GET(
     const last = slugSegments[slugSegments.length - 1] ?? "";
     if (homeOnly) return remainingSegments.length > 0 && NON_HTML_FILE.test(last) ? notFoundResponse() : homePageRedirect(request);
     if (unpublishedOnPath) return notFoundResponse();
+    // "about.html" and "/about" are the same page; one address for search engines and bookmarks
+    // (the uploaded site's own links often say "about.html").
+    if (remainingSegments.length === 0 && /\.html?$/i.test(last)) {
+      const clean = [...slugSegments.slice(0, -1), last.replace(/\.html?$/i, "")];
+      return NextResponse.redirect(new URL(`/${clean.join("/")}${new URL(request.url).search}`, request.url), 301);
+    }
   }
 
   // A raw-uploaded page's own root document is never itself a TemplateAsset — the zip
@@ -619,6 +627,8 @@ export async function GET(
       siteName: published.template.name || rawDomain,
     });
     html = optimizeImages(html);
+    // The menu link for the page the visitor is on is marked (and underlined in the editor's own menus).
+    html = applyActiveNav(html, new URL(request.url).pathname, rawDomain);
     // New-editor (V2) pages have their custom script baked into compiledHtml at compile time
     // (lib/v2/compile.ts); only classic pages re-inject it from designJson here.
     if (cursor.sourceType !== "RAW_UPLOAD" && cursor.designFormat !== "v2") {
@@ -671,6 +681,17 @@ export async function GET(
     // live on the same entity) rather than a second DB read.
     if (commerceSettings?.newsletterPopupEnabled && commerceSettings?.maildripNewsletterGroupId) {
       html = injectNewsletterPopupScript(html);
+    }
+
+    // Content widget + form connector: gated on what the page actually contains, so a page
+    // with neither never loads them. Same for builder pages and raw uploads.
+    if (html.includes(CONTENT_MARKER_ATTR)) {
+      // Written into the page itself so search engines read it; the script then keeps it live.
+      html = await renderContentBlocks(html, published.templateId, `https://${rawDomain}`);
+      html = injectContentScript(html);
+    }
+    if (/<form[\s>]/i.test(html) || html.includes("data-plexo-form")) {
+      html = injectFormsScript(html, published.templateId, { auto: true });
     }
 
     // Record analytics view asynchronously (does not block client response)
@@ -875,6 +896,20 @@ export async function GET(
   if (/^(font\/|application\/(font|x-font|vnd\.ms-fontobject))/i.test(asset.contentType) || /\.(woff2?|ttf|otf|eot)$/i.test(remainingSegments.join("/"))) {
     headers.set("Access-Control-Allow-Origin", "*");
   }
+  // An HTML file that is served as a page of the site gets the same form + content support as any
+  // page, so its contact form works and says thank you.
+  if (/^text\/html/i.test(asset.contentType)) {
+    let html = applyActiveNav(await assetRes.text(), new URL(request.url).pathname, rawDomain);
+    if (html.includes(CONTENT_MARKER_ATTR)) {
+      html = await renderContentBlocks(html, published.templateId, `https://${rawDomain}`);
+      html = injectContentScript(html);
+    }
+    if (/<form[\s>]/i.test(html) || html.includes("data-plexo-form")) {
+      html = injectFormsScript(html, published.templateId, { auto: true });
+    }
+    headers.set("Cache-Control", "public, max-age=0, s-maxage=30, must-revalidate");
+    return new NextResponse(html, { headers });
+  }
   const etag = assetRes.headers.get("etag");
   if (etag) headers.set("ETag", etag);
   const lastModified = assetRes.headers.get("last-modified");
@@ -933,6 +968,44 @@ function humanizeRoute(path: string): string {
   return tail.join(" — ") || "Website form";
 }
 
+/** Where the visitor goes back to after a form on `path` was sent: the thank-you page the owner set, else the same page. */
+async function handlePageFormPost(
+  request: NextRequest,
+  published: { templateId: string; organization: { id: string } },
+  host: string,
+  path: string,
+): Promise<NextResponse> {
+  const templateId = published.templateId;
+  const back = (target: string) => NextResponse.redirect(new URL(target, request.url), { status: 303 });
+  const samePage = `${path}${path.includes("?") ? "&" : "?"}submitted=1`;
+
+  // Same-site browsers only: a post that names another site as its origin is dropped without a signal.
+  const originHeader = request.headers.get("origin") ?? request.headers.get("referer");
+  if (originHeader) {
+    try {
+      if (new URL(originHeader).hostname !== host.split(":")[0]) return back(samePage);
+    } catch { /* unreadable origin: carry on */ }
+  }
+  if (!(await checkCommerceRateLimit(`forms:page:${templateId}:${clientIp(request)}`, 10))) {
+    return NextResponse.json({ error: "Too many submissions. Please try again shortly." }, { status: 429 });
+  }
+  const fields = await readSubmittedFields(request);
+  // Spam trap: a filled-in hidden field means a bot — answer as if it worked.
+  if (fields["_hp_field"]) return back(samePage);
+  delete fields["_hp_field"];
+  if (Object.keys(fields).length === 0) return NextResponse.json({ error: "Please fill in the form before sending." }, { status: 400 });
+
+  const url = new URL(request.url);
+  const lastSegment = path.split("/").filter(Boolean).pop() ?? "";
+  const formName = (url.searchParams.get("form") || (lastSegment ? lastSegment.replace(/\.html?$/i, "").replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Website Form")).slice(0, 100);
+  await recordFormSubmission({ templateId, organizationId: published.organization.id, formName, fields, submitterIp: clientIp(request), siteHost: host });
+
+  const { data: settings } = await FormSettings.get({ templateId, formName }).go();
+  const thankYou = settings?.redirectUrl;
+  if (thankYou && (thankYou.startsWith("/") && !thankYou.startsWith("//") || /^https:\/\//i.test(thankYou))) return back(thankYou);
+  return back(samePage);
+}
+
 /**
  * POSTs on a published site. Only WordPress-compatibility endpoints of a site migrated
  * from WordPress live here:
@@ -956,6 +1029,12 @@ export async function POST(
   const root = siteResult.published.template;
   const captureRoutes = Array.isArray(root.migratedApiCaptureRoutes) ? (root.migratedApiCaptureRoutes as string[]) : [];
   const isCaptureRoute = captureRoutes.some((r) => path === r || path === `${r}/`);
+  // A form that posts to its own page (<form method="post"> with no action — what a hand-built or uploaded
+  // site's contact form usually is) lands here. Collect it like any other Plexo form instead of refusing it.
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!isAjax && !isCaptureRoute && /application\/x-www-form-urlencoded|multipart\/form-data/i.test(contentType)) {
+    return handlePageFormPost(request, siteResult.published, decodeURIComponent(domain), path);
+  }
   if (!isAjax && !isCaptureRoute) return NextResponse.json({ error: "Method not allowed." }, { status: 405 });
   if (!root.migratedFrom) return isAjax ? wordPressAjaxStub() : NextResponse.json({ error: "Method not allowed." }, { status: 405 });
 

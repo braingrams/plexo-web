@@ -23,6 +23,7 @@ import { LMS_MCP_TOOLS, LMS_TOOL_NAMES, handleLmsTool } from "./lmsTools";
 import { WP_MIGRATION_MCP_TOOLS, WP_MIGRATION_TOOL_NAMES, handleWpMigrationTool } from "./wpMigrationTools";
 import { DONATION_MCP_TOOLS, DONATION_TOOL_NAMES, handleDonationTool } from "./donationTools";
 import { FORM_MCP_TOOLS, FORM_TOOL_NAMES, handleFormTool } from "./formTools";
+import { CONTENT_MCP_TOOLS, CONTENT_TOOL_NAMES, handleContentTool } from "./contentTools";
 import { APP_MCP_TOOLS, APP_TOOL_NAMES, handleAppTool } from "./appTools";
 import { PAGE_MCP_TOOLS, PAGE_TOOL_NAMES, handlePageTool } from "./pageTools";
 import { PageToolError, convertLegacyDesign, createV2Page, editableUrlFor, publishPage, summarizeSections } from "./v2Pages";
@@ -568,7 +569,7 @@ Because this serves unsanitized content, the account must accept the Acceptable 
     name: "create_landing_page_subpage",
     title: "Create Sub-Page",
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-    description: `Adds a new page nested under an existing landing page, reachable at <site domain>/<slug> — or nested deeper (e.g. /blog/post-1) if parentTemplateId is itself a sub-page rather than the home page. This is how a single landing page becomes a multi-page site (BUILDER and RAW_UPLOAD pages can be freely mixed within the same site — each page's own sourceType is independent of its siblings). No separate publish step is needed for sub-pages: they automatically become reachable once the site's home page has a domain linked (see publish_existing_landing_page). Requires an Ultra subscription plan — sub-pages are otherwise unlimited per site once enabled (the plan's template limit only counts home pages, not their sub-pages).
+    description: `Adds a new page nested under an existing landing page, reachable at <site domain>/<slug> — or nested deeper (e.g. /blog/post-1) if parentTemplateId is itself a sub-page rather than the home page. This is how a single landing page becomes a multi-page site (BUILDER and RAW_UPLOAD pages can be freely mixed within the same site — each page's own sourceType is independent of its siblings). No separate publish step is needed for sub-pages: they automatically become reachable once the site's home page has a domain linked (see publish_existing_landing_page). Requires a Pro or Ultra plan — sub-pages are otherwise unlimited per site once enabled (the plan's template limit only counts home pages, not their sub-pages).
 
 Provide EITHER designJson (a drag-and-drop BUILDER sub-page) OR htmlContent (a raw-HTML sub-page, same unsanitized/AUP/1MB caveats as create_raw_landing_page) — not both. Omit both to create a blank BUILDER page (fill it in afterward with update_template using the returned templateId). Edit an existing sub-page's content afterward with update_template (BUILDER) or update_raw_landing_page (RAW_UPLOAD) depending on which mode it was created with.`,
     inputSchema: {
@@ -773,6 +774,7 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   ...WP_MIGRATION_MCP_TOOLS,
   ...DONATION_MCP_TOOLS,
   ...FORM_MCP_TOOLS,
+  ...CONTENT_MCP_TOOLS,
   ...APP_MCP_TOOLS,
   ...PAGE_MCP_TOOLS,
 ].map(markDeprecated);
@@ -1300,7 +1302,7 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
     case "create_landing_page_subpage": {
       const features = getTierFeatures(resolved.subscriptionPlan);
       if (!features.multiPageSitesEnabled) {
-        throw new Error("Multi-page sites require an Ultra subscription plan.");
+        throw new Error("Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages.");
       }
 
       const parentTemplateId = typeof args.parentTemplateId === "string" ? args.parentTemplateId.trim() : "";
@@ -1570,7 +1572,7 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
     case "duplicate_landing_page_page": {
       const features = getTierFeatures(resolved.subscriptionPlan);
       if (!features.multiPageSitesEnabled) {
-        throw new Error("Multi-page sites require an Ultra subscription plan.");
+        throw new Error("Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages.");
       }
 
       const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
@@ -1767,6 +1769,10 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       }
       if (FORM_TOOL_NAMES.has(toolName)) {
         toolResult = await handleFormTool(toolName, args, resolved);
+        break;
+      }
+      if (CONTENT_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleContentTool(toolName, args, resolved);
         break;
       }
       if (APP_TOOL_NAMES.has(toolName)) {

@@ -882,7 +882,7 @@ function ManagePagesModal({
 				<div style={{ flex: 1, overflowY: "auto", padding: "0.75rem" }}>
 					{!isUltra && (
 						<div style={{ margin: "0.25rem 0.25rem 0.75rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "var(--brand-subtle)", border: "1px solid rgba(var(--brand-rgb),0.25)", fontSize: "0.8rem", color: "rgba(240,242,255,0.8)", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
-							<IconSparkle /> <span>Multi-page sites (adding, duplicating pages) require an <strong>Ultra</strong> plan. Existing pages remain fully usable below.</span>
+							<IconSparkle /> <span>Multi-page sites (adding, duplicating pages) need a <strong>Pro</strong> or <strong>Ultra</strong> plan. Existing pages remain fully usable below.</span>
 						</div>
 					)}
 					{root && renderNode(root, 0)}

@@ -50,6 +50,26 @@ export function insertBeforeBodyEnd(html: string, fragment: string): string {
   return html + fragment;
 }
 
+/** Marker the content widget (public/plexo-content.js) fills in — a plain div that works in every builder. */
+export const CONTENT_MARKER_ATTR = "data-plexo-content";
+
+/** Content widget runtime (videos, stories, events…). Same injection for builder pages, raw uploads and React projects. */
+export function injectContentScript(html: string): string {
+  return insertBeforeBodyEnd(html, `<script src="/plexo-content.js?v=${process.env.ASSET_VERSION ?? "dev"}" defer></script>`);
+}
+
+/**
+ * Form connector (public/plexo-forms.js): sends any form on the page to this site's Form Submissions.
+ * `auto: false` (React projects) connects only forms marked data-plexo-form — an app's own forms
+ * already have their own handlers, so Plexo never takes one over unasked.
+ */
+export function injectFormsScript(html: string, templateId: string, opts: { auto: boolean }): string {
+  return insertBeforeBodyEnd(
+    html,
+    `<script src="/plexo-forms.js?v=${process.env.ASSET_VERSION ?? "dev"}" data-template-id="${escapeHtmlAttr(templateId)}" data-auto="${opts.auto}" defer></script>`,
+  );
+}
+
 export function injectBrandingBar(html: string, ctaHref: string): string {
   const bar = `<div style="position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;gap:12px;padding:10px 16px;background:#0b0f19;color:#f0f2ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;line-height:1;border-top:1px solid rgba(255,255,255,0.08);box-shadow:0 -4px 20px rgba(0,0,0,0.35);">
   <span>Hosted with <strong>Plexo</strong>.</span>

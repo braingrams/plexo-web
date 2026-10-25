@@ -507,7 +507,7 @@ const PLANS = [
     period: "/month",
     description: "For creators and small teams shipping landing pages.",
     features: [
-      "20 Templates", "Email + Landing Pages", "10 Published Domains", "Custom Domain Support",
+      "20 Templates", "Email + Landing Pages", "Unlimited Multi-Page Sites", "10 Published Domains", "Custom Domain Support",
       "Remove Plexo Branding", "BYOK Encryption Vault", "MCP Server Access", "Strata Design Tokens", "3 API Keys",
     ],
     cta: "Start with Pro",
@@ -520,7 +520,7 @@ const PLANS = [
     period: "/month",
     description: "For agencies and SaaS apps embedding Plexo for end users.",
     features: [
-      "Unlimited Templates", "Unlimited Multi-Page Sites", "25 Published Domains", "Host-Managed AI Webhooks",
+      "Unlimited Templates", "25 Published Domains", "Host-Managed AI Webhooks",
       "White-Glove SDK Embedding", `${planMonthlyCredits("ULTRA").toLocaleString("en-US")} Monthly AI Credits`, "10 API Keys", "Everything in Pro",
     ],
     cta: "Get Ultra",

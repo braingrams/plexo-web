@@ -44,14 +44,25 @@ export interface GeoInfo {
 }
 
 /**
- * Vercel's edge network injects these on every request (Edge and Node/serverless alike)
- * when deployed on Vercel — free, no third-party GeoIP API or raw-IP lookup needed. They're
- * simply absent in local dev / non-Vercel environments, which is fine — geo fields stay null.
+ * Where a visitor is, from the headers the edge network adds — free, no GeoIP service or raw-IP lookup:
+ *  - CloudFront (how Plexo is served on AWS): CloudFront-Viewer-Country / -Country-Region / -City. CloudFront only
+ *    hands these to the app when the distribution's cache policy names them (cdk/lib/published-sites-stack.ts,
+ *    pageCachePolicy) — without that every visit shows "Unknown".
+ *  - Vercel (the previous host): x-vercel-ip-*, kept so a Vercel deploy or preview still works.
+ * Both are simply absent in local dev, which is fine — the fields stay null.
  */
 export function extractGeoFromHeaders(headers: Headers): GeoInfo {
-  const country = headers.get("x-vercel-ip-country");
-  const region = headers.get("x-vercel-ip-country-region");
-  const rawCity = headers.get("x-vercel-ip-city");
-  const city = rawCity ? decodeURIComponent(rawCity) : null;
-  return { country, region, city };
+  const country = headers.get("cloudfront-viewer-country") ?? headers.get("x-vercel-ip-country");
+  const region = headers.get("cloudfront-viewer-country-region") ?? headers.get("x-vercel-ip-country-region");
+  const rawCity = headers.get("cloudfront-viewer-city") ?? headers.get("x-vercel-ip-city");
+  let city = rawCity;
+  if (rawCity) {
+    // Vercel percent-encodes the city; CloudFront sends it as is ("São Paulo", or a name with a stray "%").
+    try {
+      city = decodeURIComponent(rawCity);
+    } catch {
+      city = rawCity;
+    }
+  }
+  return { country: country || null, region: region || null, city: city || null };
 }

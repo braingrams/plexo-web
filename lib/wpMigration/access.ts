@@ -17,7 +17,7 @@ export interface MigrationAccess {
 // same security reason: the detect step fetches arbitrary URLs server-side, so it must not
 // be a free fetch proxy for accounts that can't use the result). The message tells the
 // owner exactly what unlocks it rather than a bare 403.
-export const MIGRATION_PLAN_MESSAGE = "Moving a whole WordPress site to Plexo is part of the Ultra plan. Upgrade in Settings → Billing to continue.";
+export const MIGRATION_PLAN_MESSAGE = "Moving a whole WordPress site to Plexo is part of the Pro and Ultra plans. Upgrade in Settings → Billing to continue.";
 
 export async function resolveMigrationAccess(
   request: NextRequest,
@@ -27,7 +27,7 @@ export async function resolveMigrationAccess(
   if (!resolved) return { error: NextResponse.json({ error: "Please sign in again." }, { status: 401 }) };
   const permissionError = requirePermission(resolved.role, { template: [opts.permission] });
   if (permissionError) return { error: permissionError };
-  if (!getTierFeatures(resolved.subscriptionPlan).multiPageSitesEnabled) {
+  if (!getTierFeatures(resolved.subscriptionPlan).siteMigrationEnabled) {
     return { error: NextResponse.json({ error: MIGRATION_PLAN_MESSAGE, requiresUpgrade: true }, { status: 403 }) };
   }
   return {

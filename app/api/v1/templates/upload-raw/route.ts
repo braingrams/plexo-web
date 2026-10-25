@@ -109,7 +109,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // upload used as a sub-page is still a sub-page for plan-limit purposes.
     if (!features.multiPageSitesEnabled) {
       return NextResponse.json(
-        { error: "Multi-page sites require an Ultra subscription plan." },
+        { error: "Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages." },
         { status: 403 }
       );
     }

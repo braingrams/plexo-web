@@ -402,6 +402,11 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
       const payload = await res.json();
       if (!res.ok) throw new Error(payload.error ?? "Couldn't create the file.");
 
+      if (payload.page?.id) {
+        // The file became a real page of the site — open it in its own editor.
+        window.location.href = `/dashboard/templates/${payload.page.id}`;
+        return;
+      }
       const newFile: FileEntry = payload.file;
       setFiles((prev) => [...prev, newFile].sort((a, b) => (a.path === "index.html" ? -1 : b.path === "index.html" ? 1 : a.path.localeCompare(b.path))));
       if (newFile.editable) {

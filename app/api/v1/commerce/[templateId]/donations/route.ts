@@ -10,7 +10,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   const { templateId } = await context.params;
   const resolved = await resolveCommerceAdmin(request, templateId);
   if (resolved.error) return resolved.error;
-  return NextResponse.json(await listDonationsOverview(templateId));
+  return NextResponse.json(await listDonationsOverview(templateId, { allGifts: true }));
 }
 
 /** POST — create a donation campaign (and switch on everything donations need). */

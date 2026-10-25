@@ -31,7 +31,7 @@ export default async function FormSubmissionsPage({ params }: { params: Promise<
           Form Submissions
         </h1>
         <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.45)", marginTop: "0.4rem" }}>
-          Messages sent through any form on this site, newest first — showing the last up to 200.
+          Messages sent through any form on this site, newest first.
         </p>
       </div>
 

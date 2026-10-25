@@ -366,7 +366,7 @@ export async function createV2Page(
   const siteId = str(args.siteId);
   let parent: Row | null = null;
   if (siteId) {
-    if (!features.multiPageSitesEnabled) throw new PageToolError("Adding pages to a site needs the Ultra plan — a single-page site is available on your current plan. Upgrade to add more pages.");
+    if (!features.multiPageSitesEnabled) throw new PageToolError("Adding pages to a site needs the Pro or Ultra plan — a single-page site is available on your current plan. Upgrade to add more pages.");
     parent = await loadOwnedRow(resolved, siteId);
     if (formatLabel(parent) !== "v2") {
       throw new PageToolError(

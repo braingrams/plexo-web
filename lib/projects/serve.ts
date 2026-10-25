@@ -4,7 +4,7 @@ import { Template } from "@/lib/db/contentEntities";
 import { ProjectBuild } from "@/lib/db/projectEntities";
 import { resolveHideBranding, canWhiteLabel } from "@/lib/subscription";
 import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
-import { injectBrandingBar, injectFavicon, injectSeoTags, insertBeforeBodyEnd } from "@/lib/pub/htmlInject";
+import { injectBrandingBar, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags, insertBeforeBodyEnd } from "@/lib/pub/htmlInject";
 import { buildSitePrefix, getObject } from "./blobStore";
 import { ANALYTICS_BEACON_JS, previewRuntimeJs } from "./previewRuntime";
 import { latestSuccessfulBuild, recordLatestBuild } from "./builds";
@@ -189,6 +189,10 @@ async function htmlResponse(source: string, url: URL, ctx: ServeContext): Promis
     html = html.replace(/<head[^>]*>/i, (m) => `${m}<script>${HOME_ONLY_GUARD_JS}</script>`);
   }
   html = insertBeforeBodyEnd(html, `<script>${ANALYTICS_BEACON_JS}</script>`);
+  // Plexo content blocks and form collection for apps: both watch the page, so they also pick up
+  // what the app renders after load. Forms are connected only when marked data-plexo-form.
+  html = injectContentScript(html);
+  html = injectFormsScript(html, ctx.template.id, { auto: false });
   if (!resolveHideBranding(ctx.owner.subscriptionPlan, ctx.owner.hideBranding)) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);

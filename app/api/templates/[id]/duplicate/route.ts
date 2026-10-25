@@ -31,7 +31,7 @@ export async function POST(
   }
   if (!getTierFeatures(resolved.subscriptionPlan).multiPageSitesEnabled) {
     return NextResponse.json(
-      { error: "Multi-page sites require an Ultra subscription plan.", plan: resolved.subscriptionPlan },
+      { error: "Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages.", plan: resolved.subscriptionPlan },
       { status: 403 },
     );
   }

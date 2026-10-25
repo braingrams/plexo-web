@@ -58,7 +58,7 @@ export default async function BlogIndexPaginatedPage({ params }: { params: Promi
       />
       <main className="plexo-blog__main">
         {result.posts.length === 0 ? (
-          <EmptyState message="No posts published yet." />
+          <EmptyState message="Posts will appear here as soon as they're published." />
         ) : (
           <div className="plexo-blog__grid">
             {result.posts.map((post) => (

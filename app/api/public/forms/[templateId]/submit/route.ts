@@ -31,6 +31,9 @@ const HONEYPOT_FIELD_NAME = V2_FORM_HONEYPOT_FIELD_NAME; // same name in V1 and 
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
   const { templateId } = await params;
+  // public/plexo-forms.js (forms in raw HTML / React / the visual builder) asks for JSON and
+  // shows the thank-you in place; a plain browser form post still gets the redirect below.
+  const wantsJson = (request.headers.get("accept") ?? "").includes("application/json");
   const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
   const siteResult = await resolveSite(hostname);
   if (siteResult.status !== "ok") {
@@ -63,6 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (originHost && originHost !== hostname) {
       console.info(`[forms] origin mismatch: templateId=${templateId} origin=${originHost} expected=${hostname}`);
+      if (wantsJson) return NextResponse.json({ ok: true, redirect: null });
       const redirectParam = new URL(request.url).searchParams.get("redirect") || "/";
       const redirectPath = redirectParam.startsWith("/") ? redirectParam : "/";
       return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
@@ -78,7 +82,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   let fields = collectFormFields(formData.entries());
   if (Object.keys(fields).length === 0) {
-    return NextResponse.json({ error: "Empty submission." }, { status: 400 });
+    return NextResponse.json({ error: "Please fill in the form before sending." }, { status: 400 });
   }
 
   const url = new URL(request.url);
@@ -122,6 +126,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const honeypotValue = formData.get(HONEYPOT_FIELD_NAME);
   if (typeof honeypotValue === "string" && honeypotValue.trim()) {
     console.info(`[forms] honeypot catch: templateId=${templateId} at=${new Date().toISOString()}`);
+    if (wantsJson) return NextResponse.json({ ok: true, redirect: null });
     return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
   }
 
@@ -131,8 +136,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // default of showing the confirmation on the same page.
   const { data: formSettings } = await FormSettings.get({ templateId, formName }).go();
   const thankYou = formSettings?.redirectUrl;
-  if (thankYou && (thankYou.startsWith("/") || /^https:\/\//i.test(thankYou))) {
-    return NextResponse.redirect(new URL(thankYou, request.url), { status: 303 });
+  const validThankYou = thankYou && (thankYou.startsWith("/") || /^https:\/\//i.test(thankYou)) ? thankYou : null;
+  if (wantsJson) return NextResponse.json({ ok: true, redirect: validThankYou });
+  if (validThankYou) {
+    return NextResponse.redirect(new URL(validThankYou, request.url), { status: 303 });
   }
   return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
 }

@@ -202,7 +202,17 @@ export class PublishedSitesStack extends cdk.Stack {
       maxTtl: cdk.Duration.seconds(60),
       cookieBehavior: cloudfront.CacheCookieBehavior.none(),
       queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("p", "page_id"),
-      headerBehavior: cloudfront.CacheHeaderBehavior.allowList("x-forwarded-host"),
+      // The CloudFront-Viewer-* headers are how the app learns where a visit came from (the analytics
+      // "Location" column — server/analytics.ts extractGeoFromHeaders). CloudFront adds them, but only passes
+      // them to the origin when a policy names them; naming them here also varies the cache entry by the
+      // viewer's place, which the 10s TTL keeps cheap. Without this every visit was "Unknown" after the move
+      // off Vercel (which sent its own x-vercel-ip-* headers).
+      headerBehavior: cloudfront.CacheHeaderBehavior.allowList(
+        "x-forwarded-host",
+        "cloudfront-viewer-country",
+        "cloudfront-viewer-country-region",
+        "cloudfront-viewer-city",
+      ),
       enableAcceptEncodingGzip: true,
       enableAcceptEncodingBrotli: true,
     });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { CustomContentType, CustomContentEntry } from "@/lib/db/customContentEntities";
+import { BLOG_SLUG, listBlogItems } from "@/lib/customContent/blogSource";
 
 /**
  * GET /api/public/content/:domain/:typeSlug
@@ -45,6 +46,15 @@ export async function GET(
 
   const { data: contentTypes } = await CustomContentType.query.primary({ templateId }).go();
   const contentType = contentTypes.find((ct) => ct.slug === typeSlug);
+  // "blog" is the site's own blog (unless the owner made a content type with that name).
+  if (!contentType && typeSlug === BLOG_SLUG) {
+    const blogLimit = Number(request.nextUrl.searchParams.get("limit"));
+    const items = await listBlogItems(templateId, Number.isFinite(blogLimit) && blogLimit > 0 ? blogLimit : 48);
+    return NextResponse.json(
+      { contentType: { id: "blog", name: "Blog", slug: BLOG_SLUG }, entries: items, total: items.length, page: 1, pageSize: items.length },
+      { headers: { "Cache-Control": "public, max-age=0, s-maxage=30, stale-while-revalidate=60" } },
+    );
+  }
   if (!contentType) {
     return NextResponse.json({ error: `No content type "${typeSlug}" found for this site.` }, { status: 404 });
   }
@@ -73,11 +83,15 @@ export async function GET(
       ? mapped.slice(0, limit)
       : mapped;
 
-  return NextResponse.json({
-    contentType: { id: contentType.id, name: contentType.name, slug: contentType.slug },
-    entries,
-    total,
-    page,
-    pageSize: pageSize ?? total,
-  });
+  return NextResponse.json(
+    {
+      contentType: { id: contentType.id, name: contentType.name, slug: contentType.slug },
+      entries,
+      total,
+      page,
+      pageSize: pageSize ?? total,
+    },
+    // A new post shows up within about a minute; popular pages don't hit the database each view.
+    { headers: { "Cache-Control": "public, max-age=0, s-maxage=30, stale-while-revalidate=60" } },
+  );
 }
