@@ -73,6 +73,11 @@ export default async function TemplateDetailPage(props: {
     blogEnabled: boolean;
     siteLayoutEnabled: boolean;
     commerceEnabled: boolean;
+    deployedApp: {
+      framework: string;
+      spaMode: boolean;
+      updatedAt: string;
+    } | null;
   } | null = null;
 
   if (template.kind === "LANDING_PAGE") {

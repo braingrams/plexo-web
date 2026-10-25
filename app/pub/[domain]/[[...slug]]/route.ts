@@ -428,10 +428,11 @@ function applyRedirectDest(to: string, captures: Record<string, string>): string
 
 async function serveDeployedStatic(
   request: NextRequest,
-  app: { s3Prefix: string; spaMode?: boolean | null; redirectRules?: unknown },
+  app: { s3Prefix?: string | null; spaMode?: boolean | null; redirectRules?: unknown },
   slugSegments: string[],
 ): Promise<NextResponse> {
-  const s3Prefix = app.s3Prefix!;
+  const s3Prefix = app.s3Prefix;
+  if (!s3Prefix) return notFoundResponse();
   const spaMode = app.spaMode ?? false;
   const rules = (app.redirectRules as RedirectRule[] | null | undefined) ?? [];
   const requestedPath = "/" + slugSegments.join("/");
@@ -516,7 +517,7 @@ export async function GET(
   // its underlying Template row still exists. The builder/RAW_UPLOAD path never runs for
   // a domain that has a DeployedApp entity.
   const { data: deployedApp } = await DeployedApp.get({ templateId: published.templateId }).go();
-  if (deployedApp?.type === "STATIC" && deployedApp.s3Prefix) {
+  if (deployedApp?.type === "STATIC") {
     return serveDeployedStatic(request, deployedApp, slugSegments);
   }
 
