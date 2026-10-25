@@ -57,7 +57,7 @@ server.listen(port, async () => {
   const browser = await chromium.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" });
   const only = process.argv.slice(2);
   const targets = [...compiled.keys()].filter((k) => !only.length || only.includes(k));
-  for (const vp of [{ n: "d", w: 1024 }, { n: "w", w: 1440 }, { n: "t", w: 820 }, { n: "m", w: 390 }]) {
+  for (const vp of [{ n: "d", w: 1024 }, { n: "w", w: 1440 }, { n: "x", w: 1920 }, { n: "t", w: 820 }, { n: "m", w: 390 }]) {
     if (only.length && !process.env.ALL_VIEWPORTS && vp.n !== "d") continue;
     const ctx = await browser.newContext({ viewport: { width: vp.w, height: 900 } });
     for (const t of targets) {

@@ -15,7 +15,7 @@
 import "dotenv/config";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { User, Member, UploadedImage } from "../../lib/db/coreEntities";
 import { Template, BlogSite, BlogAuthor, BlogPost } from "../../lib/db/contentEntities";
@@ -111,10 +111,14 @@ async function main() {
   };
   const urls: Record<string, string> = {};
   for (const [key, f] of Object.entries(files)) {
-    const rel = `media/${user.id}/echoes-of-experience/${f.file}`;
+    // The file name carries a fingerprint of the content: the page's image optimiser and the edge cache key on the address,
+    // so re-uploading changed bytes under the same name would keep serving the old copy for a long time.
+    const bytes = readFileSync(path.join(assets!, f.file));
+    const stamp = createHash("sha256").update(bytes).digest("hex").slice(0, 8);
+    const rel = `media/${user.id}/echoes-of-experience/${f.file.replace(/(\.[a-z0-9]+)$/i, `-${stamp}$1`)}`;
     urls[key] = `https://${BUCKET}.s3.${REGION}.amazonaws.com/public/${rel}`;
     if (!apply) continue;
-    const { url } = await uploadObject(rel, readFileSync(path.join(assets!, f.file)), { access: "public", contentType: f.type });
+    const { url } = await uploadObject(rel, bytes, { access: "public", contentType: f.type });
     urls[key] = url;
     if (f.type.startsWith("image/")) await UploadedImage.put({ id: `echoes-${key}`, userId: user.id, organizationId, name: `Echoes of Experience — ${f.file}`, url }).go();
   }

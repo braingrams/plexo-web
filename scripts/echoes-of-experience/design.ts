@@ -32,6 +32,9 @@ export const SERIF = "Cormorant Garamond";
 // screen is capped so lines and cards don't stretch absurdly.
 const SIDE = "6.15%";
 const MAX = "1760px";
+// The hero photo keeps the mockup's scale: it grows with the screen up to this width, then stops (anchored right, its
+// left edge fading into the page) instead of zooming in on very wide screens. The fade layer is exactly as wide.
+const PHOTO_W = "min(100%, 1180px)";
 export const SCRIPT = "Oooh Baby";
 
 export type SiteImages = {
@@ -388,7 +391,7 @@ export function homePage(img: SiteImages, cards: BlogCard[]): PageSpec {
   const FADE =
     // Left to right: the photo's own soft, sunlit blur shows through a cream wash (so the left reads as an extension of
     // the photo rather than a flat block), clearing completely before the subject.
-    "linear-gradient(90deg, rgba(248,241,232,0.86) 0%, rgba(248,241,232,0.84) 30%, rgba(248,241,232,0.66) 40%, rgba(248,241,232,0.36) 49%, rgba(248,241,232,0.12) 58%, rgba(248,241,232,0) 66%), " +
+    "linear-gradient(90deg, rgba(248,241,232,1) 0%, rgba(248,241,232,0.9) 9%, rgba(248,241,232,0.84) 30%, rgba(248,241,232,0.66) 40%, rgba(248,241,232,0.36) 49%, rgba(248,241,232,0.12) 58%, rgba(248,241,232,0) 66%), " +
     // Top: solid under the menu, easing into the photo. Bottom: eases into the page so the photo has no hard edge.
     "linear-gradient(180deg, rgba(248,241,232,1) 0px, rgba(248,241,232,0.96) 90px, rgba(248,241,232,0.5) 150px, rgba(248,241,232,0.16) 215px, rgba(248,241,232,0) 270px), " +
     "linear-gradient(0deg, rgba(248,241,232,1) 0px, rgba(248,241,232,0.75) 16px, rgba(248,241,232,0.28) 44px, rgba(248,241,232,0) 84px), " +
@@ -397,16 +400,24 @@ export function homePage(img: SiteImages, cards: BlogCard[]): PageSpec {
     name: "Hero",
     styles: {
       layoutMode: "flow", display: "flex", flexDirection: "column", position: "relative", width: "100%",
-      backgroundColor: C.cream, backgroundImage: img.hero, backgroundSize: "100% auto", backgroundPosition: "right bottom",
+      backgroundColor: C.cream,
       minHeight: "652px", paddingBottom: "40px",
     },
-    // Below desktop width the photo simply fills the hero (a too-small photo would repeat); phones show it under the text instead.
-    tablet: { backgroundSize: "cover", backgroundPosition: "right center" },
-    mobile: { minHeight: "0px", backgroundImage: "none", paddingBottom: "0px" },
+    // Phones show the photo under the text instead (see the image after the text, below).
+    mobile: { minHeight: "0px", paddingBottom: "0px" },
     children: [
+      // The photo: the user's own, untouched, sized by the screen's width (so the mug is the same size relative to the page
+      // as in the mockup) up to PHOTO_W, anchored bottom right. An image element, not a background, so it never tiles and
+      // replacing it in the editor is one click.
+      node("image", {
+        name: "Hero photo",
+        props: { src: img.hero, alt: "" },
+        styles: { position: "absolute", x: 0, y: 0, width: PHOTO_W, height: "auto", horizontalConstraint: "right", verticalConstraint: "bottom", rightOffset: 0, bottomOffset: 0, pointerEvents: "none", zIndex: 0 },
+        hideOn: ["mobile"],
+      }),
       node("container", {
         name: "Fade over the photo",
-        styles: { position: "absolute", x: 0, y: 0, width: "100%", height: "100%", horizontalConstraint: "stretch", verticalConstraint: "stretch", rightOffset: 0, bottomOffset: 0, backgroundGradient: FADE, pointerEvents: "none", zIndex: 0 },
+        styles: { position: "absolute", x: 0, y: 0, width: PHOTO_W, height: "100%", horizontalConstraint: "right", verticalConstraint: "stretch", rightOffset: 0, bottomOffset: 0, backgroundGradient: FADE, pointerEvents: "none", zIndex: 0 },
         hideOn: ["mobile"],
       }),
       headerBar(img, true),
