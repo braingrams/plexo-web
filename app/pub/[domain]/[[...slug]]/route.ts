@@ -979,6 +979,17 @@ async function handlePageFormPost(
   const back = (target: string) => NextResponse.redirect(new URL(target, request.url), { status: 303 });
   const samePage = `${path}${path.includes("?") ? "&" : "?"}submitted=1`;
 
+  // Only a real page of this site can receive a form. Internet scanners POST to made-up addresses
+  // (/api, /next, /login …) all day; those must never land in the owner's Form Submissions.
+  let cursorId = templateId;
+  for (const segment of path.split("/").filter(Boolean)) {
+    const child =
+      (await findChildBySlug(cursorId, segment)) ??
+      (/\.html?$/i.test(segment) ? await findChildBySlug(cursorId, segment.replace(/\.html?$/i, "")) : null);
+    if (!child) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    cursorId = child.id;
+  }
+
   // Same-site browsers only: a post that names another site as its origin is dropped without a signal.
   const originHeader = request.headers.get("origin") ?? request.headers.get("referer");
   if (originHeader) {
@@ -993,6 +1004,8 @@ async function handlePageFormPost(
   // Spam trap: a filled-in hidden field means a bot — answer as if it worked.
   if (fields["_hp_field"]) return back(samePage);
   delete fields["_hp_field"];
+  // Exploit probes (e.g. React Server Components "__proto__" payloads) are never a person's message.
+  if (Object.entries(fields).some(([k, v]) => /__proto__|\$ACTION_|resolved_model/.test(k + v))) return back(samePage);
   if (Object.keys(fields).length === 0) return NextResponse.json({ error: "Please fill in the form before sending." }, { status: 400 });
 
   const url = new URL(request.url);
