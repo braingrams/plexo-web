@@ -177,6 +177,27 @@ export async function POST(
 
   const { framework, spaMode } = detectFramework(Array.from(files.keys()));
 
+  // Next.js static exports reference /_next/ for all static assets, but CloudFront has a
+  // dedicated cache behaviour routing /_next/static/* directly to plexo-web's own S3 asset
+  // bucket — bypassing Lambda entirely. Customer chunks don't exist in that bucket, so every
+  // asset request 403s. Rewriting to /_dn/ (no CloudFront behaviour) lets serveDeployedStatic
+  // serve them normally through Lambda. Applied to file paths AND all text file contents (HTML,
+  // CSS, JS all embed /_next/ references internally).
+  if (framework === "nextjs-export") {
+    const TEXT_EXTS = new Set(["html", "htm", "css", "js", "mjs", "cjs", "json", "xml", "txt", "webmanifest", "map"]);
+    const rewritten = new Map<string, { buf: Buffer; contentType: string }>();
+    for (const [path, file] of files) {
+      const newPath = path.startsWith("_next/") ? `_dn/${path.slice(6)}` : path;
+      let { buf, contentType } = file;
+      if (TEXT_EXTS.has(extensionOf(newPath)) && buf.includes("/_next/")) {
+        buf = Buffer.from(buf.toString("utf8").replaceAll("/_next/", "/_dn/"), "utf8");
+      }
+      rewritten.set(newPath, { buf, contentType });
+    }
+    files.clear();
+    for (const [k, v] of rewritten) files.set(k, v);
+  }
+
   // Upload all files to S3 in parallel. Each file lands at:
   // s3://USER_CONTENT_BUCKET/public/deployedApps/{templateId}/{path}
   const s3Prefix = `deployedApps/${templateId}`;
