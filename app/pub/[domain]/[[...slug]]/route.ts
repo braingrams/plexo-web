@@ -8,6 +8,8 @@ import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
 import { fillLatestPostLists } from "@/lib/pub/livePostQueries";
 import { Template, TemplateAsset, BlogSite, PublishedDomain } from "@/lib/db/contentEntities";
+import { DeployedApp, type RedirectRule } from "@/lib/db/appEntities";
+import { deployedAppFileUrl } from "@/lib/storage";
 import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
 import { getStorefrontPath, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
 import { deriveCommerceTheme, type CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
@@ -365,6 +367,101 @@ function optimizeImages(html: string): string {
   });
 }
 
+// ─── Deployed static app serving ─────────────────────────────────────────────
+
+// Hashed asset detection: Vite ("main-BszCFdh3.js"), Webpack ("main.abc12345.chunk.js"),
+// CRA ("runtime-main.a1b2c3d4.js"), Next.js export ("page-Abc12345.js") — all share the
+// shape of a separator followed by 8+ alphanumeric characters immediately before the
+// final extension. False-positive risk is low; worst case a non-hashed file gets an
+// immutable Cache-Control, which only matters on a re-deploy of the exact same filename.
+function isHashedAsset(filename: string): boolean {
+  const nameNoExt = filename.replace(/\.[^./\\]+$/, "");
+  const lastSegment = nameNoExt.split(/[.\-_]/).pop() ?? "";
+  return lastSegment.length >= 8 && /^[a-zA-Z0-9]+$/.test(lastSegment);
+}
+
+function cacheControlFor(filePath: string): string {
+  const filename = filePath.split("/").pop() ?? filePath;
+  const ext = filename.includes(".") ? filename.slice(filename.lastIndexOf(".") + 1).toLowerCase() : "";
+  if (ext === "html" || ext === "htm") return "no-cache";
+  if (isHashedAsset(filename)) return "public, max-age=31536000, immutable";
+  return "public, max-age=60, stale-while-revalidate=3600";
+}
+
+// Simple redirect rule matching — supports exact paths and a single trailing wildcard.
+// Returns null on no match; returns the captures ({ splat }) on match.
+function matchRedirectRule(from: string, requestedPath: string): Record<string, string> | null {
+  const normalFrom = from.startsWith("/") ? from : `/${from}`;
+  const normalPath = requestedPath.startsWith("/") ? requestedPath : `/${requestedPath}`;
+  if (!from.includes("*")) {
+    return normalFrom === normalPath ? {} : null;
+  }
+  const escaped = normalFrom.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "(.*)");
+  const m = new RegExp(`^${escaped}$`).exec(normalPath);
+  return m ? { splat: m[1] ?? "" } : null;
+}
+
+function applyRedirectDest(to: string, captures: Record<string, string>): string {
+  return to.replace(/:splat/g, captures.splat ?? "");
+}
+
+async function serveDeployedStatic(
+  request: NextRequest,
+  app: { s3Prefix?: string | null; spaMode?: boolean | null; redirectRules?: unknown },
+  slugSegments: string[],
+): Promise<NextResponse> {
+  const s3Prefix = app.s3Prefix;
+  if (!s3Prefix) return notFoundResponse();
+  const spaMode = app.spaMode ?? false;
+  const rules = (app.redirectRules as RedirectRule[] | null | undefined) ?? [];
+  const requestedPath = "/" + slugSegments.join("/");
+
+  // 1. Redirect rules evaluated first — same order as Netlify/Cloudflare Pages.
+  for (const rule of rules) {
+    if (rule.status < 300 || rule.status > 308) continue; // skip rewrite rules (200) for now
+    const captures = matchRedirectRule(rule.from, requestedPath);
+    if (captures) {
+      const dest = applyRedirectDest(rule.to, captures);
+      return NextResponse.redirect(new URL(dest, request.url), rule.status);
+    }
+  }
+
+  // 2. Build candidate file paths in priority order.
+  // A path with no file extension gets tried as-is, then with .html appended, then as a
+  // directory index — same resolution order as Netlify/Vercel/GitHub Pages.
+  const rawPath = slugSegments.join("/") || "index.html";
+  const hasExtension = /\.[a-z0-9]{1,10}$/i.test(rawPath);
+  const candidates: string[] = hasExtension
+    ? [rawPath]
+    : [rawPath, `${rawPath}.html`, `${rawPath}/index.html`];
+
+  if (spaMode && !candidates.includes("index.html")) {
+    candidates.push("index.html");
+  }
+
+  // 3. Try each candidate against S3.
+  for (const candidate of candidates) {
+    const fileUrl = deployedAppFileUrl(s3Prefix, candidate);
+    const s3Res = await fetch(fileUrl, { cache: "no-store" });
+    if (!s3Res.ok || !s3Res.body) continue;
+
+    const headers = new Headers({
+      "Content-Type": s3Res.headers.get("content-type") || "application/octet-stream",
+      "Cache-Control": cacheControlFor(candidate),
+      "X-Content-Type-Options": "nosniff",
+    });
+    const etag = s3Res.headers.get("etag");
+    if (etag) headers.set("ETag", etag);
+    const lastModified = s3Res.headers.get("last-modified");
+    if (lastModified) headers.set("Last-Modified", lastModified);
+    return new NextResponse(s3Res.body, { headers });
+  }
+
+  return notFoundResponse();
+}
+
+// ─── Builder / RAW_UPLOAD serving (existing path) ────────────────────────────
+
 /** Prisma's `prisma.template.findFirst({ where: { parentId, slug } })` — Template has no
  * (parentId, slug) direct index, only byParent (GSI2, sorted by order), so this fetches the
  * parent's children (small in practice — a site's own page tree) and matches in memory,
@@ -470,6 +567,15 @@ export async function GET(
       const target = new URL(request.url);
       return NextResponse.redirect(`https://${canonicalHost}${target.pathname}${target.search}`, 301);
     }
+  }
+
+  // Deployed framework app (Phase 1: static; Phase 3: SSR) — checked before the builder
+  // path so a site that has been migrated to a framework build is served correctly even if
+  // its underlying Template row still exists. The builder/RAW_UPLOAD path never runs for
+  // a domain that has a DeployedApp entity.
+  const { data: deployedApp } = await DeployedApp.get({ templateId: published.templateId }).go();
+  if (deployedApp?.type === "STATIC") {
+    return serveDeployedStatic(request, deployedApp, slugSegments);
   }
 
   // WordPress's "Reading Settings: your homepage displays" toggle — when a site has

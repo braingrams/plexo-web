@@ -117,6 +117,14 @@ export async function getSignedDownloadUrl(privateUrl: string, expiresInSeconds:
   return getSignedUrl(s3(), new GetObjectCommand({ Bucket: bucketName(), Key: key }), { expiresIn: expiresInSeconds });
 }
 
+/** Returns the public URL for a file uploaded via uploadDeployedAppFile / uploadObject.
+ * `s3Prefix` is the value stored in DeployedApp.s3Prefix (e.g. "deployedApps/tmpl_abc").
+ * `filePath` is the relative path within that prefix (e.g. "assets/main.js").
+ * The caller never needs to reconstruct the bucket URL format. */
+export function deployedAppFileUrl(s3Prefix: string, filePath: string): string {
+  return publicUrlFor(`public/${s3Prefix}/${filePath}`);
+}
+
 /** Replaces @vercel/blob/client's browser-direct-upload flow (upload() on the client +
  * handleUpload() on the server) — an S3 presigned POST policy the browser submits
  * straight to S3, bypassing the Lambda entirely for the file bytes (same reason Vercel's
