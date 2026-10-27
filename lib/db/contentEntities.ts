@@ -39,6 +39,9 @@ export const Template = new Entity(
       latestBuildId: { type: "string" },
       headVersionId: { type: "string" },
       previewHost: { type: "string" },
+      // The Strata project this app was published from (lib/strata/publish.ts), so publishing
+      // that project again updates this app — same address — instead of making a second one.
+      strataProjectId: { type: "string" },
       // Which editor/compiler owns designJson, draftJson and compiledHtml: "v1" is the classic
       // builder's TemplateJSON ({ body: { rows } }); "v2" is the new visual editor's payload
       // ({ format: "plexo-v2@1", pages: [PageDefinition], designSystem?, customJs?, meta? } —

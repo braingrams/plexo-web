@@ -26,3 +26,20 @@ export function getCharisolVerifier() {
   }
   return charisolVerifier;
 }
+
+// Charisol sign-ins issued to a *partner* product (Strata) calling Plexo on the person's behalf.
+// Same pool and signature check, but the token's audience may be Plexo's client or any client
+// in CHARISOL_TRUSTED_CLIENT_IDS (comma-separated) — the mirror of Plexo's own client id being
+// in Strata's CHARISOL_TRUSTED_CLIENT_IDS. Anything else is refused.
+let partnerVerifier: ReturnType<typeof CognitoJwtVerifier.create> | undefined;
+export function getCharisolPartnerVerifier() {
+  if (!partnerVerifier) {
+    const trusted = (process.env.CHARISOL_TRUSTED_CLIENT_IDS ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+    partnerVerifier = CognitoJwtVerifier.create({
+      userPoolId: process.env.CHARISOL_USER_POOL_ID ?? "",
+      tokenUse: "id",
+      clientId: [process.env.NEXT_PUBLIC_CHARISOL_CLIENT_ID ?? "", ...trusted].filter(Boolean),
+    });
+  }
+  return partnerVerifier;
+}

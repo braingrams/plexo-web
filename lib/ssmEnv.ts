@@ -26,6 +26,9 @@ const APP_SECRET_KEYS = [
   // deploy-production.yml/deploy-staging.yml's "Build the app" step) since only the server
   // ever needs it.
   "CHARISOL_USER_POOL_ID",
+  // Strata's Cognito app client id(s), comma-separated: Charisol sign-ins issued to them are accepted by
+  // the Strata publish routes (server/charisolVerifier.ts getCharisolPartnerVerifier).
+  "CHARISOL_TRUSTED_CLIENT_IDS",
   "AI_KEY_ENCRYPTION_SECRET",
   "PAYSTACK_KEY_ENCRYPTION_SECRET",
   "COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET",
