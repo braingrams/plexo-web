@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
 import { BlogArchivePage, buildArchiveMetadata } from "@/lib/pub/blogArchivePageDynamo";
 
@@ -15,5 +16,6 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 export default async function TagArchivePage({ params }: { params: Promise<Params> }) {
   const { domain, tagSlug } = await params;
   const site = await resolveBlogSite(decodeURIComponent(domain));
+  if (site.status === "deployed") redirect(`/_dp/blog/tag/${tagSlug}`);
   return <BlogArchivePage domain={domain} site={site} kind="tag" slug={tagSlug} page={1} />;
 }

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
 import { listPublishedPosts } from "@/lib/blog/queriesDynamo";
 import { listingMetadata, listingJsonLd } from "@/lib/blog/seo";
@@ -29,6 +29,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 export default async function BlogIndexPage({ params }: { params: Promise<Params> }) {
   const { domain } = await params;
   const site = await loadSite(domain);
+  if (site.status === "deployed") redirect("/_dp/blog");
   if (site.status !== "ok") notFound();
 
   const result = await listPublishedPosts(site.published.templateId, { page: 1, perPage: site.blogSite.postsPerPage ?? 10 });

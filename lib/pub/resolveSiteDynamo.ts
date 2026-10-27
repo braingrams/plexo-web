@@ -1,6 +1,7 @@
 import { EntityItem } from "electrodb";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { Template, PublishedDomain, BlogSite } from "@/lib/db/contentEntities";
+import { DeployedApp } from "@/lib/db/appEntities";
 import { User, Organization } from "@/lib/db/coreEntities";
 import { after } from "next/server";
 import { effectivePlan, planSyncAction } from "@/lib/plan/entitlement";
@@ -97,6 +98,9 @@ export type ResolveBlogSiteResult =
   | { status: "suspended" }
   | { status: "inactive"; domain: string; domainType: "SUBDOMAIN" | "CUSTOM" }
   | { status: "blog_disabled" }
+  // A DeployedApp entity exists for this template — the blog RSC pages must not render
+  // and should redirect to /_dp/{path} so the static file is served instead.
+  | { status: "deployed" }
   | { status: "ok"; published: ResolvedPublishedDomain; blogSite: EntityItem<typeof BlogSite> };
 
 /**
@@ -107,6 +111,12 @@ export type ResolveBlogSiteResult =
 export async function resolveBlogSite(rawDomain: string): Promise<ResolveBlogSiteResult> {
   const site = await resolveSite(rawDomain);
   if (site.status !== "ok") return site;
+
+  // A deployed framework app (Phase 1: static) owns all routes including /blog — the blog
+  // RSC pages must not render for these domains. Checked before the plan gate so a deployed
+  // app on Free still gets its blog pages served (the plan gate is irrelevant for static).
+  const { data: deployedApp } = await DeployedApp.get({ templateId: site.published.template.id }).go();
+  if (deployedApp?.type === "STATIC") return { status: "deployed" };
 
   // Free serves a site's homepage only — the blog is kept, but not served, until an upgrade.
   if (isHomePageOnlyPlan(site.published.user.subscriptionPlan)) return { status: "blog_disabled" };

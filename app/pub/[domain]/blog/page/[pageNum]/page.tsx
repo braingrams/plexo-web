@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
 import { listPublishedPosts } from "@/lib/blog/queriesDynamo";
 import { listingMetadata, listingJsonLd } from "@/lib/blog/seo";
@@ -20,6 +20,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 export default async function BlogIndexPaginatedPage({ params }: { params: Promise<Params> }) {
   const { domain, pageNum } = await params;
   const site = await resolveBlogSite(decodeURIComponent(domain));
+  if (site.status === "deployed") redirect(`/_dp/blog/page/${pageNum}`);
   if (site.status !== "ok") notFound();
 
   const page = Number.parseInt(pageNum, 10);
