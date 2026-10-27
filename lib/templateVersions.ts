@@ -6,6 +6,7 @@ import {
 
 import { docClient } from "@/lib/db/client";
 import { Template, TemplateRevision } from "@/lib/db/contentEntities";
+import { designFormatOf } from "@/lib/v2/design";
 
 // Retention cap — same generous-but-bounded undo window as the pre-draft/publish model
 // (lib/templateRevisions.ts), applied here to published-version history instead.
@@ -17,6 +18,7 @@ type TransactItem = NonNullable<
 
 type ExistingTemplate = {
   id: string;
+  designFormat?: string | null;
   designJson: unknown;
   compiledHtml: string;
   draftJson?: unknown;
@@ -38,6 +40,9 @@ export async function publishTemplateDraft(
   author: { userId: string; userName: string },
   publishedDesignJson: unknown,
   publishedCompiledHtml: string,
+  // The format publishedDesignJson is in — the row's own, unless a (later) conversion publishes
+  // the converted design and flips the format in the same transaction.
+  publishedDesignFormat: "v1" | "v2" = designFormatOf(existing),
 ): Promise<{ revisionId: string; createdAt: string }> {
   const revisionId = randomUUID();
   const createdAt = new Date().toISOString();
@@ -45,6 +50,7 @@ export async function publishTemplateDraft(
   const createRevision = TemplateRevision.create({
     id: revisionId,
     templateId: existing.id,
+    designFormat: publishedDesignFormat,
     designJson: publishedDesignJson,
     compiledHtml: publishedCompiledHtml,
     sdkVersion: "unknown",
@@ -55,6 +61,7 @@ export async function publishTemplateDraft(
 
   const patchTemplate = Template.patch({ id: existing.id })
     .set({
+      designFormat: publishedDesignFormat,
       designJson: publishedDesignJson,
       compiledHtml: publishedCompiledHtml,
       activeVersionId: revisionId,
@@ -107,10 +114,13 @@ async function pruneOldVersions(templateId: string): Promise<void> {
  */
 export async function restoreTemplateVersion(
   templateId: string,
-  revision: { id: string; designJson: unknown; compiledHtml: string },
+  revision: { id: string; designFormat?: string | null; designJson: unknown; compiledHtml: string },
 ): Promise<void> {
   await Template.patch({ id: templateId })
     .set({
+      // The format travels with the design: restoring a classic revision on a page that has
+      // since moved to the new editor (or the reverse) must not leave JSON under the wrong label.
+      designFormat: designFormatOf(revision),
       designJson: revision.designJson,
       compiledHtml: revision.compiledHtml,
       activeVersionId: revision.id,

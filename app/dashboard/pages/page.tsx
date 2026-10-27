@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
@@ -28,7 +29,7 @@ export default async function PagesOverviewPage() {
   }
 
   const { data: user } = await User.get({ id: session.user.id }).go();
-  const isUltra = getTierFeatures(user?.subscriptionPlan).multiPageSitesEnabled;
+  const isUltra = getTierFeatures(effectivePlan(user)).multiPageSitesEnabled;
 
   // Root landing-page templates with at least one sub-page — i.e. multi-site templates,
   // regardless of whether they've been published to a domain yet. Mirrors the root-template
@@ -48,7 +49,7 @@ export default async function PagesOverviewPage() {
     return !(site?.enabled && site?.showOnHomepage);
   });
 
-  const childBatches = await Promise.all(notBlogHomepages.map((t) => Template.query.byParent({ parentId: t.id }).go()));
+  const childBatches = await Promise.all(notBlogHomepages.map((t) => Template.query.byParent({ parentId: t.id }).go({ pages: "all" })));
   const withChildren = notBlogHomepages
     .map((t, i) => ({ template: t, children: childBatches[i].data }))
     .filter((r) => r.children.length > 0);

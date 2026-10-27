@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { formatMoney } from "@/lib/commerce/formatMoney";
+import { Pagination } from "../../../_components/Pagination";
 
 type LedgerEntry = {
   id: string;
@@ -31,7 +32,9 @@ type InitialWallet = {
   currency: string;
   pooled: boolean;
   ledger: LedgerEntry[];
-  nextCursor: string | null;
+  ledgerTotal: number;
+  ledgerPage: number;
+  ledgerPageSize: number;
   withdrawals: Withdrawal[];
 };
 
@@ -64,9 +67,10 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
   const [balanceCents, setBalanceCents] = useState(initial.balanceCents);
   const [pooled, setPooled] = useState(initial.pooled);
   const [ledger, setLedger] = useState(initial.ledger);
-  const [nextCursor, setNextCursor] = useState(initial.nextCursor);
+  const [ledgerTotal, setLedgerTotal] = useState(initial.ledgerTotal);
+  const [ledgerPaging, setLedgerPaging] = useState({ page: initial.ledgerPage, pageSize: initial.ledgerPageSize });
   const [withdrawals, setWithdrawals] = useState(initial.withdrawals);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingLedger, setLoadingLedger] = useState(false);
   const [togglingPooled, setTogglingPooled] = useState(false);
 
   const [showWithdrawForm, setShowWithdrawForm] = useState(false);
@@ -77,18 +81,18 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
-  async function handleLoadMore() {
-    if (!nextCursor) return;
-    setLoadingMore(true);
+  async function loadLedger(next: { page: number; pageSize: number }) {
+    setLoadingLedger(true);
     try {
-      const res = await fetch(`/api/v1/commerce/${templateId}/wallet?cursor=${nextCursor}`);
+      const res = await fetch(`/api/v1/commerce/${templateId}/wallet?page=${next.page}&pageSize=${next.pageSize}`);
       const data = await res.json();
       if (res.ok) {
-        setLedger((prev) => [...prev, ...data.ledger]);
-        setNextCursor(data.nextCursor);
+        setLedger(data.ledger);
+        setLedgerTotal(data.ledgerTotal ?? data.ledger.length);
+        setLedgerPaging({ page: data.page ?? next.page, pageSize: data.pageSize ?? next.pageSize });
       }
     } finally {
-      setLoadingMore(false);
+      setLoadingLedger(false);
     }
   }
 
@@ -102,10 +106,11 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
       });
       if (res.ok) {
         setPooled(next);
-        const refreshed = await fetch(`/api/v1/commerce/${templateId}/wallet`).then((r) => r.json());
+        const refreshed = await fetch(`/api/v1/commerce/${templateId}/wallet?page=1&pageSize=${ledgerPaging.pageSize}`).then((r) => r.json());
         setBalanceCents(refreshed.wallet.balanceCents);
         setLedger(refreshed.ledger);
-        setNextCursor(refreshed.nextCursor);
+        setLedgerTotal(refreshed.ledgerTotal ?? refreshed.ledger.length);
+        setLedgerPaging({ page: refreshed.page ?? 1, pageSize: refreshed.pageSize ?? ledgerPaging.pageSize });
       }
     } finally {
       setTogglingPooled(false);
@@ -323,16 +328,7 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
                 </div>
               ))}
             </div>
-            {nextCursor && (
-              <button
-                type="button"
-                onClick={() => void handleLoadMore()}
-                disabled={loadingMore}
-                style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.78rem", cursor: loadingMore ? "not-allowed" : "pointer", fontFamily: "inherit", justifySelf: "start" }}
-              >
-                {loadingMore ? "Loading…" : "Load more"}
-              </button>
-            )}
+            <Pagination page={ledgerPaging.page} pageSize={ledgerPaging.pageSize} total={ledgerTotal} noun="entries" disabled={loadingLedger} onChange={(n) => void loadLedger(n)} />
           </>
         )}
       </Section>

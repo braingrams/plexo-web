@@ -33,7 +33,7 @@ export default async function EntriesPage({ params }: { params: Promise<{ id: st
 
   const fields = (Array.isArray(contentType.fields) ? contentType.fields : []) as CustomContentField[];
 
-  const { data: entries } = await CustomContentEntry.query.primary({ contentTypeId: typeId }).go();
+  const { data: entries } = await CustomContentEntry.query.primary({ contentTypeId: typeId }).go({ pages: "all" });
   entries.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
 
   const initialEntries: EntrySummary[] = entries.map((e) => ({

@@ -6,7 +6,9 @@ import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import { Greeting } from "./Greeting";
 import { CreditExhaustedModal } from "./CreditExhaustedModal";
+import { CreditOverdraftNotice } from "./CreditOverdraftNotice";
 import { AskUserQuestionOverlay } from "./AskUserQuestionCard";
+import { pausingCall } from "./pausingCall";
 import { ArtifactCanvas, ArtifactCard, type ActiveArtifact } from "./ArtifactCanvas";
 import { useSolStream } from "./useSolStream";
 import { useSolSidebar } from "./SolSidebarContext";
@@ -40,6 +42,9 @@ const CANVAS_TOOL_NAMES = new Set([
   "publish_raw_landing_page",
   "update_template",
   "update_raw_landing_page",
+  "page_create_from_template",
+  "page_edit",
+  "page_publish",
 ]);
 
 function artifactFromResult(name: string, result: { templateId?: string; name?: string; publishedUrl?: string | null } | undefined): ActiveArtifact | null {
@@ -95,23 +100,60 @@ function draftStorageKey(conversationId: string): string {
   return `sol:draft:${conversationId}`;
 }
 
+/** Options for SOL embedded in another surface (the app editor's chat panel). */
+export type SolChatEmbedding = {
+  /** Text shown in the empty state instead of the greeting. */
+  emptyTitle?: string;
+  emptySuggestions?: string[];
+  /** Lets the host send a message itself (Select & Edit, "Fix with AI", the brief an app starts from). */
+  registerSend?: (send: (text: string, attachments?: ChatAttachment[], modelTier?: ModelTier) => void) => void;
+  /** Called once per tool call that finishes in this session (e.g. a build → refresh the preview). */
+  onToolFinished?: (call: { name: string; status: string; result: unknown }) => void;
+  /** Rendered just above the composer (e.g. the element picked with Select & Edit). */
+  composerPrefix?: React.ReactNode;
+  /** Where the credit modal returns to. */
+  returnTo?: string;
+  /** Adds host context (e.g. the selected element) to what the person typed, before sending. */
+  transformOutgoing?: (text: string) => string;
+  /** The host handles running out of credits in place (instead of the top-up modal): it gets
+   *  the shortfall and a resend() that sends the same message again once topped up. */
+  onCreditExhausted?: (info: CreditInfo, resend: () => void, midTurn: boolean) => void;
+  /** Fixes the model for this chat (e.g. Basic for Free app builds), with the reason. */
+  lockedModelTier?: { tier: ModelTier; note: string };
+  /** Rendered after the last message, inside the conversation (e.g. a build checklist). */
+  afterMessages?: React.ReactNode;
+  /** The chat box's placeholder. */
+  composerPlaceholder?: string;
+  /** Called when a turn ends ("done", "error", "awaiting_confirmation", "credit_exhausted"). */
+  onTurnEnd?: (outcome: string) => void;
+};
+
 export function SolChatView({
   conversation: initialConversation,
   initialMessages,
   userName,
+  embedded,
+  lockedModelTier: lockedModelTierProp,
+  initialDraft,
 }: {
   conversation: ConversationSummary | null;
   initialMessages: SolMessage[];
   userName: string | null;
+  embedded?: SolChatEmbedding;
+  /** The model this person is held to (Free plans on Plexo's AI → Basic — lib/ai/solEngine.ts). */
+  lockedModelTier?: { tier: ModelTier; note: string } | null;
+  /** Text to start the chat box with (e.g. handed over from another SOL feature) — not sent. */
+  initialDraft?: string;
 }) {
+  const lockedModelTier = lockedModelTierProp ?? embedded?.lockedModelTier;
   const { bumpRefresh, setActiveConversationIdOverride } = useSolSidebar();
   const [conversation, setConversation] = useState<ConversationSummary | null>(initialConversation);
   const [messages, setMessages] = useState<SolMessage[]>(initialMessages);
-  const [modelTier, setModelTier] = useState<ModelTier>(initialConversation?.modelTier ?? "BASIC");
+  const [modelTier, setModelTier] = useState<ModelTier>(lockedModelTier?.tier ?? initialConversation?.modelTier ?? "BASIC");
   const [pendingConfirmMessageId, setPendingConfirmMessageId] = useState<string | null>(null);
   const [creditInfo, setCreditInfo] = useState<CreditInfo | null>(null);
   const [inlineError, setInlineError] = useState<string | null>(null);
-  const [composerRestoreText, setComposerRestoreText] = useState<string | undefined>(undefined);
+  const [composerRestoreText, setComposerRestoreText] = useState<string | undefined>(initialDraft || undefined);
   const [creditsRefreshKey, setCreditsRefreshKey] = useState(0);
   const [creatingConversation, setCreatingConversation] = useState(false);
   // True for exactly the one render where a title just arrived live from the stream (see
@@ -233,6 +275,29 @@ export function SolChatView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialConversation?.id]);
 
+  // A caption SOL wrote for an attached image arrives mid-turn — put it on the image in
+  // the user's message already on screen (it's saved on the server copy too).
+  useEffect(() => {
+    const described = stream.imageDescriptions;
+    if (Object.keys(described).length === 0) return;
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.role !== "user" || !Array.isArray(m.content)) return m;
+        let changed = false;
+        const content = m.content.map((b) => {
+          const block = b as { type?: string; url?: string; source?: { url?: string }; description?: string };
+          const url = block.source?.url ?? block.url;
+          if (block.type === "image" && url && described[url] && block.description !== described[url]) {
+            changed = true;
+            return { ...block, description: described[url] } as typeof b;
+          }
+          return b;
+        });
+        return changed ? { ...m, content } : m;
+      }),
+    );
+  }, [stream.imageDescriptions]);
+
   const commitAssistantMessage = useCallback(() => {
     setMessages((prev) => [
       ...prev,
@@ -296,6 +361,7 @@ export function SolChatView({
   }, []);
 
   useEffect(() => {
+    if (stream.outcome !== "idle" && stream.outcome !== "streaming") embedded?.onTurnEnd?.(stream.outcome);
     if (stream.outcome === "done") {
       commitAssistantMessage();
     } else if (stream.outcome === "awaiting_confirmation") {
@@ -307,6 +373,14 @@ export function SolChatView({
       // handleConfirmToolCall/handleSubmitAnswers below both bail out when
       // pendingConfirmMessageId is still null.
       setPendingConfirmMessageId(stream.awaitingMessageId);
+    } else if (stream.outcome === "credit_exhausted" && embedded?.onCreditExhausted && stream.creditInfo) {
+      // Ran out before starting → the message never happened: take it back and resend it as
+      // is. Ran out partway → the rounds so far are saved: keep everything and, once topped
+      // up, ask SOL to carry on rather than start over.
+      const midTurn = stream.blocks.length > 0;
+      if (!midTurn) rollbackOptimisticUserMessage();
+      const text = midTurn ? "Carry on where you stopped." : lastSentTextRef.current;
+      embedded.onCreditExhausted(stream.creditInfo, () => void handleSendRef.current(text, []), midTurn);
     } else if (stream.outcome === "credit_exhausted") {
       rollbackOptimisticUserMessage();
       setCreditInfo(stream.creditInfo);
@@ -322,7 +396,9 @@ export function SolChatView({
         }
       }
     } else if (stream.outcome === "error") {
-      rollbackOptimisticUserMessage();
+      // Take the message back (and put it in the box to resend) only if nothing happened.
+      // After SOL has done work, the work is saved — resending would redo it from scratch.
+      if (stream.blocks.length === 0) rollbackOptimisticUserMessage();
       setInlineError(stream.errorMessage);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -365,22 +441,48 @@ export function SolChatView({
     }
   }
 
-  async function handleSend(text: string, attachments: ChatAttachment[]) {
+  async function handleSend(typed: string, attachments: ChatAttachment[], tierOverride?: ModelTier) {
+    // A host can pick the tier for this message (the app wizard's Standard / Advanced choice); a locked plan stays locked.
+    const tier = lockedModelTier ? lockedModelTier.tier : (tierOverride ?? modelTier);
+    if (tier !== modelTier) handleModelTierChange(tier);
+    const text = embedded?.transformOutgoing ? embedded.transformOutgoing(typed) : typed;
     setInlineError(null);
-    setComposerRestoreText(undefined);
+    // "" (not undefined) actually empties the box: a message put back after running out of
+    // credits and then resent from the top-up card otherwise stayed in it after sending.
+    setComposerRestoreText("");
     const target = await ensureConversation();
 
     const mediaBlocks: MediaBlock[] = attachments.map((a) => ({ type: a.type === "pdf" ? "document" : a.type, url: a.url, filename: a.filename }));
     const optimisticId = `local-user-${randomId()}`;
     optimisticUserMessageIdRef.current = optimisticId;
-    lastSentTextRef.current = text;
+    lastSentTextRef.current = typed;
     setMessages((prev) => [
       ...prev,
-      { id: optimisticId, role: "user", content: [{ type: "text", text }, ...mediaBlocks], createdAt: new Date().toISOString() },
+      // The bubble shows what the person typed; any host context rides along only in what's sent.
+      { id: optimisticId, role: "user", content: [{ type: "text", text: typed }, ...mediaBlocks], createdAt: new Date().toISOString() },
     ]);
 
-    void stream.sendMessage(target.id, text, attachments, modelTier);
+    void stream.sendMessage(target.id, text, attachments, tier);
   }
+
+  // Embedded hosts can send on the person's behalf; always the latest handleSend.
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
+  useEffect(() => {
+    embedded?.registerSend?.((text: string, attachments?: ChatAttachment[], tier?: ModelTier) => void handleSendRef.current(text, attachments ?? [], tier));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const reportedToolCallsRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!embedded?.onToolFinished) return;
+    for (const block of stream.blocks) {
+      if (!isToolUseBlock(block) || !block.status || !["success", "error"].includes(block.status)) continue;
+      if (reportedToolCallsRef.current.has(block.id)) continue;
+      reportedToolCallsRef.current.add(block.id);
+      embedded.onToolFinished({ name: block.name, status: block.status, result: block.result });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stream.blocks]);
 
   function handleConfirmToolCall(decision: "confirmed" | "declined") {
     if (!conversation || !pendingConfirmMessageId) return;
@@ -455,8 +557,8 @@ export function SolChatView({
   // source of truth for WHICH message; this just finds its actual content wherever it is.
   const pendingToolUseBlock =
     stream.outcome === "awaiting_confirmation" && pendingConfirmMessageId === stream.awaitingMessageId
-      ? stream.blocks.find(isToolUseBlock)
-      : messages.find((m) => m.id === pendingConfirmMessageId)?.content.find(isToolUseBlock);
+      ? pausingCall(stream.blocks)
+      : pausingCall(messages.find((m) => m.id === pendingConfirmMessageId)?.content);
   const pendingQuestionBlock =
     pendingToolUseBlock && pendingToolUseBlock.name === ASK_USER_QUESTION_TOOL_NAME ? pendingToolUseBlock : null;
 
@@ -467,6 +569,7 @@ export function SolChatView({
           {inlineError}
         </div>
       )}
+      {stream.overdraft && <CreditOverdraftNotice balance={stream.overdraft.balance} />}
       <Composer
         streaming={streaming}
         disabled={disabled}
@@ -475,24 +578,83 @@ export function SolChatView({
         onSend={(text, attachments) => void handleSend(text, attachments)}
         onStop={handleStop}
         initialText={composerRestoreText}
+        placeholder={embedded?.composerPlaceholder}
+        tierNote={lockedModelTier?.note}
       />
     </>
   );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0 }}>
-      <SolHeader
-        conversation={conversation}
-        onRename={handleRename}
-        creditsRefreshKey={creditsRefreshKey}
-        titleJustGenerated={titleJustGenerated}
-        onTitleRevealDone={() => setTitleJustGenerated(false)}
-      />
+      {!embedded && (
+        <SolHeader
+          conversation={conversation}
+          onRename={handleRename}
+          creditsRefreshKey={creditsRefreshKey}
+          titleJustGenerated={titleJustGenerated}
+          onTitleRevealDone={() => setTitleJustGenerated(false)}
+        />
+      )}
 
-      {isEmpty ? (
+      {isEmpty && embedded ? (
+        // Inside the app editor the chat box always sits at the bottom — the same spot it
+        // keeps once a conversation starts — with the starting ideas just above it.
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "1.25rem" }}>
+            {embedded.emptyTitle && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
+                <h2 style={{ margin: 0, fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 700, color: "#f0f2ff" }}>{embedded.emptyTitle}</h2>
+                {embedded.emptySuggestions && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", alignItems: "flex-start" }}>
+                    {embedded.emptySuggestions.map((suggestion) => (
+                      <button
+                        key={suggestion}
+                        type="button"
+                        onClick={() => void handleSend(suggestion, [])}
+                        style={{ padding: "0.5rem 0.85rem", borderRadius: 12, border: "1px solid rgba(var(--brand-rgb), 0.25)", background: "rgba(var(--brand-rgb), 0.08)", color: "rgba(240,242,255,0.88)", fontSize: "0.8rem", textAlign: "left", cursor: "pointer" }}
+                      >
+                        {suggestion}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div style={{ padding: "0 1.25rem 1.25rem" }}>
+            <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+              {embedded.composerPrefix}
+              {composer}
+            </div>
+          </div>
+        </div>
+      ) : isEmpty ? (
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 1.25rem", gap: "1.75rem" }}>
-          <Greeting name={userName} />
-          <div style={{ width: "100%", maxWidth: 680 }}>{composer}</div>
+          {embedded?.emptyTitle ? (
+            <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "0.9rem", alignItems: "center" }}>
+              <h2 style={{ margin: 0, fontFamily: "var(--font-heading), sans-serif", fontSize: "1.25rem", fontWeight: 700, color: "#f0f2ff" }}>{embedded.emptyTitle}</h2>
+              {embedded.emptySuggestions && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem", justifyContent: "center", maxWidth: 520 }}>
+                  {embedded.emptySuggestions.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => void handleSend(suggestion, [])}
+                      style={{ padding: "0.45rem 0.8rem", borderRadius: 999, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "rgba(240,242,255,0.8)", fontSize: "0.78rem", cursor: "pointer" }}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <Greeting name={userName} />
+          )}
+          <div style={{ width: "100%", maxWidth: 680 }}>
+            {embedded?.composerPrefix}
+            {composer}
+          </div>
         </div>
       ) : (
         <div className="sol-split-row" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "row" }}>
@@ -504,12 +666,14 @@ export function SolChatView({
               streaming={streaming}
               onConfirmToolCall={handleConfirmToolCall}
               confirmBusy={streaming && pendingConfirmMessageId !== null}
+              footer={embedded?.afterMessages}
             />
             <div style={{ padding: "0 1.25rem 1.25rem" }}>
               <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-                {activeArtifact && !showArtifactPanel && (
+                {!embedded && activeArtifact && !showArtifactPanel && (
                   <ArtifactCard artifact={activeArtifact} onOpen={() => setShowArtifactPanel(true)} />
                 )}
+                {embedded?.composerPrefix}
                 {composer}
               </div>
             </div>
@@ -543,7 +707,7 @@ export function SolChatView({
       {creditInfo && (
         <CreditExhaustedModal
           creditInfo={creditInfo}
-          returnTo={conversation ? `/dashboard/sol/${conversation.id}` : "/dashboard/sol"}
+          returnTo={embedded?.returnTo ?? (conversation ? `/dashboard/sol/${conversation.id}` : "/dashboard/sol")}
           onClose={handleCloseCreditModal}
         />
       )}

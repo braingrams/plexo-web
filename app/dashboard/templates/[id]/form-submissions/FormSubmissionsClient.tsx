@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { Pagination } from "../../../_components/Pagination";
 
 type Submission = {
   id: string;
@@ -86,15 +87,22 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [viewing, setViewing] = useState<Submission | null>(null);
+  const [paging, setPaging] = useState({ page: 1, pageSize: 25 });
+  const [total, setTotal] = useState(0);
+  const [likelySpamIds, setLikelySpamIds] = useState<string[]>([]);
 
-  function load() {
+  function load(next = paging) {
     setLoading(true);
     setError(null);
-    fetch(`/api/v1/templates/${templateId}/form-submissions`)
+    fetch(`/api/v1/templates/${templateId}/form-submissions?page=${next.page}&pageSize=${next.pageSize}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load submissions.");
         setSubmissions(data.submissions);
+        setTotal(data.total);
+        setLikelySpamIds(data.likelySpamIds ?? []);
+        // The server brings a page past the end back to the last one (e.g. after deleting its last message).
+        setPaging({ page: data.page, pageSize: data.pageSize });
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load submissions."))
       .finally(() => setLoading(false));
@@ -105,7 +113,10 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId]);
 
-  const likelySpamIds = useMemo(() => submissions.filter((s) => s.likelySpam).map((s) => s.id), [submissions]);
+  function changePage(next: { page: number; pageSize: number }) {
+    setPaging(next);
+    load(next);
+  }
 
   function toggleOne(id: string) {
     setSelected((prev) => {
@@ -116,8 +127,15 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
     });
   }
 
+  // "Select all" is the messages on this page; a selection made on other pages is kept.
+  const allOnPageSelected = submissions.length > 0 && submissions.every((s) => selected.has(s.id));
   function toggleAll() {
-    setSelected((prev) => (prev.size === submissions.length ? new Set() : new Set(submissions.map((s) => s.id))));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allOnPageSelected) submissions.forEach((s) => next.delete(s.id));
+      else submissions.forEach((s) => next.add(s.id));
+      return next;
+    });
   }
 
   function selectLikelySpam() {
@@ -145,7 +163,7 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
     }
   }
 
-  if (loading) return <p style={{ color: "rgba(240,242,255,0.4)", fontSize: "0.85rem" }}>Loading…</p>;
+  if (loading && submissions.length === 0) return <p style={{ color: "rgba(240,242,255,0.4)", fontSize: "0.85rem" }}>Loading…</p>;
   if (error) {
     return (
       <div style={{ padding: "2rem", textAlign: "center", borderRadius: 14, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.06)", color: "#f87171", fontSize: "0.85rem" }}>
@@ -177,7 +195,7 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
           <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", color: "rgba(240,242,255,0.55)", cursor: "pointer" }}>
-            <input type="checkbox" checked={selected.size > 0 && selected.size === submissions.length} onChange={toggleAll} />
+            <input type="checkbox" checked={allOnPageSelected} onChange={toggleAll} />
             {selected.size > 0 ? `${selected.size} selected` : "Select all"}
           </label>
           {likelySpamIds.length > 0 && (
@@ -243,6 +261,8 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
           );
         })}
       </div>
+
+      <Pagination page={paging.page} pageSize={paging.pageSize} total={total} onChange={changePage} noun="messages" disabled={loading} />
 
       {viewing && (
         <>

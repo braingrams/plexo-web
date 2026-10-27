@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SettingsActionBar } from "../_components/SettingsActionBar";
+import { Toggle } from "@/app/dashboard/_components/Toggle";
 
 type CommercePaymentProvider = "BYO_PAYSTACK" | "PLATFORM_PAYSTACK" | "PLATFORM_STRIPE" | "BYO_STRIPE";
 type StripeAccessStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED";
@@ -20,6 +21,11 @@ type InitialPaymentsSettings = {
   stripeLiveSecretKeyMasked: string | null;
   stripeTestWebhookSecretMasked: string | null;
   stripeLiveWebhookSecretMasked: string | null;
+  bankTransferEnabled: boolean;
+  bankTransferBankName: string;
+  bankTransferAccountName: string;
+  bankTransferAccountNumber: string;
+  bankTransferInstructions: string;
 };
 
 const inputStyle: React.CSSProperties = {
@@ -279,6 +285,51 @@ function StripeAccessControl() {
   );
 }
 
+type BankTransferState = { enabled: boolean; bankName: string; accountName: string; accountNumber: string; instructions: string };
+
+/** Direct bank transfer — sits alongside (not instead of) the card provider above, so a
+ * store can offer either or both. Customers see these exact details at checkout; the
+ * owner confirms each payment once it lands (emailed link, or Orders). */
+function BankTransferCard({ value, onChange }: { value: BankTransferState; onChange: (next: BankTransferState) => void }) {
+  const set = (patch: Partial<BankTransferState>) => onChange({ ...value, ...patch });
+  return (
+    <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.4rem" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem" }}>
+        <div>
+          <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>Bank transfer</h2>
+          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 0", maxWidth: 560, lineHeight: 1.5 }}>
+            Let customers pay straight into your bank account. They&apos;ll see these details at checkout, transfer the money, then place their order.
+            We&apos;ll email you to confirm the payment arrived — the order only goes ahead once you do.
+          </p>
+        </div>
+        <Toggle checked={value.enabled} onChange={(v) => set({ enabled: v })} label="Accept bank transfers" />
+      </div>
+      {value.enabled && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.8rem", marginTop: "1.1rem" }}>
+          <FieldLabel label="Bank name">
+            <input type="text" value={value.bankName} onChange={(e) => set({ bankName: e.target.value })} placeholder="e.g. GTBank" style={inputStyle} />
+          </FieldLabel>
+          <FieldLabel label="Account name">
+            <input type="text" value={value.accountName} onChange={(e) => set({ accountName: e.target.value })} placeholder="Name on the account" style={inputStyle} />
+          </FieldLabel>
+          <FieldLabel label="Account number">
+            <input type="text" inputMode="numeric" value={value.accountNumber} onChange={(e) => set({ accountNumber: e.target.value })} placeholder="0123456789" style={inputStyle} />
+          </FieldLabel>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <FieldLabel label="Note for customers (optional)" hint="Shown under your bank details at checkout and in the customer's order email.">
+              <textarea
+                value={value.instructions} onChange={(e) => set({ instructions: e.target.value })} rows={2} maxLength={500}
+                placeholder="e.g. Use your order number as the transfer reference."
+                style={{ ...inputStyle, resize: "vertical" }}
+              />
+            </FieldLabel>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PaymentsSettingsClient({ templateId, initial }: { templateId: string; initial: InitialPaymentsSettings }) {
   const [provider, setProvider] = useState<CommercePaymentProvider>(initial.paymentProvider);
   const [paystackMode, setPaystackMode] = useState(initial.paystackMode);
@@ -293,6 +344,13 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
   const [stripeLiveSecretKey, setStripeLiveSecretKey] = useState("");
   const [stripeTestWebhookSecret, setStripeTestWebhookSecret] = useState("");
   const [stripeLiveWebhookSecret, setStripeLiveWebhookSecret] = useState("");
+  const [bankTransfer, setBankTransfer] = useState<BankTransferState>({
+    enabled: initial.bankTransferEnabled,
+    bankName: initial.bankTransferBankName,
+    accountName: initial.bankTransferAccountName,
+    accountNumber: initial.bankTransferAccountNumber,
+    instructions: initial.bankTransferInstructions,
+  });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
 
@@ -320,6 +378,11 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
           stripeLiveSecretKey: stripeLiveSecretKey || undefined,
           stripeTestWebhookSecret: stripeTestWebhookSecret || undefined,
           stripeLiveWebhookSecret: stripeLiveWebhookSecret || undefined,
+          bankTransferEnabled: bankTransfer.enabled,
+          bankTransferBankName: bankTransfer.bankName,
+          bankTransferAccountName: bankTransfer.accountName,
+          bankTransferAccountNumber: bankTransfer.accountNumber,
+          bankTransferInstructions: bankTransfer.instructions,
         }),
       });
       const data = await res.json();
@@ -446,7 +509,8 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
                 <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>Stripe keys</h2>
                 <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 1rem" }}>
                   Create a webhook endpoint in your own Stripe Dashboard → Developers → Webhooks, pointing at the URL below,
-                  subscribed to <code>checkout.session.completed</code>. Do this once for Test mode and once for Live mode —
+                  subscribed to <code>checkout.session.completed</code>, <code>invoice.paid</code>, <code>invoice.payment_failed</code> and{" "}
+                  <code>customer.subscription.deleted</code> (the last three keep monthly donations recorded). Do this once for Test mode and once for Live mode —
                   Stripe shows a signing secret starting with <code>whsec_</code> for each; paste it into the matching field below.
                 </p>
                 <ModeToggle mode={stripeMode} onChange={setStripeMode} activeColor="#8f89ff" />
@@ -491,6 +555,8 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
           </div>
         </div>
       )}
+
+      <BankTransferCard value={bankTransfer} onChange={setBankTransfer} />
 
       <SettingsActionBar saving={saving} message={message} onSave={() => void handleSave()} />
     </div>

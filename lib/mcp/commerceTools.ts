@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { catalogFieldsFromInput } from "@/lib/commerce/variants";
 import type { resolveUser } from "@/lib/auth/resolveUser";
 import { slugify } from "@/server/slugDynamo";
 import { encryptDigitalAccessSecret, encryptBankDetail, encryptPaystackKey, encryptMaildripKey, encryptStripeKey, decryptPaystackKey, decryptMaildripKey, decryptStripeKey, tryDecrypt } from "@/lib/crypto";
@@ -10,7 +11,9 @@ import { resolveCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { resendDigitalDelivery } from "@/lib/commerce/digitalDeliveryDynamo";
 import { sendCommerceStripeAccessRequestNotificationEmail, sendCommerceWithdrawalRequestNotificationEmail } from "@/lib/email";
 import { resolveCommerceCustomers } from "@/lib/commerce/customers";
-import { updateOrderFulfillmentStatus, refundCommerceOrder } from "@/lib/commerce/orderStatusActions";
+import { updateOrderFulfillmentStatus, refundCommerceOrder, deleteCommerceOrder } from "@/lib/commerce/orderStatusActions";
+import { resolveBankTransferOrder, withoutOrderSecrets } from "@/lib/commerce/bankTransfer";
+import { applyCheckoutSettingsInput, checkoutSettingsView } from "@/lib/commerce/checkoutSettings";
 import { Template } from "@/lib/db/contentEntities";
 import { Organization, User } from "@/lib/db/coreEntities";
 import {
@@ -59,7 +62,7 @@ function normalizeStringList(value: unknown): string[] | undefined {
 
 async function ensureUniqueProductSlug(templateId: string, baseInput: string): Promise<string> {
   const base = slugify(baseInput) || "product";
-  const { data: products } = await CommerceProduct.query.primary({ templateId }).go();
+  const { data: products } = await CommerceProduct.query.primary({ templateId }).go({ pages: "all" });
   const slugs = new Set(products.map((p) => p.slug));
   let candidate = base;
   let suffix = 2;
@@ -75,7 +78,7 @@ async function resolveCategoryId(templateId: string, organizationId: string, cat
   if (typeof categoryName !== "string" || !categoryName.trim()) return null;
   const name = categoryName.trim();
   const slug = slugify(name) || "category";
-  const { data: categories } = await CommerceCategory.query.primary({ templateId }).go();
+  const { data: categories } = await CommerceCategory.query.primary({ templateId }).go({ pages: "all" });
   const existing = categories.find((c) => c.slug === slug);
   if (existing) {
     if (existing.name !== name) await CommerceCategory.patch({ templateId, id: existing.id }).set({ name }).go();
@@ -129,6 +132,31 @@ export const COMMERCE_MCP_TOOLS = [
         imageUrl: { type: "string", description: "Optional cover/main image URL." },
         category: { type: "string", description: "Optional category name — reused if it exists, created otherwise." },
         stockQuantity: { type: "number", description: "PHYSICAL only — starting stock. Omit for untracked stock." },
+        compareAtPriceMinor: { type: "number", description: "Optional sale \"was\" price (smallest currency unit), shown crossed out next to the price. Must be higher than the price; omit or null for no sale." },
+        sku: { type: "string", description: "Optional SKU / stock code." },
+        options: {
+          type: "array",
+          description: "PHYSICAL/DIGITAL — options the product comes in, e.g. [{name:\"Size\",values:[\"S\",\"M\",\"L\"]},{name:\"Colour\",values:[\"Red\",\"Blue\"]}]. Up to 3. Requires variants. Send [] (with variants: []) to remove options.",
+          items: { type: "object", properties: { name: { type: "string" }, values: { type: "array", items: { type: "string" } } }, required: ["name", "values"] },
+        },
+        variants: {
+          type: "array",
+          description: "One entry per purchasable combination of the options, each with its own price. stockQuantity omitted = unlimited. Pass back an existing variant's id when updating so carts/orders pointing at it stay linked. With variants, the product's own price follows its cheapest variant and its own stockQuantity is ignored.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              options: { type: "object", description: "Option name → value, e.g. {\"Size\":\"M\",\"Colour\":\"Red\"}." },
+              priceMinor: { type: "number" },
+              compareAtPriceMinor: { type: "number" },
+              sku: { type: "string" },
+              stockQuantity: { type: "number" },
+              imageUrl: { type: "string" },
+              active: { type: "boolean", description: "false hides a combination you don't sell." },
+            },
+            required: ["options", "priceMinor"],
+          },
+        },
         durationMinutes: { type: "number", description: "SERVICE only — booking duration in minutes." },
         digitalDeliveryMethod: { type: "string", enum: ["FILE_DOWNLOAD", "EXTERNAL_LINK", "ACCESS_LIST"], description: "DIGITAL only — see this tool's description." },
         digitalFileUrl: { type: "string", description: "DIGITAL/FILE_DOWNLOAD — the uploaded file's URL (upload via the dashboard first)." },
@@ -157,6 +185,31 @@ export const COMMERCE_MCP_TOOLS = [
         category: { type: "string", description: "Category name — reused/created as needed. Empty string clears it." },
         active: { type: "boolean" },
         stockQuantity: { type: "number", description: "PHYSICAL only." },
+        compareAtPriceMinor: { type: "number", description: "Optional sale \"was\" price (smallest currency unit), shown crossed out next to the price. Must be higher than the price; omit or null for no sale." },
+        sku: { type: "string", description: "Optional SKU / stock code." },
+        options: {
+          type: "array",
+          description: "PHYSICAL/DIGITAL — options the product comes in, e.g. [{name:\"Size\",values:[\"S\",\"M\",\"L\"]},{name:\"Colour\",values:[\"Red\",\"Blue\"]}]. Up to 3. Requires variants. Send [] (with variants: []) to remove options.",
+          items: { type: "object", properties: { name: { type: "string" }, values: { type: "array", items: { type: "string" } } }, required: ["name", "values"] },
+        },
+        variants: {
+          type: "array",
+          description: "One entry per purchasable combination of the options, each with its own price. stockQuantity omitted = unlimited. Pass back an existing variant's id when updating so carts/orders pointing at it stay linked. With variants, the product's own price follows its cheapest variant and its own stockQuantity is ignored.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              options: { type: "object", description: "Option name → value, e.g. {\"Size\":\"M\",\"Colour\":\"Red\"}." },
+              priceMinor: { type: "number" },
+              compareAtPriceMinor: { type: "number" },
+              sku: { type: "string" },
+              stockQuantity: { type: "number" },
+              imageUrl: { type: "string" },
+              active: { type: "boolean", description: "false hides a combination you don't sell." },
+            },
+            required: ["options", "priceMinor"],
+          },
+        },
         durationMinutes: { type: "number", description: "SERVICE only." },
         digitalDeliveryMethod: { type: "string", enum: ["FILE_DOWNLOAD", "EXTERNAL_LINK", "ACCESS_LIST"], description: "DIGITAL only — switches the delivery method, clearing the other methods' fields." },
         digitalFileUrl: { type: "string" },
@@ -184,7 +237,7 @@ export const COMMERCE_MCP_TOOLS = [
   },
   {
     name: "get_commerce_settings",
-    description: "Fetches a site's Commerce settings: enabled state, storefront slug/URL, store currency, payment provider, Paystack/Stripe mode/keys (masked), MailDrip config, and notification email.",
+    description: "Fetches a site's Commerce settings: enabled state, storefront slug/URL, store currency, payment provider, Paystack/Stripe mode/keys (masked), bank transfer details, extra checkout questions, delivery/store-pickup switches and pickup location, MailDrip config, and notification email.",
     inputSchema: {
       type: "object",
       properties: { templateId: { type: "string", description: "The site's home page template id." } },
@@ -193,7 +246,7 @@ export const COMMERCE_MCP_TOOLS = [
   },
   {
     name: "update_commerce_settings",
-    description: `Updates a site's Commerce settings. Only the fields provided are changed. paymentProvider: BYO_PAYSTACK (default — the site's own Paystack keys below), PLATFORM_PAYSTACK (Plexo's own Paystack account, no keys needed, proceeds credit the Commerce wallet), BYO_STRIPE (the site's own Stripe keys below), or PLATFORM_STRIPE (Plexo's own Stripe account — requires prior approval, see request_commerce_stripe_access/get_commerce_stripe_access_status). currency can't be changed once the site has any orders. Setting enabled:true auto-provisions a working storefront (shop grid, checkout, order confirmation, order tracking) at /store if one doesn't exist yet — rename its URL any time with storefrontSlug.`,
+    description: `Updates a site's Commerce settings. Only the fields provided are changed. paymentProvider: BYO_PAYSTACK (default — the site's own Paystack keys below), PLATFORM_PAYSTACK (Plexo's own Paystack account, no keys needed, proceeds credit the Commerce wallet), BYO_STRIPE (the site's own Stripe keys below), or PLATFORM_STRIPE (Plexo's own Stripe account — requires prior approval, see request_commerce_stripe_access/get_commerce_stripe_access_status). currency can't be changed once the site has any orders. Bank transfer: set bankTransferEnabled:true together with bankTransferBankName/AccountName/AccountNumber to let customers pay straight into the owner's account — those orders wait for the owner to confirm the money arrived (resolve_bank_transfer_order). Store pickup is on by default (pickupEnabled) — set pickupLocation to the store's address so customers see where to collect; deliveryEnabled:false hides all shipping methods (delivery and pickup can't both be off). checkoutFields replaces the full list of extra checkout questions (a question can be limited to customers delivering to certain countries via its countries list, e.g. tailor details only for Nigeria). Setting enabled:true auto-provisions a working storefront (shop grid, checkout, order confirmation, order tracking) at /store if one doesn't exist yet — rename its URL any time with storefrontSlug.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -225,6 +278,36 @@ export const COMMERCE_MCP_TOOLS = [
         notifyCustomerOnShipped: { type: "boolean", description: "Email the customer when fulfillment status changes to SHIPPED. Default true." },
         notifyCustomerOnCompleted: { type: "boolean", description: "Email the customer when fulfillment status changes to COMPLETED. Default true." },
         notifyCustomerOnRefunded: { type: "boolean", description: "Email the customer when their order is refunded. Default true." },
+        bankTransferEnabled: { type: "boolean", description: "Offer direct bank transfer at checkout. Requires the three bank fields below (already saved or sent in this call)." },
+        bankTransferBankName: { type: "string", description: "e.g. \"GTBank\". Shown to customers at checkout." },
+        bankTransferAccountName: { type: "string", description: "Name on the account. Shown to customers at checkout." },
+        bankTransferAccountNumber: { type: "string", description: "Shown to customers at checkout." },
+        bankTransferInstructions: { type: "string", description: "Optional extra note shown with the bank details (e.g. \"Send a screenshot to 080…\"). Empty string clears it." },
+        deliveryEnabled: { type: "boolean", description: "false hides every shipping (COURIER) method at checkout. Default true." },
+        pickupEnabled: { type: "boolean", description: "The built-in free \"Store pickup\" option at checkout. Default true." },
+        pickupLocation: { type: "string", description: "The store's pickup address, shown to customers at checkout and on their order. Empty string clears it." },
+        pickupInstructions: { type: "string", description: "Optional pickup hours/notes. Empty string clears it." },
+        checkoutFields: {
+          type: "array",
+          description: "REPLACES the site's whole list of extra checkout questions (send [] to remove all). Keep an existing question's id to preserve it; omit id for a new one.",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              label: { type: "string", description: "The question, e.g. \"Gift message\"." },
+              type: { type: "string", enum: ["text", "textarea", "select", "date", "phone"] },
+              required: { type: "boolean" },
+              options: { type: "array", items: { type: "string" }, description: "Choices — required (2+) when type is select." },
+              placeholder: { type: "string" },
+              countries: {
+                type: "array",
+                items: { type: "string" },
+                description: "Optional. Only ask this question when the order ships to one of these countries (ISO 2-letter codes, e.g. [\"NG\"]). Omit or [] to ask everyone. Never asked for pickup orders.",
+              },
+            },
+            required: ["label", "type"],
+          },
+        },
       },
       required: ["templateId"],
     },
@@ -393,14 +476,43 @@ export const COMMERCE_MCP_TOOLS = [
   },
   {
     name: "refund_commerce_order",
-    description: "Refunds a PAID order through the Paystack account it was actually paid through. Paystack-only today — a PLATFORM_STRIPE-paid order will error, since that refund path doesn't exist yet. Does not restock inventory or free a booking slot; that's a separate deliberate decision.",
+    description: "Refunds a PAID order. IRREVERSIBLE — only call this when the site owner has explicitly asked to refund THIS specific order in the current conversation; never as a guess or a follow-up suggestion. First show them the order (get_commerce_order) and get their reason. Gateway orders refund through the Paystack account they were paid with (Paystack-only today — a Stripe-paid order will error). A bank-transfer order is recorded as refunded only — the owner must send the money back themselves; say so. Does not restock inventory or free a booking slot.",
     inputSchema: {
       type: "object",
       properties: {
         templateId: { type: "string", description: "The site's home page template id." },
         orderId: { type: "string" },
+        reason: { type: "string", description: "The owner's stated reason (min 5 characters) — stored on the order as an audit trail." },
+        confirmOrderNumber: { type: "string", description: "The order's human-facing number (e.g. ORD-4F2A9C1B), exactly as the owner confirmed it. Must match the order or the refund is refused." },
       },
-      required: ["templateId", "orderId"],
+      required: ["templateId", "orderId", "reason", "confirmOrderNumber"],
+    },
+  },
+  {
+    name: "delete_commerce_order",
+    description: "PERMANENTLY deletes an order and its items, booking slot and download links. IRREVERSIBLE and unrecoverable — only call this when the site owner has explicitly asked to delete THIS specific order in the current conversation (typically a test order); never as a guess or a clean-up suggestion. First show them the order (get_commerce_order) and tell them it can't be recovered. Refused for orders still waiting on a card payment and for sales processed through Plexo's own payment processing (those must stay on record — refund instead; the error explains). A bank-transfer order still awaiting payment has its stock/slot released. The customer is not notified. Not a refund: if the customer paid, refund them first (refund_commerce_order).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        orderId: { type: "string" },
+        confirmOrderNumber: { type: "string", description: "The order's human-facing number (e.g. ORD-4F2A9C1B), exactly as the owner confirmed it. Must match the order or the delete is refused." },
+      },
+      required: ["templateId", "orderId", "confirmOrderNumber"],
+    },
+  },
+  {
+    name: "resolve_bank_transfer_order",
+    description: "Confirms or rejects a bank-transfer order that's waiting for payment (status PENDING, paymentMethod BANK_TRANSFER). action \"confirm\" marks it PAID and runs the normal paid flow (customer confirmation email, digital delivery, booking confirmed) — only use it once the site owner says the money has actually arrived in their account. action \"reject\" cancels it, releases its stock/booking slot, and emails the customer (optional reason is included).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        templateId: { type: "string", description: "The site's home page template id." },
+        orderId: { type: "string" },
+        action: { type: "string", enum: ["confirm", "reject"] },
+        reason: { type: "string", description: "Optional note to the customer when rejecting." },
+      },
+      required: ["templateId", "orderId", "action"],
     },
   },
   {
@@ -475,7 +587,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
   switch (toolName) {
     case "list_commerce_products": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const { data: allProducts } = await CommerceProduct.query.primary({ templateId: siteId }).go();
+      const { data: allProducts } = await CommerceProduct.query.primary({ templateId: siteId }).go({ pages: "all" });
       let products = allProducts;
       if (typeof args.kind === "string" && ["PHYSICAL", "SERVICE", "DIGITAL"].includes(args.kind)) products = products.filter((p) => p.kind === args.kind);
       if (args.activeOnly) products = products.filter((p) => p.active ?? true);
@@ -512,6 +624,12 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         if (args.digitalDeliveryMethod === "ACCESS_LIST" && !args.digitalAccessInstructions) throw new Error("digitalAccessInstructions is required for ACCESS_LIST.");
       }
 
+      // Sale price, SKU, options/variants — same rules as the dashboard (lib/commerce/variants.ts).
+      const catalog = catalogFieldsFromInput(
+        { compareAtPriceMinor: args.compareAtPriceMinor, sku: args.sku, options: args.options, variants: args.variants },
+        { kind, priceMinor },
+      );
+
       const slug = await ensureUniqueProductSlug(siteId, name);
       const categoryId = (await resolveCategoryId(siteId, resolved.organizationId, args.category)) ?? undefined;
 
@@ -527,7 +645,8 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         kind,
         priceMinor,
         imageUrl: typeof args.imageUrl === "string" && args.imageUrl ? args.imageUrl : undefined,
-        stockQuantity: kind === "PHYSICAL" && typeof args.stockQuantity === "number" ? Math.max(0, Math.trunc(args.stockQuantity)) : undefined,
+        stockQuantity: kind === "PHYSICAL" && typeof args.stockQuantity === "number" && !catalog.set.variants ? Math.max(0, Math.trunc(args.stockQuantity)) : undefined,
+        ...(catalog.set as Record<string, never>),
         durationMinutes: kind === "SERVICE" && typeof args.durationMinutes === "number" ? Math.max(5, Math.trunc(args.durationMinutes)) : undefined,
         digitalDeliveryMethod: kind === "DIGITAL" ? args.digitalDeliveryMethod : undefined,
         digitalFileUrl: kind === "DIGITAL" && args.digitalDeliveryMethod === "FILE_DOWNLOAD" ? String(args.digitalFileUrl) : undefined,
@@ -617,6 +736,14 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         if (typeof args.digitalLinkExpiryDays === "number") data.digitalLinkExpiryDays = Math.max(1, Math.trunc(args.digitalLinkExpiryDays));
       }
 
+      const catalog = catalogFieldsFromInput(
+        { compareAtPriceMinor: args.compareAtPriceMinor, sku: args.sku, options: args.options, variants: args.variants },
+        { kind: existing.kind ?? "PHYSICAL", priceMinor: typeof data.priceMinor === "number" ? data.priceMinor : existing.priceMinor },
+      );
+      Object.assign(data, catalog.set);
+      toRemove.push(...catalog.remove);
+      if (catalog.set.variants) delete data.stockQuantity;
+
       let patch = CommerceProduct.patch({ templateId: siteId, id: productId }).set(data);
       const uniqueRemove = [...new Set(toRemove)].filter((f) => !(f in data));
       if (uniqueRemove.length) patch = patch.remove(uniqueRemove as any);
@@ -672,6 +799,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
           notifyCustomerOnShipped: settings?.notifyCustomerOnShipped ?? true,
           notifyCustomerOnCompleted: settings?.notifyCustomerOnCompleted ?? true,
           notifyCustomerOnRefunded: settings?.notifyCustomerOnRefunded ?? true,
+          ...checkoutSettingsView(settings),
         },
       };
     }
@@ -689,7 +817,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         throw new Error("paymentProvider must be BYO_PAYSTACK, PLATFORM_PAYSTACK, PLATFORM_STRIPE, or BYO_STRIPE.");
       }
       if (paymentProvider === "PLATFORM_STRIPE") {
-        const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go();
+        const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go({ pages: "all" });
         if (!requests.some((r) => r.status === "APPROVED")) throw new Error("Platform Stripe isn't approved for this organization yet — call request_commerce_stripe_access first.");
       }
 
@@ -775,6 +903,11 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       if (typeof args.notifyCustomerOnRefunded === "boolean") data.notifyCustomerOnRefunded = args.notifyCustomerOnRefunded;
 
       const { data: existingSettings } = await CommerceSettings.get({ templateId: siteId }).go();
+      // Bank transfer / checkout questions / delivery+pickup — same validation as the
+      // dashboard's settings PUT (lib/commerce/checkoutSettings.ts); throws a readable error.
+      const checkoutInput = applyCheckoutSettingsInput(args, existingSettings);
+      Object.assign(data, checkoutInput.data);
+      toRemove.push(...checkoutInput.toRemove);
       if (existingSettings) {
         let patch = CommerceSettings.patch({ templateId: siteId }).set(data);
         if (toRemove.length) patch = patch.remove(toRemove as any);
@@ -821,6 +954,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
           notifyCustomerOnShipped: settings.notifyCustomerOnShipped ?? true,
           notifyCustomerOnCompleted: settings.notifyCustomerOnCompleted ?? true,
           notifyCustomerOnRefunded: settings.notifyCustomerOnRefunded ?? true,
+          ...checkoutSettingsView(settings),
         },
         ...(currencyWarning || storefrontWarning ? { warning: [currencyWarning, storefrontWarning].filter(Boolean).join(" ") } : {}),
       };
@@ -831,7 +965,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       const page = Math.max(1, Number(args.page) || 1);
       const pageSize = 25;
 
-      const { data: allOrders } = await CommerceOrder.query.primary({ templateId: siteId }).go();
+      const { data: allOrders } = await CommerceOrder.query.primary({ templateId: siteId }).go({ pages: "all" });
       let filtered = allOrders;
       if (typeof args.status === "string") filtered = filtered.filter((o) => o.status === args.status);
       if (typeof args.q === "string" && args.q.trim()) {
@@ -846,8 +980,8 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
 
       const orders = await Promise.all(
         pageRows.map(async (order) => {
-          const { data: items } = await CommerceOrderItem.query.primary({ templateId: siteId, orderId: order.id }).go();
-          return { ...order, items: items.map((i) => ({ nameSnapshot: i.nameSnapshot, quantity: i.quantity ?? 1, unitPriceMinor: i.unitPriceMinor })) };
+          const { data: items } = await CommerceOrderItem.query.primary({ templateId: siteId, orderId: order.id }).go({ pages: "all" });
+          return { ...withoutOrderSecrets(order), items: items.map((i) => ({ nameSnapshot: i.nameSnapshot, quantity: i.quantity ?? 1, unitPriceMinor: i.unitPriceMinor })) };
         }),
       );
 
@@ -862,9 +996,9 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       if (!order) throw new Error(`Order not found with id "${orderId}".`);
 
       const [{ data: items }, { data: booking }, { data: deliveries }] = await Promise.all([
-        CommerceOrderItem.query.primary({ templateId: siteId, orderId }).go(),
+        CommerceOrderItem.query.primary({ templateId: siteId, orderId }).go({ pages: "all" }),
         CommerceBooking.get({ templateId: siteId, orderId }).go(),
-        CommerceDigitalDelivery.query.primary({ orderId }).go(),
+        CommerceDigitalDelivery.query.primary({ orderId }).go({ pages: "all" }),
       ]);
       const digitalDeliveries = await Promise.all(
         deliveries.map(async (d) => {
@@ -881,7 +1015,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         }),
       );
 
-      return { order: { ...order, items, booking: booking ? { scheduledStart: booking.scheduledStart, status: booking.status } : null, digitalDeliveries } };
+      return { order: { ...withoutOrderSecrets(order), items, booking: booking ? { scheduledStart: booking.scheduledStart, status: booking.status } : null, digitalDeliveries } };
     }
 
     case "resend_digital_delivery": {
@@ -995,7 +1129,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       ]);
       if (!organization || !user) throw new Error("Unauthorized.");
 
-      const { data: existingRequests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go();
+      const { data: existingRequests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go({ pages: "all" });
       const blocking = existingRequests.some((r) => r.status === "PENDING" || r.status === "APPROVED");
       if (blocking) throw new Error("A Stripe access request is already pending or approved for this organization.");
 
@@ -1013,7 +1147,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
 
     case "list_commerce_delivery_methods": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const { data: methods } = await CommerceDeliveryMethod.query.primary({ templateId: siteId }).go();
+      const { data: methods } = await CommerceDeliveryMethod.query.primary({ templateId: siteId }).go({ pages: "all" });
       methods.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
       return { methods };
     }
@@ -1102,20 +1236,47 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
       if (!orderId) throw new Error("orderId is required.");
       const order = await updateOrderFulfillmentStatus(siteId, resolved.organizationId, orderId, args.fulfillmentStatus);
-      return { success: true, order };
+      return { success: true, order: withoutOrderSecrets(order) };
     }
 
     case "refund_commerce_order": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
       const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
       if (!orderId) throw new Error("orderId is required.");
-      const order = await refundCommerceOrder(siteId, resolved.organizationId, orderId);
-      return { success: true, order };
+      const order = await refundCommerceOrder(siteId, resolved.organizationId, orderId, {
+        reason: args.reason,
+        confirmOrderNumber: args.confirmOrderNumber,
+        refundedBy: `mcp:${resolved.userId}`,
+      });
+      return { success: true, order: withoutOrderSecrets(order) };
+    }
+
+    case "delete_commerce_order": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
+      if (!orderId) throw new Error("orderId is required.");
+      const { orderNumber } = await deleteCommerceOrder(siteId, orderId, { confirmOrderNumber: args.confirmOrderNumber, deletedBy: `mcp:${resolved.userId}` });
+      return { success: true, deleted: true, orderNumber };
+    }
+
+    case "resolve_bank_transfer_order": {
+      const siteId = await resolveCommerceSiteId(resolved, args.templateId);
+      const orderId = typeof args.orderId === "string" ? args.orderId.trim() : "";
+      if (!orderId) throw new Error("orderId is required.");
+      if (args.action !== "confirm" && args.action !== "reject") throw new Error('action must be "confirm" or "reject".');
+      const order = await resolveBankTransferOrder({
+        templateId: siteId,
+        orderId,
+        action: args.action,
+        resolvedBy: `mcp:${resolved.userId}`,
+        reason: typeof args.reason === "string" ? args.reason : null,
+      });
+      return { success: true, order: withoutOrderSecrets(order) };
     }
 
     case "list_commerce_discounts": {
       const siteId = await resolveCommerceSiteId(resolved, args.templateId);
-      const { data: discounts } = await CommerceDiscountCode.query.primary({ templateId: siteId }).go();
+      const { data: discounts } = await CommerceDiscountCode.query.primary({ templateId: siteId }).go({ pages: "all" });
       discounts.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
       return { discounts };
     }
@@ -1128,7 +1289,7 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       if (typeof args.value !== "number" || !Number.isInteger(args.value) || args.value <= 0) throw new Error("value must be a positive integer.");
       if (args.type === "PERCENT" && args.value > 100) throw new Error("A percentage discount can't exceed 100.");
 
-      const { data: byCode } = await CommerceDiscountCode.query.byCode({ templateId: siteId, code: normalizedCode }).go();
+      const { data: byCode } = await CommerceDiscountCode.query.byCode({ templateId: siteId, code: normalizedCode }).go({ pages: "all" });
       if (byCode[0]) throw new Error(`"${normalizedCode}" is already in use.`);
 
       const id = randomUUID();

@@ -10,8 +10,12 @@ import { resolveCheckoutStripeSecret } from "@/lib/commerce/stripe";
 import { isSlotAvailable } from "@/lib/commerce/availability";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { createCommerceStripeCheckoutSession } from "@/lib/commerce/stripeClient";
-import { createCommerceOrder, failCommerceOrder, OutOfStockError, SlotTakenError, InvalidDiscountError } from "@/lib/commerce/checkoutDynamo";
-import { resolveOrderDeliveryMethod, InvalidDeliveryMethodError } from "@/lib/commerce/delivery";
+import { createCommerceOrder, failCommerceOrder, OutOfStockError, SlotTakenError, InvalidDiscountError, VariantUnavailableError } from "@/lib/commerce/checkoutDynamo";
+import { lineName, resolvePurchasable } from "@/lib/commerce/variants";
+import { resolveOrderDeliveryMethod, InvalidDeliveryMethodError, pickupLocationFor } from "@/lib/commerce/delivery";
+import { readCheckoutFields, resolveCheckoutFieldAnswers, CheckoutFieldsError } from "@/lib/commerce/checkoutFields";
+import { chooseCheckoutPaymentMethod } from "@/lib/commerce/checkoutPayment";
+import { isBankTransferReady, generateBankTransferToken, notifyBankTransferPlaced, BANK_TRANSFER_HOLD_MS } from "@/lib/commerce/bankTransfer";
 import { CommerceOrder, CommerceSettings, CommerceProduct, CommerceDiscountCode, CommerceAvailabilityRule, CommerceAvailabilityException, CommerceBooking } from "@/lib/db/commerceEntities";
 
 function generateOrderNumber(): string {
@@ -55,6 +59,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const {
     productId,
+    variantId: rawVariantId,
     quantity: rawQuantity,
     scheduledStart: rawScheduledStart,
     customerEmail,
@@ -65,6 +70,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     shippingState,
     shippingAddressLine,
     discountCode: rawDiscountCode,
+    paymentMethod: requestedPaymentMethod,
+    customFields: rawCustomFields,
   } = body;
 
   if (typeof productId !== "string" || !productId) {
@@ -101,12 +108,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         stripeLiveWebhookSecretEncrypted: settings.stripeLiveWebhookSecretEncrypted ?? null,
       })
     : null;
-  if (!isStripeFlow && (!paystackKeys?.secretKeyEncrypted || !paystackKeys.publicKey)) {
-    return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
+  const gatewayReady = isStripeFlow ? Boolean(stripeKeys?.secretKeyEncrypted) : Boolean(paystackKeys?.secretKeyEncrypted && paystackKeys.publicKey);
+  const paymentChoice = chooseCheckoutPaymentMethod(requestedPaymentMethod, gatewayReady, isBankTransferReady(settings));
+  if ("error" in paymentChoice) {
+    return NextResponse.json({ error: paymentChoice.error }, { status: 400 });
   }
-  if (isStripeFlow && !stripeKeys?.secretKeyEncrypted) {
-    return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
-  }
+  const isBankTransfer = paymentChoice.method === "BANK_TRANSFER";
+
   // Currency is a site-wide setting (Settings > General), not a per-product value — a
   // product's own `currency` attribute is a vestigial per-record default from before that
   // decision and is never read here anymore.
@@ -118,6 +126,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!product || !(product.active ?? true)) {
     return NextResponse.json({ error: "Product not found." }, { status: 404 });
   }
+
+  // A product with options (Size, Colour…) is bought as one specific variant.
+  const variantId = typeof rawVariantId === "string" && rawVariantId ? rawVariantId : null;
+  const purchase = resolvePurchasable(product, variantId);
+  if (!purchase.ok) return NextResponse.json({ error: purchase.error }, { status: 400 });
 
   let quantity = 1;
   let scheduledStart: Date | null = null;
@@ -141,8 +154,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // even when nobody else is racing for it.
     const now = new Date();
     const [{ data: ruleRows }, { data: exceptionRows }, { data: orgBookings }] = await Promise.all([
-      CommerceAvailabilityRule.query.byProduct({ productId: product.id }).go(),
-      CommerceAvailabilityException.query.byProduct({ productId: product.id }).go(),
+      CommerceAvailabilityRule.query.byProduct({ productId: product.id }).go({ pages: "all" }),
+      CommerceAvailabilityException.query.byProduct({ productId: product.id }).go({ pages: "all" }),
       CommerceBooking.query.byOrg({ organizationId }).go({ pages: "all" }),
     ]);
     const rules = ruleRows.map((r) => ({ dayOfWeek: r.dayOfWeek, startMinute: r.startMinute, endMinute: r.endMinute, timezone: r.timezone ?? "Africa/Lagos" }));
@@ -171,6 +184,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // DIGITAL/SERVICE product never resolves a method at all.
   let resolvedDeliveryMethod: Awaited<ReturnType<typeof resolveOrderDeliveryMethod>> = null;
   if (product.kind === "PHYSICAL") {
+    if (typeof deliveryMethodId !== "string" || !deliveryMethodId) {
+      return NextResponse.json({ error: "Please choose how you'd like to get your order — delivery or pickup." }, { status: 400 });
+    }
     try {
       resolvedDeliveryMethod = await resolveOrderDeliveryMethod(
         templateId,
@@ -185,7 +201,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  const subtotalMinor = product.priceMinor * quantity;
+  // After delivery resolution on purpose — see the cart route: country-limited questions
+  // follow where the order actually ships (none for pickup, bookings or digital products).
+  const deliveryCountry = resolvedDeliveryMethod?.type === "COURIER" ? shippingAddress.shippingCountry : null;
+  let customFieldAnswers;
+  try {
+    customFieldAnswers = resolveCheckoutFieldAnswers(readCheckoutFields(settings.checkoutFields), rawCustomFields, deliveryCountry);
+  } catch (err) {
+    if (err instanceof CheckoutFieldsError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
+  }
+
+  const subtotalMinor = purchase.unitPriceMinor * quantity;
 
   // Fast, non-authoritative pre-check — a clean error for an obviously-bad code before
   // ever attempting the transaction. The atomic claim inside createCommerceOrder is what
@@ -193,7 +220,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let discount: EntityItem<typeof CommerceDiscountCode> | null = null;
   const normalizedDiscountCode = typeof rawDiscountCode === "string" ? rawDiscountCode.trim().toUpperCase() : "";
   if (normalizedDiscountCode) {
-    const { data: matches } = await CommerceDiscountCode.query.byCode({ templateId, code: normalizedDiscountCode }).go();
+    const { data: matches } = await CommerceDiscountCode.query.byCode({ templateId, code: normalizedDiscountCode }).go({ pages: "all" });
     discount = matches[0] ?? null;
     const invalid =
       !discount ||
@@ -221,8 +248,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // resolveCheckoutPaystackSecret) — paystackMode only means anything for BYO_PAYSTACK.
   // Stripe orders use neither field (see stripeCheckoutSessionId instead, set after this
   // transaction commits).
-  const paystackMode = isStripeFlow || paystackKeys?.isPlatform ? null : settings.paystackMode ?? "TEST";
-  const paystackReference = isStripeFlow ? null : generatePaystackReference();
+  const paystackMode = isBankTransfer || isStripeFlow || paystackKeys?.isPlatform ? null : settings.paystackMode ?? "TEST";
+  const paystackReference = isBankTransfer || isStripeFlow ? null : generatePaystackReference();
 
   let order;
   try {
@@ -230,6 +257,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       templateId,
       organizationId,
       product,
+      variantId,
       quantity,
       orderNumber,
       paystackReference,
@@ -246,13 +274,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       paystackMode,
       scheduledStart,
       scheduledEnd,
+      extras: {
+        paymentMethod: paymentChoice.method,
+        bankTransferConfirmToken: isBankTransfer ? generateBankTransferToken() : null,
+        pickupLocationSnapshot: pickupLocationFor(resolvedDeliveryMethod, settings),
+        customFields: customFieldAnswers,
+      },
+      holdMs: isBankTransfer ? BANK_TRANSFER_HOLD_MS : undefined,
     });
   } catch (err) {
     if (err instanceof SlotTakenError) {
       return NextResponse.json({ error: "That time slot was just booked by someone else. Please pick another." }, { status: 409 });
     }
     if (err instanceof OutOfStockError) {
-      return NextResponse.json({ error: `Only ${product.stockQuantity ?? 0} left in stock.` }, { status: 409 });
+      const left = Math.max(0, purchase.stockQuantity ?? 0);
+      return NextResponse.json({ error: left > 0 ? `Only ${left} left in stock.` : `${lineName(product.name, purchase.label)} is out of stock.` }, { status: 409 });
+    }
+    if (err instanceof VariantUnavailableError) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
     }
     if (err instanceof InvalidDiscountError) {
       return NextResponse.json({ error: "That discount code isn't valid." }, { status: 400 });
@@ -261,6 +300,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const callbackUrl = `${request.nextUrl.origin}/order-confirmation?order=${order.orderNumber}&email=${encodeURIComponent(customerEmail)}`;
+
+  // Bank transfer: the order (and any booking slot) is held until the owner confirms the
+  // money arrived — see lib/commerce/bankTransfer.ts.
+  if (isBankTransfer) {
+    await notifyBankTransferPlaced(order, settings).catch((err) => console.error("Commerce: bank transfer notify failed", err));
+    return NextResponse.json({ orderNumber: order.orderNumber, paymentMethod: "BANK_TRANSFER", redirectUrl: callbackUrl });
+  }
 
   try {
     if (isStripeFlow) {
@@ -273,7 +319,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         amountMinor,
         currency,
         customerEmail,
-        productName: product.name,
+        productName: lineName(product.name, purchase.label),
         returnUrl: callbackUrl,
       });
       await CommerceOrder.patch({ templateId: order.templateId, id: order.id }).set({ stripeCheckoutSessionId: session.id }).go();
@@ -313,7 +359,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // Surface the real provider error (e.g. a currency the connected account isn't
     // provisioned for) instead of a generic message — a silent rejection here is exactly
     // how a currency mismatch would otherwise go unnoticed.
-    await failCommerceOrder(order, product, quantity, discount);
+    await failCommerceOrder(order, product, quantity, discount, variantId);
     const message = err instanceof Error ? err.message : "Unable to start payment. Please try again.";
     return NextResponse.json({ error: message }, { status: 502 });
   }

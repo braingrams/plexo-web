@@ -104,20 +104,20 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
   const currentSample = samplePrompts[activeTab];
 
   return (
-    <div className="min-h-screen bg-[#08090f] text-[#f0f2ff] font-sans selection:bg-[#8b5cf6] selection:text-white">
+    <div className={`min-h-screen bg-[#08090f] text-[#f0f2ff] font-sans selection:bg-[color:var(--brand)] selection:text-white`}>
       <LandingNav />
 
       {/* ── Main Container ───────────────────────────────────── */}
       <main className="pt-28 pb-20 px-4 md:px-6 max-w-[1400px] mx-auto space-y-16">
         {/* ── HERO SECTION ───────────────────────────────────── */}
         <section className="text-center max-w-3xl mx-auto space-y-6 pt-4">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#8b5cf6]/10 border border-[#8b5cf6]/20 text-[#a78bfa] text-xs font-bold backdrop-blur-md uppercase tracking-wider">
-            <Sparkles className="w-3.5 h-3.5 text-[#8b5cf6]" />
+          <div className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[color:var(--brand)]/10 border border-[color:var(--brand)]/20 text-[color:var(--brand-400)] text-xs font-bold backdrop-blur-md uppercase tracking-wider`}>
+            <Sparkles className={`w-3.5 h-3.5 text-[color:var(--brand)]`} />
             Model Context Protocol (@charisol/plexo-mcp)
           </div>
 
           <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-white leading-tight">
-            Prompt Any AI to <span className="bg-gradient-to-r from-[#a78bfa] via-[#818cf8] to-[#34d399] bg-clip-text text-transparent">Generate & Publish</span> Web Pages
+            Prompt Any AI to <span className={`bg-gradient-to-r from-[color:var(--brand-400)] via-[#818cf8] to-[#34d399] bg-clip-text text-transparent`}>Generate & Publish</span> Web Pages
           </h1>
 
           <p className="text-sm md:text-base text-[#f0f2ff]/70 max-w-2xl mx-auto leading-relaxed">
@@ -127,7 +127,7 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
           <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
             <Link
               href="/auth/register"
-              className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[#8b5cf6] to-[#7c3aed] hover:opacity-95 text-white text-sm font-bold shadow-xl shadow-[#8b5cf6]/25 flex items-center gap-2 transition"
+              className={`px-6 py-3.5 rounded-2xl bg-gradient-to-r from-[color:var(--brand)] to-[color:var(--brand-deep)] hover:opacity-95 text-white text-sm font-bold shadow-xl shadow-[color:var(--brand)]/25 flex items-center gap-2 transition`}
             >
               Get Your MCP API Key
               <ArrowRight className="w-4 h-4" />
@@ -147,7 +147,7 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-5">
             <div>
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Terminal className="w-5 h-5 text-[#8b5cf6]" />
+                <Terminal className={`w-5 h-5 text-[color:var(--brand)]`} />
                 Live MCP Tool Call Simulation
               </h2>
               <p className="text-xs text-white/50">Click a scenario to see how Plexo MCP processes AI prompts under the hood.</p>
@@ -169,7 +169,7 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
                     onClick={() => setActiveTab(tab.id as any)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
                       active
-                        ? "bg-[#8b5cf6] text-white shadow-md shadow-[#8b5cf6]/30 font-bold"
+                        ? `bg-[color:var(--brand)] text-white shadow-md shadow-[color:var(--brand)]/30 font-bold`
                         : "bg-white/[0.04] text-white/60 hover:text-white border border-white/10"
                     }`}
                   >
@@ -184,7 +184,7 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
           {/* Chat Bubble & Response Mock */}
           <div className="grid md:grid-cols-2 gap-6 items-start">
             <div className="bg-[#08090f] border border-white/10 rounded-2xl p-5 space-y-4">
-              <div className="flex items-center gap-2 text-xs text-[#a78bfa] font-mono">
+              <div className={`flex items-center gap-2 text-xs text-[color:var(--brand-400)] font-mono`}>
                 <Bot className="w-4 h-4" />
                 Prompt (User Input in Claude / Cursor)
               </div>
@@ -193,7 +193,7 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
               </p>
             </div>
 
-            <div className="bg-[#08090f] border border-[#8b5cf6]/30 rounded-2xl p-5 space-y-3 shadow-lg shadow-[#8b5cf6]/10">
+            <div className={`bg-[#08090f] border border-[color:var(--brand)]/30 rounded-2xl p-5 space-y-3 shadow-lg shadow-[color:var(--brand)]/10`}>
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono text-[#34d399] flex items-center gap-1.5 font-bold">
                   <CheckCircle2 className="w-4 h-4" />
@@ -223,7 +223,7 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
             <div className="bg-[#111827]/80 border border-white/10 rounded-3xl p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Laptop className="w-4 h-4 text-[#8b5cf6]" />
+                  <Laptop className={`w-4 h-4 text-[color:var(--brand)]`} />
                   Claude Desktop Configuration
                 </h3>
                 <button
@@ -236,10 +236,10 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
               </div>
 
               <p className="text-xs text-white/60">
-                Add to your <code className="text-[#a78bfa]">claude_desktop_config.json</code>:
+                Add to your <code className={`text-[color:var(--brand-400)]`}>claude_desktop_config.json</code>:
               </p>
 
-              <pre className="text-xs font-mono bg-black/60 border border-white/10 rounded-xl p-4 text-[#a78bfa] overflow-x-auto leading-relaxed">
+              <pre className={`text-xs font-mono bg-black/60 border border-white/10 rounded-xl p-4 text-[color:var(--brand-400)] overflow-x-auto leading-relaxed`}>
 {`{
   "mcpServers": {
     "plexo": {
@@ -292,12 +292,12 @@ export default function McpLandingClient({ baseUrl }: McpLandingClientProps) {
         </section>
 
         {/* ── CALL TO ACTION ────────────────────────────────────── */}
-        <section className="text-center bg-gradient-to-r from-[#8b5cf6]/15 to-[#7c3aed]/15 border border-[#8b5cf6]/30 rounded-3xl p-10 space-y-6">
+        <section className={`text-center bg-gradient-to-r from-[color:var(--brand)]/15 to-[color:var(--brand-deep)]/15 border border-[color:var(--brand)]/30 rounded-3xl p-10 space-y-6`}>
           <h2 className="text-2xl md:text-3xl font-extrabold text-white">Start Commanding Your Landing Pages with AI</h2>
           <p className="text-sm text-white/60 max-w-xl mx-auto">Generate your Plexo API key and connect your favorite AI assistant today.</p>
           <Link
             href="/auth/register"
-            className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-gradient-to-r from-[#8b5cf6] to-[#7c3aed] hover:opacity-95 text-white text-sm font-bold shadow-xl shadow-[#8b5cf6]/30 transition"
+            className={`inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-gradient-to-r from-[color:var(--brand)] to-[color:var(--brand-deep)] hover:opacity-95 text-white text-sm font-bold shadow-xl shadow-[color:var(--brand)]/30 transition`}
           >
             Get Free API Key
             <ArrowRight className="w-4 h-4" />

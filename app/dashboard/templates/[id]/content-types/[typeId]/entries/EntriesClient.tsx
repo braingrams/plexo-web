@@ -39,6 +39,46 @@ function IconArrowLeft() {
   );
 }
 
+/** An image field: pick a file to upload (or paste a link), with a preview. */
+function ImageInput({ value, onChange }: { value: string; onChange: (value: unknown) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function upload(file: File) {
+    setUploading(true);
+    setErr(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/v1/media/upload", { method: "POST", body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) throw new Error(data.error || "The upload didn't work. Please try again.");
+      onChange(data.url);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "The upload didn't work. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div>
+      {value && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={value} alt="" style={{ display: "block", maxWidth: "100%", maxHeight: 160, borderRadius: 8, marginBottom: "0.5rem" }} />
+      )}
+      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <label style={{ ...inputStyle, width: "auto", cursor: "pointer", whiteSpace: "nowrap" }}>
+          {uploading ? "Uploading…" : value ? "Replace image" : "Upload image"}
+          <input type="file" accept="image/*" hidden disabled={uploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); e.target.value = ""; }} />
+        </label>
+        <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder="…or paste an image link" style={inputStyle} />
+      </div>
+      {err && <span style={{ display: "block", fontSize: "0.75rem", color: "#f87171", marginTop: "0.3rem" }}>{err}</span>}
+    </div>
+  );
+}
+
 /** Renders one input per field, keyed by the field's own `key` in `values` — text→text
  * input, textarea→textarea, richtext→textarea (plain/simple-HTML text, no WYSIWYG — real
  * scope creep for v1), number→number input, boolean→checkbox, date→date input,
@@ -82,12 +122,16 @@ function FieldInput({
     case "date":
       return <input type="date" value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} style={inputStyle} />;
     case "image_url":
+      return <ImageInput value={typeof value === "string" ? value : ""} onChange={onChange} />;
+    case "video":
       return (
         <>
-          <input type="text" value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} placeholder="https://example.com/image.jpg" style={inputStyle} />
-          <span style={{ display: "block", fontSize: "0.72rem", color: "rgba(240,242,255,0.4)", marginTop: "0.3rem" }}>Paste an image URL.</span>
+          <input type="text" value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} placeholder="Paste a YouTube or Vimeo link" style={inputStyle} />
+          <span style={{ display: "block", fontSize: "0.72rem", color: "rgba(240,242,255,0.4)", marginTop: "0.3rem" }}>YouTube, Vimeo, or a direct video link.</span>
         </>
       );
+    case "datetime":
+      return <input type="datetime-local" value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} style={inputStyle} />;
     case "url":
       return <input type="text" value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} placeholder="https://example.com" style={inputStyle} />;
     case "text":

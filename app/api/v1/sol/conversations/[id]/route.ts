@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { docClient } from "@/lib/db/client";
 import { SolConversation, SolMessage } from "@/lib/db/solEntities";
+import { stopSharing } from "@/lib/sol/share";
 
 /** Same userId-scoped scan-and-find-by-id pattern as
  * lib/db/solConversationActivity.ts's bumpConversationActivity and the export route —
@@ -56,15 +57,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     .where((attr, op) => op.eq(attr.updatedAt, existing.updatedAt))
     .params();
   const putParams = SolConversation.create({
-    id: existing.id,
-    userId: existing.userId,
-    organizationId: existing.organizationId,
+    // Every field carried over (appId included — dropping it unlinked an app's chat
+    // from its app after the first turn); only what this write changes is set below.
+    ...existing,
     title: nextTitle,
-    modelTier: existing.modelTier,
     status: nextStatus,
-    lastMessageAt: existing.lastMessageAt,
-    messageCount: existing.messageCount,
-    createdAt: existing.createdAt,
     updatedAt: now,
   }).params();
 
@@ -126,6 +123,8 @@ export async function DELETE(request: NextRequest, context: { params: Promise<{ 
     await Promise.all(batch.map((m) => SolMessage.remove({ conversationId, createdAt: m.createdAt, id: m.id }).go()));
   }
 
+  // A shared link to it stops working too.
+  await stopSharing(conversationId);
   await SolConversation.remove({ userId: existing.userId, updatedAt: existing.updatedAt, id: existing.id }).go();
 
   return NextResponse.json({ success: true });

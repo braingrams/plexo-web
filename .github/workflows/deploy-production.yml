@@ -76,13 +76,22 @@ jobs:
       # compute-stack) is safe to skip when none of its real inputs changed.
       - name: Check whether published-sites-stack needs a deploy
         id: published_sites_diff
+        # Compared against the commit this stack was last deployed from (recorded in SSM
+        # after each successful deploy below) — not the previous push, which skipped the
+        # stack whenever the push that changed it had failed before reaching this step.
+        # Anything unknown (first run, missing commit) deploys.
         run: |
+          PATHS="cdk/lib/published-sites-stack.ts cdk/lib/conventions.ts cdk/lib/forward-host-function.js cdk/bin/app.ts .github/workflows/deploy-production.yml"
+          LAST=$(aws ssm get-parameter --name "/plexo/production/PUBLISHED_SITES_DEPLOYED_SHA" --query Parameter.Value --output text --region us-east-1 2>/dev/null || true)
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "workflow_dispatch — always redeploying published-sites-stack"
-          elif git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- cdk/lib/published-sites-stack.ts cdk/lib/conventions.ts cdk/lib/forward-host-function.js cdk/bin/app.ts .github/workflows/deploy-production.yml; then
+          elif [ -z "$LAST" ] || [ "$LAST" = "None" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "No record of the last published-sites deploy — deploying"
+          elif git fetch --quiet --depth=1 origin "$LAST" && git diff --quiet "$LAST" "${{ github.sha }}" -- $PATHS; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No relevant changes — skipping published-sites-stack deploy"
+            echo "Nothing changed since the last published-sites deploy ($LAST) — skipping"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
@@ -104,6 +113,16 @@ jobs:
           COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET: ${{ secrets.COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET }}
           BANK_DETAILS_ENCRYPTION_SECRET: ${{ secrets.BANK_DETAILS_ENCRYPTION_SECRET }}
           MAILDRIP_KEY_ENCRYPTION_SECRET: ${{ secrets.MAILDRIP_KEY_ENCRYPTION_SECRET }}
+          APP_SECRETS_ENCRYPTION_SECRET: ${{ secrets.APP_SECRETS_ENCRYPTION_SECRET }}
+          STRATA_TOKEN_ENCRYPTION_SECRET: ${{ secrets.STRATA_TOKEN_ENCRYPTION_SECRET }}
+          STRATA_API_URL: ${{ secrets.STRATA_API_URL }}
+          CHARISOL_TRUSTED_CLIENT_IDS: ${{ secrets.CHARISOL_TRUSTED_CLIENT_IDS }}
+          PLEXO_GITHUB_APP_ID: ${{ secrets.PLEXO_GITHUB_APP_ID }}
+          PLEXO_GITHUB_APP_SLUG: ${{ secrets.PLEXO_GITHUB_APP_SLUG }}
+          PLEXO_GITHUB_APP_PRIVATE_KEY: ${{ secrets.PLEXO_GITHUB_APP_PRIVATE_KEY }}
+          PLEXO_GITHUB_APP_WEBHOOK_SECRET: ${{ secrets.PLEXO_GITHUB_APP_WEBHOOK_SECRET }}
+          PLEXO_GITHUB_APP_CLIENT_ID: ${{ secrets.PLEXO_GITHUB_APP_CLIENT_ID }}
+          PLEXO_GITHUB_APP_CLIENT_SECRET: ${{ secrets.PLEXO_GITHUB_APP_CLIENT_SECRET }}
           MAILDRIP_API_URL: ${{ secrets.MAILDRIP_API_URL }}
           MAILDRIP_API_KEY: ${{ secrets.MAILDRIP_API_KEY }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
@@ -134,7 +153,7 @@ jobs:
           for NAME in AUTH_SECRET GOOGLE_SAFE_BROWSING_API_KEY CHARISOL_USER_POOL_ID \
             AI_KEY_ENCRYPTION_SECRET PAYSTACK_KEY_ENCRYPTION_SECRET COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET \
             BANK_DETAILS_ENCRYPTION_SECRET \
-            MAILDRIP_KEY_ENCRYPTION_SECRET MAILDRIP_API_URL MAILDRIP_API_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
+            MAILDRIP_KEY_ENCRYPTION_SECRET APP_SECRETS_ENCRYPTION_SECRET STRATA_TOKEN_ENCRYPTION_SECRET STRATA_API_URL CHARISOL_TRUSTED_CLIENT_IDS PLEXO_GITHUB_APP_ID PLEXO_GITHUB_APP_SLUG PLEXO_GITHUB_APP_PRIVATE_KEY PLEXO_GITHUB_APP_WEBHOOK_SECRET PLEXO_GITHUB_APP_CLIENT_ID PLEXO_GITHUB_APP_CLIENT_SECRET MAILDRIP_API_URL MAILDRIP_API_KEY STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET \
             PLATFORM_COMMERCE_STRIPE_SECRET_KEY PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET \
             STRIPE_PRICE_PRO STRIPE_PRICE_ULTRA STRIPE_PRICE_TOPUP_SMALL STRIPE_PRICE_TOPUP_MEDIUM STRIPE_PRICE_TOPUP_LARGE \
             SYSTEM_AI_PROVIDER SYSTEM_AI_KEY_ANTHROPIC_CLAUDE SYSTEM_AI_KEY_OPENAI SYSTEM_AI_KEY_GOOGLE_GEMINI \
@@ -215,9 +234,22 @@ jobs:
         working-directory: ./cdk
         run: npm install
 
+      - name: Deploy the app-data stack
+        # Databases for apps built on Plexo: Aurora Serverless v2 (auto-pauses to 0 ACU) +
+        # AppDbFn (cdk/lib/app-data-stack.ts). A no-op when nothing in it changed; the very
+        # first deploy creates the cluster (~10 minutes). Before compute, whose Lambdas
+        # call it.
+        working-directory: ./cdk
+        env:
+          STACK_KIND: app-data
+        run: npx aws-cdk deploy "${STACK_ID}-app-data-stack" --require-approval never --exclusively
+
       - name: Deploy the compute stack
         working-directory: ./cdk
         env:
+          # SolChatFn's own copy of the build-time NEXT_PUBLIC_ values (see compute-stack.ts's publicUrlEnv).
+          NEXT_PUBLIC_APP_URL: https://plexo.charisol.io
+          NEXT_PUBLIC_PAGES_DOMAIN: plexopages.com
           STACK_KIND: compute
           APP_DOMAIN: plexo.charisol.io
           # compute-stack.ts bakes these directly into ServerFn's environment (optional —
@@ -252,6 +284,10 @@ jobs:
           APP_URL: https://plexo.charisol.io
         run: npx aws-cdk deploy "${STACK_ID}-published-sites-stack" --require-approval never --exclusively
 
+      - name: Record the deployed published-sites commit
+        if: steps.published_sites_diff.outputs.changed == 'true'
+        run: aws ssm put-parameter --name "/plexo/production/PUBLISHED_SITES_DEPLOYED_SHA" --value "${{ github.sha }}" --type String --overwrite --region us-east-1 > /dev/null
+
       # Belt-and-suspenders alongside the shorter origin Cache-Control DeployCommerceJs
       # now sets (compute-stack.ts) and the ?v=<sha> cache-busting query param
       # (injectCommerceScript) — this makes the fix take effect at THIS distribution's
@@ -275,8 +311,9 @@ jobs:
       # commerce.js for hours after a deploy until its own dedicated tenant was found and
       # invalidated by hand (see create-invalidation-for-distribution-tenant, the
       # tenant-scoped equivalent — the plain command 404s as NoSuchDistribution against a
-      # tenant ID). Keeping the plain call too costs nothing and covers any other cache
-      # CloudFront might hold at the distribution level itself.
+      # tenant ID). The distribution is multi-tenant, so the plain distribution-level call
+      # always fails (NoSuchDistribution) — and under bash -e it used to end this step
+      # before any tenant was invalidated. Only the per-tenant calls are made.
       - name: Invalidate CloudFront cache for commerce.js (every distribution tenant)
         working-directory: ./cdk
         continue-on-error: true
@@ -285,7 +322,8 @@ jobs:
             --stack-name "${STACK_ID}-published-sites-stack" \
             --query "Stacks[0].Outputs[?OutputKey=='PrimaryDistributionId'].OutputValue" \
             --output text)
-          aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" --paths "/commerce.js" >/dev/null
+          # Multi-tenant ("tenant-only") distributions reject a plain CreateInvalidation
+          # (NoSuchDistribution), so invalidate each tenant instead.
 
           TENANT_IDS=$(aws cloudfront list-distribution-tenants \
             --association-filter DistributionId="$DISTRIBUTION_ID" \
@@ -306,3 +344,14 @@ jobs:
             exit 1
           fi
           echo "✓ Dashboard responded 200"
+
+      # Plan enforcement applies to every account right after a deploy — not only as each
+      # one is next visited (lib/plan/sweep.ts). Idempotent; the hourly schedule finishes
+      # anything this run doesn't. Never fails the deploy.
+      - name: Apply plan lifecycle to every account
+        continue-on-error: true
+        run: |
+          STATUS=$(curl -s -o /tmp/plan-sweep.json -w "%{http_code}" --max-time 90 \
+            -H "x-cron-secret: $CRON_SECRET" "https://plexo.charisol.io/api/internal/plan-lifecycle" || true)
+          echo "Plan lifecycle sweep: HTTP $STATUS"
+          cat /tmp/plan-sweep.json 2>/dev/null || true

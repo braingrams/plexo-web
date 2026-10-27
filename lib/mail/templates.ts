@@ -1,6 +1,7 @@
+import { EMAIL_COLORS } from "@/lib/theme";
 import { emailShell, type EmailBrand } from "./maildrip";
 
-export const CTA_BUTTON = (href: string, label: string, color = "#8b5cf6", colorDeep = "#7c3aed") => `
+export const CTA_BUTTON = (href: string, label: string, color = EMAIL_COLORS.brand, colorDeep = EMAIL_COLORS.brandDeep) => `
   <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 32px auto;">
     <tr>
       <td style="border-radius:10px;background:linear-gradient(135deg,${color},${colorDeep});text-align:center;">
@@ -11,7 +12,7 @@ export const CTA_BUTTON = (href: string, label: string, color = "#8b5cf6", color
     </tr>
   </table>`;
 
-const FALLBACK_LINK = (href: string, color = "#8b5cf6") => `
+const FALLBACK_LINK = (href: string, color = EMAIL_COLORS.brand) => `
   <p style="margin:0 0 8px;font-size:12px;color:#64748b;line-height:1.5;text-align:center;">
     If the button doesn't work, copy and paste this link into your browser:
   </p>
@@ -28,7 +29,7 @@ export function buildVerificationEmail(actionUrl: string): string {
         Welcome to Plexo — the visual email &amp; template builder. Before your first login, please confirm your email address so we can secure your workspace.
       </p>
       <p style="margin:0 0 28px;font-size:14px;color:#64748b;line-height:1.6;text-align:center;">
-        Click the button below to verify your account. This link is valid for <strong style="color:#8b5cf6;">60 minutes</strong>.
+        Click the button below to verify your account. This link is valid for <strong style="color:${EMAIL_COLORS.brand};">60 minutes</strong>.
       </p>
       ${CTA_BUTTON(actionUrl, "Verify Email Address")}
       ${FALLBACK_LINK(actionUrl)}
@@ -49,7 +50,7 @@ export function buildPasswordResetEmail(actionUrl: string): string {
         &#9888;&#65039; If you did not request this, please ignore this email.
       </p>
       <p style="margin:0 0 28px;font-size:14px;color:#64748b;line-height:1.6;text-align:center;">
-        This link expires in <strong style="color:#8b5cf6;">15 minutes</strong>.
+        This link expires in <strong style="color:${EMAIL_COLORS.brand};">15 minutes</strong>.
       </p>
       ${CTA_BUTTON(actionUrl, "Reset Password")}
       ${FALLBACK_LINK(actionUrl)}
@@ -116,7 +117,7 @@ export function buildInviteEmail(input: {
 }): string {
   const roleLabel = ROLE_LABELS[input.role] ?? input.role;
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `Join ${input.orgName} on ${productName}`,
     bodyHtml: `
@@ -125,7 +126,7 @@ export function buildInviteEmail(input: {
         <strong>${input.inviterName}</strong> invited you to join <strong>${input.orgName}</strong> on ${productName} as a
       </p>
       <p style="margin:0 0 28px;text-align:center;">
-        <span style="display:inline-block;background:#ede9fe;color:#7c3aed;font-size:13px;font-weight:700;padding:6px 14px;border-radius:9999px;letter-spacing:0.2px;">${roleLabel}</span>
+        <span style="display:inline-block;background:${EMAIL_COLORS.brandTint};color:${EMAIL_COLORS.brandDeep};font-size:13px;font-weight:700;padding:6px 14px;border-radius:9999px;letter-spacing:0.2px;">${roleLabel}</span>
       </p>
       ${CTA_BUTTON(input.acceptUrl, "Accept Invitation", accent)}
       ${FALLBACK_LINK(input.acceptUrl, accent)}
@@ -144,7 +145,7 @@ export function buildSiteTransferEmail(input: {
   brand?: EmailBrand;
 }): string {
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `${input.senderName} wants to transfer "${input.siteName}" to you on ${productName}`,
     bodyHtml: `
@@ -175,7 +176,7 @@ export function buildMentionEmail(input: {
   brand?: EmailBrand;
 }): string {
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `${input.mentionerName} mentioned you on ${productName}`,
     bodyHtml: `
@@ -202,7 +203,7 @@ export function buildNewBlogCommentEmail(input: {
   brand?: EmailBrand;
 }): string {
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `New comment on "${input.postTitle}" — ${productName}`,
     bodyHtml: `
@@ -228,7 +229,7 @@ export function buildCommentReplyEmail(input: {
   brand?: EmailBrand;
 }): string {
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `${input.replierName} replied on ${productName}`,
     bodyHtml: `
@@ -257,7 +258,7 @@ export function buildFormSubmissionEmail(input: {
   brand?: EmailBrand;
 }): string {
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const fieldsHtml = input.fieldsPreview
     .map(
       ([key, value]) => `
@@ -295,7 +296,7 @@ export function buildPaymentReceivedEmail(input: {
   brand?: EmailBrand;
 }): string {
   const productName = input.brand?.name ?? "Plexo";
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `Payment received on ${input.siteName} — ${productName}`,
     bodyHtml: `
@@ -338,7 +339,7 @@ export function buildOrderStatusEmail(input: {
   brand?: EmailBrand;
 }): { subject: string; html: string } {
   const copy = ORDER_STATUS_COPY[input.event];
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const formatMinor = (minor: number) =>
     new Intl.NumberFormat(undefined, { style: "currency", currency: input.currency }).format((minor || 0) / 100);
 
@@ -373,6 +374,121 @@ export function buildOrderStatusEmail(input: {
   return { subject: `${copy.subject} — ${input.siteName}`, html };
 }
 
+// ── Direct bank transfer (lib/commerce/bankTransfer.ts) — the customer pays the store's
+// bank account directly, so nothing is confirmed until the OWNER says the money arrived.
+// Every value a customer typed (name, checkout answers) is escaped: unlike the other
+// builders here, these interpolate free text from an anonymous storefront visitor.
+
+function esc(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function detailRows(rows: [string, string][]): string {
+  return rows
+    .map(
+      ([key, value]) => `
+        <tr>
+          <td style="padding:6px 16px 6px 0;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;vertical-align:top;white-space:nowrap;">${esc(key)}</td>
+          <td style="padding:6px 0;font-size:14px;color:#334155;line-height:1.5;">${esc(value)}</td>
+        </tr>`,
+    )
+    .join("");
+}
+
+/** To the site owner: a customer says they've transferred the money — check your bank,
+ * then one click confirms (or rejects) it. */
+export function buildBankTransferOwnerEmail(input: {
+  siteName: string;
+  amountFormatted: string;
+  orderNumber: string;
+  customerName: string | null;
+  customerEmail: string;
+  details: [string, string][];
+  confirmUrl: string;
+  brand?: EmailBrand;
+}): { subject: string; html: string } {
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
+  const html = emailShell({
+    title: `Bank transfer to confirm — ${input.orderNumber}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A bank transfer payment has been made</h1>
+      <p style="margin:0 0 8px;font-size:32px;font-weight:800;color:#0f172a;letter-spacing:-0.5px;text-align:center;">${esc(input.amountFormatted)}</p>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        <strong>${esc(input.customerName || input.customerEmail)}</strong> placed order <strong>${esc(input.orderNumber)}</strong> on <strong>${esc(input.siteName)}</strong>
+        and says they've sent this amount to your bank account. Check that it has arrived, then confirm it below so the order goes ahead.
+      </p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 28px;background:#f1f5f9;border-radius:10px;padding:16px 20px;text-align:left;">
+        ${detailRows([["Order", input.orderNumber], ["Customer", input.customerEmail], ...input.details])}
+      </table>
+      ${CTA_BUTTON(input.confirmUrl, "Confirm payment received", accent)}
+      <p style="margin:0 0 20px;font-size:13px;color:#64748b;line-height:1.5;text-align:center;">
+        Nothing arrived? Open the same link and choose "I didn't receive it" — the order is cancelled and its stock released.
+      </p>
+      ${FALLBACK_LINK(input.confirmUrl, accent)}
+    `,
+    brand: input.brand,
+  });
+  return { subject: `Confirm bank transfer: ${input.amountFormatted} for ${input.orderNumber} — ${input.siteName}`, html };
+}
+
+/** To the customer: order received, here's exactly where to send the money, and what
+ * happens next. */
+export function buildBankTransferCustomerEmail(input: {
+  siteName: string;
+  amountFormatted: string;
+  orderNumber: string;
+  bankRows: [string, string][];
+  instructions: string | null;
+  orderUrl: string;
+  brand?: EmailBrand;
+}): { subject: string; html: string } {
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
+  const html = emailShell({
+    title: `Order received — ${input.siteName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">Order received</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Thanks! <strong>${esc(input.siteName)}</strong> will confirm order <strong>${esc(input.orderNumber)}</strong> as soon as your bank transfer of
+        <strong>${esc(input.amountFormatted)}</strong> arrives. If you haven't sent it yet, use these details and put your order number as the reference:
+      </p>
+      <table cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 20px;background:#f1f5f9;border-radius:10px;padding:16px 20px;text-align:left;">
+        ${detailRows([...input.bankRows, ["Amount", input.amountFormatted], ["Reference", input.orderNumber]])}
+      </table>
+      ${input.instructions ? `<p style="margin:0 0 24px;font-size:13.5px;color:#475569;line-height:1.6;text-align:center;">${esc(input.instructions)}</p>` : ""}
+      ${CTA_BUTTON(input.orderUrl, "View Order", accent)}
+      ${FALLBACK_LINK(input.orderUrl, accent)}
+    `,
+    brand: input.brand,
+  });
+  return { subject: `Order received — awaiting your bank transfer — ${input.siteName}`, html };
+}
+
+/** To the customer: the owner couldn't find the transfer, so the order was cancelled. */
+export function buildBankTransferRejectedEmail(input: {
+  siteName: string;
+  orderNumber: string;
+  amountFormatted: string;
+  reason: string | null;
+  storeUrl: string;
+  brand?: EmailBrand;
+}): { subject: string; html: string } {
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
+  const html = emailShell({
+    title: `Order cancelled — ${input.siteName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">We couldn't confirm your payment</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        <strong>${esc(input.siteName)}</strong> didn't receive a bank transfer of <strong>${esc(input.amountFormatted)}</strong> for order
+        <strong>${esc(input.orderNumber)}</strong>, so the order has been cancelled.${input.reason ? ` Note from the store: “${esc(input.reason)}”` : ""}
+        If you did send the money, reply to the store with your transfer receipt.
+      </p>
+      ${CTA_BUTTON(input.storeUrl, "Visit the store", accent)}
+    `,
+    brand: input.brand,
+  });
+  return { subject: `Order ${input.orderNumber} cancelled — payment not received — ${input.siteName}`, html };
+}
+
 // ── Digital product delivery — the first real customer-facing post-payment emails in
 // Commerce (every other Commerce email today only ever notifies the site owner). One
 // builder per CommerceDigitalDeliveryMethod, all sharing the same CTA_BUTTON/FALLBACK_LINK
@@ -385,7 +501,7 @@ export function buildDigitalFileDeliveryEmail(input: {
   expiresAt?: string | null; // pre-formatted, e.g. "March 12, 2026"
   brand?: EmailBrand;
 }): string {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `Your download: ${input.productName}`,
     bodyHtml: `
@@ -411,7 +527,7 @@ export function buildDigitalExternalLinkEmail(input: {
   accessUrl: string; // our own token route, not the raw external URL — see digitalDelivery.ts
   brand?: EmailBrand;
 }): string {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `Your access link: ${input.productName}`,
     bodyHtml: `
@@ -434,7 +550,7 @@ export function buildDigitalAccessGrantedEmail(input: {
   accessUrl: string; // "see it again" page — same content as this email
   brand?: EmailBrand;
 }): string {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: `Your access: ${input.productName}`,
     bodyHtml: `
@@ -476,7 +592,7 @@ export function buildDomainTransferCodeEmail(input: {
   transferEligibleAt?: string | null;
   brand?: EmailBrand;
 }): string {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const eligibleNote =
     input.transferEligibleAt && new Date(input.transferEligibleAt).getTime() > Date.now()
       ? `<p style="margin:0 0 20px;font-size:14px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:14px 16px;line-height:1.6;text-align:left;">
@@ -520,7 +636,7 @@ export function buildDomainRenewalFailedEmail(input: {
   manageUrl: string;
   brand?: EmailBrand;
 }): string {
-  const accent = input.brand?.color ?? "#8b5cf6";
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
     title: input.expired ? `${input.domain} has expired` : `Renewal payment failed for ${input.domain}`,
     bodyHtml: `
@@ -545,5 +661,220 @@ export function buildDomainRenewalFailedEmail(input: {
       ${FALLBACK_LINK(input.manageUrl, accent)}
     `,
     brand: input.brand,
+  });
+}
+
+// ── Donations (lib/commerce/donations.ts) — the donor's thank-you receipt. Donor-typed
+// values (their name) and the owner's own thank-you text are escaped like every other
+// visitor-supplied string in this file.
+export function buildDonationReceiptEmail(input: {
+  siteName: string;
+  donorName: string | null;
+  amountFormatted: string;
+  monthly: boolean;
+  campaignName: string | null;
+  receiptNumber: string;
+  dateIso: string;
+  thankYouMessage: string | null;
+  /** Monthly gifts only — the donor's private link to stop their gift. */
+  manageUrl: string | null;
+  brand?: EmailBrand;
+}): { subject: string; html: string } {
+  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
+  const greeting = input.donorName ? `Dear ${esc(input.donorName.split(" ")[0])},` : "Thank you,";
+  const date = new Date(input.dateIso).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const message = input.thankYouMessage
+    ? esc(input.thankYouMessage)
+    : `Your generosity makes our work possible. Thank you for supporting ${esc(input.siteName)}.`;
+  const rows: [string, string][] = [
+    ["Amount", `${input.amountFormatted}${input.monthly ? " / month" : ""}`],
+    ...(input.campaignName ? ([["For", input.campaignName]] as [string, string][]) : []),
+    ["Date", date],
+    ["Receipt", input.receiptNumber],
+  ];
+  const html = emailShell({
+    title: `Thank you for your donation — ${input.siteName}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">Thank you for your ${input.monthly ? "monthly " : ""}gift</h1>
+      <p style="margin:0 0 6px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">${greeting}</p>
+      <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">${message}</p>
+      <p style="margin:0 0 24px;font-size:30px;font-weight:800;color:#16a34a;letter-spacing:-0.5px;text-align:center;">${esc(input.amountFormatted)}${input.monthly ? '<span style="font-size:15px;color:#64748b;font-weight:600"> / month</span>' : ""}</p>
+      <table cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">${detailRows(rows)}</table>
+      <p style="margin:0 0 ${input.manageUrl ? "20px" : "0"};font-size:12.5px;color:#94a3b8;line-height:1.6;text-align:center;">Please keep this email as your donation receipt.</p>
+      ${input.manageUrl ? `${CTA_BUTTON(input.manageUrl, "Manage your monthly gift", accent)}${FALLBACK_LINK(input.manageUrl, accent)}` : ""}
+    `,
+    brand: input.brand,
+  });
+  return { subject: `Thank you for your ${input.monthly ? "monthly " : ""}donation to ${input.siteName}`, html };
+}
+
+/** To the site owner when their WordPress site has finished moving to Plexo (lib/wpMigration/notify.ts). */
+export function buildWpMigrationDoneEmail(input: {
+  siteName: string;
+  pagesCopied: number;
+  postsCopied: number;
+  productsMoved?: number;
+  thingsToCheck: number;
+  reportUrl: string;
+}): string {
+  const plural = (n: number, word: string) => `${n.toLocaleString("en-US")} ${word}${n === 1 ? "" : "s"}`;
+  const moved = [plural(input.pagesCopied, "page"), plural(input.postsCopied, "blog post"), ...(input.productsMoved ? [plural(input.productsMoved, "product")] : [])].join(", ");
+  return emailShell({
+    title: `${input.siteName} has moved to Plexo`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">Your site has moved to Plexo</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        <strong>${input.siteName}</strong> is now on Plexo: ${moved}, with its images, design and SEO.
+      </p>
+      <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        ${input.thingsToCheck > 0
+          ? `Your report lists <strong>${plural(input.thingsToCheck, "thing")}</strong> to look at, then you can preview the site and connect your domain.`
+          : "Nothing needs fixing. Preview the site, then connect your domain when you're happy."}
+      </p>
+      ${CTA_BUTTON(input.reportUrl, "See your site")}
+      ${FALLBACK_LINK(input.reportUrl)}
+    `,
+    footerHtml: "Your WordPress site hasn't been changed — it keeps running until you switch your domain to Plexo.<br/>",
+  });
+}
+
+/** To the site owner when their migration paused on something that needs them (lib/wpMigration/notify.ts). */
+export function buildWpMigrationPausedEmail(input: { siteName: string; reason: string; resumeUrl: string }): string {
+  return emailShell({
+    title: `Moving ${input.siteName} to Plexo has paused`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">Your move has paused</h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Moving <strong>${input.siteName}</strong> to Plexo stopped partway: ${input.reason}
+      </p>
+      <p style="margin:0 0 28px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        This is usually temporary — your WordPress host was slow or briefly offline. Press <strong>Try again</strong> and it carries on exactly where it stopped; nothing already moved is lost.
+      </p>
+      ${CTA_BUTTON(input.resumeUrl, "Continue the move")}
+      ${FALLBACK_LINK(input.resumeUrl)}
+    `,
+  });
+}
+
+// ── Plan lifecycle (lib/plan/lifecycle.ts) ──────────────────────────────────────────────
+
+const PLAN_NAME: Record<string, string> = { PRO: "Pro", ULTRA: "Ultra", FREE: "Free" };
+
+export function buildPlanEndingSoonEmail(input: { plan: string; endsAt: string; isTrial: boolean; upgradeUrl: string }): string {
+  const plan = PLAN_NAME[input.plan] ?? input.plan;
+  const date = new Date(input.endsAt).toLocaleDateString("en-US", { day: "numeric", month: "long" });
+  return emailShell({
+    title: input.isTrial ? `Your ${plan} trial ends ${date}` : `Your ${plan} access ends ${date}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">
+        ${input.isTrial ? `Your ${plan} trial ends on ${date}` : `Your ${plan} access ends on ${date}`}
+      </h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Keep everything working exactly as it is by choosing a plan before then. If you don't, your account moves to Free:
+        one site stays live with just its homepage, on a Plexo address. Nothing is deleted — upgrading later brings it all back.
+      </p>
+      ${CTA_BUTTON(input.upgradeUrl, `Keep ${plan}`)}
+      ${FALLBACK_LINK(input.upgradeUrl)}
+    `,
+  });
+}
+
+export function buildPlanEndedEmail(input: {
+  previousPlan: string;
+  reason: "PAYMENT_ENDED" | "TRIAL_ENDED" | "GRANT_ENDED" | "NO_PAYMENT" | "ADMIN";
+  liveSiteName: string | null;
+  liveAddress: string | null;
+  offlineSiteCount: number;
+  archivedPageCount: number;
+  customDomainCount: number;
+  upgradeUrl: string;
+}): string {
+  const plan = PLAN_NAME[input.previousPlan] ?? input.previousPlan;
+  const why =
+    input.reason === "TRIAL_ENDED" ? `Your ${plan} trial has ended`
+      : input.reason === "PAYMENT_ENDED" ? `Your ${plan} subscription has ended`
+        : `Your ${plan} access has ended`;
+  const changes: string[] = [];
+  if (input.liveSiteName) {
+    changes.push(`<strong>${esc(input.liveSiteName)}</strong> is still live${input.liveAddress ? ` at <strong>${esc(input.liveAddress)}</strong>` : ""}, showing its homepage.`);
+  }
+  if (input.archivedPageCount > 0) changes.push(`${input.archivedPageCount} other page${input.archivedPageCount === 1 ? " is" : "s are"} saved but not published.`);
+  if (input.offlineSiteCount > 0) changes.push(`${input.offlineSiteCount} other site${input.offlineSiteCount === 1 ? " is" : "s are"} offline.`);
+  if (input.customDomainCount > 0) changes.push(`Your custom domain${input.customDomainCount === 1 ? " is" : "s are"} paused.`);
+  const list = changes.length
+    ? `<ul style="margin:0 0 20px;padding:0 0 0 20px;font-size:14px;color:#475569;line-height:1.7;text-align:left;">${changes.map((c) => `<li>${c}</li>`).join("")}</ul>`
+    : "";
+  return emailShell({
+    title: `${why} — you're now on Free`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">
+        ${why}
+      </h1>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Your account is now on Free. Nothing has been deleted.
+      </p>
+      ${list}
+      <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Upgrade any time and everything comes straight back — every page, every site and your custom domain${input.customDomainCount === 1 ? "" : "s"}.
+      </p>
+      ${CTA_BUTTON(input.upgradeUrl, "Bring everything back")}
+      ${FALLBACK_LINK(input.upgradeUrl)}
+    `,
+  });
+}
+
+// ── Payment receipts (lib/billing/payments.ts) ──────────────────────────────────────────
+
+const CARD_BRANDS: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "Amex", discover: "Discover", jcb: "JCB", diners: "Diners", unionpay: "UnionPay" };
+
+function money(cents: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(cents / 100);
+  } catch {
+    return `${currency.toUpperCase()} ${(cents / 100).toFixed(2)}`;
+  }
+}
+
+export function buildPaymentReceiptEmail(input: {
+  receiptNumber: string;
+  name: string | null;
+  description: string;
+  detail: string | null;
+  amountCents: number;
+  refundedCents: number;
+  currency: string;
+  paidAt: string;
+  card: { brand: string; last4: string } | null;
+  downloadUrl: string;
+  historyUrl: string;
+}): string {
+  const date = new Date(input.paidAt).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+  const row = (label: string, value: string) => `
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#64748b;text-align:left;">${label}</td>
+      <td style="padding:6px 0;font-size:13px;color:#0f172a;text-align:right;font-weight:600;">${value}</td>
+    </tr>`;
+  return emailShell({
+    title: `Your Plexo receipt ${input.receiptNumber}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">
+        Thanks${input.name ? `, ${esc(input.name.split(" ")[0])}` : ""} — payment received
+      </h1>
+      <p style="margin:0 0 24px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Here's your receipt for ${esc(money(input.amountCents, input.currency))}. Keep it for your records — you can download it again any time from your account.
+      </p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">
+        ${row("Receipt", esc(input.receiptNumber))}
+        ${row("Date", esc(date))}
+        ${row("For", esc(input.description) + (input.detail ? `<br /><span style="font-weight:400;color:#64748b;">${esc(input.detail)}</span>` : ""))}
+        ${input.card ? row("Paid with", `${esc(CARD_BRANDS[input.card.brand] ?? input.card.brand)} •••• ${esc(input.card.last4)}`) : ""}
+        ${input.refundedCents > 0 ? row("Refunded", `−${esc(money(input.refundedCents, input.currency))}`) : ""}
+        ${row("Total paid", esc(money(input.amountCents - input.refundedCents, input.currency)))}
+      </table>
+      ${CTA_BUTTON(input.downloadUrl, "Download receipt (PDF)")}
+      <p style="margin:0;font-size:12px;color:#64748b;line-height:1.5;text-align:center;">
+        All your receipts live under <a href="${input.historyUrl}" style="color:${EMAIL_COLORS.brand};text-decoration:none;">Settings → Subscription</a>.
+      </p>
+    `,
   });
 }

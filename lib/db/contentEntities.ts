@@ -1,5 +1,6 @@
 import { Entity, Service } from "electrodb";
 import { docClient, TABLES } from "./client";
+import { packHtml, packJson, unpackHtml, unpackJson } from "./packed";
 
 // plexo-content. Field shapes ported 1:1 from schema.prisma. Most entities scope by
 // templateId (co-located, matches how they're actually queried — "everything for this
@@ -23,20 +24,45 @@ export const Template = new Entity(
       organizationId: { type: "string", required: true },
       name: { type: "string", required: true },
       kind: { type: ["EMAIL", "LANDING_PAGE"] as const, required: true },
+      // REACT_PROJECT: a full-stack React app (docs/plexo-projects/ARCHITECTURE.md). Its
+      // files live in ProjectFile rows (lib/db/projectEntities.ts), not designJson/
+      // compiledHtml — those two stay set to {}/"" only because they're required here.
       sourceType: {
-        type: ["BUILDER", "RAW_UPLOAD"] as const,
+        type: ["BUILDER", "RAW_UPLOAD", "REACT_PROJECT"] as const,
         default: "BUILDER",
       },
-      designJson: { type: "any", required: true },
-      compiledHtml: { type: "string", required: true },
+      // REACT_PROJECT only. liveBuildId: the ProjectBuild the published domain serves.
+      // latestBuildId: the newest successful build (what the preview host serves).
+      // headVersionId: the newest ProjectVersion snapshot. previewHost: the
+      // "<host>.<pagesDomain>" label of the shareable preview (ProjectPreviewHost).
+      liveBuildId: { type: "string" },
+      latestBuildId: { type: "string" },
+      headVersionId: { type: "string" },
+      previewHost: { type: "string" },
+      // The Strata project this app was published from (lib/strata/publish.ts), so publishing
+      // that project again updates this app — same address — instead of making a second one.
+      strataProjectId: { type: "string" },
+      // Which editor/compiler owns designJson, draftJson and compiledHtml: "v1" is the classic
+      // builder's TemplateJSON ({ body: { rows } }); "v2" is the new visual editor's payload
+      // ({ format: "plexo-v2@1", pages: [PageDefinition], designSystem?, customJs?, meta? } —
+      // lib/v2/design.ts, docs/v2-templates.md). Rows written before this attribute existed
+      // have none: ALWAYS read it through designFormatOf() (missing = "v1"). EMAIL templates
+      // are always v1.
+      designFormat: { type: ["v1", "v2"] as const, default: "v1" },
+      // Set while a page that was moved from the classic editor to the new one can still go
+      // back: the TemplateRevision (made by POST /api/templates/:id/convert-to-v2) holding its
+      // classic design. Cleared when the owner goes back.
+      classicBackupId: { type: "string" },
+      designJson: { type: "any", required: true, set: (v: unknown) => packJson(v), get: (v: unknown) => unpackJson(v) },
+      compiledHtml: { type: "string", required: true, set: (v: string | undefined) => packHtml(v) ?? undefined, get: (v: string | undefined) => unpackHtml(v) ?? undefined },
       // Draft/Publish model: designJson/compiledHtml above are always the LIVE, currently-
       // published content (what app/pub actually serves) — draftJson/draftHtml are the
       // working-copy state the editor's autosave writes to instead. Null draftJson means
       // "no unpublished changes" (draft === live). Publishing (lib/templateVersions.ts)
       // snapshots the draft into an immutable TemplateRevision, copies it into the live
       // fields, and clears these two back to null.
-      draftJson: { type: "any" },
-      draftHtml: { type: "string" },
+      draftJson: { type: "any", set: (v: unknown) => packJson(v), get: (v: unknown) => unpackJson(v) },
+      draftHtml: { type: "string", set: (v: string | undefined) => packHtml(v) ?? undefined, get: (v: string | undefined) => unpackHtml(v) ?? undefined },
       // The TemplateRevision.id currently live — the "active version pointer" restore/
       // delete/version-history all key off. Null until this template has been published
       // at least once.
@@ -69,6 +95,31 @@ export const Template = new Entity(
       // Domains connect-a-domain picker (same reason isCommerceLayout/isBlogLayout are),
       // unlike isLmsFunnel: this one genuinely shouldn't be browsable as "a site."
       isLmsPageDesign: { type: "boolean", default: false },
+      // Root sites only. True when this site's URLs end in "/" (WordPress's convention) —
+      // the serve route then answers "/about/" directly and 301s "/about" to it, instead of
+      // Plexo's default of the reverse. Set by the WordPress migration (lib/wpMigration) so
+      // every migrated URL keeps working at exactly its old address, with no redirect hop.
+      urlTrailingSlash: { type: "boolean", default: false },
+      // The site this one was migrated from ("https://example.org"). Set on the root site
+      // (shown in the dashboard, used by the domain-cutover guidance) and on every page the
+      // migration created — which is how the raw-upload daily limit tells pages Plexo made
+      // for the owner apart from HTML they uploaded themselves.
+      migratedFrom: { type: "string" },
+      // When set, this page's own URL permanently redirects here (its sub-pages and files
+      // still resolve normally, and it's left out of the sitemap). Used for a WordPress
+      // "posts page" (e.g. /news/) whose job the live Plexo blog at /blog now does — a frozen
+      // copy of the old post list would never show a new post.
+      redirectTo: { type: "string" },
+      // Root sites only: paths of a migrated site's custom-plugin API endpoints that accepted
+      // submissions on WordPress (e.g. "/blog/wp-json/my-plugin/v1/contact"). The serve route
+      // captures POSTs to them into Form Submissions so anything still calling them keeps working.
+      migratedApiCaptureRoutes: { type: "any" },
+      // Sub-pages only (the root template IS the site's homepage). Absent = published.
+      // false = visitors get a 404 (the serve route checks it on every page of the path).
+      isPublished: { type: "boolean" },
+      // Set when a plan downgrade unpublished this page (lib/plan/lifecycle.ts), so an
+      // upgrade republishes exactly these pages and never one the owner unpublished.
+      planArchivedAt: { type: "string" },
       createdAt: {
         type: "string",
         default: () => new Date().toISOString(),
@@ -136,8 +187,15 @@ export const TemplateRevision = new Entity(
     attributes: {
       id: { type: "string", required: true },
       templateId: { type: "string", required: true },
-      designJson: { type: "any", required: true },
-      compiledHtml: { type: "string", required: true },
+      // The format designJson is in. Optional (not defaulted) so old rows stay untouched;
+      // read through designFormatOf(). Restoring a revision restores this with the design.
+      designFormat: { type: ["v1", "v2"] as const },
+      designJson: { type: "any", required: true, set: (v: unknown) => packJson(v), get: (v: unknown) => unpackJson(v) },
+      compiledHtml: { type: "string", required: true, set: (v: string | undefined) => packHtml(v) ?? undefined, get: (v: string | undefined) => unpackHtml(v) ?? undefined },
+      // Only on the backup made when a page moves to the new editor: the unpublished working
+      // copy it had at that moment, so going back to the classic editor loses nothing.
+      draftJson: { type: "any", set: (v: unknown) => packJson(v), get: (v: unknown) => unpackJson(v) },
+      draftHtml: { type: "string", set: (v: string | undefined) => packHtml(v) ?? undefined, get: (v: string | undefined) => unpackHtml(v) ?? undefined },
       sdkVersion: { type: "string", required: true },
       // Left optional (not required) rather than backfilled, since pre-existing revision
       // rows (every auto-snapshot taken before this attribute existed, and anything the
@@ -271,6 +329,13 @@ export const PublishedDomain = new Entity(
       // equivalent) — read by app/pub/[domain]/[[...slug]]/route.ts to emit
       // <meta name="robots" content="noindex,nofollow"> on every page this domain serves.
       noindex: { type: "boolean", default: false },
+      // Taken offline by the plan, not by abuse review (that's `active`): Free keeps one
+      // live site on a Plexo address. The row, its certificate and its CloudFront tenant
+      // are all kept, so an upgrade brings the domain straight back (lib/plan/lifecycle.ts).
+      planDisabledAt: { type: "string" },
+      // A Plexo address created by a downgrade because the site's only addresses were
+      // custom domains — so the one site Free keeps live is still reachable.
+      planFallback: { type: "boolean" },
       createdAt: {
         type: "string",
         default: () => new Date().toISOString(),
@@ -497,6 +562,8 @@ export const BlogSite = new Entity(
       enabled: { type: "boolean", default: false },
       title: { type: "string", default: "Blog" },
       description: { type: "string" },
+      /** The listing page's own <title> for search engines, when it differs from the heading (a migrated site keeps its WordPress posts page's SEO title). */
+      metaTitle: { type: "string" },
       postsPerPage: { type: "number", default: 10 },
       defaultCategoryId: { type: "string" },
       showOnHomepage: { type: "boolean", default: false },
@@ -706,7 +773,10 @@ export const BlogPost = new Entity(
         type: ["DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"] as const,
         default: "DRAFT",
       },
-      publishedAt: { type: "string" },
+      // Part of the byStatus sort key, so it can never be missing when status is written —
+      // a never-published draft stores "" here as a key placeholder (see savePostCore.ts).
+      // The getter hands readers back "no date" for it, exactly as before.
+      publishedAt: { type: "string", get: (value?: string) => (value ? value : undefined) },
       scheduledAt: { type: "string" },
       metaTitle: { type: "string" },
       metaDescription: { type: "string" },

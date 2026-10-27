@@ -1,26 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { Code, Layers, Globe, ShieldCheck, Check, Copy, ArrowRight, Zap } from "lucide-react";
+import { Code, Layers, Globe, ShieldCheck, Check, Copy } from "lucide-react";
 import { Reveal } from "@/app/scroll-fx";
+import { SDK_V2_SHORT } from "@/app/sdk/v2-snippets";
 
 export function DevSdkSection({ isDark }: { isDark: boolean }) {
   const [copied, setCopied] = useState(false);
 
-  const codeSnippet = `import { PlexoBuilder } from "@charisol/plexo-sdk";
-
-export default function SaaSPageEditor() {
-  return (
-    <div className="h-screen w-full">
-      <PlexoBuilder
-        mode="landing_page"
-        apiKey={process.env.NEXT_PUBLIC_PLEXO_API_KEY}
-        useAi
-        onSave={({ json, html }) => console.log("Saved:", html)}
-      />
-    </div>
-  );
-}`;
+  const codeSnippet = SDK_V2_SHORT;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(codeSnippet);
@@ -44,7 +33,7 @@ export default function SaaSPageEditor() {
 
           <Reveal delay={0.1}>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight">
-              Plexo SDK for Next.js &amp; React
+              Plexo SDK 2 for React &amp; Next.js
             </h2>
           </Reveal>
 
@@ -52,7 +41,7 @@ export default function SaaSPageEditor() {
             <p className={`text-base sm:text-lg font-medium leading-relaxed ${
               isDark ? "text-slate-400" : "text-slate-600"
             }`}>
-              Embed the complete drag-and-drop web and email builder directly into your SaaS application with full customization and event callbacks.
+              Give your users a visual website builder inside your own product. They edit pages section by section, you keep the pages in your database and compile them to clean HTML or React.
             </p>
           </Reveal>
         </div>
@@ -67,7 +56,7 @@ export default function SaaSPageEditor() {
                   <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3 text-xs font-mono text-slate-400">
                     <span className="flex items-center gap-2 text-purple-400 font-bold">
                       <Code className="w-4 h-4" />
-                      <span>SaaSPageEditor.tsx</span>
+                      <span>site-editor.tsx</span>
                     </span>
                     <button
                       onClick={handleCopy}
@@ -84,8 +73,8 @@ export default function SaaSPageEditor() {
                 </div>
 
                 <div className="p-5 bg-slate-950 border-t border-slate-800 flex justify-between items-center text-xs font-mono text-slate-400">
-                  <span>Package: @charisol/plexo-sdk@1.0.40</span>
-                  <span className="text-emerald-400 font-bold">● Production Ready</span>
+                  <span>Package: @charisol/plexo-sdk (SDK 2)</span>
+                  <Link href="/sdk" className="text-emerald-400 font-bold hover:underline">Full guide →</Link>
                 </div>
               </div>
             </Reveal>
@@ -100,9 +89,9 @@ export default function SaaSPageEditor() {
                 <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center border border-purple-500/20">
                   <Layers className="w-5 h-5" />
                 </div>
-                <h3 className="text-lg font-extrabold">Visual &amp; Raw Mode Switching</h3>
+                <h3 className="text-lg font-extrabold">Section by section, for anyone</h3>
                 <p className={`text-xs font-medium leading-relaxed ${isDark ? "text-slate-400" : "text-slate-600"}`}>
-                  Switch between visual drag-and-drop canvas and raw HTML/CSS editing. Trigger eject callbacks to save raw HTML to your own storage.
+                  Pages are built from ready-made sections that people edit by clicking and typing. Brand colours and fonts stay in sync through one design system, with Strata.
                 </p>
               </div>
             </Reveal>
@@ -114,9 +103,9 @@ export default function SaaSPageEditor() {
                 <div className="w-10 h-10 rounded-2xl bg-teal-500/10 text-teal-400 flex items-center justify-center border border-teal-500/20">
                   <Globe className="w-5 h-5" />
                 </div>
-                <h3 className="text-lg font-extrabold">Custom Domain Binding</h3>
+                <h3 className="text-lg font-extrabold">Clean HTML or React out</h3>
                 <p className={`text-xs font-medium leading-relaxed ${isDark ? "text-slate-400" : "text-slate-600"}`}>
-                  Pass <code className="font-mono text-purple-400">customDomain</code> props to automatically bind customer domains to Vercel DNS and Blob assets.
+                  Compile any page on your server with <code className="font-mono text-purple-400">compilePageToHtml</code>, or call <code className="font-mono text-purple-400">/api/v1/compile-v2</code>. Forms post to your own address with <code className="font-mono text-purple-400">formAction</code>.
                 </p>
               </div>
             </Reveal>
@@ -128,9 +117,9 @@ export default function SaaSPageEditor() {
                 <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
-                <h3 className="text-lg font-extrabold">Tenant Security &amp; Isolation</h3>
+                <h3 className="text-lg font-extrabold">Classic builder keeps working</h3>
                 <p className={`text-xs font-medium leading-relaxed ${isDark ? "text-slate-400" : "text-slate-600"}`}>
-                  Multi-tenant API keys and origin restrictions safeguard data and prevent cross-account leaks.
+                  Already using <code className="font-mono text-purple-400">&lt;PlexoBuilder /&gt;</code>? It is unchanged, with the same API key and endpoints. See the classic docs when you are ready to compare.
                 </p>
               </div>
             </Reveal>

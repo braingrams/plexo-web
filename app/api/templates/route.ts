@@ -6,8 +6,12 @@ import { getTierFeatures } from "@/lib/subscription";
 import { ensureUniqueSlug } from "@/server/slugDynamo";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
-import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
+import { validateRawHtmlContent, RawUploadValidationError } from "@/server/rawUpload";
+import { rawUploadLimitMessage } from "@/server/rawUploadLimit";
 import { isTemplateNameTaken } from "@/server/templateNameDynamo";
+import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutDynamo";
+import { compileTemplate } from "@/lib/compileTemplate";
+import { blankV2Design, defaultDesignFormat, designFormatOf, starterV2EmailDesign, v2DesignFromTemplate, type DesignFormat } from "@/lib/v2/design";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
@@ -27,6 +31,10 @@ type CreateTemplateBody = {
   slug?: string;
   htmlContent?: string;
   acceptAup?: boolean;
+  /** Dashboard session only: "v1" | "v2". Ignored (never trusted) on API-key calls. */
+  designFormat?: string;
+  /** New-editor pages only: start from one of the SDK page templates ("home", "pricing", ...) instead of a blank page. */
+  pageTemplate?: string;
 };
 
 const BLANK_TEMPLATE_SHELL = {
@@ -82,7 +90,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const templates = await Promise.all(
     roots.map(async (t) => {
-      const { data: children } = await Template.query.byParent({ parentId: t.id }).go();
+      const { data: children } = await Template.query.byParent({ parentId: t.id }).go({ pages: "all" });
       return serializeTemplate(t as { id: string; name: string; kind: TemplateKind; createdAt?: string; updatedAt?: string }, children.length);
     }),
   );
@@ -113,14 +121,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const parentId = body.parentId?.trim() || null;
-  let parent: { id: string; kind: TemplateKind } | null = null;
+  let parent: { id: string; kind: TemplateKind; designFormat: DesignFormat } | null = null;
   if (parentId) {
-    // Multi-page sites are an Ultra feature. A page's sub-pages are unlimited
+    // Multi-page sites are a Pro and Ultra feature. A page's sub-pages are unlimited
     // once enabled (see the template-limit check below, which only counts
-    // root/home pages) — Ultra-gating is the actual scarcity control here.
+    // root/home pages); Free stays a single page.
     if (!features.multiPageSitesEnabled) {
       return NextResponse.json(
-        { error: "Multi-page sites require an Ultra subscription plan.", plan: resolved.subscriptionPlan },
+        { error: "Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages.", plan: resolved.subscriptionPlan },
         { status: 403 },
       );
     }
@@ -131,7 +139,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (parentRecord.kind !== "LANDING_PAGE") {
       return NextResponse.json({ error: "Only landing pages can have sub-pages." }, { status: 400 });
     }
-    parent = { id: parentRecord.id, kind: parentRecord.kind as TemplateKind };
+    parent = { id: parentRecord.id, kind: parentRecord.kind as TemplateKind, designFormat: designFormatOf(parentRecord) };
   }
 
   // A sub-page always belongs to the same landing-page tree as its parent.
@@ -168,7 +176,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let order = 0;
   if (parentId) {
     slug = await ensureUniqueSlug(parentId, body.slug?.trim() || name);
-    const { data: siblings } = await Template.query.byParent({ parentId }).go();
+    const { data: siblings } = await Template.query.byParent({ parentId }).go({ pages: "all" });
     const lastOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1);
     order = lastOrder + 1;
   }
@@ -199,19 +207,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       await User.patch({ id: resolved.userId }).set({ aupAcceptedAt: new Date().toISOString() }).go();
     }
 
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
-    const recentUploadCount = orgTemplates.filter(
-      (t) => t.userId === resolved.userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
-    ).length;
-    if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
-      return NextResponse.json({
-        error: `You've reached the raw-upload limit of ${RAW_UPLOAD_DAILY_LIMIT} per 24 hours. Try again later.`,
-      }, { status: 429 });
-    }
+    const limited = await rawUploadLimitMessage(resolved.organizationId, resolved.userId);
+    if (limited) return NextResponse.json({ error: limited }, { status: 429 });
+  }
+
+  // Which editor owns the new page. Raw HTML is never V2. An email is V2 only when the dashboard asks for it (or the
+  // TEMPLATES_V2_NEW switch is on): the classic email tools used by the API and MCP keep making classic emails. A sub-page always matches
+  // its site (a site never mixes editors by accident). Otherwise: an explicit choice from the
+  // dashboard's own signed-in call, else the TEMPLATES_V2_NEW switch (off = classic).
+  const fromDashboard = !request.headers.get("authorization");
+  const requested = fromDashboard && (body.designFormat === "v1" || body.designFormat === "v2") ? body.designFormat : null;
+  let designFormat: DesignFormat = "v1";
+  if (rawHtmlContent === null && kind === "EMAIL" && fromDashboard && !parent) {
+    designFormat = requested ?? defaultDesignFormat();
+  }
+  if (rawHtmlContent === null && kind === "LANDING_PAGE") {
+    // A dashboard call can name the editor for a sub-page too (a new-editor page opened inside a
+    // classic site adds its next page in the new editor); otherwise it matches its site.
+    designFormat = requested ?? (parent ? parent.designFormat : defaultDesignFormat());
   }
 
   const id = crypto.randomUUID();
+  let v2Design: ReturnType<typeof blankV2Design> | null = null;
+  let v2Html = "";
+  if (designFormat === "v2") {
+    v2Design = kind === "EMAIL" ? starterV2EmailDesign() : body.pageTemplate ? v2DesignFromTemplate(body.pageTemplate, { name, slug: slug ?? undefined, seed: `${id}` }) : blankV2Design();
+    try {
+      v2Html = kind === "EMAIL" ? await compileTemplate({ id, kind, name, designFormat, designJson: v2Design }) : await compileTemplateWithSiteLayout({ id, parentId, kind, name, designFormat }, v2Design);
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "This page couldn't be built." }, { status: 400 });
+    }
+  }
   await Template.create({
     id,
     userId: resolved.userId,
@@ -223,7 +249,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     order,
     ...(rawHtmlContent !== null
       ? { sourceType: "RAW_UPLOAD" as const, designJson: {}, compiledHtml: rawHtmlContent }
-      : { designJson: BLANK_TEMPLATE_SHELL, compiledHtml: "" }),
+      : v2Design
+        ? { designFormat: "v2" as const, designJson: v2Design, compiledHtml: v2Html }
+        : { designJson: BLANK_TEMPLATE_SHELL, compiledHtml: "" }),
   }).go();
 
   const { data: template } = await Template.get({ id }).go();

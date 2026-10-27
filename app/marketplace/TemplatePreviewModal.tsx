@@ -15,22 +15,25 @@ export function TemplatePreviewModal({
 }) {
   const [html, setHtml] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
+  const [kind, setKind] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [device, setDevice] = useState<DeviceMode>("desktop");
 
   useEffect(() => {
     let cancelled = false;
     setHtml(null);
+    setKind(null);
     setError(null);
     fetch(`/api/v1/marketplace/templates/${templateId}/preview`)
       .then((res) => {
         if (!res.ok) throw new Error("Couldn't load preview.");
         return res.json();
       })
-      .then((data: { html: string; name: string }) => {
+      .then((data: { html: string; name: string; kind?: string }) => {
         if (cancelled) return;
         setHtml(data.html);
         setName(data.name);
+        setKind(data.kind ?? null);
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Couldn't load preview.");
@@ -48,8 +51,9 @@ export function TemplatePreviewModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
+  const isEmail = kind === "EMAIL";
   const deviceWidths: Record<DeviceMode, string> = {
-    desktop: "100%",
+    desktop: isEmail ? "720px" : "100%",
     tablet: "768px",
     mobile: "375px",
   };
@@ -155,17 +159,43 @@ export function TemplatePreviewModal({
               <span>Rendering template preview...</span>
             </div>
           ) : (
-            <div
-              style={{ width: deviceWidths[device] }}
-              className="h-full transition-all duration-300 ease-out bg-white rounded-xl shadow-2xl overflow-hidden border border-[var(--surface-border)]"
-            >
-              <iframe
-                title={`Preview ${name ?? ""}`}
-                srcDoc={html}
-                sandbox=""
-                className="w-full h-full border-none"
-              />
-            </div>
+            isEmail ? (
+              <div
+                style={{ width: deviceWidths[device], maxWidth: "100%" }}
+                className="h-full flex flex-col transition-all duration-300 ease-out bg-white rounded-xl shadow-2xl overflow-hidden border border-[var(--surface-border)]"
+              >
+                {/* Inbox-style message header, so the email reads the way it lands in a real mailbox */}
+                <div className="shrink-0 px-5 py-4 border-b border-slate-200 bg-white text-slate-900">
+                  <h2 className="text-lg font-semibold leading-snug">{name}</h2>
+                  <div className="mt-3 flex items-center gap-3">
+                    <div className="grid place-items-center w-9 h-9 rounded-full bg-slate-200 text-slate-600 text-sm font-bold">
+                      {(name ?? "?").charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 text-xs leading-tight">
+                      <p className="font-semibold truncate">
+                        {name?.split(":")[0] ?? "Your business"} <span className="font-normal text-slate-500">&lt;hello@yourbusiness.com&gt;</span>
+                      </p>
+                      <p className="mt-0.5 text-slate-500">to me</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex-1 min-h-0 bg-slate-100">
+                  <iframe title={`Preview ${name ?? ""}`} srcDoc={html} sandbox="" className="w-full h-full border-none" />
+                </div>
+              </div>
+            ) : (
+              <div
+                style={{ width: deviceWidths[device] }}
+                className="h-full transition-all duration-300 ease-out bg-white rounded-xl shadow-2xl overflow-hidden border border-[var(--surface-border)]"
+              >
+                <iframe
+                  title={`Preview ${name ?? ""}`}
+                  srcDoc={html}
+                  sandbox=""
+                  className="w-full h-full border-none"
+                />
+              </div>
+            )
           )}
         </div>
       </div>

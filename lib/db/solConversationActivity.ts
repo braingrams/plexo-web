@@ -55,15 +55,11 @@ export async function bumpConversationActivity(userId: string, conversationId: s
     .params();
 
   const putParams = SolConversation.create({
-    id: existing.id,
-    userId: existing.userId,
-    organizationId: existing.organizationId,
-    title: existing.title,
-    modelTier: existing.modelTier,
-    status: existing.status,
+    // Every field carried over (appId included — dropping it unlinked an app's chat
+    // from its app after the first turn); only what this write changes is set below.
+    ...existing,
     lastMessageAt,
     messageCount,
-    createdAt: existing.createdAt,
     updatedAt,
   }).params();
 
@@ -107,16 +103,10 @@ export async function setConversationTitleIfUnset(userId: string, conversationId
     .where((attr, op) => op.eq(attr.updatedAt, existing.updatedAt))
     .params();
   const putParams = SolConversation.create({
-    id: existing.id,
-    userId: existing.userId,
-    organizationId: existing.organizationId,
+    // Every field carried over (appId included — dropping it unlinked an app's chat
+    // from its app after the first turn); only what this write changes is set below.
+    ...existing,
     title,
-    modelTier: existing.modelTier,
-    status: existing.status,
-    lastMessageAt: existing.lastMessageAt,
-    messageCount: existing.messageCount,
-    createdAt: existing.createdAt,
-    updatedAt: existing.updatedAt,
   }).params();
 
   try {

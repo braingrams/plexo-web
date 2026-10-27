@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { EntityItem } from "electrodb";
-import { BlogPost, BlogPostCategory, BlogPostTag, BlogAuthor, BlogCategory, BlogTag } from "@/lib/db/contentEntities";
+import { BlogPost, BlogPostCategory, BlogPostTag, BlogAuthor, BlogCategory, BlogTag, BlogComment } from "@/lib/db/contentEntities";
 import { ensureUniqueBlogSlug } from "@/server/slugDynamo";
 import { sanitizeBlogHtml } from "./sanitize";
 import { estimateReadingTimeMinutes, autoExcerpt } from "./content";
@@ -72,6 +72,9 @@ export interface SavePostInput {
 // same "small in practice" fetch-and-find-in-memory pattern used throughout this
 // migration for entities with no id-based index.
 
+/** Key placeholder for a post that has never been published — read back as "no date" by the entity's getter. */
+const NO_PUBLISH_DATE = "";
+
 function computePublishedAt(
   status: PostStatus,
   scheduledAt: Date | null,
@@ -85,13 +88,13 @@ function computePublishedAt(
 }
 
 async function findPostById(templateId: string, postId: string): Promise<BlogPostItem | null> {
-  const { data: posts } = await BlogPost.query.byStatus({ templateId }).go();
+  const { data: posts } = await BlogPost.query.byStatus({ templateId }).go({ pages: "all" });
   return posts.find((p) => p.id === postId) ?? null;
 }
 
 async function syncCategoriesAndTags(templateId: string, postId: string, categoryIds: string[] | undefined, tagIds: string[] | undefined): Promise<void> {
   if (categoryIds !== undefined) {
-    const { data: existing } = await BlogPostCategory.query.primary({ templateId, postId }).go();
+    const { data: existing } = await BlogPostCategory.query.primary({ templateId, postId }).go({ pages: "all" });
     await Promise.all(existing.map((e) => BlogPostCategory.remove({ templateId, postId: e.postId, categoryId: e.categoryId }).go()));
     await Promise.all(
       categoryIds.map((categoryId) =>
@@ -104,7 +107,7 @@ async function syncCategoriesAndTags(templateId: string, postId: string, categor
     );
   }
   if (tagIds !== undefined) {
-    const { data: existing } = await BlogPostTag.query.primary({ templateId, postId }).go();
+    const { data: existing } = await BlogPostTag.query.primary({ templateId, postId }).go({ pages: "all" });
     await Promise.all(existing.map((e) => BlogPostTag.remove({ templateId, postId: e.postId, tagId: e.tagId }).go()));
     await Promise.all(
       tagIds.map((tagId) =>
@@ -120,11 +123,11 @@ async function syncCategoriesAndTags(templateId: string, postId: string, categor
 
 async function slugsForRevalidate(templateId: string, postId: string, authorId: string | null | undefined): Promise<{ categorySlugs: string[]; tagSlugs: string[]; authorSlug: string | null }> {
   const [{ data: postCategories }, { data: postTags }, { data: categories }, { data: tags }, authorResult] = await Promise.all([
-    BlogPostCategory.query.primary({ templateId, postId }).go(),
-    BlogPostTag.query.primary({ templateId, postId }).go(),
-    BlogCategory.query.primary({ templateId }).go(),
-    BlogTag.query.primary({ templateId }).go(),
-    authorId ? BlogAuthor.query.primary({ templateId }).go() : null,
+    BlogPostCategory.query.primary({ templateId, postId }).go({ pages: "all" }),
+    BlogPostTag.query.primary({ templateId, postId }).go({ pages: "all" }),
+    BlogCategory.query.primary({ templateId }).go({ pages: "all" }),
+    BlogTag.query.primary({ templateId }).go({ pages: "all" }),
+    authorId ? BlogAuthor.query.primary({ templateId }).go({ pages: "all" }) : null,
   ]);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const tagById = new Map(tags.map((t) => [t.id, t]));
@@ -142,7 +145,7 @@ async function slugsForRevalidate(templateId: string, postId: string, authorId: 
  * filters in memory, bounded by the same partition query every other per-template lookup
  * here uses, not a table-wide Scan. */
 export async function findPostByExternalId(templateId: string, externalId: string): Promise<BlogPostItem | null> {
-  const { data: posts } = await BlogPost.query.byStatus({ templateId }).go();
+  const { data: posts } = await BlogPost.query.byStatus({ templateId }).go({ pages: "all" });
   return posts.find((p) => p.externalId === externalId) ?? null;
 }
 
@@ -165,7 +168,9 @@ export async function createBlogPost(templateId: string, input: SavePostInput, r
     featuredImageAlt: input.featuredImageAlt || undefined,
     status: input.status,
     scheduledAt: scheduledAt?.toISOString(),
-    publishedAt: publishedAt ?? undefined,
+    // "" for a never-published draft: publishedAt is part of the byStatus index key, and
+    // ElectroDB rejects writing status without it (new drafts returned 500 before this).
+    publishedAt: publishedAt ?? NO_PUBLISH_DATE,
     metaTitle: input.metaTitle || undefined,
     metaDescription: input.metaDescription || undefined,
     ogImageUrl: input.ogImageUrl || undefined,
@@ -174,7 +179,9 @@ export async function createBlogPost(templateId: string, input: SavePostInput, r
     authorId: input.authorId || undefined,
     externalId: input.externalId || undefined,
   }).go();
-  const { data: post } = await BlogPost.get({ templateId, slug }).go();
+  // Strongly consistent: a default (eventually consistent) read straight after the write can
+  // miss it — seen copying a WordPress blog several posts at a time.
+  const { data: post } = await BlogPost.get({ templateId, slug }).go({ consistent: true });
   if (!post) throw new Error(`BlogPost ${id} vanished immediately after being created`);
 
   await syncCategoriesAndTags(templateId, post.id, input.categoryIds, input.tagIds);
@@ -203,8 +210,7 @@ export async function updateBlogPost(templateId: string, postId: string, input: 
     | "metaDescription"
     | "ogImageUrl"
     | "authorId"
-    | "scheduledAt"
-    | "publishedAt";
+    | "scheduledAt";
   const toRemove: RemovableField[] = [];
 
   if (input.title !== undefined) data.title = input.title.trim();
@@ -261,14 +267,16 @@ export async function updateBlogPost(templateId: string, postId: string, input: 
     if (scheduledAt) data.scheduledAt = scheduledAt.toISOString();
     else toRemove.push("scheduledAt");
     const publishedAt = computePublishedAt(input.status, scheduledAt, existing.publishedAt ?? null);
-    if (publishedAt) data.publishedAt = publishedAt;
-    else toRemove.push("publishedAt");
+    // Never removed: it's part of the byStatus key (see createBlogPost).
+    data.publishedAt = publishedAt ?? NO_PUBLISH_DATE;
   } else if (input.scheduledAt !== undefined) {
     if (input.scheduledAt) data.scheduledAt = new Date(input.scheduledAt).toISOString();
     else toRemove.push("scheduledAt");
   }
 
   let patch = BlogPost.patch({ templateId, slug: existing.slug }).set(data);
+  // Writing status rebuilds the byStatus sort key (status#publishedAt#id) — supply id for it.
+  if (data.status !== undefined) patch = patch.composite({ id: existing.id });
   if (toRemove.length) patch = patch.remove(toRemove);
   await patch.go();
 
@@ -280,7 +288,7 @@ export async function updateBlogPost(templateId: string, postId: string, input: 
   if (nextSlug !== existing.slug) {
     const { data: updated } = await BlogPost.get({ templateId, slug: existing.slug }).go();
     if (updated) {
-      await BlogPost.create({ ...updated, slug: nextSlug }).go();
+      await BlogPost.create({ ...updated, publishedAt: updated.publishedAt ?? NO_PUBLISH_DATE, slug: nextSlug }).go();
       await BlogPost.remove({ templateId, slug: existing.slug }).go();
       finalSlug = nextSlug;
     }
@@ -288,7 +296,7 @@ export async function updateBlogPost(templateId: string, postId: string, input: 
 
   await syncCategoriesAndTags(templateId, existing.id, input.categoryIds, input.tagIds);
 
-  const { data: post } = await BlogPost.get({ templateId, slug: finalSlug }).go();
+  const { data: post } = await BlogPost.get({ templateId, slug: finalSlug }).go({ consistent: true });
   if (!post) throw new Error(`BlogPost ${postId} vanished immediately after being updated`);
 
   const { categorySlugs, tagSlugs, authorSlug } = await slugsForRevalidate(templateId, post.id, post.authorId);
@@ -317,6 +325,9 @@ export async function deleteBlogPost(templateId: string, postId: string, revalid
 
   await BlogPost.remove({ templateId, slug: existing.slug }).go();
   await syncCategoriesAndTags(templateId, existing.id, [], []);
+  // Its comments live under the post, not the site — they'd otherwise outlive it.
+  const { data: comments } = await BlogComment.query.primary({ postId: existing.id }).go({ pages: "all" });
+  if (comments.length > 0) await BlogComment.delete(comments).go();
 
   await revalidate({
     templateId,

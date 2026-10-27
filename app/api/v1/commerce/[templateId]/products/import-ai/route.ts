@@ -3,13 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
 import { slugify } from "@/server/slugDynamo";
-import { resolveSystemProvider } from "@/lib/ai/systemProvider";
 import { resolveModel } from "@/lib/ai/modelRegistry";
-import * as anthropicProvider from "@/lib/ai/providers/anthropic";
-import * as bedrockProvider from "@/lib/ai/providers/bedrockClaude";
-import * as geminiProvider from "@/lib/ai/providers/gemini";
-import * as openaiProvider from "@/lib/ai/providers/openai";
-import type { AiProvider } from "@/lib/ai/types";
+import { callProvider } from "@/lib/ai/generate";
+import { chargeFor, checkCanAfford, solRouteForUser, tierFor, type SolRoute } from "@/lib/ai/solEngine";
+import type { ConcreteTier, GenerateOutcome } from "@/lib/ai/types";
 import { CommerceProduct, CommerceCategory } from "@/lib/db/commerceEntities";
 import {
   PRODUCT_CSV_FIELDS,
@@ -17,39 +14,6 @@ import {
   parseCsvText,
   type ProductCsvField,
 } from "@/lib/commerce/csvProductImporter";
-
-// Same small local dispatcher as the (now AI-free) standard import route used to have —
-// kept local here rather than shared since this is the only remaining AI-import call site.
-async function callProvider(
-  provider: AiProvider,
-  model: string,
-  apiKey: string,
-  systemPrompt: string,
-  userPrompt: string,
-  maxTokens: number,
-  attachments?: Array<{ mediaType: string; data: string; name?: string }>,
-) {
-  const params = {
-    model,
-    apiKey,
-    systemPrompt,
-    userPrompt,
-    maxTokens,
-    attachments,
-  };
-  switch (provider) {
-    case "anthropic_claude":
-      return anthropicProvider.generate(params);
-    case "openai":
-      return openaiProvider.generate(params);
-    case "google_gemini":
-      return geminiProvider.generate(params);
-    case "bedrock_claude":
-      return bedrockProvider.generate(params);
-    default:
-      throw new Error(`Unsupported AI provider: ${provider satisfies never}`);
-  }
-}
 
 function cleanJsonString(raw: string): string {
   let cleaned = raw.trim();
@@ -62,18 +26,19 @@ function cleanJsonString(raw: string): string {
   return cleaned;
 }
 
-/** Asks the system AI provider to read a raw source (a CSV dump as text, or a PDF/other
+/** Asks SOL (lib/ai/solEngine.ts decides whose AI and which tier) to read a raw source (a CSV dump as text, or a PDF/other
  * file forwarded as a base64 attachment) and align it into the fixed product schema,
  * returning rows already in PRODUCT_CSV_FIELDS order. There is no non-AI fallback here —
  * unlike the standard import's heuristic column matcher, an arbitrary file has no columns
  * to heuristically match, so a configured system AI provider is required for this
  * endpoint. */
 async function suggestProductRowsFromSource(
+  route: SolRoute,
+  tier: ConcreteTier,
   sourceKind: "csv" | "pdf",
   sourceText: string | null,
   attachment: { mediaType: string; data: string; name?: string } | null,
-): Promise<string[][]> {
-  const systemProvider = resolveSystemProvider();
+): Promise<{ rows: string[][]; usage: GenerateOutcome["usage"] }> {
   const fieldList = PRODUCT_CSV_FIELDS.map(
     (f) => `"${f.key}" (${f.label}${f.required ? ", required" : ""})`,
   ).join(", ");
@@ -82,37 +47,49 @@ async function suggestProductRowsFromSource(
     ? "The product catalog is in the attached file."
     : (sourceText ?? "").slice(0, 20000);
 
-  const model = resolveModel(systemProvider.provider, "MEDIUM");
-  // ADD HERE:
-  console.log(`[AI Route] Provider: ${systemProvider.provider}, Model: ${model}`);
-  const { text, truncated } = await callProvider(
-    systemProvider.provider,
+  const model = resolveModel(route.provider, tier);
+  const { text, truncated, usage } = await callProvider(
+    route.provider,
     model,
-    systemProvider.apiKey,
+    route.apiKey,
     systemPrompt,
     userPrompt,
     8000,
+    undefined,
     attachment ? [attachment] : undefined,
   );
+  const spent = { inputTokens: usage?.inputTokens ?? 0, outputTokens: usage?.outputTokens ?? 0 };
   if (truncated) {
-    throw new Error(
+    throw new ImportReadError(
       "The catalog produced too many products for the AI to finish reading in one pass — try splitting the file into smaller batches.",
+      spent,
     );
   }
   let parsed: { rows?: unknown };
   try {
     parsed = JSON.parse(cleanJsonString(text)) as { rows?: unknown };
   } catch {
-    throw new Error(
+    throw new ImportReadError(
       "The AI's response couldn't be read — try again, or split the file into smaller batches.",
+      spent,
     );
   }
-  if (!Array.isArray(parsed.rows)) return [];
-  return parsed.rows
-    .filter((row): row is unknown[] => Array.isArray(row))
-    .map((row) =>
-      PRODUCT_CSV_FIELDS.map((_, index) => String(row[index] ?? "")),
-    );
+  if (!Array.isArray(parsed.rows)) return { rows: [], usage: spent };
+  return {
+    rows: parsed.rows
+      .filter((row): row is unknown[] => Array.isArray(row))
+      .map((row) =>
+        PRODUCT_CSV_FIELDS.map((_, index) => String(row[index] ?? "")),
+      ),
+    usage: spent,
+  };
+}
+
+/** A read that used the AI but couldn't produce rows — carries what it used, so it's still charged. */
+class ImportReadError extends Error {
+  constructor(message: string, readonly usage: GenerateOutcome["usage"]) {
+    super(message);
+  }
 }
 
 async function ensureUniqueProductSlug(
@@ -143,7 +120,7 @@ async function resolveCategoryId(
   if (cache.has(slug)) return cache.get(slug)!;
   const { data: categories } = await CommerceCategory.query
     .primary({ templateId })
-    .go();
+    .go({ pages: "all" });
   const existing = categories.find((c) => c.slug === slug);
   if (existing) {
     cache.set(slug, existing.id);
@@ -212,21 +189,31 @@ export async function POST(
       sourceText = rows.map((r) => r.join(",")).join("\n");
     }
 
+    // SOL's rules (lib/ai/solEngine.ts): the account's own key or Plexo's AI (Free → Basic),
+    // affordable up front, and what was actually used charged afterwards.
+    const userId = resolved.context.userId;
+    const solRoute = await solRouteForUser(userId);
+    if ("error" in solRoute) return NextResponse.json({ error: solRoute.error }, { status: solRoute.status });
+    const tier = tierFor(solRoute.route, solRoute.plan, "MEDIUM");
+    const approxChars = attachment ? Math.round(attachment.data.length * 0.75) : (sourceText ?? "").slice(0, 20000).length;
+    const cannotAfford = await checkCanAfford(userId, solRoute.route, tier, "import_products", approxChars);
+    if (cannotAfford) return NextResponse.json({ error: cannotAfford.error }, { status: cannotAfford.status });
+
     let dataRows: string[][];
     try {
-      dataRows = await suggestProductRowsFromSource(
+      const read = await suggestProductRowsFromSource(
+        solRoute.route,
+        tier,
         isPdf ? "pdf" : "csv",
         sourceText,
         attachment,
       );
+      dataRows = read.rows;
+      await chargeFor(userId, solRoute.route, tier, "import_products", read.usage);
     } catch (err) {
+      if (err instanceof ImportReadError) await chargeFor(userId, solRoute.route, tier, "import_products", err.usage).catch(() => undefined);
       return NextResponse.json(
-        {
-          error:
-            err instanceof Error
-              ? err.message
-              : "AI import requires a configured system AI provider.",
-        },
+        { error: err instanceof Error ? err.message : "We couldn't read that file. Try again in a moment." },
         { status: 400 },
       );
     }
@@ -279,7 +266,7 @@ export async function POST(
 
   const { data: existingProducts } = await CommerceProduct.query
     .primary({ templateId })
-    .go();
+    .go({ pages: "all" });
   const existingSlugs = new Set(existingProducts.map((p) => p.slug));
   const existingSkus = new Set(
     existingProducts.map((p) => p.slug.toLowerCase()),

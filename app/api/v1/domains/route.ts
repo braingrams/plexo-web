@@ -4,6 +4,7 @@ import { getPagesDomain } from "@/server/pagesDomain";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { requestCustomDomainConnection, removeCloudFrontDomain, getRoutingEndpoint } from "@/lib/cloudfrontDomains";
 import { getDomainLimit } from "@/lib/domainLimit";
+import { assertCanPutSiteLive, PlanLimitError, planLimitResponse } from "@/lib/plan/publishGuard";
 import { resolveUser as resolveUserDynamo } from "@/lib/auth/resolveUser";
 import { requirePermission as requirePermissionDynamo } from "@/server/requirePermissionDynamo";
 import { Template, PublishedDomain, RegisteredDomain } from "@/lib/db/contentEntities";
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       : d;
   });
 
-  const count = domains.filter((d) => d.userId === resolved.userId).length;
+  const count = domains.filter((d) => d.userId === resolved.userId && !d.planDisabledAt).length;
 
   // No live CloudFront/ACM calls here on purpose — each domain's own certificateStatus/
   // certificateValidationName/certificateValidationValue fields (already included via the
@@ -149,6 +150,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (RESERVED_SUBDOMAINS.has(rawDomain)) {
       return NextResponse.json({ error: "This subdomain name is reserved." }, { status: 400 });
     }
+    // "--" is reserved for Plexo's own app preview hosts (lib/projects/previewHost.ts).
+    if (rawDomain.includes("--")) {
+      return NextResponse.json({ error: "Subdomains can't contain two hyphens in a row (--). Try a single hyphen instead." }, { status: 400 });
+    }
     finalDomain = `${rawDomain}.${baseDomain}`;
   } else {
     // Custom domain
@@ -158,6 +163,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (rawDomain.endsWith("." + baseDomain) || rawDomain === baseDomain) {
       return NextResponse.json({ error: "Custom domains cannot end with the platform base domain." }, { status: 400 });
     }
+  }
+
+  // Plan: Free can't use a custom domain, and keeps one site live at a time.
+  try {
+    await assertCanPutSiteLive(resolved, templateId, type);
+  } catch (err) {
+    if (err instanceof PlanLimitError) return planLimitResponse(err);
+    throw err;
   }
 
   // Check if domain is already registered — THE hot-path lookup (byDomain GSI1).
@@ -204,7 +217,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { data: orgTemplatesForCount } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const rootIds = orgTemplatesForCount.filter((t) => !t.parentId).map((t) => t.id);
   const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
-  const currentCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);
+  // Addresses a downgrade switched off are kept for the upgrade but don't use up the limit.
+  const currentCount = domainCountBatches.reduce((sum, b) => sum + b.data.filter((d) => !d.planDisabledAt).length, 0);
 
   const limit = resolved.manageLandingPagePublishing
     ? -1

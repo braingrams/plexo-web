@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
+import { compileTemplate } from "@/lib/compileTemplate";
+import { defaultDesignFormat, isV2Design, parseV2Design } from "@/lib/v2/design";
+import { externalizeDesignSystem } from "@/lib/v2/designSystemStore";
 import { getTierFeatures } from "@/lib/subscription";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { getDomainLimit } from "@/lib/domainLimit";
@@ -10,6 +13,9 @@ import { getPagesDomain } from "@/server/pagesDomain";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
+import { PlanLimitError, planLimitResponse } from "@/lib/plan/publishGuard";
+import { otherLiveSites } from "@/lib/plan/siteLimits";
+import { listGovernedSites } from "@/lib/plan/sitesStore";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
@@ -70,34 +76,90 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Same strict schema the dashboard's own save endpoint enforces (server/sanitizer.ts) —
-  // every row must already be a fully hydrated { columns: [{ elements: [...] }] } tree.
-  // We reject rather than guess: a caller (MCP server, ChatGPT Custom Action, agent) gets
-  // one clean, actionable error to retry against instead of a silently mangled page.
-  const hydrated = hydrateStructuralDefaults(rawDesignJson);
-  const validation = TemplateJSONSchema.safeParse(hydrated);
-  if (!validation.success) {
+  // The page's id is chosen up front: a new-editor page's forms post to its own site id.
+  const templateId = randomUUID();
+
+  // A new-editor (V2) payload creates a V2 page — only while new-editor creation is switched
+  // on (TEMPLATES_V2_NEW) and only for landing pages (email stays classic forever).
+  const payloadIsV2 = isV2Design(rawDesignJson);
+  if (payloadIsV2 && (kind === "EMAIL" || defaultDesignFormat() !== "v2")) {
     return NextResponse.json(
-      { error: `designJson failed schema validation: ${formatValidationIssues(validation.error)}` },
-      { status: 400 }
+      { error: kind === "EMAIL" ? "Email templates use the classic design format." : "The new page editor isn't switched on for your account yet. Send a classic design (body.rows) instead." },
+      { status: 400 },
     );
-  }
-  const designJson = validation.data;
-  if (designJson.body.style) {
-    designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
   }
 
-  // compiledHtml is always derived server-side from the validated designJson (never trusted
-  // from the caller) so the published page can never drift from what's editable in the
-  // dashboard, and so a third-party AI client can't hand us raw HTML/script to serve.
+  let designJson: any;
   let compiledHtml: string;
-  try {
-    compiledHtml = sanitizeHtml(compileToHTML(designJson));
-  } catch (err) {
-    return NextResponse.json(
-      { error: `Failed to compile designJson into HTML: ${err instanceof Error ? err.message : "Malformed structure"}` },
-      { status: 400 }
-    );
+  const designFormat: "v1" | "v2" = payloadIsV2 ? "v2" : "v1";
+  if (payloadIsV2) {
+    const parsed = parseV2Design(rawDesignJson);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    designJson = parsed.design;
+    try {
+      compiledHtml = await compileTemplate({ designFormat, designJson, kind, id: templateId, name });
+      designJson = await externalizeDesignSystem(parsed.design); // a big brand is stored once, outside the row
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "This page couldn't be built." }, { status: 400 });
+    }
+  } else {
+    // Same strict schema the dashboard's own save endpoint enforces (server/sanitizer.ts) —
+    // every row must already be a fully hydrated { columns: [{ elements: [...] }] } tree.
+    // We reject rather than guess: a caller (MCP server, ChatGPT Custom Action, agent) gets
+    // one clean, actionable error to retry against instead of a silently mangled page.
+    const hydrated = hydrateStructuralDefaults(rawDesignJson);
+    const validation = TemplateJSONSchema.safeParse(hydrated);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: `designJson failed schema validation: ${formatValidationIssues(validation.error)}` },
+        { status: 400 }
+      );
+    }
+    designJson = validation.data;
+    if (designJson.body.style) {
+      designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+    }
+
+    // compiledHtml is always derived server-side from the validated designJson (never trusted
+    // from the caller) so the published page can never drift from what's editable in the
+    // dashboard, and so a third-party AI client can't hand us raw HTML/script.
+    try {
+      compiledHtml = kind === "LANDING_PAGE"
+        ? await compileTemplate({ designFormat, designJson, kind, id: templateId, name })
+        : sanitizeHtml(compileToHTML(designJson)); // email templates: legacy path, unchanged
+    } catch (err) {
+      return NextResponse.json(
+        { error: `Failed to compile designJson into HTML: ${err instanceof Error ? err.message : "Malformed structure"}` },
+        { status: 400 }
+      );
+    }
+  }
+
+  // Plan check BEFORE anything is created, so a refused publish leaves nothing behind.
+  // Free: Plexo addresses only, and one live site at a time (lib/plan/publishGuard.ts).
+  if (kind === "LANDING_PAGE" && rawDomain) {
+    const wantsCustom = (domainType ?? (rawDomain.includes(".") ? "CUSTOM" : "SUBDOMAIN")) === "CUSTOM";
+    try {
+      if (wantsCustom && !features.customDomainEnabled) {
+        throw new PlanLimitError("PLAN_CUSTOM_DOMAIN_REQUIRES_UPGRADE", "Custom domains are part of Pro. Publish to a free Plexo address (a name without dots, e.g. \"acme\") or upgrade to use your own domain.");
+      }
+      if (features.maxPublishedSites !== null) {
+        // The page is brand new, so every live site counts against the limit — except one
+        // that already owns this exact address (re-pointing it replaces that site).
+        const finalForCheck = wantsCustom ? rawDomain : `${rawDomain}.${getPagesDomain()}`;
+        const live = otherLiveSites(await listGovernedSites(resolved.userId), "").filter((s) => !s.domains.some((d) => d.domain === finalForCheck));
+        if (live.length >= features.maxPublishedSites) {
+          throw new PlanLimitError(
+            "PLAN_SITE_LIMIT_EXCEEDED",
+            `The Free plan keeps one site live at a time, and "${live[0].name}" is live now. Upgrade to Pro to publish more sites, or call again without a domain to save this page as a draft.`,
+            { liveSiteIds: live.map((s) => s.id), liveSiteNames: live.map((s) => s.name) },
+          );
+        }
+      }
+    } catch (err) {
+      if (err instanceof PlanLimitError) return planLimitResponse(err);
+      throw err;
+    }
   }
 
   // Check template creation limits — root/home pages only, per kind, so a landing page
@@ -118,9 +180,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // 1. Create the template
-  const templateId = randomUUID();
   await Template.create({
     id: templateId,
+    designFormat,
     userId: resolved.userId,
     organizationId: resolved.organizationId,
     name,
@@ -174,6 +236,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (RESERVED_SUBDOMAINS.has(rawDomain)) {
       return NextResponse.json({ error: `Subdomain '${rawDomain}' is reserved.` }, { status: 400 });
     }
+    // "--" is reserved for Plexo's own app preview hosts (lib/projects/previewHost.ts).
+    if (rawDomain.includes("--")) {
+      return NextResponse.json({ error: "Subdomains can't contain two hyphens in a row (--). Try a single hyphen instead." }, { status: 400 });
+    }
     finalDomain = `${rawDomain}.${pagesDomain}`;
   } else {
     if (!DOMAIN_REGEX.test(rawDomain)) {
@@ -189,7 +255,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const { data: orgTemplatesForCount } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const rootIds = orgTemplatesForCount.filter((t) => !t.parentId).map((t) => t.id);
   const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
-  const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);
+  const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.filter((d) => !d.planDisabledAt).length, 0);
   const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
   if (currentDomainCount >= domainLimit) {
     return NextResponse.json({

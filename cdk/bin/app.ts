@@ -6,6 +6,7 @@ import { ComputeStack } from "../lib/compute-stack";
 import { AnalyticsStack } from "../lib/analytics-stack";
 import { DnsStack } from "../lib/dns-stack";
 import { PublishedSitesStack } from "../lib/published-sites-stack";
+import { AppDataStack } from "../lib/app-data-stack";
 
 const app = new cdk.App();
 cdk.Tags.of(app).add("appName", "plexo-web");
@@ -45,6 +46,10 @@ if (stackKind === "data") {
     },
     { env },
   );
+} else if (stackKind === "app-data") {
+  // Databases for apps built on Plexo (Aurora Serverless v2 + AppDbFn) — once per
+  // environment like "data", never per PR (previews share staging's cluster).
+  new AppDataStack(app, `${stackID}-app-data-stack`, { env });
 } else if (stackKind === "dns") {
   new DnsStack(app, `${stackID}-dns-stack`, { env });
 } else if (stackKind === "published-sites") {

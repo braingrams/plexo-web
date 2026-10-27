@@ -1,10 +1,12 @@
 "use client";
 
+import { startTrial } from "../_components/trial";
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { getStripePromise } from "@/lib/stripeClientPromise";
+import { useTopupPacks, packLabel } from "../_components/useTopupPacks";
 
 type LedgerEntryType = "MONTHLY_GRANT" | "TOPUP_PURCHASE" | "AI_USAGE" | "REFUND" | "ADJUSTMENT";
 
@@ -26,6 +28,12 @@ type LedgerEntry = {
 
 type Props = {
   plan: "FREE" | "PRO" | "ULTRA";
+  /** A paid subscription is behind the plan (false on Free, a trial, or an admin grant). */
+  paying?: boolean;
+  /** One plain-language line on where the plan stands (trial days left, kept by Plexo, …). */
+  planNote?: { text: string; tone: "info" | "warning" } | null;
+  /** The account can still start its one free trial. */
+  trialAvailable?: boolean;
   allowanceBalance: number;
   topupBalance: number;
   allowanceResetAt: string;
@@ -47,10 +55,11 @@ const TYPE_LABELS: Record<LedgerEntryType, string> = {
   ADJUSTMENT: "Adjustment",
 };
 
-const TOPUP_PACKS: Array<{ pack: "SMALL" | "MEDIUM" | "LARGE"; label: string; sub: string }> = [
-  { pack: "SMALL", label: "5,000 credits", sub: "Small top-up" },
-  { pack: "MEDIUM", label: "25,000 credits", sub: "Medium top-up" },
-  { pack: "LARGE", label: "120,000 credits", sub: "Large top-up" },
+// Credits per pack come from its real price (half of it as AI value — lib/credits/value.ts).
+const TOPUP_PACKS: Array<{ pack: "SMALL" | "MEDIUM" | "LARGE"; sub: string }> = [
+  { pack: "SMALL", sub: "Small top-up" },
+  { pack: "MEDIUM", sub: "Medium top-up" },
+  { pack: "LARGE", sub: "Large top-up" },
 ];
 
 const actionButtonStyle: CSSProperties = {
@@ -128,11 +137,12 @@ function CheckoutModal({ clientSecret, onClose }: { clientSecret: string; onClos
   );
 }
 
-export function BillingSection({ plan, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
+export function BillingSection({ plan, paying = plan !== "FREE", planNote = null, trialAvailable = false, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const packInfo = useTopupPacks();
   const [error, setError] = useState<string | null>(null);
   const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<{ kind: "success" | "processing" | "error"; text: string } | null>(null);
@@ -354,13 +364,63 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
             <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)" }}>Never expires</p>
           </div>
         </div>
+        {total < 0 && (
+          <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: "#fcd34d", background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, padding: "0.7rem 0.9rem" }}>
+            <strong style={{ color: "#fde68a" }}>Why is my balance below zero?</strong>{" "}Your credits ran out while SOL was partway through a step.
+            We let it finish rather than stop, so your work wasn&apos;t left half-done. That amount is taken off your next monthly credits or
+            top-up first; until you&apos;re back above zero, SOL waits for you to add credits.
+          </p>
+        )}
 
         {/* Plan actions */}
         <div>
           <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
             Plan
           </p>
+          {planNote && (
+            <p
+              style={{
+                fontSize: "0.82rem", lineHeight: 1.5, marginBottom: "0.75rem", padding: "0.6rem 0.9rem", borderRadius: 10,
+                color: planNote.tone === "warning" ? "#fbbf24" : "rgba(240,242,255,0.75)",
+                background: planNote.tone === "warning" ? "rgba(251,191,36,0.08)" : "rgba(var(--brand-rgb),0.07)",
+                border: `1px solid ${planNote.tone === "warning" ? "rgba(251,191,36,0.25)" : "rgba(var(--brand-rgb),0.25)"}`,
+              }}
+            >
+              {planNote.text}
+            </p>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+            {/* On a trial or an admin grant there's no subscription yet: offer both plans, to keep. */}
+            {!paying && plan !== "FREE" && (["PRO", "ULTRA"] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                disabled={busyAction === `sub-${p}`}
+                onClick={() => void startCheckout({ kind: "subscription", plan: p }, `sub-${p}`)}
+                style={{ ...actionButtonStyle, opacity: busyAction === `sub-${p}` ? 0.7 : 1 }}
+              >
+                {busyAction === `sub-${p}` ? "Opening…" : p === plan ? `Keep ${p}` : `Subscribe to ${p}`}
+              </button>
+            ))}
+            {/* The one free trial, for anyone who hasn't had it — no card. */}
+            {plan === "FREE" && trialAvailable && (["PRO", "ULTRA"] as const).map((p) => (
+              <button
+                key={`trial-${p}`}
+                type="button"
+                disabled={busyAction !== null}
+                onClick={() => {
+                  setBusyAction(`trial-${p}`);
+                  setError(null);
+                  void startTrial(p).catch((err) => {
+                    setError(err instanceof Error ? err.message : "Couldn't start your trial.");
+                    setBusyAction(null);
+                  });
+                }}
+                style={{ ...(p === "PRO" ? actionButtonStyle : secondaryButtonStyle), opacity: busyAction === `trial-${p}` ? 0.7 : 1 }}
+              >
+                {busyAction === `trial-${p}` ? "Starting your trial…" : `Try ${p === "PRO" ? "Pro" : "Ultra"} free for 14 days`}
+              </button>
+            ))}
             {plan === "FREE" && (
               <button
                 type="button"
@@ -371,7 +431,7 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
                 {busyAction === "sub-PRO" ? "Opening…" : "Upgrade to PRO"}
               </button>
             )}
-            {plan !== "ULTRA" && (
+            {paying && plan !== "ULTRA" || plan === "FREE" ? (
               <button
                 type="button"
                 disabled={busyAction === "sub-ULTRA"}
@@ -380,8 +440,8 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
               >
                 {busyAction === "sub-ULTRA" ? "Opening…" : "Upgrade to ULTRA"}
               </button>
-            )}
-            {plan === "ULTRA" && (
+            ) : null}
+            {paying && plan === "ULTRA" && (
               <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#34d399", padding: "0.5rem 0.9rem", borderRadius: 9, background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
                 Current Plan: ULTRA <IconSparkle />
               </span>
@@ -428,7 +488,8 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
             Buy credits
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem" }}>
-            {TOPUP_PACKS.map(({ pack, label, sub }) => {
+            {TOPUP_PACKS.map(({ pack, sub }) => {
+              const label = packLabel(packInfo[pack]);
               const actionKey = `topup-${pack}`;
               return (
                 <button
@@ -439,7 +500,7 @@ export function BillingSection({ plan, allowanceBalance, topupBalance, allowance
                   style={{ ...actionButtonStyle, opacity: busyAction === actionKey ? 0.7 : 1 }}
                 >
                   <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>{busyAction === actionKey ? "Opening…" : label}</span>
-                  <span style={{ fontSize: "0.68rem", opacity: 0.7, fontWeight: 500 }}>{sub}</span>
+                  <span style={{ fontSize: "0.68rem", opacity: 0.7, fontWeight: 500 }}>{packInfo[pack]?.price ?? sub}</span>
                 </button>
               );
             })}

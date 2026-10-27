@@ -4,6 +4,7 @@ import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
 import { listPublishedPosts } from "@/lib/blog/queriesDynamo";
 import { listingMetadata, listingJsonLd } from "@/lib/blog/seo";
 import { BlogStyles, SiteHeader, SiteFooter, PostCard, Pagination, EmptyState, JsonLd } from "@/lib/pub/blogTheme";
+import { ListingInLayout, loadListingLayoutHtml } from "@/lib/pub/blogListingLayout";
 
 export const revalidate = 60;
 
@@ -31,6 +32,20 @@ export default async function BlogIndexPaginatedPage({ params }: { params: Promi
 
   const blogSiteView = { title: site.blogSite.title ?? "Blog", description: site.blogSite.description ?? null };
 
+  const layoutHtml = await loadListingLayoutHtml(site.blogSite);
+  if (layoutHtml) {
+    return (
+      <ListingInLayout
+        layoutHtml={layoutHtml}
+        blogSite={site.blogSite}
+        siteTemplateId={site.published.templateId}
+        posts={result.posts}
+        options={{ pagination: { page: result.page, totalPages: result.totalPages, buildHref: (p) => (p === 1 ? "/blog" : `/blog/page/${p}`) } }}
+        jsonLd={listingJsonLd(domain, blogSiteView, result.posts)}
+      />
+    );
+  }
+
   return (
     <div className="plexo-blog">
       <BlogStyles appearance={site.blogSite} />
@@ -43,7 +58,7 @@ export default async function BlogIndexPaginatedPage({ params }: { params: Promi
       />
       <main className="plexo-blog__main">
         {result.posts.length === 0 ? (
-          <EmptyState message="No posts published yet." />
+          <EmptyState message="Posts will appear here as soon as they're published." />
         ) : (
           <div className="plexo-blog__grid">
             {result.posts.map((post) => (

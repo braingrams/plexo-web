@@ -1,29 +1,36 @@
 import { randomUUID } from "node:crypto";
-import { uploadObject, deleteObjects } from "@/lib/storage";
+import { compileTemplate } from "@/lib/compileTemplate";
+import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutCore";
+import { recompileCopiedV2Page } from "@/lib/v2/copy";
+import { blankV2Design, defaultDesignFormat, designFormatOf } from "@/lib/v2/design";
+import { uploadObject } from "@/lib/storage";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { getTierFeatures } from "@/lib/subscription";
 import type { resolveUser } from "@/lib/auth/resolveUser";
 import { getDomainLimit } from "@/lib/domainLimit";
-import { removeCloudFrontDomain, requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
+import { requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
 import { resolveStrataProjectId, fetchStrataTokens } from "@/server/strataDynamo";
 import { getPagesDomain } from "@/server/pagesDomain";
-import {
-  slugify,
-  isValidSlugSegment,
-  isReservedTopLevelSlug,
-  ensureUniqueSlug,
-  isSameOrAncestor,
-  getPageTree,
-  pathForPage,
-  getDescendantIds,
-} from "@/server/slugDynamo";
-import { validateRawHtmlContent, RawUploadValidationError, RAW_UPLOAD_DAILY_LIMIT } from "@/server/rawUpload";
+import { rawUploadLimitMessage } from "@/server/rawUploadLimit";
+import { slugify, isValidSlugSegment, isReservedTopLevelSlug, ensureUniqueSlug, isSameOrAncestor, getPageTree, pathForPage } from "@/server/slugDynamo";
+import { validateRawHtmlContent, RawUploadValidationError } from "@/server/rawUpload";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { BLOG_MCP_TOOLS, BLOG_TOOL_NAMES, handleBlogTool } from "./blogTools";
 import type { RevalidateFn } from "@/lib/blog/savePostCore";
 import { COMMERCE_MCP_TOOLS, COMMERCE_TOOL_NAMES, handleCommerceTool } from "./commerceTools";
 import { LMS_MCP_TOOLS, LMS_TOOL_NAMES, handleLmsTool } from "./lmsTools";
+import { WP_MIGRATION_MCP_TOOLS, WP_MIGRATION_TOOL_NAMES, handleWpMigrationTool } from "./wpMigrationTools";
+import { DONATION_MCP_TOOLS, DONATION_TOOL_NAMES, handleDonationTool } from "./donationTools";
+import { FORM_MCP_TOOLS, FORM_TOOL_NAMES, handleFormTool } from "./formTools";
+import { CONTENT_MCP_TOOLS, CONTENT_TOOL_NAMES, handleContentTool } from "./contentTools";
+import { APP_MCP_TOOLS, APP_TOOL_NAMES, handleAppTool } from "./appTools";
+import { PAGE_MCP_TOOLS, PAGE_TOOL_NAMES, handlePageTool } from "./pageTools";
+import { PageToolError, convertLegacyDesign, createV2Page, editableUrlFor, publishPage, summarizeSections } from "./v2Pages";
+import { deprecationNotice, isDeprecatedTool, markDeprecated, v2TargetMessage } from "./deprecation";
+import { coerceToolArgs } from "./coerceArgs";
+import { deleteTemplateAndContents } from "@/lib/sites/deleteTemplate";
+import { linkDomainToTemplate, SUBDOMAIN_REGEX, DOMAIN_REGEX, RESERVED_SUBDOMAINS } from "@/lib/sites/linkDomain";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
 
@@ -44,16 +51,6 @@ import { User } from "@/lib/db/coreEntities";
 // never calls resolveUser() itself. mcpServer.ts re-exports both `dispatchMcpTool` and
 // `ResolvedUser` from here so handleMcpJsonRpc's existing call site, and any other file that
 // imported them from mcpServer.ts, keep working completely unchanged.
-
-const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
-const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
-
-const RESERVED_SUBDOMAINS = new Set([
-  "admin", "api", "auth", "dashboard", "plexobuilder", "www", "localhost", "dev",
-  "test", "prod", "staging", "status", "dns", "mail", "email", "support", "help",
-  "static", "assets", "sdk", "pub", "published", "templates", "compile", "settings",
-  "profile", "domains", "account", "login", "register", "signup", "logout", "signin"
-]);
 
 const SCHEMA_HINT =
   "Every row must already be a fully hydrated layout: { id, style, columns: [{ id, width, elements: [{ id, type, style, attributes }] }] }. " +
@@ -163,17 +160,9 @@ async function assertRawUploadAllowed(userId: string, organizationId: string, ac
     await User.patch({ id: userId }).set({ aupAcceptedAt: new Date().toISOString() }).go();
   }
 
-  // Org-scoped, not global across every org this user has ever created templates in —
-  // same adaptation as app/api/v1/templates/upload-raw/route.ts's identical rate-limit
-  // check, since Template has no cross-org index over userId to check this globally.
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId }).go({ pages: "all" });
-  const recentUploadCount = orgTemplates.filter(
-    (t) => t.userId === userId && t.sourceType === "RAW_UPLOAD" && (t.createdAt ?? "") >= since,
-  ).length;
-  if (recentUploadCount >= RAW_UPLOAD_DAILY_LIMIT) {
-    throw new Error(`You've reached the raw-upload limit of ${RAW_UPLOAD_DAILY_LIMIT} per 24 hours. Try again later.`);
-  }
+  // Org-scoped (Template has no cross-org index over userId); migrated pages don't count.
+  const limited = await rawUploadLimitMessage(organizationId, userId);
+  if (limited) throw new Error(limited);
 }
 
 /**
@@ -184,122 +173,6 @@ async function assertRawUploadAllowed(userId: string, organizationId: string, ac
  * thrown error) — the same check app/api/v1/publish/route.ts's REST
  * counterpart already enforces.
  */
-async function linkDomainToTemplate(
-  resolved: { userId: string; organizationId: string; subscriptionPlan: string; customDomainLimit: number | null },
-  templateId: string,
-  rawDomainInput: string,
-  domainTypeInput?: "SUBDOMAIN" | "CUSTOM"
-): Promise<{
-  finalDomain: string;
-  publishedUrl: string;
-  routingEndpoint: string | undefined;
-  certificateValidationName: string | undefined;
-  certificateValidationValue: string | undefined;
-}> {
-  const rawDomain = rawDomainInput.trim().toLowerCase();
-  if (!rawDomain) {
-    throw new Error("A domain is required to publish.");
-  }
-
-  // Tenant subdomains live on the dedicated pages domain (server/pagesDomain.ts),
-  // isolated from the dashboard's own cookie/session domain — not the app's own
-  // hostname. This function previously derived baseDomain from NEXT_PUBLIC_APP_URL
-  // directly, missing the plexopages.io migration entirely: every subdomain published
-  // through MCP was still landing on the dashboard's own domain regardless of that fix.
-  const pagesDomain = getPagesDomain();
-
-  let domainType = domainTypeInput;
-  if (!domainType) {
-    domainType = rawDomain.includes(".") ? "CUSTOM" : "SUBDOMAIN";
-  }
-
-  let finalDomain = rawDomain;
-  if (domainType === "SUBDOMAIN") {
-    if (!SUBDOMAIN_REGEX.test(rawDomain)) {
-      throw new Error("Subdomain slug must be lowercase alphanumeric characters or hyphens.");
-    }
-    if (RESERVED_SUBDOMAINS.has(rawDomain)) {
-      throw new Error(`Subdomain '${rawDomain}' is reserved.`);
-    }
-    finalDomain = `${rawDomain}.${pagesDomain}`;
-  } else {
-    if (!DOMAIN_REGEX.test(rawDomain)) {
-      throw new Error("Invalid custom domain format.");
-    }
-    if (rawDomain.endsWith("." + pagesDomain) || rawDomain === pagesDomain) {
-      throw new Error("Custom domains cannot end with the platform pages domain.");
-    }
-  }
-
-  // PublishedDomain has no org-wide index (only templateId-primary and byDomain-GSI1,
-  // see contentEntities.ts) — fan out per org root template, same bound every other
-  // ported org-wide domain count uses (app/api/v1/domains/route.ts, publish/route.ts).
-  const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
-  const rootIds = orgTemplates.filter((t) => !t.parentId).map((t) => t.id);
-  const domainCountBatches = await Promise.all(rootIds.map((id) => PublishedDomain.query.primary({ templateId: id }).go()));
-  const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.length, 0);
-  const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
-  if (currentDomainCount >= domainLimit) {
-    throw new Error(`Published domain limit reached (${domainLimit}). Unlink an existing domain to publish a new one.`);
-  }
-
-  const { data: domainMatches } = await PublishedDomain.query.byDomain({ domain: finalDomain }).go();
-  const existingDomain = domainMatches[0] ?? null;
-  if (existingDomain) {
-    if (existingDomain.organizationId !== resolved.organizationId) {
-      throw new Error(`Domain '${finalDomain}' is already registered by another account.`);
-    }
-    // templateId is part of this entity's own primary key (see contentEntities.ts) —
-    // ElectroDB can't .set() a key-composite attribute in place, so a real re-link moves
-    // the item via create-at-new-key + remove-old-key, same pattern used everywhere else
-    // this migration has hit the same constraint (BlogPost slug rename, this same
-    // re-link in app/api/v1/domains/route.ts and app/api/v1/publish/route.ts).
-    if (existingDomain.templateId !== templateId) {
-      await PublishedDomain.create({ ...existingDomain, templateId }).go();
-      await PublishedDomain.remove({ templateId: existingDomain.templateId, id: existingDomain.id }).go();
-    }
-  } else {
-    // A CUSTOM domain needs a real CloudFront distribution tenant (cdk/lib/published-
-    // sites-stack.ts) before it has any valid routing or TLS cert — without this, the
-    // database row alone would never actually work when visited. Connecting one is now a
-    // two-phase, asynchronous process (see lib/cloudfrontDomains.ts's own comment): this
-    // only requests the certificate and records what's needed to finish later;
-    // lib/lambda/certificateAttachment.ts's scheduled check creates the actual
-    // distribution tenant once ACM issues it.
-    let cfRoutingEndpoint: string | undefined;
-    let certificateArn: string | undefined;
-    let certificateValidationName: string | undefined;
-    let certificateValidationValue: string | undefined;
-    if (domainType === "CUSTOM") {
-      const result = await requestCustomDomainConnection(finalDomain);
-      cfRoutingEndpoint = result.routingEndpoint;
-      certificateArn = result.certificateArn;
-      certificateValidationName = result.certificateValidationName;
-      certificateValidationValue = result.certificateValidationValue;
-    }
-    await PublishedDomain.create({
-      id: randomUUID(),
-      userId: resolved.userId,
-      organizationId: resolved.organizationId,
-      templateId,
-      domain: finalDomain,
-      type: domainType,
-      ...(domainType === "CUSTOM" ? { certificateArn, certificateStatus: "PENDING_VALIDATION" as const, certificateValidationName, certificateValidationValue } : {}),
-    }).go();
-    const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
-    return {
-      finalDomain,
-      publishedUrl: `${protocol}://${finalDomain}`,
-      routingEndpoint: cfRoutingEndpoint,
-      certificateValidationName,
-      certificateValidationValue,
-    };
-  }
-
-  const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
-  return { finalDomain, publishedUrl: `${protocol}://${finalDomain}`, routingEndpoint: undefined, certificateValidationName: undefined, certificateValidationValue: undefined };
-}
-
 export const PLEXO_MCP_TOOLS = [
   {
     name: "publish_landing_page",
@@ -696,7 +569,7 @@ Because this serves unsanitized content, the account must accept the Acceptable 
     name: "create_landing_page_subpage",
     title: "Create Sub-Page",
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-    description: `Adds a new page nested under an existing landing page, reachable at <site domain>/<slug> — or nested deeper (e.g. /blog/post-1) if parentTemplateId is itself a sub-page rather than the home page. This is how a single landing page becomes a multi-page site (BUILDER and RAW_UPLOAD pages can be freely mixed within the same site — each page's own sourceType is independent of its siblings). No separate publish step is needed for sub-pages: they automatically become reachable once the site's home page has a domain linked (see publish_existing_landing_page). Requires an Ultra subscription plan — sub-pages are otherwise unlimited per site once enabled (the plan's template limit only counts home pages, not their sub-pages).
+    description: `Adds a new page nested under an existing landing page, reachable at <site domain>/<slug> — or nested deeper (e.g. /blog/post-1) if parentTemplateId is itself a sub-page rather than the home page. This is how a single landing page becomes a multi-page site (BUILDER and RAW_UPLOAD pages can be freely mixed within the same site — each page's own sourceType is independent of its siblings). No separate publish step is needed for sub-pages: they automatically become reachable once the site's home page has a domain linked (see publish_existing_landing_page). Requires a Pro or Ultra plan — sub-pages are otherwise unlimited per site once enabled (the plan's template limit only counts home pages, not their sub-pages).
 
 Provide EITHER designJson (a drag-and-drop BUILDER sub-page) OR htmlContent (a raw-HTML sub-page, same unsanitized/AUP/1MB caveats as create_raw_landing_page) — not both. Omit both to create a blank BUILDER page (fill it in afterward with update_template using the returned templateId). Edit an existing sub-page's content afterward with update_template (BUILDER) or update_raw_landing_page (RAW_UPLOAD) depending on which mode it was created with.`,
     inputSchema: {
@@ -784,7 +657,7 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
     name: "delete_template",
     title: "Delete Template",
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
-    description: "Permanently deletes any landing page or email template by templateId or template name (e.g. 'buzm'). Cleans up attached sub-pages, Vercel Blob assets, and custom domain routing. Confirm with user before calling as this action cannot be undone.",
+    description: "Permanently deletes any landing page or email template by templateId or template name (e.g. 'buzm'). Cleans up attached sub-pages, files and custom domain routing. Deleting a whole site (its home page) also deletes everything it owns — blog posts, shop products and settings, form submissions, imports — except orders, which stay as financial records; a site with active monthly donors can't be deleted until their gifts are cancelled. Confirm with user before calling as this action cannot be undone.",
     inputSchema: {
       type: "object",
       properties: {
@@ -898,7 +771,59 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   ...BLOG_MCP_TOOLS,
   ...COMMERCE_MCP_TOOLS,
   ...LMS_MCP_TOOLS,
-];
+  ...WP_MIGRATION_MCP_TOOLS,
+  ...DONATION_MCP_TOOLS,
+  ...FORM_MCP_TOOLS,
+  ...CONTENT_MCP_TOOLS,
+  ...APP_MCP_TOOLS,
+  ...PAGE_MCP_TOOLS,
+].map(markDeprecated);
+
+/**
+ * With TEMPLATES_V2_NEW on, the classic create/publish tools build a V2 page too, so even an
+ * old client ends up with something the visual editor can keep editing. A classic-shaped
+ * designJson is converted (the SDK's convertV1Design) as a FALLBACK, and the result says so;
+ * with no design at all the owner gets the complete "landing" page template.
+ */
+async function createV2FromClassicInput(resolved: ResolvedUser, args: any) {
+  const name = typeof args.name === "string" && args.name.trim() ? args.name.trim() : "AI Landing Page";
+  let rawDesignJson = args.designJson;
+  if (typeof rawDesignJson === "string") {
+    try {
+      rawDesignJson = JSON.parse(rawDesignJson);
+    } catch {
+      rawDesignJson = null;
+    }
+  }
+  try {
+    if (rawDesignJson && typeof rawDesignJson === "object") {
+      const converted = convertLegacyDesign(validateDesignJson(rawDesignJson), name);
+      const created = await createV2Page(resolved, { name }, { design: converted.design });
+      return {
+        created,
+        extra: {
+          designFormat: "v2",
+          convertedFromClassic: true,
+          conversionFidelity: converted.fidelity,
+          conversionWarnings: converted.warnings,
+          conversionNote: `Your classic design was converted to the new visual editor (${converted.fidelity} match${converted.warnings.length ? "; see conversionWarnings" : ""}). Build new pages with page_create_from_template and change them with page_edit.`,
+        },
+      };
+    }
+    const created = await createV2Page(resolved, { name, templateId: "landing" });
+    return {
+      created,
+      extra: {
+        designFormat: "v2",
+        sections: summarizeSections(created.design),
+        conversionNote: "This page is built with the new visual editor from the \"landing\" template, with sample wording. Use page_describe and page_edit to write the business's real copy.",
+      },
+    };
+  } catch (err) {
+    if (err instanceof PageToolError) throw new Error(err.message);
+    throw err;
+  }
+}
 
 /**
  * The full MCP tool-dispatch switch, extracted verbatim from handleMcpJsonRpc's
@@ -918,10 +843,36 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
  * (a no-op in effect anyway: a bare Lambda invocation has no Next.js page cache to
  * invalidate in the first place).
  */
-export async function dispatchMcpTool(toolName: string, args: any, resolved: ResolvedUser, revalidateBlogPost?: RevalidateFn): Promise<any> {
+export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: ResolvedUser, revalidateBlogPost?: RevalidateFn): Promise<any> {
+  // Lists/objects sent as JSON text are unwrapped against the tool's own schema first.
+  const args: any = coerceToolArgs(rawArgs, PLEXO_MCP_TOOLS.find((t) => t.name === toolName)?.inputSchema as never);
   let toolResult: any;
   switch (toolName) {
     case "publish_landing_page": {
+      if (defaultDesignFormat() === "v2") {
+        const { created, extra } = await createV2FromClassicInput(resolved, args);
+        const row = created.row;
+        const v2Url = editableUrlFor(row.id);
+        const v2Domain = typeof args.domain === "string" ? args.domain.trim().toLowerCase() : "";
+        if (!v2Domain) {
+          toolResult = { success: true, templateId: row.id, name: row.name, editableUrl: v2Url, publishedUrl: null, ...extra };
+          break;
+        }
+        const linked = await linkDomainToTemplate(resolved, row.id, v2Domain, args.type as "SUBDOMAIN" | "CUSTOM" | undefined);
+        toolResult = {
+          success: true,
+          templateId: row.id,
+          name: row.name,
+          domain: linked.finalDomain,
+          publishedUrl: linked.publishedUrl,
+          editableUrl: v2Url,
+          routingEndpoint: linked.routingEndpoint,
+          certificateValidationName: linked.certificateValidationName,
+          certificateValidationValue: linked.certificateValidationValue,
+          ...extra,
+        };
+        break;
+      }
       const features = getTierFeatures(resolved.subscriptionPlan);
       {
         const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
@@ -1062,6 +1013,9 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
       if (existing.sourceType === "RAW_UPLOAD") {
         throw new Error(`"${existing.name}" was created via raw upload (create_raw_landing_page/publish_raw_landing_page) — use update_raw_landing_page to edit its HTML instead.`);
       }
+      if (designFormatOf(existing) === "v2") {
+        throw new Error(v2TargetMessage("update_template"));
+      }
 
       let rawDesignJson = args.designJson;
       if (typeof rawDesignJson === "string") {
@@ -1110,6 +1064,19 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
     }
 
     case "create_landing_page": {
+      if (defaultDesignFormat() === "v2") {
+        const { created, extra } = await createV2FromClassicInput(resolved, args);
+        toolResult = {
+          success: true,
+          templateId: created.row.id,
+          name: created.row.name,
+          editableUrl: editableUrlFor(created.row.id),
+          publishedUrl: null,
+          message: "Landing page created without publishing. Call page_publish (or publish_existing_landing_page) with this templateId and a domain when ready to go live.",
+          ...extra,
+        };
+        break;
+      }
       const features = getTierFeatures(resolved.subscriptionPlan);
       {
         // Root/home pages only — a page's sub-pages don't count against this limit.
@@ -1129,23 +1096,33 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
           rawDesignJson = null;
         }
       }
-      if (!rawDesignJson || typeof rawDesignJson !== "object") {
-        throw new Error("designJson object is required to create a landing page.");
-      }
-
-      const designJson = validateDesignJson(rawDesignJson);
-      if (designJson.body.style) {
-        designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
-      }
-      const compiledHtml = sanitizeHtml(compileToHTML(designJson));
-
       const createdId = randomUUID();
+      let designJson: any;
+      let compiledHtml: string;
+      let createdFormat: "v1" | "v2" = "v1";
+      if ((!rawDesignJson || typeof rawDesignJson !== "object") && defaultDesignFormat() === "v2") {
+        // New-editor creation is on and no classic design was given: start a blank new-editor page.
+        createdFormat = "v2";
+        designJson = blankV2Design();
+        compiledHtml = await compileTemplate({ designFormat: "v2", designJson, kind: "LANDING_PAGE", id: createdId, name });
+      } else {
+        if (!rawDesignJson || typeof rawDesignJson !== "object") {
+          throw new Error("designJson object is required to create a landing page.");
+        }
+        designJson = validateDesignJson(rawDesignJson);
+        if (designJson.body.style) {
+          designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+        }
+        compiledHtml = sanitizeHtml(compileToHTML(designJson));
+      }
+
       await Template.create({
         id: createdId,
         userId: resolved.userId,
         organizationId: resolved.organizationId,
         name,
         kind: "LANDING_PAGE",
+        designFormat: createdFormat,
         designJson,
         compiledHtml,
       }).go();
@@ -1249,6 +1226,9 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
       if (!existing || existing.organizationId !== resolved.organizationId) {
         throw new Error(`No template found with id "${templateId}" in this account. Use list_landing_pages to look up the correct id.`);
       }
+      if (designFormatOf(existing) === "v2") {
+        throw new Error(v2TargetMessage("update_raw_landing_page"));
+      }
       if (existing.sourceType !== "RAW_UPLOAD") {
         throw new Error(`"${existing.name}" was created via the drag-and-drop builder — use update_template to edit its content instead.`);
       }
@@ -1290,6 +1270,17 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
         throw new Error(`No landing page template found with id "${templateId}" in this account. Use list_landing_pages to look up the correct id.`);
       }
 
+      if (designFormatOf(template) === "v2" && template.sourceType !== "RAW_UPLOAD") {
+        // A V2 page's edits wait in its working copy until published — do both in one step.
+        try {
+          toolResult = await publishPage(resolved, { templateId: template.id, domain: rawDomain, type: args.type });
+        } catch (err) {
+          if (err instanceof PageToolError) throw new Error(err.message);
+          throw err;
+        }
+        break;
+      }
+
       const domainType = args.type === "SUBDOMAIN" || args.type === "CUSTOM" ? args.type : undefined;
       const { finalDomain, publishedUrl, routingEndpoint, certificateValidationName, certificateValidationValue } = await linkDomainToTemplate(resolved, template.id, rawDomain, domainType);
 
@@ -1311,7 +1302,7 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
     case "create_landing_page_subpage": {
       const features = getTierFeatures(resolved.subscriptionPlan);
       if (!features.multiPageSitesEnabled) {
-        throw new Error("Multi-page sites require an Ultra subscription plan.");
+        throw new Error("Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages.");
       }
 
       const parentTemplateId = typeof args.parentTemplateId === "string" ? args.parentTemplateId.trim() : "";
@@ -1345,6 +1336,12 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
       let designJson: any;
       let compiledHtml: string;
       let sourceType: "BUILDER" | "RAW_UPLOAD" = "BUILDER";
+      // A site never mixes editors by accident: a page under a new-editor site is a new-editor page.
+      const subpageFormat = sourceType === "BUILDER" ? designFormatOf(parent) : "v1";
+      const newPageId = randomUUID();
+      if (subpageFormat === "v2" && rawDesignJson && typeof rawDesignJson === "object") {
+        throw new Error(v2TargetMessage("create_landing_page_subpage"));
+      }
       if (rawHtmlContent) {
         try {
           validateRawHtmlContent(rawHtmlContent);
@@ -1362,22 +1359,29 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
           designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
         }
         compiledHtml = sanitizeHtml(compileToHTML(designJson));
+      } else if (subpageFormat === "v2") {
+        designJson = blankV2Design();
+        compiledHtml = ""; // built below, once the page's own place in the site tree exists
       } else {
         designJson = { body: { style: { background: "#0b0f19", padding: "24px" }, rows: [] } };
         compiledHtml = "";
       }
+      const createdFormat = sourceType === "BUILDER" && !rawHtmlContent ? subpageFormat : "v1";
 
       const slug = await ensureUniqueSlug(parentTemplateId, (typeof args.slug === "string" && args.slug.trim()) || name);
-      const { data: siblings } = await Template.query.byParent({ parentId: parentTemplateId }).go();
+      const { data: siblings } = await Template.query.byParent({ parentId: parentTemplateId }).go({ pages: "all" });
       const nextOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
 
-      const newPageId = randomUUID();
+      if (createdFormat === "v2") {
+        compiledHtml = await compileTemplateWithSiteLayout({ id: newPageId, parentId: parentTemplateId, kind: "LANDING_PAGE", name, designFormat: "v2" }, designJson);
+      }
       await Template.create({
         id: newPageId,
         userId: resolved.userId,
         organizationId: resolved.organizationId,
         name,
         kind: "LANDING_PAGE",
+        designFormat: createdFormat,
         sourceType,
         parentId: parentTemplateId,
         slug,
@@ -1495,7 +1499,7 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
       // constraint equivalent — checked explicitly here, same as the REST PATCH route
       // (app/api/templates/[id]/route.ts).
       if (data.slug !== undefined && effectiveParentId) {
-        const { data: siblings } = await Template.query.byParent({ parentId: effectiveParentId }).go();
+        const { data: siblings } = await Template.query.byParent({ parentId: effectiveParentId }).go({ pages: "all" });
         if (siblings.some((s) => s.id !== existing.id && s.slug === data.slug)) {
           throw new Error("A page with this URL already exists here.");
         }
@@ -1552,35 +1556,9 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
         throw new Error(`No template found matching "${rawInput}" in this account. Use list_landing_pages or list_email_templates to view saved templates.`);
       }
 
-      const descendantIds = await getDescendantIds(resolved.organizationId, existing.id);
-      const allIds = [existing.id, ...descendantIds];
-
-      // Same cleanup as the REST DELETE route (app/api/templates/[id]/route.ts) —
-      // TemplateAsset rows and PublishedDomain rows cascade at the DB level under
-      // Prisma, but S3 and Vercel's own domain registry have no idea a delete
-      // happened, so both need explicit cleanup before removing the rows.
-      const assetBatches = await Promise.all(allIds.map((tid) => TemplateAsset.query.primary({ templateId: tid }).go()));
-      const assets = assetBatches.flatMap((b) => b.data);
-      if (assets.length > 0) {
-        await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
-          console.error("Failed to delete blobs during MCP page delete (non-fatal):", err)
-        );
-      }
-      await Promise.all(assets.map((a) => TemplateAsset.remove({ templateId: a.templateId, path: a.path }).go()));
-
-      const domainBatches = await Promise.all(allIds.map((tid) => PublishedDomain.query.primary({ templateId: tid }).go()));
-      const domains = domainBatches.flatMap((b) => b.data);
-      for (const d of domains) {
-        if (d.type === "CUSTOM") {
-          await removeCloudFrontDomain(d.domain, { tenantId: d.tenantId, certificateArn: d.certificateArn }).catch((err) =>
-            console.error(`Failed to remove CloudFront distribution tenant for ${d.domain} during MCP page delete (non-fatal):`, err)
-          );
-        }
-      }
-      await Promise.all(domains.map((d) => PublishedDomain.remove({ templateId: d.templateId, id: d.id }).go()));
-
-      await Promise.all(descendantIds.map((did) => Template.remove({ id: did }).go()));
-      await Template.remove({ id: existing.id }).go();
+      // Same deletion as the dashboard: a whole site also takes its blog, catalogue and settings (lib/sites/deleteTemplate.ts).
+      const { descendantCount } = await deleteTemplateAndContents(existing, resolved.organizationId);
+      const descendantIds = { length: descendantCount };
 
       toolResult = {
         success: true,
@@ -1594,7 +1572,7 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
     case "duplicate_landing_page_page": {
       const features = getTierFeatures(resolved.subscriptionPlan);
       if (!features.multiPageSitesEnabled) {
-        throw new Error("Multi-page sites require an Ultra subscription plan.");
+        throw new Error("Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages.");
       }
 
       const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
@@ -1610,7 +1588,7 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
         throw new Error("The home page can't be duplicated from here.");
       }
 
-      const { data: siblings } = await Template.query.byParent({ parentId: existing.parentId }).go();
+      const { data: siblings } = await Template.query.byParent({ parentId: existing.parentId }).go({ pages: "all" });
       const nextOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
 
       const name = `${existing.name} copy`;
@@ -1652,6 +1630,7 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
         organizationId: resolved.organizationId,
         name,
         kind: existing.kind,
+        designFormat: designFormatOf(existing),
         sourceType: existing.sourceType,
         parentId: existing.parentId,
         slug,
@@ -1659,6 +1638,7 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
         designJson: existing.designJson,
         compiledHtml: existing.compiledHtml,
       }).go();
+      await recompileCopiedV2Page(newId);
       const { data: duplicate } = await Template.get({ id: newId }).go();
       if (!duplicate) throw new Error(`Template ${newId} vanished immediately after being created`);
 
@@ -1721,14 +1701,23 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
             id: userRow.id,
             name: userRow.name,
             email: userRow.email,
-            subscriptionPlan: userRow.subscriptionPlan,
+            subscriptionPlan: resolved.subscriptionPlan,
             allowanceBalance: userRow.allowanceBalance,
             topupBalance: userRow.topupBalance,
             customDomainLimit: userRow.customDomainLimit ?? null,
           }
         : null;
       const features = getTierFeatures(user?.subscriptionPlan);
-      toolResult = { user, features, limit: getDomainLimit(user?.subscriptionPlan ?? "FREE", user?.customDomainLimit ?? null) };
+      toolResult = {
+        user,
+        features,
+        limit: getDomainLimit(user?.subscriptionPlan ?? "FREE", user?.customDomainLimit ?? null),
+        // So an assistant knows up front what publishing will allow, instead of learning it from a refusal.
+        publishing:
+          features.maxPublishedSites === null
+            ? "Every site and every page can be live."
+            : `Free plan: ${features.maxPublishedSites} live site, homepage only, on a Plexo address (no custom domain). Other pages stay saved as drafts.`,
+      };
       break;
     }
 
@@ -1770,8 +1759,37 @@ export async function dispatchMcpTool(toolName: string, args: any, resolved: Res
         toolResult = await handleLmsTool(toolName, args, resolved);
         break;
       }
+      if (WP_MIGRATION_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleWpMigrationTool(toolName, args, resolved, revalidateBlogPost);
+        break;
+      }
+      if (DONATION_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleDonationTool(toolName, args, resolved);
+        break;
+      }
+      if (FORM_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleFormTool(toolName, args, resolved);
+        break;
+      }
+      if (CONTENT_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleContentTool(toolName, args, resolved);
+        break;
+      }
+      if (APP_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleAppTool(toolName, args, resolved);
+        break;
+      }
+      if (PAGE_TOOL_NAMES.has(toolName)) {
+        toolResult = await handlePageTool(toolName, args, resolved);
+        break;
+      }
       throw new Error(`Unknown tool: ${toolName}`);
     }
+  }
+  // Deprecated classic tools keep working, but every successful result says what replaces them.
+  if (isDeprecatedTool(toolName) && toolResult && typeof toolResult === "object" && !Array.isArray(toolResult) && !toolResult.deprecation) {
+    const notice = deprecationNotice(toolName, toolResult.conversionNote);
+    if (notice) toolResult = { ...toolResult, deprecation: notice };
   }
   return toolResult;
 }

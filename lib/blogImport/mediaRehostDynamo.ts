@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import pLimit from "p-limit";
 import { uploadObject } from "@/lib/storage";
 import { safeFetch } from "@/lib/siteImport/fetchSafe";
@@ -12,6 +12,31 @@ const MAX_MEDIA_BYTES = 20 * 1024 * 1024;
 const CONCURRENCY = 5;
 
 const limit = pLimit(CONCURRENCY);
+/** One image may take this long to download before it's given up on (it's retried later). */
+const DOWNLOAD_TIMEOUT_MS = 15_000;
+
+/** The caller's deadline passed before every image was moved — nothing is lost; call again later. */
+export class MediaOutOfTimeError extends Error {
+  constructor() {
+    super("Ran out of time moving this post's images; it will be finished in the next step.");
+    this.name = "MediaOutOfTimeError";
+  }
+}
+
+/**
+ * Where a source image is stored: a hash of its full URL. (It used to be the first 48
+ * characters of the URL's base64 — identical for every image on a site, so every
+ * imported image overwrote the same file and every post showed the same picture.)
+ */
+export function mediaKey(templateId: string, sourceUrl: string, extension: string): string {
+  return `blog-import/${templateId}/${createHash("sha256").update(sourceUrl).digest("hex").slice(0, 40)}.${extension}`;
+}
+
+/** A mapping written under the old colliding key — its file may hold another image, so it's re-uploaded. */
+export function isCollidedMapping(sourceUrl: string, blobUrl: string): boolean {
+  const name = blobUrl.split("/").pop()?.split(".")[0] ?? "";
+  return name === Buffer.from(sourceUrl).toString("base64url").slice(0, 48);
+}
 
 export function extractImageUrls(html: string): string[] {
   return Array.from(html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi), (m) => m[1]);
@@ -32,22 +57,29 @@ export function rewriteImageUrls(html: string, urlMap: Map<string, string>): str
  * re-downloads a file it already moved — safe to call repeatedly with overlapping URL
  * lists across batches.
  */
-export async function rehostMediaUrls(templateId: string, urls: string[], errors: string[]): Promise<Map<string, string>> {
+export async function rehostMediaUrls(templateId: string, urls: string[], errors: string[], opts: { deadline?: number } = {}): Promise<Map<string, string>> {
   const unique = Array.from(new Set(urls.filter(Boolean)));
   if (unique.length === 0) return new Map();
 
   const existingBatches = await Promise.all(unique.map((sourceUrl) => ImportMediaMap.get({ templateId, sourceUrl }).go()));
   const resolved = new Map<string, string>();
   existingBatches.forEach((res, i) => {
-    if (res.data) resolved.set(unique[i], res.data.blobUrl);
+    if (res.data && !isCollidedMapping(unique[i], res.data.blobUrl)) resolved.set(unique[i], res.data.blobUrl);
   });
   const toFetch = unique.filter((u) => !resolved.has(u));
 
+  // With a deadline, an image that can't start (or finish) in time leaves the call unfinished
+  // instead of leaving the old site's URL in the content: the caller tries again later.
+  let outOfTime = false;
   await Promise.all(
     toFetch.map((sourceUrl) =>
       limit(async () => {
+        if (opts.deadline && Date.now() > opts.deadline) {
+          outOfTime = true;
+          return;
+        }
         try {
-          const res = await safeFetch(sourceUrl);
+          const res = await safeFetch(sourceUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
           if (!res.ok) {
             errors.push(`Media download failed (${res.status}): ${sourceUrl}`);
             return;
@@ -59,9 +91,9 @@ export async function rehostMediaUrls(templateId: string, urls: string[], errors
             return;
           }
           const extension = sourceUrl.split(".").pop()?.split(/[?#]/)[0]?.slice(0, 5).replace(/[^a-z0-9]/gi, "") || "bin";
-          const key = `blog-import/${templateId}/${Buffer.from(sourceUrl).toString("base64url").slice(0, 48)}.${extension}`;
           // key is a hash of sourceUrl — a "collision" is always identical content, so
           // uploadObject's unconditional overwrite is always safe here.
+          const key = mediaKey(templateId, sourceUrl, extension);
           const blob = await uploadObject(key, buffer, { access: "public", contentType });
 
           // .put() (not .create()) — same upsert semantics as the Prisma version's
@@ -69,11 +101,18 @@ export async function rehostMediaUrls(templateId: string, urls: string[], errors
           await ImportMediaMap.put({ id: randomUUID(), templateId, sourceUrl, blobUrl: blob.url }).go();
           resolved.set(sourceUrl, blob.url);
         } catch (err) {
+          // Cut off by the step's deadline → try again next step. A single image that's just
+          // too slow on its own is an ordinary failure (otherwise it would be retried forever).
+          if (opts.deadline && Date.now() > opts.deadline) {
+            outOfTime = true;
+            return;
+          }
           errors.push(`Media rehost error for ${sourceUrl}: ${err instanceof Error ? err.message : String(err)}`);
         }
       }),
     ),
   );
 
+  if (outOfTime) throw new MediaOutOfTimeError();
   return resolved;
 }

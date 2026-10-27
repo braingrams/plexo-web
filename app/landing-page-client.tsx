@@ -1,13 +1,16 @@
 "use client";
 
+import { SDK_V2_NEXT, SDK_V2_SHORT } from "@/app/sdk/v2-snippets";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import {
-  Sparkles, ArrowRight, LayoutTemplate, Code2, Bot, KeyRound, Webhook,
+  Zap, ArrowRight, LayoutTemplate, Code2, Bot, KeyRound, Webhook,
   Cpu, Check, Copy, ChevronDown, Monitor, Tablet, Smartphone,
 } from "lucide-react";
 import { Reveal, OpenReveal, useReducedMotion, gsap, useGSAP } from "./scroll-fx";
+import { planMonthlyCredits } from "@/lib/credits/value";
 
+import { BRAND } from "@/lib/theme";
 /* ─────────────────────────────────────────────────────────────
    HERO — interactive product mock, scales/fades away as you scroll past it
    ("scroll away to collapse").
@@ -70,7 +73,7 @@ export function HeroSection() {
             borderRadius: 999, padding: "0.35rem 0.95rem", marginBottom: "1.75rem",
           }}
         >
-          <Sparkles size={14} color="var(--brand)" />
+          <Zap size={14} color="var(--brand)" />
           <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--brand)" }}>
             Visual Builder · React SDK · MCP Agent Protocol
           </span>
@@ -91,7 +94,7 @@ export function HeroSection() {
           fontSize: "clamp(1rem, 1.6vw, 1.2rem)", color: "var(--text-muted)",
           maxWidth: 620, margin: "0 auto 2.5rem", lineHeight: 1.65,
         }}>
-          Design emails and landing pages visually, embed the builder into your own product with the React SDK,
+          Design emails and landing pages visually, embed a builder into your own product with the React SDK,
           or let Claude, Cursor, and ChatGPT publish pages for you through the MCP agent protocol.
         </Reveal>
 
@@ -236,12 +239,12 @@ const ECOSYSTEM_CARDS = [
     icon: LayoutTemplate,
     title: "Studio Platform",
     desc: "The visual drag-and-drop builder for email and landing page templates — compile to clean HTML, publish to a subdomain or your own custom domain, and track visits in real time.",
-    color: "#8b5cf6",
+    color: BRAND.primary,
   },
   {
     icon: Code2,
     title: "React SDK",
-    desc: "@charisol/plexo-sdk drops the entire builder into your own product as a <PlexoBuilder /> component, with a ref-based exportDesign() API and server-proxied AI generation.",
+    desc: "@charisol/plexo-sdk drops a visual website builder into your own product as a <V2Editor /> component. Your users edit pages section by section; you compile them to clean HTML or React. The classic <PlexoBuilder /> keeps working.",
     color: "#38bdf8",
   },
   {
@@ -367,9 +370,20 @@ export function AiModesSection() {
 const CODE_TABS = [
   {
     id: "react",
-    label: "React / Vite",
+    label: "React (SDK 2)",
+    code: SDK_V2_SHORT,
+  },
+  {
+    id: "nextjs",
+    label: "Next.js App Router",
+    code: SDK_V2_NEXT,
+  },
+  {
+    id: "classic",
+    label: "Classic builder (V1)",
     code: `import { PlexoBuilder } from "@charisol/plexo-sdk";
 
+// Unchanged: the classic builder keeps working.
 export default function Editor() {
   return (
     <PlexoBuilder
@@ -378,21 +392,6 @@ export default function Editor() {
       useAi
     />
   );
-}`,
-  },
-  {
-    id: "nextjs",
-    label: "Next.js App Router",
-    code: `"use client";
-import dynamic from "next/dynamic";
-
-const PlexoBuilder = dynamic(
-  () => import("@charisol/plexo-sdk").then((m) => m.PlexoBuilder),
-  { ssr: false }
-);
-
-export default function Editor() {
-  return <PlexoBuilder mode="email" apiKey={process.env.NEXT_PUBLIC_PLEXO_KEY} />;
 }`,
   },
   {
@@ -508,7 +507,7 @@ const PLANS = [
     period: "/month",
     description: "For creators and small teams shipping landing pages.",
     features: [
-      "20 Templates", "Email + Landing Pages", "10 Published Domains", "Custom Domain Support",
+      "20 Templates", "Email + Landing Pages", "Unlimited Multi-Page Sites", "10 Published Domains", "Custom Domain Support",
       "Remove Plexo Branding", "BYOK Encryption Vault", "MCP Server Access", "Strata Design Tokens", "3 API Keys",
     ],
     cta: "Start with Pro",
@@ -521,8 +520,8 @@ const PLANS = [
     period: "/month",
     description: "For agencies and SaaS apps embedding Plexo for end users.",
     features: [
-      "Unlimited Templates", "Unlimited Multi-Page Sites", "25 Published Domains", "Host-Managed AI Webhooks",
-      "White-Glove SDK Embedding", "5,000 Monthly AI Credits", "10 API Keys", "Everything in Pro",
+      "Unlimited Templates", "25 Published Domains", "Host-Managed AI Webhooks",
+      "White-Glove SDK Embedding", `${planMonthlyCredits("ULTRA").toLocaleString("en-US")} Monthly AI Credits`, "10 API Keys", "Everything in Pro",
     ],
     cta: "Get Ultra",
     highlight: false,
@@ -591,7 +590,7 @@ export function PricingSection() {
 const FAQS = [
   {
     q: "How does the React SDK work?",
-    a: "Install @charisol/plexo-sdk and drop the <PlexoBuilder /> component into any React app. It renders the full drag-and-drop editor, and a ref-based exportDesign() call returns compiled HTML whenever you need it — you own the output.",
+    a: "Install @charisol/plexo-sdk and drop the <V2Editor /> component into any React app. It is a complete visual builder, so with no setup it opens a blank page. Save pages wherever you like, and compile them to clean HTML or React on your server — you own the output. If you already use the classic <PlexoBuilder />, it keeps working exactly as before.",
   },
   {
     q: "What can the MCP server actually do?",

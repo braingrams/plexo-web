@@ -20,6 +20,7 @@ export type EmailDeliveryContext =
   | "commerce_order_status"
   | "commerce_digital_delivery"
   | "commerce_payment_received"
+  | "commerce_donation_receipt"
   | "testimonial_notification"
   | "feedback_notification"
   | "withdrawal_request_notification"
@@ -30,7 +31,14 @@ export type EmailDeliveryContext =
   | "domain_renewal_failed"
   | "lms_magic_link"
   | "lms_enrollment_confirmation"
-  | "lms_drip_ready";
+  | "lms_drip_ready"
+  | "commerce_bank_transfer"
+  // Sign-in emails sent on behalf of an app built on Plexo (lib/appAuth/emails.ts), and
+  // emails its server functions send (ctx.sendEmail).
+  | "app_auth"
+  | "app_function_email"
+  // Trial ending soon / plan ended (lib/plan/lifecycle.ts).
+  | "plan_lifecycle";
 
 /**
  * Fire-and-forget write to EmailLog — mirrors this codebase's established

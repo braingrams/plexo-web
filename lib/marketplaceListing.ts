@@ -5,10 +5,9 @@ import { uploadObject } from "@/lib/storage";
 import { Template, TemplateAsset } from "@/lib/db/contentEntities";
 import { User, PlatformSettings } from "@/lib/db/coreEntities";
 
-/** Same well-known system account plexo-admin's marketplaceOwner.ts creates/uses for
- * admin-curated listings — plexo-web never creates it (only plexo-admin's curation tools
- * do), it only needs to recognize it to skip seller-crediting on admin-curated sales. */
-export const MARKETPLACE_OWNER_EMAIL = "templates@plexo.charisol.io";
+import { MARKETPLACE_OWNER_EMAIL } from "@/lib/marketplaceOwnerEmail";
+
+export { MARKETPLACE_OWNER_EMAIL };
 
 function isConditionalCheckFailure(err: unknown): boolean {
   const anyErr = err as { name?: string; cause?: { name?: string } };
@@ -97,6 +96,7 @@ export async function submitTemplateForMarketplace(
     organizationId,
     name: source.name,
     kind: source.kind,
+    designFormat: source.designFormat ?? "v1",
     sourceType: source.sourceType,
     designJson: source.designJson,
     compiledHtml: source.compiledHtml,

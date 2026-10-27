@@ -135,7 +135,7 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
 
   return (
     <>
-      <PageHeader eyebrow="Developer" title="AI" subtitle="Configure the AI proxy for each of your API keys." />
+      <PageHeader eyebrow="Developer" title="SOL (AI)" subtitle="SOL is Plexo's AI. Choose whether it runs on Plexo's AI (paid from your AI credits) or your own AI key." />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "1.5rem" }}>
@@ -164,8 +164,8 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                   {/* Use AI Toggle */}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.9rem 1rem", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 11 }}>
                     <div>
-                      <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "#f0f2ff" }}>Use AI</p>
-                      <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)" }}>Enable AI proxy for this token</p>
+                      <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "#f0f2ff" }}>Use SOL</p>
+                      <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)" }}>Let SOL work with this key</p>
                     </div>
                     <button
                       type="button"

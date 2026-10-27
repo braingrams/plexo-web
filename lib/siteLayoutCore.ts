@@ -1,7 +1,10 @@
-import { compileToHTML } from "@/lib/compiler";
-import { sanitizeHtml } from "@/server/sanitizer";
-import { Template, BlogSite, SiteLayout } from "@/lib/db/contentEntities";
+import { convertV1Design, type DocumentNode } from "@charisol/plexo-sdk/v2/compile";
+
+import { compileTemplate } from "@/lib/compileTemplate";
+import { Template, BlogSite, SiteLayout, type TemplateKind } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
+import type { V2LayoutSections } from "@/lib/v2/compile";
+import { designFormatOf, isV2Design } from "@/lib/v2/design";
 
 // Split out of lib/siteLayoutDynamo.ts so these pure, DynamoDB-only functions have NO
 // `next/server`/`next/navigation` import anywhere in their own module or its import graph —
@@ -65,7 +68,9 @@ async function resolveLayoutFragmentRootId(templateId: string): Promise<string |
   return blogMatch.data[0]?.templateId ?? commerceMatch.data[0]?.templateId ?? null;
 }
 
-type LayoutRows = { headerRows: any[]; footerRows: any[] };
+/** A header/footer fragment as stored — its format decides how it is spliced (rows for V1, sections for V2). */
+type LayoutSource = { designFormat: string | null | undefined; designJson: unknown } | null;
+type LayoutRows = { headerRows: any[]; footerRows: any[]; headerSource?: LayoutSource; footerSource?: LayoutSource };
 
 function extractRows(designJson: unknown): any[] {
   const rows = (designJson as { body?: { rows?: unknown } } | null)?.body?.rows;
@@ -82,10 +87,37 @@ export async function getEnabledSiteLayoutRows(rootTemplateId: string): Promise<
     layout.headerTemplateId ? Template.get({ id: layout.headerTemplateId }).go() : null,
     layout.footerTemplateId ? Template.get({ id: layout.footerTemplateId }).go() : null,
   ]);
+  const source = (t: typeof header): LayoutSource => (t?.data ? { designFormat: t.data.designFormat, designJson: t.data.designJson } : null);
+  const rowsOf = (t: typeof header) => (t?.data && designFormatOf(t.data) === "v2" ? [] : extractRows(t?.data?.designJson));
   return {
-    headerRows: extractRows(header?.data?.designJson),
-    footerRows: extractRows(footer?.data?.designJson),
+    headerRows: rowsOf(header),
+    footerRows: rowsOf(footer),
+    headerSource: source(header),
+    footerSource: source(footer),
   };
+}
+
+/**
+ * The layout as V2 sections. A V2 fragment contributes the sections of its one page; a
+ * classic (V1) fragment on a V2 site is converted on the fly by the SDK's convertV1Design
+ * (it never throws and keeps what it can), so a site whose header was built before the
+ * switch still shows its header on its new pages instead of silently losing it.
+ */
+export function layoutSectionsOf(layout: LayoutRows | null): V2LayoutSections | null {
+  if (!layout) return null;
+  const sectionsOf = (src: LayoutSource | undefined, which: "header" | "footer"): DocumentNode[] => {
+    if (!src) return [];
+    if (designFormatOf(src) === "v2") {
+      return isV2Design(src.designJson) ? (src.designJson.pages[0]?.rootNode.children ?? []) : [];
+    }
+    if (extractRows(src.designJson).length === 0) return [];
+    try {
+      return convertV1Design(src.designJson, { id: `layout-${which}` }).page.rootNode.children ?? [];
+    } catch {
+      return [];
+    }
+  };
+  return { headerSections: sectionsOf(layout.headerSource, "header"), footerSections: sectionsOf(layout.footerSource, "footer") };
 }
 
 /** Pure — returns designJson unchanged (same reference) when there's nothing to splice. */
@@ -107,11 +139,33 @@ export function spliceLayoutRows(designJson: any, layout: LayoutRows | null): an
  * that page and the header/footer stay editable in exactly one place).
  */
 export async function compileWithSiteLayout(template: { id: string; parentId: string | null }, designJson: any): Promise<any> {
-  const rootId = template.parentId
-    ? await findRootTemplateId(template.id, template.parentId)
-    : ((await resolveLayoutFragmentRootId(template.id)) ?? template.id);
+  const rootId = await resolveRootId(template);
   const layout = await getEnabledSiteLayoutRows(rootId);
   return spliceLayoutRows(designJson, layout);
+}
+
+async function resolveRootId(template: { id: string; parentId?: string | null }): Promise<string> {
+  return template.parentId
+    ? await findRootTemplateId(template.id, template.parentId)
+    : ((await resolveLayoutFragmentRootId(template.id)) ?? template.id);
+}
+
+/**
+ * compileWithSiteLayout + the compile itself, for a template of EITHER format: V1 splices
+ * header/footer ROWS into designJson and compiles it exactly as before; V2 splices header/
+ * footer SECTIONS around its page. Persist the ORIGINAL designJson, store the RETURN VALUE
+ * as compiledHtml. `designJson` defaults to the row's own (pass the draft when publishing one).
+ */
+export async function compileTemplateWithSiteLayout(
+  template: { id: string; parentId?: string | null; kind: TemplateKind; name?: string; designFormat?: string | null; designJson?: unknown },
+  designJson: unknown = template.designJson,
+): Promise<string> {
+  const rootId = await resolveRootId(template);
+  const layout = await getEnabledSiteLayoutRows(rootId);
+  if (designFormatOf(template) === "v2") {
+    return compileTemplate({ ...template, designJson }, { rootTemplateId: rootId, layout: layoutSectionsOf(layout) });
+  }
+  return compileTemplate({ ...template, designJson: spliceLayoutRows(designJson, layout) }, { rootTemplateId: rootId });
 }
 
 /**
@@ -125,20 +179,27 @@ export async function compileWithSiteLayout(template: { id: string; parentId: st
 export async function recompileSiteLayoutDependents(rootTemplateId: string): Promise<void> {
   const layout = await getEnabledSiteLayoutRows(rootTemplateId);
 
-  const pages: { id: string; designJson: unknown }[] = [];
+  type PageToCompile = { id: string; name: string; designFormat?: string | null; designJson: unknown };
+  const asPage = (t: { id: string; name: string; designFormat?: string | null; designJson: unknown }): PageToCompile => ({
+    id: t.id,
+    name: t.name,
+    designFormat: t.designFormat,
+    designJson: t.designJson,
+  });
+  const pages: PageToCompile[] = [];
   const { data: root } = await Template.get({ id: rootTemplateId }).go();
   if (root && root.kind === "LANDING_PAGE" && root.sourceType === "BUILDER" && !root.isSiteLayoutFragment) {
-    pages.push({ id: root.id, designJson: root.designJson });
+    pages.push(asPage(root));
   }
 
   let frontier = [rootTemplateId];
   while (frontier.length > 0) {
-    const childBatches = await Promise.all(frontier.map((parentId) => Template.query.byParent({ parentId }).go()));
+    const childBatches = await Promise.all(frontier.map((parentId) => Template.query.byParent({ parentId }).go({ pages: "all" })));
     const children = childBatches.flatMap((b) => b.data);
     pages.push(
       ...children
         .filter((c) => c.kind === "LANDING_PAGE" && c.sourceType === "BUILDER" && !c.isSiteLayoutFragment)
-        .map((c) => ({ id: c.id, designJson: c.designJson })),
+        .map(asPage),
     );
     frontier = children.map((c) => c.id);
   }
@@ -155,14 +216,17 @@ export async function recompileSiteLayoutDependents(rootTemplateId: string): Pro
   );
   if (fragmentIds.length > 0) {
     const fragments = await Promise.all(fragmentIds.map((id) => Template.get({ id }).go()));
-    pages.push(...fragments.map((f) => f.data).filter((f): f is NonNullable<typeof f> => f !== null).map((f) => ({ id: f.id, designJson: f.designJson })));
+    pages.push(...fragments.map((f) => f.data).filter((f): f is NonNullable<typeof f> => f !== null).map(asPage));
   }
 
+  const layoutSections = layoutSectionsOf(layout);
   for (const page of pages) {
-    const spliced = spliceLayoutRows(page.designJson, layout);
     let compiledHtml: string;
     try {
-      compiledHtml = sanitizeHtml(compileToHTML(spliced));
+      compiledHtml =
+        designFormatOf(page) === "v2"
+          ? await compileTemplate({ ...page, kind: "LANDING_PAGE" }, { rootTemplateId, layout: layoutSections })
+          : await compileTemplate({ ...page, designJson: spliceLayoutRows(page.designJson, layout), kind: "LANDING_PAGE" }, { rootTemplateId });
     } catch {
       continue; // a malformed stored designJson shouldn't take the whole recompile pass down
     }

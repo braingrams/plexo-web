@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
@@ -62,18 +63,18 @@ export default async function BlogOverviewPage() {
       ),
       Promise.all(
         candidates.map((t) =>
-          PublishedDomain.query.primary({ templateId: t.id }).go(),
+          PublishedDomain.query.primary({ templateId: t.id }).go({ pages: "all" }),
         ),
       ),
       Promise.all(
         candidates.map((t) =>
-          BlogPost.query.byStatus({ templateId: t.id }).go(),
+          BlogPost.query.byStatus({ templateId: t.id }).go({ pages: "all" }),
         ),
       ),
       User.get({ id: session.user.id }).go(),
     ]);
   const publishedLimit = getTierFeatures(
-    currentUser?.subscriptionPlan ?? "FREE",
+    effectivePlan(currentUser),
   ).maxPublishedBlogPosts;
 
   const blogs: {

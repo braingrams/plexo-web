@@ -52,9 +52,9 @@ export default async function TemplateDetailPage(props: {
 
   const [{ data: assets }, { data: children }, { data: submissions }] =
     await Promise.all([
-      TemplateAsset.query.primary({ templateId: template.id }).go(),
-      Template.query.byParent({ parentId: template.id }).go(),
-      FormSubmission.query.primary({ templateId: template.id }).go(),
+      TemplateAsset.query.primary({ templateId: template.id }).go({ pages: "all" }),
+      Template.query.byParent({ parentId: template.id }).go({ pages: "all" }),
+      FormSubmission.query.primary({ templateId: template.id }).go({ pages: "all" }),
     ]);
 
   const previewHtml = await buildLivePreviewHtml(
@@ -91,7 +91,7 @@ export default async function TemplateDetailPage(props: {
       { data: commerceSettings },
       { data: deployedAppRow },
     ] = await Promise.all([
-      PublishedDomain.query.primary({ templateId: template.id }).go(),
+      PublishedDomain.query.primary({ templateId: template.id }).go({ pages: "all" }),
       PageView.query
         .primary({ templateId: template.id })
         .between({ createdAt: since }, { createdAt: now })

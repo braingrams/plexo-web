@@ -32,6 +32,7 @@ export function StepCard({
   status,
   children,
   footer,
+  fill,
 }: {
   icon: LucideIcon;
   iconColor?: string;
@@ -40,6 +41,9 @@ export function StepCard({
   status: StepStatus;
   children?: ReactNode;
   footer?: ReactNode;
+  /** Take the available width (up to the max) instead of sizing to the content — keeps a long
+   * file name from pushing the card past the edge of a right-aligned message. */
+  fill?: boolean;
 }) {
   const meta = STATUS_META[status];
   return (
@@ -53,6 +57,7 @@ export function StepCard({
         background: meta.bg,
         padding: "0.65rem 0.85rem",
         maxWidth: 480,
+        ...(fill ? { width: "100%", boxSizing: "border-box" as const, minWidth: 0 } : {}),
       }}
     >
       <style>{`@keyframes sol-spin { to { transform: rotate(360deg); } }`}</style>

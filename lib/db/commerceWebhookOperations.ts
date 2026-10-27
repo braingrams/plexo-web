@@ -12,6 +12,7 @@ import {
 import { NotificationPreferences } from "./coreEntities";
 import { Template, LmsFunnel } from "./contentEntities";
 import { activateLmsEnrollmentFromOrder } from "@/lib/lms/enrollment";
+import { handleDonationPaid, isDonationOrder } from "@/lib/commerce/donations";
 import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
 import { notifyMaildripOfPaidOrder, resolveMaildripApiKey, sendCommerceEmail } from "@/lib/commerce/maildripNotify";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
@@ -95,12 +96,27 @@ export async function confirmPaystackPayment(
  * delivery are all best-effort side effects, same as the original (a failure in any one
  * of them must never fail the webhook that already recorded a real payment).
  */
-export async function handleOrderPaid(order: OrderItem, booking: BookingItem | null, settings: SettingsItem): Promise<void> {
+export async function handleOrderPaid(
+  order: OrderItem,
+  booking: BookingItem | null,
+  settings: SettingsItem,
+  // false when the owner themself just confirmed the payment (a bank transfer) — a "you've
+  // been paid" email to the person who clicked "I received it" seconds ago is pure noise.
+  options: { notifyOwner?: boolean } = {},
+): Promise<void> {
   if (booking) {
     await CommerceBooking.patch({ templateId: order.templateId, orderId: order.id })
       .set({ status: "CONFIRMED" })
       .remove(["holdExpiresAt"])
       .go();
+  }
+
+  // A donation gets a thank-you receipt (and moves its campaign total / activates a
+  // monthly gift) instead of an "order confirmed" email — nothing to fulfil or deliver.
+  if (isDonationOrder(order)) {
+    await handleDonationPaid(order, settings).catch((err) => console.error("Commerce: donation paid handling failed", err));
+    if (options.notifyOwner !== false) notifyPaymentReceived(order).catch((err) => console.error("[mail] payment received notification failed:", err));
+    return;
   }
 
   try {
@@ -117,7 +133,7 @@ export async function handleOrderPaid(order: OrderItem, booking: BookingItem | n
     console.error("Commerce: MailDrip notify failed", err);
   }
 
-  notifyPaymentReceived(order).catch((err) => console.error("[mail] payment received notification failed:", err));
+  if (options.notifyOwner !== false) notifyPaymentReceived(order).catch((err) => console.error("[mail] payment received notification failed:", err));
 
   try {
     await deliverDigitalProducts(order, settings);

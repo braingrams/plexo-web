@@ -20,7 +20,7 @@ export function V2Footer({ isDark }: { isDark: boolean }) {
         <div className="flex flex-wrap items-center justify-center gap-4">
           <Link
             href="/auth/register"
-            className="bg-[#6b3bf9] hover:bg-[#5b2be6] text-white px-8 py-4 rounded-2xl font-extrabold text-base shadow-xl hover:shadow-2xl transition-all inline-flex items-center gap-3"
+            className={`bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white px-8 py-4 rounded-2xl font-extrabold text-base shadow-xl hover:shadow-2xl transition-all inline-flex items-center gap-3`}
           >
             <span>Start Building — It&apos;s free</span>
             <ArrowRight className="w-5 h-5" />

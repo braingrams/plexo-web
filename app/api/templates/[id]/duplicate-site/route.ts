@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { recompileCopiedV2Page } from "@/lib/v2/copy";
 import { NextRequest, NextResponse } from "next/server";
 import { EntityItem } from "electrodb";
 import { uploadObject } from "@/lib/storage";
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const descendants: SourceTemplate[] = [];
   let frontier = [existing.id];
   while (frontier.length > 0) {
-    const childBatches = await Promise.all(frontier.map((parentId) => Template.query.byParent({ parentId }).go()));
+    const childBatches = await Promise.all(frontier.map((parentId) => Template.query.byParent({ parentId }).go({ pages: "all" })));
     const children = childBatches.flatMap((b) => b.data).filter((c) => c.organizationId === resolved.organizationId);
     for (const child of children) idMap.set(child.id, randomUUID());
     descendants.push(...children);
@@ -127,6 +128,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     organizationId: resolved.organizationId,
     name: rootName,
     kind: existing.kind,
+    designFormat: existing.designFormat ?? "v1",
     sourceType: existing.sourceType,
     designJson: existing.designJson,
     compiledHtml: existing.compiledHtml,
@@ -151,6 +153,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       organizationId: resolved.organizationId,
       name: child.name,
       kind: child.kind,
+      designFormat: child.designFormat ?? "v1",
       sourceType: child.sourceType,
       parentId: newParentId,
       slug,
@@ -162,6 +165,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       await copyRawUploadAssets(child.id, newChildId);
     }
   }
+
+  // New-editor pages carry their site id in their forms — rebuild every copy for its own site.
+  for (const id of [newRootId, ...descendants.map((d) => idMap.get(d.id)!)]) await recompileCopiedV2Page(id);
 
   const { data: duplicate } = await Template.get({ id: newRootId }).go();
   if (!duplicate) throw new Error(`Template ${newRootId} vanished immediately after being created`);

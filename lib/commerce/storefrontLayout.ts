@@ -1,11 +1,20 @@
 import { randomUUID } from "node:crypto";
 import type { EntityItem } from "electrodb";
-import { compileToHTML } from "@/lib/compiler";
-import { sanitizeHtml } from "@/server/sanitizer";
-import { getEnabledSiteLayoutRows, spliceLayoutRows } from "@/lib/siteLayoutCore";
+import { recompileSiteLayoutDependents } from "@/lib/siteLayoutCore";
 import { ensureUniqueSlug } from "@/server/slugDynamo";
-import { Template } from "@/lib/db/contentEntities";
+import { SiteLayout, Template } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
+import { designFormatOf, type DesignFormat } from "@/lib/v2/design";
+import {
+  buildCheckoutV2,
+  buildOrderConfirmationV2,
+  buildStorefrontV2,
+  buildTrackOrderV2,
+  DEFAULT_STORE_LINKS,
+  type ChromeOptions,
+  type StoreLinks,
+} from "@/lib/v2/layoutDesigns";
+import { chromeFor, compileGenerated, siteInfo } from "@/lib/v2/siteFormat";
 
 type TemplateItem = EntityItem<typeof Template>;
 
@@ -22,7 +31,7 @@ type TemplateItem = EntityItem<typeof Template>;
  * resolves any such Template with no changes needed there.
  *
  * Deliberately created via Template.create directly rather than the create_landing_page_subpage
- * MCP tool/route, which gates multi-page sites behind an Ultra subscription plan
+ * MCP tool/route, which gates multi-page sites behind a Pro/Ultra subscription plan
  * (getTierFeatures(...).multiPageSitesEnabled) — that gate is for a user's own deliberate
  * multi-page site, not for infrastructure a paid Commerce feature already requires to function.
  */
@@ -91,19 +100,37 @@ export function buildTrackOrderDesignJson(): any {
   return { body: { style: { background: "#ffffff", fontFamily: "inherit" }, rows: [headingRow("Track Your Order"), markerRow("order_tracking", {}, "400px")] } };
 }
 
-async function compileForSite(rootTemplateId: string, designJson: any): Promise<string> {
-  const layout = await getEnabledSiteLayoutRows(rootTemplateId);
-  const spliced = spliceLayoutRows(designJson, layout);
-  return sanitizeHtml(compileToHTML(spliced));
+/**
+ * Which design a provisioned page gets: the classic row/column one for a classic (v1) site —
+ * byte-for-byte what it always was — or the new editor's managed sections for a v2 site, so
+ * the owner can open and edit it there. `chrome` carries the site name and whether the page
+ * must bring its own header/footer (a site with a shared Site layout already has them).
+ */
+type PageKey = "storefront" | "checkout" | "confirmation" | "tracking";
+type Plan = { format: DesignFormat; chrome: ChromeOptions; links: StoreLinks };
+
+function designFor(key: PageKey, plan: Plan): any {
+  if (plan.format === "v2") {
+    const builders = { storefront: buildStorefrontV2, checkout: buildCheckoutV2, confirmation: buildOrderConfirmationV2, tracking: buildTrackOrderV2 };
+    return builders[key](plan.chrome, plan.links);
+  }
+  const builders = { storefront: buildStorefrontDesignJson, checkout: buildCheckoutDesignJson, confirmation: buildOrderConfirmationDesignJson, tracking: buildTrackOrderDesignJson };
+  return builders[key]();
+}
+
+async function planFor(rootTemplateId: string, shopPath?: string | null): Promise<Plan> {
+  const info = await siteInfo(rootTemplateId);
+  const chrome = info.format === "v2" ? await chromeFor(rootTemplateId, info.name) : { siteName: info.name, header: false, footer: false };
+  return { format: info.format, chrome, links: { ...DEFAULT_STORE_LINKS, ...(shopPath ? { shopPath } : {}) } };
 }
 
 async function findChildBySlug(parentId: string, slug: string): Promise<{ id: string } | null> {
-  const { data: siblings } = await Template.query.byParent({ parentId }).go();
+  const { data: siblings } = await Template.query.byParent({ parentId }).go({ pages: "all" });
   return siblings.find((s) => s.slug === slug) ?? null;
 }
 
 async function nextOrder(parentId: string): Promise<number> {
-  const { data: siblings } = await Template.query.byParent({ parentId }).go();
+  const { data: siblings } = await Template.query.byParent({ parentId }).go({ pages: "all" });
   return siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1) + 1;
 }
 
@@ -115,9 +142,11 @@ async function createChildPage(params: {
   name: string;
   slug: string;
   designJson: any;
+  designFormat?: DesignFormat;
 }): Promise<string> {
   const id = randomUUID();
-  const compiledHtml = await compileForSite(params.rootId, params.designJson);
+  const designFormat = params.designFormat ?? "v1";
+  const compiledHtml = await compileGenerated(params.rootId, { id, name: params.name, designFormat, designJson: params.designJson });
   const order = await nextOrder(params.parentId);
   await Template.create({
     id,
@@ -129,6 +158,7 @@ async function createChildPage(params: {
     parentId: params.parentId,
     slug: params.slug,
     order,
+    ...(designFormat === "v2" ? { designFormat } : {}),
     designJson: params.designJson,
     compiledHtml,
   }).go();
@@ -145,37 +175,28 @@ export const DEFAULT_STOREFRONT_SLUG = "store";
  */
 export async function ensureStorefrontLayout(templateId: string, organizationId: string, userId: string): Promise<void> {
   const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  // One decision per call: the site's format. A classic site gets the classic pages exactly
+  // as before; a new-editor site gets editable sections. Pages that already exist are never
+  // touched, whatever their format — this only fills in what's missing.
+  const plan = await planFor(templateId);
+  const base = { rootId: templateId, userId, organizationId, designFormat: plan.format } as const;
 
   let storefrontTemplateId = settings?.storefrontTemplateId ?? null;
   if (!storefrontTemplateId) {
     const existing = await findChildBySlug(templateId, DEFAULT_STOREFRONT_SLUG);
     storefrontTemplateId = existing
       ? existing.id
-      : await createChildPage({
-          parentId: templateId,
-          rootId: templateId,
-          userId,
-          organizationId,
-          name: "Shop",
-          slug: DEFAULT_STOREFRONT_SLUG,
-          designJson: buildStorefrontDesignJson(),
-        });
+      : await createChildPage({ ...base, parentId: templateId, name: "Shop", slug: DEFAULT_STOREFRONT_SLUG, designJson: designFor("storefront", plan) });
   }
+  // Every link the other pages carry points at the shop's REAL path (it can be renamed or live under a parent page).
+  if (plan.format === "v2") plan.links.shopPath = (await pagePath(storefrontTemplateId)) ?? plan.links.shopPath;
 
   let storefrontCheckoutTemplateId = settings?.storefrontCheckoutTemplateId ?? null;
   if (!storefrontCheckoutTemplateId) {
     const existing = await findChildBySlug(storefrontTemplateId, "checkout");
     storefrontCheckoutTemplateId = existing
       ? existing.id
-      : await createChildPage({
-          parentId: storefrontTemplateId,
-          rootId: templateId,
-          userId,
-          organizationId,
-          name: "Checkout",
-          slug: "checkout",
-          designJson: buildCheckoutDesignJson(),
-        });
+      : await createChildPage({ ...base, parentId: storefrontTemplateId, name: "Checkout", slug: "checkout", designJson: designFor("checkout", plan) });
   }
 
   let orderConfirmationTemplateId = settings?.orderConfirmationTemplateId ?? null;
@@ -183,15 +204,7 @@ export async function ensureStorefrontLayout(templateId: string, organizationId:
     const existing = await findChildBySlug(templateId, "order-confirmation");
     orderConfirmationTemplateId = existing
       ? existing.id
-      : await createChildPage({
-          parentId: templateId,
-          rootId: templateId,
-          userId,
-          organizationId,
-          name: "Order Confirmation",
-          slug: "order-confirmation",
-          designJson: buildOrderConfirmationDesignJson(),
-        });
+      : await createChildPage({ ...base, parentId: templateId, name: "Order Confirmation", slug: "order-confirmation", designJson: designFor("confirmation", plan) });
   }
 
   let trackOrderTemplateId = settings?.trackOrderTemplateId ?? null;
@@ -199,15 +212,7 @@ export async function ensureStorefrontLayout(templateId: string, organizationId:
     const existing = await findChildBySlug(templateId, "track-order");
     trackOrderTemplateId = existing
       ? existing.id
-      : await createChildPage({
-          parentId: templateId,
-          rootId: templateId,
-          userId,
-          organizationId,
-          name: "Track Order",
-          slug: "track-order",
-          designJson: buildTrackOrderDesignJson(),
-        });
+      : await createChildPage({ ...base, parentId: templateId, name: "Track Order", slug: "track-order", designJson: designFor("tracking", plan) });
   }
 
   const patch = { storefrontTemplateId, storefrontCheckoutTemplateId, orderConfirmationTemplateId, trackOrderTemplateId };
@@ -224,6 +229,28 @@ export async function getStorefrontSlug(templateId: string): Promise<string | nu
   if (!settings?.storefrontTemplateId) return null;
   const { data: page } = await Template.get({ id: settings.storefrontTemplateId }).go();
   return page?.slug ?? null;
+}
+
+/**
+ * The storefront page's REAL served path, e.g. "/store" or "/lineagecare/shop" — a migrated
+ * store's shop page can sit under a parent page, which the bare slug can't express.
+ */
+export async function getStorefrontPath(templateId: string): Promise<string | null> {
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  return settings?.storefrontTemplateId ? pagePath(settings.storefrontTemplateId) : null;
+}
+
+/** "/a/b" for a page in the site tree (the root contributes no segment), or null if it's gone. */
+async function pagePath(pageId: string): Promise<string | null> {
+  const segments: string[] = [];
+  let currentId: string | null = pageId;
+  while (currentId) {
+    const page: TemplateItem | null = (await Template.get({ id: currentId }).go()).data;
+    if (!page) return null;
+    if (page.parentId) segments.unshift(page.slug ?? "");
+    currentId = page.parentId ?? null;
+  }
+  return segments.length ? `/${segments.join("/")}` : null;
 }
 
 /**
@@ -271,7 +298,103 @@ export async function renameStorefrontSlug(templateId: string, newSlugInput: str
   if (!base) throw new Error("storefrontSlug cannot be empty.");
   // ensureUniqueSlug scans this page's OWN siblings under templateId for a collision; since
   // the page currently sits at its OLD slug (checked above), it can never collide with itself.
+  const oldPath = await pagePath(page.id);
   const candidate = await ensureUniqueSlug(templateId, base);
   await Template.patch({ id: page.id }).set({ slug: candidate }).go();
+  const newPath = await pagePath(page.id);
+  if (oldPath && newPath && oldPath !== newPath) await retargetStoreLinks(templateId, settings, oldPath, newPath);
   return candidate;
+}
+
+/**
+ * Just the order-confirmation page, for a site that takes donations but doesn't sell
+ * anything — a bank-transfer donor lands there to see the account details, and a
+ * donations-only nonprofit shouldn't get a shop, checkout and order-tracking page it never
+ * asked for. Idempotent, same rules as ensureStorefrontLayout (respects an existing page).
+ */
+export async function ensureOrderConfirmationPage(templateId: string, organizationId: string, userId: string): Promise<void> {
+  const { data: settings } = await CommerceSettings.get({ templateId }).go();
+  if (settings?.orderConfirmationTemplateId) return;
+  const existing = await findChildBySlug(templateId, "order-confirmation");
+  // A donations-only site may have no shop at all: its "Keep shopping" button then goes home, not to a page that isn't there.
+  const shopPath = settings?.storefrontTemplateId ? await pagePath(settings.storefrontTemplateId) : null;
+  const plan = await planFor(templateId, shopPath);
+  if (plan.format === "v2" && !shopPath) plan.links.shopPath = "/";
+  const orderConfirmationTemplateId = existing
+    ? existing.id
+    : await createChildPage({
+        parentId: templateId,
+        rootId: templateId,
+        userId,
+        organizationId,
+        name: "Order Confirmation",
+        slug: "order-confirmation",
+        designJson: designFor("confirmation", plan),
+        designFormat: plan.format,
+      });
+  if (settings) await CommerceSettings.patch({ templateId }).set({ orderConfirmationTemplateId }).go();
+  else await CommerceSettings.create({ id: randomUUID(), templateId, organizationId, orderConfirmationTemplateId }).go();
+}
+
+/** Replaces every string in a JSON value that is exactly `from` with `to` (a link's address). Returns the same object when nothing matched. */
+function replaceExactStrings(value: unknown, from: string, to: string): { value: unknown; changed: boolean } {
+  if (typeof value === "string") return value === from ? { value: to, changed: true } : { value, changed: false };
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((v) => {
+      const r = replaceExactStrings(v, from, to);
+      changed ||= r.changed;
+      return r.value;
+    });
+    return { value: changed ? next : value, changed };
+  }
+  if (value && typeof value === "object") {
+    let changed = false;
+    const next: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      const r = replaceExactStrings(v, from, to);
+      changed ||= r.changed;
+      next[k] = r.value;
+    }
+    return { value: changed ? next : value, changed };
+  }
+  return { value, changed: false };
+}
+
+/**
+ * The new-editor store pages Plexo generated carry the shop's address in their buttons and
+ * menus (Back to the shop, Keep shopping, the header's Shop link). When the owner renames
+ * the shop those would 404, so they follow it. Classic (v1) pages never carried the path, and
+ * a page the owner built themselves is only touched where a link says exactly the old path.
+ */
+async function retargetStoreLinks(
+  templateId: string,
+  settings: { storefrontTemplateId?: string | null; storefrontCheckoutTemplateId?: string | null; orderConfirmationTemplateId?: string | null; trackOrderTemplateId?: string | null; productDetailTemplateId?: string | null },
+  oldPath: string,
+  newPath: string,
+): Promise<void> {
+  const { data: shared } = await SiteLayout.get({ templateId }).go();
+  const ids = [
+    settings.storefrontTemplateId,
+    settings.storefrontCheckoutTemplateId,
+    settings.orderConfirmationTemplateId,
+    settings.trackOrderTemplateId,
+    settings.productDetailTemplateId,
+    shared?.headerTemplateId,
+    shared?.footerTemplateId,
+  ].filter((id): id is string => !!id);
+  let touched = false;
+  for (const id of ids) {
+    const { data: page } = await Template.get({ id }).go();
+    if (!page || designFormatOf(page) !== "v2") continue;
+    const live = replaceExactStrings(page.designJson, oldPath, newPath);
+    const draft = page.draftJson ? replaceExactStrings(page.draftJson, oldPath, newPath) : { value: page.draftJson, changed: false };
+    if (!live.changed && !draft.changed) continue;
+    await Template.patch({ id })
+      .set({ ...(live.changed ? { designJson: live.value as any } : {}), ...(draft.changed ? { draftJson: draft.value as any } : {}) })
+      .go();
+    touched = true;
+  }
+  // Recompile this site's pages (the product page included) so the new links are what visitors get.
+  if (touched) await recompileSiteLayoutDependents(templateId);
 }

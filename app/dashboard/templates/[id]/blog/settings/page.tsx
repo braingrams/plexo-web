@@ -9,9 +9,9 @@ export default async function BlogSettingsPage({ params }: { params: Promise<{ i
 
   const [{ data: site }, { data: categories }, { data: tags }, { data: authors }] = await Promise.all([
     BlogSite.get({ templateId: access.templateId }).go(),
-    BlogCategory.query.primary({ templateId: access.templateId }).go(),
-    BlogTag.query.primary({ templateId: access.templateId }).go(),
-    BlogAuthor.query.primary({ templateId: access.templateId }).go(),
+    BlogCategory.query.primary({ templateId: access.templateId }).go({ pages: "all" }),
+    BlogTag.query.primary({ templateId: access.templateId }).go({ pages: "all" }),
+    BlogAuthor.query.primary({ templateId: access.templateId }).go({ pages: "all" }),
   ]);
   categories.sort((a, b) => a.name.localeCompare(b.name));
   tags.sort((a, b) => a.name.localeCompare(b.name));

@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { TemplateKind } from "@/lib/db/contentEntities";
-import { Sparkles, SearchX, ChevronLeft, ChevronRight, Zap, ShieldCheck, Smartphone } from "lucide-react";
+import { SearchX, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { listMarketplaceTemplates } from "@/lib/marketplace";
 import { LandingNav } from "../landing-nav";
+import { MarketplaceBrowse, MarketplaceResults } from "./MarketplaceBrowse";
 import { MarketplaceFilters } from "./MarketplaceFilters";
 import { MarketplaceRowExpandGrid } from "./MarketplaceRowExpandGrid";
 
@@ -36,67 +37,35 @@ export default async function MarketplacePage({
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  // Category counts map
-  const categoryCounts = templates.reduce((acc, t) => {
-    if (t.category) {
-      acc[t.category] = (acc[t.category] || 0) + 1;
-    }
-    return acc;
-  }, {} as Record<string, number>);
-
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text-main)] selection:bg-[var(--brand)] selection:text-white transition-colors duration-300">
       {/* Top Site Navigation Header */}
       <LandingNav />
 
-      {/* Hero Header Section */}
-      <section className="relative pt-32 pb-14 px-6 overflow-hidden border-b border-[var(--surface-border)]">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[450px] bg-gradient-to-b from-[var(--brand-glow)] via-transparent to-transparent blur-3xl pointer-events-none -z-10" />
-
-        <div className="max-w-6xl mx-auto flex flex-col items-center text-center">
-          {/* Eyebrow Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[var(--surface)] border border-[var(--brand-glow)] text-xs font-semibold text-[var(--brand)] shadow-xl backdrop-blur-md mb-6">
-            <Sparkles className="w-3.5 h-3.5 text-[var(--brand)] animate-pulse" />
-            <span>Plexo Marketplace · Premium Production Templates</span>
-          </div>
-
-          {/* Hero Heading */}
-          <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight max-w-3xl leading-[1.12] mb-6 gradient-text">
-            Discover & Deploy World-Class Templates
-          </h1>
-
-          {/* Subtitle */}
-          <p className="text-base md:text-lg text-[var(--text-muted)] max-w-2xl leading-relaxed mb-8">
-            Curated collection of high-converting landing pages and responsive email designs. Hover over any template to stretch it full-width with a live HTML preview.
+      {/* Short header: say what this is and get out of the way, so the templates are on screen straight away */}
+      <section className="relative pt-28 pb-6 px-6">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-[320px] bg-gradient-to-b from-[var(--brand-glow)] via-transparent to-transparent blur-3xl pointer-events-none -z-10" />
+        <div className="max-w-6xl mx-auto">
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight gradient-text">Start from a template</h1>
+          <p className="mt-2 text-base text-[var(--text-muted)] max-w-2xl leading-relaxed">
+            Pick a design you like and make it yours. It opens in the editor with your own words and photos, ready to publish.
           </p>
-
-          {/* Feature Highlights */}
-          <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-[var(--text-muted)] font-medium">
-            <div className="flex items-center gap-1.5 bg-[var(--surface)] px-3.5 py-1.5 rounded-full border border-[var(--surface-border)]">
-              <Zap className="w-3.5 h-3.5 text-amber-400" /> Instant 1-Click Import
-            </div>
-            <div className="flex items-center gap-1.5 bg-[var(--surface)] px-3.5 py-1.5 rounded-full border border-[var(--surface-border)]">
-              <Smartphone className="w-3.5 h-3.5 text-[var(--brand)]" /> Multi-Device Viewport Preview
-            </div>
-            <div className="flex items-center gap-1.5 bg-[var(--surface)] px-3.5 py-1.5 rounded-full border border-[var(--surface-border)]">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Production & Mobile Ready
-            </div>
-          </div>
         </div>
       </section>
 
       {/* Main Browse Marketplace Container */}
-      <main className="max-w-6xl mx-auto px-6 py-12">
+      <main className="max-w-6xl mx-auto px-6 pt-4 pb-16">
+        <MarketplaceBrowse>
         {/* Filter Controls Panel */}
-        <div className="mb-10">
+        <div className="mb-8">
           <MarketplaceFilters
             categories={categories}
-            categoryCounts={categoryCounts}
             totalCount={total}
             current={{ category: sp.category, kind: sp.kind, free: sp.free, q: sp.q, sort }}
           />
         </div>
 
+        <MarketplaceResults>
         {/* Row-Chunked Expandable Grid */}
         {templates.length > 0 ? (
           <MarketplaceRowExpandGrid templates={templates} />
@@ -106,15 +75,15 @@ export default async function MarketplacePage({
             <div className="w-16 h-16 rounded-2xl bg-[var(--brand-subtle)] border border-[var(--brand-glow)] flex items-center justify-center text-[var(--brand)] mb-4 shadow-xl">
               <SearchX className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-bold text-[var(--text-main)] mb-2">No matching templates found</h3>
+            <h3 className="text-xl font-bold text-[var(--text-main)] mb-2">Nothing matches that yet</h3>
             <p className="text-sm text-[var(--text-muted)] max-w-md mb-6 leading-relaxed">
-              We couldn&apos;t find any templates matching your search criteria or category filters. Try resetting search parameters.
+              Try a shorter search, or clear the filters to see every template.
             </p>
             <Link
               href="/marketplace"
               className="px-5 py-2.5 rounded-xl bg-[var(--brand)] text-xs font-semibold text-white hover:opacity-90 transition-all shadow-lg shadow-[var(--brand-glow)]"
             >
-              Reset All Filters
+              Show all templates
             </Link>
           </div>
         )}
@@ -182,6 +151,8 @@ export default async function MarketplacePage({
             )}
           </div>
         )}
+        </MarketplaceResults>
+        </MarketplaceBrowse>
       </main>
     </div>
   );

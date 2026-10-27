@@ -40,15 +40,15 @@ export default async function EditBlogPostPage({
       access.userId,
       access.userName || access.userEmail,
     ),
-    BlogPost.query.byStatus({ templateId: access.templateId }).go(),
-    BlogCategory.query.primary({ templateId: access.templateId }).go(),
-    BlogTag.query.primary({ templateId: access.templateId }).go(),
-    BlogAuthor.query.primary({ templateId: access.templateId }).go(),
-    PublishedDomain.query.primary({ templateId: access.templateId }).go(),
+    BlogPost.query.byStatus({ templateId: access.templateId }).go({ pages: "all" }),
+    BlogCategory.query.primary({ templateId: access.templateId }).go({ pages: "all" }),
+    BlogTag.query.primary({ templateId: access.templateId }).go({ pages: "all" }),
+    BlogAuthor.query.primary({ templateId: access.templateId }).go({ pages: "all" }),
+    PublishedDomain.query.primary({ templateId: access.templateId }).go({ pages: "all" }),
     BlogPostCategory.query
       .primary({ templateId: access.templateId, postId })
-      .go(),
-    BlogPostTag.query.primary({ templateId: access.templateId, postId }).go(),
+      .go({ pages: "all" }),
+    BlogPostTag.query.primary({ templateId: access.templateId, postId }).go({ pages: "all" }),
     getPublishedBlogPostQuotaStatus(access.templateId, access.subscriptionPlan),
   ]);
   categories.sort((a, b) => a.name.localeCompare(b.name));

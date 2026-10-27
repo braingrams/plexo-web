@@ -45,7 +45,7 @@ export async function POST(
 
   const cost = imageGenerationCredits();
   const balance = await ensureCreditPeriod(resolved.context.userId);
-  if (balance.total < cost) {
+  if (balance.available < cost) {
     return NextResponse.json(
       { error: "Insufficient credits — top up in Settings to generate a featured image." },
       { status: 402 },

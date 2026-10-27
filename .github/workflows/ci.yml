@@ -35,5 +35,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The build Lambda (lambda/project-build) is its own package and TS project, like cdk/;
+      # its dependencies are installed here for its typecheck and the worker's unit tests.
+      - name: Install build Lambda dependencies
+        run: npm ci --prefix lambda/project-build --no-audit --no-fund
+
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: npx tsc --noEmit && npx tsc --noEmit -p lambda/project-build
+
+      - name: Unit tests
+        run: npm test

@@ -35,6 +35,10 @@
   // live: a real site's checkout 404ed under that assumption. Falls back to the old
   // concatenation only if the config predates this (null), never as the normal case.
   var CHECKOUT_PATH = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.checkoutPath) || (STOREFRONT_PATH + "/checkout");
+  // Where product pages live: the store's own product base (a migrated WooCommerce store
+  // keeps /product/<slug>/), else under the storefront page (/store/<slug>) — which is
+  // where the server serves them; links used to hardcode /shop/<slug> and 404ed.
+  var PRODUCT_BASE = (window.__PLEXO_COMMERCE__ && window.__PLEXO_COMMERCE__.productBase) || STOREFRONT_PATH;
   var CART_EVENT = "plexo:cart-updated";
   var CHECKOUT_STATE_EVENT = "plexo:checkout-state-changed";
   // Shared between the checkout page's two independent marker blocks — checkout_flow
@@ -58,6 +62,15 @@
     customerEmail: "",
     customerPhone: "",
     discountCode: "",
+    // "delivery" | "pickup" — which kind of option the customer is choosing between (see
+    // renderCheckoutFlow). Pickup never needs an address typed in.
+    fulfillmentMode: null,
+    // "ONLINE" | "BANK_TRANSFER" — picked in the order summary (renderCartSummary), right
+    // next to the total it applies to. null until checkout-config says what's available.
+    paymentMethod: null,
+    // Answers to the site owner's own checkout questions, keyed by question id —
+    // re-validated server-side (lib/commerce/checkoutFields.ts), never trusted.
+    customFields: {},
   };
 
   // ---------------------------------------------------------------------
@@ -387,11 +400,265 @@
   };
   var OTHER_CITY_VALUE = "__other__";
 
+  // ---------------------------------------------------------------------
+  // Checkout config — payment options, extra questions, delivery/pickup switches
+  // ---------------------------------------------------------------------
+
+  // One fetch per page load, shared by checkout_flow, cart_summary and booking — see
+  // app/api/public/commerce/checkout-config/route.ts. Falls back to "card only, no extra
+  // questions" so an older site (or a hiccup) still gets the checkout it always had.
+  var checkoutConfigPromise = null;
+  function fetchCheckoutConfig() {
+    if (!checkoutConfigPromise) {
+      checkoutConfigPromise = api("/api/public/commerce/checkout-config").catch(function () {
+        return { payment: { online: true, gateway: "paystack", bankTransfer: null }, fields: [], fulfillment: { deliveryEnabled: true, pickupEnabled: true, pickupLocation: null } };
+      });
+    }
+    return checkoutConfigPromise;
+  }
+
+  function defaultPaymentMethod(config) {
+    if (checkoutFormState.paymentMethod === "BANK_TRANSFER" && config.payment.bankTransfer) return "BANK_TRANSFER";
+    if (checkoutFormState.paymentMethod === "ONLINE" && config.payment.online) return "ONLINE";
+    return config.payment.online ? "ONLINE" : config.payment.bankTransfer ? "BANK_TRANSFER" : null;
+  }
+
+  // A selectable bordered card with a radio dot — the same look the delivery options
+  // always had, reused for delivery-vs-pickup and card-vs-bank-transfer choices.
+  function optionCard(opts) {
+    var wrap = el(
+      "div",
+      {
+        role: "radio",
+        "aria-checked": opts.selected ? "true" : "false",
+        tabindex: "0",
+        style: {
+          border: "1.5px solid " + (opts.selected ? "#16233F" : "#E4E1D6"),
+          padding: "14px 16px",
+          cursor: "pointer",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: "12px",
+          flex: "1",
+          minWidth: opts.minWidth || "160px",
+          background: "#FFFFFF",
+        },
+        onclick: opts.onSelect,
+        onkeydown: function (e) {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            opts.onSelect();
+          }
+        },
+      },
+      [
+        el("div", { style: { display: "flex", flexDirection: "column", gap: "4px", minWidth: "0" } }, [
+          el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F" } }, [opts.title]),
+          opts.subtitle ? el("span", { class: "pc-muted", style: { fontSize: "12px", lineHeight: "1.5" } }, [opts.subtitle]) : null,
+        ]),
+        el("span", {
+          style: { width: "16px", height: "16px", borderRadius: "50%", border: "1.5px solid #16233F", background: opts.selected ? "#16233F" : "transparent", flexShrink: "0", marginTop: "2px" },
+        }),
+      ]
+    );
+    return wrap;
+  }
+
+  // A question with `countries` is only asked when the order ships to one of them (mirrors
+  // isCheckoutFieldShown in lib/commerce/checkoutFields.ts — the server re-checks). `country`
+  // is null whenever there's no delivery address: pickup, bookings.
+  function isFieldShown(f, country) {
+    if (!f.countries || !f.countries.length) return true;
+    return Boolean(country) && f.countries.indexOf(String(country).toUpperCase()) !== -1;
+  }
+
+  // The cart checkout's current delivery country — only while the customer is actually
+  // choosing delivery, never a leftover from before they switched to pickup.
+  function checkoutDeliveryCountry() {
+    return checkoutFormState.fulfillmentMode === "delivery" ? checkoutFormState.shippingCountry || null : null;
+  }
+
+  // The site owner's own checkout questions (Settings → Checkout). `values` is the object
+  // answers are written into — checkoutFormState.customFields for the cart checkout, a
+  // local object for a booking. `getCountry` (optional) returns the current delivery country;
+  // call the returned node's refresh() whenever it may have changed, so country-limited
+  // questions appear/disappear in place without losing anything already typed.
+  function customFieldsSection(fields, values, heading, getCountry) {
+    if (!fields || !fields.length) return null;
+    var rows = fields.map(function (f) {
+      var label = f.label + (f.required ? " *" : "");
+      var common = {
+        class: f.type === "select" ? "pc-select" : "pc-input",
+        style: f.type === "select" ? { width: "100%" } : null,
+        placeholder: f.placeholder || null,
+      };
+      var input;
+      if (f.type === "select") {
+        input = el(
+          "select",
+          Object.assign({}, common, {
+            onchange: function (e) {
+              values[f.id] = e.target.value;
+            },
+          }),
+          [el("option", { value: "" }, ["Select…"])].concat(
+            (f.options || []).map(function (o) {
+              return el("option", { value: o, selected: values[f.id] === o ? "selected" : null }, [o]);
+            })
+          )
+        );
+      } else if (f.type === "textarea") {
+        input = el("textarea", Object.assign({}, common, { rows: "3", oninput: function (e) { values[f.id] = e.target.value; } }));
+        input.value = values[f.id] || "";
+      } else {
+        input = el(
+          "input",
+          Object.assign({}, common, {
+            type: f.type === "date" ? "date" : f.type === "phone" ? "tel" : "text",
+            value: values[f.id] || "",
+            oninput: function (e) {
+              values[f.id] = e.target.value;
+            },
+          })
+        );
+      }
+      return el("div", {}, [el("label", { class: "pc-label" }, [label]), input]);
+    });
+    var section = el("div", {}, [
+      heading ? el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, [heading]) : null,
+      el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, rows),
+    ]);
+    section.refresh = function () {
+      var country = getCountry ? getCountry() : null;
+      var anyShown = false;
+      fields.forEach(function (f, i) {
+        var shown = isFieldShown(f, country);
+        rows[i].style.display = shown ? "" : "none";
+        if (shown) anyShown = true;
+      });
+      section.style.display = anyShown ? "" : "none";
+    };
+    section.refresh();
+    return section;
+  }
+
+  // Client-side mirror of resolveCheckoutFieldAnswers' required check — just for a fast,
+  // friendly message before submitting; the server re-validates everything.
+  function missingRequiredField(fields, values, country) {
+    for (var i = 0; i < (fields || []).length; i++) {
+      var f = fields[i];
+      if (!isFieldShown(f, country)) continue;
+      if (f.required && !String(values[f.id] || "").trim()) return f.label;
+    }
+    return null;
+  }
+
+  // Where to send the money, shown at checkout and again on the order confirmation page.
+  function bankDetailsCard(bank, amountText, referenceText) {
+    function row(label, value, copyable) {
+      var copyBtn = copyable
+        ? el(
+            "button",
+            {
+              type: "button",
+              style: { border: "1px solid #E4E1D6", background: "#fff", fontSize: "11px", padding: "3px 8px", cursor: "pointer", color: "#16233F" },
+              onclick: function () {
+                try {
+                  navigator.clipboard.writeText(value);
+                  copyBtn.textContent = "Copied";
+                  setTimeout(function () { copyBtn.textContent = "Copy"; }, 1500);
+                } catch (e) {}
+              },
+            },
+            ["Copy"]
+          )
+        : null;
+      return el("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", fontSize: "13px", padding: "4px 0" } }, [
+        el("span", { class: "pc-muted" }, [label]),
+        el("span", { style: { display: "flex", alignItems: "center", gap: "8px", fontWeight: "600", color: "#16233F", textAlign: "right", wordBreak: "break-word" } }, [value, copyBtn]),
+      ]);
+    }
+    return el("div", { style: { background: "#F3F1EA", border: "1px solid #E4E1D6", padding: "14px 16px", display: "flex", flexDirection: "column", gap: "2px" } }, [
+      row("Pay via", bank.bankName),
+      row("Account name", bank.accountName),
+      row("Account number", bank.accountNumber, true),
+      amountText ? row("Amount", amountText) : null,
+      referenceText ? row("Reference", referenceText) : null,
+      bank.instructions ? el("p", { class: "pc-muted", style: { margin: "8px 0 0", fontSize: "12px", lineHeight: "1.5" } }, [bank.instructions]) : null,
+    ]);
+  }
+
+  // Card vs. bank transfer choice + (for bank transfer) the details to pay into. Returns
+  // null when there's only one way to pay AND it's the card gateway — the checkout then
+  // looks exactly like it always did.
+  function paymentChoiceSection(config, amountText, onChange) {
+    var hasOnline = config.payment.online;
+    var bank = config.payment.bankTransfer;
+    if (!bank) return null;
+    var children = [el("span", { class: "pc-label", style: { marginBottom: "0" } }, ["Payment"])];
+    if (hasOnline) {
+      children.push(
+        el("div", { role: "radiogroup", style: { display: "flex", gap: "10px", flexWrap: "wrap" } }, [
+          optionCard({
+            title: "Pay online",
+            subtitle: "Card, via " + (config.payment.gateway === "stripe" ? "Stripe" : "Paystack"),
+            selected: checkoutFormState.paymentMethod === "ONLINE",
+            minWidth: "130px",
+            onSelect: function () { onChange("ONLINE"); },
+          }),
+          optionCard({
+            title: "Bank transfer",
+            subtitle: "Pay directly into our account",
+            selected: checkoutFormState.paymentMethod === "BANK_TRANSFER",
+            minWidth: "130px",
+            onSelect: function () { onChange("BANK_TRANSFER"); },
+          }),
+        ])
+      );
+    }
+    if (checkoutFormState.paymentMethod === "BANK_TRANSFER") {
+      children.push(
+        el("p", { class: "pc-muted", style: { margin: "0", fontSize: "12.5px", lineHeight: "1.55" } }, [
+          "Transfer the total to the account below, then place your order. We'll email your order number — your order is confirmed as soon as the store sees your payment.",
+        ])
+      );
+      children.push(bankDetailsCard(bank, amountText, "Your full name"));
+    }
+    return el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, children);
+  }
+
   function stockBadge(stockQuantity) {
     if (stockQuantity === null || stockQuantity === undefined) return el("span", { class: "pc-badge pc-badge-ok" }, ["In Stock"]);
     if (stockQuantity <= 0) return el("span", { class: "pc-badge pc-badge-out" }, ["Out of Stock"]);
     if (stockQuantity <= 5) return el("span", { class: "pc-badge pc-badge-low" }, ["Low Stock"]);
     return el("span", { class: "pc-badge pc-badge-ok" }, ["In Stock"]);
+  }
+
+  // ── Products with options (Size, Colour…) ─────────────────────────────
+  // A product with variants is bought as one specific variant, chosen on its own page —
+  // so from a card or product block its button reads "Choose options" and opens that page
+  // (lib/commerce/variants.ts). `__variantId` is set by the product page's pickers.
+  function needsOptions(p) {
+    return !!(p && p.hasVariants && !p.__variantId);
+  }
+  function productHref(p) {
+    return PRODUCT_BASE.replace(/\/+$/, "") + "/" + encodeURIComponent(p.slug || p.id);
+  }
+  function cartLabel(p, text) {
+    if (p.stockQuantity === 0) return "Out of Stock";
+    if (needsOptions(p)) return "Choose options";
+    return text;
+  }
+  // "From ₦5,000" when options are priced differently; the "was" price struck through on sale.
+  function priceChildren(p) {
+    var parts = [];
+    if (p.compareAtPriceMinor && p.compareAtPriceMinor > p.priceMinor) {
+      parts.push(el("s", { style: { opacity: "0.55", marginRight: "8px", fontWeight: "400" } }, [money(p.compareAtPriceMinor, p.currency)]));
+    }
+    var ranged = p.priceRange && p.priceRange.maxMinor > p.priceRange.minMinor && !p.__variantId;
+    parts.push((ranged ? "From " : "") + money(p.priceMinor, p.currency));
+    return parts;
   }
 
   function broadcastCart(snapshot) {
@@ -410,7 +677,14 @@
   // already has the full product object in scope at their call site.
   function addToCart(product, quantity) {
     var qty = quantity || 1;
-    return api("/api/public/commerce/cart/items", { method: "POST", body: JSON.stringify({ productId: product.id, quantity: qty }) }).then(function (snapshot) {
+    if (needsOptions(product)) {
+      // Never guess a size — let the shopper choose on the product page.
+      window.location.href = productHref(product);
+      return new Promise(function () {});
+    }
+    var body = { productId: product.id, quantity: qty };
+    if (product.__variantId) body.variantId = product.__variantId;
+    return api("/api/public/commerce/cart/items", { method: "POST", body: JSON.stringify(body) }).then(function (snapshot) {
       broadcastCart(snapshot);
       showAddedToCartFlyout(product, qty);
       return snapshot;
@@ -634,12 +908,12 @@
                       });
                   },
                 },
-                [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart — " + money(p.priceMinor, p.currency)]
+                [cartLabel(p, "Add to Cart — " + money(p.priceMinor, p.currency))]
               )),
             ])
           );
           getCartProductIds().then(function (ids) {
-            if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+            if (ids[p.id] && p.stockQuantity !== 0 && !p.hasVariants) addBtn.textContent = "Added ✓";
           });
           return;
         }
@@ -661,7 +935,7 @@
               media,
               el("div", { style: { padding: "20px", display: "flex", flexDirection: "column", gap: "8px" } }, [
                 el("span", { style: { fontSize: "14.5px", fontWeight: "600", color: "#FBFAF6" } }, [p.name]),
-                el("span", { class: "pc-mono", style: { fontSize: "13px", color: "#E3B23C" } }, [money(p.priceMinor, p.currency)]),
+                el("span", { class: "pc-mono", style: { fontSize: "13px", color: "#E3B23C" } }, priceChildren(p)),
                 (addBtn = el(
                   "button",
                   {
@@ -683,7 +957,7 @@
                         });
                     },
                   },
-                  [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart"]
+                  [cartLabel(p, "Add to Cart")]
                 )),
               ]),
             ]
@@ -695,7 +969,7 @@
                   stockBadge(p.stockQuantity),
                 ]),
                 p.description ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13.5px", lineHeight: "1.55" } }, [p.description]) : null,
-                el("div", { class: "pc-mono", style: { fontSize: "16px", color: "#16233F" } }, [money(p.priceMinor, p.currency)]),
+                el("div", { class: "pc-mono", style: { fontSize: "16px", color: "#16233F" } }, priceChildren(p)),
                 el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
                   buildQtyRow(),
                   (addBtn = el(
@@ -718,7 +992,7 @@
                           });
                       },
                     },
-                    ["Add to Cart"]
+                    [cartLabel(p, "Add to Cart")]
                   )),
                 ]),
               ]),
@@ -727,7 +1001,7 @@
           el("div", { style: Object.assign({ height: "100%", overflow: "hidden" }, teaser ? { background: "#1E2F52", border: "1px solid rgba(227,178,60,0.16)" } : { background: "#fff", border: "1px solid #E4E1D6" }) }, body)
         );
         getCartProductIds().then(function (ids) {
-          if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+          if (ids[p.id] && p.stockQuantity !== 0 && !p.hasVariants) addBtn.textContent = "Added ✓";
         });
       })
       .catch(function (err) {
@@ -754,12 +1028,46 @@
         var qty = 1;
         var qtyLabel, addBtn;
 
+        // Options (Size, Colour…): the shopper picks one value per option; the matching
+        // variant decides the price, sale price, stock and photo shown, and what's added.
+        var hasOptions = !!(p.hasVariants && p.options && p.options.length && p.variants && p.variants.length);
+        var selected = {};
+        if (hasOptions) {
+          var startVariant = p.variants.filter(function (v) { return v.stockQuantity === null || v.stockQuantity > 0; })[0] || p.variants[0];
+          p.options.forEach(function (o) { selected[o.name] = startVariant.options[o.name]; });
+        }
+        function variantFor(choice) {
+          return p.variants.filter(function (v) {
+            return p.options.every(function (o) { return v.options[o.name] === choice[o.name]; });
+          })[0] || null;
+        }
+        function chosen() {
+          if (!hasOptions) return p;
+          var v = variantFor(selected);
+          if (!v) return Object.assign({}, p, { __variantId: null, stockQuantity: 0, hasVariants: true });
+          var label = p.options.map(function (o) { return o.name + ": " + selected[o.name]; }).join(" / ");
+          return Object.assign({}, p, {
+            __variantId: v.id,
+            name: p.name + " — " + label,
+            priceMinor: v.priceMinor,
+            compareAtPriceMinor: v.compareAtPriceMinor,
+            stockQuantity: v.stockQuantity,
+            imageUrl: v.imageUrl || p.imageUrl,
+          });
+        }
+        function buyText(view) {
+          if (hasOptions && !view.__variantId) return "Not available";
+          if (view.stockQuantity === 0) return "Out of Stock";
+          return "Add to Cart — " + money(view.priceMinor * qty, view.currency);
+        }
+
         clear(node);
         prepareNode(node);
         node.style.padding = "0";
 
+        var mediaImg = null;
         var media = p.imageUrl
-          ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } })
+          ? (mediaImg = el("img", { src: chosen().imageUrl || p.imageUrl, alt: p.name, style: { width: "100%", height: "100%", objectFit: "cover", display: "block" } }))
           : el("div", { style: { width: "100%", height: "100%", background: "linear-gradient(155deg,#1F3B2A,#2E7D52)", display: "flex", alignItems: "center", justifyContent: "center", padding: "40px", textAlign: "center" } }, [
               el("span", { class: "pc-serif", style: { fontSize: "20px", color: "#D7F0DF" } }, [p.name]),
             ]);
@@ -800,68 +1108,152 @@
           ]);
         }
 
+        // One row of value buttons per option; a value that can't be bought with the
+        // other current choices is faded (still clickable, so the shopper sees why).
+        var priceEl, badgeEl;
+        var pickers = null;
+        var valueButtons = [];
+        function refresh() {
+          var view = chosen();
+          clear(priceEl);
+          priceChildren(view).forEach(function (c) { priceEl.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+          var badge = stockBadge(view.stockQuantity);
+          badgeEl.replaceWith(badge);
+          badgeEl = badge;
+          if (mediaImg && view.imageUrl) mediaImg.src = view.imageUrl;
+          if (addBtn) {
+            addBtn.textContent = buyText(view);
+            addBtn.disabled = (hasOptions && !view.__variantId) || view.stockQuantity === 0;
+          }
+          valueButtons.forEach(function (b) {
+            var isOn = selected[b.option] === b.value;
+            var trial = Object.assign({}, selected);
+            trial[b.option] = b.value;
+            var v = variantFor(trial);
+            var buyable = !!v && (v.stockQuantity === null || v.stockQuantity > 0);
+            b.node.style.borderColor = isOn ? "#16233F" : "#E4E1D6";
+            b.node.style.background = isOn ? "#16233F" : "#fff";
+            b.node.style.color = isOn ? "#fff" : "#16233F";
+            b.node.style.opacity = buyable ? "1" : "0.45";
+            b.node.style.textDecoration = buyable ? "none" : "line-through";
+            b.node.setAttribute("aria-pressed", isOn ? "true" : "false");
+          });
+        }
+        if (hasOptions) {
+          pickers = el(
+            "div",
+            { style: { display: "flex", flexDirection: "column", gap: "14px" } },
+            p.options.map(function (o) {
+              return el("div", { style: { display: "flex", flexDirection: "column", gap: "8px" } }, [
+                el("span", { class: "pc-mono", style: { fontSize: "11.5px", letterSpacing: "0.12em", textTransform: "uppercase", color: "#565F72" } }, [o.name]),
+                el(
+                  "div",
+                  { style: { display: "flex", flexWrap: "wrap", gap: "8px" } },
+                  o.values.map(function (value) {
+                    var b = el(
+                      "button",
+                      {
+                        type: "button",
+                        class: "pc-btn-outline",
+                        style: { padding: "9px 16px", fontSize: "13.5px", border: "1px solid #E4E1D6", cursor: "pointer" },
+                        onclick: function () {
+                          selected[o.name] = value;
+                          refresh();
+                        },
+                      },
+                      [value]
+                    );
+                    valueButtons.push({ option: o.name, value: value, node: b });
+                    return b;
+                  })
+                ),
+              ]);
+            })
+          );
+        }
+
         var buyControl =
           p.kind === "SERVICE"
             ? el("a", { class: "pc-btn pc-btn-gold", href: "#", style: { width: "fit-content" }, onclick: function (e) { e.preventDefault(); var target = document.querySelector('[data-plexo-commerce-booking][data-plexo-service-id="' + p.id + '"]'); if (target) target.scrollIntoView({ behavior: "smooth", block: "center" }); } }, ["Book this service"])
             : el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } }, [
                 buildQtyRow(),
+                pickers,
                 (addBtn = el(
                   "button",
                   {
                     class: "pc-btn",
                     style: { width: "fit-content", padding: "17px 26px", fontSize: "15px" },
-                    disabled: p.stockQuantity === 0 ? "disabled" : null,
+                    disabled: chosen().stockQuantity === 0 ? "disabled" : null,
                     onclick: function () {
+                      var view = chosen();
                       addBtn.disabled = true;
                       addBtn.textContent = "Adding…";
-                      addToCart(p, qty)
+                      addToCart(view, qty)
                         .then(function () {
                           addBtn.textContent = "Added ✓";
                           addBtn.disabled = false;
                         })
                         .catch(function (err) {
-                          addBtn.textContent = "Add to Cart — " + money(p.priceMinor * qty, p.currency);
+                          addBtn.textContent = buyText(chosen());
                           addBtn.disabled = false;
                           alert(err.message);
                         });
                     },
                   },
-                  [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart — " + money(p.priceMinor, p.currency)]
+                  [buyText(chosen())]
                 )),
               ]);
 
-        var deliveryRow = el("div", { style: { display: "flex", gap: "28px", paddingTop: "8px", borderTop: "1px solid #E4E1D6", marginTop: "4px", flexWrap: "wrap" } }, [
-          el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
-            el("span", { html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 21h18M5 21V9l7-6 7 6v12M9 21v-6h6v6"></path></svg>' }),
+        // Reflects the store's real delivery/pickup switches (checkout-config), filled in
+        // once that answers — instead of always promising both regardless of whether the
+        // owner actually offers them.
+        var deliveryRow = el("div", { style: { display: "flex", gap: "28px", paddingTop: "8px", borderTop: "1px solid #E4E1D6", marginTop: "4px", flexWrap: "wrap" } });
+        function fulfillmentBadge(iconHtml, title, subtitle) {
+          return el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
+            el("span", { html: iconHtml }),
             el("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } }, [
-              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, ["Pickup available"]),
-              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, ["Choose your delivery method at checkout"]),
+              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, [title]),
+              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, [subtitle]),
             ]),
-          ]),
-          el("div", { style: { display: "flex", gap: "10px", alignItems: "flex-start", paddingTop: "20px" } }, [
-            el("span", { html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"></path><circle cx="7" cy="19" r="1.6"></circle><circle cx="17.5" cy="19" r="1.6"></circle></svg>' }),
-            el("div", { style: { display: "flex", flexDirection: "column", gap: "2px" } }, [
-              el("span", { style: { fontSize: "13px", fontWeight: "600", color: "#16233F" } }, ["Courier delivery"]),
-              el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, ["Fee calculated at checkout"]),
-            ]),
-          ]),
-        ]);
+          ]);
+        }
+        if (p.kind === "PHYSICAL") {
+          fetchCheckoutConfig().then(function (cfg) {
+            var f = cfg.fulfillment || {};
+            if (f.pickupEnabled !== false) {
+              deliveryRow.appendChild(
+                fulfillmentBadge(
+                  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 21h18M5 21V9l7-6 7 6v12M9 21v-6h6v6"></path></svg>',
+                  "Free store pickup",
+                  f.pickupLocation ? f.pickupLocation : "Choose pickup at checkout"
+                )
+              );
+            }
+            if (f.deliveryEnabled !== false) {
+              deliveryRow.appendChild(
+                fulfillmentBadge(
+                  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#565F72" stroke-width="1.6"><path d="M3 7h11v10H3zM14 10h4l3 3v4h-7z"></path><circle cx="7" cy="19" r="1.6"></circle><circle cx="17.5" cy="19" r="1.6"></circle></svg>',
+                  "Delivery",
+                  "Fee calculated at checkout"
+                )
+              );
+            }
+            if (!deliveryRow.childNodes.length) deliveryRow.style.display = "none";
+          });
+        } else {
+          deliveryRow.style.display = "none";
+        }
 
         var infoCol = el("div", { style: { flex: "1 1 380px", minWidth: "280px", display: "flex", flexDirection: "column", gap: "24px" } }, [
           el("div", { style: { display: "flex", flexDirection: "column", gap: "12px" } }, [
             el("span", { class: "pc-mono", style: { fontSize: "11.5px", letterSpacing: "0.16em", textTransform: "uppercase", color: "#2E7D52" } }, [p.category ? p.category.name : "Shop"]),
             el("h1", { class: "pc-serif", style: { margin: "0", fontWeight: "500", fontSize: "38px", color: "#16233F" } }, [p.name]),
             el("div", { style: { display: "flex", alignItems: "center", gap: "14px" } }, [
-              el("span", { class: "pc-mono", style: { fontSize: "22px", color: "#16233F" } }, [money(p.priceMinor, p.currency)]),
-              stockBadge(p.stockQuantity),
+              (priceEl = el("span", { class: "pc-mono", style: { fontSize: "22px", color: "#16233F" } }, priceChildren(chosen()))),
+              (badgeEl = stockBadge(chosen().stockQuantity)),
             ]),
           ]),
           p.description ? el("p", { style: { margin: "0", fontSize: "15.5px", lineHeight: "1.75", color: "#3C4356" } }, [p.description]) : null,
-          el("div", { style: { background: "#F3F1EA", borderLeft: "3px solid #E3B23C", padding: "16px 20px" } }, [
-            el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13px", lineHeight: "1.6" } }, [
-              "Natural food and wellness item, not a replacement for prescribed medical treatment. Always tell your doctor about any herbal products you're using.",
-            ]),
-          ]),
           buyControl,
           deliveryRow,
         ]);
@@ -874,10 +1266,43 @@
           ]),
         ]);
         node.appendChild(heroWrap);
+        if (hasOptions) refresh();
         if (addBtn) {
           getCartProductIds().then(function (ids) {
-            if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+            if (ids[p.id] && p.stockQuantity !== 0 && !p.hasVariants) addBtn.textContent = "Added ✓";
           });
+        }
+
+        // Approved customer reviews (e.g. carried over from a WooCommerce store).
+        var reviews = data.reviews;
+        if (reviews && reviews.count > 0) {
+          var stars = function (n) {
+            var r = Math.round(n || 0);
+            return "★★★★★".slice(0, r) + "☆☆☆☆☆".slice(0, 5 - r);
+          };
+          node.appendChild(
+            el("div", { style: { maxWidth: "1440px", margin: "0 auto", padding: "8px clamp(20px, 6vw, 56px) 72px", boxSizing: "border-box" } }, [
+              el("h2", { class: "pc-serif", style: { margin: "0 0 8px", fontWeight: "500", fontSize: "26px", color: "#16233F" } }, ["Customer reviews"]),
+              el("div", { style: { display: "flex", alignItems: "center", gap: "10px", marginBottom: "24px" } }, [
+                el("span", { style: { color: "#E3B23C", fontSize: "18px", letterSpacing: "2px" }, "aria-hidden": "true" }, [stars(reviews.average)]),
+                el("span", { class: "pc-muted", style: { fontSize: "14px" } }, [reviews.average + " out of 5 · " + reviews.count + (reviews.count === 1 ? " review" : " reviews")]),
+              ]),
+              el(
+                "div",
+                { style: { display: "flex", flexDirection: "column", gap: "18px" } },
+                reviews.items.map(function (r) {
+                  return el("div", { style: { borderTop: "1px solid #E4E1D6", paddingTop: "16px", display: "flex", flexDirection: "column", gap: "6px" } }, [
+                    el("div", { style: { display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" } }, [
+                      el("span", { style: { fontWeight: "600", fontSize: "14px", color: "#16233F" } }, [r.name]),
+                      el("span", { style: { color: "#E3B23C", letterSpacing: "1px" }, "aria-label": r.rating + " out of 5" }, [stars(r.rating)]),
+                      r.date ? el("span", { class: "pc-muted", style: { fontSize: "12.5px" } }, [new Date(r.date).toLocaleDateString()]) : null,
+                    ]),
+                    r.body ? el("p", { style: { margin: "0", fontSize: "14.5px", lineHeight: "1.7", color: "#3C4356", whiteSpace: "pre-line" } }, [r.body]) : null,
+                  ]);
+                })
+              ),
+            ])
+          );
         }
 
         // Staff-curated only (CommerceProductRelation, set from the product's own admin
@@ -916,10 +1341,27 @@
     if (!serviceId) return;
     showSpinner(node);
 
-    Promise.all([api("/api/public/commerce/products/" + encodeURIComponent(serviceId)), api("/api/public/commerce/availability?productId=" + encodeURIComponent(serviceId))])
+    Promise.all([api("/api/public/commerce/products/" + encodeURIComponent(serviceId)), api("/api/public/commerce/availability?productId=" + encodeURIComponent(serviceId)), fetchCheckoutConfig()])
       .then(function (results) {
         var product = results[0].product;
         var slots = results[1].slots || [];
+        var config = results[2];
+        var answers = {};
+        if (!checkoutFormState.paymentMethod) checkoutFormState.paymentMethod = defaultPaymentMethod(config);
+        var priceText = money(product.priceMinor, product.currency);
+        function confirmLabel() {
+          return checkoutFormState.paymentMethod === "BANK_TRANSFER" ? "I've sent the transfer — Book" : "Confirm & Pay — " + priceText;
+        }
+        var paymentBox = el("div", {});
+        function paintPayment() {
+          clear(paymentBox);
+          var section = paymentChoiceSection(config, priceText, function (method) {
+            checkoutFormState.paymentMethod = method;
+            paintPayment();
+            if (confirmBtn && !confirmBtn.dataset.busy) confirmBtn.textContent = confirmLabel();
+          });
+          if (section) paymentBox.appendChild(section);
+        }
         clear(node);
         prepareNode(node);
 
@@ -1003,7 +1445,14 @@
                 confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
                 return;
               }
+              var missing = missingRequiredField(config.fields, answers, null);
+              if (missing) {
+                errorBox = el("div", { class: "pc-error" }, ['Please answer "' + missing + '".']);
+                confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
+                return;
+              }
               confirmBtn.disabled = true;
+              confirmBtn.dataset.busy = "1";
               confirmBtn.textContent = "Booking…";
               api("/api/public/commerce/checkout", {
                 method: "POST",
@@ -1013,12 +1462,19 @@
                   customerName: nameInput.value || undefined,
                   customerEmail: emailInput.value,
                   customerPhone: phoneInput.value || undefined,
+                  paymentMethod: checkoutFormState.paymentMethod || undefined,
+                  customFields: answers,
                 }),
               })
                 .then(function (result) {
+                  if (result.redirectUrl) {
+                    window.location.href = result.redirectUrl;
+                    return;
+                  }
                   if (result.checkout && result.checkout.provider === "stripe") {
                     confirmBtn.disabled = false;
-                    confirmBtn.textContent = "Confirm & Pay — " + money(product.priceMinor, product.currency);
+                    delete confirmBtn.dataset.busy;
+                    confirmBtn.textContent = confirmLabel();
                     openStripeEmbeddedCheckout(result.checkout, function (err) {
                       errorBox = el("div", { class: "pc-error" }, [err.message]);
                       confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
@@ -1029,14 +1485,16 @@
                 })
                 .catch(function (err) {
                   confirmBtn.disabled = false;
-                  confirmBtn.textContent = "Confirm & Pay — " + money(product.priceMinor, product.currency);
+                  delete confirmBtn.dataset.busy;
+                  confirmBtn.textContent = confirmLabel();
                   errorBox = el("div", { class: "pc-error" }, [err.message]);
                   confirmBtn.parentNode.insertBefore(errorBox, confirmBtn);
                 });
             },
           },
-          ["Confirm & Pay — " + money(product.priceMinor, product.currency)]
+          [confirmLabel()]
         );
+        paintPayment();
 
         node.appendChild(
           el("div", { class: "pc-card", style: { padding: "24px", display: "flex", flexDirection: "column", gap: "20px" } }, [
@@ -1049,6 +1507,8 @@
             nameField.wrap,
             emailField.wrap,
             phoneField.wrap,
+            customFieldsSection(config.fields, answers, null),
+            paymentBox,
             confirmBtn,
           ])
         );
@@ -1071,7 +1531,7 @@
     var addBtn;
     var textColor = dark ? "#FBFAF6" : "#16233F";
     var priceColor = dark ? "#E3B23C" : "#16233F";
-    var href = "/shop/" + encodeURIComponent(p.slug || p.id);
+    var href = productHref(p);
     var media = p.imageUrl
       ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", height: "160px", objectFit: "cover", display: "block" } })
       : el("div", { style: { width: "100%", height: "160px", background: dark ? "linear-gradient(155deg,#1F3B2A,#2E7D52)" : "#F3F1EA", display: "flex", alignItems: "center", justifyContent: "center", color: dark ? "#D7F0DF" : "#8A93A6", fontSize: "13px" } }, [p.name]);
@@ -1090,7 +1550,7 @@
         ]),
       ]),
       el("div", { style: { padding: "8px 14px 14px", display: "flex", flexDirection: "column", gap: "8px", flex: "1" } }, [
-        el("div", { class: "pc-mono", style: { fontSize: "14.5px", fontWeight: dark ? "500" : "700", color: priceColor, marginTop: "auto" } }, [money(p.priceMinor, p.currency)]),
+        el("div", { class: "pc-mono", style: { fontSize: "14.5px", fontWeight: dark ? "500" : "700", color: priceColor, marginTop: "auto" } }, priceChildren(p)),
         (addBtn = el(
           "button",
           {
@@ -1112,12 +1572,12 @@
                 });
             },
           },
-          [p.stockQuantity === 0 ? "Out of Stock" : "Add to Cart"]
+          [cartLabel(p, "Add to Cart")]
         )),
       ]),
     ]);
     getCartProductIds().then(function (ids) {
-      if (ids[p.id] && p.stockQuantity !== 0) addBtn.textContent = "Added ✓";
+      if (ids[p.id] && p.stockQuantity !== 0 && !p.hasVariants) addBtn.textContent = "Added ✓";
     });
     return card;
   }
@@ -1170,7 +1630,9 @@
         });
         var catalogEmpty = allProducts.length === 0;
         var categories = data.categories || [];
-        var activeCategory = null;
+        // ?category=<slug> opens the shop already filtered (e.g. an old category link).
+        var requestedCategory = new URLSearchParams(window.location.search).get("category");
+        var activeCategory = requestedCategory && categories.some(function (c) { return c.slug === requestedCategory; }) ? requestedCategory : null;
         var searchTerm = "";
         var stockFilter = "all";
         var page = 1;
@@ -1465,6 +1927,7 @@
   // since the delivery method and contact fields live in the OTHER marker's DOM.
   function renderCartSummary(node) {
     var latestSnapshot = null;
+    var config = null;
     // Lives at this scope (not inside paint()) deliberately — updateItem/removeItem call
     // paint() synchronously to show a row disabled mid-request, and paint() rebuilds its
     // whole subtree (including re-declaring updateItem/removeItem as closures) on every
@@ -1601,6 +2064,16 @@
       var payBtn;
       var errorBox = null;
 
+      if (config && !checkoutFormState.paymentMethod) checkoutFormState.paymentMethod = defaultPaymentMethod(config);
+      var isBankTransfer = checkoutFormState.paymentMethod === "BANK_TRANSFER";
+      var payLabel = isBankTransfer ? "I've sent the transfer — Place order" : "Continue to Payment →";
+      var paymentSection = config
+        ? paymentChoiceSection(config, money(total, snapshot.currency), function (method) {
+            checkoutFormState.paymentMethod = method;
+            paint(latestSnapshot);
+          })
+        : null;
+
       payBtn = el(
         "button",
         {
@@ -1617,12 +2090,23 @@
               return;
             }
             if (needsDelivery(snapshot) && !checkoutFormState.deliveryMethodId) {
-              errorBox = el("div", { class: "pc-error" }, ["Please choose a delivery method."]);
+              errorBox = el("div", { class: "pc-error" }, [checkoutFormState.fulfillmentMode === "pickup" ? "Please choose a pickup option." : "Please choose how you'd like to get your order."]);
+              payBtn.parentNode.insertBefore(errorBox, payBtn);
+              return;
+            }
+            var missing = config ? missingRequiredField(config.fields, checkoutFormState.customFields, checkoutDeliveryCountry()) : null;
+            if (missing) {
+              errorBox = el("div", { class: "pc-error" }, ['Please answer "' + missing + '".']);
+              payBtn.parentNode.insertBefore(errorBox, payBtn);
+              return;
+            }
+            if (config && !checkoutFormState.paymentMethod) {
+              errorBox = el("div", { class: "pc-error" }, ["This store isn't accepting payments yet — please check back soon."]);
               payBtn.parentNode.insertBefore(errorBox, payBtn);
               return;
             }
             payBtn.disabled = true;
-            payBtn.textContent = "Starting payment…";
+            payBtn.textContent = isBankTransfer ? "Placing order…" : "Starting payment…";
             api("/api/public/commerce/checkout/cart", {
               method: "POST",
               body: JSON.stringify({
@@ -1638,12 +2122,18 @@
                 shippingAddressLine:
                   [checkoutFormState.shippingAddressLine, checkoutFormState.shippingCity].filter(Boolean).join(", ") || undefined,
                 discountCode: checkoutFormState.discountCode || undefined,
+                paymentMethod: checkoutFormState.paymentMethod || undefined,
+                customFields: checkoutFormState.customFields,
               }),
             })
               .then(function (result) {
+                if (result.redirectUrl) {
+                  window.location.href = result.redirectUrl;
+                  return;
+                }
                 if (result.checkout && result.checkout.provider === "stripe") {
                   payBtn.disabled = false;
-                  payBtn.textContent = "Continue to Payment →";
+                  payBtn.textContent = payLabel;
                   openStripeEmbeddedCheckout(result.checkout, function (err) {
                     errorBox = el("div", { class: "pc-error" }, [err.message]);
                     payBtn.parentNode.insertBefore(errorBox, payBtn);
@@ -1654,13 +2144,13 @@
               })
               .catch(function (err) {
                 payBtn.disabled = false;
-                payBtn.textContent = "Continue to Payment →";
+                payBtn.textContent = payLabel;
                 errorBox = el("div", { class: "pc-error" }, [err.message]);
                 payBtn.parentNode.insertBefore(errorBox, payBtn);
               });
           },
         },
-        ["Continue to Payment →"]
+        [payLabel]
       );
 
       node.appendChild(
@@ -1672,7 +2162,7 @@
             { style: { display: "flex", flexDirection: "column", gap: "8px", paddingTop: "16px", borderTop: "1px solid #E4E1D6" } },
             [totalsRow("Subtotal", money(snapshot.subtotalMinor, snapshot.currency))].concat(
               needsDelivery(snapshot)
-                ? [totalsRow("Delivery", checkoutFormState.deliveryFeeMinor > 0 ? money(checkoutFormState.deliveryFeeMinor, snapshot.currency) : "Free", checkoutFormState.deliveryFeeMinor === 0)]
+                ? [totalsRow(checkoutFormState.fulfillmentMode === "pickup" ? "Pickup" : "Delivery", checkoutFormState.deliveryFeeMinor > 0 ? money(checkoutFormState.deliveryFeeMinor, snapshot.currency) : "Free", checkoutFormState.deliveryFeeMinor === 0)]
                 : []
             )
           ),
@@ -1680,16 +2170,24 @@
             el("span", {}, ["Total"]),
             el("span", {}, [money(total, snapshot.currency)]),
           ]),
+          paymentSection,
           payBtn,
-          el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, ["Secured by " + (snapshot.paymentGateway === "stripe" ? "Stripe" : "Paystack")]),
+          el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, [
+            isBankTransfer ? "Direct bank transfer · confirmed by the store once received" : "Secured by " + (snapshot.paymentGateway === "stripe" ? "Stripe" : "Paystack"),
+          ]),
         ])
       );
     }
 
     showSpinner(node);
-    fetchCart().then(paint).catch(function (err) {
-      showError(node, err.message);
-    });
+    Promise.all([fetchCart(), fetchCheckoutConfig()])
+      .then(function (results) {
+        config = results[1];
+        paint(results[0]);
+      })
+      .catch(function (err) {
+        showError(node, err.message);
+      });
     document.addEventListener(CART_EVENT, function (e) {
       paint(e.detail);
     });
@@ -1711,8 +2209,10 @@
   // on delivery-method changes so the sidebar's total stays in sync.
   function renderCheckoutFlow(node) {
     showSpinner(node);
-    fetchCart()
-      .then(function (cart) {
+    Promise.all([fetchCart(), fetchCheckoutConfig()])
+      .then(function (results) {
+        var cart = results[0];
+        var config = results[1];
         clear(node);
         prepareNode(node);
 
@@ -1725,104 +2225,161 @@
           return i.kind === "PHYSICAL";
         });
 
-        function deliveryOption(method) {
-          var dot;
-          var selected = method.id === checkoutFormState.deliveryMethodId;
-          var feeText = (method.feeMinor > 0 ? money(method.feeMinor, cart.currency) : "Free") + (method.estimatedTimeLabel ? " · " + method.estimatedTimeLabel : "");
-          var wrap = el(
-            "div",
-            {
-              style: {
-                border: "1.5px solid " + (selected ? "#16233F" : "#E4E1D6"),
-                padding: "16px 18px",
-                cursor: "pointer",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                gap: "12px",
-                flex: "1",
-                minWidth: "180px",
-              },
-              onclick: function () {
-                checkoutFormState.deliveryMethodId = method.id;
-                checkoutFormState.deliveryFeeMinor = method.feeMinor || 0;
-                Array.prototype.forEach.call(deliverySection.querySelectorAll("[data-pc-delivery-option]"), function (o) {
-                  o.style.borderColor = "#E4E1D6";
-                  var d = o.querySelector("[data-pc-delivery-dot]");
-                  if (d) d.style.background = "transparent";
-                });
-                wrap.style.borderColor = "#16233F";
-                dot.style.background = "#16233F";
-                document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
-              },
-              "data-pc-delivery-option": "true",
-            },
-            [
-              el("div", { style: { display: "flex", flexDirection: "column", gap: "4px" } }, [
-                el("span", { style: { fontSize: "13.5px", fontWeight: "600", color: "#16233F" } }, [method.name]),
-                el("span", { class: "pc-muted", style: { fontSize: "12px" } }, [feeText]),
-              ]),
-              (dot = el("span", {
-                "data-pc-delivery-dot": "true",
-                style: { width: "16px", height: "16px", borderRadius: "50%", border: "1.5px solid #16233F", background: selected ? "#16233F" : "transparent", flexShrink: "0" },
-              })),
-            ]
-          );
-          return wrap;
-        }
-
-        // Populated once /api/public/commerce/delivery-methods answers — starts as a
-        // loading placeholder since a real fetch has to happen before anything can be
-        // selected. Re-fetched whenever the country/state inputs change so the option list
-        // only ever shows methods that actually cover the typed address.
-        var deliverySection = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
-          el("p", { class: "pc-muted", style: { fontSize: "13px" } }, ["Loading delivery options…"]),
-        ]);
+        // Delivery vs. pickup. Shipping (COURIER) options depend on the address typed in;
+        // pickup options never do (see resolveAvailableDeliveryMethods) — including the
+        // built-in "Store pickup" every store gets by default — so a pickup customer is
+        // never asked for an address at all.
+        var deliveryAllowed = !config.fulfillment || config.fulfillment.deliveryEnabled !== false;
+        var pickupMethods = [];
+        var modeSection = el("div", {});
+        var fulfillmentBody = el("div", { style: { display: "flex", flexDirection: "column", gap: "14px" } });
+        var deliverySection = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } });
+        var pickupSection = el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } });
+        var addressBlock = null; // built below, once its inputs exist
+        // Says what's actually on offer once pickup options have loaded — "Delivery or
+        // pickup" only when both genuinely exist.
+        var fulfillmentHeading = el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, [deliveryAllowed ? "Delivery" : "Pickup"]);
         var deliveryFetchTimer = null;
 
-        function paintDeliveryOptions(methods) {
-          clear(deliverySection);
-          if (!methods.length) {
-            checkoutFormState.deliveryMethodId = null;
-            checkoutFormState.deliveryFeeMinor = 0;
-            deliverySection.appendChild(
-              el("p", { class: "pc-muted", style: { fontSize: "13px" } }, [
-                "No delivery methods are available for this address yet — try a different country or state, or contact the seller directly.",
-              ])
-            );
-            document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
-            return;
-          }
-          if (checkoutFormState.deliveryMethodId && !methods.some(function (m) { return m.id === checkoutFormState.deliveryMethodId; })) {
-            checkoutFormState.deliveryMethodId = null;
-            checkoutFormState.deliveryFeeMinor = 0;
-          }
-          if (!checkoutFormState.deliveryMethodId && methods.length === 1) {
-            checkoutFormState.deliveryMethodId = methods[0].id;
-            checkoutFormState.deliveryFeeMinor = methods[0].feeMinor || 0;
-          }
-          deliverySection.appendChild(el("div", { style: { display: "flex", gap: "12px", flexWrap: "wrap" } }, methods.map(deliveryOption)));
+        function selectMethod(method) {
+          checkoutFormState.deliveryMethodId = method ? method.id : null;
+          checkoutFormState.deliveryFeeMinor = method ? method.feeMinor || 0 : 0;
           document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
         }
 
-        function loadDeliveryOptions() {
+        function paintOptions(container, methods, emptyText, describe) {
+          clear(container);
+          var stillValid = methods.some(function (m) {
+            return m.id === checkoutFormState.deliveryMethodId;
+          });
+          if (!stillValid && checkoutFormState.deliveryMethodId) selectMethod(null);
+          if (!methods.length) {
+            container.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px", margin: "0" } }, [emptyText]));
+            return;
+          }
+          if (!checkoutFormState.deliveryMethodId && methods.length === 1) selectMethod(methods[0]);
+          container.appendChild(
+            el(
+              "div",
+              { role: "radiogroup", style: { display: "flex", gap: "12px", flexWrap: "wrap" } },
+              methods.map(function (m) {
+                return optionCard({
+                  title: m.name,
+                  subtitle: describe(m),
+                  selected: m.id === checkoutFormState.deliveryMethodId,
+                  minWidth: "180px",
+                  onSelect: function () {
+                    selectMethod(m);
+                    paintOptions(container, methods, emptyText, describe);
+                  },
+                });
+              })
+            )
+          );
+        }
+
+        function feeText(m) {
+          return m.feeMinor > 0 ? money(m.feeMinor, cart.currency) : "Free";
+        }
+        function courierSubtitle(m) {
+          return feeText(m) + (m.estimatedTimeLabel ? " · " + m.estimatedTimeLabel : "");
+        }
+        function pickupSubtitle(m) {
+          return (m.location ? "Pick up at: " + m.location : "The store will send you the pickup address") + " · " + feeText(m);
+        }
+
+        function loadCourierOptions() {
           clear(deliverySection);
-          deliverySection.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px" } }, ["Loading delivery options…"]));
+          deliverySection.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px", margin: "0" } }, ["Loading delivery options…"]));
           var qs = [];
           if (checkoutFormState.shippingCountry) qs.push("country=" + encodeURIComponent(checkoutFormState.shippingCountry));
           if (checkoutFormState.shippingState) qs.push("state=" + encodeURIComponent(checkoutFormState.shippingState));
+          var emptyText = !checkoutFormState.shippingCountry
+            ? "Choose your country to see delivery options."
+            : pickupMethods.length
+              ? "No delivery options cover this address yet — try a different country or state, or choose pickup instead."
+              : "No delivery options cover this address yet — try a different country or state, or contact the seller directly.";
           api("/api/public/commerce/delivery-methods" + (qs.length ? "?" + qs.join("&") : ""))
             .then(function (data) {
-              paintDeliveryOptions(data.methods || []);
+              var courier = (data.methods || []).filter(function (m) {
+                // A country-limited option only makes sense once a country is chosen —
+                // offering it earlier lets a customer pick one the server then rejects.
+                return m.type === "COURIER" && (checkoutFormState.shippingCountry || !(m.countries && m.countries.length));
+              });
+              paintOptions(deliverySection, courier, emptyText, courierSubtitle);
             })
             .catch(function () {
-              paintDeliveryOptions([]);
+              paintOptions(deliverySection, [], emptyText, courierSubtitle);
             });
         }
 
         function scheduleDeliveryReload() {
+          if (checkoutFormState.fulfillmentMode !== "delivery") return;
           if (deliveryFetchTimer) clearTimeout(deliveryFetchTimer);
-          deliveryFetchTimer = setTimeout(loadDeliveryOptions, 350);
+          deliveryFetchTimer = setTimeout(loadCourierOptions, 350);
+        }
+
+        function setMode(mode) {
+          if (mode !== checkoutFormState.fulfillmentMode) {
+            checkoutFormState.fulfillmentMode = mode;
+            selectMethod(null);
+          }
+          paintMode();
+        }
+
+        function paintMode() {
+          clear(modeSection);
+          clear(fulfillmentBody);
+          var hasPickup = pickupMethods.length > 0;
+          if (!deliveryAllowed && !hasPickup) {
+            checkoutFormState.fulfillmentMode = null;
+            fulfillmentBody.appendChild(
+              el("p", { class: "pc-muted", style: { fontSize: "13px", margin: "0" } }, [
+                "This store isn't offering delivery or pickup right now — please contact the seller to arrange your order.",
+              ])
+            );
+            return;
+          }
+          fulfillmentHeading.textContent = deliveryAllowed && hasPickup ? "Delivery or pickup" : deliveryAllowed ? "Delivery" : "Pickup";
+          if (deliveryAllowed && hasPickup) {
+            modeSection.appendChild(
+              el("div", { role: "radiogroup", style: { display: "flex", gap: "12px", flexWrap: "wrap", marginBottom: "16px" } }, [
+                optionCard({ title: "Delivery", subtitle: "Ship it to my address", selected: checkoutFormState.fulfillmentMode === "delivery", onSelect: function () { setMode("delivery"); } }),
+                optionCard({ title: "Pickup", subtitle: "I'll collect it from the store", selected: checkoutFormState.fulfillmentMode === "pickup", onSelect: function () { setMode("pickup"); } }),
+              ])
+            );
+          } else {
+            checkoutFormState.fulfillmentMode = deliveryAllowed ? "delivery" : "pickup";
+          }
+          if (checkoutFormState.fulfillmentMode === "delivery") {
+            fulfillmentBody.appendChild(addressBlock);
+            fulfillmentBody.appendChild(deliverySection);
+            loadCourierOptions();
+          } else if (checkoutFormState.fulfillmentMode === "pickup") {
+            fulfillmentBody.appendChild(pickupSection);
+            paintOptions(pickupSection, pickupMethods, "No pickup options are available right now.", pickupSubtitle);
+            fulfillmentBody.appendChild(
+              el("p", { class: "pc-muted", style: { fontSize: "12.5px", lineHeight: "1.55", margin: "0" } }, [
+                "Pickup is free. The store will confirm with you when your order is ready to collect.",
+              ])
+            );
+          }
+          document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
+        }
+
+        function loadFulfillmentOptions() {
+          fulfillmentBody.appendChild(el("p", { class: "pc-muted", style: { fontSize: "13px", margin: "0" } }, ["Loading delivery options…"]));
+          api("/api/public/commerce/delivery-methods")
+            .then(function (data) {
+              pickupMethods = (data.methods || []).filter(function (m) {
+                return m.type === "PICKUP";
+              });
+              paintMode();
+            })
+            .catch(function () {
+              pickupMethods = [];
+              paintMode();
+            });
         }
 
         function field(label, type, stateKey) {
@@ -1944,6 +2501,7 @@
                 checkoutFormState.shippingCountry = e.target.value;
                 buildStateField();
                 scheduleDeliveryReload();
+                document.dispatchEvent(new CustomEvent(CHECKOUT_STATE_EVENT));
               },
             },
             [el("option", { value: "" }, ["Select country"])].concat(
@@ -1963,18 +2521,22 @@
             },
           });
 
+          addressBlock = el("div", {}, [
+            el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "14px" } }, [
+              el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["Country"]), countryInput]),
+              el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["State / region"]), stateFieldBox]),
+            ]),
+            el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap" } }, [
+              el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["City"]), cityFieldBox]),
+              el("div", { style: { flex: "2", minWidth: "220px" } }, [el("label", { class: "pc-label" }, ["Street address"]), addressLineInput]),
+            ]),
+          ]);
+
           sections.push(
             el("div", {}, [
-              el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Delivery"]),
-              el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "14px" } }, [
-                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["Country"]), countryInput]),
-                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["State / region"]), stateFieldBox]),
-              ]),
-              el("div", { style: { display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "16px" } }, [
-                el("div", { style: { flex: "1", minWidth: "140px" } }, [el("label", { class: "pc-label" }, ["City"]), cityFieldBox]),
-                el("div", { style: { flex: "2", minWidth: "220px" } }, [el("label", { class: "pc-label" }, ["Street address"]), addressLineInput]),
-              ]),
-              deliverySection,
+              fulfillmentHeading,
+              modeSection,
+              fulfillmentBody,
             ])
           );
         }
@@ -1992,7 +2554,13 @@
           ])
         );
 
-        sections.push(
+        var extraQuestions = customFieldsSection(config.fields, checkoutFormState.customFields, "Additional information", checkoutDeliveryCountry);
+        if (extraQuestions) {
+          sections.push(extraQuestions);
+          document.addEventListener(CHECKOUT_STATE_EVENT, extraQuestions.refresh);
+        }
+
+        if (config.discounts !== false) sections.push(
           el("div", {}, [
             el("h3", { style: { margin: "0 0 14px", fontFamily: "'Fraunces', serif", fontWeight: "600", fontSize: "17px", color: "#16233F" } }, ["Discount code"]),
             el("div", { style: { display: "flex", gap: "10px" } }, [
@@ -2016,7 +2584,7 @@
 
         node.appendChild(el("div", { style: { display: "flex", flexDirection: "column", gap: "30px" } }, sections));
 
-        if (needsDelivery) loadDeliveryOptions();
+        if (needsDelivery) loadFulfillmentOptions();
       })
       .catch(function (err) {
         showError(node, err.message);
@@ -2041,12 +2609,29 @@
         var order = data.order;
         clear(node);
         prepareNode(node);
+        var awaitingTransfer = order.paymentMethod === "BANK_TRANSFER" && order.status === "PENDING";
         node.appendChild(
           el("div", { class: "pc-card", style: { padding: "28px", display: "flex", flexDirection: "column", gap: "18px" } }, [
             el("div", { style: { display: "flex", alignItems: "center", gap: "10px" } }, [
               el("span", { style: { background: "#16233F", color: "#fff", fontSize: "11px", fontWeight: "700", padding: "5px 10px", borderRadius: "3px", letterSpacing: "0.04em" } }, [order.orderNumber]),
-              el("span", { class: "pc-badge " + (order.status === "PAID" ? "pc-badge-ok" : order.status === "PENDING" ? "pc-badge-low" : "pc-badge-out") }, [order.status]),
+              el("span", { class: "pc-badge " + (order.status === "PAID" ? "pc-badge-ok" : order.status === "PENDING" ? "pc-badge-low" : "pc-badge-out") }, [awaitingTransfer ? "Awaiting payment confirmation" : order.status]),
             ]),
+            awaitingTransfer
+              ? el("div", { style: { display: "flex", flexDirection: "column", gap: "10px" } }, [
+                  el("p", { style: { margin: "0", fontSize: "14px", lineHeight: "1.6", color: "#16233F" } }, [
+                    "Thanks — your order is placed. The store will confirm it as soon as your bank transfer arrives, and we'll email you when it does.",
+                  ]),
+                  order.bankTransfer
+                    ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "12.5px" } }, ["Haven't sent it yet? Transfer to:"])
+                    : null,
+                  order.bankTransfer ? bankDetailsCard(order.bankTransfer, money(order.amountMinor, order.currency), order.orderNumber) : null,
+                ])
+              : null,
+            order.pickupLocation
+              ? el("div", { style: { fontSize: "13px", color: "#16233F" } }, [el("strong", {}, ["Pickup at: "]), order.pickupLocation])
+              : order.deliveryMethod === "PICKUP"
+                ? el("div", { class: "pc-muted", style: { fontSize: "13px" } }, ["Pickup — the store will send you pickup details when your order is ready."])
+                : null,
             el(
               "div",
               { style: { display: "flex", flexDirection: "column" } },
@@ -2095,8 +2680,16 @@
         .then(function (data) {
           var order = data.order;
           clear(resultBox);
-          if (order.status !== "PAID") {
-            resultBox.appendChild(el("div", { class: "pc-error", style: { background: "#FBEFD8", borderColor: "#fde68a", color: "#92400e" } }, ["This order hasn't been paid for yet."]));
+          if (order.status === "PENDING" && order.paymentMethod === "BANK_TRANSFER") {
+            resultBox.appendChild(
+              el("div", { class: "pc-error", style: { background: "#FBEFD8", borderColor: "#fde68a", color: "#92400e" } }, [
+                "We're waiting for the store to confirm your bank transfer. You'll get an email as soon as it's confirmed.",
+              ])
+            );
+            return;
+          }
+          if (order.status !== "PAID" && order.status !== "REFUNDED") {
+            resultBox.appendChild(el("div", { class: "pc-error", style: { background: "#FBEFD8", borderColor: "#fde68a", color: "#92400e" } }, [order.status === "CANCELLED" ? "This order was cancelled." : "This order hasn't been paid for yet."]));
             return;
           }
           var isCancelled = order.status === "CANCELLED" || order.status === "REFUNDED";
@@ -2161,6 +2754,274 @@
       .catch(function () {});
   }
 
+  // ---------------------------------------------------------------------
+  // Donations (lib/commerce/donations.ts). Two modes, one payment path:
+  //  - a native donate form, rendered into any [data-plexo-donation="<campaignId>"] block;
+  //  - an existing form (a donation form migrated from WordPress, kept pixel-identical)
+  //    marked <form data-plexo-donation="<campaignId>" data-plexo-donation-adapter>, whose
+  //    own fields are annotated with data-plexo-amount-minor / data-plexo-amount-custom /
+  //    data-plexo-custom-amount / data-plexo-monthly / data-plexo-donor-* — this just
+  //    takes over its submit.
+  // Both finish payment exactly like storefront checkout (embedded Stripe, Paystack
+  // redirect, or bank transfer), and both thank the donor when they come back.
+  // ---------------------------------------------------------------------
+  function donationReturnPath() {
+    var params = new URLSearchParams(location.search);
+    params.delete("plexo_donation");
+    params.delete("order");
+    var q = params.toString();
+    return location.pathname + (q ? "?" + q : "");
+  }
+
+  var donationConfirmSent = false;
+  function isDonationThanks() {
+    var params = new URLSearchParams(location.search);
+    var thanks = params.get("plexo_donation") === "thanks";
+    // Back from checkout: have Plexo confirm the gift with the gateway right away, so it's
+    // recorded (and the receipt sent) even if the site's webhook isn't set up yet.
+    if (thanks && !donationConfirmSent && params.get("order")) {
+      donationConfirmSent = true;
+      api("/api/public/commerce/donations/confirm", { method: "POST", body: JSON.stringify({ order: params.get("order") }) }).catch(function () {});
+    }
+    return thanks;
+  }
+
+  function donationThanksBanner(campaign) {
+    return el("div", { role: "status", style: { padding: "16px 18px", margin: "0 0 18px", borderRadius: "10px", background: "#E4F0E7", color: "#1F5C3C", fontWeight: "600", lineHeight: "1.5" } }, [
+      (campaign && campaign.thankYouMessage) || "Thank you for your gift! A receipt is on its way to your inbox.",
+    ]);
+  }
+
+  function submitDonation(payload, onError, onBusy) {
+    onBusy(true);
+    payload.returnPath = donationReturnPath();
+    return api("/api/public/commerce/donate", { method: "POST", body: JSON.stringify(payload) })
+      .then(function (result) {
+        if (result.checkout && result.checkout.provider === "stripe") {
+          onBusy(false);
+          openStripeEmbeddedCheckout(result.checkout, function (err) {
+            onError(err.message);
+          });
+          return;
+        }
+        if (result.authorizationUrl) {
+          window.location.href = result.authorizationUrl;
+          return;
+        }
+        if (result.redirectUrl) {
+          window.location.href = result.redirectUrl;
+          return;
+        }
+        onBusy(false);
+      })
+      .catch(function (err) {
+        onBusy(false);
+        onError(err.message);
+      });
+  }
+
+  function fetchDonationCampaign(id) {
+    return api("/api/public/commerce/donations/" + encodeURIComponent(id)).then(function (d) {
+      return d.campaign;
+    });
+  }
+
+  function renderDonation(node) {
+    var campaignId = node.getAttribute("data-plexo-donation");
+    if (!campaignId) return;
+    if (node.tagName === "FORM") return adaptDonationForm(node, campaignId);
+    showSpinner(node);
+    fetchDonationCampaign(campaignId)
+      .then(function (c) {
+        clear(node);
+        prepareNode(node);
+        if (isDonationThanks()) node.appendChild(donationThanksBanner(c));
+        if (!c.accepting) {
+          node.appendChild(el("div", { class: "pc-muted", style: { padding: "12px 0" } }, ["Online donations are being set up — please check back soon."]));
+          return;
+        }
+        var presets = c.presetAmounts || [];
+        var state = {
+          amountMinor: presets.length ? presets[Math.min(c.defaultPresetIndex || 0, presets.length - 1)].amountMinor : null,
+          custom: !presets.length,
+          frequency: c.allowMonthly ? c.defaultFrequency || "ONCE" : "ONCE",
+        };
+        var card = el("div", { class: "pc-card", style: { padding: "22px" } });
+        if (c.goalAmountMinor) {
+          var pct = Math.min(100, Math.round(((c.raisedMinor || 0) / c.goalAmountMinor) * 100));
+          card.appendChild(el("div", { style: { marginBottom: "18px" } }, [
+            el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "13px", marginBottom: "6px" } }, [
+              el("strong", {}, [money(c.raisedMinor || 0, c.currency) + " raised"]),
+              el("span", { class: "pc-muted" }, ["of " + money(c.goalAmountMinor, c.currency)]),
+            ]),
+            el("div", { style: { height: "8px", background: "#EEECE4", borderRadius: "99px", overflow: "hidden" } }, [
+              el("div", { class: "pc-btn-gold", style: { height: "100%", width: pct + "%", padding: "0", borderRadius: "99px" } }),
+            ]),
+          ]));
+        }
+        var freqRow = null;
+        function paintFreq() {
+          if (!freqRow) return;
+          Array.prototype.forEach.call(freqRow.children, function (b) {
+            var on = b.getAttribute("data-f") === state.frequency;
+            b.className = on ? "pc-btn" : "pc-btn pc-btn-outline";
+          });
+        }
+        if (c.allowMonthly) {
+          freqRow = el("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "14px" } }, [
+            el("button", { type: "button", "data-f": "ONCE", onclick: function () { state.frequency = "ONCE"; paintFreq(); } }, ["Give once"]),
+            el("button", { type: "button", "data-f": "MONTHLY", onclick: function () { state.frequency = "MONTHLY"; paintFreq(); } }, ["Monthly"]),
+          ]);
+          card.appendChild(freqRow);
+          paintFreq();
+        }
+        var amountGrid = el("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: "8px", marginBottom: "12px" } });
+        var customInput = el("input", { class: "pc-input", type: "number", min: String((c.minAmountMinor || 100) / 100), step: "any", placeholder: "Other amount", style: { display: state.custom ? "block" : "none", marginBottom: "12px" } });
+        function paintAmounts() {
+          Array.prototype.forEach.call(amountGrid.children, function (b) {
+            var on = b.getAttribute("data-custom") ? state.custom : !state.custom && Number(b.getAttribute("data-amount")) === state.amountMinor;
+            b.className = on ? "pc-btn" : "pc-btn pc-btn-outline";
+          });
+          customInput.style.display = state.custom ? "block" : "none";
+        }
+        presets.forEach(function (p) {
+          amountGrid.appendChild(el("button", { type: "button", "data-amount": String(p.amountMinor), style: { flexDirection: "column", gap: "2px" }, onclick: function () { state.custom = false; state.amountMinor = p.amountMinor; paintAmounts(); } }, [
+            el("span", {}, [money(p.amountMinor, c.currency)]),
+            p.label ? el("span", { style: { fontSize: "11.5px", fontWeight: "500", opacity: "0.8" } }, [p.label]) : null,
+          ].filter(Boolean)));
+        });
+        if (c.allowCustomAmount) {
+          amountGrid.appendChild(el("button", { type: "button", "data-custom": "1", onclick: function () { state.custom = true; paintAmounts(); customInput.focus(); } }, ["Other"]));
+        }
+        card.appendChild(amountGrid);
+        card.appendChild(customInput);
+        paintAmounts();
+        var nameInput = el("input", { class: "pc-input", type: "text", placeholder: "Your name", autocomplete: "name", style: { marginBottom: "10px" } });
+        var emailInput = el("input", { class: "pc-input", type: "email", placeholder: "Email for your receipt", autocomplete: "email", required: "required", style: { marginBottom: "14px" } });
+        card.appendChild(nameInput);
+        card.appendChild(emailInput);
+        var errorBox = el("div", { class: "pc-error", style: { display: "none" } });
+        var button = el("button", { type: "button", class: "pc-btn", style: { width: "100%" } }, [c.buttonLabel || "Donate"]);
+        card.appendChild(errorBox);
+        card.appendChild(button);
+        node.appendChild(card);
+        button.addEventListener("click", function () {
+          errorBox.style.display = "none";
+          var amount = state.custom ? Math.round(parseFloat(customInput.value || "0") * 100) : state.amountMinor;
+          if (!amount || amount <= 0) {
+            errorBox.textContent = "Please choose or enter an amount.";
+            errorBox.style.display = "block";
+            return;
+          }
+          submitDonation(
+            { campaignId: campaignId, amountMinor: amount, frequency: state.frequency, donorName: nameInput.value, donorEmail: emailInput.value },
+            function (msg) { errorBox.textContent = msg; errorBox.style.display = "block"; },
+            function (busy) { button.disabled = busy; button.textContent = busy ? "Starting payment…" : c.buttonLabel || "Donate"; }
+          );
+        });
+      })
+      .catch(function (err) {
+        showError(node, err.message);
+      });
+  }
+
+  // A migrated donation form: keep its markup and styling exactly, just route its submit.
+  function adaptDonationForm(form, campaignId) {
+    if (form.getAttribute("data-plexo-adapted")) return;
+    form.setAttribute("data-plexo-adapted", "1");
+    form.removeAttribute("action");
+    fetchDonationCampaign(campaignId)
+      .then(function (c) {
+        if (isDonationThanks()) {
+          var banner = donationThanksBanner(c);
+          // A form inside a closed pop-up isn't visible on return — show the thanks on top instead.
+          if (!form.offsetParent || form.getBoundingClientRect().height === 0) {
+            banner.style.position = "fixed";
+            banner.style.top = "16px";
+            banner.style.left = "50%";
+            banner.style.transform = "translateX(-50%)";
+            banner.style.zIndex = "2147483000";
+            banner.style.maxWidth = "92vw";
+            banner.style.boxShadow = "0 8px 30px rgba(0,0,0,.25)";
+            document.body.appendChild(banner);
+            setTimeout(function () { if (banner.parentNode) banner.parentNode.removeChild(banner); }, 8000);
+          } else {
+            form.parentNode.insertBefore(banner, form);
+          }
+        }
+        if (!c.accepting) {
+          form.parentNode.insertBefore(el("div", { class: "pc-error" }, ["Online donations are being set up — please check back soon."]), form);
+        }
+      })
+      .catch(function () {});
+    var submitBtn = form.querySelector("button[type=submit], input[type=submit], button:not([type])");
+    // Form plugins often ship their button disabled until their own script initializes it.
+    if (submitBtn) submitBtn.disabled = false;
+    var originalLabel = submitBtn ? submitBtn.innerHTML : "";
+    // Keep the form's controls in step the way its original plugin script did: picking a
+    // suggested amount fills the amount box, typing an amount selects "custom", ticking
+    // monthly reveals its options.
+    var amountBox = form.querySelector("[data-plexo-custom-amount]");
+    var customChoice = form.querySelector("[data-plexo-amount-custom]");
+    Array.prototype.forEach.call(form.querySelectorAll("[data-plexo-amount-minor]"), function (radio) {
+      radio.addEventListener("change", function () {
+        if (radio.checked && amountBox) amountBox.value = String(Number(radio.getAttribute("data-plexo-amount-minor")) / 100);
+      });
+    });
+    if (amountBox && customChoice) {
+      amountBox.addEventListener("input", function () {
+        customChoice.checked = true;
+      });
+    }
+    var monthlyBox = form.querySelector("[data-plexo-monthly]");
+    var monthlyOptions = form.querySelector("[data-plexo-monthly-options]");
+    if (monthlyBox && monthlyOptions) {
+      var syncMonthly = function () {
+        monthlyOptions.style.display = monthlyBox.checked ? "flex" : "none";
+      };
+      monthlyBox.addEventListener("change", syncMonthly);
+      syncMonthly();
+    }
+    var preset = form.querySelector("[data-plexo-amount-minor]:checked");
+    if (preset && amountBox) amountBox.value = String(Number(preset.getAttribute("data-plexo-amount-minor")) / 100);
+
+    function errorHere(msg) {
+      var box = form.querySelector(".pc-donation-error");
+      if (!box) {
+        box = el("div", { class: "pc-error pc-donation-error" });
+        form.appendChild(box);
+      }
+      box.textContent = msg;
+    }
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      var chosen = form.querySelector("[data-plexo-amount-minor]:checked, [data-plexo-amount-custom]:checked");
+      var amount = 0;
+      var customField = form.querySelector("[data-plexo-custom-amount]");
+      if (chosen && chosen.hasAttribute("data-plexo-amount-minor")) amount = Number(chosen.getAttribute("data-plexo-amount-minor"));
+      else if (customField) amount = Math.round(parseFloat(customField.value || "0") * 100);
+      if (!amount || amount <= 0) return errorHere("Please choose or enter an amount.");
+      var monthly = form.querySelector("[data-plexo-monthly]");
+      var first = form.querySelector("[data-plexo-donor-first]");
+      var last = form.querySelector("[data-plexo-donor-last]");
+      var full = form.querySelector("[data-plexo-donor-name]");
+      var email = form.querySelector("[data-plexo-donor-email]");
+      var name = full ? full.value : [first && first.value, last && last.value].filter(Boolean).join(" ");
+      if (!email || !email.value) return errorHere("Please enter your email address for your receipt.");
+      submitDonation(
+        { campaignId: campaignId, amountMinor: amount, frequency: monthly && monthly.checked ? "MONTHLY" : "ONCE", donorName: name, donorEmail: email.value },
+        errorHere,
+        function (busy) {
+          if (!submitBtn) return;
+          submitBtn.disabled = busy;
+          if (busy) submitBtn.textContent = "Starting payment…";
+          else submitBtn.innerHTML = originalLabel;
+        }
+      );
+    }, true);
+  }
+
   function init() {
     injectStyles();
     document.querySelectorAll("[data-plexo-commerce-product]").forEach(renderProduct);
@@ -2171,6 +3032,7 @@
     document.querySelectorAll("[data-plexo-commerce-orderConfirmation]").forEach(renderOrderConfirmation);
     document.querySelectorAll("[data-plexo-commerce-orderTracking]").forEach(renderOrderTracking);
     document.querySelectorAll("[data-plexo-newsletter-signup]").forEach(renderNewsletterSignup);
+    document.querySelectorAll("[data-plexo-donation]").forEach(renderDonation);
     renderProductCounts();
     fetchCart().then(broadcastCart).catch(function () {});
   }

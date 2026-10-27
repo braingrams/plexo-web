@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { PageContainer } from "../../../../_components/PageContainer";
+import { Pagination } from "../../../../_components/Pagination";
+import { paginate } from "@/lib/pagination";
 
 type Status = "PENDING" | "APPROVED" | "SPAM" | "REJECTED";
 
@@ -64,7 +66,11 @@ export function CommentsModerationClient({ templateId, initialComments }: { temp
     }
   }
 
-  const visible = tab === "ALL" ? comments : comments.filter((c) => c.status === tab);
+  const [paging, setPaging] = useState({ page: 1, pageSize: 25 });
+  const filtered = tab === "ALL" ? comments : comments.filter((c) => c.status === tab);
+  // Every comment is loaded; they are shown a page at a time (moderating the last one on a page moves you back a page).
+  const shown = paginate(filtered, paging);
+  const visible = shown.items;
   const counts = comments.reduce<Record<string, number>>((acc, c) => { acc[c.status] = (acc[c.status] ?? 0) + 1; return acc; }, {});
 
   return (
@@ -76,7 +82,7 @@ export function CommentsModerationClient({ templateId, initialComments }: { temp
           <button
             key={t.value}
             type="button"
-            onClick={() => setTab(t.value)}
+            onClick={() => { setTab(t.value); setPaging((p) => ({ ...p, page: 1 })); }}
             style={{
               padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer",
               fontSize: "0.8rem", fontWeight: 700,
@@ -93,6 +99,7 @@ export function CommentsModerationClient({ templateId, initialComments }: { temp
       {visible.length === 0 ? (
         <p style={{ textAlign: "center", color: "rgba(240,242,255,0.4)", padding: "3rem 1rem" }}>No comments here.</p>
       ) : (
+        <>
         <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, overflow: "hidden" }}>
           {visible.map((c, i) => {
             const colors = STATUS_COLORS[c.status];
@@ -137,6 +144,8 @@ export function CommentsModerationClient({ templateId, initialComments }: { temp
             );
           })}
         </div>
+        <Pagination page={shown.page} pageSize={shown.pageSize} total={shown.total} noun="comments" onChange={setPaging} />
+        </>
       )}
     </PageContainer>
   );

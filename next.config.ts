@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+// The self-hosted code editor's version — its files live at /monaco/<version>/vs
+// (scripts/copy-monaco.mjs), and the app editor loads from that address.
+const monacoVersion: string = JSON.parse(readFileSync(join(process.cwd(), "node_modules/monaco-editor/package.json"), "utf8")).version;
 
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_MONACO_VERSION: monacoVersion },
   reactStrictMode: true,
   // playwright-core: even connectOverCDP (no local browser launch) touches its coreBundle,
   // which does a relative-path require of browsers.json — bundling it (Turbopack's default)
@@ -17,6 +24,12 @@ const nextConfig: NextConfig = {
     "/api/internal/site-import/**/*": ["./node_modules/playwright-core/**"],
   },
   transpilePackages: ["@charisol/plexo-sdk"],
+  // Next normally 308s "/about/" → "/about" before middleware runs, which would make every
+  // site migrated from WordPress (whose URLs all end in "/") answer its real URLs with a
+  // redirect. Trailing-slash handling moves to middleware.ts (same 308 as before for the
+  // dashboard, API and blog routes) and, for published sites' pages, to the serve route,
+  // which knows per page which form is canonical — see Template.urlTrailingSlash.
+  skipTrailingSlashRedirect: true,
   // Only our own uploads bucket (lib/storage.ts's publicUrlFor — bucket name/region vary per
   // environment, hence the wildcard) is allowlisted for /_next/image optimization. Published
   // pages can also embed an arbitrary externally-hosted image URL (an author pasting a direct

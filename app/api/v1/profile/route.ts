@@ -1,9 +1,12 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { getDomainLimit } from "@/lib/domainLimit";
 import { getTierFeatures } from "@/lib/subscription";
 import { User } from "@/lib/db/coreEntities";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
+import { planMonthlyCredits } from "@/lib/credits/value";
+import type { SubscriptionPlan } from "@/lib/subscription";
 
 /**
  * GET /api/v1/profile
@@ -29,7 +32,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // app/dashboard/page.tsx) and filter to this specific user's rows in memory, so the
     // counts match the original per-user semantics exactly rather than counting the
     // whole org.
-    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
+    // Only the fields counted here — never the pages' content (a migrated site's pages are
+    // 100–300 KB each, which made this the slowest call on the dashboard).
+    const { data: orgTemplates } = await Template.query
+      .byOrg({ organizationId: resolved.organizationId })
+      .go({ pages: "all", attributes: ["id", "userId", "kind", "parentId", "isBlogLayout", "isSiteLayoutFragment"] });
     const userTemplates = orgTemplates.filter((t) => t.userId === user.id);
 
     const emailTemplateCount = userTemplates.filter((t) => t.kind === "EMAIL").length;
@@ -39,13 +46,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       (t) => t.kind === "LANDING_PAGE" && !t.isBlogLayout && !t.isSiteLayoutFragment,
     ).length;
 
+    // Domains belong to whole sites, never their sub-pages (same rule as app/api/v1/domains).
     const domainBatches = await Promise.all(
-      orgTemplates.map((t) => PublishedDomain.query.primary({ templateId: t.id }).go()),
+      orgTemplates.filter((t) => !t.parentId).map((t) => PublishedDomain.query.primary({ templateId: t.id }).go({ attributes: ["userId"] })),
     );
     const domainCount = domainBatches.reduce((sum, batch) => sum + batch.data.filter((d) => d.userId === user.id).length, 0);
 
-    const features = getTierFeatures(user.subscriptionPlan ?? "FREE");
-    const domainLimit = getDomainLimit(user.subscriptionPlan ?? "FREE", user.customDomainLimit ?? null);
+    const features = getTierFeatures(effectivePlan(user));
+    const domainLimit = getDomainLimit(effectivePlan(user), user.customDomainLimit ?? null);
 
     return NextResponse.json({
       success: true,
@@ -54,10 +62,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         name: user.name,
         email: user.email,
         image: user.image ?? null,
-        subscriptionPlan: user.subscriptionPlan ?? "FREE",
+        subscriptionPlan: effectivePlan(user),
         allowanceBalance: user.allowanceBalance ?? 0,
         topupBalance: user.topupBalance ?? 0,
         totalCredits: (user.allowanceBalance ?? 0) + (user.topupBalance ?? 0),
+        // What the plan grants each month (lib/credits/value.ts) — the credit meter's "full".
+        monthlyCredits: planMonthlyCredits(effectivePlan(user)),
         layoutMode: user.layoutMode ?? "CLASSIC",
         createdAt: user.createdAt,
       },

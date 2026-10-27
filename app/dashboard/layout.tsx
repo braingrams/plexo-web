@@ -5,6 +5,10 @@ import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { ensureActiveOrganization, getOrgBrandDynamo } from "@/server/orgDynamo";
 import { DashboardShell } from "./dashboard-shell";
+import { MigrationBanner } from "./migrate/wordpress/MigrationBanner";
+import { PlanBanner, type PlanBannerState } from "./_components/PlanBanner";
+import { TRIAL_DAYS, accessDaysLeft, canStartTrial, effectivePlan, paidAccess, planSyncAction } from "@/lib/plan/entitlement";
+import { syncPlanLifecycle } from "@/lib/plan/lifecycle";
 
 export default async function DashboardLayout({
   children,
@@ -20,8 +24,16 @@ export default async function DashboardLayout({
   const userName = session.user.name ?? session.user.email?.split("@")[0] ?? "User";
   const userEmail = session.user.email ?? "";
 
-  const { data: dbUser } = await User.get({ id: session.user.id }).go();
+  let { data: dbUser } = await User.get({ id: session.user.id }).go();
+  // The owner sees their plan's real state the moment they arrive: a lapsed trial is
+  // downgraded, and an account that paid again (or an admin switched back on) gets every
+  // page, site and custom domain back — before anything below renders.
+  if (dbUser && planSyncAction(dbUser)) {
+    await syncPlanLifecycle(dbUser.id).catch((err) => console.error("plan lifecycle (dashboard):", err));
+    dbUser = (await User.get({ id: session.user.id }).go()).data ?? dbUser;
+  }
   const initialLayoutMode = dbUser?.layoutMode ?? "CLASSIC";
+  const planBanner = dbUser ? planBannerState(dbUser) : null;
 
   // Org-scoped login: makes sure this session always has an active organization before
   // rendering the dashboard shell (auto-picks a single membership, restores/creates one
@@ -48,8 +60,28 @@ export default async function DashboardLayout({
         organizationName={orgResolution.organizationName}
         orgBranding={orgBranding}
       >
+        {/* A WordPress site moving in the background: progress on every page, not just the migration tab. */}
+        <MigrationBanner />
+        {planBanner ? <PlanBanner state={planBanner} /> : null}
         {children}
       </DashboardShell>
     </ThemeProvider>
   );
+}
+
+function planBannerState(user: Parameters<typeof paidAccess>[0] & { planDowngradedAt?: string | null; planBeforeDowngrade?: string | null; planDowngradeReason?: string | null; trialStartedAt?: string | null }): PlanBannerState | null {
+  const plan = effectivePlan(user);
+  if (plan !== "FREE") {
+    const access = paidAccess(user);
+    const daysLeft = accessDaysLeft(user);
+    if (access.entitled && (access.basis === "TRIAL" || access.basis === "GRANT") && daysLeft !== null) {
+      return access.basis === "TRIAL" ? { kind: "trial", plan, daysLeft, trialDays: TRIAL_DAYS } : { kind: "grant", plan, daysLeft };
+    }
+    if (access.entitled && access.basis === "SUBSCRIPTION" && user.subscriptionStatus === "PAST_DUE") return { kind: "past_due", plan };
+    return null;
+  }
+  if (user.planDowngradedAt) {
+    return { kind: "downgraded", previousPlan: user.planBeforeDowngrade === "ULTRA" ? "ULTRA" : "PRO", since: user.planDowngradedAt, reason: user.planDowngradeReason ?? null, trialAvailable: canStartTrial(user) };
+  }
+  return null;
 }

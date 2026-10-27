@@ -35,8 +35,25 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "";
   const hostname = host.split(":")[0];
 
+  // next.config.ts sets skipTrailingSlashRedirect so a published site can choose its own
+  // URL style (see the tenant rewrite below). Everything else keeps Next's default:
+  // "/x/" permanently redirects to "/x".
+  const hasTrailingSlash = pathname.length > 1 && pathname.endsWith("/");
+  const stripTrailingSlash = (): NextResponse => {
+    // A plain URL, not request.nextUrl.clone(): NextURL re-applies its own trailing-slash
+    // formatting on serialization, which turned this into a redirect to itself.
+    return NextResponse.redirect(new URL(`${pathname.replace(/\/+$/, "") || "/"}${request.nextUrl.search}`, request.url), 308);
+  };
+
   // Handle CORS and preflight requests for API endpoints
   if (pathname.startsWith("/api/")) {
+    // The React-app runtime is only ever reached through the /__plexo/api rewrite on the
+    // app's own domain (below). Called directly — on the dashboard or any host — it would
+    // let one origin act on another app's sessions, so it doesn't exist from the outside.
+    if (pathname === "/api/runtime" || pathname.startsWith("/api/runtime/")) {
+      return new NextResponse("Not found.", { status: 404 });
+    }
+    if (hasTrailingSlash && request.method !== "OPTIONS") return stripTrailingSlash();
     const origin = request.headers.get("origin") || "";
     const appOrigin = new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").origin;
     // Extra first-party origins allowed to make COOKIE-credentialed requests, comma
@@ -178,9 +195,23 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       lookupDomain = `${sub}.${pagesDomain}`;
     }
 
+    // A React app's own backend (lib/projects, docs/plexo-projects/ARCHITECTURE.md): data,
+    // sign-in, storage and server functions, answered on the app's own domain so its
+    // session cookie stays first-party. A separate route tree, never the page catch-all.
+    if (pathname === "/__plexo/api" || pathname.startsWith("/__plexo/api/")) {
+      const rest = pathname.slice("/__plexo/api".length) || "/";
+      return NextResponse.rewrite(new URL(`/api/runtime/${lookupDomain}${rest}${request.nextUrl.search}`, request.url));
+    }
+
+    // The blog's own routes keep Next's default URL style; every other path keeps its
+    // trailing slash so the page serve route can apply the page's own URL style.
+    if (hasTrailingSlash && (pathname === "/blog/" || pathname.startsWith("/blog/"))) return stripTrailingSlash();
+
     // Rewrite path to /pub/${lookupDomain}${pathname}
-    return NextResponse.rewrite(new URL(`/pub/${lookupDomain}${pathname}`, request.url));
+    return NextResponse.rewrite(new URL(`/pub/${lookupDomain}${pathname}${request.nextUrl.search}`, request.url));
   }
+
+  if (hasTrailingSlash) return stripTrailingSlash();
 
   // 2. Enforce session cookie check for dashboard paths. Auth.js's default cookie name
   // is "authjs.session-token" (or "__Secure-authjs.session-token" over HTTPS) — this

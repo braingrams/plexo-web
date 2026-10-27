@@ -15,6 +15,7 @@ import { isKnownCurrency, isPaystackCompatibleCurrency } from "@/lib/commerce/cu
 import { ensureProductDetailLayout } from "@/lib/commerce/productDetailLayout";
 import { ensureStorefrontLayout, getStorefrontSlug, renameStorefrontSlug } from "@/lib/commerce/storefrontLayout";
 import { deriveCommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
+import { applyCheckoutSettingsInput, checkoutSettingsView, CheckoutSettingsError } from "@/lib/commerce/checkoutSettings";
 import { CommerceSettings, CommerceStripeAccessRequest, CommerceOrder } from "@/lib/db/commerceEntities";
 import { Template } from "@/lib/db/contentEntities";
 
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
       notifyCustomerOnShipped: settings?.notifyCustomerOnShipped ?? true,
       notifyCustomerOnCompleted: settings?.notifyCustomerOnCompleted ?? true,
       notifyCustomerOnRefunded: settings?.notifyCustomerOnRefunded ?? true,
+      ...checkoutSettingsView(settings),
       webhookUrl: `${request.nextUrl.origin}/api/webhooks/paystack/${templateId}`,
       stripeWebhookUrl: `${request.nextUrl.origin}/api/webhooks/stripe/commerce/${templateId}`,
     },
@@ -154,7 +156,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
   // Platform Paystack and BYO Stripe need no such gate — both are opt-in with either
   // Plexo's own Paystack account (automatic) or the site's own Stripe keys (entered below).
   if (paymentProvider === "PLATFORM_STRIPE") {
-    const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId }).go();
+    const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId }).go({ pages: "all" });
     const approved = requests.some((r) => r.status === "APPROVED");
     if (!approved) {
       return NextResponse.json(
@@ -206,7 +208,8 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
     | "maildripNewsletterGroupId"
     | "notificationEmail"
     | "themeAccentColor"
-    | "themeButtonRadius";
+    | "themeButtonRadius"
+    | ReturnType<typeof applyCheckoutSettingsInput>["toRemove"][number];
   const toRemove: RemovableField[] = [];
 
   if (typeof enabled === "boolean") data.enabled = enabled;
@@ -283,6 +286,18 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
   }
 
   const { data: existing } = await CommerceSettings.get({ templateId }).go();
+
+  // Bank transfer, checkout questions, delivery/pickup — shared validation with the MCP
+  // tool (lib/commerce/checkoutSettings.ts).
+  try {
+    const checkoutInput = applyCheckoutSettingsInput(body, existing);
+    Object.assign(data, checkoutInput.data);
+    toRemove.push(...checkoutInput.toRemove);
+  } catch (err) {
+    if (err instanceof CheckoutSettingsError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
+  }
+
   if (existing) {
     let patch = CommerceSettings.patch({ templateId }).set(data);
     if (toRemove.length) patch = patch.remove(toRemove);
@@ -345,6 +360,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
       notifyCustomerOnShipped: settings.notifyCustomerOnShipped ?? true,
       notifyCustomerOnCompleted: settings.notifyCustomerOnCompleted ?? true,
       notifyCustomerOnRefunded: settings.notifyCustomerOnRefunded ?? true,
+      ...checkoutSettingsView(settings),
       webhookUrl: `${request.nextUrl.origin}/api/webhooks/paystack/${templateId}`,
       stripeWebhookUrl: `${request.nextUrl.origin}/api/webhooks/stripe/commerce/${templateId}`,
     },

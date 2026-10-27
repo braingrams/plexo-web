@@ -5,6 +5,7 @@ import { Template, BlogSite } from "@/lib/db/contentEntities";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 
 import { TemplatesClient } from "./templates-client";
+import { defaultDesignFormat } from "@/lib/v2/design";
 import { PagesShell } from "../_components/PagesShell";
 
 // Always fetch fresh — this route sits behind the always-visible "Templates" nav link, which
@@ -63,7 +64,7 @@ export default async function TemplatesDashboardPage() {
 
   const templates: TemplateSummary[] = await Promise.all(
     roots.map(async (t) => {
-      const { data: children } = await Template.query.byParent({ parentId: t.id }).go();
+      const { data: children } = await Template.query.byParent({ parentId: t.id }).go({ pages: "all" });
       return {
         id: t.id,
         name: t.name,
@@ -79,7 +80,7 @@ export default async function TemplatesDashboardPage() {
 
   return (
     <PagesShell>
-      <TemplatesClient initialTemplates={templates} />
+      <TemplatesClient initialTemplates={templates} pageDesignsForNew={defaultDesignFormat() === "v2"} />
     </PagesShell>
   );
 }

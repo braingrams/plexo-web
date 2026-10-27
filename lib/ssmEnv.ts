@@ -26,6 +26,9 @@ const APP_SECRET_KEYS = [
   // deploy-production.yml/deploy-staging.yml's "Build the app" step) since only the server
   // ever needs it.
   "CHARISOL_USER_POOL_ID",
+  // Strata's Cognito app client id(s), comma-separated: Charisol sign-ins issued to them are accepted by
+  // the Strata publish routes (server/charisolVerifier.ts getCharisolPartnerVerifier).
+  "CHARISOL_TRUSTED_CLIENT_IDS",
   "AI_KEY_ENCRYPTION_SECRET",
   "PAYSTACK_KEY_ENCRYPTION_SECRET",
   "COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET",
@@ -35,6 +38,33 @@ const APP_SECRET_KEYS = [
   // not just failing to decrypt.
   "BANK_DETAILS_ENCRYPTION_SECRET",
   "MAILDRIP_KEY_ENCRYPTION_SECRET",
+  // Apps built on Plexo: their server-function secrets (lib/crypto.ts encryptAppSecret) and
+  // the app-visitor Cognito pool for zero-setup "Sign in with Google" (lib/appAuth/oauth.ts;
+  // the three APP_SIGNIN_* values are written by cdk/lib/app-data-stack.ts).
+  "APP_SECRETS_ENCRYPTION_SECRET",
+  // Connecting a person's Strata account from the editor's Branding panel (lib/strata): the key
+  // that encrypts their Strata session at rest, and Strata's API root (incl. /v1).
+  "STRATA_TOKEN_ENCRYPTION_SECRET",
+  "STRATA_API_URL",
+  "APP_SIGNIN_COGNITO_CLIENT_ID",
+  "APP_SIGNIN_COGNITO_USER_POOL_ID",
+  "APP_SIGNIN_COGNITO_DOMAIN",
+  // The Plexo GitHub App (two-way GitHub sync for apps — lib/projects/github).
+  "PLEXO_GITHUB_APP_ID",
+  "PLEXO_GITHUB_APP_SLUG",
+  "PLEXO_GITHUB_APP_PRIVATE_KEY",
+  "PLEXO_GITHUB_APP_WEBHOOK_SECRET",
+  "PLEXO_GITHUB_APP_CLIENT_ID",
+  "PLEXO_GITHUB_APP_CLIENT_SECRET",
+  // Production only: one GitHub App serves both environments, so production passes
+  // staging's webhooks and install redirects on (lib/projects/github/relay.ts).
+  "PLEXO_GITHUB_RELAY_ORIGIN",
+  // Plain on/off flag ("true" to enable) for server/passwordSignIn.ts; set directly in SSM
+  // like the relay origin above. Leave unset until Charisol has approved legacy-verify.
+  "CHARISOL_PASSWORD_ENFORCED",
+  // Runtime flag (not a secret): "true" creates NEW landing pages in the new editor's V2 format
+  // (lib/v2/design.ts defaultDesignFormat). Unset/anything else = classic V1.
+  "TEMPLATES_V2_NEW",
   "MAILDRIP_API_URL",
   "MAILDRIP_API_KEY",
   "STRIPE_SECRET_KEY",
@@ -70,10 +100,21 @@ const APP_SECRET_KEYS = [
   "PUSHER_SECRET",
   "PUSHER_CLUSTER",
   "BROWSERBASE_API_KEY",
+  // Plexo's stock-photo accounts: SOL's app_find_photos (lib/media/stockPhotos.ts) and the
+  // dashboard's image picker.
+  "UNSPLASH_KEY",
+  "PEXELS_KEY",
+  "PIXABAY_KEY",
   // Not a secret (a bucket name), but published to the same /plexo/<env>/* SSM path by
   // cdk/lib/data-stack.ts and read through this same loader rather than inventing a
   // second config-loading mechanism for one value.
   "USER_CONTENT_BUCKET_NAME",
+  // Apps built on Plexo: the shared Aurora cluster that holds their databases, published to
+  // SSM by cdk/lib/app-data-stack.ts (deployed once per environment, like data-stack.ts).
+  "APP_DB_CLUSTER_ARN",
+  "APP_DB_ADMIN_SECRET_ARN",
+  "APP_DB_CLUSTER_ID",
+  "APP_DB_FUNCTION_NAME",
   // Not secrets either — cdk/lib/published-sites-stack.ts's own IDs for THIS environment
   // (staging vs production each get their own distribution + connection group). Can't be
   // injected via compute-stack.ts's Lambda environment the way PLEXO_*_TABLE is: the

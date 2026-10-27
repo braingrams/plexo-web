@@ -15,6 +15,9 @@ type PageNode = {
 	order: number;
 	updatedAt: string;
 	sourceType: SourceType;
+	/** false = saved but not on the live site (e.g. kept from a paid plan). */
+	isPublished?: boolean;
+	archivedByPlan?: boolean;
 };
 
 type Props = {
@@ -327,6 +330,7 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 					rootId={rootId}
 					currentId={templateId}
 					isUltra={isUltra}
+					homeOnly={getTierFeatures(subscriptionPlan).maxPublishedPagesPerSite === 1}
 					domainPreview={domainPreview}
 					onClose={() => setManageOpen(false)}
 					onNavigate={(id) => { setManageOpen(false); onNavigate(id); }}
@@ -348,6 +352,7 @@ function ManagePagesModal({
 	rootId,
 	currentId,
 	isUltra,
+	homeOnly,
 	domainPreview,
 	onClose,
 	onNavigate,
@@ -359,6 +364,8 @@ function ManagePagesModal({
 	rootId: string;
 	currentId: string;
 	isUltra: boolean;
+	/** The plan publishes only the homepage (Free). */
+	homeOnly: boolean;
 	domainPreview: string | null;
 	onClose: () => void;
 	onNavigate: (id: string) => void;
@@ -725,6 +732,18 @@ function ManagePagesModal({
 											HTML
 										</span>
 									)}
+									{!isHome && (node.isPublished === false || homeOnly) && (
+										<span
+											title={homeOnly || node.archivedByPlan ? "Saved, not published — upgrade to publish it" : "Saved, not published"}
+											style={{
+												marginLeft: "0.4rem", fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.04em",
+												textTransform: "uppercase", color: "#fbbf24", background: "rgba(245,183,74,0.1)",
+												padding: "0.1rem 0.4rem", borderRadius: 4, verticalAlign: "middle",
+											}}
+										>
+											Not live
+										</span>
+									)}
 								</span>
 								<span style={{ display: "block", fontSize: "0.7rem", color: "rgba(240,242,255,0.35)" }}>
 									{domainPreview ? `${domainPreview}${pathFor(node.id, byId)}` : pathFor(node.id, byId)}
@@ -863,7 +882,7 @@ function ManagePagesModal({
 				<div style={{ flex: 1, overflowY: "auto", padding: "0.75rem" }}>
 					{!isUltra && (
 						<div style={{ margin: "0.25rem 0.25rem 0.75rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "var(--brand-subtle)", border: "1px solid rgba(var(--brand-rgb),0.25)", fontSize: "0.8rem", color: "rgba(240,242,255,0.8)", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
-							<IconSparkle /> <span>Multi-page sites (adding, duplicating pages) require an <strong>Ultra</strong> plan. Existing pages remain fully usable below.</span>
+							<IconSparkle /> <span>Multi-page sites (adding, duplicating pages) need a <strong>Pro</strong> or <strong>Ultra</strong> plan. Existing pages remain fully usable below.</span>
 						</div>
 					)}
 					{root && renderNode(root, 0)}

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { compileToHTML } from "@/lib/compiler";
+import { designFormatOf, V2_PAGE_NEEDS_NEW_TOOLS } from "@/lib/v2/design";
 import {
   TemplateJSONSchema,
   hydrateStructuralDefaults,
@@ -28,6 +29,9 @@ import { convertWordPressHtmlToTiptapJson } from "@/lib/blogImport/htmlToTiptap"
 import { assertPublishedBlogPostQuota } from "@/lib/blog/publishQuota";
 import { FONT_PRESET_OPTIONS } from "@/lib/pub/blogFontPresets";
 import { hasBlogMarker, type BlogMarkerName } from "@/lib/pub/blogLayoutRender";
+import { v2TargetMessage } from "./deprecation";
+import { buildBlogListingLayoutV2, buildBlogPostLayoutV2 } from "@/lib/v2/layoutDesigns";
+import { chromeFor, compileGenerated, siteInfo } from "@/lib/v2/siteFormat";
 import {
   Template,
   BlogSite,
@@ -124,7 +128,7 @@ async function resolveAuthorId(
   if (authorName === null) return null;
   const name = String(authorName).trim();
   if (!name) return null;
-  const { data: authors } = await BlogAuthor.query.primary({ templateId }).go();
+  const { data: authors } = await BlogAuthor.query.primary({ templateId }).go({ pages: "all" });
   const existing = authors.find(
     (a) => a.name.toLowerCase() === name.toLowerCase(),
   );
@@ -142,7 +146,7 @@ async function resolveCategoryIds(
   if (names === undefined) return undefined;
   const { data: categories } = await BlogCategory.query
     .primary({ templateId })
-    .go();
+    .go({ pages: "all" });
   const ids: string[] = [];
   for (const name of names) {
     const existing = categories.find(
@@ -175,7 +179,7 @@ async function resolveTagIds(
   names: string[] | undefined,
 ): Promise<string[] | undefined> {
   if (names === undefined) return undefined;
-  const { data: tags } = await BlogTag.query.primary({ templateId }).go();
+  const { data: tags } = await BlogTag.query.primary({ templateId }).go({ pages: "all" });
   const ids: string[] = [];
   for (const name of names) {
     const existing = tags.find(
@@ -220,17 +224,29 @@ async function ensureBlogLayoutTemplate(
   if (existingId) return existingId;
 
   const layoutId = randomUUID();
+  const layoutName = kind === "post" ? "Blog Post Layout" : "Blog Listing Layout";
+  // A site on the new editor gets a ready, editable layout (same starter the dashboard makes);
+  // a classic site keeps the empty classic page.
+  const siteDetails = await siteInfo(siteId);
+  let layoutDesign: object = { body: { style: { background: "#ffffff", padding: "24px" }, rows: [] } };
+  let layoutHtml = "";
+  let layoutFormat: "v1" | "v2" = "v1";
+  if (siteDetails.format === "v2") {
+    const chrome = await chromeFor(siteId, siteDetails.name);
+    layoutDesign = kind === "post" ? buildBlogPostLayoutV2(chrome) : buildBlogListingLayoutV2(chrome);
+    layoutFormat = "v2";
+    layoutHtml = await compileGenerated(siteId, { id: "new-blog-layout", name: layoutName, designFormat: "v2", designJson: layoutDesign });
+  }
   await Template.create({
     id: layoutId,
     userId: resolved.userId,
     organizationId: resolved.organizationId,
-    name: kind === "post" ? "Blog Post Layout" : "Blog Listing Layout",
+    name: layoutName,
     kind: "LANDING_PAGE",
     isBlogLayout: true,
-    designJson: {
-      body: { style: { background: "#ffffff", padding: "24px" }, rows: [] },
-    },
-    compiledHtml: "",
+    ...(layoutFormat === "v2" ? { designFormat: "v2" as const } : {}),
+    designJson: layoutDesign,
+    compiledHtml: layoutHtml,
   }).go();
 
   const layoutField =
@@ -981,6 +997,16 @@ export async function handleBlogTool(
         );
       }
 
+      // A layout built with the visual (V2) editor is changed with blog_layout_edit, never overwritten with classic JSON.
+      {
+        const { data: blogRow } = await BlogSite.get({ templateId: siteId }).go();
+        const existingLayoutId = kind === "post" ? blogRow?.postLayoutTemplateId : blogRow?.listingLayoutTemplateId;
+        if (existingLayoutId) {
+          const { data: existingLayout } = await Template.get({ id: existingLayoutId }).go();
+          if (existingLayout && designFormatOf(existingLayout) === "v2") throw new Error(v2TargetMessage("design_blog_layout"));
+        }
+      }
+
       const designJson = validateBlogDesignJson(rawDesignJson);
       const compiledHtml = sanitizeHtml(compileToHTML(designJson));
 
@@ -989,6 +1015,10 @@ export async function handleBlogTool(
         siteId,
         kind,
       );
+      // A layout on the new editor holds a new-editor design: this classic tool must not
+      // overwrite it with a classic one (it would corrupt the layout).
+      const { data: layoutRow } = await Template.get({ id: layoutTemplateId }).go();
+      if (designFormatOf(layoutRow) === "v2") throw new Error(V2_PAGE_NEEDS_NEW_TOOLS);
       const requiredMarker: BlogMarkerName =
         kind === "post" ? "content" : "postList";
       const hasRequired = hasBlogMarker(compiledHtml, requiredMarker);
@@ -1141,9 +1171,9 @@ export async function handleBlogTool(
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
       const [{ data: allPosts }, { data: categories }, { data: authors }] =
         await Promise.all([
-          BlogPost.query.byStatus({ templateId: siteId }).go(),
-          BlogCategory.query.primary({ templateId: siteId }).go(),
-          BlogAuthor.query.primary({ templateId: siteId }).go(),
+          BlogPost.query.byStatus({ templateId: siteId }).go({ pages: "all" }),
+          BlogCategory.query.primary({ templateId: siteId }).go({ pages: "all" }),
+          BlogAuthor.query.primary({ templateId: siteId }).go({ pages: "all" }),
         ]);
 
       let filtered = allPosts;
@@ -1166,7 +1196,7 @@ export async function handleBlogTool(
         const { data: linked } = category
           ? await BlogPostCategory.query
               .byCategory({ categoryId: category.id })
-              .go()
+              .go({ pages: "all" })
           : { data: [] as { postId: string; templateId: string }[] };
         const postIdsInCategory = new Set(
           linked.filter((l) => l.templateId === siteId).map((l) => l.postId),
@@ -1184,7 +1214,7 @@ export async function handleBlogTool(
         filtered.map((p) =>
           BlogPostCategory.query
             .primary({ templateId: siteId, postId: p.id })
-            .go(),
+            .go({ pages: "all" }),
         ),
       );
 
@@ -1234,7 +1264,7 @@ export async function handleBlogTool(
       } else {
         const { data: allPosts } = await BlogPost.query
           .byStatus({ templateId: siteId })
-          .go();
+          .go({ pages: "all" });
         post = allPosts.find((p) => p.id === postId) ?? null;
       }
       if (!post)
@@ -1249,13 +1279,13 @@ export async function handleBlogTool(
         { data: postCategories },
         { data: postTags },
       ] = await Promise.all([
-        BlogCategory.query.primary({ templateId: siteId }).go(),
-        BlogTag.query.primary({ templateId: siteId }).go(),
-        BlogAuthor.query.primary({ templateId: siteId }).go(),
+        BlogCategory.query.primary({ templateId: siteId }).go({ pages: "all" }),
+        BlogTag.query.primary({ templateId: siteId }).go({ pages: "all" }),
+        BlogAuthor.query.primary({ templateId: siteId }).go({ pages: "all" }),
         BlogPostCategory.query
           .primary({ templateId: siteId, postId: post.id })
-          .go(),
-        BlogPostTag.query.primary({ templateId: siteId, postId: post.id }).go(),
+          .go({ pages: "all" }),
+        BlogPostTag.query.primary({ templateId: siteId, postId: post.id }).go({ pages: "all" }),
       ]);
       const categoryById = new Map(categories.map((c) => [c.id, c]));
       const tagById = new Map(tags.map((t) => [t.id, t]));
@@ -1387,7 +1417,7 @@ export async function handleBlogTool(
         if (args.status === "PUBLISHED") {
           const { data: existingPosts } = await BlogPost.query
             .byStatus({ templateId: siteId })
-            .go();
+            .go({ pages: "all" });
           const existing = existingPosts.find((p) => p.id === postId);
           if (existing && existing.status !== "PUBLISHED") {
             const quota = await assertPublishedBlogPostQuota(
@@ -1455,7 +1485,7 @@ export async function handleBlogTool(
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
       const { data: categories } = await BlogCategory.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       categories.sort((a, b) => a.name.localeCompare(b.name));
       return { categories };
     }
@@ -1467,7 +1497,7 @@ export async function handleBlogTool(
 
       const { data: siblings } = await BlogCategory.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
 
       let parentId: string | undefined;
       if (typeof args.parentName === "string" && args.parentName.trim()) {
@@ -1518,7 +1548,7 @@ export async function handleBlogTool(
 
       const { data: categories } = await BlogCategory.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       let category = isValidUuid(idOrName)
         ? categories.find((c) => c.id === idOrName)
         : undefined;
@@ -1532,7 +1562,7 @@ export async function handleBlogTool(
       // equivalent — clean up the join rows explicitly via byCategory (GSI1) first.
       const { data: links } = await BlogPostCategory.query
         .byCategory({ categoryId: category.id })
-        .go();
+        .go({ pages: "all" });
       await Promise.all(
         links.map((l) =>
           BlogPostCategory.remove({
@@ -1554,7 +1584,7 @@ export async function handleBlogTool(
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
       const { data: tags } = await BlogTag.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       tags.sort((a, b) => a.name.localeCompare(b.name));
       return { tags };
     }
@@ -1591,7 +1621,7 @@ export async function handleBlogTool(
 
       const { data: tags } = await BlogTag.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       let tag = isValidUuid(idOrName)
         ? tags.find((t) => t.id === idOrName)
         : undefined;
@@ -1603,7 +1633,7 @@ export async function handleBlogTool(
       // equivalent — clean up the join rows explicitly via byTag (GSI1) first.
       const { data: links } = await BlogPostTag.query
         .byTag({ tagId: tag.id })
-        .go();
+        .go({ pages: "all" });
       await Promise.all(
         links.map((l) =>
           BlogPostTag.remove({
@@ -1622,7 +1652,7 @@ export async function handleBlogTool(
       const siteId = await resolveBlogSiteId(resolved, args.templateId);
       const { data: authors } = await BlogAuthor.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       authors.sort((a, b) => a.name.localeCompare(b.name));
       return { authors };
     }
@@ -1661,7 +1691,7 @@ export async function handleBlogTool(
 
       const { data: authors } = await BlogAuthor.query
         .primary({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       let author = isValidUuid(idOrName)
         ? authors.find((a) => a.id === idOrName)
         : undefined;
@@ -1675,7 +1705,7 @@ export async function handleBlogTool(
       // No DynamoDB equivalent, so every post referencing this author is patched first.
       const { data: posts } = await BlogPost.query
         .byStatus({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       const affected = posts.filter((p) => p.authorId === author!.id);
       await Promise.all(
         affected.map((p) =>
@@ -1701,10 +1731,10 @@ export async function handleBlogTool(
       // direct "every comment on this site" index, so this fans out per post.
       const { data: posts } = await BlogPost.query
         .byStatus({ templateId: siteId })
-        .go();
+        .go({ pages: "all" });
       const postById = new Map(posts.map((p) => [p.id, p]));
       const commentBatches = await Promise.all(
-        posts.map((p) => BlogComment.query.primary({ postId: p.id }).go()),
+        posts.map((p) => BlogComment.query.primary({ postId: p.id }).go({ pages: "all" })),
       );
       let comments = commentBatches.flatMap((b) => b.data);
       if (statusFilter)

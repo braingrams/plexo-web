@@ -108,7 +108,7 @@ function ProductDetailLayoutSection({ templateId, layout }: { templateId: string
   return (
     <Section
       title="Product page"
-      description="One reusable page design serves every product's own URL (e.g. /shop/your-product) — created automatically with a working default the moment Commerce is enabled. Customize it any time, or reuse a design from another site."
+      description="One reusable page design serves every product's own URL (e.g. /store/your-product) — created automatically with a working default the moment Commerce is enabled. Customize it any time, or reuse a design from another site."
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
         <div>

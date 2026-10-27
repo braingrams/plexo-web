@@ -1,5 +1,6 @@
 "use client";
 
+import { SolIcon, SolOutOfCredits } from "../../../_components/sol/SolTopUp";
 import { useState } from "react";
 
 export type AiBlogPostResult = {
@@ -12,16 +13,6 @@ export type AiBlogPostResult = {
   tags: string[];
   imagePrompt: string;
 };
-
-function IconSparkle() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" />
-      <path d="M19 3v3M20.5 4.5H17.5" />
-      <path d="M5 17v2.5M6.25 18.25H3.75" />
-    </svg>
-  );
-}
 
 /**
  * A topic in, a REVIEWABLE draft out — generation never touches the editor's fields
@@ -44,6 +35,7 @@ export function AiWriteAssistant({
   const [isInserting, setIsInserting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<AiBlogPostResult | null>(null);
+  const [outOfCredits, setOutOfCredits] = useState(false);
 
   async function runGenerate() {
     if (!topic.trim()) {
@@ -52,11 +44,13 @@ export function AiWriteAssistant({
     }
     setIsGenerating(true);
     setError(null);
+    setOutOfCredits(false);
     try {
       const result = await onGenerate(topic.trim());
       setPreview(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      if ((err as { outOfCredits?: boolean })?.outOfCredits) setOutOfCredits(true);
+      else setError(err instanceof Error ? err.message : "SOL couldn't finish that. Please try again.");
     } finally {
       setIsGenerating(false);
     }
@@ -95,8 +89,8 @@ export function AiWriteAssistant({
           fontSize: "0.8rem", fontWeight: 700, fontFamily: "inherit",
         }}
       >
-        <IconSparkle />
-        AI Write for Me
+        <SolIcon size={15} />
+        Write with SOL
       </button>
 
       {open && (
@@ -107,8 +101,8 @@ export function AiWriteAssistant({
           {!preview && (
             <>
               <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.5)", marginBottom: "0.6rem" }}>
-                What should this post be about? Generates the title, content, excerpt, SEO details,
-                categories/tags, and a featured image — spends AI credit from your account.
+                What should this post be about? SOL writes the title, the post, a short summary, search
+                details, categories and tags, and a featured image. Uses AI credits.
               </p>
               <div style={{ display: "flex", gap: "0.5rem" }}>
                 <input
@@ -135,10 +129,15 @@ export function AiWriteAssistant({
                     fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", whiteSpace: "nowrap",
                   }}
                 >
-                  {isGenerating ? "Writing…" : "Generate"}
+                  {isGenerating ? "Writing…" : "Write it"}
                 </button>
               </div>
             </>
+          )}
+          {outOfCredits && (
+            <div style={{ marginTop: "0.6rem" }}>
+              <SolOutOfCredits onDismiss={() => setOutOfCredits(false)} onToppedUp={() => void runGenerate()} />
+            </div>
           )}
           {error && (
             <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.6rem" }} role="alert">

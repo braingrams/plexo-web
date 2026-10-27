@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { deleteObjects } from "@/lib/storage";
 
-import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
+import { Template, TemplateAsset } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
 import { resolveUser } from "@/lib/auth/resolveUser";
-import { removeCloudFrontDomain } from "@/lib/cloudfrontDomains";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
-import { isValidSlugSegment, isReservedTopLevelSlug, isSameOrAncestor, isValidUuid, slugify, getDescendantIds } from "@/server/slugDynamo";
+import { isValidSlugSegment, isReservedTopLevelSlug, isSameOrAncestor, isValidUuid, slugify } from "@/server/slugDynamo";
 import { isTemplateNameTaken } from "@/server/templateNameDynamo";
+import { SiteDeletionBlockedError, deleteTemplateAndContents } from "@/lib/sites/deleteTemplate";
 import { buildLivePreviewHtml } from "@/lib/buildLivePreviewHtml";
 
 type PatchTemplateBody = {
@@ -44,8 +43,11 @@ export async function GET(
   }
 
   const { data: assets } = await TemplateAsset.query.primary({ templateId: id }).go();
-  const previewHtml = await buildLivePreviewHtml(template.compiledHtml, assets.map((a) => ({ path: a.path, blobUrl: a.blobUrl })));
-  return NextResponse.json({ page: { id: template.id, name: template.name, kind: template.kind, compiledHtml: template.compiledHtml, previewHtml } });
+  // ?draft=1 (SOL's canvas): show the page as the owner's latest edits left it — a visual page
+  // changed by page_edit waits in its working copy until it is published.
+  const html = request.nextUrl.searchParams.get("draft") === "1" && template.draftHtml ? template.draftHtml : template.compiledHtml;
+  const previewHtml = await buildLivePreviewHtml(html, assets.map((a) => ({ path: a.path, blobUrl: a.blobUrl })));
+  return NextResponse.json({ page: { id: template.id, name: template.name, kind: template.kind, compiledHtml: html, previewHtml } });
 }
 
 export async function PATCH(
@@ -143,7 +145,7 @@ export async function PATCH(
   // P2002 catch) — checked explicitly here since a plain .patch() has no equivalent
   // built-in constraint to catch a violation of.
   if (data.slug !== undefined && nextParentId) {
-    const { data: siblings } = await Template.query.byParent({ parentId: nextParentId }).go();
+    const { data: siblings } = await Template.query.byParent({ parentId: nextParentId }).go({ pages: "all" });
     if (siblings.some((s) => s.id !== existing.id && s.slug === data.slug)) {
       return NextResponse.json({ error: "A page with this URL already exists here." }, { status: 409 });
     }
@@ -184,50 +186,12 @@ export async function DELETE(
     return NextResponse.json({ error: "Page not found." }, { status: 404 });
   }
 
-  const descendantIds = await getDescendantIds(resolved.organizationId, existing.id);
-  const allIds = [existing.id, ...descendantIds];
-
-  // TemplateAsset rows cascaded at the DB level under Prisma (Template.assets onDelete:
-  // Cascade), but Vercel Blob has no idea a delete just happened there either way — clean
-  // up the actual blob storage for this page and everything nested under it before
-  // deleting the rows, otherwise every raw-uploaded file becomes a permanently orphaned,
-  // still-billed blob.
-  const assetBatches = await Promise.all(allIds.map((tid) => TemplateAsset.query.primary({ templateId: tid }).go()));
-  const assets = assetBatches.flatMap((b) => b.data);
-  if (assets.length > 0) {
-    await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
-      console.error("Failed to delete blobs during page delete (non-fatal):", err),
-    );
+  try {
+    await deleteTemplateAndContents(existing, resolved.organizationId);
+  } catch (err) {
+    if (err instanceof SiteDeletionBlockedError) return NextResponse.json({ error: err.message }, { status: 409 });
+    throw err;
   }
-  await Promise.all(assets.map((a) => TemplateAsset.remove({ templateId: a.templateId, path: a.path }).go()));
-
-  // Same problem for CUSTOM PublishedDomain rows: CloudFront SaaS Manager has no idea a
-  // delete happened — a CUSTOM domain (added via addCloudFrontDomain at link time) stays
-  // attached as a live distribution tenant forever unless explicitly removed, blocking
-  // that domain from ever being re-added even though it no longer appears anywhere in
-  // the dashboard.
-  const domainBatches = await Promise.all(allIds.map((tid) => PublishedDomain.query.primary({ templateId: tid }).go()));
-  const domains = domainBatches.flatMap((b) => b.data);
-  for (const d of domains) {
-    if (d.type === "CUSTOM") {
-      await removeCloudFrontDomain(d.domain, { tenantId: d.tenantId, certificateArn: d.certificateArn }).catch((err) =>
-        console.error(`Failed to remove CloudFront distribution tenant for ${d.domain} during page delete (non-fatal):`, err),
-      );
-    }
-  }
-  await Promise.all(domains.map((d) => PublishedDomain.remove({ templateId: d.templateId, id: d.id }).go()));
-
-  // KNOWN GAP, not silently dropped: Prisma's schema cascades ~30 more relations off
-  // Template (Comment, every Commerce* entity, blog layout fragments, TemplateRevision,
-  // TemplatePurchase, etc.) — see DYNAMODB_CUTOVER_CHECKLIST.md. Only the two cleanups
-  // above (TemplateAsset, PublishedDomain) are wired so far, matching what this route
-  // already did manually pre-migration for the two systems Postgres's own cascade
-  // couldn't reach (Vercel Blob, Vercel's domain registry). The rest need wiring as
-  // Commerce/Content's remaining entities get cut over — deleting a template today does
-  // NOT yet clean up its comments, commerce products/orders, or blog layout fragments.
-
-  await Promise.all(descendantIds.map((did) => Template.remove({ id: did }).go()));
-  await Template.remove({ id: existing.id }).go();
 
   return NextResponse.json({ success: true });
 }

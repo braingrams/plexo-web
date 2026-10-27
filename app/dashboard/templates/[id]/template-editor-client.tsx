@@ -8,6 +8,7 @@
  * via the next/dynamic wrapper in template-editor-dynamic.tsx (ssr: false).
  */
 
+import { SolOutOfCredits } from "../../_components/sol/SolTopUp";
 import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -17,8 +18,12 @@ import {
   type CommentTarget,
 } from "@charisol/plexo-sdk";
 import "@charisol/plexo-sdk/dist/plexo-sdk.css";
+import { SitePlanNotice } from "../../_components/SitePlanNotice";
 import { PagesPanel } from "./PagesPanel";
-import { CommentLayer } from "./comments/CommentLayer";
+import { CommentLayer, type NodeRectSource, type PendingPin } from "./comments/CommentLayer";
+import { V2TemplateEditor, type V2TemplateEditorHandle } from "./v2/V2TemplateEditor";
+import { TryNewEditorBanner, TryNewEditorDialog } from "./v2/TryNewEditor";
+import type { V2Design } from "@/lib/v2/design";
 import { BuyDomainFlow } from "../../domains/domains-client";
 import { Toggle } from "../../_components/Toggle";
 
@@ -67,6 +72,16 @@ type Props = {
   // link to /dashboard/templates/{root}/site-layout regardless of how deep the current
   // page sits in the site's page tree.
   rootTemplateId: string;
+  // Which editor this page uses: "v1" is the classic builder (everything above), "v2" is the new
+  // visual editor (lib/v2/design.ts). Decided on the server from the page's own format.
+  designFormat?: "v1" | "v2";
+  // v2 only: the page's working copy, ready for the new editor.
+  initialV2Design?: V2Design | null;
+  // v1 only: this page can move to the new editor (not an email, uploaded HTML or shared layout).
+  canTryNewEditor?: boolean;
+  // v2 only: this page was moved from the classic editor and can still go back.
+  canGoBackToClassic?: boolean;
+  templateSlug?: string | null;
 };
 
 function IconArrowLeft() {
@@ -384,7 +399,9 @@ function EditorHeaderRight({
   autoSaveEnabled,
   onToggleAutoSave,
   autoSaveNotification,
+  compact,
 }: {
+  compact?: boolean;
   saveMessage: string | null;
   saveError: string | null;
   subscriptionPlan: string;
@@ -412,7 +429,7 @@ function EditorHeaderRight({
     >
       <div
         style={{
-          display: "inline-flex",
+          display: compact ? "none" : "inline-flex",
           alignItems: "center",
           gap: "0.4rem",
           fontSize: "0.8rem",
@@ -575,7 +592,7 @@ function EditorHeaderRight({
         onClick={onSave}
         disabled={isSaving}
         style={{
-          display: "inline-flex",
+          display: compact ? "none" : "inline-flex",
           alignItems: "center",
           gap: "0.45rem",
           padding: "0.5rem 1rem",
@@ -615,7 +632,8 @@ function EditorHeaderRight({
         onClick={onPublish}
         disabled={isPublishing}
         style={{
-          display: "inline-flex",
+          // The new editor has one Save button with Draft / Publish in its menu, so this one is only for the classic editor.
+          display: compact ? "none" : "inline-flex",
           alignItems: "center",
           gap: "0.45rem",
           padding: "0.5rem 1rem",
@@ -676,13 +694,23 @@ export function TemplateEditorClient({
   commerceEnabled,
   maildripConnected,
   rootTemplateId,
+  designFormat = "v1",
+  initialV2Design = null,
+  canTryNewEditor = false,
+  canGoBackToClassic = false,
+  templateSlug = null,
 }: Props) {
   const router = useRouter();
+  const isV2 = designFormat === "v2" && !!initialV2Design;
+  const v2Ref = useRef<V2TemplateEditorHandle>(null);
+  const [tryOpen, setTryOpen] = useState(false);
   const searchParams = useSearchParams();
   const builderRef = useRef<PlexoBuilderRef>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // The builder's SOL actions ran out of AI credits → SOL's top-up card over the editor.
+  const [solOutOfCredits, setSolOutOfCredits] = useState(false);
   const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(
     initialHasUnpublishedChanges,
   );
@@ -725,9 +753,7 @@ export function TemplateEditorClient({
   const [commentsOpen, setCommentsOpen] = useState(() =>
     searchParams.has("comment"),
   );
-  const [pendingPin, setPendingPin] = useState<
-    import("@charisol/plexo-sdk").CommentTarget | null
-  >(null);
+  const [pendingPin, setPendingPin] = useState<PendingPin | null>(null);
 
   const isEmail = templateKind === "EMAIL";
   // Viewer/Commenter roles get a read-only canvas (enforced for real server-side by
@@ -738,6 +764,13 @@ export function TemplateEditorClient({
 
   /** Exports and persists the current canvas without any of the save button's UI side effects — used when switching pages so the outgoing page's edits aren't lost. */
   async function flushSave(): Promise<{ json: TemplateJSON; html: string }> {
+    if (isV2) {
+      // The new editor saves its own page (same autosave route); there is no client-side HTML.
+      if (!v2Ref.current) return { json: initialDesignJson, html: "" };
+      const saved = await v2Ref.current.flush();
+      setHasUnpublishedChanges(true);
+      return { json: saved as unknown as TemplateJSON, html: "" };
+    }
     if (!builderRef.current) return { json: initialDesignJson, html: "" };
     const mode = isEmail ? "email" : "landing_page";
     const exported = await builderRef.current.exportDesign(mode);
@@ -892,7 +925,7 @@ export function TemplateEditorClient({
   }
 
   async function handleSave(): Promise<void> {
-    if (!builderRef.current) {
+    if (!(isV2 ? v2Ref.current : builderRef.current)) {
       setSaveError("Builder is not ready yet.");
       return;
     }
@@ -918,9 +951,9 @@ export function TemplateEditorClient({
    * Publish always goes live with whatever is on the canvas right now, not a stale
    * previously-autosaved draft. */
   async function handlePublish(): Promise<void> {
-    if (!builderRef.current) {
+    if (!(isV2 ? v2Ref.current : builderRef.current)) {
       setPublishError("Builder is not ready yet.");
-      return;
+      throw new Error("Builder is not ready yet.");
     }
     setPublishError(null);
     setPublishMessage(null);
@@ -974,6 +1007,8 @@ export function TemplateEditorClient({
       setPublishError(
         error instanceof Error ? error.message : "Unable to publish template.",
       );
+      // The new editor's Save menu shows "couldn't publish" from this; the message above stays in the header too.
+      throw error;
     } finally {
       setIsPublishing(false);
     }
@@ -1058,6 +1093,30 @@ export function TemplateEditorClient({
     }
   }
 
+  const headerRightNode = (
+    <EditorHeaderRight
+      compact={isV2}
+      saveMessage={saveMessage}
+      saveError={saveError}
+      subscriptionPlan={subscriptionPlan}
+      isSaving={isSaving}
+      onSave={() => void handleSave()}
+      hasUnpublishedChanges={hasUnpublishedChanges}
+      isPublishing={isPublishing}
+      publishMessage={publishMessage}
+      publishError={publishError}
+      onPublish={() => void handlePublish().catch(() => undefined)}
+      commentsOpen={commentsOpen}
+      onToggleComments={() => {
+        setCommentsOpen((v) => !v);
+        setPendingPin(null);
+      }}
+      autoSaveEnabled={autoSaveEnabled}
+      onToggleAutoSave={handleToggleAutoSave}
+      autoSaveNotification={autoSaveNotification}
+    />
+  );
+
   return (
     <div
       style={{
@@ -1067,12 +1126,28 @@ export function TemplateEditorClient({
         overflow: "hidden",
       }}
     >
-      {templateKind === "LANDING_PAGE" && !isBlogLayout && (
+      {templateKind === "LANDING_PAGE" && !isBlogLayout && !isV2 && (
         <PagesPanel
           templateId={templateId}
           subscriptionPlan={subscriptionPlan}
           onNavigate={(pageId) => void handleNavigateToPage(pageId)}
         />
+      )}
+      {!isV2 && canTryNewEditor && !isReadOnlyRole && (
+        <TryNewEditorBanner templateId={templateId} onTry={() => setTryOpen(true)} />
+      )}
+      {tryOpen && (
+        <TryNewEditorDialog
+          templateId={templateId}
+          templateName={templateName}
+          slug={templateSlug}
+          isHome={!templateParentId}
+          getLatestDesign={async () => (await flushSave()).json}
+          onClose={() => setTryOpen(false)}
+        />
+      )}
+      {templateKind === "LANDING_PAGE" && !isBlogLayout && (
+        <SitePlanNotice templateId={templateId} refreshKey={isPublishing} />
       )}
       {isBlogLayout && (
         <div
@@ -1094,10 +1169,41 @@ export function TemplateEditorClient({
           go live.
         </div>
       )}
+      {solOutOfCredits && (
+        <div style={{ position: "fixed", right: 20, bottom: 20, zIndex: 60, width: "min(380px, calc(100vw - 32px))" }}>
+          <SolOutOfCredits onDismiss={() => setSolOutOfCredits(false)} onToppedUp={() => setSolOutOfCredits(false)} />
+        </div>
+      )}
       <div style={{ flex: 1, overflow: "hidden", background: "#0a0c15" }}>
+        {isV2 && initialV2Design ? (
+          <V2TemplateEditor
+            ref={v2Ref}
+            templateId={templateId}
+            templateName={templateName}
+            rootTemplateId={rootTemplateId}
+            initialDesign={initialV2Design}
+            readOnly={isReadOnlyRole}
+            commentMode={commentsOpen}
+            onRequestComment={(target) => {
+              setPendingPin(target);
+              setCommentsOpen(true);
+            }}
+            stockKeys={{ unsplash: unsplashKey, pexels: pexelsKey, pixabay: pixabayKey }}
+            kind={templateKind}
+            headerRight={headerRightNode}
+            onPublish={handlePublish}
+            onBack={() => router.push(`/dashboard/templates/${rootTemplateId}/detail`)}
+            onSaved={() => {
+              setSaveError(null);
+              setHasUnpublishedChanges(true);
+            }}
+            canGoBack={canGoBackToClassic}
+          />
+        ) : (
         <PlexoBuilder
           ref={builderRef}
           apiKey="workspace-internal"
+          onAiCreditsExhausted={() => setSolOutOfCredits(true)}
           mode={isEmail ? "email" : "landing_page"}
           isBlogLayout={isBlogLayout}
           commerceEnabled={commerceEnabled}
@@ -1147,33 +1253,13 @@ export function TemplateEditorClient({
               }}
             />
           }
-          headerRightContent={
-            <EditorHeaderRight
-              saveMessage={saveMessage}
-              saveError={saveError}
-              subscriptionPlan={subscriptionPlan}
-              isSaving={isSaving}
-              onSave={() => void handleSave()}
-              hasUnpublishedChanges={hasUnpublishedChanges}
-              isPublishing={isPublishing}
-              publishMessage={publishMessage}
-              publishError={publishError}
-              onPublish={() => void handlePublish()}
-              commentsOpen={commentsOpen}
-              onToggleComments={() => {
-                setCommentsOpen((v) => !v);
-                setPendingPin(null);
-              }}
-              autoSaveEnabled={autoSaveEnabled}
-              onToggleAutoSave={handleToggleAutoSave}
-              autoSaveNotification={autoSaveNotification}
-            />
-          }
+          headerRightContent={headerRightNode}
           {...({ __internalPlan: subscriptionPlan } as any)}
         />
+        )}
 
         <CommentLayer
-          builderRef={builderRef}
+          builderRef={(isV2 ? v2Ref : builderRef) as React.RefObject<NodeRectSource | null>}
           templateId={templateId}
           organizationId={organizationId}
           currentUserId={currentUserId}

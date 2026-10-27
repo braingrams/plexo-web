@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
-import { resolveNotificationRecipient } from "@/lib/notificationPreferencesDynamo";
-import { sendMaildripEmail } from "@/lib/mail/maildrip";
-import { buildFormSubmissionEmail } from "@/lib/mail/templates";
-import { FormSubmission } from "@/lib/db/opsEntities";
-import { logEmailDelivery } from "@/lib/mail/logEmail";
+import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
+import { FormSettings } from "@/lib/db/opsEntities";
 import { Template } from "@/lib/db/contentEntities";
-import { User } from "@/lib/db/coreEntities";
+import { designFormatOf } from "@/lib/v2/design";
+import { V2_FORM_HONEYPOT_FIELD_NAME, findV2Form, relabelV2Fields } from "@/lib/v2/forms";
 
 /**
  * Receives a real, no-JS browser form submission from a form_container's own <form
@@ -29,10 +27,13 @@ import { User } from "@/lib/db/coreEntities";
 // sees or fills it. Hardcoded rather than imported: the SDK version currently pinned in
 // package.json predates this field, so the export doesn't exist yet on this side until
 // that dependency is bumped — see the SDK-repo commit that introduced it.
-const HONEYPOT_FIELD_NAME = "_hp_field";
+const HONEYPOT_FIELD_NAME = V2_FORM_HONEYPOT_FIELD_NAME; // same name in V1 and V2 forms
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
   const { templateId } = await params;
+  // public/plexo-forms.js (forms in raw HTML / React / the visual builder) asks for JSON and
+  // shows the thank-you in place; a plain browser form post still gets the redirect below.
+  const wantsJson = (request.headers.get("accept") ?? "").includes("application/json");
   const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
   const siteResult = await resolveSite(hostname);
   if (siteResult.status !== "ok") {
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (originHost && originHost !== hostname) {
       console.info(`[forms] origin mismatch: templateId=${templateId} origin=${originHost} expected=${hostname}`);
+      if (wantsJson) return NextResponse.json({ ok: true, redirect: null });
       const redirectParam = new URL(request.url).searchParams.get("redirect") || "/";
       const redirectPath = redirectParam.startsWith("/") ? redirectParam : "/";
       return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
@@ -78,12 +80,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: "Invalid form submission." }, { status: 400 });
   }
 
-  const fields: Record<string, string> = {};
-  for (const [key, value] of formData.entries()) {
-    if (typeof value === "string" && value.trim()) fields[key] = value.trim().slice(0, 5000);
-  }
+  let fields = collectFormFields(formData.entries());
   if (Object.keys(fields).length === 0) {
-    return NextResponse.json({ error: "Empty submission." }, { status: 400 });
+    return NextResponse.json({ error: "Please fill in the form before sending." }, { status: 400 });
   }
 
   const url = new URL(request.url);
@@ -91,8 +90,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Same-origin only — an author's redirect param controls where their own visitor lands
   // after submitting, never an arbitrary external URL a copied/tampered action could point
   // at instead.
-  const redirectParam = url.searchParams.get("redirect") || "/";
-  const redirectPath = redirectParam.startsWith("/") ? redirectParam : "/";
+  // No redirect given (new-editor forms don't set one): send the visitor back to the page they
+  // were on, when the browser told us (same site only), else the home page.
+  const refererPath = (() => {
+    try {
+      const ref = new URL(originHeader ?? "");
+      return ref.hostname === hostname ? ref.pathname : null;
+    } catch {
+      return null;
+    }
+  })();
+  const redirectParam = url.searchParams.get("redirect") || refererPath || "/";
+  const redirectPath = redirectParam.startsWith("/") && !redirectParam.startsWith("//") ? redirectParam : "/";
+
+  // New-editor (V2) forms name inputs after field ids; find the form in its page's design and
+  // restore the labels so the inbox reads "Phone number: ..." rather than "f3: ...".
+  const pageId = url.searchParams.get("page");
+  const formNodeId = url.searchParams.get("fid");
+  const resolvedFormName = formName;
+  if (pageId && formNodeId) {
+    const { data: page } = await Template.get({ id: pageId }).go();
+    if (page && page.organizationId === organization.id && designFormatOf(page) === "v2") {
+      const v2Form = findV2Form(page.designJson, formNodeId);
+      if (v2Form) fields = relabelV2Fields(fields, v2Form);
+    }
+  }
 
   // Honeypot: a real visitor never sees or fills HONEYPOT_FIELD_NAME (it's CSS-collapsed
   // to nothing in every compiled form_container — see its compiler-side comment), but a
@@ -104,55 +126,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const honeypotValue = formData.get(HONEYPOT_FIELD_NAME);
   if (typeof honeypotValue === "string" && honeypotValue.trim()) {
     console.info(`[forms] honeypot catch: templateId=${templateId} at=${new Date().toISOString()}`);
+    if (wantsJson) return NextResponse.json({ ok: true, redirect: null });
     return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
   }
 
-  await FormSubmission.create({
-    id: crypto.randomUUID(),
-    templateId,
-    organizationId: organization.id,
-    formName,
-    fields,
-    submitterIp: clientIp(request),
-  }).go();
+  await recordFormSubmission({ templateId, organizationId: organization.id, formName: resolvedFormName, fields, submitterIp: clientIp(request), siteHost: hostname });
 
-  void notifyFormSubmission(templateId, organization.id, formName, fields).catch((err) =>
-    console.error("[mail] form submission notification failed:", err),
-  );
-
+  // A thank-you page set for this form (e.g. carried over from WordPress) wins over the
+  // default of showing the confirmation on the same page.
+  const { data: formSettings } = await FormSettings.get({ templateId, formName }).go();
+  const thankYou = formSettings?.redirectUrl;
+  const validThankYou = thankYou && (thankYou.startsWith("/") || /^https:\/\//i.test(thankYou)) ? thankYou : null;
+  if (wantsJson) return NextResponse.json({ ok: true, redirect: validThankYou });
+  if (validThankYou) {
+    return NextResponse.redirect(new URL(validThankYou, request.url), { status: 303 });
+  }
   return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
 }
 
-async function notifyFormSubmission(
-  templateId: string,
-  organizationId: string,
-  formName: string,
-  fields: Record<string, string>,
-): Promise<void> {
-  const { data: template } = await Template.get({ id: templateId }).go();
-  if (!template) return;
-  const { data: owner } = await User.get({ id: template.userId }).go();
-
-  const to = await resolveNotificationRecipient(organizationId, "formSubmissions", owner?.email);
-  if (!to) return;
-
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const html = buildFormSubmissionEmail({
-    siteName: template.name,
-    formName,
-    fieldsPreview: Object.entries(fields).slice(0, 8) as [string, string][],
-    submissionsUrl: `${base}/dashboard/templates/${templateId}/form-submissions`,
-  });
-  const subject = `New ${formName} submission on ${template.name}`;
-  try {
-    await sendMaildripEmail({ to, subject, html });
-    logEmailDelivery({ kind: "maildrip", to, subject, status: "sent", context: "form_submission", organizationId, templateId });
-  } catch (err) {
-    logEmailDelivery({
-      kind: "maildrip", to, subject, status: "failed",
-      errorMessage: err instanceof Error ? err.message : String(err),
-      context: "form_submission", organizationId, templateId,
-    });
-    throw err;
-  }
-}

@@ -62,14 +62,130 @@ type FormState = {
   countries: string;
   states: string;
   estimatedTimeLabel: string;
+  description: string;
   status: "ACTIVE" | "INACTIVE";
 };
 
-const EMPTY_FORM: FormState = {
-  id: null, name: "", type: "PICKUP", feeMajor: "", free: true, countries: "", states: "", estimatedTimeLabel: "", status: "ACTIVE",
+export type FulfillmentSettings = {
+  deliveryEnabled: boolean;
+  pickupEnabled: boolean;
+  pickupLocation: string | null;
+  pickupInstructions: string | null;
 };
 
-export function DeliveryClient({ templateId, initialMethods, currency }: { templateId: string; initialMethods: DeliveryMethodSummary[]; currency: string }) {
+/**
+ * The two store-wide switches above the method list: whether shipping is offered at all,
+ * and the built-in "Store pickup" option (on by default for every store, so physical
+ * products can sell before any delivery method exists). Saved on its own — it's a
+ * CommerceSettings change, not a delivery-method row.
+ */
+function FulfillmentCard({ templateId, initial, hasCourierMethods }: { templateId: string; initial: FulfillmentSettings; hasCourierMethods: boolean }) {
+  const [deliveryEnabled, setDeliveryEnabled] = useState(initial.deliveryEnabled);
+  const [pickupEnabled, setPickupEnabled] = useState(initial.pickupEnabled);
+  const [pickupLocation, setPickupLocation] = useState(initial.pickupLocation ?? "");
+  const [pickupInstructions, setPickupInstructions] = useState(initial.pickupInstructions ?? "");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+
+  async function save() {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/v1/commerce/${templateId}/settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deliveryEnabled, pickupEnabled, pickupLocation, pickupInstructions }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to save.");
+      setMessage({ kind: "success", text: "Saved." });
+    } catch (err) {
+      setMessage({ kind: "error", text: err instanceof Error ? err.message : "Failed to save." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const rowStyle: React.CSSProperties = { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem" };
+  return (
+    <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.2rem 1.3rem", marginBottom: "1.25rem", display: "grid", gap: "1.1rem" }}>
+      <div style={rowStyle}>
+        <div style={{ display: "flex", gap: "0.8rem" }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: "rgba(96,165,250,0.14)", display: "grid", placeItems: "center" }}><IconCourier /></div>
+          <div>
+            <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "#f0f2ff" }}>Delivery</div>
+            <div style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)", marginTop: 2, lineHeight: 1.45 }}>
+              {deliveryEnabled
+                ? hasCourierMethods
+                  ? "Customers can have orders shipped using your shipping methods below."
+                  : "On, but you haven't added a shipping method yet — add one below, or turn delivery off and offer pickup only."
+                : "Off — customers won't see any shipping options at checkout."}
+            </div>
+          </div>
+        </div>
+        <Toggle checked={deliveryEnabled} disabled={deliveryEnabled && !pickupEnabled} onChange={setDeliveryEnabled} label="Offer delivery" />
+      </div>
+
+      <div style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+
+      <div style={rowStyle}>
+        <div style={{ display: "flex", gap: "0.8rem" }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: "rgba(var(--brand-rgb),0.14)", display: "grid", placeItems: "center" }}><IconPickup /></div>
+          <div>
+            <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "#f0f2ff" }}>Store pickup <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "#34d399", marginLeft: 6 }}>FREE</span></div>
+            <div style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)", marginTop: 2, lineHeight: 1.45 }}>
+              Customers can choose to collect their order from you. You&apos;ll let them know when it&apos;s ready.
+            </div>
+          </div>
+        </div>
+        <Toggle checked={pickupEnabled} disabled={pickupEnabled && !deliveryEnabled} onChange={setPickupEnabled} label="Offer store pickup" />
+      </div>
+
+      {pickupEnabled && (
+        <div style={{ display: "grid", gap: "0.8rem", paddingLeft: "calc(36px + 0.8rem)" }}>
+          {!pickupLocation.trim() && (
+            <div style={{ fontSize: "0.78rem", color: "#fbbf24", background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 9, padding: "0.55rem 0.75rem" }}>
+              Add your store&apos;s address so customers can see where to pick up before they order.
+            </div>
+          )}
+          <FieldLabel label="Pickup address" hint="Shown at checkout and on the customer's order confirmation.">
+            <textarea value={pickupLocation} onChange={(e) => setPickupLocation(e.target.value)} rows={2} maxLength={300} placeholder="e.g. 12 Admiralty Way, Lekki Phase 1, Lagos" style={{ ...inputStyle, resize: "vertical" }} />
+          </FieldLabel>
+          <FieldLabel label="Pickup hours / notes (optional)">
+            <input type="text" value={pickupInstructions} onChange={(e) => setPickupInstructions(e.target.value)} maxLength={500} placeholder="e.g. Mon–Sat, 9am–6pm. Call 0803… on arrival." style={inputStyle} />
+          </FieldLabel>
+        </div>
+      )}
+
+      {!deliveryEnabled || !pickupEnabled ? (
+        <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", margin: 0 }}>At least one of delivery or pickup must stay on so customers can receive physical products.</p>
+      ) : null}
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.8rem" }}>
+        {message && <span style={{ fontSize: "0.8rem", color: message.kind === "success" ? "#34d399" : "#f87171", marginRight: "auto" }}>{message.text}</span>}
+        <button
+          type="button" onClick={() => void save()} disabled={saving}
+          style={{ padding: "0.55rem 1.1rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", fontSize: "0.82rem", fontWeight: 700 }}
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const EMPTY_FORM: FormState = {
+  id: null, name: "", type: "PICKUP", feeMajor: "", free: true, countries: "", states: "", estimatedTimeLabel: "", description: "", status: "ACTIVE",
+};
+
+export function DeliveryClient({
+  templateId, initialMethods, currency, initialFulfillment,
+}: {
+  templateId: string;
+  initialMethods: DeliveryMethodSummary[];
+  currency: string;
+  initialFulfillment: FulfillmentSettings;
+}) {
   const [methods, setMethods] = useState(initialMethods);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -94,6 +210,7 @@ export function DeliveryClient({ templateId, initialMethods, currency }: { templ
       countries: method.countries.join(", "),
       states: method.states.join(", "),
       estimatedTimeLabel: method.estimatedTimeLabel ?? "",
+      description: method.description ?? "",
       status: method.status,
     });
     setError(null);
@@ -119,6 +236,9 @@ export function DeliveryClient({ templateId, initialMethods, currency }: { templ
       countries: form.countries.split(",").map((s) => s.trim()).filter(Boolean),
       states: form.states.split(",").map((s) => s.trim()).filter(Boolean),
       estimatedTimeLabel: form.estimatedTimeLabel.trim() || undefined,
+      // For a pickup method this IS its pickup address (shown to customers at checkout and
+      // snapshotted onto the order — see pickupLocationFor). "" clears it on edit.
+      description: form.description.trim(),
       status: form.status,
     };
 
@@ -175,6 +295,8 @@ export function DeliveryClient({ templateId, initialMethods, currency }: { templ
 
   return (
     <div>
+      <FulfillmentCard templateId={templateId} initial={initialFulfillment} hasCourierMethods={methods.some((m) => m.type === "COURIER" && m.status === "ACTIVE")} />
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "1.25rem" }}>
         <span style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)" }}>{methods.length} delivery method{methods.length === 1 ? "" : "s"}</span>
         <button
@@ -187,12 +309,14 @@ export function DeliveryClient({ templateId, initialMethods, currency }: { templ
 
       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", background: "rgba(var(--brand-rgb),0.08)", border: "1px solid rgba(var(--brand-rgb),0.2)", borderRadius: 12, padding: "0.7rem 1rem", marginBottom: "1.25rem", fontSize: "0.82rem", color: "#c4b5fd" }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
-        A customer only sees the methods that match their delivery address — set each one&apos;s country and state coverage below.
+        A customer only sees the shipping methods that match their delivery address — set each one&apos;s country and state coverage below. Pickup options are shown to everyone.
       </div>
 
       {methods.length === 0 ? (
         <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", color: "rgba(240,242,255,0.45)", fontSize: "0.85rem" }}>
-          No delivery methods yet — add one so checkout has something to offer customers.
+          {initialFulfillment.pickupEnabled
+            ? "No extra delivery methods yet — customers can still choose Store pickup. Add a shipping method to deliver to their address."
+            : "No delivery methods yet — add one so checkout has something to offer customers."}
         </div>
       ) : (
         methods.map((m) => (
@@ -203,7 +327,7 @@ export function DeliveryClient({ templateId, initialMethods, currency }: { templ
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "#f0f2ff" }}>{m.name}</div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginTop: 3, flexWrap: "wrap" }}>
-                <span style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.5)", background: "rgba(255,255,255,0.05)", borderRadius: 999, padding: "0.15rem 0.55rem" }}>{scopeLabel(m)}</span>
+                <span style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.5)", background: "rgba(255,255,255,0.05)", borderRadius: 999, padding: "0.15rem 0.55rem" }}>{m.type === "PICKUP" ? m.description || "No pickup address yet — edit to add one" : scopeLabel(m)}</span>
                 {m.estimatedTimeLabel && <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)" }}>{m.estimatedTimeLabel}</span>}
               </div>
             </div>
@@ -274,6 +398,13 @@ export function DeliveryClient({ templateId, initialMethods, currency }: { templ
                 )}
               </div>
 
+              {form.type === "PICKUP" && (
+                <FieldLabel label="Pickup address" hint="Where customers collect from — shown at checkout and on their order.">
+                  <textarea value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} rows={2} placeholder="e.g. 12 Admiralty Way, Lekki Phase 1, Lagos" style={{ ...inputStyle, resize: "vertical" }} />
+                </FieldLabel>
+              )}
+
+              {form.type === "COURIER" && (<>
               <FieldLabel label="Country coverage" hint="Comma-separated ISO country codes (e.g. NG). Leave blank for worldwide.">
                 <input type="text" value={form.countries} onChange={(e) => setForm((p) => ({ ...p, countries: e.target.value }))} placeholder="NG" style={inputStyle} />
               </FieldLabel>
@@ -281,6 +412,7 @@ export function DeliveryClient({ templateId, initialMethods, currency }: { templ
               <FieldLabel label="State coverage (optional)" hint="Comma-separated. Leave blank for every state in the countries above.">
                 <input type="text" value={form.states} onChange={(e) => setForm((p) => ({ ...p, states: e.target.value }))} placeholder="Lagos, Abuja" style={inputStyle} />
               </FieldLabel>
+              </>)}
 
               <FieldLabel label="Estimated delivery time (optional)">
                 <input type="text" value={form.estimatedTimeLabel} onChange={(e) => setForm((p) => ({ ...p, estimatedTimeLabel: e.target.value }))} placeholder="1-2 business days" style={inputStyle} />

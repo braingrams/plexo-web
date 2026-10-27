@@ -10,7 +10,9 @@ import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 const REGION = process.env.AWS_REGION || "us-east-1";
 let client: S3Client | null = null;
 function s3(): S3Client {
-  if (!client) client = new S3Client({ region: REGION });
+  // Adaptive retries: a migration uploads thousands of files in bursts, and S3 answers a
+  // burst with SlowDown ("Please reduce your request rate") — retry with back-off.
+  if (!client) client = new S3Client({ region: REGION, maxAttempts: 10, retryMode: "adaptive" });
   return client;
 }
 
@@ -24,12 +26,31 @@ function publicUrlFor(key: string): string {
   return `https://${bucketName()}.s3.${REGION}.amazonaws.com/${key}`;
 }
 
+/** The origin user uploads are served from, or null when storage isn't configured (tests, local). Used to
+ * allow the owner's own uploaded font files in compiled pages' @font-face rules. */
+export function userContentOrigin(): string | null {
+  try {
+    return `https://${bucketName()}.s3.${REGION}.amazonaws.com`;
+  } catch {
+    return null;
+  }
+}
+
 /** Extracts the S3 key from a URL this module minted (publicUrlFor's inverse). Throws on
  * a URL from a different bucket/format — every real caller only ever passes back a URL
  * this module itself produced. */
-function keyFromUrl(url: string): string {
+export function keyFromUrl(url: string): string {
   const parsed = new URL(url);
-  return parsed.pathname.replace(/^\//, "");
+  // A URL's path is percent-encoded ("WhatsApp%20Image…%E2%80%AFPM.jpeg"); the key isn't.
+  // Using it encoded named a file that doesn't exist: every signed link to a file with a
+  // space in its name was broken (SOL's attachment thumbnails), and deleting it silently
+  // did nothing. readObject below always decoded.
+  const path = parsed.pathname.replace(/^\//, "");
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path; // a stray "%" that isn't an escape
+  }
 }
 
 export class StorageError extends Error {}
@@ -122,4 +143,31 @@ export async function createPresignedUploadPost(
     Expires: 5 * 60,
   });
   return { url, fields, publicUrl: publicUrlFor(key) };
+}
+
+/** Reads an object this module minted back into memory — for server-side consumers of a
+ * private upload (e.g. SOL handing a chat attachment's bytes to the model, which can't
+ * fetch a private URL itself). The bucket comes from the URL rather than
+ * USER_CONTENT_BUCKET_NAME because the SOL chat Lambda doesn't load SSM env; it's still
+ * restricted to Plexo's own user-content buckets (the same "plexo-user-content*" scope the
+ * IAM grants use), so an arbitrary S3 URL can't be read through this. */
+export async function readObject(url: string): Promise<{ body: Buffer; contentType: string | undefined }> {
+  let bucket = "";
+  let key = "";
+  try {
+    const parsed = new URL(url);
+    const match = parsed.hostname.match(/^(plexo-user-content[a-z0-9.-]*)\.s3\.[a-z0-9-]+\.amazonaws\.com$/);
+    bucket = match?.[1] ?? "";
+    key = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
+  } catch {
+    // handled below
+  }
+  if (!bucket || !key) throw new StorageError("Not a Plexo storage URL.");
+  try {
+    const res = await s3().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    const bytes = await res.Body!.transformToByteArray();
+    return { body: Buffer.from(bytes), contentType: res.ContentType };
+  } catch (err) {
+    throw new StorageError(err instanceof Error ? err.message : "Failed to read file.");
+  }
 }

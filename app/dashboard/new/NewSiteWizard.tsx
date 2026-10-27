@@ -1,8 +1,14 @@
 "use client";
 
+import { SolIcon, SolOutOfCredits } from "../_components/sol/SolTopUp";
 import { useEffect, useRef, useState } from "react";
+import { AI_UNREACHABLE } from "@/lib/ai/requestErrors";
+import { checkAiCredits, generateWithProgress, type AiRequestBody } from "@/lib/ai/clientGenerate";
 import type { DragEvent, FormEvent } from "react";
 import Link from "next/link";
+import type { MarketplaceListItem } from "@/lib/marketplace";
+import { MarketplaceRowExpandGrid } from "@/app/marketplace/MarketplaceRowExpandGrid";
+import { MarketplaceSkeletonGrid } from "@/app/marketplace/MarketplaceBrowse";
 import { CustomSelect } from "../../_components/CustomSelect";
 
 // Same four tiers/labels as Settings → AI's own Creativity Tier picker (AiSettingsClient.tsx)
@@ -26,25 +32,12 @@ const AI_TIER_OPTIONS: Array<{ label: string; value: "AUTO" | "BASIC" | "MEDIUM"
   { label: "Most Capable", value: "HIGH", description: "Most creative & thorough" },
 ];
 
-type MarketplaceItem = {
-  id: string;
-  name: string;
-  kind: "EMAIL" | "LANDING_PAGE";
-  category: string | null;
-  priceCents: number;
-};
+type MarketplaceItem = MarketplaceListItem;
 
 type CreatedTemplate = { id: string; name: string };
 
 const hairline = "rgba(255,255,255,0.09)";
 const hairlineSoft = "rgba(255,255,255,0.055)";
-
-const SWATCHES = [
-  "linear-gradient(150deg,#312e81,var(--brand-deep) 60%,var(--brand-light))",
-  "linear-gradient(150deg,#0f172a,#0ea5e9 65%,#67e8f9)",
-  "linear-gradient(150deg,#134e4a,#10b981 65%,#6ee7b7)",
-  "linear-gradient(150deg,#450a0a,#f43f5e 65%,#fda4af)",
-];
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
@@ -94,21 +87,11 @@ function IconGlobe() {
   );
 }
 
-function IconSparkle() {
+function IconSuccess() {
   return (
     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="10" />
       <polyline points="8 12.5 11 15.5 16 9" />
-    </svg>
-  );
-}
-
-function IconWand() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m15 4 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z" />
-      <path d="M5 20 19 6" />
-      <path d="m5 13 .8 1.7L7.5 15.5l-1.7.8L5 18l-.8-1.7L2.5 15.5l1.7-.8L5 13Z" />
     </svg>
   );
 }
@@ -264,7 +247,7 @@ function Dropzone({ file, onFile }: { file: File | null; onFile: (f: File | null
 
 export function NewSiteWizard() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [startTab, setStartTab] = useState<"marketplace" | "ai" | "upload">("marketplace");
+  const [startTab, setStartTab] = useState<"marketplace" | "ai" | "upload" | "wordpress">("marketplace");
 
   const [items, setItems] = useState<MarketplaceItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
@@ -276,6 +259,10 @@ export function NewSiteWizard() {
   // the same framing SOL's own ask_user_question uses for this exact choice).
   const [pageType, setPageType] = useState<"html" | "builder">("html");
   const [aiGenerating, setAiGenerating] = useState(false);
+  // Streamed while the AI writes the page (lib/ai/clientGenerate.ts): how much so far, and
+  // whether it's on a second pass after a first draft came back cut off.
+  const [aiProgress, setAiProgress] = useState<{ characters: number; attempt: number } | null>(null);
+  const [aiStage, setAiStage] = useState<"checking" | "writing" | "saving" | null>(null);
   // AI is a per-ApiKey setting (Settings → AI), not a single account-wide flag — "enabled"
   // means at least one active key has useAi:true. Checked once, the first time the AI tab
   // is opened, so a first-time user is asked to turn it on right here instead of hitting a
@@ -289,6 +276,13 @@ export function NewSiteWizard() {
   const [uploading, setUploading] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
+  const [outOfCredits, setOutOfCredits] = useState(false);
+  // The card is tall and the action buttons sit low in it: bring a new error into view,
+  // or it appears off-screen above the button that caused it and looks like nothing happened.
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [error]);
   const [template, setTemplate] = useState<CreatedTemplate | null>(null);
 
   const [baseDomain, setBaseDomain] = useState("plexo.site");
@@ -299,7 +293,7 @@ export function NewSiteWizard() {
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/v1/marketplace/templates?sort=popular&free=true")
+    fetch("/api/v1/marketplace/templates?sort=popular&free=true&kind=LANDING_PAGE")
       .then((res) => res.json())
       .then((data) => setItems(data.templates ?? []))
       .catch(() => setItems([]))
@@ -346,7 +340,7 @@ export function NewSiteWizard() {
         });
         const createData = await createRes.json().catch(() => ({}));
         if (!createRes.ok) {
-          setError(createData.error ?? "Couldn't create an API key to enable AI with.");
+          setError(createData.error ?? "Couldn't turn on SOL. Please try again.");
           return;
         }
         keyId = createData.apiKey.id;
@@ -359,7 +353,7 @@ export function NewSiteWizard() {
       });
       const patchData = await patchRes.json().catch(() => ({}));
       if (!patchRes.ok) {
-        setError(patchData.error ?? "Couldn't enable AI.");
+        setError(patchData.error ?? "Couldn't turn on SOL. Please try again.");
         return;
       }
       setAiKeyStatus("enabled");
@@ -401,6 +395,7 @@ export function NewSiteWizard() {
    * the fastest path plexo-web itself has to a working page from a prompt.
    */
   async function handleGenerateWithAi() {
+    setOutOfCredits(false);
     if (!aiPrompt.trim()) {
       setError("Describe the site you want first.");
       return;
@@ -411,26 +406,36 @@ export function NewSiteWizard() {
     }
     setError(null);
     setAiGenerating(true);
+    setAiProgress(null);
     try {
-      const genRes = await fetch("/api/v1/ai/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": "workspace-internal" },
-        body: JSON.stringify(
-          pageType === "html"
-            ? { mode: "generate_raw_html", prompt: aiPrompt.trim(), templateKind: "LANDING_PAGE", context: null, tier: aiTier }
-            : { mode: "generate_layout", prompt: aiPrompt.trim(), templateKind: "LANDING_PAGE", context: BLANK_DESIGN_JSON, tier: aiTier },
-        ),
-      });
-      const genData = await genRes.json().catch(() => ({}));
-      if (!genRes.ok) {
-        // "AI is not enabled for this account" is the one error here a first-time user is
-        // actually likely to hit (AI access is opt-in per account, set up in Settings —
-        // same requirement every other in-dashboard AI feature already has) — point them
-        // at the fix instead of leaving a bare permission error on their very first action.
-        const hint = genRes.status === 403 ? " Enable AI for your account in Settings, then try again." : "";
-        setError((genData.error ?? "Failed to generate your site.") + hint);
+      const request: AiRequestBody =
+        pageType === "html"
+          ? { mode: "generate_raw_html", prompt: aiPrompt.trim(), templateKind: "LANDING_PAGE", context: null, tier: aiTier }
+          : { mode: "generate_layout", prompt: aiPrompt.trim(), templateKind: "LANDING_PAGE", context: BLANK_DESIGN_JSON, tier: aiTier };
+
+      // Confirm the account can afford it before anything runs.
+      setAiStage("checking");
+      const credits = await checkAiCredits(request);
+      if (credits && !credits.enough) {
+        // Plexo's AI and not enough credits → SOL's top-up card; anything else is a plain message.
+        if (credits.paidBy === "plexo" && credits.estimatedCredits !== null) setOutOfCredits(true);
+        else setError(credits.message ?? "You don't have enough AI credits for this.");
         return;
       }
+
+      setAiStage("writing");
+      let genData: { summary: string; result: unknown };
+      try {
+        genData = await generateWithProgress(request, setAiProgress);
+      } catch (err) {
+        // "AI is not enabled for this account" is the one error a first-time user is likely
+        // to hit — point them at the fix instead of leaving a bare permission error.
+        const message = err instanceof Error ? err.message : "SOL couldn't build your site. Please try again.";
+        if (/enough AI credits|out of AI credits/i.test(message)) setOutOfCredits(true);
+        else setError(/not enabled/i.test(message) ? "SOL isn't turned on for your account yet. Turn it on in Settings → AI, then try again." : message);
+        return;
+      }
+      setAiStage("saving");
 
       const name = aiPrompt.trim().slice(0, 60);
       const publishRes = await fetch(pageType === "html" ? "/api/v1/templates/upload-raw" : "/api/v1/publish", {
@@ -448,8 +453,13 @@ export function NewSiteWizard() {
         return;
       }
       advanceToConnect({ id: publishData.templateId, name: publishData.name });
+    } catch {
+      // The request never got an answer (connection dropped, or the browser gave up).
+      setError(AI_UNREACHABLE);
     } finally {
       setAiGenerating(false);
+      setAiStage(null);
+      setAiProgress(null);
     }
   }
 
@@ -549,10 +559,24 @@ export function NewSiteWizard() {
             boxShadow: "0 24px 60px -30px rgba(0,0,0,0.6)",
           }}
         >
+          {outOfCredits && (
+            <div style={{ margin: "0 0 18px" }}>
+              <SolOutOfCredits onDismiss={() => setOutOfCredits(false)} onToppedUp={() => void handleGenerateWithAi()} />
+            </div>
+          )}
           {error && (
-            <p style={{ fontSize: "12.5px", color: "var(--danger)", margin: "0 0 18px" }} role="alert">
-              {error}
-            </p>
+            <div
+              ref={errorRef}
+              role="alert"
+              style={{
+                display: "flex", gap: 10, alignItems: "flex-start", margin: "0 0 18px", padding: "12px 14px", borderRadius: 10,
+                border: "1px solid rgba(248,113,113,0.45)", background: "rgba(248,113,113,0.08)", color: "#fca5a5", fontSize: "13px", lineHeight: 1.5,
+              }}
+            >
+              <span aria-hidden="true" style={{ fontWeight: 800 }}>!</span>
+              <span style={{ flex: 1 }}>{error}</span>
+              <button type="button" onClick={() => setError(null)} aria-label="Dismiss" style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+            </div>
           )}
 
           {/* Step 1 — Start */}
@@ -626,11 +650,28 @@ export function NewSiteWizard() {
                 >
                   Upload your own
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setStartTab("wordpress")}
+                  style={{
+                    fontSize: "12.5px",
+                    fontWeight: 650,
+                    padding: "7px 14px",
+                    borderRadius: 999,
+                    border: "none",
+                    cursor: "pointer",
+                    background: startTab === "wordpress" ? "var(--brand)" : "transparent",
+                    color: startTab === "wordpress" ? "#fff" : "var(--text-muted)",
+                    transition: "background 0.15s, color 0.15s",
+                  }}
+                >
+                  Move from WordPress
+                </button>
               </div>
 
               {startTab === "marketplace" ? (
                 loadingItems ? (
-                  <p style={{ fontSize: "12.5px", color: "var(--text-faint)" }}>Loading templates…</p>
+                  <MarketplaceSkeletonGrid />
                 ) : items.length === 0 ? (
                   <p style={{ fontSize: "12.5px", color: "var(--text-faint)" }}>
                     No free templates available right now — try{" "}
@@ -644,41 +685,7 @@ export function NewSiteWizard() {
                     .
                   </p>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 18 }}>
-                    {items.slice(0, 8).map((item, i) => {
-                      const busy = busyId === item.id;
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => void handleUseMarketplace(item)}
-                          disabled={busy}
-                          style={{
-                            textAlign: "left",
-                            background: "rgba(255,255,255,0.02)",
-                            border: `1px solid ${hairline}`,
-                            borderRadius: 12,
-                            padding: 10,
-                            cursor: busy ? "wait" : "pointer",
-                            fontFamily: "inherit",
-                            color: "inherit",
-                            transition: "border-color 0.15s, transform 0.15s",
-                          }}
-                        >
-                          <div style={{ height: 72, borderRadius: 8, background: SWATCHES[i % SWATCHES.length], marginBottom: 10 }} />
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontSize: "12.5px", fontWeight: 650, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {item.name}
-                              </div>
-                              <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{item.category ?? (item.kind === "LANDING_PAGE" ? "Landing Page" : "Email")}</div>
-                            </div>
-                            <span style={{ fontSize: "11px", fontWeight: 650, color: "var(--success)", flexShrink: 0 }}>{busy ? "…" : "Use →"}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <MarketplaceRowExpandGrid templates={items} busyId={busyId} onSelect={(t) => void handleUseMarketplace(t)} />
                 )
               ) : startTab === "ai" ? (
                 <div style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 18 }}>
@@ -689,15 +696,15 @@ export function NewSiteWizard() {
                         display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                       }}
                     >
-                      <IconWand />
+                      <SolIcon size={20} />
                     </div>
                     <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-muted)" }}>
-                      Describe the site you want — Plexo's AI builds a complete, working page from your prompt.
+                      Describe the site you want — SOL builds a complete, working page from your description.
                     </p>
                   </div>
 
                   {aiKeyStatus === "checking" || aiKeyStatus === "unchecked" ? (
-                    <p style={{ fontSize: "12.5px", color: "var(--text-faint)" }}>Checking your AI settings…</p>
+                    <p style={{ fontSize: "12.5px", color: "var(--text-faint)" }}>Getting SOL ready…</p>
                   ) : aiKeyStatus === "disabled" ? (
                     <div
                       style={{
@@ -711,11 +718,10 @@ export function NewSiteWizard() {
                         alignItems: "flex-start",
                       }}
                     >
-                      <p style={{ margin: 0, fontSize: "13px", fontWeight: 650 }}>Turn on AI to build with a prompt</p>
+                      <p style={{ margin: 0, fontSize: "13px", fontWeight: 650 }}>Turn on SOL to build from a description</p>
                       <p style={{ margin: 0, fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-                        AI generation isn&rsquo;t on for your account yet. Turning it on uses Plexo&rsquo;s system AI by
-                        default (billed from your credit balance) — no setup needed. You can switch to your own API key
-                        any time in{" "}
+                        SOL isn&rsquo;t on for your account yet. Turning it on uses Plexo&rsquo;s AI, paid from your AI
+                        credits — no setup needed. You can switch to your own AI key any time in{" "}
                         <Link href="/dashboard/settings/ai" target="_blank" style={{ color: "var(--brand)" }}>
                           Settings
                         </Link>
@@ -727,7 +733,7 @@ export function NewSiteWizard() {
                         disabled={enablingAi}
                         style={{ ...primaryButtonStyle(!enablingAi), cursor: enablingAi ? "wait" : "pointer" }}
                       >
-                        {enablingAi ? "Turning on…" : "Turn on AI"}
+                        {enablingAi ? "Turning on…" : "Turn on SOL"}
                       </button>
                     </div>
                   ) : (
@@ -777,15 +783,46 @@ export function NewSiteWizard() {
                         disabled={aiGenerating || !aiPrompt.trim() || (pageType === "html" && !agreed)}
                         style={{ ...primaryButtonStyle(!aiGenerating && !!aiPrompt.trim() && (pageType !== "html" || agreed)), alignSelf: "flex-start", cursor: aiGenerating ? "wait" : "pointer" }}
                       >
-                        {aiGenerating ? "Generating your site…" : "Generate my site"}
+                        {aiGenerating ? (aiStage === "checking" ? "Checking your AI credits…" : aiStage === "saving" ? "Saving your site…" : "Writing your site…") : "Generate my site"}
                       </button>
-                      {aiGenerating && (
-                        <p style={{ fontSize: "11.5px", color: "var(--text-faint)", margin: 0 }}>
-                          This can take up to a minute for a full layout.
-                        </p>
+                      {aiGenerating && aiStage === "writing" && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 420 }} aria-live="polite">
+                          <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+                            <div className="plexo-ai-progress" style={{ height: "100%", width: "40%", borderRadius: 999, background: "var(--brand)" }} />
+                          </div>
+                          <p style={{ fontSize: "11.5px", color: "var(--text-faint)", margin: 0 }}>
+                            {!aiProgress || aiProgress.characters === 0
+                              ? "Planning your page…"
+                              : aiProgress.attempt > 1
+                                ? `The first draft ran long — writing the full version (${aiProgress.characters.toLocaleString()} characters so far)…`
+                                : `Writing your page — ${aiProgress.characters.toLocaleString()} characters so far…`}
+                            {" "}A full page usually takes one to three minutes; you can watch it come together here.
+                          </p>
+                          <style>{`@keyframes plexoAiSlide{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}.plexo-ai-progress{animation:plexoAiSlide 1.4s ease-in-out infinite}`}</style>
+                        </div>
                       )}
                     </>
                   )}
+                </div>
+              ) : startTab === "wordpress" ? (
+                <div style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 16, alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{
+                        width: 36, height: 36, borderRadius: 10, background: "var(--brand-subtle)",
+                        display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                      }}
+                    >
+                      <IconGlobe />
+                    </div>
+                    <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+                      Already have a WordPress site? Plexo copies all of it — pages, blog posts, images, your theme&rsquo;s design and your
+                      exact web addresses — reconnects your forms, and walks you through moving your domain. Your WordPress site isn&rsquo;t changed.
+                    </p>
+                  </div>
+                  <Link href="/dashboard/migrate/wordpress" style={{ ...primaryButtonStyle(true), textDecoration: "none", display: "inline-block" }}>
+                    Move my WordPress site →
+                  </Link>
                 </div>
               ) : (
                 <form onSubmit={handleUpload} style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 22 }}>
@@ -901,7 +938,7 @@ export function NewSiteWizard() {
               {publishedUrl ? (
                 <div style={{ textAlign: "center", padding: "12px 0" }}>
                   <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-                    <IconSparkle />
+                    <IconSuccess />
                   </div>
                   <h2 style={{ margin: "0 0 8px", fontSize: "19px", fontWeight: 700 }}>Your site is live</h2>
                   <Link href={publishedUrl} target="_blank" style={{ fontFamily: "var(--font-mono)", fontSize: "15px", fontWeight: 650, color: "var(--brand)" }}>

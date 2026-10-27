@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { EntityItem } from "electrodb";
 
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
 import { resolveCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { Organization } from "@/lib/db/coreEntities";
 import { CommerceWallet, CommerceWalletLedgerEntry } from "@/lib/db/commerceEntities";
+import { paginate, parsePageRequest } from "@/lib/pagination";
 
 /**
  * GET /api/v1/commerce/:templateId/wallet
@@ -13,6 +15,9 @@ import { CommerceWallet, CommerceWalletLedgerEntry } from "@/lib/db/commerceEnti
  * on — see resolveCommerceWallet. Read-only; wallets are only ever created by a real sale
  * (creditCommerceWallet) or lazily here on first read, never by this route directly mutating
  * balance.
+ *
+ * The ledger comes back one page at a time: ?page=&pageSize= (with `ledgerTotal` for the pager).
+ * Without `page`, the older ?limit=&cursor= form still works for API callers.
  */
 export async function GET(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
   const { templateId } = await context.params;
@@ -23,6 +28,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   const searchParams = request.nextUrl.searchParams;
   const limit = Math.min(Math.max(Number(searchParams.get("limit")) || 25, 1), 100);
   const cursor = searchParams.get("cursor") || null;
+  const paged = searchParams.has("page");
 
   const { data: org } = await Organization.get({ id: organizationId }).go();
   const pooled = org?.commerceWalletPooled ?? false;
@@ -37,11 +43,22 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
     });
   }
 
-  const { data: ledger, cursor: nextCursor } = await CommerceWalletLedgerEntry.query
-    .primary({ walletId: existing.id })
-    .go({ limit, cursor, order: "desc" });
+  let ledger: EntityItem<typeof CommerceWalletLedgerEntry>[];
+  let nextCursor: string | null = null;
+  let pageInfo: { ledgerTotal: number; page: number; pageSize: number } | null = null;
+  if (paged) {
+    const { data: all } = await CommerceWalletLedgerEntry.query.primary({ walletId: existing.id }).go({ pages: "all", order: "desc" });
+    const p = paginate(all, parsePageRequest(searchParams));
+    ledger = p.items;
+    pageInfo = { ledgerTotal: p.total, page: p.page, pageSize: p.pageSize };
+  } else {
+    const result = await CommerceWalletLedgerEntry.query.primary({ walletId: existing.id }).go({ limit, cursor, order: "desc" });
+    ledger = result.data;
+    nextCursor = result.cursor ?? null;
+  }
 
   return NextResponse.json({
+    ...(pageInfo ?? {}),
     wallet: { balanceCents: existing.balanceCents ?? 0, currency: existing.currency ?? "NGN", pooled },
     ledger: ledger.map((entry) => ({
       id: entry.id,
@@ -53,7 +70,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
       description: entry.description ?? null,
       createdAt: entry.createdAt,
     })),
-    nextCursor: nextCursor ?? null,
+    nextCursor,
   });
 }
 

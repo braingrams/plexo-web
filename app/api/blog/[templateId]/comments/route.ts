@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BlogPost, BlogComment } from "@/lib/db/contentEntities";
 import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
+import { paginate, parsePageRequest } from "@/lib/pagination";
 
 export async function GET(
   request: NextRequest,
@@ -16,16 +17,26 @@ export async function GET(
   // BlogComment is scoped by postId, not templateId (see its own entity comment in
   // contentEntities.ts) — no direct "every comment on this site" index, so this fans out
   // per post, same as the comments moderation dashboard page.
-  const { data: posts } = await BlogPost.query.byStatus({ templateId: resolved.context.templateId }).go();
+  const { data: posts } = await BlogPost.query.byStatus({ templateId: resolved.context.templateId }).go({ pages: "all" });
   const postById = new Map(posts.map((p) => [p.id, p]));
-  const commentBatches = await Promise.all(posts.map((p) => BlogComment.query.primary({ postId: p.id }).go()));
+  const commentBatches = await Promise.all(posts.map((p) => BlogComment.query.primary({ postId: p.id }).go({ pages: "all" })));
   let comments = commentBatches.flatMap((b) => b.data);
   if (statusFilter) {
     comments = comments.filter((c) => c.status === statusFilter);
   }
-  comments = comments.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, 200);
+  comments = comments.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
+  // ?page=&pageSize= returns one page (with the real total); without them, every comment.
+  const total = comments.length;
+  let paging: { total: number; page: number; pageSize: number } | null = null;
+  if (searchParams.has("page")) {
+    const p = paginate(comments, parsePageRequest(searchParams));
+    comments = p.items;
+    paging = { total: p.total, page: p.page, pageSize: p.pageSize };
+  }
 
   return NextResponse.json({
+    total,
+    ...(paging ?? {}),
     comments: comments.map((c) => {
       const post = postById.get(c.postId);
       return {

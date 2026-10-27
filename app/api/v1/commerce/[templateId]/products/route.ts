@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { catalogFieldsFromInput, VariantInputError } from "@/lib/commerce/variants";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
@@ -20,7 +21,7 @@ function toPublicProduct<T extends { digitalAccessPasswordEncrypted?: string }>(
 // list in memory rather than a direct .get(). Small in practice (one site's catalog).
 async function ensureUniqueProductSlug(templateId: string, baseInput: string): Promise<string> {
   const base = slugify(baseInput) || "product";
-  const { data: products } = await CommerceProduct.query.primary({ templateId }).go();
+  const { data: products } = await CommerceProduct.query.primary({ templateId }).go({ pages: "all" });
   const slugs = new Set(products.map((p) => p.slug));
   let candidate = base;
   let suffix = 2;
@@ -35,7 +36,7 @@ async function resolveCategoryId(templateId: string, organizationId: string, cat
   if (typeof categoryName !== "string" || !categoryName.trim()) return null;
   const name = categoryName.trim();
   const slug = slugify(name) || "category";
-  const { data: categories } = await CommerceCategory.query.primary({ templateId }).go();
+  const { data: categories } = await CommerceCategory.query.primary({ templateId }).go({ pages: "all" });
   const existing = categories.find((c) => c.slug === slug);
   if (existing) {
     if (existing.name !== name) await CommerceCategory.patch({ templateId, id: existing.id }).set({ name }).go();
@@ -52,8 +53,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   if (resolved.error) return resolved.error;
 
   const [{ data: products }, { data: categories }] = await Promise.all([
-    CommerceProduct.query.primary({ templateId }).go(),
-    CommerceCategory.query.primary({ templateId }).go(),
+    CommerceProduct.query.primary({ templateId }).go({ pages: "all" }),
+    CommerceCategory.query.primary({ templateId }).go({ pages: "all" }),
   ]);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
 
@@ -81,6 +82,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   const body = await request.json().catch(() => ({}));
   const {
     name, description, kind, priceMinor, stockQuantity, durationMinutes, imageUrl, galleryImageUrls, category, relatedProductIds,
+    compareAtPriceMinor, sku, options, variants,
     digitalDeliveryMethod, digitalFileUrl, digitalFileName, digitalExternalUrl, digitalAccessInstructions, digitalAccessPassword,
     digitalMaxDownloads, digitalLinkExpiryDays,
   } = body;
@@ -109,6 +111,15 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
     }
   }
 
+  // Sale price, SKU, and options/variants (Size, Colour…) — lib/commerce/variants.ts.
+  let catalog: ReturnType<typeof catalogFieldsFromInput>;
+  try {
+    catalog = catalogFieldsFromInput({ compareAtPriceMinor, sku, options, variants }, { kind, priceMinor });
+  } catch (err) {
+    if (err instanceof VariantInputError) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
+  }
+
   const slug = await ensureUniqueProductSlug(templateId, name);
   const categoryId = await resolveCategoryId(templateId, organizationId, category);
 
@@ -123,7 +134,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
     description: typeof description === "string" ? description : undefined,
     kind,
     priceMinor,
-    stockQuantity: kind === "PHYSICAL" && typeof stockQuantity === "number" ? Math.max(0, Math.trunc(stockQuantity)) : undefined,
+    stockQuantity: kind === "PHYSICAL" && typeof stockQuantity === "number" && !catalog.set.variants ? Math.max(0, Math.trunc(stockQuantity)) : undefined,
+    ...(catalog.set as Record<string, never>),
     durationMinutes: kind === "SERVICE" && typeof durationMinutes === "number" ? Math.max(5, Math.trunc(durationMinutes)) : undefined,
     imageUrl: typeof imageUrl === "string" && imageUrl ? imageUrl : undefined,
     galleryImageUrls: Array.isArray(galleryImageUrls) ? galleryImageUrls.filter((u) => typeof u === "string") : undefined,
@@ -143,7 +155,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   if (!product) throw new Error(`CommerceProduct ${productId} vanished immediately after being created`);
 
   if (Array.isArray(relatedProductIds) && relatedProductIds.length > 0) {
-    const { data: candidateProducts } = await CommerceProduct.query.primary({ templateId }).go();
+    const { data: candidateProducts } = await CommerceProduct.query.primary({ templateId }).go({ pages: "all" });
     const validIds = candidateProducts.filter((p) => relatedProductIds.includes(p.id)).map((p) => p.id);
     await Promise.all(
       validIds.map((relatedProductId) =>

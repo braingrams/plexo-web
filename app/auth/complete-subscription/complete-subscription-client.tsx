@@ -5,13 +5,16 @@ import { useState } from "react";
 
 type Props = {
   plan: "PRO" | "ULTRA";
+  /** The account hasn't used its one free trial yet. */
+  canTrial: boolean;
+  trialDays: number;
 };
 
 const PLAN_LABEL: Record<Props["plan"], string> = { PRO: "Pro", ULTRA: "Ultra" };
 
-export function CompleteSubscriptionClient({ plan }: Props) {
+export function CompleteSubscriptionClient({ plan, canTrial, trialDays }: Props) {
   const router = useRouter();
-  const [loading, setLoading] = useState<"pay" | "free" | null>(null);
+  const [loading, setLoading] = useState<"trial" | "pay" | "free" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Hands off to the Subscription settings page (?upgrade=PRO|ULTRA triggers the same
@@ -25,14 +28,34 @@ export function CompleteSubscriptionClient({ plan }: Props) {
     router.push(`/dashboard/settings/subscription?upgrade=${plan}&returnTo=${encodeURIComponent("/dashboard")}`);
   }
 
+  async function startTrial(): Promise<void> {
+    setLoading("trial");
+    setError(null);
+    try {
+      const res = await fetch("/api/billing/trial", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Could not start your trial.");
+      router.push("/dashboard?trial=started");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start your trial.");
+      setLoading(null);
+    }
+  }
+
   async function continueOnFree(): Promise<void> {
     setLoading("free");
     setError(null);
     try {
-      const res = await fetch("/api/profile", {
-        method: "PATCH",
+      // Clears the plan picked at signup and stops the trial being offered again.
+      const res = await fetch("/api/billing/trial", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pendingPlan: null }),
+        body: JSON.stringify({ dismiss: true }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -49,9 +72,11 @@ export function CompleteSubscriptionClient({ plan }: Props) {
   return (
     <main className="auth-shell">
       <section className="auth-card">
-        <h1 className="auth-title">Finish setting up {PLAN_LABEL[plan]}</h1>
+        <h1 className="auth-title">{canTrial ? `Try ${PLAN_LABEL[plan]} free for ${trialDays} days` : `Finish setting up ${PLAN_LABEL[plan]}`}</h1>
         <p className="auth-subtitle">
-          Your account is created — complete payment to activate your {PLAN_LABEL[plan]} plan and unlock its features.
+          {canTrial
+            ? `Your account is ready. Start with every ${PLAN_LABEL[plan]} feature unlocked — no card needed. We'll remind you before the trial ends, and nothing you build is ever deleted.`
+            : `Your account is created — complete payment to activate your ${PLAN_LABEL[plan]} plan and unlock its features.`}
         </p>
 
         {error ? (
@@ -63,14 +88,22 @@ export function CompleteSubscriptionClient({ plan }: Props) {
           </p>
         ) : null}
 
+        {canTrial ? (
+          <button className="auth-button" type="button" disabled={loading !== null} onClick={() => void startTrial()}>
+            {loading === "trial" ? <span className="auth-spinner" aria-hidden="true" /> : null}
+            {loading === "trial" ? "Starting your trial…" : `Start my free ${PLAN_LABEL[plan]} trial`}
+          </button>
+        ) : null}
+
         <button
-          className="auth-button"
+          className={canTrial ? "auth-button auth-button-secondary" : "auth-button"}
           type="button"
           disabled={loading !== null}
           onClick={() => void continueToPayment()}
+          style={canTrial ? { marginTop: "0.75rem", background: "transparent", border: "1px solid var(--surface-border)", color: "var(--text-main)" } : undefined}
         >
           {loading === "pay" ? <span className="auth-spinner" aria-hidden="true" /> : null}
-          {loading === "pay" ? "Redirecting…" : `Continue to payment for ${PLAN_LABEL[plan]}`}
+          {loading === "pay" ? "Redirecting…" : canTrial ? `Pay now and skip the trial` : `Continue to payment for ${PLAN_LABEL[plan]}`}
         </button>
 
         <p className="auth-meta">

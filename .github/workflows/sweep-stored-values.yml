@@ -1,0 +1,49 @@
+name: Cleanup | Stored big values
+
+# Weekly: removes big values and big brands from storage that no row points at any more (lib/db/valueSweep.ts; docs/large-values.md).
+# It reads every row of every table first and deletes nothing if any read fails; only objects older than 7 days are touched.
+# Manual runs are a DRY RUN (report only) unless "apply" is ticked; the weekly run applies.
+# Runs as a least-privilege role (scripts/aws/create-sweep-role.sh) that can only read the tables and list/read/delete the two prefixes.
+on:
+  schedule:
+    - cron: "30 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Actually delete (otherwise: report only)"
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  sweep:
+    if: github.repository == 'Challaris/plexo-web'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      AWS_REGION: us-east-1
+      USER_CONTENT_BUCKET_NAME: plexo-user-content
+      PLEXO_CORE_TABLE: plexo-core
+      PLEXO_LEDGER_TABLE: plexo-ledger
+      PLEXO_COMMERCE_TABLE: plexo-commerce
+      PLEXO_CONTENT_TABLE: plexo-content
+      PLEXO_OPS_TABLE: plexo-ops
+      PLEXO_IMPORT_TABLE: plexo-import
+      PLEXO_SOL_TABLE: plexo-sol
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::919927637684:role/github-actions-plexo-sweep
+          aws-region: us-east-1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - name: Sweep
+        run: npx tsx scripts/sweep-stored-values.ts ${{ (github.event_name == 'schedule' || inputs.apply) && '--apply' || '' }}

@@ -5,6 +5,7 @@ import type {
   GenerateWithToolsParams,
   GenerateWithToolsResult,
 } from "./shared";
+import { withHistoryCacheBreakpoints, billableInputTokens } from "./shared";
 
 // `client.messages.create` request/response shape verified against the current
 // Anthropic API reference (claude-api skill), including current model IDs in
@@ -17,6 +18,7 @@ export async function generate({
   userPrompt,
   maxTokens,
   attachments,
+  onTextDelta,
 }: ProviderCallParams): Promise<ProviderCallResult> {
   const client = new Anthropic({ apiKey });
 
@@ -30,12 +32,18 @@ export async function generate({
   }));
   content.push({ type: "text", text: userPrompt });
 
-  const response = await client.messages.create({
+  // Streamed, then collected into one message: the SDK refuses a non-streaming request
+  // whose max_tokens could run past 10 minutes (any large page — generate_raw_html asks
+  // for up to 32000 tokens, 64000 on the truncation retry). Same result as create().
+  const stream = client.messages.stream({
     model,
     max_tokens: maxTokens,
     system: systemPrompt,
     messages: [{ role: "user", content }],
   });
+  // Lets the caller show the page being written (lib/ai/generateRequest.ts streams it to the browser).
+  if (onTextDelta) stream.on("text", onTextDelta);
+  const response = await stream.finalMessage();
 
   const textBlock = response.content.find((block) => block.type === "text");
   const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
@@ -66,6 +74,7 @@ export async function generateWithTools({
   tools,
   maxTokens,
   onTextDelta,
+  onToolInputProgress,
 }: GenerateWithToolsParams): Promise<GenerateWithToolsResult> {
   const client = new Anthropic({ apiKey });
 
@@ -92,12 +101,29 @@ export async function generateWithTools({
         cache_control: { type: "ephemeral" },
       },
     ],
-    messages: conversationHistory,
+    messages: withHistoryCacheBreakpoints(conversationHistory),
     ...(cachedTools ? { tools: cachedTools } : {}),
   });
 
   if (onTextDelta) {
     stream.on("text", (textDelta) => onTextDelta(textDelta));
+  }
+  if (onToolInputProgress) {
+    // A tool call's input arrives as JSON fragments after its block starts; report its size.
+    const writing = new Map<number, { id: string; name: string; characters: number }>();
+    stream.on("streamEvent", (event) => {
+      if (event.type === "content_block_start" && event.content_block.type === "tool_use") {
+        const call = { id: event.content_block.id, name: event.content_block.name, characters: 0 };
+        writing.set(event.index, call);
+        onToolInputProgress({ ...call });
+      } else if (event.type === "content_block_delta" && event.delta.type === "input_json_delta") {
+        const call = writing.get(event.index);
+        if (call) {
+          call.characters += event.delta.partial_json.length;
+          onToolInputProgress({ ...call });
+        }
+      }
+    });
   }
 
   const finalMessage = await stream.finalMessage();
@@ -106,7 +132,7 @@ export async function generateWithTools({
     content: finalMessage.content,
     stopReason: finalMessage.stop_reason ?? "end_turn",
     usage: {
-      inputTokens: finalMessage.usage?.input_tokens ?? 0,
+      inputTokens: billableInputTokens(finalMessage.usage),
       outputTokens: finalMessage.usage?.output_tokens ?? 0,
     },
   };

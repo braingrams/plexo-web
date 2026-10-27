@@ -1,11 +1,12 @@
 import { CommerceDeliveryMethod, CommerceSettings } from "@/lib/db/commerceEntities";
+import { resolveFulfillmentOptions } from "@/lib/commerce/delivery";
 import { DeliveryClient, type DeliveryMethodSummary } from "./DeliveryClient";
 
 export default async function CommerceDeliveryPage({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = await params;
 
   const [{ data: methods }, { data: settings }] = await Promise.all([
-    CommerceDeliveryMethod.query.primary({ templateId }).go(),
+    CommerceDeliveryMethod.query.primary({ templateId }).go({ pages: "all" }),
     CommerceSettings.get({ templateId }).go(),
   ]);
   methods.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
@@ -22,5 +23,12 @@ export default async function CommerceDeliveryPage({ params }: { params: Promise
     status: m.status ?? "ACTIVE",
   }));
 
-  return <DeliveryClient templateId={templateId} initialMethods={initialMethods} currency={settings?.currency ?? "NGN"} />;
+  return (
+    <DeliveryClient
+      templateId={templateId}
+      initialMethods={initialMethods}
+      currency={settings?.currency ?? "NGN"}
+      initialFulfillment={resolveFulfillmentOptions(settings)}
+    />
+  );
 }

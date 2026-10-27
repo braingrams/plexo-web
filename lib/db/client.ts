@@ -1,15 +1,24 @@
 import { DynamoDB } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocument } from "@aws-sdk/lib-dynamodb";
+import { withLargeValues } from "./largeValues";
 
 // DynamoDBDocument (not the separate DynamoDBDocumentClient wrapper) — this is the type
 // @auth/dynamodb-adapter specifically requires (see server/authDynamo.ts), and it works
 // equally well for ElectroDB and the raw TransactWriteCommand calls in
 // lib/db/ledgerOperations.ts, so one shared client instance covers all three.
-const ddb = new DynamoDB({ region: process.env.AWS_REGION || "us-east-1" });
+// Adaptive retries: a burst of writes to one partition (a WordPress migration planning a
+// site with hundreds of posts writes them all under one job key) gets throttled even on an
+// on-demand table. The SDK's default 3 attempts gave up mid-burst; adaptive mode backs off
+// and rate-limits the client instead of surfacing "Throughput exceeds…" to the user.
+const ddb = new DynamoDB({ region: process.env.AWS_REGION || "us-east-1", maxAttempts: 10, retryMode: "adaptive" });
 
-export const docClient = DynamoDBDocument.from(ddb, {
+// Big text values (a page, a design system, a long conversation…) move out of the row into storage and come back on read, so a
+// DynamoDB item's 400 KB limit never limits what a person can save. See lib/db/largeValues.ts.
+/** The client with no layer on it: what the stored-value cleanup reads (markers and all). Everything else uses `docClient`. */
+export const rawDocClient = DynamoDBDocument.from(ddb, {
   marshallOptions: { removeUndefinedValues: true },
 });
+export const docClient = withLargeValues(rawDocClient);
 
 // Table names come from the environment rather than being recomputed here from the CDK
 // naming convention (base name, or `${base}-${stackID}` for non-prod) — that convention

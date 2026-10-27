@@ -37,6 +37,11 @@ export const User = new Entity(
       allowanceBalance: { type: "number", default: 0 },
       topupBalance: { type: "number", default: 0 },
       allowanceResetAt: { type: "string", default: () => new Date().toISOString() },
+      // Credits held for AI turns that are running right now — { [turnId]: { credits, expiresAt } },
+      // with heldCredits the cached sum of the live ones. See holdCredits in
+      // lib/db/ledgerOperations.ts: it's what stops two chats at once spending the same credits.
+      creditHolds: { type: "any" },
+      heldCredits: { type: "number" },
       // Marketplace seller earnings (cents) — reserved at withdrawal request, not at
       // processing time, same semantics as today (see docs comment on the Prisma field).
       sellerBalanceCents: { type: "number", default: 0 },
@@ -77,6 +82,12 @@ export const User = new Entity(
       isConfirmed: { type: "boolean", default: false },
       suspendedAt: { type: "string" },
       suspendedReason: { type: "string" },
+      // Charisol Auth (server/charisolAccount.ts). `charisolSub` is the shared Charisol
+      // account this user signed in as (Google or password). `charisolPasswordAt` is set the
+      // first time they sign in with a Charisol PASSWORD — from then on Charisol holds their
+      // password and the local `passwordHash` is never accepted again (see authDynamo.ts).
+      charisolSub: { type: "string" },
+      charisolPasswordAt: { type: "string" },
       // Self-selected once on first visit to /dashboard/funnels (Funnel/LMS module) —
       // reshapes both the funnel-creation flow and the ongoing page-builder's guidance
       // density (see the Funnel/LMS plan's "Experience-level onboarding" section). Null
@@ -95,6 +106,45 @@ export const User = new Entity(
       // actually was, so admin doesn't just see a timestamp with no idea what it means.
       lastActiveAt: { type: "string" },
       lastActiveContext: { type: "string" },
+      // ── Plan lifecycle (lib/plan) ────────────────────────────────────────────────
+      // Mirrors the Stripe subscription behind subscriptionPlan (webhooks/stripe). PAST_DUE
+      // keeps the plan while Stripe retries the card; CANCELED means the payment has ended.
+      subscriptionStatus: { type: ["ACTIVE", "TRIALING", "PAST_DUE", "CANCELED"] as const },
+      // Paid access that isn't a subscription: the 14-day trial, or an admin grant with an
+      // end date. The plan drops to Free once this passes (unless planKeptByAdmin).
+      planAccessUntil: { type: "string" },
+      planAccessSource: { type: ["TRIAL", "ADMIN"] as const },
+      // One trial per account, ever. trialOfferSeenAt: the post-signup offer was shown.
+      trialStartedAt: { type: "string" },
+      trialOfferSeenAt: { type: "string" },
+      // The "your access ends in a few days" email for the current planAccessUntil was sent.
+      planAccessReminderSentAt: { type: "string" },
+      // The admin console's "Keep on plan" switch: this account keeps subscriptionPlan
+      // indefinitely, with no payment, and is never downgraded automatically.
+      planKeptByAdmin: { type: "boolean", default: false },
+      // Set while the account is on Free after having had a paid plan — what the dashboard
+      // explains, and what tells the lifecycle there's an archive to restore on upgrade.
+      planDowngradedAt: { type: "string" },
+      planDowngradeReason: { type: ["PAYMENT_ENDED", "TRIAL_ENDED", "GRANT_ENDED", "NO_PAYMENT", "ADMIN"] as const },
+      planBeforeDowngrade: { type: ["PRO", "ULTRA"] as const },
+      // When Free's limits (one live site, homepage only, no custom domain) were last
+      // applied to this account's sites. Cleared on upgrade, so a later downgrade re-applies.
+      freeLimitsAppliedAt: { type: "string" },
+      // Last time a subscription with no recorded status was checked against Stripe.
+      subscriptionCheckedAt: { type: "string" },
+      // Short lease so two requests never run the same downgrade/restore at once.
+      planSyncLockUntil: { type: "string" },
+      // ── Billing snapshot (lib/billing/payments.ts, webhooks/stripe) ─────────────────
+      // The card most recently charged successfully — brand + last 4 + expiry only, never
+      // anything more — and the current plan subscription's period, so the dashboard and
+      // the admin console can show them without calling Stripe.
+      billingCardBrand: { type: "string" },
+      billingCardLast4: { type: "string" },
+      billingCardExpMonth: { type: "number" },
+      billingCardExpYear: { type: "number" },
+      subscriptionStartedAt: { type: "string" },
+      subscriptionPeriodEnd: { type: "string" },
+      subscriptionCancelAtPeriodEnd: { type: "boolean" },
     },
     indexes: {
       primary: {
@@ -133,6 +183,88 @@ export const UserEmailLock = new Entity(
       primary: {
         pk: { field: "pk", composite: ["email"], template: "EMAILLOCK#${email}" },
         sk: { field: "sk", composite: [], template: "EMAILLOCK#METADATA" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// A person's Strata (Charisol design system) session — what lets the editor's Branding panel
+// read and update their Strata projects on their behalf (lib/strata). One row per Plexo
+// user. The token is a Strata session JWT (~24h), stored ENCRYPTED (lib/crypto.ts
+// encryptStrataToken) and never sent back to the browser; connectedAt is when Strata issued
+// it, which is how "expired" is told apart from "never connected". Only a primary-key lookup
+// is ever needed, so no GSI.
+export const StrataSession = new Entity(
+  {
+    model: { entity: "strataSession", version: "1", service: "plexoCore" },
+    attributes: {
+      userId: { type: "string", required: true },
+      ciphertext: { type: "string", required: true },
+      // Who the Strata account is — shown as "Connected as …", never used for access decisions.
+      strataEmail: { type: "string" },
+      strataName: { type: "string" },
+      connectedAt: { type: "string", required: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["userId"], template: "USER#${userId}" },
+        sk: { field: "sk", composite: [], template: "STRATASESSION" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// The person's Charisol sign-in, kept on the server (encrypted) so another Charisol product — Strata today — can be opened as
+// them without asking them to sign in again: Charisol's own browser session only lasts about an hour, but this renews a fresh
+// ID token whenever it's needed (lib/charisolLink.ts). Never returned to the browser; removed when they sign out of Plexo.
+export const CharisolLink = new Entity(
+  {
+    model: { entity: "charisolLink", version: "1", service: "plexoCore" },
+    attributes: {
+      userId: { type: "string", required: true },
+      ciphertext: { type: "string", required: true },
+      storedAt: { type: "string", required: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["userId"], template: "USER#${userId}" },
+        sk: { field: "sk", composite: [], template: "CHARISOLLINK" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// "Keep my website up to date with Strata" (lib/strata/autoUpdate.ts): one row per app that has
+// automatic updates on. It holds a read-only Strata integration key (scope design-system:read,
+// limited to the one linked project), stored ENCRYPTED and never sent to the browser, so a
+// scheduled job can check Strata without the owner being signed in. runningAt is the per-app
+// lock (a run older than a few minutes is treated as dead). The scheduled sweep scans this
+// small table for status "active".
+export const StrataAutoUpdate = new Entity(
+  {
+    model: { entity: "strataAutoUpdate", version: "1", service: "plexoCore" },
+    attributes: {
+      appId: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      strataProjectId: { type: "string", required: true },
+      keyId: { type: "string", required: true },
+      ciphertext: { type: "string", required: true },
+      status: { type: ["active", "needs-reconnect"] as const, required: true },
+      createdAt: { type: "string", required: true },
+      lastCheckedAt: { type: "string" },
+      lastRevision: { type: "string" },
+      // What the last check found, for the Design tab: "updated" | "up-to-date" | "needs-review" | "error" | "reconnect".
+      lastResultKind: { type: "string" },
+      lastResult: { type: "string" },
+      runningAt: { type: "string" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["appId"], template: "APP#${appId}" },
+        sk: { field: "sk", composite: [], template: "STRATAAUTOUPDATE" },
       },
     },
   },
@@ -449,6 +581,8 @@ export const plexoCoreService = new Service(
   {
     User,
     UserEmailLock,
+    StrataSession,
+    CharisolLink,
     Organization,
     Member,
     ApiKey,

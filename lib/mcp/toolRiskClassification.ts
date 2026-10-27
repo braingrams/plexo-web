@@ -19,6 +19,11 @@
 //   - lib/mcp/blogTools.ts        (BLOG_MCP_TOOLS)
 //   - lib/mcp/commerceTools.ts    (COMMERCE_MCP_TOOLS)
 //   - lib/mcp/lmsTools.ts         (LMS_MCP_TOOLS)
+//   - lib/mcp/donationTools.ts    (DONATION_MCP_TOOLS)
+//   - lib/mcp/wpMigrationTools.ts (WP_MIGRATION_MCP_TOOLS) — none destructive: a migration
+//     only ever creates a NEW site and only reads from the WordPress source.
+//   - lib/mcp/formTools.ts        (FORM_MCP_TOOLS) — none destructive: they only set where
+//     future form submissions are also sent; stored submissions are never touched.
 //
 // Explicitly EXCLUDED, and why (so a future reviewer doesn't "fix" these back in without
 // re-checking the reasoning):
@@ -38,6 +43,9 @@ export const DESTRUCTIVE_TOOL_NAMES: ReadonlySet<string> = new Set([
 
   // --- lib/mcp/blogTools.ts ---
   "delete_blog_post", // "Permanently deletes... Cannot be undone" per its own tool description
+
+  // --- lib/mcp/donationTools.ts ---
+  "cancel_monthly_donation", // stops a donor's recurring gift at the payment gateway — money stops flowing
   "delete_blog_category", // permanently deletes the category
   "delete_blog_tag", // permanently deletes the tag
   "delete_blog_author", // permanently deletes the author/byline
@@ -48,11 +56,16 @@ export const DESTRUCTIVE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "delete_commerce_delivery_method", // "Permanently deletes" a checkout delivery option
   "delete_commerce_discount", // "Permanently deletes" a discount code
   "refund_commerce_order", // moves real money back to a paying customer through Paystack
+  "delete_commerce_order", // permanently deletes an order and its customer details — no undo
   "request_commerce_withdrawal", // reserves/moves real money out of the store's wallet immediately
 
   // --- lib/mcp/lmsTools.ts (Funnel/LMS) ---
   "delete_funnel_page", // deletes a funnel page outright (unlike delete_funnel, nothing here is soft/reversible)
   "set_funnel_enrollment_status", // can immediately revoke a paying learner's access to content they bought
+
+  // --- lib/mcp/appTools.ts (React apps) ---
+  "app_publish", // changes what the app's real visitors get, and migrates the LIVE database
+  "app_restore_version", // replaces the app's current files with an older version's
 ]);
 
 export function isDestructiveTool(toolName: string): boolean {

@@ -4,6 +4,7 @@ import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { readCartToken, setCartCookie, findOpenCart, createCart, readCartSnapshot } from "@/lib/commerce/cartDynamo";
 import { CommerceProduct, CommerceCartItem } from "@/lib/db/commerceEntities";
+import { lineName, resolvePurchasable } from "@/lib/commerce/variants";
 
 const MAX_QUANTITY = 50;
 
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { productId?: unknown; quantity?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { productId?: unknown; variantId?: unknown; quantity?: unknown };
   if (typeof body.productId !== "string" || !body.productId) {
     return NextResponse.json({ error: "productId is required." }, { status: 400 });
   }
@@ -37,15 +38,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (product.kind !== "PHYSICAL") {
     return NextResponse.json({ error: "This item is booked directly, not added to a cart." }, { status: 400 });
   }
+  // Products with options (Size, Colour…) go in the cart as one specific variant.
+  const purchase = resolvePurchasable(product, typeof body.variantId === "string" ? body.variantId : null);
+  if (!purchase.ok) return NextResponse.json({ error: purchase.error }, { status: 400 });
+  if (purchase.stockQuantity !== null && purchase.stockQuantity <= 0) {
+    return NextResponse.json({ error: `${lineName(product.name, purchase.label)} is out of stock.` }, { status: 409 });
+  }
+  const variantId = purchase.variant?.id;
 
   let cart = await findOpenCart(templateId, readCartToken(request));
   if (!cart) cart = await createCart(templateId, organization.id);
 
-  const { data: existingItems } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go();
-  const existing = existingItems.find((i) => i.productId === product.id);
+  const { data: existingItems } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go({ pages: "all" });
+  // Same product in a different size is a separate line.
+  const existing = existingItems.find((i) => i.productId === product.id && (i.variantId ?? undefined) === variantId);
   if (existing) {
     await CommerceCartItem.patch({ templateId, cartId: cart.id, id: existing.id })
-      .set({ quantity: Math.min((existing.quantity ?? 1) + quantity, MAX_QUANTITY), unitPriceMinorSnapshot: product.priceMinor })
+      .set({ quantity: Math.min((existing.quantity ?? 1) + quantity, MAX_QUANTITY), unitPriceMinorSnapshot: purchase.unitPriceMinor })
       .go();
   } else {
     await CommerceCartItem.create({
@@ -53,8 +62,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       templateId,
       cartId: cart.id,
       productId: product.id,
+      ...(variantId ? { variantId } : {}),
       quantity,
-      unitPriceMinorSnapshot: product.priceMinor,
+      unitPriceMinorSnapshot: purchase.unitPriceMinor,
     }).go();
   }
 

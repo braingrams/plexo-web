@@ -4,6 +4,17 @@ on:
   pull_request:
     types: [opened, reopened, synchronize]
 
+# One CloudFormation operation per PR stack at a time. Without this, pushing commits in
+# quick succession (or merging while a deploy is still running) started overlapping runs
+# against the same stack, and every one after the first failed with "is in
+# UPDATE_IN_PROGRESS state" (PR #50). Pushes queue rather than cancel each other (a
+# cancelled CloudFormation update rolls back slowly and blocks the next run anyway). When
+# the PR is merged/closed, pr-destroy-aws.yml cancels whatever is still running here and
+# tears the stack down instead of waiting for a deploy nobody will use.
+concurrency:
+  group: pr-preview-stack-${{ github.event.number }}
+  cancel-in-progress: false
+
 permissions:
   id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
   contents: read
@@ -115,6 +126,8 @@ jobs:
       - name: Deploy the PR's compute stack (bare domain first)
         working-directory: ./cdk
         env:
+          # SolChatFn's own copy of the build-time NEXT_PUBLIC_ value (see compute-stack.ts's publicUrlEnv).
+          NEXT_PUBLIC_PAGES_DOMAIN: plexo.aws.charisol.io
           TABLE_STACK_ID: staging-plexo
           # PR previews share staging's data tables (TABLE_STACK_ID above), including its
           # plexo-ledger table and the customer-managed KMS key that guards it — so this
@@ -149,6 +162,8 @@ jobs:
       - name: Deploy the PR's compute stack again (now with the custom domain)
         working-directory: ./cdk
         env:
+          # SolChatFn's own copy of the build-time NEXT_PUBLIC_ value (see compute-stack.ts's publicUrlEnv).
+          NEXT_PUBLIC_PAGES_DOMAIN: plexo.aws.charisol.io
           TABLE_STACK_ID: staging-plexo
           LEDGER_KMS_KEY_ARN: arn:aws:kms:us-east-1:919927637684:key/91672c29-e32c-4524-ad2d-b9b2b2b1ef92
           # APP_CERT_ARN imports the already-issued wildcard cert for

@@ -61,3 +61,90 @@ export async function createCommerceStripeCheckoutSession(input: {
   }
   return { id: session.id, clientSecret: session.client_secret };
 }
+
+/**
+ * Embedded Checkout for a MONTHLY donation: same embedded flow as a one-time payment, but
+ * in subscription mode, so Stripe bills the donor every month until they (or the site
+ * owner) cancel. The first payment completes the session (checkout.session.completed, same
+ * as a one-time order); every later month arrives as invoice.paid for the subscription,
+ * whose metadata carries the Plexo ids needed to record it.
+ */
+export async function createCommerceStripeDonationSubscriptionSession(input: {
+  secretKey: string;
+  orderId: string;
+  templateId: string;
+  donationSubscriptionId: string;
+  amountMinor: number;
+  currency: string;
+  customerEmail: string;
+  description: string;
+  returnUrl: string;
+}): Promise<{ id: string; clientSecret: string }> {
+  const stripe = new Stripe(input.secretKey, { apiVersion: STRIPE_API_VERSION });
+  const session = await stripe.checkout.sessions.create({
+    ui_mode: "embedded_page",
+    mode: "subscription",
+    customer_email: input.customerEmail,
+    line_items: [
+      {
+        price_data: {
+          currency: input.currency.toLowerCase(),
+          product_data: { name: input.description },
+          unit_amount: input.amountMinor,
+          recurring: { interval: "month" },
+        },
+        quantity: 1,
+      },
+    ],
+    return_url: input.returnUrl,
+    metadata: { orderId: input.orderId, templateId: input.templateId, donationSubscriptionId: input.donationSubscriptionId },
+    subscription_data: { metadata: { templateId: input.templateId, donationSubscriptionId: input.donationSubscriptionId } },
+  });
+  if (!session.client_secret) throw new Error("Stripe did not return a checkout client secret.");
+  return { id: session.id, clientSecret: session.client_secret };
+}
+
+export async function cancelStripeSubscription(secretKey: string, subscriptionId: string): Promise<void> {
+  const stripe = new Stripe(secretKey, { apiVersion: STRIPE_API_VERSION });
+  await stripe.subscriptions.cancel(subscriptionId);
+}
+
+/** Refunds a Stripe payment in full. */
+export async function refundStripePayment(secretKey: string, paymentIntentId: string): Promise<void> {
+  const stripe = new Stripe(secretKey, { apiVersion: STRIPE_API_VERSION });
+  await stripe.refunds.create({ payment_intent: paymentIntentId });
+}
+
+export interface StripeRecurringSummary {
+  id: string;
+  amountMinor: number;
+  currency: string;
+  interval: string;
+  customerEmail: string | null;
+  customerName: string | null;
+  description: string | null;
+  metadata: Record<string, string>;
+}
+
+/** Every active monthly-or-yearly subscription on the account — used to adopt monthly donors from a previous site. */
+export async function listActiveStripeSubscriptions(secretKey: string, max = 500): Promise<StripeRecurringSummary[]> {
+  const stripe = new Stripe(secretKey, { apiVersion: STRIPE_API_VERSION });
+  const out: StripeRecurringSummary[] = [];
+  for await (const sub of stripe.subscriptions.list({ status: "active", limit: 100, expand: ["data.customer"] })) {
+    const item = sub.items.data[0];
+    const price = item?.price;
+    const customer = typeof sub.customer === "object" && sub.customer && !("deleted" in sub.customer && sub.customer.deleted) ? (sub.customer as Stripe.Customer) : null;
+    out.push({
+      id: sub.id,
+      amountMinor: (price?.unit_amount ?? 0) * (item?.quantity ?? 1),
+      currency: (price?.currency ?? "usd").toUpperCase(),
+      interval: price?.recurring?.interval ?? "month",
+      customerEmail: customer?.email ?? null,
+      customerName: customer?.name ?? null,
+      description: sub.description ?? (typeof price?.product === "object" && price.product && "name" in price.product ? (price.product as Stripe.Product).name : null),
+      metadata: (sub.metadata ?? {}) as Record<string, string>,
+    });
+    if (out.length >= max) break;
+  }
+  return out;
+}

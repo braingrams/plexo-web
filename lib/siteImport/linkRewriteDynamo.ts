@@ -68,7 +68,7 @@ export async function rewriteLinksForPage(
   }
 
   if (blogPostId) {
-    const { data: posts } = await BlogPost.query.byStatus({ templateId: jobTemplateId }).go();
+    const { data: posts } = await BlogPost.query.byStatus({ templateId: jobTemplateId }).go({ pages: "all" });
     const post = posts.find((p) => p.id === blogPostId);
     if (!post) return;
     const contentHtml = rewriteHtmlLinks(post.contentHtml, urlMap);

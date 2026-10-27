@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { productVariants } from "@/lib/commerce/variants";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
@@ -38,7 +39,7 @@ async function resolveCategoryId(
   if (cache.has(slug)) return cache.get(slug)!;
   const { data: categories } = await CommerceCategory.query
     .primary({ templateId })
-    .go();
+    .go({ pages: "all" });
   const existing = categories.find((c) => c.slug === slug);
   if (existing) {
     cache.set(slug, existing.id);
@@ -97,13 +98,16 @@ export async function POST(
 
     const { data: existingProducts } = await CommerceProduct.query
       .primary({ templateId })
-      .go();
+      .go({ pages: "all" });
     const existingSlugs = new Set(existingProducts.map((p) => p.slug));
-    // Best-effort "SKU already in catalog" check: since CommerceProduct has no dedicated
-    // SKU attribute, an existing product's slug is treated as its SKU basis (same
-    // convention used when minting a fresh slug from a row's SKU below).
+    // "SKU already in catalog" check — the product's own SKU (and its variants'), plus its
+    // slug for products imported before SKUs were stored (their slug was minted from it).
     const existingSkus = new Set(
-      existingProducts.map((p) => p.slug.toLowerCase()),
+      existingProducts.flatMap((p) => [
+        p.slug.toLowerCase(),
+        ...(p.sku ? [p.sku.toLowerCase()] : []),
+        ...productVariants(p).flatMap((v) => (v.sku ? [v.sku.toLowerCase()] : [])),
+      ]),
     );
 
     const parsedRows = buildProductRows(dataRows, columnMapping, existingSkus);
@@ -134,6 +138,7 @@ export async function POST(
         description: row.description ?? undefined,
         kind: row.kind,
         priceMinor: row.priceMinor,
+        ...(row.sku ? { sku: row.sku } : {}),
         stockQuantity:
           row.kind === "PHYSICAL" ? (row.stockQuantity ?? 0) : undefined,
         durationMinutes:

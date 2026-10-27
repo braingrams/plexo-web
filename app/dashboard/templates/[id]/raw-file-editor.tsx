@@ -10,7 +10,9 @@ import { javascript } from "@codemirror/lang-javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
 import type { FileEntry } from "@/app/api/v1/templates/[id]/files/route";
 import { buildPreviewHtml } from "./preview-utils";
+import { injectBaseHref } from "@/lib/wpMigration/injectBaseHref";
 import { PagesPanel } from "./PagesPanel";
+import { SitePlanNotice } from "../../_components/SitePlanNotice";
 import { RawTextContentEditor, type RawTextContentEditorHandle, type RawTextContentSaveStatus } from "./RawTextContentEditor";
 import { RawAiEditPanel } from "./RawAiEditPanel";
 import { EmbedCodeModal } from "./EmbedCodeModal";
@@ -23,6 +25,8 @@ type Props = {
   useAi: boolean;
   aiProvider: string;
   aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
+  /** A migrated WordPress page's live URL — its theme/media files load from there (see lib/wpMigration/previewBase.ts). */
+  previewBaseHref?: string | null;
 };
 
 function IconEye() {
@@ -148,7 +152,7 @@ const editorTheme = EditorView.theme(
   { dark: true }
 );
 
-export function RawFileEditor({ templateId, templateName, templateKind, subscriptionPlan, useAi, aiProvider, aiTier }: Props) {
+export function RawFileEditor({ templateId, templateName, templateKind, subscriptionPlan, useAi, aiProvider, aiTier, previewBaseHref }: Props) {
   const router = useRouter();
   // Text Content is the friendlier, non-technical default for a freshly-opened raw page —
   // Code is a step down into the file tree for people who actually want to touch markup.
@@ -314,7 +318,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
     const rootPath = isHtmlFile ? activePath : "index.html";
     const { html, cleanup } = buildPreviewHtml(files, edits, rootPath);
     previewCleanupRef.current = cleanup;
-    setPreviewHtml(html);
+    setPreviewHtml(injectBaseHref(html, previewBaseHref));
     setPreviewRootPath(rootPath);
     setPreviewOpen(true);
   }
@@ -398,6 +402,11 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
       const payload = await res.json();
       if (!res.ok) throw new Error(payload.error ?? "Couldn't create the file.");
 
+      if (payload.page?.id) {
+        // The file became a real page of the site — open it in its own editor.
+        window.location.href = `/dashboard/templates/${payload.page.id}`;
+        return;
+      }
       const newFile: FileEntry = payload.file;
       setFiles((prev) => [...prev, newFile].sort((a, b) => (a.path === "index.html" ? -1 : b.path === "index.html" ? 1 : a.path.localeCompare(b.path))));
       if (newFile.editable) {
@@ -439,6 +448,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
         subscriptionPlan={subscriptionPlan}
         onNavigate={(pageId) => { if (pageId !== templateId) router.push(`/dashboard/templates/${pageId}`); }}
       />
+      <SitePlanNotice templateId={templateId} />
       {/* Toolbar */}
       <div className="raw-editor-toolbar" style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -460,7 +470,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
             {([
               { key: "text", label: "Text Content" },
               { key: "code", label: "Code" },
-              { key: "ai", label: "AI Edit" },
+              { key: "ai", label: "Ask SOL" },
             ] as const).map((tab) => {
               const disabled = tab.key !== "code" && isDirty("index.html");
               const aiCostHint = tab.key === "ai" ? "Uses AI credits — the whole page is sent and returned, so larger pages cost more per edit." : undefined;

@@ -1,6 +1,8 @@
 "use client";
 
+import { SolHandoff, SolIcon, SolOutOfCredits } from "../../_components/sol/SolTopUp";
 import { useEffect, useRef, useState } from "react";
+import { checkAiCredits, generateWithProgress, type AiRequestBody } from "@/lib/ai/clientGenerate";
 
 type Props = {
   templateId: string;
@@ -50,6 +52,8 @@ function IconCheck() {
 export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Props) {
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
+  // Streamed while the AI rewrites the page — how much it has written so far.
+  const [progress, setProgress] = useState<{ characters: number; attempt: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [insufficientCredits, setInsufficientCredits] = useState(false);
   const [result, setResult] = useState<{ summary: string; html: string } | null>(null);
@@ -75,26 +79,23 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
     setInsufficientCredits(false);
     setResult(null);
     try {
-      const res = await fetch("/api/v1/ai/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": "workspace-internal" },
-        body: JSON.stringify({
-          mode: "edit_raw_html",
-          prompt: prompt.trim(),
-          templateKind,
-          context: { html: currentHtml },
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (res.status === 402) setInsufficientCredits(true);
-        throw new Error(data.error ?? "AI generation failed.");
+      const request: AiRequestBody = { mode: "edit_raw_html", prompt: prompt.trim(), templateKind, context: { html: currentHtml } };
+      // Confirm the account can afford it before anything runs.
+      const credits = await checkAiCredits(request);
+      if (credits && !credits.enough) {
+        setInsufficientCredits(credits.paidBy === "plexo" && credits.estimatedCredits !== null);
+        setError(credits.message ?? "You don't have enough AI credits for this.");
+        return;
       }
-      setResult({ summary: data.summary, html: data.result });
+      const data = await generateWithProgress(request, setProgress);
+      setResult({ summary: data.summary, html: data.result as string });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "AI generation failed.");
+      const message = err instanceof Error ? err.message : "SOL couldn't finish that. Please try again.";
+      if (/enough AI credits|out of AI credits/i.test(message)) setInsufficientCredits(true);
+      setError(message);
     } finally {
       setGenerating(false);
+      setProgress(null);
     }
   }
 
@@ -102,19 +103,16 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
     return (
       <div style={{ flex: 1, display: "grid", placeItems: "center", padding: "2rem", textAlign: "center" }}>
         <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", maxWidth: 360 }}>
-          AI editing isn&apos;t enabled for this account. Configure an API key with AI enabled in Settings, or
-          upgrade your plan.
+          SOL isn&apos;t turned on for this account yet. Turn it on in Settings → AI.
         </p>
       </div>
     );
   }
 
   const canSubmit = prompt.trim().length > 0 && !generating;
-  // Rough, deliberately approximate size read — the whole page is sent as context and the
-  // model returns the whole page back (mode "edit_raw_html" has the largest MAX_TOKENS
-  // ceiling of any AI action for exactly this reason), so credit cost scales with page size
-  // in a way no other AI action in the app does. ~50KB is a generous "this is a real page,
-  // not a stub" threshold, not a precise token count.
+  // Rough, deliberately approximate size read — SOL writes back only the changes, but it
+  // still reads the whole page each time, so a big page costs more per edit than a small
+  // one. ~50KB is a generous "this is a real page, not a stub" threshold, not a token count.
   const pageSizeKb = Math.round(currentHtml.length / 1024);
   const isLargePage = currentHtml.length > 50_000;
 
@@ -125,8 +123,9 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
           <h2 style={{
             fontFamily: "var(--font-heading), sans-serif", fontSize: "clamp(1.2rem, 5vw, 1.6rem)", fontWeight: 700,
             color: "#f0f2ff", textAlign: "center", margin: 0,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: "0.55rem",
           }}>
-            What would you like to change?
+            <SolIcon size={26} /> What should SOL change?
           </h2>
 
           <div style={{ width: "100%", maxWidth: 680 }}>
@@ -180,10 +179,26 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
               </button>
             </div>
 
-            {insufficientCredits && (
-              <p style={{ color: "#f59e0b", fontSize: "0.8rem", textAlign: "center", marginTop: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem" }}>
-                <IconWarning /> Insufficient AI credits — top up or configure your own API key in Settings.
+            {generating && (
+              <p aria-live="polite" style={{ color: "rgba(240,242,255,0.55)", fontSize: "0.78rem", textAlign: "center", marginTop: "0.9rem" }}>
+                {!progress || progress.characters === 0
+                  ? "Reading your page and planning the change…"
+                  : progress.attempt > 1
+                    ? `The first draft ran long — writing the full version (${progress.characters.toLocaleString()} characters so far)…`
+                    : `Rewriting your page — ${progress.characters.toLocaleString()} characters so far…`}
               </p>
+            )}
+            {insufficientCredits && (
+              <div style={{ marginTop: "0.9rem" }}>
+                <SolOutOfCredits
+                  onDismiss={() => setInsufficientCredits(false)}
+                  onToppedUp={() => {
+                    setInsufficientCredits(false);
+                    setError(null);
+                    void handleGenerate();
+                  }}
+                />
+              </div>
             )}
             {error && !insufficientCredits && (
               <p style={{ color: "#f87171", fontSize: "0.8rem", textAlign: "center", marginTop: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem" }}><IconWarning /> {error}</p>
@@ -197,9 +212,10 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
           }}>
             {isLargePage && <IconWarning />}
             {isLargePage
-              ? `This page is fairly large (~${pageSizeKb}KB) — the whole thing is sent to the AI and back, so this edit will use a lot of AI credits.`
-              : "The AI edits the full page and shows you the result before anything is saved. Larger pages use more AI credits per edit."}
+              ? `This page is fairly large (~${pageSizeKb}KB) — SOL reads all of it for each edit, so edits here use more AI credits than on a small page.`
+              : "SOL changes only what you ask for and shows you the result before anything is saved."}
           </p>
+          <SolHandoff draft={prompt} />
         </div>
       ) : (
         <div className="raw-ai-result" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "0.75rem", padding: "1.25rem", maxWidth: 900, margin: "0 auto", width: "100%" }}>

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { recompileCopiedV2Page } from "@/lib/v2/copy";
 import { NextRequest, NextResponse } from "next/server";
 import { uploadObject } from "@/lib/storage";
 
@@ -30,7 +31,7 @@ export async function POST(
   }
   if (!getTierFeatures(resolved.subscriptionPlan).multiPageSitesEnabled) {
     return NextResponse.json(
-      { error: "Multi-page sites require an Ultra subscription plan.", plan: resolved.subscriptionPlan },
+      { error: "Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages.", plan: resolved.subscriptionPlan },
       { status: 403 },
     );
   }
@@ -59,7 +60,7 @@ export async function POST(
     return NextResponse.json({ error: "The home page can't be duplicated from here." }, { status: 400 });
   }
 
-  const { data: siblings } = await Template.query.byParent({ parentId: existing.parentId }).go();
+  const { data: siblings } = await Template.query.byParent({ parentId: existing.parentId }).go({ pages: "all" });
   const lastOrder = siblings.reduce((max, s) => Math.max(max, s.order ?? 0), -1);
 
   const name = await ensureUniqueTemplateName({ organizationId: resolved.organizationId, parentId: existing.parentId, kind: existing.kind, base: `${existing.name} copy` });
@@ -99,6 +100,7 @@ export async function POST(
     organizationId: resolved.organizationId,
     name,
     kind: existing.kind,
+    designFormat: existing.designFormat ?? "v1",
     sourceType: existing.sourceType,
     parentId: existing.parentId,
     slug,
@@ -106,6 +108,7 @@ export async function POST(
     designJson: existing.designJson,
     compiledHtml: existing.compiledHtml,
   }).go();
+  await recompileCopiedV2Page(newId);
   const { data: duplicate } = await Template.get({ id: newId }).go();
   if (!duplicate) throw new Error(`Template ${newId} vanished immediately after being created`);
 

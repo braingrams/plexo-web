@@ -46,11 +46,11 @@ export async function hydratePostCards(templateId: string, posts: PostItem[]): P
   if (posts.length === 0) return [];
 
   const [{ data: authors }, { data: categories }, { data: tags }, postCategoryBatches, postTagBatches] = await Promise.all([
-    BlogAuthor.query.primary({ templateId }).go(),
-    BlogCategory.query.primary({ templateId }).go(),
-    BlogTag.query.primary({ templateId }).go(),
-    Promise.all(posts.map((p) => BlogPostCategory.query.primary({ templateId, postId: p.id }).go())),
-    Promise.all(posts.map((p) => BlogPostTag.query.primary({ templateId, postId: p.id }).go())),
+    BlogAuthor.query.primary({ templateId }).go({ pages: "all" }),
+    BlogCategory.query.primary({ templateId }).go({ pages: "all" }),
+    BlogTag.query.primary({ templateId }).go({ pages: "all" }),
+    Promise.all(posts.map((p) => BlogPostCategory.query.primary({ templateId, postId: p.id }).go({ pages: "all" }))),
+    Promise.all(posts.map((p) => BlogPostTag.query.primary({ templateId, postId: p.id }).go({ pages: "all" }))),
   ]);
   const authorById = new Map(authors.map((a) => [a.id, a]));
   const categoryById = new Map(categories.map((c) => [c.id, c]));
@@ -126,7 +126,7 @@ function isPubliclyVisible(post: PostItem): boolean {
 }
 
 async function loadTemplatePosts(templateId: string): Promise<PostItem[]> {
-  const { data } = await BlogPost.query.byStatus({ templateId }).go();
+  const { data } = await BlogPost.query.byStatus({ templateId }).go({ pages: "all" });
   return data;
 }
 
@@ -158,7 +158,7 @@ export async function listPublishedPosts(templateId: string, opts: ListPostsOpti
     if (!category) {
       filtered = [];
     } else {
-      const { data: links } = await BlogPostCategory.query.byCategory({ categoryId: category.id }).go();
+      const { data: links } = await BlogPostCategory.query.byCategory({ categoryId: category.id }).go({ pages: "all" });
       const postIds = new Set(links.map((l) => l.postId));
       filtered = filtered.filter((p) => postIds.has(p.id));
     }
@@ -168,7 +168,7 @@ export async function listPublishedPosts(templateId: string, opts: ListPostsOpti
     if (!tag) {
       filtered = [];
     } else {
-      const { data: links } = await BlogPostTag.query.byTag({ tagId: tag.id }).go();
+      const { data: links } = await BlogPostTag.query.byTag({ tagId: tag.id }).go({ pages: "all" });
       const postIds = new Set(links.map((l) => l.postId));
       filtered = filtered.filter((p) => postIds.has(p.id));
     }
@@ -216,12 +216,12 @@ export async function getAuthorBySlug(templateId: string, slug: string): Promise
 }
 
 export async function listAllCategories(templateId: string): Promise<CategoryItem[]> {
-  const { data } = await BlogCategory.query.primary({ templateId }).go();
+  const { data } = await BlogCategory.query.primary({ templateId }).go({ pages: "all" });
   return [...data].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function listAllTags(templateId: string): Promise<TagItem[]> {
-  const { data } = await BlogTag.query.primary({ templateId }).go();
+  const { data } = await BlogTag.query.primary({ templateId }).go({ pages: "all" });
   return [...data].sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -256,15 +256,15 @@ export async function getRelatedPosts(templateId: string, post: BlogPostDetail, 
   if (categorySlugs.length === 0 && tagSlugs.length === 0) return [];
 
   const [{ data: categories }, { data: tags }] = await Promise.all([
-    BlogCategory.query.primary({ templateId }).go(),
-    BlogTag.query.primary({ templateId }).go(),
+    BlogCategory.query.primary({ templateId }).go({ pages: "all" }),
+    BlogTag.query.primary({ templateId }).go({ pages: "all" }),
   ]);
   const categoryIds = categories.filter((c) => categorySlugs.includes(c.slug)).map((c) => c.id);
   const tagIds = tags.filter((t) => tagSlugs.includes(t.slug)).map((t) => t.id);
 
   const [categoryLinkBatches, tagLinkBatches] = await Promise.all([
-    Promise.all(categoryIds.map((categoryId) => BlogPostCategory.query.byCategory({ categoryId }).go())),
-    Promise.all(tagIds.map((tagId) => BlogPostTag.query.byTag({ tagId }).go())),
+    Promise.all(categoryIds.map((categoryId) => BlogPostCategory.query.byCategory({ categoryId }).go({ pages: "all" }))),
+    Promise.all(tagIds.map((tagId) => BlogPostTag.query.byTag({ tagId }).go({ pages: "all" }))),
   ]);
   const relatedPostIds = new Set<string>();
   for (const batch of categoryLinkBatches) for (const link of batch.data) relatedPostIds.add(link.postId);
@@ -292,7 +292,7 @@ export interface ApprovedCommentRow {
  * for how these get rendered. status is a prefix of this entity's own sort key (see
  * contentEntities.ts), so this is a real begins_with query, not a filtered full-partition scan. */
 export async function listApprovedComments(postId: string): Promise<ApprovedCommentRow[]> {
-  const { data } = await BlogComment.query.primary({ postId, status: "APPROVED" }).go();
+  const { data } = await BlogComment.query.primary({ postId, status: "APPROVED" }).go({ pages: "all" });
   return data
     .map((c) => ({
       id: c.id,

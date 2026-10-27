@@ -58,7 +58,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // same from/to window, then filtered by productId/templateId in memory. Bounded by one
   // org's booking volume in a <=60-day window, not the whole table.
   const [{ data: ruleRows }, { data: exceptionRows }, { data: orgBookingsInRange }] = await Promise.all([
-    CommerceAvailabilityRule.query.byProduct({ productId }).go(),
+    CommerceAvailabilityRule.query.byProduct({ productId }).go({ pages: "all" }),
     CommerceAvailabilityException.query
       .byProduct({ productId })
       .between({ date: effectiveFrom.toISOString() }, { date: cappedTo.toISOString() })

@@ -8,8 +8,7 @@ import { authClient } from "@/lib/auth-client";
 import { Mulish } from "next/font/google";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
-import { triggerGoogleSignIn } from "@/lib/charisolAuth";
-import { isPrPreviewHost } from "@/lib/isPrPreviewHost";
+import { DashboardSkeleton } from "@/app/auth/charisol/callback/dashboard-skeleton";
 
 const mulish = Mulish({
   subsets: ["latin"],
@@ -20,10 +19,14 @@ const mulish = Mulish({
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const [email, setEmail] = useState("");
+  // Arriving from the reset-password page: their email is pre-filled and a banner confirms it.
+  const passwordReset = params.get("passwordReset") === "1";
+  const [email, setEmail] = useState(() => params.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Signed in, on the way to the dashboard: its first render takes a moment, so the page shows the dashboard's own outline instead of freezing.
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(() => params.get("error"));
 
   // A failed Charisol/Google sign-in routes back here with ?error=... (see
@@ -48,7 +51,9 @@ function LoginForm() {
 
     setLoading(true);
 
-    const redirectTo = params.get("redirectTo") ?? "/dashboard";
+    // Only ever a path on this site (never another address someone put in the link).
+    const wanted = params.get("redirectTo") ?? "/dashboard";
+    const redirectTo = wanted.startsWith("/") && !wanted.startsWith("//") ? wanted : "/dashboard";
 
     try {
       const result = await authClient.signIn.email({
@@ -57,24 +62,18 @@ function LoginForm() {
         callbackURL: redirectTo,
       });
 
-      // This account is real but Google-only (server/authDynamo.ts's
-      // GoogleAccountOnlyError) — a password can never work for it, so go straight to
-      // Google instead of showing a dead-end error or a second "continue with Google"
-      // click. No banner, no extra info shown — same full-page redirect
-      // GoogleAuthButton's own click handler triggers, just fired automatically here.
-      //
-      // Suppressed on PR previews: they share staging's real Users table (see
-      // .github/workflows/pr-deploy-aws.yml), so testing with any account that happens
-      // to have been created via Google silently bounces the tester off to a Google
-      // OAuth flow whose redirect URI likely isn't even registered for the preview's
-      // own throwaway hostname. A plain inline message keeps preview testing on
-      // email+password without a surprise redirect.
+      // A Google-only account has no password. Say so and point at the Google button —
+      // never redirect on the owner's behalf from the email form.
       if (result?.error?.code === "google_account_only") {
-        if (isPrPreviewHost(window.location.hostname)) {
-          setError("This account uses Google sign-in, which isn't available on PR previews — use a different test account with a password.");
-          return;
-        }
-        await triggerGoogleSignIn(redirectTo);
+        setError("That password didn’t work. This account was set up with Google — use “Continue with Google” above, or choose “Forgot password” to set a password.");
+        return;
+      }
+
+      // Charisol Auth needs this account to pick a new password first (usually an older
+      // password that's shorter than today's rules, moved across on this sign-in). A code
+      // has already been emailed — go straight to entering it.
+      if (result?.error?.code === "password_reset_required") {
+        router.push(`/auth/reset-password?mode=code&reason=security&email=${encodeURIComponent(email.trim().toLowerCase())}`);
         return;
       }
 
@@ -89,13 +88,25 @@ function LoginForm() {
         return;
       }
 
-      router.push(redirectTo);
+      if (redirectTo.startsWith("/dashboard")) setRedirecting(true);
+      // A full page load, not a client-side push: the sign-in cookie is fresh, and a client-side push can reuse a copy of the
+      // destination fetched while signed out (which just bounces back here) and leave the person on this screen for good.
+      window.location.assign(redirectTo);
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Invalid credentials.";
       setError(message);
     } finally {
       setLoading(false);
     }
+  }
+
+  if (redirecting) {
+    // Covers the whole screen (the sign-in layout's own panels included) until the dashboard replaces it.
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 100, overflow: "auto", background: "#0b0f19" }}>
+        <DashboardSkeleton />
+      </div>
+    );
   }
 
   return (
@@ -130,6 +141,11 @@ function LoginForm() {
 
       {/* Form */}
       <form onSubmit={onSubmit} className="space-y-5" noValidate>
+        {passwordReset && !error && (
+          <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-semibold">
+            Password updated. Sign in with your new password.
+          </div>
+        )}
         {error && (
           <div className="p-4 rounded-2xl bg-red-950/80 border border-red-800 text-red-300 text-xs font-semibold">
             {error}
@@ -191,7 +207,7 @@ function LoginForm() {
             id="login-submit"
             type="submit"
             disabled={loading}
-            className="w-full bg-[#6b3bf9] hover:bg-[#5b2be6] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className={`w-full bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
           >
             {loading ? <span>Signing in...</span> : <span>Sign In</span>}
           </button>

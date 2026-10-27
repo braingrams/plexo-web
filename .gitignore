@@ -20,6 +20,9 @@ node_modules
 # misc
 .DS_Store
 *.pem
+# Exception: AWS's public RDS CA bundle (certificates only), which AppDbFn verifies the
+# database's TLS with — https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+!lambda/app-db/rds-global-bundle.pem
 .vercel
 .env*
 
@@ -48,3 +51,8 @@ cdk/lib/lib/
 .tmp-scripts/
 
 *.lock
+# Self-hosted Monaco editor, copied from node_modules at build (scripts/copy-monaco.mjs)
+public/monaco/
+
+# Built inside the build Lambda image (lambda/project-build/Dockerfile)
+lambda/project-build/dist/

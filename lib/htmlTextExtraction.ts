@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import type { AnyNode, Element } from "domhandler";
 
+import { BRAND } from "@/lib/theme";
 /**
  * Tags whose entire subtree is never end-user-visible text — skipped outright rather than
  * enumerated per-tag, since <script>/<style>/comments already get a distinct cheerio node
@@ -203,7 +204,7 @@ export function annotateTextNodesForPreview(html: string): string {
   $("a[href]").removeAttr("href");
 
   const styleTag =
-    "<style>.plexo-active{outline:3px solid #8b5cf6 !important;outline-offset:2px;border-radius:2px;}</style>";
+    `<style>.plexo-active{outline:3px solid ${BRAND.primary} !important;outline-offset:2px;border-radius:2px;}</style>`;
   if ($("head").length > 0) {
     $("head").append(styleTag);
   } else {

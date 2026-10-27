@@ -15,6 +15,8 @@ export const CUSTOM_CONTENT_FIELD_TYPES: readonly CustomContentFieldType[] = [
   "date",
   "image_url",
   "url",
+  "video",
+  "datetime",
 ];
 
 function isFieldType(value: unknown): value is CustomContentFieldType {
@@ -139,6 +141,9 @@ export function validateEntryData(
       case "date":
       case "image_url":
       case "url":
+      // video: a YouTube / Vimeo / direct video link; datetime: "YYYY-MM-DDTHH:mm" from a datetime-local input.
+      case "video":
+      case "datetime":
       default: {
         if (typeof value !== "string") {
           return { error: `"${field.name}" must be a string.` };

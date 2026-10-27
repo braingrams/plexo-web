@@ -27,13 +27,13 @@ export async function GET(
 
   const [{ data: allPosts }, { data: categories }, { data: authors }] =
     await Promise.all([
-      BlogPost.query.byStatus({ templateId: resolved.context.templateId }).go(),
+      BlogPost.query.byStatus({ templateId: resolved.context.templateId }).go({ pages: "all" }),
       BlogCategory.query
         .primary({ templateId: resolved.context.templateId })
-        .go(),
+        .go({ pages: "all" }),
       BlogAuthor.query
         .primary({ templateId: resolved.context.templateId })
-        .go(),
+        .go({ pages: "all" }),
     ]);
 
   let filtered = allPosts;
@@ -46,7 +46,7 @@ export async function GET(
   if (categoryId) {
     const { data: linked } = await BlogPostCategory.query
       .byCategory({ categoryId })
-      .go();
+      .go({ pages: "all" });
     const postIdsInCategory = new Set(
       linked
         .filter((l) => l.templateId === resolved.context.templateId)
@@ -65,7 +65,7 @@ export async function GET(
     filtered.map((p) =>
       BlogPostCategory.query
         .primary({ templateId: resolved.context.templateId, postId: p.id })
-        .go(),
+        .go({ pages: "all" }),
     ),
   );
 

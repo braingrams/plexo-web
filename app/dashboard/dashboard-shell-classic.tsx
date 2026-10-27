@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { NAV_ITEMS } from "./nav-items";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
@@ -186,6 +186,19 @@ function IconCommerce() {
   );
 }
 
+function IconApps() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <path d="M3 9h18" />
+      <circle cx="6.5" cy="6.5" r="0.6" fill="currentColor" />
+      <circle cx="9" cy="6.5" r="0.6" fill="currentColor" />
+      <rect x="7" y="12.5" width="4.5" height="4" rx="1" />
+      <path d="M14.5 13h3M14.5 16h2" />
+    </svg>
+  );
+}
+
 function IconFunnels() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -204,6 +217,7 @@ function IconChevronDown() {
 
 const NAV_ICONS: Record<string, React.ReactNode> = {
   "/dashboard": <IconOverview />,
+  "/dashboard/apps": <IconApps />,
   "/dashboard/templates": <IconTemplates />,
   "/dashboard/pages": <IconPages />,
   "/dashboard/blog": <IconBlog />,
@@ -322,7 +336,9 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
   // and its own Settings/Memory subpages under that same /dashboard/sol/ tree) — no room
   // for this shell's fixed sidebar alongside it, same reasoning as the template editor
   // route above.
-  const isSolRoute = /^\/dashboard\/sol(\/.*)?$/.test(pathname);
+  // The app editor (/dashboard/apps/<id>) is the same kind of full-viewport surface — chat,
+  // preview and code side by side — so it reuses SOL's chrome-free treatment.
+  const isSolRoute = /^\/dashboard\/sol(\/.*)?$/.test(pathname) || /^\/dashboard\/apps\/[^/]+$/.test(pathname);
   const rootClassName = isEditorRoute
     ? "dash-classic-root dash-classic-editor-route"
     : isSolRoute
@@ -346,10 +362,24 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
     router.push("/auth/login");
   }
 
+  // The editor wants every pixel it can get, so entering it folds the menu down to icons (and hands it back, the way the
+  // person had it, when they leave). The chevron still opens it again for as long as they stay.
+  const beforeEditor = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (isEditorRoute && beforeEditor.current === null) {
+      beforeEditor.current = collapsed;
+      setCollapsed(true);
+    } else if (!isEditorRoute && beforeEditor.current !== null) {
+      setCollapsed(beforeEditor.current);
+      beforeEditor.current = null;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the route change should fold the menu, not the person's own toggling
+  }, [isEditorRoute]);
+
   const sidebarWidth = collapsed ? 64 : 250;
-  // Extra breathing room between the fixed sidebar and the main content column —
-  // without it, page content butts directly against the sidebar's right edge.
-  const contentGutter = 24;
+  // No dead strip between the menu and the page: every page already pads its own content, so a second gap here only
+  // wasted space (it showed on all pages, not just the editor).
+  const contentGutter = 0;
 
   // Close the mobile drawer whenever the route changes (navigating counts as "done").
   useEffect(() => {
@@ -570,6 +600,8 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
         }}>
           <div style={{
             display: "flex", alignItems: "center",
+            // Collapsed, the menu is one icon wide: Feedback and notifications stack instead of squeezing side by side.
+            flexDirection: collapsed ? "column" : "row",
             justifyContent: collapsed ? "center" : "space-between",
             gap: "0.4rem", marginBottom: "0.5rem",
           }}>

@@ -7,12 +7,15 @@ import type { AskUserAnswer, ChatAttachment, ContentBlock, CreditInfo, ModelTier
 // union streams — field names/casing copied verbatim from that file, not re-derived.
 type StreamFrame =
   | { type: "tool_call_start"; id: string; name: string; label: string; args: unknown }
+  | { type: "attachment_described"; url: string; description: string }
+  | { type: "tool_call_preparing"; id: string; name: string; label: string; characters: number }
   | { type: "tool_call_awaiting_confirmation"; id: string; name: string; args: unknown; messageId: string }
   | { type: "tool_call_result"; id: string; name: string; status: "success" | "error" | "cancelled"; result?: unknown }
   | { type: "token"; text: string }
   | { type: "message_done"; messageId: string | null; usage: { inputTokens: number; outputTokens: number } }
   | { type: "title_generated"; title: string }
   | { type: "credit_exhausted"; requiredCredits: number; availableCredits: number }
+  | { type: "credits_overdrawn"; overdrawnBy: number; balance: number }
   | { type: "error"; message: string };
 
 export type StreamOutcome = "idle" | "streaming" | "done" | "awaiting_confirmation" | "error" | "credit_exhausted";
@@ -34,6 +37,8 @@ export function useSolStream() {
   const [outcome, setOutcome] = useState<StreamOutcome>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [creditInfo, setCreditInfo] = useState<CreditInfo | null>(null);
+  // Set when a step that was already running as credits ran out was allowed to finish, leaving the balance below zero.
+  const [overdraft, setOverdraft] = useState<{ overdrawnBy: number; balance: number } | null>(null);
   const [usage, setUsage] = useState<{ inputTokens: number; outputTokens: number } | null>(null);
   const [finalMessageId, setFinalMessageId] = useState<string | null>(null);
   // The PENDING SolMessage's own id, carried directly in the tool_call_awaiting_confirmation
@@ -43,6 +48,9 @@ export function useSolStream() {
   // a real race: a fast click on Confirm/Submit would silently no-op if it landed before
   // the fetch did — see SolChatView's own comment on the fix this replaced).
   const [awaitingMessageId, setAwaitingMessageId] = useState<string | null>(null);
+  // Captions SOL wrote for attached images, by the image's stored URL. Not cleared between
+  // turns: they belong to messages already on screen.
+  const [imageDescriptions, setImageDescriptions] = useState<Record<string, string>>({});
   // Only ever set once per conversation (the very first turn — see solChatHandler.ts's
   // `needsTitle` gate), arriving in its own frame right before the stream closes. The
   // caller (SolChatView) is what actually applies it to the conversation's title and
@@ -61,6 +69,7 @@ export function useSolStream() {
     setOutcomeBoth("idle");
     setErrorMessage(null);
     setCreditInfo(null);
+    setOverdraft(null);
     setUsage(null);
     setFinalMessageId(null);
     setAwaitingMessageId(null);
@@ -70,11 +79,21 @@ export function useSolStream() {
   const handleFrame = useCallback(
     (frame: StreamFrame) => {
       switch (frame.type) {
+        case "tool_call_preparing": {
+          // SOL is still writing this call's input — show the step straight away, with progress.
+          setBlocks((prev) =>
+            prev.some((b) => isToolUseBlock(b) && b.id === frame.id)
+              ? prev.map((b) => (isToolUseBlock(b) && b.id === frame.id ? { ...b, characters: frame.characters } : b))
+              : [...prev, { type: "tool_use", id: frame.id, name: frame.name, label: frame.label, input: {}, status: "preparing", characters: frame.characters } as ToolUseBlock],
+          );
+          break;
+        }
         case "tool_call_start": {
-          setBlocks((prev) => [
-            ...prev,
-            { type: "tool_use", id: frame.id, name: frame.name, label: frame.label, input: frame.args, status: "running" } as ToolUseBlock,
-          ]);
+          setBlocks((prev) =>
+            prev.some((b) => isToolUseBlock(b) && b.id === frame.id)
+              ? prev.map((b) => (isToolUseBlock(b) && b.id === frame.id ? { ...b, label: frame.label, input: frame.args, status: "running" } : b))
+              : [...prev, { type: "tool_use", id: frame.id, name: frame.name, label: frame.label, input: frame.args, status: "running" } as ToolUseBlock],
+          );
           break;
         }
         case "tool_call_awaiting_confirmation": {
@@ -83,7 +102,10 @@ export function useSolStream() {
             if (!exists) {
               return [...prev, { type: "tool_use", id: frame.id, name: frame.name, input: frame.args, status: "awaiting_confirmation" } as ToolUseBlock];
             }
-            return prev.map((b) => (isToolUseBlock(b) && b.id === frame.id ? { ...b, status: "awaiting_confirmation" } : b));
+            // The block may be the empty placeholder from tool_call_preparing — take the
+            // finished input too, or a question arrives with nothing to show and the chat
+            // looks frozen.
+            return prev.map((b) => (isToolUseBlock(b) && b.id === frame.id ? { ...b, input: frame.args, status: "awaiting_confirmation" } : b));
           });
           setAwaitingMessageId(frame.messageId);
           break;
@@ -111,6 +133,10 @@ export function useSolStream() {
           setOutcomeBoth("done");
           break;
         }
+        case "attachment_described": {
+          setImageDescriptions((prev) => ({ ...prev, [frame.url]: frame.description }));
+          break;
+        }
         case "title_generated": {
           setGeneratedTitle(frame.title);
           break;
@@ -118,6 +144,10 @@ export function useSolStream() {
         case "credit_exhausted": {
           setCreditInfo({ requiredCredits: frame.requiredCredits, availableCredits: frame.availableCredits });
           setOutcomeBoth("credit_exhausted");
+          break;
+        }
+        case "credits_overdrawn": {
+          setOverdraft({ overdrawnBy: frame.overdrawnBy, balance: frame.balance });
           break;
         }
         case "error": {
@@ -135,6 +165,7 @@ export function useSolStream() {
       setOutcomeBoth("streaming");
       setErrorMessage(null);
       setCreditInfo(null);
+      setOverdraft(null);
       const controller = new AbortController();
       abortRef.current = controller;
 
@@ -173,7 +204,12 @@ export function useSolStream() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let lastFrameType: string | null = null;
+      // Whether this turn paused for the user (a confirmation or SOL's own question). Not
+      // "was it the last frame": on a new chat's first turn the generated title arrives
+      // AFTER the pause, and reading only the last frame treated the pause as a finished
+      // turn — no question shown, the composer left open, and the next typed message
+      // corrupted the conversation.
+      let paused = false;
 
       try {
         for (;;) {
@@ -187,7 +223,7 @@ export function useSolStream() {
             if (!trimmed) continue;
             try {
               const frame = JSON.parse(trimmed) as StreamFrame;
-              lastFrameType = frame.type;
+              if (frame.type === "tool_call_awaiting_confirmation") paused = true;
               handleFrame(frame);
             } catch {
               // A malformed line shouldn't kill an otherwise-good stream.
@@ -198,7 +234,7 @@ export function useSolStream() {
         if (trailing) {
           try {
             const frame = JSON.parse(trailing) as StreamFrame;
-            lastFrameType = frame.type;
+            if (frame.type === "tool_call_awaiting_confirmation") paused = true;
             handleFrame(frame);
           } catch {
             // ignore
@@ -219,7 +255,7 @@ export function useSolStream() {
       // it never sends a dedicated "frame" for the pause itself beyond the
       // tool_call_awaiting_confirmation frame already handled above).
       if (outcomeRef.current === "streaming") {
-        setOutcomeBoth(lastFrameType === "tool_call_awaiting_confirmation" ? "awaiting_confirmation" : "done");
+        setOutcomeBoth(paused ? "awaiting_confirmation" : "done");
       }
     },
     [handleFrame, setOutcomeBoth],
@@ -258,5 +294,5 @@ export function useSolStream() {
     abortRef.current?.abort();
   }, []);
 
-  return { blocks, outcome, errorMessage, creditInfo, usage, finalMessageId, awaitingMessageId, generatedTitle, sendMessage, confirmToolCall, submitAnswers, stop, reset };
+  return { blocks, outcome, errorMessage, creditInfo, overdraft, usage, finalMessageId, awaitingMessageId, generatedTitle, imageDescriptions, sendMessage, confirmToolCall, submitAnswers, stop, reset };
 }

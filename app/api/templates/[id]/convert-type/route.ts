@@ -4,7 +4,8 @@ import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { getTierFeatures } from "@/lib/subscription";
-import { compileDesignJsonForKind } from "@/lib/compileForKind";
+import { compileTemplate } from "@/lib/compileTemplate";
+import { designFormatOf } from "@/lib/v2/design";
 import { isValidUuid } from "@/server/slugDynamo";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
@@ -61,6 +62,9 @@ export async function POST(
   if (existing.kind === targetKind) {
     return NextResponse.json({ error: `This page is already ${targetKind === "EMAIL" ? "an email template" : "a landing page"}.` }, { status: 400 });
   }
+  if (targetKind === "EMAIL" && designFormatOf(existing) === "v2") {
+    return NextResponse.json({ error: "This page uses Plexo's new editor, and email templates use the classic one, so it can't be turned into an email. Create a new email template instead." }, { status: 400 });
+  }
   if (existing.sourceType !== "BUILDER") {
     return NextResponse.json({ error: "Raw HTML pages can't be converted directly. Switch to Builder first." }, { status: 400 });
   }
@@ -73,7 +77,7 @@ export async function POST(
 
   const features = getTierFeatures(resolved.subscriptionPlan);
 
-  const { data: pageCount } = await Template.query.byParent({ parentId: existing.id }).go();
+  const { data: pageCount } = await Template.query.byParent({ parentId: existing.id }).go({ pages: "all" });
 
   if (targetKind === "EMAIL") {
     if (pageCount.length > 0) {
@@ -108,7 +112,7 @@ export async function POST(
     }
   }
 
-  const compiledHtml = await compileDesignJsonForKind(existing.designJson, targetKind);
+  const compiledHtml = await compileTemplate({ designFormat: existing.designFormat, designJson: existing.designJson, kind: targetKind, id: existing.id, name: existing.name });
 
   await Template.patch({ id: existing.id }).set({ kind: targetKind, compiledHtml }).go();
   const { data: updated } = await Template.get({ id: existing.id }).go();

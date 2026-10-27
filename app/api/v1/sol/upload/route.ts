@@ -66,7 +66,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const id = randomUUID();
-  const path = `sol-attachments/${resolved.userId}/${id}-${filename}`;
+  // The stored name is kept to plain characters: real file names carry spaces and things
+  // like the narrow no-break space macOS/WhatsApp put before "PM", which broke links and
+  // lookups. The chat shows the original name (sent with the message), not this one.
+  const safeName = filename.normalize("NFKC").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/-{2,}/g, "-").replace(/^-|-$/g, "").slice(0, 120) || "file";
+  const path = `sol-attachments/${resolved.userId}/${id}-${safeName}`;
 
   let presigned;
   try {

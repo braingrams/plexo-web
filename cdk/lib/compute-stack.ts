@@ -15,6 +15,7 @@ import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { buildLogGroup, buildCloudFrontWebAcl, isWafEnabled } from "./conventions";
+import { addProjectRuntime } from "./project-runtime";
 
 // Real OpenNext deployment (SSR Lambda + image-optimization Lambda + CloudFront + S3 +
 // SQS/DynamoDB for ISR), built from a verified `.open-next/` build output — not
@@ -59,6 +60,7 @@ const OPEN_NEXT_DIR = path.join(__dirname, "..", "..", ".open-next");
 // bundling) — resolved, no longer the raw-source-zip gap the original TODO(infra) here
 // used to flag.
 const SOL_CHAT_ENTRY = path.join(__dirname, "..", "..", "lambda", "sol-chat", "index.ts");
+const BROWSER_ENTRY = path.join(__dirname, "..", "..", "lambda", "browser", "index.ts");
 
 // Same naming convention as data-stack.ts's own nameFor() — production keeps the bare
 // literal table names ("plexo-core", etc.) it's already deployed with; every other
@@ -133,11 +135,26 @@ if (!authSecret) throw new Error("AUTH_SECRET is required for SolChatFn's sessio
 // with System AI not yet configured should just make that one feature unavailable
 // (resolveSystemProvider() already throws a clean, caught "not configured" error at
 // request time), not fail the whole deploy the way a missing auth/security secret would.
+// The app's own URL and the published-sites domain. Next.js bakes NEXT_PUBLIC_* values into
+// serverFn's bundle at build time; SolChatFn is bundled separately (NodejsFunction) and gets
+// them here instead. Without NEXT_PUBLIC_PAGES_DOMAIN, SOL's publish tools built
+// "careconnect.localhost" instead of "careconnect.plexopages.com" (server/pagesDomain.ts's
+// local-dev fallback) — and told the person their page was live at an address that 404'd.
+const publicUrlEnv: Record<string, string> = {};
+for (const key of ["NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_PAGES_DOMAIN"]) {
+  const value = process.env[key];
+  if (value) publicUrlEnv[key] = value;
+}
+
 const systemAiEnv: Record<string, string> = {};
 for (const key of ["SYSTEM_AI_PROVIDER", "SYSTEM_AI_KEY_ANTHROPIC_CLAUDE", "SYSTEM_AI_KEY_OPENAI", "SYSTEM_AI_KEY_GOOGLE_GEMINI"]) {
   const value = process.env[key];
   if (value) systemAiEnv[key] = value;
 }
+
+// The unhashed scripts under public/ that the platform injects into published pages (see DeployCommerceJs and
+// published-sites-stack.ts's behaviors for them).
+export const PLATFORM_SCRIPTS = ["commerce.js", "plexo-content.js", "plexo-content.css", "plexo-forms.js", "lms-signup.js", "newsletter-popup.js"];
 
 // Cache-busting suffix for the unhashed, unversioned public/commerce.js URL that
 // app/pub/[domain]/[[...slug]]/route.ts's injectCommerceScript() embeds into every
@@ -226,8 +243,12 @@ export class ComputeStack extends cdk.Stack {
     // origin. This second deployment overwrites just that one object with a short,
     // revalidating Cache-Control — ordered (via addDependency) to run after DeployAssets
     // so its header is the one left standing on the shared key both deployments write.
+    // Every script the platform injects into published pages is served the same way (a published site's own
+    // distribution only routes the names listed in published-sites-stack.ts to this bucket — anything else under
+    // public/ falls through to the server function, which doesn't carry public/, and 404s): commerce.js, the
+    // content widget + form connector (plexo-content.js/.css, plexo-forms.js), the funnel sign-up and the newsletter popup.
     const deployCommerceJs = new s3deploy.BucketDeployment(this, "DeployCommerceJs", {
-      sources: [s3deploy.Source.data("commerce.js", fs.readFileSync(path.join(OPEN_NEXT_DIR, "assets", "commerce.js"), "utf-8"))],
+      sources: PLATFORM_SCRIPTS.map((name) => s3deploy.Source.data(name, fs.readFileSync(path.join(OPEN_NEXT_DIR, "assets", name), "utf-8"))),
       destinationBucket: assetsBucket,
       destinationKeyPrefix: "_assets",
       cacheControl: [s3deploy.CacheControl.fromString("public,max-age=60,must-revalidate")],
@@ -326,7 +347,11 @@ export class ComputeStack extends cdk.Stack {
       // populated (via SSM) for ordinary Node-runtime route handlers in the very same
       // Lambda. Setting it directly here is required at `cdk deploy` time anyway
       // (originVerifySecret throws above if unset), so this has no new operational cost.
-      environment: { ...commonEnv, ...tableEnv, ...systemAiEnv, PLEXO_ENV: ssmEnv, PLEXO_ORIGIN_VERIFY_SECRET: originVerifySecret!, CRON_SECRET: cronSecret!, ASSET_VERSION: assetVersion },
+      // PLEXO_SELF_URL: this deployment's own address, for server-to-itself calls (a
+      // WordPress migration handing itself to the next background invocation —
+      // lib/wpMigration/background.ts). NEXT_PUBLIC_APP_URL can't serve: a PR preview reads
+      // staging's value from SSM, which would hand the job to staging's code instead.
+      environment: { ...commonEnv, ...tableEnv, ...systemAiEnv, PLEXO_ENV: ssmEnv, PLEXO_ORIGIN_VERIFY_SECRET: originVerifySecret!, CRON_SECRET: cronSecret!, ASSET_VERSION: assetVersion, ...(appDomain ? { PLEXO_SELF_URL: `https://${appDomain}` } : {}) },
       logGroup: buildLogGroup(this, "ServerFn"),
     });
     assetsBucket.grantReadWrite(serverFn);
@@ -517,6 +542,11 @@ export class ComputeStack extends cdk.Stack {
     // neither fits serverFn's 30s timeout or its buffered (non-streaming) Function URL
     // invoke mode, so this follows imageFn's "second Lambda + own Function URL + own
     // CloudFront behavior" precedent above rather than trying to extend serverFn itself.
+    // Checked here, not when this file loads: bin/app.ts imports it for every STACK_KIND,
+    // and the published-sites deploy step doesn't (and needn't) carry these values.
+    if (isProd && !publicUrlEnv.NEXT_PUBLIC_PAGES_DOMAIN) {
+      throw new Error("NEXT_PUBLIC_PAGES_DOMAIN is required to deploy production's compute stack (SOL publishes pages under it).");
+    }
     const solChatFn = new NodejsFunction(this, "SolChatFn", {
       runtime: lambda.Runtime.NODEJS_24_X,
       entry: SOL_CHAT_ENTRY,
@@ -546,6 +576,11 @@ export class ComputeStack extends cdk.Stack {
         tsconfig: path.join(__dirname, "..", "..", "tsconfig.json"),
         minify: false,
         sourceMap: true,
+        // SOL's app_screenshot tool drives a remote browser with playwright-core, which
+        // can't be bundled (optional native/bidi modules) — shipped as a real dependency.
+        // node-postgres's optional native binding is never used.
+        nodeModules: ["playwright-core"],
+        externalModules: ["pg-native"],
         // aws-sdk-v3 clients used by this handler's own imports (Dynamo, Bedrock,
         // Transcribe) are bundled in rather than externalized — the NODEJS_24_X managed
         // runtime's built-in AWS SDK is v3 but its exact minor version isn't pinned to
@@ -553,7 +588,10 @@ export class ComputeStack extends cdk.Stack {
         // is small enough that bundling it is simpler than chasing a version mismatch.
       },
       memorySize: 1536,
-      timeout: cdk.Duration.minutes(5),
+      // 15 minutes (Lambda's ceiling): a SOL turn that builds an app runs many tool rounds,
+      // each possibly waiting on a build. The stream sends keepalives meanwhile
+      // (lambda/sol-chat/index.ts), so CloudFront never sees an idle connection.
+      timeout: cdk.Duration.minutes(15),
       environment: {
         ...tableEnv,
         PLEXO_ENV: ssmEnv,
@@ -573,6 +611,10 @@ export class ComputeStack extends cdk.Stack {
         // See authSecret's own comment above — required for lambda/sol-chat/sessionAuth.ts
         // to verify a NextAuth session JWT outside of Next.js's own request context.
         AUTH_SECRET: authSecret!,
+        // AI page generation also streams from this function (api/v1/ai/stream/*, see the
+        // CloudFront behavior below) and runs on Plexo's own AI the same way serverFn does.
+        ...systemAiEnv,
+        ...publicUrlEnv,
       },
       logGroup: buildLogGroup(this, "SolChatFn"),
     });
@@ -612,6 +654,33 @@ export class ComputeStack extends cdk.Stack {
     // staging: "AWSKMSException: ... SolChatFnServiceRole ... is not authorized to
     // perform: kms:Decrypt" the moment a real SOL turn tried to charge usage.
     solChatFn.addToRolePolicy(ledgerKmsPolicy);
+    // AI page generation (lambda/sol-chat → lib/ai/streamGeneration.ts) loads the app's
+    // secrets from SSM at cold start, as serverFn does — e.g. to decrypt an account's own
+    // stored AI provider key. Same scope as serverFn's grant above.
+    solChatFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["ssm:GetParameters"],
+        resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/plexo/${ssmEnv}/*`],
+      }),
+    );
+    solChatFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["kms:Decrypt"],
+        resources: [`arn:aws:kms:${this.region}:${this.account}:alias/aws/ssm`],
+      }),
+    );
+    // User content: SOL reads chat attachments to hand them to the model, and its tools are
+    // the dashboard's own (lib/mcp/dispatchMcpTool.ts) — they save and remove files exactly
+    // as serverFn does (use_attached_image's public copy of an image, a page's files…). It
+    // used to be read-only on sol-attachments, so every tool that saves a file failed with
+    // AccessDenied (found when use_attached_image couldn't put a user's photo on a page).
+    // Same grant as serverFn's.
+    solChatFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+        resources: ["arn:aws:s3:::plexo-user-content*/*"],
+      }),
+    );
     // Bedrock — tightened to the exact three models SOL actually uses (see
     // lib/ai/modelRegistry.ts's bedrock_claude row: Claude Haiku 4.5 / Sonnet 5 / Opus 5),
     // verified against both AWS's own Bedrock model-card docs AND the real Plexo AWS
@@ -684,6 +753,68 @@ export class ComputeStack extends cdk.Stack {
       action: "lambda:InvokeFunctionUrl",
       functionUrlAuthType: lambda.FunctionUrlAuthType.NONE,
     });
+
+    // Apps built on Plexo: build pipeline, server-function roles, and the grants serverFn /
+    // SolChatFn need to queue builds, run app databases and deploy functions
+    // (cdk/lib/project-runtime.ts). SOL runs whole app-building turns (write → build → fix →
+    // screenshot), so its tools may wait minutes for a build — within its own timeout.
+    solChatFn.addEnvironment("APP_TOOL_WAIT_MS", "240000");
+    addProjectRuntime(this, {
+      appFunctions: [serverFn, solChatFn],
+      envName: ssmEnv as "production" | "staging",
+      contentTableName: tableEnv.PLEXO_CONTENT_TABLE,
+      finalizeEnvironment: { ...tableEnv, ...publicUrlEnv, PLEXO_ENV: ssmEnv },
+      sharedStatements: [
+        new iam.PolicyStatement({
+          actions: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:BatchWriteItem", "dynamodb:TransactWriteItems"],
+          resources: Object.values(tableEnv).flatMap((tableName) => [
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/${tableName}`,
+            `arn:aws:dynamodb:${this.region}:${this.account}:table/${tableName}/index/*`,
+          ]),
+        }),
+        ledgerKmsPolicy,
+        new iam.PolicyStatement({ actions: ["ssm:GetParameters"], resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/plexo/${ssmEnv}/*`] }),
+        new iam.PolicyStatement({ actions: ["kms:Decrypt"], resources: [`arn:aws:kms:${this.region}:${this.account}:alias/aws/ssm`] }),
+        new iam.PolicyStatement({ actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"], resources: ["arn:aws:s3:::plexo-user-content*", "arn:aws:s3:::plexo-user-content*/*"] }),
+      ],
+    });
+    // Project storage clean-up lists prefixes (lib/projects/blobStore.ts deletePrefix,
+    // lib/appStorage listFiles); the object-level grants above don't cover ListBucket.
+    for (const fn of [serverFn, solChatFn]) {
+      fn.addToRolePolicy(new iam.PolicyStatement({ actions: ["s3:ListBucket"], resources: ["arn:aws:s3:::plexo-user-content*"] }));
+    }
+
+    // Plexo's own browser (lambda/browser): Chromium in a Lambda, which SOL and the MCP use to
+    // look at an app's preview (lib/projects/screenshot.ts) — no third-party browser service or
+    // shared limit; Browserbase stays as the backup. It only opens public https pages and
+    // returns the screenshot, so its role has nothing beyond logging.
+    const browserFn = new NodejsFunction(this, "BrowserFn", {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      // @sparticuz/chromium ships an x86_64 build of Chromium for Lambda.
+      architecture: lambda.Architecture.X86_64,
+      entry: BROWSER_ENTRY,
+      handler: "handler",
+      projectRoot: path.join(__dirname, "..", ".."),
+      depsLockFilePath: path.join(__dirname, "..", "..", "package-lock.json"),
+      bundling: {
+        tsconfig: path.join(__dirname, "..", "..", "tsconfig.json"),
+        minify: false,
+        sourceMap: true,
+        // Chromium's compressed binaries ship as files inside the package, and playwright-core
+        // can't be bundled (optional native/bidi modules) — both go in as real dependencies.
+        nodeModules: ["@sparticuz/chromium", "playwright-core"],
+      },
+      // Chromium wants memory (more memory also means more CPU on Lambda) and unpacks itself
+      // into /tmp on a cold start.
+      memorySize: 2048,
+      ephemeralStorageSize: cdk.Size.mebibytes(1024),
+      timeout: cdk.Duration.seconds(90),
+      logGroup: buildLogGroup(this, "BrowserFn"),
+    });
+    for (const fn of [serverFn, solChatFn]) {
+      browserFn.grantInvoke(fn);
+      fn.addEnvironment("SCREENSHOT_FUNCTION_NAME", browserFn.functionName);
+    }
 
     const revalidationFn = new lambda.Function(this, "RevalidationFn", {
       runtime: lambda.Runtime.NODEJS_24_X,
@@ -881,6 +1012,18 @@ export class ComputeStack extends cdk.Stack {
           functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
           responseHeadersPolicy: securityHeadersPolicy,
         },
+        // AI page generation, streamed to the browser as it's written (lib/ai/streamGeneration.ts)
+        // — served by the same response-streaming Lambda as SOL, so a long page isn't cut
+        // off by serverFn's buffered 60s limit. Same behavior shape as SOL's own.
+        "api/v1/ai/stream/*": {
+          origin: new origins.FunctionUrlOrigin(solChatFnUrl, { customHeaders: { "x-origin-verify": originVerifySecret! } }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+          responseHeadersPolicy: securityHeadersPolicy,
+        },
         "api/v1/mcp*": {
           // Same readTimeout bump as the default behavior above — an MCP tool call can
           // reach the exact same generate_layout-style code path (dispatchMcpTool ->
@@ -912,6 +1055,23 @@ export class ComputeStack extends cdk.Stack {
           responseHeadersPolicy: securityHeadersPolicy,
         },
         "commerce.js": {
+          origin: origins.S3BucketOrigin.withOriginAccessControl(assetsBucket, { originPath: "/_assets" }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          responseHeadersPolicy: securityHeadersPolicy,
+        },
+        // The other platform scripts (content widget, form connector, sign-up, newsletter popup) — same bucket, same cache.
+        ...Object.fromEntries(["plexo-*", "lms-signup.js", "newsletter-popup.js"].map((pattern) => [pattern, {
+          origin: origins.S3BucketOrigin.withOriginAccessControl(assetsBucket, { originPath: "/_assets" }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          responseHeadersPolicy: securityHeadersPolicy,
+        }])),
+        // The app editor's self-hosted code editor (scripts/copy-monaco.mjs). Versioned paths,
+        // so the immutable cache DeployAssets stamps on them is safe. Without this behavior the
+        // requests fell through to the server function, which doesn't carry public/ — 404s,
+        // and Code mode sat on "Loading editor…".
+        "monaco/*": {
           origin: origins.S3BucketOrigin.withOriginAccessControl(assetsBucket, { originPath: "/_assets" }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,

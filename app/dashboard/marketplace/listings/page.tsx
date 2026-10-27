@@ -36,7 +36,7 @@ export default async function MyListingsPage() {
     .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   const purchaseCounts = await Promise.all(
-    listingTemplates.map((t) => TemplatePurchase.query.byTemplate({ templateId: t.id }).go().then((r) => r.data.length)),
+    listingTemplates.map((t) => TemplatePurchase.query.byTemplate({ templateId: t.id }).go({ pages: "all" }).then((r) => r.data.length)),
   );
 
   const listings = listingTemplates.map((t, i) => ({

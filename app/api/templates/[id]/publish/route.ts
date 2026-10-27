@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { sanitizeHtml } from "@/server/sanitizer";
-import { compileToHTML } from "@/lib/compiler";
 
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
-import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
+import { compileTemplateWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
 import { publishTemplateDraft } from "@/lib/templateVersions";
+import { V2DesignError } from "@/lib/v2/design";
 import { Template } from "@/lib/db/contentEntities";
 import { Member, User } from "@/lib/db/coreEntities";
+import { assertCanPublishPage, PlanLimitError, planLimitResponse } from "@/lib/plan/publishGuard";
+import { setPagePublishFlags } from "@/lib/plan/sitesStore";
 
 /**
  * POST /api/templates/:id/publish
@@ -51,6 +52,14 @@ export async function POST(
     if (scopeError) return scopeError;
   }
 
+  // Free publishes one page per site — the homepage (lib/plan/publishGuard.ts).
+  try {
+    assertCanPublishPage(resolved.subscriptionPlan, existing);
+  } catch (err) {
+    if (err instanceof PlanLimitError) return planLimitResponse(err);
+    throw err;
+  }
+
   const designJson = existing.draftJson ?? existing.designJson;
 
   // Same "never trust a client-supplied compile" rule as the update route this draft came
@@ -58,11 +67,15 @@ export async function POST(
   // rather than trusting draftHtml, since draftHtml was compiled without that awareness.
   let compiledHtml = existing.draftHtml ?? existing.compiledHtml;
   if (existing.kind === "LANDING_PAGE") {
-    const forCompile = await compileWithSiteLayout(
-      { id: existing.id, parentId: existing.parentId ?? null },
-      designJson,
-    );
-    compiledHtml = sanitizeHtml(compileToHTML(forCompile));
+    try {
+      compiledHtml = await compileTemplateWithSiteLayout(
+        { id: existing.id, parentId: existing.parentId ?? null, kind: existing.kind, name: existing.name, designFormat: existing.designFormat },
+        designJson,
+      );
+    } catch (err) {
+      if (err instanceof V2DesignError) return NextResponse.json({ error: err.message }, { status: 400 });
+      throw err;
+    }
   }
 
   const { data: user } = await User.get({ id: resolved.userId }).go();
@@ -73,6 +86,11 @@ export async function POST(
     designJson,
     compiledHtml,
   );
+
+  // Publishing a page that was unpublished puts it back on the site.
+  if (existing.parentId && existing.isPublished === false) {
+    await setPagePublishFlags(existing.id, true, null);
+  }
 
   await onTemplateSaved(existing.id);
 

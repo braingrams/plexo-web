@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { cookies } from "next/headers";
 import { randomUUID } from "node:crypto";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
@@ -38,7 +39,7 @@ export async function getOrganizationOwnerPlanDynamo(organizationId: string): Pr
   const ownerUserId = owner[0]?.userId;
   if (!ownerUserId) return "FREE";
   const { data: ownerUser } = await User.get({ id: ownerUserId }).go();
-  return ownerUser?.subscriptionPlan ?? "FREE";
+  return effectivePlan(ownerUser);
 }
 
 export async function getOrgBrandDynamo(
@@ -121,16 +122,10 @@ export async function setActiveOrganizationCookie(organizationId: string): Promi
   });
 }
 
-export async function createOrganization(
-  userId: string,
-  name: string,
-): Promise<{ id: string; name: string }> {
-  const id = randomUUID();
-  const slug = `ws-${userId.slice(0, 8)}-${Date.now().toString(36)}`;
-  await Organization.create({ id, name, slug }).go();
-  await Member.create({ id: randomUUID(), organizationId: id, userId, role: "owner" }).go();
-  return { id, name };
-}
+// There is deliberately no "create an organization" function here. A workspace is only ever
+// created by ensurePersonalWorkspace (server/orgMemberships.ts), whose id is derived from the
+// user's id so two racing requests can only ever produce one. A random-id creator used to live
+// here; tests/singlePersonalWorkspace.test.ts fails if one comes back.
 
 export async function listMembers(organizationId: string): Promise<
   { id: string; userId: string; role: OrgRole; scopedTemplateIds: string[]; name: string; email: string }[]

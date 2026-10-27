@@ -26,7 +26,7 @@ export async function GET(
   const { data: contentType } = await CustomContentType.get({ templateId, id: typeId }).go();
   if (!contentType) return NextResponse.json({ error: "Content type not found." }, { status: 404 });
 
-  const { data: entries } = await CustomContentEntry.query.primary({ contentTypeId: typeId }).go();
+  const { data: entries } = await CustomContentEntry.query.primary({ contentTypeId: typeId }).go({ pages: "all" });
   entries.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
 
   return NextResponse.json({ contentType: { id: contentType.id, name: contentType.name, slug: contentType.slug, fields: contentType.fields }, entries });

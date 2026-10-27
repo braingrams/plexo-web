@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { ArrowRight, Code, Terminal, Sparkles, Cpu, Copy, Check, Zap, Layers } from "lucide-react";
+import { ArrowRight, Code, Terminal, Cpu, Copy, Check, Zap, Layers } from "lucide-react";
 import { Reveal, gsap, useGSAP, useReducedMotion } from "@/app/scroll-fx";
 
 export function DevHero({ isDark }: { isDark: boolean }) {
@@ -62,7 +62,7 @@ export function DevHero({ isDark }: { isDark: boolean }) {
 
           <Reveal delay={0.2}>
             <p className="text-base sm:text-lg md:text-xl font-medium text-white/90 max-w-xl leading-relaxed">
-              Integrate the Plexo visual builder into your SaaS with our SDK, or connect Cursor, Claude, and Antigravity via our native MCP server.
+              Add the Plexo visual builder to your product with SDK 2, compile pages to clean HTML or React, or connect Cursor, Claude, and Antigravity through our native MCP server. The classic builder keeps working.
             </p>
           </Reveal>
 
@@ -105,37 +105,33 @@ export function DevHero({ isDark }: { isDark: boolean }) {
                 </div>
                 <span className="font-bold text-slate-300">app/developer-quickstart.tsx</span>
                 <span className="bg-purple-950 text-purple-300 border border-purple-800/60 px-2 py-0.5 rounded-md text-[10px]">
-                  SDK v1.0.40
+                  SDK 2
                 </span>
               </div>
 
               {/* Code Snippet */}
               <pre className="p-6 overflow-x-auto leading-relaxed text-slate-300">
-                <code>{`import { PlexoBuilder } from "@charisol/plexo-sdk";
-import { mcpServer } from "@charisol/plexo-mcp";
+                <code>{`import { V2Editor } from "@charisol/plexo-sdk/v2";
+import { compilePageToHtml } from "@charisol/plexo-sdk/v2/compile";
 
-// 1. Embed Visual Builder Canvas
-<PlexoBuilder
-  mode="landing_page"
-  apiKey={process.env.NEXT_PUBLIC_PLEXO_API_KEY}
-  useAi
-  onSave={({ json, html }) => console.log("Saved:", html)}
+// 1. Embed the visual builder
+<V2Editor
+  pages={savedPages}
+  onSave={async (pages) => saveToMyDatabase(pages)}
+  formAction={(formId) => \`/api/forms/\${formId}\`}
 />
 
-// 2. Connect AI Agents via MCP
-mcpServer.registerTools({
-  createPage: true,
-  syncCustomDomain: true,
-});`}</code>
+// 2. Turn a saved page into clean HTML
+const { document } = compilePageToHtml(page);`}</code>
               </pre>
 
               {/* Footer Status Bar */}
               <div className="px-5 py-3 bg-slate-900/90 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
                 <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Zap className="w-3.5 h-3.5" />
                   <span>SDK &amp; MCP Active</span>
                 </div>
-                <span className="text-cyan-300 font-bold">Vercel Edge Ready</span>
+                <span className="text-cyan-300 font-bold">Classic builder supported</span>
               </div>
             </div>
           </div>

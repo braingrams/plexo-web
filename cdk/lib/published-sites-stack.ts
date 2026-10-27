@@ -191,6 +191,9 @@ export class PublishedSitesStack extends cdk.Stack {
     // cached first for "/" get served to every other visitor of "/", including ones with no
     // `p` at all. Allow-listing just "p" keeps that one param in the cache key without
     // fragmenting the cache on ordinary marketing querystrings (utm_source, fbclid, etc).
+    // "page_id" for the same reason: a site migrated from WordPress answers its page
+    // shortlinks (/blog/?page_id=45) with a 301 to the page — without it in the cache key,
+    // CloudFront served the cached plain page instead (confirmed live on staging).
     const pageCachePolicy = new cloudfront.CachePolicy(this, "PublishedPageCachePolicy", {
       cachePolicyName: `${this.stackName}-page`,
       comment: "Short-TTL cache for published page HTML — see published-sites-stack.ts's own comment at this resource",
@@ -198,7 +201,34 @@ export class PublishedSitesStack extends cdk.Stack {
       minTtl: cdk.Duration.seconds(0),
       maxTtl: cdk.Duration.seconds(60),
       cookieBehavior: cloudfront.CacheCookieBehavior.none(),
-      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("p"),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("p", "page_id"),
+      // The CloudFront-Viewer-* headers are how the app learns where a visit came from (the analytics
+      // "Location" column — server/analytics.ts extractGeoFromHeaders). CloudFront adds them, but only passes
+      // them to the origin when a policy names them; naming them here also varies the cache entry by the
+      // viewer's place, which the 10s TTL keeps cheap. Without this every visit was "Unknown" after the move
+      // off Vercel (which sent its own x-vercel-ip-* headers).
+      headerBehavior: cloudfront.CacheHeaderBehavior.allowList(
+        "x-forwarded-host",
+        "cloudfront-viewer-country",
+        "cloudfront-viewer-country-region",
+        "cloudfront-viewer-city",
+      ),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    });
+
+    // Built files of apps built on Plexo (lib/projects/serve.ts): every path under
+    // /__plexo/assets/<buildId>/ is content-hashed and never changes, so it's cached at the
+    // edge for up to a year. Keyed by host (x-forwarded-host, set by the viewer-request
+    // function) like page HTML: two apps' builds can never be confused.
+    const appAssetCachePolicy = new cloudfront.CachePolicy(this, "AppAssetCachePolicy", {
+      cachePolicyName: `${this.stackName}-app-assets`,
+      comment: "Immutable, host-keyed cache for React app build assets (/__plexo/assets/*)",
+      defaultTtl: cdk.Duration.days(1),
+      minTtl: cdk.Duration.seconds(0),
+      maxTtl: cdk.Duration.days(365),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
       headerBehavior: cloudfront.CacheHeaderBehavior.allowList("x-forwarded-host"),
       enableAcceptEncodingGzip: true,
       enableAcceptEncodingBrotli: true,
@@ -325,10 +355,20 @@ export class PublishedSitesStack extends cdk.Stack {
           // to checkout, cart shows empty/stale until reload" — the reload just happened
           // to land after the cached entry expired. CACHING_DISABLED is CloudFront's own
           // managed zero-TTL policy — every request here always reaches ServerFn fresh.
+          // A React app's own backend (/__plexo/api/* on its domain → app/api/runtime): per
+          // visitor, never cached, every method.
+          { pathPattern: "__plexo/api/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_DISABLED, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: ALLOW_ALL_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
+          { pathPattern: "__plexo/assets/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: appAssetCachePolicy.cachePolicyId, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
           { pathPattern: "api/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_DISABLED, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: ALLOW_ALL_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
           { pathPattern: "_next/image*", targetOriginId: "ImageFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: imageOptimizerCachePolicy.cachePolicyId, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "_next/*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "commerce.js", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
+          // The rest of the scripts the platform injects into published pages (public/plexo-content.js + .css and
+          // plexo-forms.js, the funnel sign-up, the newsletter popup). Without a behavior they fall through to the server
+          // function, which doesn't carry public/ — a 404, and the feature silently does nothing on the live site.
+          { pathPattern: "plexo-*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
+          { pathPattern: "lms-signup.js", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
+          { pathPattern: "newsletter-popup.js", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "uploads/*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
         ],
       },
@@ -474,6 +514,10 @@ export class PublishedSitesStack extends cdk.Stack {
     // up to a day before this catches it.
     scheduledRoute("BlogImportResumeStalled", "/api/internal/blog-import/resume-stalled", events.Schedule.cron({ minute: "0", hour: "12" }));
     scheduledRoute("SiteImportResumeStalled", "/api/internal/site-import/resume-stalled", events.Schedule.cron({ minute: "0", hour: "13" }));
+    // Every 10 minutes, unlike the daily import backstops above: the WordPress migration
+    // screen tells the owner they can close the tab, so a closed tab must not mean a
+    // migration sits half-done for a day.
+    scheduledRoute("WpMigrationResumeStalled", "/api/internal/wp-migration/resume-stalled", events.Schedule.rate(cdk.Duration.minutes(10)));
 
     // Every 15 minutes, NOT once a day like the other backstops above — see that route's
     // own doc comment on why: its 15-minute hold window means a once-daily sweep would
@@ -483,11 +527,24 @@ export class PublishedSitesStack extends cdk.Stack {
     // bound by, not the actually-desired cadence.
     scheduledRoute("CommerceExpireStaleHolds", "/api/internal/commerce/expire-stale-holds", events.Schedule.rate(cdk.Duration.minutes(15)));
 
+    // "Keep my website up to date with Strata": pulls Strata changes for every app that turned
+    // it on and rebuilds/republishes when they're safe to apply (lib/strata/autoUpdate.ts).
+    // Every 15 minutes: a brand change should reach visitors the same day without anyone
+    // opening the editor; an unchanged revision costs one tiny request per app.
+    scheduledRoute("StrataAutoUpdate", "/api/internal/strata-auto-update", events.Schedule.rate(cdk.Duration.minutes(15)));
+
     // Optional, non-blocking backstop for the Funnel/LMS module's time-based (drip) page
     // unlocks — see that route's own doc comment. Unlocking itself never depends on this
     // (evaluatePageUnlock runs at read time on every portal visit); daily is plenty for a
     // "did you know your next lesson is ready" nudge.
     scheduledRoute("LmsDripReminder", "/api/internal/lms-drip-reminder", events.Schedule.cron({ minute: "0", hour: "14" }));
+
+    // Plan lifecycle backstop (lib/plan/sweep.ts): trials and admin grants that ran out for
+    // someone who hasn't been back, subscriptions recorded before statuses were tracked
+    // (checked with Stripe), and "your trial ends in 3 days" emails. Hourly so an expired
+    // trial never lingers long; everything a person or visitor touches is already handled
+    // the instant they do (lib/plan/lifecycle.ts).
+    scheduledRoute("PlanLifecycle", "/api/internal/plan-lifecycle", events.Schedule.rate(cdk.Duration.hours(1)));
 
     new cdk.CfnOutput(this, "ConnectionGroupRoutingEndpoint", { value: connectionGroup.attrRoutingEndpoint });
     new cdk.CfnOutput(this, "PrimaryDistributionId", { value: primaryDistribution.attrId, exportName: `${this.stackName}-PrimaryDistributionId` });

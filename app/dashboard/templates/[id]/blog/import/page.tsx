@@ -9,7 +9,7 @@ export default async function BlogImportPage({ params }: { params: Promise<{ id:
   // No indexed "most recent active job" query (ImportJob's primary SK is id, not
   // createdAt — same as app/api/blog/[templateId]/import/route.ts's GET) — fetch the
   // partition and pick in memory, small in practice.
-  const { data: jobs } = await ImportJob.query.primary({ templateId: access.templateId }).go();
+  const { data: jobs } = await ImportJob.query.primary({ templateId: access.templateId }).go({ pages: "all" });
   const activeJobs = jobs.filter((j) => j.status === "PENDING" || j.status === "RUNNING" || j.status === "PAUSED_ERROR");
   activeJobs.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
   const activeJob = activeJobs[0] ?? null;

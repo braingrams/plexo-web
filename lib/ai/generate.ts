@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { friendlyProviderError } from "./providerErrors";
 
 import { ElementJSONSchema, TemplateJSONSchema, hydrateStructuralDefaults } from "@/server/sanitizer";
 
@@ -15,14 +16,13 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   edit_element: 4000,
   edit_layout: 16000,
   generate_layout: 16000,
-  // Full-document output (the whole uploaded index.html back). Raised from the previous
-  // 16000: the model returns the ENTIRE document as one JSON string, so anything beyond a
-  // small page routinely hit that ceiling mid-string, producing an unparseable truncated
-  // response ("Unterminated string in JSON..."). See TRUNCATED_RETRY_CAP below for the
-  // further adaptive bump this mode's edits get if even this isn't enough.
-  edit_raw_html: 32000,
-  // Same full-document-output reasoning as edit_raw_html just above — a freshly generated
-  // page can be just as large as an edited one.
+  // Edits come back as find/replace changes, which are small; this ceiling is for the
+  // occasional page-wide rewrite, which returns the whole document (and, if even that's cut
+  // off, gets TRUNCATED_RETRY_CAP below). It also sets the pre-flight credit check, so it's
+  // kept well under a full rewrite's worst case.
+  edit_raw_html: 16000,
+  // A freshly generated page is a full document: a page can routinely pass 16000 tokens, and
+  // a cut-off answer mid-string can't be parsed.
   generate_raw_html: 32000,
   // A full post as HTML plus excerpt/SEO/category/tag/image-prompt metadata — lighter than
   // a builder layout's nested JSON per token, so a smaller ceiling than edit_layout/
@@ -36,6 +36,10 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   // gets cut off mid tool-call JSON is worse than a plain generation mode being cut off,
   // since dispatchMcpTool would then receive unparseable/truncated tool input.
   agent_chat: 32000,
+  // A catalog's product rows as JSON — ample for a few hundred products in one pass.
+  import_products: 8000,
+  // A few sentences plus the section and element commands — rebuilding a hand-designed section writes a whole element tree. It sets the credit hold.
+  page_assist: 16000,
 };
 
 /** Ceiling for the one-time adaptive retry when a response comes back truncated (see
@@ -88,8 +92,15 @@ Respond with ONLY a JSON object of this exact shape, no markdown fences, no pros
   if (mode === "edit_raw_html") {
     return `You are Plexo's builder AI. You edit a complete, self-contained static HTML document (an uploaded site, not a Plexo builder layout) according to the user's instruction.
 Preserve everything the user didn't ask you to change — structure, existing <style>/<script> blocks, classes, attributes, and functionality — and make only the requested edit.
+Return ONLY the changes, never the whole document: a list of edits, each replacing one exact piece of the current document. Plexo applies them for you.
+- "find" must be copied character-for-character from the current document (same spaces, quotes and line breaks) and must appear exactly ONCE in it — include a little surrounding text when a short snippet would match more than once.
+- Keep each "find" as short as that allows. "replace" is what goes in its place ("" removes it). Edits are applied in order.
+- To add something new, "find" the spot next to it (e.g. the closing tag before it) and put that same text back in "replace" together with the new markup.
+- Use "html" (the COMPLETE new document) instead of "edits" ONLY when the instruction rewrites most of the page (e.g. "redesign the whole page") and edits would be longer than the document itself.
 Respond with ONLY a JSON object of this exact shape, no markdown fences, no prose outside the JSON:
-{ "summary": "<one short sentence describing the change you made>", "result": "<the COMPLETE modified HTML document as a single string, starting from <!DOCTYPE html> or <html>, not a diff or partial snippet>" }`;
+{ "summary": "<one short sentence describing the change you made>", "result": { "edits": [ { "find": "<exact current text>", "replace": "<new text>" } ] } }
+or, only for a page-wide rewrite:
+{ "summary": "<one short sentence>", "result": { "html": "<the COMPLETE modified HTML document>" } }`;
   }
 
   if (mode === "generate_raw_html") {
@@ -134,8 +145,35 @@ Respond with ONLY a JSON object of this exact shape, no markdown fences, no pros
 { "summary": "<one or two short sentences describing what you changed or built>", "result": <the full TemplateJSON, i.e. { "body": { "style": {...}, "rows": [...] } }> }`;
 }
 
+const RawHtmlEditsSchema = z.union([
+  z.object({ edits: z.array(z.object({ find: z.string().min(1), replace: z.string() })).min(1).max(60) }),
+  z.object({ html: z.string().min(1) }),
+]);
+
+/** An edit the AI asked for that can't be applied safely — fed back to it on the retry. */
+export class RawHtmlEditError extends Error {}
+
+/** Applies find/replace edits to an HTML document, in order. Each "find" must match exactly
+ *  once in the document as it stands at that point, so an edit can never land in the wrong
+ *  place or half-apply; anything else throws, saying which edit and why. */
+export function applyHtmlEdits(html: string, edits: Array<{ find: string; replace: string }>): string {
+  let doc = html;
+  edits.forEach(({ find, replace }, i) => {
+    const at = doc.indexOf(find);
+    const label = `edit ${i + 1} (find: ${JSON.stringify(find.length > 80 ? `${find.slice(0, 80)}…` : find)})`;
+    if (at === -1) throw new RawHtmlEditError(`${label} doesn't match the document — copy "find" exactly from the current HTML`);
+    if (doc.indexOf(find, at + 1) !== -1) throw new RawHtmlEditError(`${label} matches more than once — include more surrounding text so it's unique`);
+    // Sliced, not String.replace: "$&" or "$1" in the new markup must stay literal.
+    doc = doc.slice(0, at) + replace + doc.slice(at + find.length);
+  });
+  return doc;
+}
+
 function resultSchemaFor(mode: AiActionMode) {
-  if (mode === "edit_raw_html" || mode === "generate_raw_html") {
+  if (mode === "edit_raw_html") {
+    return z.object({ summary: z.string().max(2000), result: RawHtmlEditsSchema });
+  }
+  if (mode === "generate_raw_html") {
     return z.object({ summary: z.string().max(2000), result: z.string().min(1) });
   }
   if (mode === "generate_blog_post") {
@@ -173,15 +211,19 @@ function trimContext(mode: AiActionMode, context: unknown): unknown {
   return clone;
 }
 
-async function callProvider(
+/** One model call on any supported provider — the single dispatcher every SOL-powered
+ *  feature uses (lib/ai/solEngine.ts decides which provider and key). */
+export async function callProvider(
   provider: AiProvider,
   model: string,
   apiKey: string,
   systemPrompt: string,
   userPrompt: string,
   maxTokens: number,
+  onTextDelta?: (delta: string) => void,
+  attachments?: Array<{ mediaType: string; data: string; name?: string }>,
 ): Promise<ProviderCallResult> {
-  const params = { model, apiKey, systemPrompt, userPrompt, maxTokens };
+  const params = { model, apiKey, systemPrompt, userPrompt, maxTokens, onTextDelta, ...(attachments ? { attachments } : {}) };
   switch (provider) {
     case "anthropic_claude":
       return anthropicProvider.generate(params);
@@ -208,6 +250,19 @@ export interface GenerateParams {
    * types are offered to the model at all (see BLOG_ELEMENT_TYPES above). */
   isBlogLayout?: boolean;
   context: unknown;
+  /** Called as the page is written — how much so far, and which attempt (a cut-off answer is retried once). */
+  onProgress?: (progress: { characters: number; attempt: number }) => void;
+  /** Runs before every call to the AI (including the retry) with that call's output budget —
+   * e.g. to confirm the account can still afford it. Throw a GenerationStoppedError to stop. */
+  beforeAttempt?: (maxTokens: number, attempt: number) => Promise<void>;
+}
+
+/** Stops a generation before it calls the AI (e.g. not enough credit for the next attempt) — shown to the person as is. */
+export class GenerationStoppedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GenerationStoppedError";
+  }
 }
 
 class ProviderCallError extends Error {
@@ -240,7 +295,13 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
   const schema = resultSchemaFor(params.mode);
   const maxTokens = MAX_TOKENS[params.mode];
 
+  // Every call is paid for, including a cut-off first answer that had to be retried —
+  // the outcome reports what the whole generation used.
+  const totalUsage = { inputTokens: 0, outputTokens: 0 };
+  let attemptNumber = 0;
   const attempt = async (opts?: { extraNote?: string; maxTokensOverride?: number }): Promise<GenerateOutcome> => {
+    attemptNumber += 1;
+    const thisAttempt = attemptNumber;
     // Raw HTML is embedded directly rather than JSON.stringify'd — stringifying would
     // escape every quote/newline in the document, burning tokens and making the markup
     // harder for the model to read as an actual document rather than a JSON string.
@@ -253,6 +314,14 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
         : `Current JSON:\n${JSON.stringify(trimmedContext)}`;
     const userPrompt = `${opts?.extraNote ? `${opts.extraNote}\n\n` : ""}User instruction: ${params.prompt}${contextBlock ? `\n\n${contextBlock}` : ""}`;
     const tokensForThisCall = opts?.maxTokensOverride ?? maxTokens;
+    if (params.beforeAttempt) await params.beforeAttempt(tokensForThisCall, thisAttempt);
+    let characters = 0;
+    const onTextDelta = params.onProgress
+      ? (delta: string) => {
+          characters += delta.length;
+          params.onProgress!({ characters, attempt: thisAttempt });
+        }
+      : undefined;
     let text: string;
     let usage: ProviderCallResult["usage"];
     let truncated: ProviderCallResult["truncated"];
@@ -264,13 +333,16 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
         systemPrompt,
         userPrompt,
         tokensForThisCall,
+        onTextDelta,
       ));
+      totalUsage.inputTokens += usage?.inputTokens ?? 0;
+      totalUsage.outputTokens += usage?.outputTokens ?? 0;
     } catch (err) {
       // Auth/network/rate-limit failures from the provider are not the model
       // returning malformed JSON — don't relabel them as parse errors, and
       // don't burn a retry re-asking the provider to "fix its JSON".
-      const reason = err instanceof Error ? err.message : "unknown error";
-      throw new ProviderCallError(`AI provider request failed: ${reason}`);
+      console.error(`[ai] ${params.provider} ${model} request failed:`, err);
+      throw new ProviderCallError(friendlyProviderError(err));
     }
     if (truncated) {
       throw new TruncatedResponseError(
@@ -294,13 +366,21 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
       parsed.result = hydrateStructuralDefaults(parsed.result);
     }
     const validated = schema.parse(parsed);
-    return { summary: validated.summary, result: validated.result, usage };
+    if (params.mode === "edit_raw_html") {
+      // Only the changes come back (far fewer tokens than the whole page); the editor still
+      // gets the complete document.
+      const answer = validated.result as z.infer<typeof RawHtmlEditsSchema>;
+      const current = (trimmedContext as { html: string }).html;
+      const html = "html" in answer ? answer.html : applyHtmlEdits(current, answer.edits);
+      return { summary: validated.summary, result: html, usage: { ...totalUsage } };
+    }
+    return { summary: validated.summary, result: validated.result, usage: { ...totalUsage } };
   };
 
   try {
     return await attempt();
   } catch (firstError) {
-    if (firstError instanceof ProviderCallError) {
+    if (firstError instanceof ProviderCallError || firstError instanceof GenerationStoppedError) {
       throw firstError;
     }
     try {
@@ -313,18 +393,22 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
       }
       // Layout JSON is large and occasionally malformed — one retry with the error fed back.
       const reason = firstError instanceof Error ? firstError.message : "parse error";
+      if (firstError instanceof RawHtmlEditError) {
+        return await attempt({ extraNote: `Your previous edits couldn't be applied: ${reason}. Nothing was changed. Send the edits again (all of them), each "find" copied exactly from the current document and unique in it — or, if that isn't possible, the complete document in "html".` });
+      }
       return await attempt({ extraNote: `Your previous response was invalid (${reason}). Return ONLY the corrected JSON object, with no markdown fences.` });
     } catch (secondError) {
-      if (secondError instanceof ProviderCallError) {
+      if (secondError instanceof ProviderCallError || secondError instanceof GenerationStoppedError) {
         throw secondError;
       }
       if (secondError instanceof TruncatedResponseError) {
         throw new Error(
-          "the AI response was cut off before it finished, even after increasing the output limit — try a shorter or more targeted instruction",
+          "The page was too long for the AI to finish in one go. Try a shorter or more focused description.",
         );
       }
       const reason = secondError instanceof Error ? secondError.message : "unknown error";
-      throw new Error(`AI response could not be parsed: ${reason}`);
+      console.error("[ai] response could not be parsed:", reason);
+      throw new Error("The AI's answer couldn't be turned into a page. Try again — rephrasing the description often helps.");
     }
   }
 }

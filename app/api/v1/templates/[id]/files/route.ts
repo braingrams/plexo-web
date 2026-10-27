@@ -15,6 +15,9 @@ import {
 } from "@/server/rawUpload";
 import { Template, TemplateAsset } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
+import { getTierFeatures } from "@/lib/subscription";
+import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
+import { listLoosePages, splitHtmlAssetsIntoPages } from "@/lib/rawSite/splitPages";
 
 export type FileEntry = {
   path: string;
@@ -56,7 +59,7 @@ export async function GET(
     return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
   }
 
-  const { data: assets } = await TemplateAsset.query.primary({ templateId: template.id }).go();
+  const { data: assets } = await TemplateAsset.query.primary({ templateId: template.id }).go({ pages: "all" });
 
   const files: FileEntry[] = [
     {
@@ -149,7 +152,7 @@ export async function POST(
     return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
   }
 
-  const { data: assets } = await TemplateAsset.query.primary({ templateId: template.id }).go();
+  const { data: assets } = await TemplateAsset.query.primary({ templateId: template.id }).go({ pages: "all" });
 
   let rawPath: string;
   let buffer: Buffer;
@@ -217,6 +220,21 @@ export async function POST(
     contentType,
     size: buffer.byteLength,
   }).go();
+
+  // A new .html file on a site's home page is a new PAGE of the site (counted, listed, editable, with
+  // its own address) — not a loose file. Only when the plan allows several pages; otherwise it stays a file.
+  if (!template.parentId && (await listLoosePages(template.id)).includes(path)) {
+    if (getTierFeatures(await getOrganizationOwnerPlanDynamo(template.organizationId)).multiPageSitesEnabled) {
+      const split = await splitHtmlAssetsIntoPages(template).catch((err) => {
+        console.error("Turning the new file into a page failed (non-fatal):", err);
+        return null;
+      });
+      const page = split && [...split.created, ...split.updated][0];
+      if (page) {
+        return NextResponse.json({ success: true, page, message: `"${page.name}" was added as a page of your site, at /${page.slug}.` });
+      }
+    }
+  }
 
   const editable = isEditableExtension(path);
   const file: FileEntry = {

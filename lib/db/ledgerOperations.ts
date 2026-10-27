@@ -3,7 +3,8 @@ import { EntityItem } from "electrodb";
 import { docClient } from "./client";
 import { User } from "./coreEntities";
 import { CreditLedgerEntry, StripeEvent } from "./ledgerEntities";
-import { PLAN_MONTHLY_CREDITS, type SubscriptionPlan } from "@/lib/subscription";
+import type { SubscriptionPlan } from "@/lib/subscription";
+import { planMonthlyCredits } from "@/lib/credits/value";
 import { computeCostUsd, creditsForUsd } from "@/lib/credits/pricing";
 import { MAX_TOKENS } from "@/lib/ai/generate";
 import type { AiActionMode, AiProvider, ConcreteTier, GenerateOutcome } from "@/lib/ai/types";
@@ -19,7 +20,11 @@ type UserItem = EntityItem<typeof User>;
 // match what was read) guarding against a concurrent writer racing us. A conflict means
 // retry, not corruption: the transaction simply fails and we recompute against the
 // now-current balance.
-const MAX_OPTIMISTIC_RETRIES = 5;
+// Raised from 5 when credit holds arrived: several chats (or a chat plus an image) can now touch one
+// account in the same instant, and each lost race costs a retry. The short random pause stops the
+// losers from colliding again in lockstep.
+const MAX_OPTIMISTIC_RETRIES = 15;
+const retryPause = (attempt: number) => new Promise<void>((resolve) => setTimeout(resolve, Math.random() * Math.min(200, 15 * (attempt + 1))));
 
 function isConditionalCheckFailure(err: unknown): boolean {
   const anyErr = err as { name?: string; cause?: { name?: string }; CancellationReasons?: Array<{ Code?: string }> };
@@ -30,6 +35,26 @@ function isConditionalCheckFailure(err: unknown): boolean {
     Boolean(anyErr?.CancellationReasons?.some((r) => r.Code === "ConditionalCheckFailed"))
   );
 }
+
+/**
+ * DynamoDB refuses a write to an item while another request's transaction on it is in flight
+ * ("Transaction is ongoing for the item") — e.g. a chat placing a credit hold at the very moment
+ * another chat's bill is being written. Nothing is wrong and nothing was written: the caller just
+ * tries again. Kept apart from isConditionalCheckFailure on purpose — that one means "someone
+ * else's write won", and the idempotent claims below must not mistake a mere collision for it.
+ */
+function isTransactionConflict(err: unknown): boolean {
+  const anyErr = err as { name?: string; message?: string; cause?: { name?: string }; CancellationReasons?: Array<{ Code?: string }> };
+  return (
+    anyErr?.name === "TransactionConflictException" ||
+    anyErr?.cause?.name === "TransactionConflictException" ||
+    Boolean(anyErr?.CancellationReasons?.some((r) => r.Code === "TransactionConflict")) ||
+    String(anyErr?.message ?? "").includes("Transaction is ongoing for the item")
+  );
+}
+
+/** A lost race or a collision — either way the credit write is simply attempted again from a fresh read. */
+const isRetryableContention = (err: unknown) => isConditionalCheckFailure(err) || isTransactionConflict(err);
 
 /**
  * Credits a completed Stripe top-up purchase. Idempotent the same way as the Postgres
@@ -88,10 +113,105 @@ export async function grantTopup(userId: string, credits: number, stripeEventId:
 }
 
 /**
+ * Credit holds — what stops two chats running at once from spending the same credits.
+ *
+ * A turn is billed once, when it ends, so while it runs the saved balance doesn't move; a
+ * second chat reading that balance would think the credits were all still free. Like a card
+ * authorisation, a running turn instead HOLDS the most it could still bill (what it has used
+ * so far plus its next step's worst case), and every other check — another chat, an image, a
+ * blog post — sees the balance minus everyone's holds. The hold is released when the turn is
+ * billed. A hold that is never released (the server died mid-turn) expires on its own after
+ * HOLD_TTL_MS, and the turn refreshes it every step, so nothing can stay locked up.
+ */
+type CreditHold = { credits: number; expiresAt: string };
+export const HOLD_TTL_MS = 10 * 60_000;
+
+function liveHolds(raw: unknown, nowMs = Date.now()): Record<string, CreditHold> {
+  const out: Record<string, CreditHold> = {};
+  if (raw && typeof raw === "object") {
+    for (const [id, hold] of Object.entries(raw as Record<string, CreditHold>)) {
+      if (hold && typeof hold.credits === "number" && typeof hold.expiresAt === "string" && new Date(hold.expiresAt).getTime() > nowMs) out[id] = hold;
+    }
+  }
+  return out;
+}
+
+function sumHolds(holds: Record<string, CreditHold>, exceptId?: string): number {
+  return Object.entries(holds).reduce((sum, [id, hold]) => (id === exceptId ? sum : sum + hold.credits), 0);
+}
+
+/** The condition every credit write carries: balances AND holds are exactly what was read, so a
+ *  concurrent charge or hold makes this write retry against the fresh values instead of losing an update.
+ *  heldCredits may not exist yet on an older account — "absent" counts as what was read. */
+function unchangedSinceRead(attr: any, op: any, read: { allowanceBalance: number; topupBalance: number; heldCredits: number | undefined }): string {
+  const held = read.heldCredits === undefined ? op.notExists(attr.heldCredits) : op.eq(attr.heldCredits, read.heldCredits);
+  return `${op.eq(attr.allowanceBalance, read.allowanceBalance)} AND ${op.eq(attr.topupBalance, read.topupBalance)} AND ${held}`;
+}
+
+/**
+ * Holds up to `ceilingCredits` for one running turn (replacing that turn's earlier hold), only if
+ * the account can cover it after every OTHER running turn's hold. Returns false — and changes
+ * nothing — when it can't, which is the signal for the turn to stop before the next step.
+ */
+export async function holdCredits(userId: string, holdId: string, ceilingCredits: number): Promise<{ held: boolean; available: number }> {
+  for (let attempt = 0; attempt < MAX_OPTIMISTIC_RETRIES; attempt++) {
+    const { data } = await User.get({ id: userId }).go();
+    if (!data || !("id" in data)) throw new Error(`holdCredits: user ${userId} not found`);
+    const user = data as UserItem;
+    const allowanceBalance = user.allowanceBalance ?? 0;
+    const topupBalance = user.topupBalance ?? 0;
+    const holds = liveHolds(user.creditHolds);
+    const available = allowanceBalance + topupBalance - sumHolds(holds, holdId);
+    if (available < ceilingCredits) return { held: false, available };
+
+    const next: Record<string, CreditHold> = { ...holds, [holdId]: { credits: ceilingCredits, expiresAt: new Date(Date.now() + HOLD_TTL_MS).toISOString() } };
+    try {
+      await User.patch({ id: userId })
+        .set({ creditHolds: next, heldCredits: sumHolds(next) })
+        .where((attr, op) => unchangedSinceRead(attr, op, { allowanceBalance, topupBalance, heldCredits: user.heldCredits }))
+        .go();
+      return { held: true, available };
+    } catch (err) {
+      if (isRetryableContention(err) && attempt < MAX_OPTIMISTIC_RETRIES - 1) { await retryPause(attempt); continue; }
+      throw err;
+    }
+  }
+  throw new Error(`holdCredits: exhausted retries for user ${userId} — too much concurrent balance contention`);
+}
+
+/** Releases a turn's hold once it has been billed (or abandoned). Safe to call twice. */
+export async function releaseHold(userId: string, holdId: string): Promise<void> {
+  for (let attempt = 0; attempt < MAX_OPTIMISTIC_RETRIES; attempt++) {
+    const { data } = await User.get({ id: userId }).go();
+    if (!data || !("id" in data)) return;
+    const user = data as UserItem;
+    const holds = liveHolds(user.creditHolds);
+    const hadIt = Object.prototype.hasOwnProperty.call(holds, holdId);
+    // Also tidies expired holds still stored on the account.
+    const storedCount = user.creditHolds && typeof user.creditHolds === "object" ? Object.keys(user.creditHolds as object).length : 0;
+    if (!hadIt && storedCount === Object.keys(holds).length) return;
+    const { [holdId]: _released, ...rest } = holds;
+    try {
+      await User.patch({ id: userId })
+        .set({ creditHolds: rest, heldCredits: sumHolds(rest) })
+        .where((attr, op) => unchangedSinceRead(attr, op, { allowanceBalance: user.allowanceBalance ?? 0, topupBalance: user.topupBalance ?? 0, heldCredits: user.heldCredits }))
+        .go();
+      return;
+    } catch (err) {
+      if (isRetryableContention(err) && attempt < MAX_OPTIMISTIC_RETRIES - 1) { await retryPause(attempt); continue; }
+      throw err;
+    }
+  }
+}
+
+/**
  * Shared debit path for chargeUsage and chargeFlatCredits — allowance bucket first, then
- * top-up, same order as the Postgres version. Left unclamped on overdraft for the same
- * reason as the original: a deficit here means the pre-flight estimate undershot real
- * usage, and should be visible rather than silently floored at zero.
+ * top-up. Deliberately NOT clamped: if the real cost overshoots what the account had (a step
+ * that was already running when the credits ran out), the balance goes negative and the ledger
+ * entry says by how much (`overdrawnBy`), so the overdraft is real, visible and explainable to
+ * the customer rather than hidden. Plexo's guard (holdCredits, per step) is what stops a turn
+ * early; this only ever records a step that had already been paid for at the provider.
+ * `releaseHoldId` drops the turn's credit hold in the same write that bills it.
  */
 async function debitCredits(
   userId: string,
@@ -99,7 +219,8 @@ async function debitCredits(
   type: "AI_USAGE",
   description: string,
   metadata?: Record<string, unknown>,
-): Promise<{ allowanceBalance: number; topupBalance: number }> {
+  releaseHoldId?: string,
+): Promise<{ allowanceBalance: number; topupBalance: number; overdrawnBy: number }> {
   for (let attempt = 0; attempt < MAX_OPTIMISTIC_RETRIES; attempt++) {
     const { data } = await User.get({ id: userId }).go();
     if (!data || !("id" in data)) throw new Error(`debitCredits: user ${userId} not found`);
@@ -111,16 +232,20 @@ async function debitCredits(
     const fromTopup = credits - fromAllowance;
     const nextAllowance = allowanceBalance - fromAllowance;
     const nextTopup = topupBalance - fromTopup;
+    // How far past what the account actually had this charge went (0 for a normal charge).
+    const overdrawnBy = Math.max(0, credits - Math.max(0, allowanceBalance + topupBalance));
     const ledgerEntryId = crypto.randomUUID();
+
+    const holds = liveHolds(user.creditHolds);
+    if (releaseHoldId) delete holds[releaseHoldId];
+    const storedHolds = user.creditHolds && typeof user.creditHolds === "object" ? Object.keys(user.creditHolds as object).length : 0;
+    const touchHolds = Boolean(releaseHoldId) || storedHolds !== Object.keys(holds).length;
 
     // ElectroDB's `.where()` callback builds one condition-expression STRING — combine
     // multiple checks via template-literal concatenation, not a fluent `.and()`.
     const updateUser = User.patch({ id: userId })
-      .set({ allowanceBalance: nextAllowance, topupBalance: nextTopup })
-      .where(
-        (attr, op) =>
-          `${op.eq(attr.allowanceBalance, allowanceBalance)} AND ${op.eq(attr.topupBalance, topupBalance)}`,
-      )
+      .set({ allowanceBalance: nextAllowance, topupBalance: nextTopup, ...(touchHolds ? { creditHolds: holds, heldCredits: sumHolds(holds) } : {}) })
+      .where((attr, op) => unchangedSinceRead(attr, op, { allowanceBalance, topupBalance, heldCredits: user.heldCredits }))
       .params();
 
     const createEntry = CreditLedgerEntry.create({
@@ -130,14 +255,15 @@ async function debitCredits(
       amount: -credits,
       balanceAfter: nextAllowance + nextTopup,
       description,
-      metadata,
+      metadata: overdrawnBy > 0 ? { ...metadata, overdrawnBy } : metadata,
     }).params();
 
     try {
       await docClient.send(buildTransactWrite(updateUser, createEntry));
-      return { allowanceBalance: nextAllowance, topupBalance: nextTopup };
+      if (overdrawnBy > 0) console.warn(`[credits] user ${userId}: ${description} cost ${credits} credits, ${overdrawnBy} more than the account had — balance is now ${nextAllowance + nextTopup}`);
+      return { allowanceBalance: nextAllowance, topupBalance: nextTopup, overdrawnBy };
     } catch (err) {
-      if (isConditionalCheckFailure(err) && attempt < MAX_OPTIMISTIC_RETRIES - 1) continue;
+      if (isRetryableContention(err) && attempt < MAX_OPTIMISTIC_RETRIES - 1) { await retryPause(attempt); continue; }
       throw err;
     }
   }
@@ -156,9 +282,11 @@ export function estimateWorstCaseCost(
   tier: ConcreteTier,
   mode: AiActionMode,
   approxInputChars: number,
+  /** A specific call's output budget (e.g. the bigger retry after a cut-off answer); defaults to the mode's. */
+  maxOutputTokensOverride?: number,
 ): number {
   const conservativeInputTokens = Math.ceil(approxInputChars / 3);
-  const maxOutputTokens = MAX_TOKENS[mode];
+  const maxOutputTokens = maxOutputTokensOverride ?? MAX_TOKENS[mode];
   const usd = computeCostUsd(provider, tier, {
     inputTokens: conservativeInputTokens,
     outputTokens: maxOutputTokens,
@@ -170,7 +298,7 @@ export async function chargeFlatCredits(
   userId: string,
   credits: number,
   description: string,
-): Promise<{ allowanceBalance: number; topupBalance: number }> {
+): Promise<{ allowanceBalance: number; topupBalance: number; overdrawnBy: number }> {
   return debitCredits(userId, credits, "AI_USAGE", description);
 }
 
@@ -182,8 +310,8 @@ export async function chargeFlatCredits(
  */
 export async function chargeUsage(
   userId: string,
-  params: { provider: AiProvider; tier: ConcreteTier; mode: AiActionMode; usage: GenerateOutcome["usage"] },
-): Promise<{ creditsCharged: number; allowanceBalance: number; topupBalance: number }> {
+  params: { provider: AiProvider; tier: ConcreteTier; mode: AiActionMode; usage: GenerateOutcome["usage"]; /** The turn's credit hold, dropped in the same write that bills it. */ releaseHoldId?: string },
+): Promise<{ creditsCharged: number; allowanceBalance: number; topupBalance: number; overdrawnBy: number }> {
   const usd = computeCostUsd(params.provider, params.tier, params.usage);
   const credits = creditsForUsd(usd);
   const description = `${params.mode} (${params.provider}/${params.tier})`;
@@ -195,14 +323,16 @@ export async function chargeUsage(
     outputTokens: params.usage?.outputTokens ?? null,
     costUsd: usd,
   };
-  const { allowanceBalance, topupBalance } = await debitCredits(userId, credits, "AI_USAGE", description, metadata);
-  return { creditsCharged: credits, allowanceBalance, topupBalance };
+  const { allowanceBalance, topupBalance, overdrawnBy } = await debitCredits(userId, credits, "AI_USAGE", description, metadata, params.releaseHoldId);
+  return { creditsCharged: credits, allowanceBalance, topupBalance, overdrawnBy };
 }
 
 export interface CreditBalance {
   allowanceBalance: number;
   topupBalance: number;
   total: number;
+  /** total minus credits held by turns running right now — what a NEW request may actually spend. */
+  available: number;
   allowanceResetAt: string;
 }
 
@@ -226,10 +356,10 @@ export async function ensureCreditPeriod(userId: string): Promise<CreditBalance>
 
   const now = new Date();
   if (now <= new Date(allowanceResetAt)) {
-    return { allowanceBalance, topupBalance, total: allowanceBalance + topupBalance, allowanceResetAt };
+    return { allowanceBalance, topupBalance, total: allowanceBalance + topupBalance, available: allowanceBalance + topupBalance - sumHolds(liveHolds(user.creditHolds)), allowanceResetAt };
   }
 
-  const grant = PLAN_MONTHLY_CREDITS[subscriptionPlan];
+  const grant = planMonthlyCredits(subscriptionPlan);
   const nextResetAt = new Date(now.getTime() + ALLOWANCE_PERIOD_MS).toISOString();
 
   const updateUser = User.patch({ id: userId })
@@ -248,9 +378,9 @@ export async function ensureCreditPeriod(userId: string): Promise<CreditBalance>
 
   try {
     await docClient.send(buildTransactWrite(updateUser, createEntry));
-    return { allowanceBalance: grant, topupBalance, total: grant + topupBalance, allowanceResetAt: nextResetAt };
+    return { allowanceBalance: grant, topupBalance, total: grant + topupBalance, available: grant + topupBalance - sumHolds(liveHolds(user.creditHolds)), allowanceResetAt: nextResetAt };
   } catch (err) {
-    if (!isConditionalCheckFailure(err)) throw err;
+    if (!isRetryableContention(err)) throw err;
     // Lost the race to another concurrent request — read back what it wrote.
     const { data: fresh } = await User.get({ id: userId }).go();
     if (!fresh) throw new Error(`ensureCreditPeriod: user ${userId} vanished mid-race`);
@@ -258,7 +388,7 @@ export async function ensureCreditPeriod(userId: string): Promise<CreditBalance>
     const freshAllowance = freshUser.allowanceBalance ?? 0;
     const freshTopup = freshUser.topupBalance ?? 0;
     const freshResetAt = freshUser.allowanceResetAt ?? nextResetAt;
-    return { allowanceBalance: freshAllowance, topupBalance: freshTopup, total: freshAllowance + freshTopup, allowanceResetAt: freshResetAt };
+    return { allowanceBalance: freshAllowance, topupBalance: freshTopup, total: freshAllowance + freshTopup, available: freshAllowance + freshTopup - sumHolds(liveHolds(freshUser.creditHolds)), allowanceResetAt: freshResetAt };
   }
 }
 
@@ -280,7 +410,7 @@ export async function grantPlanChangeAllowance(userId: string, newPlan: Subscrip
   const topupBalance = user.topupBalance ?? 0;
   const previousAllowanceResetAt = user.allowanceResetAt ?? new Date(0).toISOString();
 
-  const grant = PLAN_MONTHLY_CREDITS[newPlan];
+  const grant = planMonthlyCredits(newPlan);
   const nextResetAt = new Date(Date.now() + ALLOWANCE_PERIOD_MS).toISOString();
 
   const updateUser = User.patch({ id: userId })

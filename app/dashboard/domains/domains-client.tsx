@@ -1,11 +1,15 @@
 "use client";
 
+import { UpgradeModal } from "../_components/UpgradeModal";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { getStripePromise } from "@/lib/stripeClientPromise";
 import { CustomSelect } from "../../_components/CustomSelect";
+import { registrarRelativeName } from "@/lib/domains/registrable";
+import { needsSetup } from "@/lib/domains/wizard";
+import { LinkDomainWizard, type WizardDomain } from "./LinkDomainWizard";
 
 // Fallback only — real value comes from GET /api/v1/domains's routingEndpoint (see the
 // `routingEndpoint` state below). CloudFront SaaS Manager's connection-group endpoint is
@@ -13,31 +17,6 @@ import { CustomSelect } from "../../_components/CustomSelect";
 // wide constant the way Vercel's "cname.vercel-dns.com" was — shown only for the instant
 // before that fetch resolves.
 const DNS_CNAME_TARGET_FALLBACK = "connecting…";
-
-// ACM's DomainValidationOptions.ResourceRecord.Name (lib/acmCertificates.ts's
-// requestCertificate) comes back as the full, absolute record name with a trailing dot
-// (e.g. "_9f29d…d.www.example.com."), unlike the routing CNAME's dnsHostLabel below, which
-// is deliberately shown relative to the zone ("www", not "www.example.com") because that's
-// what a registrar's own "Name/Host" field expects — it appends the zone itself. Showing
-// the cert-validation record's absolute name unchanged means pasting it whole into that
-// same field silently doubles the domain onto the end (GoDaddy: "_9f29d…d.www.example.com"
-// typed into Name becomes "_9f29d…d.www.example.com.example.com" once saved) — a record
-// ACM will never see, so the certificate sits at PENDING_VALIDATION forever with no
-// indication anything is wrong. Confirmed live against a real stuck customer domain: the
-// exact doubled name resolved to the ACM target value, while the name ACM actually polls
-// for was NXDOMAIN. Stripping the trailing dot and the zone suffix here — the same way
-// dnsHostLabel already does for the routing CNAME — makes both records safe to paste as-is.
-function toRegistrarRelativeHost(fullyQualifiedName: string, domain: string): string {
-  const stripped = fullyQualifiedName.replace(/\.$/, "");
-  if (stripped.toLowerCase() === domain.toLowerCase()) return "@";
-  const suffix = `.${domain}`;
-  if (stripped.toLowerCase().endsWith(suffix.toLowerCase())) {
-    return stripped.slice(0, stripped.length - suffix.length);
-  }
-  // Unexpected shape (e.g. domain changed after the cert was requested) — show the real
-  // value rather than hide a mismatch behind a guessed transform.
-  return stripped;
-}
 
 type DomainType = "SUBDOMAIN" | "CUSTOM" | "BUY";
 
@@ -69,6 +48,8 @@ type DomainRecord = {
   certificateValidationName?: string;
   certificateValidationValue?: string;
   noindex?: boolean;
+  /** Switched off by the plan (Free keeps one live site, on a Plexo address) — kept, not removed. */
+  pausedByPlan?: boolean;
   registration?: DomainRegistration;
 };
 
@@ -91,14 +72,6 @@ function IconGlobe() {
       <circle cx="12" cy="12" r="10" />
       <line x1="2" y1="12" x2="22" y2="12" />
       <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-    </svg>
-  );
-}
-
-function IconPlus() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
     </svg>
   );
 }
@@ -137,15 +110,6 @@ function IconAlert() {
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="8" x2="12" y2="12" />
       <line x1="12" y1="16" x2="12.01" y2="16" />
-    </svg>
-  );
-}
-
-function IconCopy() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="9" y="9" width="13" height="13" rx="2" />
-      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
     </svg>
   );
 }
@@ -237,19 +201,14 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   // value before the /api/v1/domains fetch below confirms it server-side.
   const [baseDomain, setBaseDomain] = useState<string>(process.env.NEXT_PUBLIC_PAGES_DOMAIN || "localhost");
   const [dnsCnameTarget, setDnsCnameTarget] = useState<string>(DNS_CNAME_TARGET_FALLBACK);
-  // Populated from the POST response right after adding a CUSTOM domain — the certificate
-  // validation record this app's own ACM certificate request needs (see
-  // lib/cloudfrontDomains.ts's own comment on why this replaced CloudFront's built-in
-  // ManagedCertificateRequest mechanism). Already-added pending domains show their own
-  // stored copy of this straight from the domains list (see DomainRecord's
-  // certificateValidationName/Value) instead of this transient form-local state.
-  const [justAddedCertValidation, setJustAddedCertValidation] = useState<{ name: string; value: string } | null>(null);
-  const [count, setCount] = useState<number>(initialDomains.length);
+  const [count, setCount] = useState<number>(initialDomains.filter((d) => !d.pausedByPlan).length);
   const [limit, setLimit] = useState<number>(25);
 
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-
+  // The "Connect a domain" wizard (LinkDomainWizard). `wizardExisting` is set when finishing the setup of a domain
+  // that already exists ("Finish setup" on a pending row); `wizardType` is BUY when returning from a purchase.
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [wizardExisting, setWizardExisting] = useState<WizardDomain | null>(null);
+  const [wizardType, setWizardType] = useState<"SUBDOMAIN" | "CUSTOM" | "BUY" | undefined>(undefined);
   const [managingDomain, setManagingDomain] = useState<DomainRecord | null>(null);
 
   async function refreshDomains(): Promise<void> {
@@ -269,6 +228,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
         certificateValidationName: d.certificateValidationName,
         certificateValidationValue: d.certificateValidationValue,
         noindex: d.noindex,
+        pausedByPlan: !!d.planDisabledAt,
         registration: d.registration,
       })));
     }
@@ -285,7 +245,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
     const sessionId = searchParams.get("session_id");
     if (registeredDomainId && templateId && sessionId) {
       setResumedPurchase({ registeredDomainId, templateId });
-      setDomainType("BUY");
+      setWizardType("BUY");
       setIsDrawerOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -295,7 +255,6 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   const [customAlertInfo, setCustomAlertInfo] = useState<{ title: string; message: string } | null>(null);
 
   const canUseCustomDomain = plan === "PRO" || plan === "ULTRA";
-  const [upgradeRedirecting, setUpgradeRedirecting] = useState(false);
 
   // Custom domains are a Pro/Ultra feature — a FREE user clicking this should be offered a
   // seamless path to upgrade rather than just sitting on an inert disabled control. Rather
@@ -306,21 +265,13 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   // redirect to, which was the OLDER hosted-Checkout response shape — that route now
   // always creates an embedded-mode session (ui_mode: "embedded_page") and only ever
   // returns `clientSecret`, never `url`, so this unconditionally failed.
+  // Now opens the shared upgrade prompt, which also offers the free trial when it's available.
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   function startUpgradeCheckout(): void {
-    setUpgradeRedirecting(true);
-    window.location.href = "/dashboard/settings/subscription?upgrade=PRO&returnTo=" + encodeURIComponent("/dashboard/domains");
+    setUpgradeOpen(true);
   }
 
-  const handleCopy = (text: string, field: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000);
-  };
-
-  // Form states
-  const [domainType, setDomainType] = useState<DomainType>("SUBDOMAIN");
-  const [subdomainPrefix, setSubdomainPrefix] = useState<string>("");
-  const [customDomainInput, setCustomDomainInput] = useState<string>("");
+  // Which site the wizard opens on.
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(landingPages[0]?.id ?? "");
 
   // Deep-linked from a site's own Detail page ("Connect Domain" / "Manage Domain") — pick
@@ -336,24 +287,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
     // sync with the URL (the drawer/dropdown are then free to be user-driven as normal).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const dnsHostLabel = useMemo(() => {
-    if (!customDomainInput) return "subdomain";
-    const parts = customDomainInput.split(".");
-    return parts.length > 2 ? parts[0] : "@";
-  }, [customDomainInput]);
-
-  // Root/apex domains (e.g. "mycompany.com", host "@") can't take a CNAME record — DNS
-  // forbids a CNAME coexisting with the NS/SOA records every zone apex already has, and
-  // registrars (GoDaddy included) enforce that by rejecting the add outright. Only domains
-  // bought through Plexo dodge this automatically (lib/domains/domainDns.ts writes a
-  // Route53 ALIAS record instead); a manually-connected CUSTOM domain has no such backend
-  // to lean on, so the UI needs to warn the owner and give them a path that actually works
-  // at their registrar, instead of silently repeating instructions that will fail.
-  const isApexDomain = dnsHostLabel === "@" && customDomainInput.trim() !== "";
 
   const templateOptions = useMemo(() => {
     if (landingPages.length === 0) {
@@ -416,99 +350,25 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
     }
   }
 
-  async function handleAddDomain(e: React.FormEvent) {
-    e.preventDefault();
-    setErrorMsg(null);
-    setSuccessMsg(null);
-    setJustAddedCertValidation(null);
-
-    const inputDomain = domainType === "SUBDOMAIN" ? subdomainPrefix : customDomainInput;
-    if (!inputDomain.trim()) {
-      setErrorMsg("Please provide a domain name.");
-      return;
-    }
-
-    if (!selectedTemplateId) {
-      setErrorMsg("Please select a landing page template to link.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch("/api/v1/domains", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          templateId: selectedTemplateId,
-          type: domainType,
-          domain: inputDomain,
-        }),
-      });
-
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to publish domain.");
-      }
-
-      const isCustom = payload.domain?.type === "CUSTOM";
-      setSuccessMsg(
-        isCustom
-          ? "Domain added — add the DNS records below, then this finishes automatically. No need to resubmit."
-          : "Domain published successfully!"
-      );
-      if (isCustom && payload.domain?.certificateValidationName && payload.domain?.certificateValidationValue) {
-        setJustAddedCertValidation({ name: payload.domain.certificateValidationName, value: payload.domain.certificateValidationValue });
-      }
-      // CUSTOM keeps the drawer open with the DNS/cert instructions below — those are
-      // still reading customDomainInput (dnsHostLabel), so clearing it here would blank
-      // out the "Name/Host" field to its empty-state placeholder ("subdomain") right when
-      // the customer needs to see and copy their actual host. Only reset for SUBDOMAIN,
-      // whose drawer closes shortly after anyway.
-      setSubdomainPrefix("");
-      if (!isCustom) setCustomDomainInput("");
-
-      // Refresh list
-      const updatedRes = await fetch("/api/v1/domains");
-      const updatedData = await updatedRes.json();
-      if (updatedData.domains) {
-        setDomains(updatedData.domains.map((d: any) => ({
-          id: d.id,
-          domain: d.domain,
-          type: d.type,
-          templateId: d.templateId,
-          templateName: d.template?.name ?? "Unknown",
-          createdAt: d.createdAt,
-          certificateStatus: d.certificateStatus,
-          certificateValidationName: d.certificateValidationName,
-          certificateValidationValue: d.certificateValidationValue,
-        })));
-      }
-      if (updatedData.count !== undefined) setCount(updatedData.count);
-
-      // CUSTOM domains keep the drawer open with the DNS instructions visible — the
-      // customer needs to actually copy these, not just glance at a toast before it closes.
-      setTimeout(() => {
-        setSuccessMsg(null);
-        if (!isCustom) setIsDrawerOpen(false);
-      }, isCustom ? 6000 : 1500);
-    } catch (error) {
-      setErrorMsg(error instanceof Error ? error.message : "An unexpected error occurred.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  // Closing (not just successfully submitting) is the one point we can safely wipe the
-  // form — a reopen should start fresh rather than showing the previous link's leftover
-  // custom domain input or cert instructions.
+  // Closing is the one point the wizard's state is dropped — it is unmounted, so the next open starts fresh.
   function closeDrawer() {
     setIsDrawerOpen(false);
-    setSubdomainPrefix("");
-    setCustomDomainInput("");
-    setJustAddedCertValidation(null);
-    setSuccessMsg(null);
-    setErrorMsg(null);
+    setWizardExisting(null);
+    setWizardType(undefined);
+  }
+
+  function openWizard(existing: DomainRecord | null = null) {
+    setWizardExisting(existing ? {
+      id: existing.id,
+      domain: existing.domain,
+      type: existing.type,
+      templateId: existing.templateId,
+      certificateStatus: existing.certificateStatus,
+      certificateValidationName: existing.certificateValidationName,
+      certificateValidationValue: existing.certificateValidationValue,
+      dnsVerified: dnsStatus[existing.domain]?.valid ?? existing.dnsVerified,
+    } : null);
+    setIsDrawerOpen(true);
   }
 
   function handleDeleteDomain(domainId: string, domainName: string) {
@@ -723,7 +583,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                 </Link>
                 <button
                   type="button"
-                  onClick={() => setIsDrawerOpen(true)}
+                  onClick={() => openWizard()}
                   className="btn-primary"
                   style={{
                     padding: "0.5rem 1rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700,
@@ -773,7 +633,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
               <div style={{ display: "flex", gap: "0.75rem" }}>
                 <button
                   type="button"
-                  onClick={() => setIsDrawerOpen(true)}
+                  onClick={() => openWizard()}
                   className="btn-primary"
                   style={{
                     padding: "0.65rem 1.75rem", borderRadius: 10, fontWeight: 700, fontSize: "0.85rem",
@@ -898,7 +758,14 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                           )}
                         </td>
                         <td style={{ padding: "1.1rem 1.5rem" }}>
-                          {item.type === "SUBDOMAIN" ? (
+                          {item.pausedByPlan ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                              <span style={{ color: "#f59e0b", fontWeight: 600, fontSize: "0.8rem" }}>Paused on Free</span>
+                              <a href="/dashboard/settings/subscription" style={{ color: "var(--brand)", fontSize: "0.75rem", fontWeight: 600, textDecoration: "none" }}>
+                                Upgrade to bring it back →
+                              </a>
+                            </div>
+                          ) : item.type === "SUBDOMAIN" ? (
                             <span style={{ color: "#10b981", display: "inline-flex", alignItems: "center", gap: "0.3rem", fontWeight: 500 }}>
                               <IconCheck /> Active
                             </span>
@@ -922,8 +789,20 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                                   )}
                                   {item.certificateStatus === "PENDING_VALIDATION" && item.certificateValidationName && item.certificateValidationValue && (
                                     <div style={{ fontFamily: "monospace", fontSize: "0.68rem", color: "rgba(240,242,255,0.4)", marginTop: "0.2rem", wordBreak: "break-all" }}>
-                                      CNAME {toRegistrarRelativeHost(item.certificateValidationName, item.domain)} → {item.certificateValidationValue}
+                                      Name <span style={{ color: "rgba(240,242,255,0.75)" }}>{registrarRelativeName(item.certificateValidationName, item.domain)}</span> → {item.certificateValidationValue.replace(/\.$/, "")}
                                     </div>
+                                  )}
+                                  {needsSetup(item) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openWizard(item)}
+                                      style={{
+                                        marginTop: "0.4rem", background: "rgba(var(--brand-rgb),0.12)", border: "1px solid rgba(var(--brand-rgb),0.3)",
+                                        color: "var(--brand)", borderRadius: 7, padding: "0.25rem 0.65rem", fontSize: "0.75rem", fontWeight: 700, cursor: "pointer",
+                                      }}
+                                    >
+                                      Finish setup
+                                    </button>
                                   )}
                                 </div>
                               )}
@@ -1012,385 +891,25 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
         </div>
       </div>
 
-      {/* ─── LINK DOMAIN RIGHT-SIDE DRAWER ────────────────────────── */}
+      {/* ─── CONNECT A DOMAIN (multi-step) ─────────────────────────── */}
       {isDrawerOpen && (
-        <>
-          {/* Backdrop Overlay */}
-          <div
-            onClick={closeDrawer}
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0, 0, 0, 0.4)",
-              backdropFilter: "blur(4px)",
-              zIndex: 9998,
-              animation: "fade-in 0.25s ease"
-            }}
-          />
-          {/* Drawer Panel */}
-          <div
-            style={{
-              position: "fixed",
-              top: 0,
-              right: 0,
-              bottom: 0,
-              width: "100%",
-              maxWidth: "620px",
-              background: "rgba(18,16,36,0.98)",
-              backdropFilter: "blur(20px)",
-              borderLeft: "1px solid rgba(255,255,255,0.08)",
-              boxShadow: "-10px 0 40px rgba(0,0,0,0.5)",
-              zIndex: 9999,
-              padding: "2.5rem 2.2rem",
-              overflowY: "auto",
-              display: "flex",
-              flexDirection: "column",
-              gap: "1.5rem",
-              animation: "slide-in-drawer 0.25s cubic-bezier(0.16, 1, 0.3, 1)"
-            }}
-          >
-            {/* Drawer Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "1rem" }}>
-              <div>
-                <h3 style={{ fontSize: "1.15rem", fontWeight: 800, color: "#f0f2ff", margin: 0 }}>
-                  Link Subdomain or Domain
-                </h3>
-                <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
-                  Map subdomains or custom domains to your landing pages.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={closeDrawer}
-                style={{
-                  background: "none", border: "none", cursor: "pointer", color: "rgba(240,242,255,0.35)",
-                  padding: "0.25rem", transition: "color 0.15s", lineHeight: 1, display: "flex", alignItems: "center"
-                }}
-                className="domain-link-hover"
-              >
-                <IconClose />
-              </button>
-            </div>
-
-            {/* Linkage Setup Form */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-              {/* Domain Type Selection */}
-              <div>
-                <span className="field-label" style={{ display: "block", marginBottom: "0.4rem" }}>Domain Type</span>
-                <div style={{ display: "flex", background: "rgba(255,255,255,0.04)", padding: 4, borderRadius: 10, gap: 4, overflowX: "auto" }}>
-                  <button
-                    type="button"
-                    onClick={() => setDomainType("SUBDOMAIN")}
-                    style={{
-                      flex: "1 1 0", padding: "0.55rem 0.9rem", fontSize: "0.8rem", fontWeight: 600, border: "none", cursor: "pointer", borderRadius: 7,
-                      whiteSpace: "nowrap",
-                      background: domainType === "SUBDOMAIN" ? "var(--brand)" : "transparent",
-                      color: domainType === "SUBDOMAIN" ? "#fff" : "rgba(240,242,255,0.55)",
-                      transition: "background 0.15s, color 0.15s"
-                    }}
-                  >
-                    Subdomain
-                  </button>
-                  <button
-                    type="button"
-                    aria-disabled={!canUseCustomDomain}
-                    onClick={() => {
-                      if (!canUseCustomDomain) {
-                        void startUpgradeCheckout();
-                        return;
-                      }
-                      setDomainType("CUSTOM");
-                    }}
-                    style={{
-                      flex: "1 1 0", padding: "0.55rem 0.9rem", fontSize: "0.8rem", fontWeight: 600, border: "none", borderRadius: 7,
-                      cursor: upgradeRedirecting ? "default" : "pointer",
-                      whiteSpace: "nowrap",
-                      background: domainType === "CUSTOM" ? "var(--brand)" : "transparent",
-                      color: domainType === "CUSTOM" ? "#fff" : canUseCustomDomain ? "rgba(240,242,255,0.55)" : "rgba(240,242,255,0.3)",
-                      transition: "background 0.15s, color 0.15s",
-                      display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.4rem",
-                    }}
-                  >
-                    {upgradeRedirecting ? "Redirecting…" : "Custom Domain"}
-                    {!canUseCustomDomain && (
-                      <span style={{
-                        fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.05em",
-                        textTransform: "uppercase", color: "var(--brand)", background: "var(--brand-subtle)",
-                        padding: "0.1rem 0.4rem", borderRadius: 4,
-                      }}>
-                        Pro
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    aria-disabled={!canUseCustomDomain}
-                    onClick={() => {
-                      if (!canUseCustomDomain) {
-                        void startUpgradeCheckout();
-                        return;
-                      }
-                      setDomainType("BUY");
-                    }}
-                    style={{
-                      flex: "1 1 0", padding: "0.55rem 0.9rem", fontSize: "0.8rem", fontWeight: 600, border: "none", borderRadius: 7,
-                      cursor: upgradeRedirecting ? "default" : "pointer",
-                      whiteSpace: "nowrap",
-                      background: domainType === "BUY" ? "var(--brand)" : "transparent",
-                      color: domainType === "BUY" ? "#fff" : canUseCustomDomain ? "rgba(240,242,255,0.55)" : "rgba(240,242,255,0.3)",
-                      transition: "background 0.15s, color 0.15s",
-                      display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "0.4rem",
-                    }}
-                  >
-                    <IconSearch /> {upgradeRedirecting ? "Redirecting…" : "Buy a Domain"}
-                    {!canUseCustomDomain && (
-                      <span style={{
-                        fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.05em",
-                        textTransform: "uppercase", color: "var(--brand)", background: "var(--brand-subtle)",
-                        padding: "0.1rem 0.4rem", borderRadius: 4,
-                      }}>
-                        Pro
-                      </span>
-                    )}
-                  </button>
-                </div>
-                {!canUseCustomDomain && domainType === "CUSTOM" && (
-                  <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.4)", marginTop: "0.4rem" }}>
-                    Custom domains require a Pro or Ultra plan — click "Custom Domain" to upgrade.
-                  </p>
-                )}
-                {!canUseCustomDomain && domainType === "BUY" && (
-                  <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.4)", marginTop: "0.4rem" }}>
-                    Buying a domain requires a Pro or Ultra plan — click "Buy a Domain" to upgrade.
-                  </p>
-                )}
-              </div>
-
-              {/* Which site this domain is for — chosen once here, shared by all three
-                  domain types (including Buy) so the purchase flow below never has to ask
-                  again. */}
-              <div>
-                <label htmlFor="template-select" className="field-label">Link to Landing Page</label>
-                <div style={{ marginTop: "0.35rem" }}>
-                  <CustomSelect
-                    value={selectedTemplateId}
-                    onChange={(val) => setSelectedTemplateId(val)}
-                    options={templateOptions}
-                  />
-                </div>
-              </div>
-
-              {domainType === "BUY" ? (
-                <BuyDomainFlow
-                  templateId={selectedTemplateId}
-                  resumedPurchase={resumedPurchase}
-                  onPurchased={() => void refreshDomains()}
-                />
-              ) : (
-              <form onSubmit={handleAddDomain} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-              {/* Input fields based on type */}
-              {domainType === "SUBDOMAIN" ? (
-                <div>
-                  <label htmlFor="subdomain-input" className="field-label">Configure Subdomain</label>
-                  <div style={{ display: "flex", alignItems: "stretch", marginTop: "0.35rem" }}>
-                    <input
-                      id="subdomain-input"
-                      type="text"
-                      placeholder="my-company"
-                      value={subdomainPrefix}
-                      onChange={(e) => setSubdomainPrefix(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                      className="field-input"
-                      style={{ borderTopRightRadius: 0, borderBottomRightRadius: 0, flex: 1 }}
-                    />
-                    <span style={{
-                      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-                      borderLeft: "none", borderTopRightRadius: 8, borderBottomRightRadius: 8,
-                      display: "flex", alignItems: "center", padding: "0 0.75rem", fontSize: "0.8rem",
-                      color: "rgba(240,242,255,0.45)", fontWeight: 550
-                    }}>
-                      .{baseDomain === "localhost" ? "localhost" : baseDomain}
-                    </span>
-                  </div>
-                  <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.3)", marginTop: "0.35rem" }}>
-                    Only letters, numbers, and hyphens.
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  <label htmlFor="custom-domain-input" className="field-label">Custom Domain Name</label>
-                  <input
-                    id="custom-domain-input"
-                    type="text"
-                    placeholder="landing.mycompany.com"
-                    value={customDomainInput}
-                    onChange={(e) => setCustomDomainInput(e.target.value.toLowerCase().trim())}
-                    className="field-input"
-                    style={{ marginTop: "0.35rem" }}
-                  />
-                  {/* DNS Info */}
-                  <div style={{
-                    marginTop: "0.75rem", padding: "0.85rem", background: "rgba(var(--brand-rgb),0.03)",
-                    border: "1px solid rgba(var(--brand-rgb),0.12)", borderRadius: 10, fontSize: "0.75rem",
-                    color: "rgba(240,242,255,0.7)", lineHeight: 1.45
-                  }}>
-                    <p style={{ fontWeight: 700, color: "#a5b4fc", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      <IconSettingsGear /> DNS Setup Instructions
-                    </p>
-                    <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.45)", marginBottom: "0.75rem" }}>
-                      Log into your domain registrar (GoDaddy, Namecheap, Cloudflare, etc.) and add this record to your DNS settings:
-                    </p>
-
-                    <div style={{ background: "rgba(0,0,0,0.25)", borderRadius: 8, padding: "0.6rem 0.75rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "0.35rem", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", color: "rgba(240,242,255,0.3)" }}>
-                        <span style={{ width: "25%" }}>Record Type</span>
-                        <span style={{ width: "35%" }}>Name / Host</span>
-                        <span style={{ width: "40%", textAlign: "right" }}>Target / Value</span>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: "0.72rem", alignItems: "flex-start", flexWrap: "wrap", gap: "0.4rem 0" }}>
-                        <span style={{ width: "25%", minWidth: 0, color: "#c4b5fd", fontWeight: 600 }}>
-                          CNAME
-                        </span>
-                        <span style={{ width: "35%", minWidth: 0, color: "#f0f2ff", fontWeight: 600, display: "flex", alignItems: "flex-start", gap: "0.25rem", wordBreak: "break-all", overflowWrap: "anywhere" }}>
-                          <span style={{ minWidth: 0 }}>{dnsHostLabel}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(dnsHostLabel, 'host')}
-                            style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", flexShrink: 0 }}
-                            title="Copy Host"
-                          >
-                            {copiedField === 'host' ? <IconCheck /> : <IconCopy />}
-                          </button>
-                        </span>
-                        <span style={{ width: "40%", minWidth: 0, color: "var(--brand)", fontWeight: 600, textAlign: "right", wordBreak: "break-all", overflowWrap: "anywhere", display: "flex", alignItems: "flex-start", justifyContent: "flex-end", gap: "0.25rem" }}>
-                          <span style={{ minWidth: 0 }}>{dnsCnameTarget}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(dnsCnameTarget, 'target')}
-                            style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", flexShrink: 0 }}
-                            title="Copy Target"
-                          >
-                            {copiedField === 'target' ? <IconCheck /> : <IconCopy />}
-                          </button>
-                        </span>
-                      </div>
-                    </div>
-                    <p style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.45)", marginTop: "0.6rem", margin: "0.6rem 0 0" }}>
-                      After you submit, we'll also give you a certificate validation record to add — that one's unique to your domain, so it isn't shown until then.
-                    </p>
-                    <p style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.35)", marginTop: "0.6rem", fontStyle: "italic", margin: "0.6rem 0 0" }}>
-                      * DNS changes can take anywhere from a few minutes up to 24 hours to take effect worldwide.
-                    </p>
-                  </div>
-
-                  {/* Root/apex domains can't take the CNAME above at most registrars — see
-                      isApexDomain's own comment. Rather than let the owner hit a dead end
-                      (add a CNAME at "@", get rejected, guess their way into an invalid A
-                      record instead), spell out why and give two paths that actually work. */}
-                  {isApexDomain && (
-                    <div style={{
-                      marginTop: "0.75rem", padding: "0.85rem", background: "rgba(251,191,36,0.06)",
-                      border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, fontSize: "0.75rem",
-                      color: "rgba(240,242,255,0.7)", lineHeight: 1.5
-                    }}>
-                      <p style={{ fontWeight: 700, color: "#fbbf24", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                        <IconWarningLarge width={14} height={14} /> Root domains usually can&apos;t use a CNAME
-                      </p>
-                      <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.55)", marginBottom: "0.6rem" }}>
-                        <strong style={{ color: "#f0f2ff" }}>{customDomainInput}</strong> has no prefix like &quot;www&quot;, so the record above goes at your domain&apos;s root (&quot;@&quot;). Most registrars — including GoDaddy — block CNAME records there, since it conflicts with records they already require. You have two options:
-                      </p>
-                      <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.55)", marginBottom: "0.4rem" }}>
-                        <strong style={{ color: "#f0f2ff" }}>1. Use an ALIAS or ANAME record instead</strong>, if your registrar offers one (Cloudflare, Namecheap, and DNSimple do) — same Host (@) and Value as above, just a different record type.
-                      </p>
-                      <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.55)", margin: 0 }}>
-                        <strong style={{ color: "#f0f2ff" }}>2. Connect www.{customDomainInput} instead</strong> — retype it above with &quot;www.&quot; in front, add the CNAME to that, then turn on &quot;domain forwarding&quot; at your registrar to redirect {customDomainInput} to www.{customDomainInput}. Nearly every registrar, GoDaddy included, offers this under domain settings.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Shown right after submitting — the certificate validation record is
-                      unique per domain, generated only once the backend actually requests
-                      the certificate (see app/api/v1/domains/route.ts's POST handler), so
-                      it can't be shown proactively the way the routing CNAME above can. */}
-                  {justAddedCertValidation && (
-                    <div style={{
-                      marginTop: "0.75rem", padding: "0.85rem", background: "rgba(52,211,153,0.05)",
-                      border: "1px solid rgba(52,211,153,0.2)", borderRadius: 10, fontSize: "0.75rem",
-                      color: "rgba(240,242,255,0.7)", lineHeight: 1.45
-                    }}>
-                      <p style={{ fontWeight: 700, color: "#34d399", marginBottom: "0.5rem", display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                        <IconCheck /> Certificate Validation Record
-                      </p>
-                      <p style={{ fontSize: "0.72rem", color: "rgba(240, 242, 255, 0.45)", marginBottom: "0.75rem" }}>
-                        Add this CNAME too — it proves you own the domain so we can issue its certificate. Needed for every domain, root or subdomain.
-                      </p>
-                      <div style={{ background: "rgba(0,0,0,0.25)", borderRadius: 8, padding: "0.6rem 0.75rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "monospace", fontSize: "0.72rem", alignItems: "flex-start", flexWrap: "wrap", gap: "0.4rem 0" }}>
-                          <span style={{ width: "25%", minWidth: 0, color: "#6ee7b7", fontWeight: 600 }}>CNAME</span>
-                          <span style={{ width: "35%", minWidth: 0, color: "#f0f2ff", fontWeight: 600, display: "flex", alignItems: "flex-start", gap: "0.25rem", wordBreak: "break-all", overflowWrap: "anywhere" }}>
-                            <span style={{ minWidth: 0 }}>{toRegistrarRelativeHost(justAddedCertValidation.name, customDomainInput)}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopy(toRegistrarRelativeHost(justAddedCertValidation.name, customDomainInput), 'certHost')}
-                              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", flexShrink: 0 }}
-                              title="Copy Host"
-                            >
-                              {copiedField === 'certHost' ? <IconCheck /> : <IconCopy />}
-                            </button>
-                          </span>
-                          <span style={{ width: "40%", minWidth: 0, color: "#34d399", fontWeight: 600, textAlign: "right", wordBreak: "break-all", overflowWrap: "anywhere", display: "flex", alignItems: "flex-start", justifyContent: "flex-end", gap: "0.25rem" }}>
-                            <span style={{ minWidth: 0 }}>{justAddedCertValidation.value}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopy(justAddedCertValidation.value, 'certValue')}
-                              style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(240,242,255,0.35)", display: "inline-flex", flexShrink: 0 }}
-                              title="Copy Value"
-                            >
-                              {copiedField === 'certValue' ? <IconCheck /> : <IconCopy />}
-                            </button>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Error / Success messages */}
-              {errorMsg && (
-                <p style={{ fontSize: "0.8rem", color: "#f87171", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                  <IconWarningLarge width={14} height={14} /> {errorMsg}
-                </p>
-              )}
-
-              {successMsg && (
-                <p style={{ fontSize: "0.8rem", color: "#34d399", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                  <IconCheck /> {successMsg}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={isSubmitting || landingPages.length === 0 || count >= limit}
-                className="btn-primary"
-                style={{
-                  width: "100%", padding: "0.65rem", display: "inline-flex", alignItems: "center",
-                  justifyContent: "center", gap: "0.4rem", marginTop: "0.5rem", borderRadius: 9,
-                  background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", border: "none",
-                  fontWeight: 700, fontSize: "0.875rem", color: "#fff", cursor: "pointer"
-                }}
-              >
-                {isSubmitting ? (
-                  <span className="spinner" style={{ width: 13, height: 13 }} />
-                ) : (
-                  <IconPlus />
-                )}
-                {isSubmitting ? "Linking..." : count >= limit ? "Domain Limit Reached" : "Link Domain"}
-              </button>
-              </form>
-              )}
-            </div>
-          </div>
-        </>
+        <LinkDomainWizard
+          onClose={closeDrawer}
+          landingPages={landingPages}
+          existing={wizardExisting}
+          initialTemplateId={selectedTemplateId}
+          initialType={wizardType}
+          canUseCustomDomain={canUseCustomDomain}
+          onUpgrade={() => { closeDrawer(); startUpgradeCheckout(); }}
+          baseDomain={baseDomain}
+          routingTarget={dnsCnameTarget}
+          atLimit={limit > 0 && count >= limit}
+          onChanged={refreshDomains}
+          renderBuy={(templateId) => (
+            <BuyDomainFlow templateId={templateId} resumedPurchase={resumedPurchase} onPurchased={() => void refreshDomains()} />
+          )}
+          getVisitUrl={getClickUrl}
+        />
       )}
 
       {/* ─── CUSTOM DELETE CONFIRMATION MODAL ───────────────────── */}
@@ -1594,6 +1113,14 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
           100% { background-position: -200% 0; }
         }
       `}</style>
+      <UpgradeModal
+        open={upgradeOpen}
+        onClose={() => setUpgradeOpen(false)}
+        title="Custom domains are part of Pro"
+        message="Put your site on your own address (yourname.com) and remove the Plexo bar."
+        targetPlan="PRO"
+        returnTo="/dashboard/domains"
+      />
     </>
   );
 }

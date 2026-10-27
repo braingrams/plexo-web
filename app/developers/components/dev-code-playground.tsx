@@ -1,14 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { Code, Terminal, Globe, Check, Copy, Sparkles } from "lucide-react";
+import { Code, Check, Copy } from "lucide-react";
 import { Reveal } from "@/app/scroll-fx";
+import { SDK_V2_COMPILE, SDK_V2_EMBED } from "@/app/sdk/v2-snippets";
 
-type Tab = "sdk" | "mcp" | "api";
+type Tab = "sdk" | "classic" | "compile" | "mcp" | "api";
 
 const CODE_EXAMPLES: Record<Tab, { title: string; filename: string; language: string; code: string }> = {
   sdk: {
-    title: "Next.js / React SDK Embedding",
+    title: "SDK 2: embed the visual builder",
+    filename: "components/site-editor.tsx",
+    language: "typescript",
+    code: SDK_V2_EMBED,
+  },
+  compile: {
+    title: "SDK 2: compile pages to HTML on your server",
+    filename: "lib/render-page.ts",
+    language: "typescript",
+    code: SDK_V2_COMPILE,
+  },
+  classic: {
+    title: "Classic builder (V1) — unchanged",
     filename: "components/BuilderCanvas.tsx",
     language: "typescript",
     code: `import { PlexoBuilder } from "@charisol/plexo-sdk";
@@ -57,6 +70,14 @@ export function BuilderCanvas({ pageId }: { pageId: string }) {
   },
 };
 
+const TABS: Array<[Tab, string]> = [
+  ["sdk", "SDK 2 editor"],
+  ["compile", "SDK 2 compile"],
+  ["classic", "Classic (V1)"],
+  ["mcp", "MCP Config"],
+  ["api", "REST API & Webhooks"],
+];
+
 export function DevCodePlayground({ isDark }: { isDark: boolean }) {
   const [activeTab, setActiveTab] = useState<Tab>("sdk");
   const [copied, setCopied] = useState(false);
@@ -78,7 +99,7 @@ export function DevCodePlayground({ isDark }: { isDark: boolean }) {
         <div className="text-center max-w-2xl mx-auto space-y-4">
           <Reveal>
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              <Sparkles className="w-4 h-4 text-purple-400" />
+              <Code className="w-4 h-4 text-purple-400" />
               <span>INTERACTIVE PLAYGROUND</span>
             </div>
           </Reveal>
@@ -91,58 +112,35 @@ export function DevCodePlayground({ isDark }: { isDark: boolean }) {
 
           <Reveal delay={0.2}>
             <p className={`text-base font-medium ${isDark ? "text-slate-400" : "text-slate-600"}`}>
-              Explore implementation snippets for embedding the SDK, setting up MCP servers, or consuming REST endpoints.
+              Copy-paste code for embedding the SDK, compiling pages on your server, connecting an AI assistant over MCP, or calling the REST API. The classic builder is still here too.
             </p>
           </Reveal>
         </div>
 
         {/* Tab Buttons */}
         <Reveal delay={0.15}>
-          <div className="flex items-center justify-center gap-3">
-            <button
-              onClick={() => setActiveTab("sdk")}
-              className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
-                activeTab === "sdk"
-                  ? "bg-[#6b3bf9] text-white shadow-lg shadow-purple-600/30"
-                  : isDark
-                  ? "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
-                  : "bg-white text-slate-700 hover:text-slate-950 border border-slate-200"
-              }`}
-            >
-              Next.js SDK
-            </button>
-
-            <button
-              onClick={() => setActiveTab("mcp")}
-              className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
-                activeTab === "mcp"
-                  ? "bg-[#6b3bf9] text-white shadow-lg shadow-purple-600/30"
-                  : isDark
-                  ? "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
-                  : "bg-white text-slate-700 hover:text-slate-950 border border-slate-200"
-              }`}
-            >
-              MCP Config
-            </button>
-
-            <button
-              onClick={() => setActiveTab("api")}
-              className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
-                activeTab === "api"
-                  ? "bg-[#6b3bf9] text-white shadow-lg shadow-purple-600/30"
-                  : isDark
-                  ? "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
-                  : "bg-white text-slate-700 hover:text-slate-950 border border-slate-200"
-              }`}
-            >
-              REST API &amp; Webhooks
-            </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {TABS.map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
+                  activeTab === id
+                    ? `bg-[color:var(--brand)] text-white shadow-lg shadow-purple-600/30`
+                    : isDark
+                    ? "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+                    : "bg-white text-slate-700 hover:text-slate-950 border border-slate-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </Reveal>
 
         {/* Code Box */}
         <Reveal delay={0.25}>
-          <div className="max-w-4xl mx-auto bg-[#090d16] text-white rounded-3xl border border-slate-800 shadow-2xl overflow-hidden font-mono text-xs">
+          <div className="max-w-5xl mx-auto bg-[#090d16] text-white rounded-3xl border border-slate-800 shadow-2xl overflow-hidden font-mono text-xs">
             <div className="flex items-center justify-between border-b border-slate-800 px-5 py-3 text-slate-400">
               <span className="font-bold text-purple-400">{current.filename}</span>
               <button

@@ -244,6 +244,45 @@ export const FormSubmission = new Entity(
   { table, client: docClient },
 );
 
+/**
+ * Where a site's form sends each submission besides the Form Submissions inbox and the
+ * owner's email: a MailDrip list (the site's own connected account) and/or a webhook
+ * (Zapier, Make, a CRM). One row per form, keyed by the form's name — the same name
+ * submissions are filed under. Written from the Form Submissions page, the MCP tool, or a
+ * WordPress migration carrying over what the form did on WordPress.
+ */
+export const FormSettings = new Entity(
+  {
+    model: { entity: "formSettings", version: "1", service: "plexoOps" },
+    attributes: {
+      templateId: { type: "string", required: true },
+      formName: { type: "string", required: true },
+      maildripGroupId: { type: "string" },
+      maildripGroupTitle: { type: "string" },
+      webhookUrl: { type: "string" },
+      /** How the webhook receives it: JSON (Plexo's default), or form-encoded fields under their labels — what a WordPress form plugin's webhook sent, so an existing receiver keeps working. */
+      webhookFormat: { type: ["json", "form"] as const },
+      /** Where visitors go after submitting (a thank-you page) — a path on the site or a full address. */
+      redirectUrl: { type: "string" },
+      /** Where this setup came from, e.g. "wordpress" when a migration carried it over. */
+      source: { type: "string" },
+      /** What the form did on WordPress that Plexo couldn't repeat, in plain words — shown beside it. */
+      note: { type: "string" },
+      lastDeliveredAt: { type: "string" },
+      /** The last delivery problem, shown to the owner until a delivery succeeds again. */
+      lastDeliveryError: { type: "string" },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["formName"], template: "FORMSETTINGS#${formName}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 // Queryable record of every transactional/notification email send attempt — replaces the
 // previous state of scattered, inconsistent console.error/console.info calls with no way
 // to answer "did this email actually send." Covers both send paths: MailDrip (HTTP API)
@@ -441,6 +480,7 @@ export const plexoOpsService = new Service(
     StockCache,
     AdminAuditLog,
     FormSubmission,
+    FormSettings,
     EmailLog,
     SolUsageEvent,
     SolUsageEventContent,

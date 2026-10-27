@@ -36,6 +36,11 @@ export default async function CommercePaymentsSettingsPage({ params }: { params:
         stripeLiveWebhookSecretMasked: settings?.stripeLiveWebhookSecretEncrypted
           ? maskSecret(tryDecrypt(() => decryptStripeKey(settings.stripeLiveWebhookSecretEncrypted!)))
           : null,
+        bankTransferEnabled: settings?.bankTransferEnabled ?? false,
+        bankTransferBankName: settings?.bankTransferBankName ?? "",
+        bankTransferAccountName: settings?.bankTransferAccountName ?? "",
+        bankTransferAccountNumber: settings?.bankTransferAccountNumber ?? "",
+        bankTransferInstructions: settings?.bankTransferInstructions ?? "",
       }}
     />
   );

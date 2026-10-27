@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { SiteDeletionBlockedError, deleteTemplateAndContents } from "@/lib/sites/deleteTemplate";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
-import { compileWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
+import { compileTemplateWithSiteLayout, onTemplateSaved } from "@/lib/siteLayoutDynamo";
 import { snapshotTemplateRevision } from "@/lib/templateRevisions";
-import { getDescendantIds } from "@/server/slugDynamo";
-import { deleteObjects } from "@/lib/storage";
-import { removeCloudFrontDomain } from "@/lib/cloudfrontDomains";
-import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
+import { externalizeDesignSystem, resolveDesignSystem } from "@/lib/v2/designSystemStore";
+import { designFormatOf, isV2Design, parseV2Design, V1_PAGE_NEEDS_CLASSIC_PAYLOAD, V2_PAGE_NEEDS_NEW_TOOLS } from "@/lib/v2/design";
+
+import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
 
 /**
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
   let publishedUrl: string | null = null;
   if (template.kind === "LANDING_PAGE") {
-    const { data: domains } = await PublishedDomain.query.primary({ templateId: template.id }).go();
+    const { data: domains } = await PublishedDomain.query.primary({ templateId: template.id }).go({ pages: "all" });
     if (domains[0]) {
       const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
       publishedUrl = `${protocol}://${domains[0].domain}`;
@@ -47,10 +48,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     templateId: template.id,
     name: template.name,
     kind: template.kind,
+    designFormat: designFormatOf(template),
     isBlogLayout: template.isBlogLayout ?? false,
     parentTemplateId: template.parentId ?? null,
     slug: template.slug ?? null,
-    designJson: template.designJson,
+    designJson: await resolveDesignSystem(template.designJson),
     editableUrl: `${baseAppUrl}/dashboard/templates/${template.id}`,
     publishedUrl,
   });
@@ -113,30 +115,49 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     );
   }
 
-  const hydrated = hydrateStructuralDefaults(rawDesignJson);
-  const validation = TemplateJSONSchema.safeParse(hydrated);
-  if (!validation.success) {
-    return NextResponse.json(
-      { error: `designJson failed schema validation: ${formatValidationIssues(validation.error)}` },
-      { status: 400 }
-    );
-  }
-  const designJson = validation.data;
-
-  const name = body.name?.trim() || existing.name;
-  if (designJson.body.style) {
-    designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
-  }
-
+  const format = designFormatOf(existing);
+  let designJson: any;
   let compiledHtml: string;
-  try {
-    const forCompile = existing.kind === "LANDING_PAGE" ? await compileWithSiteLayout({ id: existing.id, parentId: existing.parentId ?? null }, designJson) : designJson;
-    compiledHtml = sanitizeHtml(compileToHTML(forCompile));
-  } catch (err) {
-    return NextResponse.json(
-      { error: `Failed to compile designJson into HTML: ${err instanceof Error ? err.message : "Malformed structure"}` },
-      { status: 400 }
-    );
+  const name = body.name?.trim() || existing.name;
+
+  if (format === "v2") {
+    if (!isV2Design(rawDesignJson)) return NextResponse.json({ error: V2_PAGE_NEEDS_NEW_TOOLS }, { status: 400 });
+    const parsed = parseV2Design(rawDesignJson);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    designJson = parsed.design;
+    try {
+      compiledHtml = await compileTemplateWithSiteLayout({ ...existing, name }, await resolveDesignSystem(parsed.design));
+      designJson = await externalizeDesignSystem(parsed.design); // a big brand is stored once, outside the row
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "This page couldn't be built." }, { status: 400 });
+    }
+  } else {
+    if (isV2Design(rawDesignJson)) return NextResponse.json({ error: V1_PAGE_NEEDS_CLASSIC_PAYLOAD }, { status: 400 });
+    const hydrated = hydrateStructuralDefaults(rawDesignJson);
+    const validation = TemplateJSONSchema.safeParse(hydrated);
+    if (!validation.success) {
+      return NextResponse.json(
+        { error: `designJson failed schema validation: ${formatValidationIssues(validation.error)}` },
+        { status: 400 }
+      );
+    }
+    designJson = validation.data;
+    if (designJson.body.style) {
+      designJson.body.style.htmlTitle = designJson.body.style.htmlTitle || name;
+    }
+    try {
+      // Email templates have always been compiled by this route with the landing-page
+      // compiler and no site layout; kept byte-for-byte (email stays classic forever).
+      compiledHtml =
+        existing.kind === "LANDING_PAGE"
+          ? await compileTemplateWithSiteLayout({ ...existing, name }, designJson)
+          : sanitizeHtml(compileToHTML(designJson));
+    } catch (err) {
+      return NextResponse.json(
+        { error: `Failed to compile designJson into HTML: ${err instanceof Error ? err.message : "Malformed structure"}` },
+        { status: 400 }
+      );
+    }
   }
 
   // Snapshot the pre-overwrite content before it's gone — never blocks or fails the save
@@ -155,7 +176,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
 
   let publishedUrl: string | null = null;
   if (existing.kind === "LANDING_PAGE") {
-    const { data: domains } = await PublishedDomain.query.primary({ templateId: updated.id }).go();
+    const { data: domains } = await PublishedDomain.query.primary({ templateId: updated.id }).go({ pages: "all" });
     if (domains[0]) {
       const protocol = process.env.NODE_ENV === "development" ? "http" : "https";
       publishedUrl = `${protocol}://${domains[0].domain}`;
@@ -206,34 +227,12 @@ export async function DELETE(
     return NextResponse.json({ error: `No template found with id "${id}" for this account.` }, { status: 404 });
   }
 
-  const descendantIds = await getDescendantIds(resolved.organizationId, existing.id);
-  const allIds = [existing.id, ...descendantIds];
-
-  // 1. Delete linked storage assets
-  const assetBatches = await Promise.all(allIds.map((tid) => TemplateAsset.query.primary({ templateId: tid }).go()));
-  const assets = assetBatches.flatMap((b) => b.data);
-  if (assets.length > 0) {
-    await deleteObjects(assets.map((a) => a.blobUrl)).catch((err) =>
-      console.error("Failed to delete blobs during template delete (non-fatal):", err)
-    );
+  try {
+    await deleteTemplateAndContents(existing, resolved.organizationId);
+  } catch (err) {
+    if (err instanceof SiteDeletionBlockedError) return NextResponse.json({ error: err.message }, { status: 409 });
+    throw err;
   }
-  await Promise.all(assets.map((a) => TemplateAsset.remove({ templateId: a.templateId, path: a.path }).go()));
-
-  // 2. Remove Custom Domains from Vercel registry
-  const domainBatches = await Promise.all(allIds.map((tid) => PublishedDomain.query.primary({ templateId: tid }).go()));
-  const domains = domainBatches.flatMap((b) => b.data);
-  for (const d of domains) {
-    if (d.type === "CUSTOM") {
-      await removeCloudFrontDomain(d.domain, { tenantId: d.tenantId, certificateArn: d.certificateArn }).catch((err) =>
-        console.error(`Failed to remove CloudFront distribution tenant for ${d.domain} during template delete (non-fatal):`, err)
-      );
-    }
-  }
-  await Promise.all(domains.map((d) => PublishedDomain.remove({ templateId: d.templateId, id: d.id }).go()));
-
-  // 3. Delete the template and every descendant page
-  await Promise.all(descendantIds.map((did) => Template.remove({ id: did }).go()));
-  await Template.remove({ id: existing.id }).go();
 
   return NextResponse.json({
     success: true,

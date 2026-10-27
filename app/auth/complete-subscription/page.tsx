@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { CompleteSubscriptionClient } from "./complete-subscription-client";
+import { TRIAL_DAYS } from "@/lib/plan/entitlement";
 
 export default async function CompleteSubscriptionPage() {
   const session = await auth();
@@ -19,5 +20,5 @@ export default async function CompleteSubscriptionPage() {
     redirect("/dashboard");
   }
 
-  return <CompleteSubscriptionClient plan={user.pendingPlan} />;
+  return <CompleteSubscriptionClient plan={user.pendingPlan} canTrial={!user.trialStartedAt && !user.stripeSubscriptionId} trialDays={TRIAL_DAYS} />;
 }

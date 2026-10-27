@@ -7,6 +7,8 @@ import { SellerLedgerEntry, WithdrawalRequest } from "@/lib/db/ledgerEntities";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
 import { Card } from "@/app/dashboard/_components/Card";
 import { PageContainer } from "@/app/dashboard/_components/PageContainer";
+import { Pagination } from "@/app/dashboard/_components/Pagination";
+import { paginate, parsePageRequest } from "@/lib/pagination";
 import { WithdrawalForm } from "./WithdrawalForm";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -15,19 +17,20 @@ const STATUS_COLOR: Record<string, string> = {
   REJECTED: "#f87171",
 };
 
-export default async function PayoutsPage() {
+export default async function PayoutsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await auth();
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/marketplace/payouts");
   }
 
-  const [{ data: user }, { data: sales }, { data: withdrawals }, { data: platformSettings }] = await Promise.all([
+  const [{ data: user }, { data: allSales }, { data: withdrawals }, { data: platformSettings }] = await Promise.all([
     User.get({ id: session.user.id }).go(),
-    SellerLedgerEntry.query.primary({ userId: session.user.id }).go({ order: "desc", limit: 25 }),
+    SellerLedgerEntry.query.primary({ userId: session.user.id }).go({ order: "desc", pages: "all" }),
     WithdrawalRequest.query.primary({ userId: session.user.id }).go({ order: "desc" }),
     PlatformSettings.get({}).go(),
   ]);
   if (!user) throw new Error(`Session user ${session.user.id} has no matching User record`);
+  const sales = paginate(allSales, parsePageRequest(await searchParams));
 
   const sellerBalanceCents = user.sellerBalanceCents ?? 0;
   const balance = (sellerBalanceCents / 100).toFixed(2);
@@ -105,13 +108,14 @@ export default async function PayoutsPage() {
       )}
 
       <h2 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.75rem" }}>Ledger</h2>
-      {sales.length === 0 ? (
+      {sales.total === 0 ? (
         <Card>
           <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.6)" }}>No activity yet.</p>
         </Card>
       ) : (
+        <>
         <div style={{ display: "grid", gap: "0.5rem" }}>
-          {sales.map((entry) => (
+          {sales.items.map((entry) => (
             <div key={entry.id} style={{
               display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem",
               padding: "0.75rem 1rem", borderRadius: 10,
@@ -126,6 +130,8 @@ export default async function PayoutsPage() {
             </div>
           ))}
         </div>
+        <Pagination page={sales.page} pageSize={sales.pageSize} total={sales.total} basePath="/dashboard/marketplace/payouts" noun="entries" />
+        </>
       )}
     </PageContainer>
   );

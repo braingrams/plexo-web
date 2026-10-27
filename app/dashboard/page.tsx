@@ -9,6 +9,7 @@ import { listMarketplaceTemplates } from "@/lib/marketplace";
 import { OverviewClient, type NeedsAttentionItem, type ActivityItem, type OverviewTemplateRow } from "./overview-client";
 import { OverviewSetup, type StarterTemplate } from "./_components/OverviewSetup";
 import { PageContainer } from "./_components/PageContainer";
+import { effectivePlan, shouldOfferTrial } from "@/lib/plan/entitlement";
 
 export default async function OverviewPage() {
   const session = await auth();
@@ -35,6 +36,11 @@ export default async function OverviewPage() {
   // directly regardless of whether the user ever passes through this page.
   if (user.pendingPlan && user.pendingPlan !== user.subscriptionPlan) {
     redirect("/auth/complete-subscription");
+  }
+
+  // A brand-new account is offered the 14-day trial once (app/welcome).
+  if (shouldOfferTrial(user)) {
+    redirect("/welcome");
   }
 
   // A user who's picked SOL (the AI agent chat) as their landing surface skips the normal
@@ -84,8 +90,8 @@ export default async function OverviewPage() {
   // aggregates in memory. Bounded by how many sites one org actually has (small in
   // practice, same assumption used throughout this migration), not by total row count.
   const [domainsByTemplate, blogPostsByTemplate, viewCountsByTemplate, apiKeysResult] = await Promise.all([
-    Promise.all(rootTemplates.map((t) => PublishedDomain.query.primary({ templateId: t.id }).go())),
-    Promise.all(rootTemplates.map((t) => BlogPost.query.primary({ templateId: t.id }).go())),
+    Promise.all(rootTemplates.map((t) => PublishedDomain.query.primary({ templateId: t.id }).go({ pages: "all" }))),
+    Promise.all(rootTemplates.map((t) => BlogPost.query.primary({ templateId: t.id }).go({ pages: "all" }))),
     Promise.all(
       rootTemplates.map((t) =>
         PageView.query
@@ -94,7 +100,7 @@ export default async function OverviewPage() {
           .go({ pages: "all" }),
       ),
     ),
-    ApiKey.query.primary({ organizationId }).go(),
+    ApiKey.query.primary({ organizationId }).go({ pages: "all" }),
   ]);
   // Matches app/dashboard/settings/api-keys/page.tsx's own filter — a revoked key stays in
   // the table (never hard-deleted) but shouldn't count here or on the management page, or
@@ -123,7 +129,7 @@ export default async function OverviewPage() {
     })
     .slice(0, 6);
   const recentTemplatePageCounts = await Promise.all(
-    recentTemplateRecords.map((t) => Template.query.byParent({ parentId: t.id }).go()),
+    recentTemplateRecords.map((t) => Template.query.byParent({ parentId: t.id }).go({ pages: "all" })),
   );
 
   const recentDomainActivity = [...allDomains]
@@ -225,7 +231,7 @@ export default async function OverviewPage() {
     <PageContainer>
       <OverviewClient
         organizationName={orgResolution.organizationName}
-        plan={user.subscriptionPlan ?? "FREE"}
+        plan={effectivePlan(user)}
         templatesCount={templatesCount}
         liveTemplatesCount={liveTemplatesCount}
         domainsCount={domainsCount}

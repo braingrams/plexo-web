@@ -10,6 +10,8 @@
  * Usage:
  *   npx tsx scripts/marketplace-templates/generate.ts --dry-run   (validate + compile only, no DB writes)
  *   npx tsx scripts/marketplace-templates/generate.ts             (also inserts as DRAFT)
+ *   add --v2 to build landing pages as V2 (visual editor) pages — the classic spec output is converted
+ *   with the SDK and every conversion warning is printed for review (emails stay classic). See reportV2.ts.
  */
 import "dotenv/config";
 import { compileToHTML } from "@charisol/plexo-sdk/compiler";
@@ -17,18 +19,10 @@ import { compileToHTML } from "@charisol/plexo-sdk/compiler";
 import { prisma } from "../../server/prisma";
 import { TemplateJSONSchema, hydrateStructuralDefaults } from "../../server/sanitizer";
 import { compileSpecToDesignJson } from "./compile";
-import type { CategoryBatch, TemplateSpec } from "./types";
+import type { TemplateSpec } from "./types";
 
-import { ecommerceBatch } from "./specs/ecommerce";
-import { blogMediaBatch } from "./specs/blog-media";
-import { corporateBatch } from "./specs/corporate";
-import { localBusinessBatch } from "./specs/local-business";
-import { entertainmentBatch } from "./specs/entertainment";
-import { musicBatch } from "./specs/music";
-import { saasBatch } from "./specs/saas";
-import { healthFitnessBatch } from "./specs/health-fitness";
-import { educationBatch } from "./specs/education";
-import { realEstateBatch } from "./specs/real-estate";
+import { BATCHES } from "./batches";
+import { compileSpecToV2 } from "./compileV2";
 
 const MARKETPLACE_OWNER_EMAIL = "templates@plexo.charisol.io";
 
@@ -72,21 +66,10 @@ function priceForSpec(spec: TemplateSpec): number {
   return Math.min(4900, 1900 + sectionCount * 400);
 }
 
-const BATCHES: CategoryBatch[] = [
-  ecommerceBatch,
-  blogMediaBatch,
-  corporateBatch,
-  localBusinessBatch,
-  entertainmentBatch,
-  musicBatch,
-  saasBatch,
-  healthFitnessBatch,
-  educationBatch,
-  realEstateBatch,
-];
 
 async function main(): Promise<void> {
   const dryRun = process.argv.includes("--dry-run");
+  const asV2 = process.argv.includes("--v2");
   const errors: string[] = [];
   let templateIndex = 0;
   let freeCount = 0;
@@ -96,6 +79,7 @@ async function main(): Promise<void> {
     name: string;
     kind: "EMAIL" | "LANDING_PAGE";
     designJson: any;
+    designFormat: "v1" | "v2";
     compiledHtml: string;
     marketplaceCategory: string;
     marketplaceDescription: string;
@@ -110,6 +94,24 @@ async function main(): Promise<void> {
       templateIndex += 1;
       const label = `[${batch.category}] ${spec.name}`;
       try {
+        const v2 = asV2 ? compileSpecToV2(spec, templateIndex) : null;
+        if (v2) {
+          for (const w of v2.warnings) console.warn(`${label}: ${w}`);
+          const priceCents = priceForSpec(spec);
+          if (priceCents > 0) paidCount += 1;
+          else freeCount += 1;
+          rowsToInsert.push({
+            name: spec.name,
+            kind: spec.kind,
+            designJson: v2.design,
+            designFormat: "v2",
+            compiledHtml: v2.html,
+            marketplaceCategory: batch.category,
+            marketplaceDescription: spec.description,
+            priceCents,
+          });
+          continue;
+        }
         const rawDesignJson = compileSpecToDesignJson(spec, templateIndex);
         const hydrated = hydrateStructuralDefaults(rawDesignJson);
         const validated = TemplateJSONSchema.parse(hydrated);
@@ -126,6 +128,7 @@ async function main(): Promise<void> {
           name: spec.name,
           kind: spec.kind,
           designJson: validated,
+          designFormat: "v1",
           compiledHtml,
           marketplaceCategory: batch.category,
           marketplaceDescription: spec.description,
@@ -166,6 +169,7 @@ async function main(): Promise<void> {
       name: row.name,
       kind: row.kind as any,
       designJson: row.designJson,
+      designFormat: row.designFormat,
       compiledHtml: row.compiledHtml,
       marketplaceStatus: "DRAFT" as any,
       marketplaceCategory: row.marketplaceCategory,

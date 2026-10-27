@@ -12,11 +12,11 @@ export default async function ContentTypesPage({ params }: { params: Promise<{ i
   const { id: templateId } = await params;
   const access = await requireCustomContentPageAccess(templateId, `/dashboard/templates/${templateId}/content-types`);
 
-  const { data: contentTypes } = await CustomContentType.query.primary({ templateId }).go();
+  const { data: contentTypes } = await CustomContentType.query.primary({ templateId }).go({ pages: "all" });
   contentTypes.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   const entryCounts = await Promise.all(
-    contentTypes.map((ct) => CustomContentEntry.query.primary({ contentTypeId: ct.id }).go()),
+    contentTypes.map((ct) => CustomContentEntry.query.primary({ contentTypeId: ct.id }).go({ pages: "all" })),
   );
 
   const initialContentTypes: ContentTypeSummary[] = contentTypes.map((ct, i) => ({
