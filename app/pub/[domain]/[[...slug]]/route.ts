@@ -534,7 +534,9 @@ export async function GET(
 
   const segments = params.slug ?? [];
   const url = new URL(request.url);
-  const clean = cleanPathFor(prefix, segments.map(safeDecode));
+  // Files Plexo writes for the whole site (not stored pages) are answered as they are; their web addresses are then cleaned like the rest.
+  const platformFile = segments.length === 1 && /^(sitemap\.xml|robots\.txt)$/i.test(segments[0]);
+  const clean = platformFile ? null : cleanPathFor(prefix, segments.map(safeDecode));
   if (clean !== null) {
     const slash = url.pathname.endsWith("/") && clean !== "/" ? "/" : "";
     return NextResponse.redirect(new URL(`${clean}${slash}${url.search}`, request.url), 301);
@@ -544,7 +546,9 @@ export async function GET(
   // compare against the request's path), so hand it that address; what it sends back is cleaned up below.
   const mappedUrl = new URL(request.url);
   mappedUrl.pathname = `${prefix}${url.pathname === "/" ? "/" : url.pathname}`;
-  const res = await serveSite(new NextRequest(mappedUrl, request), { params: Promise.resolve({ domain: params.domain, slug: mountedSegments(prefix, segments) }) });
+  const res = platformFile
+    ? await serveSite(request, context)
+    : await serveSite(new NextRequest(mappedUrl, request), { params: Promise.resolve({ domain: params.domain, slug: mountedSegments(prefix, segments) }) });
   const location = res.headers.get("location");
   if (res.status >= 300 && res.status < 400 && location) {
     const headers = new Headers(res.headers);
