@@ -25,6 +25,8 @@ export interface WpInstall {
    * see them, so they're part of "the site" whatever generated them.
    */
   staticPages: string[];
+  /** Set when the owner asked for one folder only ("/serenity"): nothing outside it was looked at or is migrated. */
+  scopedToPath?: string;
   /**
    * API routes of plugins Plexo doesn't have a native replacement for (typically a
    * site-specific custom plugin). Readable ones are preserved as data at the same URL;

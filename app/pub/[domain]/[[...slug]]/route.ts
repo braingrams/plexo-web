@@ -22,6 +22,7 @@ import { serveProject } from "@/lib/projects/serve";
 import { resolvePreviewHost } from "@/lib/projects/previewHost";
 import { User, Organization } from "@/lib/db/coreEntities";
 import { buildSiteRobotsTxt, buildSiteSitemap } from "@/lib/pub/siteSitemap";
+import { cleanPathFor, mountedSegments, normalizeMountPrefix, unmountLocation, unmountText } from "@/lib/pub/mountPrefix";
 import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 
@@ -425,7 +426,60 @@ async function servePreviewHost(request: NextRequest, host: string, templateId: 
   });
 }
 
+const MOUNTED_TEXT_TYPE = /^(text\/(html|css|javascript|plain|xml)|application\/(javascript|json|xml|ld\+json)|image\/svg\+xml)/i;
+
+/**
+ * A site stored under a folder ("/serenity") that is served at the domain root: /about serves the stored
+ * /serenity/about, the folder's own addresses redirect to the clean ones, and the links the site sends are
+ * shortened to match (lib/pub/mountPrefix.ts). Every other site goes straight to serveSite.
+ */
 export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ domain: string; slug?: string[] }> },
+): Promise<NextResponse> {
+  const params = await context.params;
+  const rawDomain = decodeURIComponent(params.domain);
+  const site = await resolveSite(rawDomain);
+  const prefix = site.status === "ok" ? normalizeMountPrefix(site.published.template.servedFromPrefix) : null;
+  if (!prefix || site.status !== "ok") return serveSite(request, context);
+
+  const segments = params.slug ?? [];
+  const url = new URL(request.url);
+  // Files Plexo writes for the whole site (not stored pages) are answered as they are; their web addresses are then cleaned like the rest.
+  const platformFile = segments.length === 1 && /^(sitemap\.xml|robots\.txt)$/i.test(segments[0]);
+  const clean = platformFile ? null : cleanPathFor(prefix, segments.map(safeDecode));
+  if (clean !== null) {
+    const slash = url.pathname.endsWith("/") && clean !== "/" ? "/" : "";
+    return NextResponse.redirect(new URL(`${clean}${slash}${url.search}`, request.url), 301);
+  }
+
+  // The site renders as if the visitor had asked for the stored address (its trailing-slash and canonical rules
+  // compare against the request's path), so hand it that address; what it sends back is cleaned up below.
+  const mappedUrl = new URL(request.url);
+  mappedUrl.pathname = `${prefix}${url.pathname === "/" ? "/" : url.pathname}`;
+  const res = platformFile
+    ? await serveSite(request, context)
+    : await serveSite(new NextRequest(mappedUrl, request), { params: Promise.resolve({ domain: params.domain, slug: mountedSegments(prefix, segments) }) });
+  const location = res.headers.get("location");
+  if (res.status >= 300 && res.status < 400 && location) {
+    const headers = new Headers(res.headers);
+    headers.set("location", unmountLocation(prefix, location, request.url));
+    return new NextResponse(null, { status: res.status, headers });
+  }
+  const type = res.headers.get("content-type") ?? "";
+  if (!res.body || !MOUNTED_TEXT_TYPE.test(type)) return res;
+  const text = unmountText(await res.text(), {
+    prefix,
+    sourceOrigin: site.published.template.migratedFrom ?? null,
+    siteOrigin: `${rawDomain.endsWith(".localhost") ? "http" : "https"}://${rawDomain}`,
+  });
+  const headers = new Headers(res.headers);
+  headers.delete("content-length");
+  headers.delete("etag");
+  return new NextResponse(text, { status: res.status, headers });
+}
+
+async function serveSite(
   request: NextRequest,
   context: { params: Promise<{ domain: string; slug?: string[] }> }
 ): Promise<NextResponse> {
