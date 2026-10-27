@@ -105,6 +105,9 @@ export const Template = new Entity(
       // migration created — which is how the raw-upload daily limit tells pages Plexo made
       // for the owner apart from HTML they uploaded themselves.
       migratedFrom: { type: "string" },
+      // A folder the site's pages are stored under ("/serenity") that visitors shouldn't see: the site is served
+      // at the domain root and the folder's own addresses redirect to the clean ones (lib/pub/mountPrefix.ts).
+      servedFromPrefix: { type: "string" },
       // When set, this page's own URL permanently redirects here (its sub-pages and files
       // still resolve normally, and it's left out of the sitemap). Used for a WordPress
       // "posts page" (e.g. /news/) whose job the live Plexo blog at /blog now does — a frozen
