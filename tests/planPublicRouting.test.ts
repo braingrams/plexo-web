@@ -37,7 +37,10 @@ vi.mock("@/lib/db/coreEntities", () => ({ User: {}, Organization: {} }));
 vi.mock("@/lib/db/projectEntities", () => ({
   ProjectBuild: { get: () => ({ go: async () => ({ data: { id: "b1", templateId: "home", outputPrefix: "site/b1" } }) }) },
 }));
-vi.mock("@/lib/db/appEntities", () => ({ AppSettings: { get: () => ({ go: async () => ({ data: null }) }) } }));
+vi.mock("@/lib/db/appEntities", () => ({
+  AppSettings: { get: () => ({ go: async () => ({ data: null }) }) },
+  DeployedApp: { get: () => ({ go: async () => ({ data: null }) }) },
+}));
 vi.mock("@/lib/projects/blobStore", () => ({
   buildSitePrefix: () => "site/b1",
   getObject: async (key: string) => {
