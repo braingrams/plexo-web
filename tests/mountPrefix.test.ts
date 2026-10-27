@@ -36,6 +36,11 @@ describe("serving a folder's site at the domain root", () => {
     expect(unmountText(html, opts)).toBe('<link rel="canonical" href="https://www.serenitypastherapy.com/about-us/"><meta property="og:url" content="https://www.serenitypastherapy.com/">');
   });
 
+  it("also fixes this site's own address that carries the folder (what Plexo writes from the stored path)", () => {
+    const html = '<link rel="canonical" href="https://www.serenitypastherapy.com/serenity/about-us/"><meta property="og:url" content="https://serenitypastherapy.com/serenity/">';
+    expect(unmountText(html, opts)).toBe('<link rel="canonical" href="https://www.serenitypastherapy.com/about-us/"><meta property="og:url" content="https://www.serenitypastherapy.com/">');
+  });
+
   it("leaves other paths and other sites alone", () => {
     const html = '<a href="/serenity-more/">x</a> <a href="https://other.com/serenity/x">y</a> <a href="/blog/serenity/">z</a>';
     expect(unmountText(html, opts)).toBe('<a href="/serenity-more/">x</a> <a href="https://other.com/serenity/x">y</a> <a href="/blog/serenity/">z</a>');

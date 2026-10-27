@@ -40,13 +40,15 @@ function escapeRegex(s: string): string {
 export function unmountText(text: string, opts: { prefix: string; sourceOrigin?: string | null; siteOrigin?: string }): string {
   const p = escapeRegex(opts.prefix.replace(/^\//, ""));
   let out = text;
-  if (opts.sourceOrigin && opts.siteOrigin) {
-    const host = new URL(opts.sourceOrigin).host.replace(/^www\./, "");
-    const abs = new RegExp(`(?:https?:)?(\\\\?/\\\\?/)(?:www\\.)?${escapeRegex(host)}(?:\\\\?/)${p}(?=(\\\\?/)|[?#"'\\s)<>,]|$)`, "gi");
-    out = out.replace(abs, (_m, slashes: string) => {
-      const site = new URL(opts.siteOrigin!);
-      return slashes.includes("\\") ? `${site.protocol}\\/\\/${site.host}` : `${site.protocol}//${site.host}`;
-    });
+  if (opts.siteOrigin) {
+    // The source site's address, and this site's own address with the folder still in it (what Plexo writes into
+    // canonical and share tags from the stored path) — both become the address visitors actually use.
+    const hosts = [new URL(opts.siteOrigin).host, ...(opts.sourceOrigin ? [new URL(opts.sourceOrigin).host] : [])]
+      .map((h) => escapeRegex(h.replace(/^www\./, "")))
+      .join("|");
+    const abs = new RegExp(`(?:https?:)?(\\\\?/\\\\?/)(?:www\\.)?(?:${hosts})(?:\\\\?/)${p}(?=(\\\\?/)|[?#"'\\s)<>,]|$)`, "gi");
+    const site = new URL(opts.siteOrigin);
+    out = out.replace(abs, (_m, slashes: string) => (slashes.includes("\\") ? `${site.protocol}\\/\\/${site.host}` : `${site.protocol}//${site.host}`));
   }
   // "/serenity/x" → "/x", and "/serenity" (the folder itself) → "/", only when it starts a path: after a quote, "(", "=", ",", ">" or whitespace.
   out = out.replace(new RegExp(`(^|["'(=,>\\s])/${p}(?=/)`, "g"), (_m, lead: string) => lead);

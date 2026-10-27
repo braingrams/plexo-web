@@ -540,7 +540,11 @@ export async function GET(
     return NextResponse.redirect(new URL(`${clean}${slash}${url.search}`, request.url), 301);
   }
 
-  const res = await serveSite(request, { params: Promise.resolve({ domain: params.domain, slug: mountedSegments(prefix, segments) }) });
+  // The site renders as if the visitor had asked for the stored address (its trailing-slash and canonical rules
+  // compare against the request's path), so hand it that address; what it sends back is cleaned up below.
+  const mappedUrl = new URL(request.url);
+  mappedUrl.pathname = `${prefix}${url.pathname === "/" ? "/" : url.pathname}`;
+  const res = await serveSite(new NextRequest(mappedUrl, request), { params: Promise.resolve({ domain: params.domain, slug: mountedSegments(prefix, segments) }) });
   const location = res.headers.get("location");
   if (res.status >= 300 && res.status < 400 && location) {
     const headers = new Headers(res.headers);
