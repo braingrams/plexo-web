@@ -18,6 +18,13 @@ const ALLOWED_EXTENSIONS = new Set([
   "woff", "woff2", "ttf", "otf", "eot",
 ]);
 
+// Standard Next.js App Router outputs that have no file extension — the filename itself
+// is the convention (e.g. opengraph-image is always a PNG served at /opengraph-image).
+const NEXT_EXTENSIONLESS: Record<string, string> = {
+  "opengraph-image": "image/png",
+  "twitter-image": "image/png",
+};
+
 // Text-editable in the dashboard's raw-file editor — everything else (images, fonts)
 // is view/reference-only, since a binary file has no meaningful "edit as text" action.
 const TEXT_EXTENSIONS = new Set(["html", "htm", "css", "js", "mjs", "json", "txt", "xml", "svg", "webmanifest"]);
@@ -164,7 +171,8 @@ export async function extractZipUpload(buffer: Buffer): Promise<ExtractedSite> {
     }
 
     const ext = extensionOf(normalized);
-    if (!ALLOWED_EXTENSIONS.has(ext)) {
+    const basename = normalized.split("/").pop() ?? normalized;
+    if (!ALLOWED_EXTENSIONS.has(ext) && !NEXT_EXTENSIONLESS[basename]) {
       throw new RawUploadValidationError(
         `File type ".${ext || "(none)"}" is not allowed (${entry.name}). This is a static-page host — ` +
         `only HTML/CSS/JS and common asset types are accepted.`
@@ -200,11 +208,14 @@ export async function extractZipUpload(buffer: Buffer): Promise<ExtractedSite> {
   const indexHtml = files.get(indexPath)!.toString("utf8");
   files.delete(indexPath);
 
-  const assets: ExtractedAsset[] = Array.from(files.entries()).map(([path, contentBuf]) => ({
-    path,
-    buffer: contentBuf,
-    contentType: contentTypeFor(path),
-  }));
+  const assets: ExtractedAsset[] = Array.from(files.entries()).map(([path, contentBuf]) => {
+    const basename = path.split("/").pop() ?? path;
+    return {
+      path,
+      buffer: contentBuf,
+      contentType: NEXT_EXTENSIONLESS[basename] ?? contentTypeFor(path),
+    };
+  });
 
   return { indexHtml, assets };
 }
