@@ -159,17 +159,18 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // "<subdomain>.plexopages.com" — so it previously 404'd via the generic /pub lookup
   // below (resolveSite() finding no PublishedDomain row for the bare apex). Redirect it
   // to the real marketing/app site instead, the same "bare platform domain sends you to
-  // the actual product" convention as e.g. vercel.app -> vercel.com. Same treatment for
-  // "www.<pagesDomain>" — "www" is in RESERVED_SUBDOMAINS (app/api/v1/publish/route.ts),
-  // so it can never be a real tenant, and it otherwise 404s the same way the bare apex
-  // did. Exact match only — "foo.plexopages.com" must fall through to the normal
+  // the actual product" convention as e.g. vercel.app -> vercel.com.
+  // Note: "www.<pagesDomain>" is intentionally NOT redirected here — it can be registered
+  // as a CUSTOM domain (type CUSTOM, not SUBDOMAIN) pointing at a real published site,
+  // in which case it must fall through to the normal tenant-resolution path below.
+  // Exact match only — "foo.plexopages.com" must fall through to the normal
   // tenant-resolution path below.
   // Gated on isSubdomainOrCustom (not a bare `hostname === pagesDomain` check) because
   // staging has no separate wildcard domain configured yet — its own
   // NEXT_PUBLIC_PAGES_DOMAIN is literally the same value as its NEXT_PUBLIC_APP_URL — so
   // an ungated check here would redirect the dashboard's own known host to itself,
   // an infinite loop.
-  if (isSubdomainOrCustom && (hostname === pagesDomain || hostname === `www.${pagesDomain}`)) {
+  if (isSubdomainOrCustom && hostname === pagesDomain) {
     // Always redirect to the main app's homepage, preserving only the query string.
     // The path is intentionally dropped: plexopages.com and plexo.charisol.io are separate
     // apps, so apex paths have no equivalent on the main app and preserving them risks 404s.
