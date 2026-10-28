@@ -156,13 +156,10 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   // 0. The wildcard pages domain's own bare apex (e.g. "plexopages.com" with no
   // subdomain) has no site of its own — nobody publishes a site there, only at
-  // "<subdomain>.plexopages.com" — so it previously 404'd via the generic /pub lookup
-  // below (resolveSite() finding no PublishedDomain row for the bare apex). Redirect it
-  // to the real marketing/app site instead, the same "bare platform domain sends you to
-  // the actual product" convention as e.g. vercel.app -> vercel.com.
-  // Note: "www.<pagesDomain>" is intentionally NOT redirected here — it can be registered
-  // as a CUSTOM domain (type CUSTOM, not SUBDOMAIN) pointing at a real published site,
-  // in which case it must fall through to the normal tenant-resolution path below.
+  // "<subdomain>.plexopages.com" — so redirect it to www.plexopages.com, which is
+  // registered as a custom domain hosting the Plexo marketing page.
+  // Note: "www.<pagesDomain>" is intentionally NOT redirected here — it is registered as
+  // a CUSTOM domain and must fall through to the normal tenant-resolution path below.
   // Exact match only — "foo.plexopages.com" must fall through to the normal
   // tenant-resolution path below.
   // Gated on isSubdomainOrCustom (not a bare `hostname === pagesDomain` check) because
@@ -171,16 +168,15 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // an ungated check here would redirect the dashboard's own known host to itself,
   // an infinite loop.
   if (isSubdomainOrCustom && hostname === pagesDomain) {
-    // Always redirect to the main app's homepage, preserving only the query string.
-    // The path is intentionally dropped: plexopages.com and plexo.charisol.io are separate
-    // apps, so apex paths have no equivalent on the main app and preserving them risks 404s.
-    // Cache-Control: no-store prevents CloudFront from caching this response: the page
-    // cache policy only keys on ?p=, so a cached redirect for "/" (no query string) would
-    // otherwise be served to every "/?utm_source=X" visitor — even after this fix. With
-    // minTtl=0 on pageCachePolicy, CloudFront honours the origin's no-store directive and
-    // never stores the response. Status 307 (not 301/308) avoids browsers permanently
-    // caching the redirect, which would trap UTM values in the visitor's own browser cache.
-    const dest = new URL("/" + request.nextUrl.search, baseAppUrl);
+    // Redirect bare apex (plexopages.com) to www.plexopages.com, which is registered as a
+    // custom domain hosting the Plexo marketing page. Path is intentionally dropped —
+    // bare-apex paths have no guaranteed equivalent on the www site. Only the query string
+    // is preserved so UTM parameters survive the redirect.
+    // Cache-Control: no-store prevents CloudFront from caching this response (pageCachePolicy
+    // keys only on ?p=, so a cached redirect for "/" would be served to "/?utm_source=X"
+    // visitors too). With minTtl=0, CloudFront honours no-store and never stores this.
+    // Status 307 (not 301/308) avoids browsers permanently caching the redirect.
+    const dest = new URL("/" + request.nextUrl.search, `https://www.${pagesDomain}`);
     const res = NextResponse.redirect(dest.toString(), { status: 307 });
     res.headers.set("Cache-Control", "no-store");
     return res;
