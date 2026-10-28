@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Card } from "../../../_components/Card";
+import { BRAND } from "@/lib/theme";
 
 type HostingTier = "STATIC" | "LAMBDA" | "PROVISIONED";
 
@@ -50,7 +51,7 @@ const TIER_META: Record<HostingTier, { label: string; description: string; color
   LAMBDA: {
     label: "Lambda",
     description: "On-demand compute. Occasional cold starts; good for most sites.",
-    color: "#a78bfa",
+    color: BRAND[400],
   },
   PROVISIONED: {
     label: "Provisioned",
