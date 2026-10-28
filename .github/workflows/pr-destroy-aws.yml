@@ -120,11 +120,12 @@ jobs:
             .open-next/dynamodb-provider; do
             echo "// placeholder — this stack is being destroyed" > "$dir/index.js"
           done
-          # compute-stack.ts's DeployCommerceJs step (see its own comment) reads this exact
-          # file with fs.readFileSync rather than just pointing s3deploy at the assets
-          # directory — a missing directory entry doesn't satisfy that, unlike every
-          # fromAsset()/Source.asset() call above, so it needs its own placeholder here too.
-          echo "// placeholder — this stack is being destroyed" > .open-next/assets/commerce.js
+          # compute-stack.ts's DeployCommerceJs step reads every entry in PLATFORM_SCRIPTS
+          # with fs.readFileSync at synth time — a missing file throws even for `cdk destroy`.
+          # Keep this list in sync with PLATFORM_SCRIPTS in cdk/lib/compute-stack.ts.
+          for script in commerce.js plexo-content.js plexo-content.css plexo-forms.js lms-signup.js newsletter-popup.js; do
+            echo "// placeholder — this stack is being destroyed" > ".open-next/assets/${script}"
+          done
 
       - name: Wait for any in-flight stack operation to finish
         # Cancelling the GitHub run above kills `cdk deploy`, but CloudFormation carries on
