@@ -42,6 +42,7 @@ type DeployedAppShape = {
   s3Prefix?: string | null;
   spaMode?: boolean | null;
   redirectRules?: unknown;
+  hostingTier?: string | null;
 };
 
 export async function serveDeployedStatic(
@@ -91,6 +92,7 @@ export async function serveDeployedStatic(
       "Content-Type": s3Res.headers.get("content-type") || "application/octet-stream",
       "Cache-Control": cacheControlFor(candidate),
       "X-Content-Type-Options": "nosniff",
+      "X-Plexo-Hosting-Tier": app.hostingTier ?? "STATIC",
     });
     const etag = s3Res.headers.get("etag");
     if (etag) headers.set("ETag", etag);
