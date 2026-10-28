@@ -21,9 +21,13 @@ export const DeployedApp = new Entity(
     model: { entity: "deployedApp", version: "1", service: "plexoContent" },
     attributes: {
       templateId: { type: "string", required: true },
-      // Only STATIC is implemented in Phase 1; SSR placeholder added now so the entity
-      // shape doesn't need migration when Phase 3 ships.
+      // Build type — STATIC (pre-rendered zip) or SSR (server-rendered, Phase 3).
       type: { type: ["STATIC", "SSR"] as const, required: true, default: "STATIC" },
+      // How the site is served to visitors. Defaults to LAMBDA (on-demand Lambda, cold
+      // starts possible). STATIC = S3-only, cheapest. PROVISIONED = Lambda with provisioned
+      // concurrency, no cold starts, fixed monthly cost. Gated by the owner's plan
+      // (lib/subscription.ts deployedAppHostingTiers).
+      hostingTier: { type: ["STATIC", "LAMBDA", "PROVISIONED"] as const, default: "LAMBDA" },
       // Path prefix within the USER_CONTENT_BUCKET (without the "public/" prefix that
       // uploadObject adds). Stored without leading/trailing slashes. Example:
       // "deployedApps/tmpl_abc123" → actual S3 key "public/deployedApps/tmpl_abc123/index.html"

@@ -5,6 +5,9 @@ import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
 import { DeployedApp, type RedirectRule } from "@/lib/db/appEntities";
 import { uploadObject } from "@/lib/storage";
+import { getTierFeatures } from "@/lib/subscription";
+
+type HostingTier = "STATIC" | "LAMBDA" | "PROVISIONED";
 
 // Framework builds produce binary/compiled files that the plain RAW_UPLOAD path rejects.
 // This set is intentionally broader — we skip unrecognised extensions silently rather than
@@ -97,6 +100,16 @@ export async function POST(
   if (!template || template.organizationId !== resolved.organizationId) {
     return NextResponse.json({ error: `No template found with id "${templateId}" for this account.` }, { status: 404 });
   }
+
+  // Resolve hosting tier from query param, defaulting to LAMBDA.
+  const tierParam = (new URL(request.url).searchParams.get("hostingTier") ?? "LAMBDA").toUpperCase() as HostingTier;
+  const allowedTiers = getTierFeatures(resolved.subscriptionPlan).deployedAppHostingTiers;
+  if (!allowedTiers.includes(tierParam)) {
+    return NextResponse.json({
+      error: `Your plan does not include the "${tierParam}" hosting tier. Available on this plan: ${allowedTiers.join(", ")}. Upgrade to access faster hosting options.`,
+    }, { status: 403 });
+  }
+  const hostingTier: HostingTier = tierParam;
 
   let formData: FormData;
   try {
@@ -214,6 +227,7 @@ export async function POST(
     await DeployedApp.update({ templateId })
       .set({
         type: "STATIC",
+        hostingTier,
         s3Prefix,
         spaMode,
         redirectRules: redirectRules.length ? redirectRules : undefined,
@@ -224,6 +238,7 @@ export async function POST(
     await DeployedApp.create({
       templateId,
       type: "STATIC",
+      hostingTier,
       s3Prefix,
       spaMode,
       redirectRules: redirectRules.length ? redirectRules : undefined,
@@ -235,8 +250,9 @@ export async function POST(
     ok: true,
     framework,
     spaMode,
+    hostingTier,
     fileCount: files.size,
     redirectRules: redirectRules.length,
-    message: `Deployed ${files.size} file${files.size !== 1 ? "s" : ""} as a ${framework} site. Your domain is now serving the new build.`,
+    message: `Deployed ${files.size} file${files.size !== 1 ? "s" : ""} as a ${framework} site on the ${hostingTier} hosting tier.`,
   });
 }

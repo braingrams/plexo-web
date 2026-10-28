@@ -88,6 +88,13 @@ export type TierFeatures = {
    * app only answers its first screen (lib/projects/serve.ts). `null` = every page.
    */
   maxPublishedPagesPerSite: number | null;
+  /**
+   * Which hosting tiers are available for deployed framework apps (static zip deploys).
+   * STATIC = S3-only, cheapest, no compute per request.
+   * LAMBDA = Lambda on-demand, server-side rendering, cold starts possible.
+   * PROVISIONED = Lambda with provisioned concurrency, no cold starts, fixed monthly cost.
+   */
+  deployedAppHostingTiers: ("STATIC" | "LAMBDA" | "PROVISIONED")[];
 };
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
@@ -117,6 +124,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     includedFunnelSlots: 0,
     maxPublishedSites: 1,
     maxPublishedPagesPerSite: 1,
+    deployedAppHostingTiers: ["STATIC"],
   },
   PRO: {
     maxEmailTemplates: 25,
@@ -137,6 +145,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     includedFunnelSlots: 0,
     maxPublishedSites: null,
     maxPublishedPagesPerSite: null,
+    deployedAppHostingTiers: ["STATIC", "LAMBDA"],
   },
   ULTRA: {
     maxEmailTemplates: 100,
@@ -157,6 +166,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     includedFunnelSlots: 1,
     maxPublishedSites: null,
     maxPublishedPagesPerSite: null,
+    deployedAppHostingTiers: ["STATIC", "LAMBDA", "PROVISIONED"],
   },
 };
 
