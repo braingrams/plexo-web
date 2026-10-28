@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
 import { listPublishedPosts } from "@/lib/blog/queriesDynamo";
 import { listingMetadata, listingJsonLd } from "@/lib/blog/seo";
@@ -8,28 +8,25 @@ import { ListingInLayout, loadListingLayoutHtml } from "@/lib/pub/blogListingLay
 
 export const revalidate = 60;
 
-type Params = { domain: string; pageNum: string };
+type Params = { domain: string };
+
+async function loadSite(rawDomain: string) {
+  return resolveBlogSite(decodeURIComponent(rawDomain));
+}
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { domain } = await params;
-  const site = await resolveBlogSite(decodeURIComponent(domain));
+  const site = await loadSite(domain);
   if (site.status !== "ok") return {};
-  return listingMetadata(domain, { title: site.blogSite.title ?? "Blog", description: site.blogSite.description ?? null });
+  return listingMetadata(domain, { title: site.blogSite.title ?? "Blog", description: site.blogSite.description ?? null, metaTitle: site.blogSite.metaTitle ?? null });
 }
 
-export default async function BlogIndexPaginatedPage({ params }: { params: Promise<Params> }) {
-  const { domain, pageNum } = await params;
-  const site = await resolveBlogSite(decodeURIComponent(domain));
-  if (site.status === "deployed") redirect(`/_dp/blog/page/${pageNum}`);
+export default async function BlogIndexPage({ params }: { params: Promise<Params> }) {
+  const { domain } = await params;
+  const site = await loadSite(domain);
   if (site.status !== "ok") notFound();
 
-  const page = Number.parseInt(pageNum, 10);
-  if (!Number.isInteger(page) || page < 1) notFound();
-  // Page 1 canonically lives at /blog, not /blog/page/1 — avoids two URLs for the same content.
-  if (page === 1) notFound();
-
-  const result = await listPublishedPosts(site.published.templateId, { page, perPage: site.blogSite.postsPerPage ?? 10 });
-  if (result.posts.length === 0) notFound();
+  const result = await listPublishedPosts(site.published.templateId, { page: 1, perPage: site.blogSite.postsPerPage ?? 10 });
 
   const blogSiteView = { title: site.blogSite.title ?? "Blog", description: site.blogSite.description ?? null };
 

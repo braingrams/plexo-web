@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
 import { BlogArchivePage, buildArchiveMetadata } from "@/lib/pub/blogArchivePageDynamo";
 
 export const revalidate = 60;
 
-type Params = { domain: string; catSlug: string };
+type Params = { domain: string; catSlug: string; pageNum: string };
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { domain, catSlug } = await params;
@@ -13,9 +13,10 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
   return buildArchiveMetadata(domain, site, "category", catSlug);
 }
 
-export default async function CategoryArchivePage({ params }: { params: Promise<Params> }) {
-  const { domain, catSlug } = await params;
+export default async function CategoryArchivePaginatedPage({ params }: { params: Promise<Params> }) {
+  const { domain, catSlug, pageNum } = await params;
+  const page = Number.parseInt(pageNum, 10);
+  if (!Number.isInteger(page) || page < 2) notFound(); // page 1 canonically lives at the un-paginated URL
   const site = await resolveBlogSite(decodeURIComponent(domain));
-  if (site.status === "deployed") redirect(`/_dp/blog/category/${catSlug}`);
-  return <BlogArchivePage domain={domain} site={site} kind="category" slug={catSlug} page={1} />;
+  return <BlogArchivePage domain={domain} site={site} kind="category" slug={catSlug} page={page} />;
 }

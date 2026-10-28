@@ -37,7 +37,6 @@ export default async function BlogPostPage({ params }: { params: Promise<Params>
   const { domain, slug } = await params;
   const { site, post } = await loadPost(domain, slug);
 
-  if (site.status === "deployed") redirect(`/_dp/blog/${slug.join("/")}`);
   if (site.status !== "ok") notFound();
 
   if (!post) {

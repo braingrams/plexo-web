@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
 import { BlogArchivePage, buildArchiveMetadata } from "@/lib/pub/blogArchivePageDynamo";
 
@@ -18,6 +18,5 @@ export default async function AuthorArchivePaginatedPage({ params }: { params: P
   const page = Number.parseInt(pageNum, 10);
   if (!Number.isInteger(page) || page < 2) notFound();
   const site = await resolveBlogSite(decodeURIComponent(domain));
-  if (site.status === "deployed") redirect(`/_dp/blog/author/${authorSlug}/page/${pageNum}`);
   return <BlogArchivePage domain={domain} site={site} kind="author" slug={authorSlug} page={page} />;
 }
