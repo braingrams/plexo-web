@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
 import { listPublishedPosts } from "@/lib/blog/queriesDynamo";
 import { listingMetadata, listingJsonLd } from "@/lib/blog/seo";
@@ -8,36 +8,28 @@ import { ListingInLayout, loadListingLayoutHtml } from "@/lib/pub/blogListingLay
 
 export const revalidate = 60;
 
-type Params = { domain: string };
-
-async function loadSite(rawDomain: string) {
-  return resolveBlogSite(decodeURIComponent(rawDomain));
-}
+type Params = { domain: string; pageNum: string };
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { domain } = await params;
-  const site = await loadSite(domain);
+  const site = await resolveBlogSite(decodeURIComponent(domain));
   if (site.status !== "ok") return {};
-  // seo.ts's listingMetadata/listingJsonLd take a Pick<Prisma.BlogSite, "title"|"description">
-  // with description as a required (nullable) key — BlogSite's DynamoDB entity type has it
-  // as an optional attribute instead, so it's normalized here rather than passed straight
-  // through, same "construct the exact shape" adapter every ported pub page in this
-  // migration uses at the boundary with a not-yet-ported shared render helper.
-  return listingMetadata(domain, { title: site.blogSite.title ?? "Blog", description: site.blogSite.description ?? null, metaTitle: site.blogSite.metaTitle ?? null });
+  return listingMetadata(domain, { title: site.blogSite.title ?? "Blog", description: site.blogSite.description ?? null });
 }
 
-export default async function BlogIndexPage({ params }: { params: Promise<Params> }) {
-  const { domain } = await params;
-  const site = await loadSite(domain);
-  if (site.status === "deployed") redirect("/_dp/blog");
+export default async function BlogIndexPaginatedPage({ params }: { params: Promise<Params> }) {
+  const { domain, pageNum } = await params;
+  const site = await resolveBlogSite(decodeURIComponent(domain));
   if (site.status !== "ok") notFound();
 
-  const result = await listPublishedPosts(site.published.templateId, { page: 1, perPage: site.blogSite.postsPerPage ?? 10 });
+  const page = Number.parseInt(pageNum, 10);
+  if (!Number.isInteger(page) || page < 1) notFound();
+  // Page 1 canonically lives at /blog, not /blog/page/1 — avoids two URLs for the same content.
+  if (page === 1) notFound();
 
-  // Custom layout, if designed and it has somewhere to show the post list — see
-  // prisma/schema.prisma's Template.isBlogLayout comment. Scoped to this page (page 1)
-  // only; paginated/category/tag/author archive pages still use the default theme, same
-  // as any site that hasn't designed a listing layout at all.
+  const result = await listPublishedPosts(site.published.templateId, { page, perPage: site.blogSite.postsPerPage ?? 10 });
+  if (result.posts.length === 0) notFound();
+
   const blogSiteView = { title: site.blogSite.title ?? "Blog", description: site.blogSite.description ?? null };
 
   const layoutHtml = await loadListingLayoutHtml(site.blogSite);

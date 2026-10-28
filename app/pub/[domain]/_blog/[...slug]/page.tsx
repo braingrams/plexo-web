@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
 import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
 import { getPublishedPostBySlug, getRelatedPosts, listApprovedComments } from "@/lib/blog/queriesDynamo";
@@ -37,7 +37,6 @@ export default async function BlogPostPage({ params }: { params: Promise<Params>
   const { domain, slug } = await params;
   const { site, post } = await loadPost(domain, slug);
 
-  if (site.status === "deployed") redirect(`/_dp/blog/${slug.join("/")}`);
   if (site.status !== "ok") notFound();
 
   if (!post) {

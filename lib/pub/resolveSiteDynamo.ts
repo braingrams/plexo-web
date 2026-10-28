@@ -98,8 +98,8 @@ export type ResolveBlogSiteResult =
   | { status: "suspended" }
   | { status: "inactive"; domain: string; domainType: "SUBDOMAIN" | "CUSTOM" }
   | { status: "blog_disabled" }
-  // A DeployedApp entity exists for this template — the blog RSC pages must not render
-  // and should redirect to /_dp/{path} so the static file is served instead.
+  // A DeployedApp entity exists for this template — blog/feed.xml and blog/sitemap.xml
+  // use this to return 404 rather than Plexo's own feed for a static-deployed site.
   | { status: "deployed" }
   | { status: "ok"; published: ResolvedPublishedDomain; blogSite: EntityItem<typeof BlogSite> };
 
@@ -112,9 +112,7 @@ export async function resolveBlogSite(rawDomain: string): Promise<ResolveBlogSit
   const site = await resolveSite(rawDomain);
   if (site.status !== "ok") return site;
 
-  // A deployed framework app (Phase 1: static) owns all routes including /blog — the blog
-  // RSC pages must not render for these domains. Checked before the plan gate so a deployed
-  // app on Free still gets its blog pages served (the plan gate is irrelevant for static).
+  // A deployed static app owns all its routes — Plexo's own blog feature doesn't apply.
   const { data: deployedApp } = await DeployedApp.get({ templateId: site.published.template.id }).go();
   if (deployedApp?.type === "STATIC") return { status: "deployed" };
 
