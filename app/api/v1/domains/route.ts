@@ -160,7 +160,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!DOMAIN_REGEX.test(rawDomain)) {
       return NextResponse.json({ error: "Invalid custom domain format." }, { status: 400 });
     }
-    if (rawDomain.endsWith("." + baseDomain) || rawDomain === baseDomain) {
+    // Block customers from registering *.plexopages.com subdomains as "custom" domains
+    // (they look like official platform URLs and would bypass subdomain reservation checks).
+    // Exception: www.plexopages.com and the bare apex are Charisol's own marketing domains
+    // and are legitimately registered this way.
+    const isApexOrWww = rawDomain === baseDomain || rawDomain === `www.${baseDomain}`;
+    if (!isApexOrWww && (rawDomain.endsWith("." + baseDomain) || rawDomain === baseDomain)) {
       return NextResponse.json({ error: "Custom domains cannot end with the platform base domain." }, { status: 400 });
     }
   }
