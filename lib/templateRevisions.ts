@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { TemplateRevision } from "@/lib/db/contentEntities";
 import { designFormatOf } from "@/lib/v2/design";
 
-// Retention cap — a generous undo window ("instant rollbacks", app/new/feature-grid.tsx)
-// without letting a template's revision history grow unbounded in plexo-content.
+// Retention cap — a generous undo window ("instant rollbacks") without letting a
+// template's revision history grow unbounded in plexo-content.
 const MAX_REVISIONS_PER_TEMPLATE = 20;
 
 /**

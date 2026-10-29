@@ -13,6 +13,7 @@ nothing here is type-checked or built, and nothing under `app/` routes to it.
 - `app/landing-page-client.tsx` — interactive hero/AI-demo client component.
 - `app/blog/` — Plexo's own marketing blog (index, post, category/author/tag archives, RSS, OG images). **Not** the multi-tenant blog feature, which lives in `app/pub/[domain]/blog/` and is untouched.
 - `app/developers/`, `app/sdk/page.tsx`, `app/mcp/page.tsx` + `mcp-landing-client.tsx`, `app/releases/`, `app/testimonials/` — marketing/content pages.
+- `app/new/` — a newer landing-page redesign that was served at `/new` (already `noindex`, unlinked — an internal preview).
 - `app/sitemap.ts` — old sitemap listing the marketing routes above.
 - `app/opengraph-image.tsx` — shared marketing OG image.
 - `lib/blog/marketingBlog.ts`, `lib/blog/marketingSeo.ts` — marketing-blog identity + SEO helpers.
