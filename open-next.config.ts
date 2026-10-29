@@ -1,4 +1,4 @@
-import type { OpenNextConfig } from "@opennextjs/aws";
+import type { OpenNextConfig } from "@opennextjs/aws/types/open-next";
 
 // Switch the server function to response-streaming mode so Lambda streams
 // response bytes to CloudFront instead of buffering the whole payload first.
@@ -11,7 +11,9 @@ import type { OpenNextConfig } from "@opennextjs/aws";
 // on the serverFn function URL for this to take effect in production.
 const config: OpenNextConfig = {
   default: {
-    wrapper: "aws-lambda-streaming",
+    override: {
+      wrapper: "aws-lambda-streaming",
+    },
   },
 };
 
