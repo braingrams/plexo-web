@@ -74,6 +74,7 @@ export function DeployPanel({
   const [result, setResult] = useState<DeployResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [chunkProgress, setChunkProgress] = useState<{ current: number; total: number } | null>(null);
 
   function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -105,29 +106,49 @@ export function DeployPanel({
     setUploading(true);
     setError(null);
     setResult(null);
+    setChunkProgress(null);
     try {
-      const fd = new FormData();
-      fd.append("file", selectedFile);
-      const res = await fetch(`/api/v1/templates/${templateId}/deploy`, {
-        method: "POST",
-        body: fd,
-      });
-      const data = await res.json().catch(() => ({})) as DeployResult & { error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "Deploy failed. Check the zip and try again.");
-        return;
+      const CHUNK_SIZE = 3 * 1024 * 1024; // 3 MB → base64 ≈ 4 MB → under Lambda's 6 MB limit
+      const chunkTotal = Math.ceil(selectedFile.size / CHUNK_SIZE);
+      const uploadSession = crypto.randomUUID();
+
+      let finalData: DeployResult | null = null;
+      for (let i = 0; i < chunkTotal; i++) {
+        setChunkProgress({ current: i + 1, total: chunkTotal });
+        const start = i * CHUNK_SIZE;
+        const chunk = selectedFile.slice(start, start + CHUNK_SIZE);
+        const res = await fetch(`/api/v1/templates/${templateId}/deploy/chunk`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "X-Upload-Session": uploadSession,
+            "X-Chunk-Index": String(i),
+            "X-Chunk-Total": String(chunkTotal),
+          },
+          body: chunk,
+        });
+        const data = await res.json().catch(() => ({})) as DeployResult & { error?: string };
+        if (!res.ok) {
+          setError(data.error ?? "Deploy failed. Check the zip and try again.");
+          return;
+        }
+        if (i === chunkTotal - 1) finalData = data;
       }
-      setResult(data);
-      setSelectedFile(null);
-      setDeployedApp({
-        framework: data.framework,
-        spaMode: data.spaMode,
-        updatedAt: new Date().toISOString(),
-      });
+
+      if (finalData) {
+        setResult(finalData);
+        setSelectedFile(null);
+        setDeployedApp({
+          framework: finalData.framework,
+          spaMode: finalData.spaMode,
+          updatedAt: new Date().toISOString(),
+        });
+      }
     } catch {
       setError("Network error. Check your connection and try again.");
     } finally {
       setUploading(false);
+      setChunkProgress(null);
     }
   }
 
@@ -292,7 +313,11 @@ export function DeployPanel({
             transition: "background 0.15s",
           }}
         >
-          {uploading ? "Deploying…" : "Deploy"}
+          {uploading
+            ? chunkProgress && chunkProgress.total > 1
+              ? `Uploading ${chunkProgress.current} of ${chunkProgress.total}…`
+              : "Deploying…"
+            : "Deploy"}
         </button>
       )}
     </Card>
