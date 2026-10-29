@@ -511,7 +511,16 @@ export class ComputeStack extends cdk.Stack {
         ]),
       }),
     );
-    const serverFnUrl = serverFn.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.NONE });
+    // RESPONSE_STREAM removes the 6 MB buffered-response ceiling — large static assets
+    // served via serveDeployedStatic (lib/pub/serveDeployedStatic.ts) would otherwise
+    // hit "payload is too large for the RequestResponse invocation type". The handler
+    // uses OpenNext's aws-lambda-streaming wrapper (open-next.config.ts) which wraps
+    // the export in awslambda.streamifyResponse — Lambda streams response bytes to
+    // CloudFront instead of buffering the whole payload in memory first.
+    const serverFnUrl = serverFn.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
+    });
     // AuthType.NONE still requires an explicit resource policy granting invocation — CDK
     // does not add this automatically the way it does for the AWS_IAM+OAC case above.
     serverFn.addPermission("AllowPublicInvokeServerFnUrl", {
