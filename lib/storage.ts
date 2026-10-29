@@ -145,6 +145,38 @@ export async function createPresignedUploadPost(
   return { url, fields, publicUrl: publicUrlFor(key) };
 }
 
+/** Reads a private or public object by its storage path (no URL construction needed).
+ * Use this instead of readObject when the caller already knows the path — e.g. reassembling
+ * staging chunks uploaded via uploadObject. */
+export async function readObjectAtKey(
+  path: string,
+  access: "public" | "private",
+): Promise<{ body: Buffer; contentType: string | undefined }> {
+  const key = `${access}/${path}`;
+  try {
+    const res = await s3().send(new GetObjectCommand({ Bucket: bucketName(), Key: key }));
+    const bytes = await res.Body!.transformToByteArray();
+    return { body: Buffer.from(bytes), contentType: res.ContentType };
+  } catch (err) {
+    throw new StorageError(err instanceof Error ? err.message : "Failed to read file.");
+  }
+}
+
+/** Deletes objects by path (access-prefixed key), complementing uploadObject.
+ * Use for server-side cleanup of staging objects where the caller holds paths, not URLs. */
+export async function deleteObjectsAtPaths(paths: string[], access: "public" | "private"): Promise<void> {
+  const keys = paths.map((p) => `${access}/${p}`);
+  for (let i = 0; i < keys.length; i += 1000) {
+    const batch = keys.slice(i, i + 1000);
+    await s3().send(
+      new DeleteObjectsCommand({
+        Bucket: bucketName(),
+        Delete: { Objects: batch.map((Key) => ({ Key })) },
+      }),
+    );
+  }
+}
+
 /** Reads an object this module minted back into memory — for server-side consumers of a
  * private upload (e.g. SOL handing a chat attachment's bytes to the model, which can't
  * fetch a private URL itself). The bucket comes from the URL rather than
