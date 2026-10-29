@@ -1,6 +1,10 @@
 import { BRAND } from "@/lib/theme";
 export const metadata = {
   title: "Acceptable Use Policy — Plexo",
+  // Kept reachable because the raw-HTML publish, WordPress migration, site-import,
+  // and MCP publish flows all link here as the policy users must accept — but
+  // noindex so it doesn't drive SEO to the app domain (that belongs on plexopages.com).
+  robots: { index: false, follow: false },
 };
 
 const SECTIONS: { title: string; body: string[] }[] = [

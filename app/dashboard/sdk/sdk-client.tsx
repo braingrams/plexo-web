@@ -6,7 +6,7 @@ import { PageHeader } from "../_components/PageHeader";
 import { Card } from "../_components/Card";
 import { IntegrationSubTabs } from "../integrations/_components/IntegrationSubTabs";
 import { CustomSelect } from "@/app/_components/CustomSelect";
-import { SDK_V2_API, SDK_V2_COMPILE, SDK_V2_EMBED, SDK_V2_INSTALL } from "@/app/sdk/v2-snippets";
+import { SDK_V2_API, SDK_V2_COMPILE, SDK_V2_EMBED, SDK_V2_INSTALL } from "@/lib/sdk/v2-snippets";
 import { V2Playground } from "./v2-playground";
 
 type SimpleKey = {
@@ -42,14 +42,6 @@ function IconCopy() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-    </svg>
-  );
-}
-
-function IconLink() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" />
     </svg>
   );
 }
@@ -412,34 +404,6 @@ const text = compileToPlainText(template.designJson);
         </div>
       )}
 
-      <div style={{ display: "grid", gap: "1.25rem", gridTemplateColumns: "1fr", marginTop: "1.25rem" }}>
-        {/* Documentation links */}
-        <div style={{
-          background: "linear-gradient(135deg, rgba(var(--brand-rgb),0.08) 0%, rgba(100,50,255,0.06) 100%)",
-          border: "1px solid rgba(var(--brand-rgb),0.15)", borderRadius: 16, padding: "1.5rem",
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap",
-        }}>
-          <div>
-            <h4 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff" }}>
-              Looking for full API specifications?
-            </h4>
-            <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", marginTop: "0.25rem" }}>
-              Browse the complete list of types, helper methods, design tokens, and compile functions.
-            </p>
-          </div>
-          <Link href="/sdk" target="_blank" style={{
-            display: "inline-flex", alignItems: "center", gap: "0.45rem",
-            padding: "0.6rem 1.1rem", borderRadius: 9,
-            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-            color: "#f0f2ff", fontSize: "0.82rem", fontWeight: 600, textDecoration: "none",
-            transition: "background 0.15s",
-          }}>
-            Public Docs
-            <IconLink />
-          </Link>
-        </div>
-
-      </div>
     </>
   );
 }
