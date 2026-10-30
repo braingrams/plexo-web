@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { contentSnippet, type ContentLayout } from "@/lib/customContent/embed";
+import { productMarker } from "@/lib/commerce/embedSnippets";
+import { SiteProductPicker } from "../../_components/SiteProductPicker";
 
 /**
  * Generates the exact data-plexo-commerce-* marker markup public/commerce.js's init()
@@ -18,7 +20,7 @@ const BLOCKS: { key: BlockKey; label: string; description: string }[] = [
   { key: "content_list", label: "Videos, stories & events", description: "Shows what you post under Content Types — a video gallery, stories or upcoming events. No setup needed on your site's other settings." },
   { key: "connect_form", label: "Connect a form", description: "Sends any form on your page to your Form Submissions inbox. Forms without a destination are connected automatically; this just names the form." },
   { key: "shop_grid", label: "Shop grid", description: "A grid of products visitors can add to cart." },
-  { key: "product", label: "Single product", description: "One specific product's add-to-cart card." },
+  { key: "product", label: "Sell one product", description: "A card with a Buy now button. Visitors pay right on your page, and every purchase is recorded as an order in Commerce." },
   { key: "cart_summary", label: "Cart summary", description: "Line items + subtotal — put this on your checkout page." },
   { key: "checkout_flow", label: "Checkout form", description: "Delivery details + payment — put this on your checkout page too." },
   { key: "order_confirmation", label: "Order confirmation", description: "Shows the order a customer just paid for." },
@@ -41,7 +43,7 @@ function buildSnippet(block: BlockKey, opts: { productId: string; category: stri
       return `<div data-plexo-commerce-shopGrid ${attrs}></div>`;
     }
     case "product":
-      return `<div data-plexo-commerce-product data-plexo-product-id="${opts.productId || "PASTE_PRODUCT_ID_HERE"}"></div>`;
+      return opts.productId ? productMarker(opts.productId) : "Choose a product above and its snippet appears here.";
     case "cart_summary":
       return `<div data-plexo-commerce-cartSummary></div>`;
     case "checkout_flow":
@@ -55,7 +57,19 @@ function buildSnippet(block: BlockKey, opts: { productId: string; category: stri
   }
 }
 
-export function EmbedCodeModal({ onClose }: { onClose: () => void }) {
+type EmbedCodeModalProps = {
+  onClose: () => void;
+  /** The site (home page id) — lets "Sell one product" list your products to pick from. */
+  siteId?: string;
+  /** The page being edited, so "Add it to my page for me" knows where to put the product. */
+  pageId?: string;
+  /** Whether adding to the page for the owner is safe right now (false while this page has unsaved edits open). */
+  canAddForMe?: boolean;
+  /** Called after a product was added to the page for the owner, so the editor can show it. */
+  onAdded?: () => void;
+};
+
+export function EmbedCodeModal({ onClose, siteId, pageId, canAddForMe = true, onAdded }: EmbedCodeModalProps) {
   const [block, setBlock] = useState<BlockKey>("content_list");
   const [productId, setProductId] = useState("");
   const [category, setCategory] = useState("");
@@ -65,6 +79,8 @@ export function EmbedCodeModal({ onClose }: { onClose: () => void }) {
   const [contentLayout, setContentLayout] = useState<ContentLayout>("gallery");
   const [formName, setFormName] = useState("Contact");
   const [copied, setCopied] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [addResult, setAddResult] = useState<{ ok: boolean; message: string; warnings: string[] } | null>(null);
 
   const snippet = useMemo(
     () => buildSnippet(block, { productId, category, limit, itemsPerRow, contentSlug, contentLayout, formName }),
@@ -79,6 +95,25 @@ export function EmbedCodeModal({ onClose }: { onClose: () => void }) {
   }
 
   const active = BLOCKS.find((b) => b.key === block)!;
+
+  async function addForMe() {
+    if (!siteId || !productId) return;
+    setAdding(true);
+    setAddResult(null);
+    try {
+      const res = await fetch(`/api/v1/commerce/${siteId}/products/${productId}/sell`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pageId }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) setAddResult({ ok: false, message: data.error || "We couldn't add it. Please try again.", warnings: [] });
+      else {
+        setAddResult({ ok: true, message: data.message, warnings: data.warnings ?? [] });
+        onAdded?.();
+      }
+    } catch {
+      setAddResult({ ok: false, message: "We couldn't add it. Check your connection and try again.", warnings: [] });
+    } finally {
+      setAdding(false);
+    }
+  }
 
   return (
     <>
@@ -152,17 +187,34 @@ export function EmbedCodeModal({ onClose }: { onClose: () => void }) {
         )}
 
         {block === "product" && (
-          <div>
-            <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(240,242,255,0.55)", display: "block", marginBottom: "0.3rem" }}>
-              Product ID (from Commerce → Products, open the product and copy its ID from the URL)
-            </label>
-            <input
-              type="text"
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              placeholder="e.g. 721cda0c-48ef-4542-8fe4-7c367b0688f9"
-              style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontFamily: "inherit" }}
-            />
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(240,242,255,0.55)", display: "block" }}>Which product?</label>
+            {siteId ? (
+              <SiteProductPicker siteId={siteId} value={productId} onChange={(id) => { setProductId(id); setAddResult(null); }} />
+            ) : (
+              <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.5)", margin: 0 }}>Open this from your site's editor to pick from your products.</p>
+            )}
+            {siteId && pageId && productId && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                <button
+                  type="button"
+                  onClick={() => void addForMe()}
+                  disabled={adding || !canAddForMe}
+                  style={{ padding: "0.55rem 0.9rem", borderRadius: 9, fontSize: "0.82rem", fontWeight: 700, border: "none", color: "#fff", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", cursor: adding || !canAddForMe ? "default" : "pointer", opacity: adding || !canAddForMe ? 0.6 : 1 }}
+                >
+                  {adding ? "Adding…" : "Add it to my page for me"}
+                </button>
+                {!canAddForMe && <p style={{ fontSize: "0.72rem", color: "#fcd34d", margin: 0 }}>Save your changes first, then I can add it for you — or copy the snippet below.</p>}
+                {addResult && (
+                  <div style={{ fontSize: "0.78rem", lineHeight: 1.5, color: addResult.ok ? "#86efac" : "#fca5a5" }}>
+                    {addResult.message}
+                    {addResult.warnings.map((w) => (
+                      <p key={w} style={{ margin: "0.3rem 0 0", color: "#fcd34d" }}>{w}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 

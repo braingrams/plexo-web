@@ -3,6 +3,7 @@ import { catalogSchema, createDefaultDesignSystem, describeDesign } from "@chari
 
 import type { resolveUser } from "@/lib/auth/resolveUser";
 import { BlogSite, Template } from "@/lib/db/contentEntities";
+import { sellProductOnPage } from "@/lib/commerce/sellProduct";
 import { hasBlogMarker, type BlogMarkerName } from "@/lib/pub/blogLayoutRender";
 import { resolveDesignSystem } from "@/lib/v2/designSystemStore";
 import { blankV2Design, designFormatOf, parseV2Design } from "@/lib/v2/design";
@@ -78,7 +79,7 @@ export const PAGE_MCP_TOOLS = [
     title: "Create Page From Template",
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description:
-      "Creates a visual page that is already complete: header, sections and footer all filled in with starting wording. Without siteId it starts a NEW SITE (this is its home page); with siteId it adds a page to that site (Ultra plan). templateId is a page template: blank, home, landing, about, services, contact or pricing (home for a first page, landing for a one-page sales site). " +
+      "Creates a visual page that is already complete: header, sections and footer all filled in with starting wording. Without siteId it starts a NEW SITE (this is its home page); with siteId it adds a page to that site (any plan can build and preview a multi-page site; Free publishes only the home page). templateId is a page template: blank, home, landing, about, services, contact or pricing (home for a first page, landing for a one-page sales site). " +
       "Pass content — the same commands as page_edit — to personalise it in the same call (headline, copy, brand colours with setBrand), so the owner sees a finished page for their business straight away; any wording you don't change stays as the template's sample text, so replace the key copy. It isn't published: call page_publish with a domain when the owner is ready. Never ask the owner for a name or address first — name the page yourself from what it's about.",
     inputSchema: {
       type: "object",
@@ -139,6 +140,42 @@ export const PAGE_MCP_TOOLS = [
         startFresh: { type: "boolean", description: "Only if the blog's current layout was built in the classic editor and has content: true replaces it. Ask the owner first." },
       },
       required: ["templateId", "kind", "commands"],
+    },
+  },
+  {
+    name: "sell_product_on_page",
+    title: "Sell a Product on a Page",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description:
+      "Makes a page SELL one product, end to end — the one call to use whenever someone wants to sell a course, ebook, download or product from a page (never a hand-made payment link). Every purchase is recorded as an order in Commerce. It does whatever is still missing: " +
+      "(1) no product yet → creates it from name + price (a digital product; pass deliveryUrl — where buyers get the course/files after paying — if you know it, otherwise buyers are told the owner will email access and the reply warns the owner to add the link); " +
+      "(2) Commerce off or no way to be paid → turns it on with Plexo's own Paystack, which needs no keys; " +
+      "(3) the page already has a hosted pay link (Flutterwave, Paystack, Selar, a Stripe payment link, Gumroad…) → switches that link to open Plexo's checkout on the same page, so the page keeps its design and only the payment changes; " +
+      "(4) otherwise → adds a buy card. A buy card opens a checkout over the page and brings the buyer back to it, so it needs no checkout page and works on the Free plan's home page for digital products. " +
+      "Works on whatever the page is made of: a visual page (published for you when nothing else is waiting in its working copy), a classic page, a hand-written HTML page, and for a React app it returns what to place and which link to change (use the app tools to make that edit, then publish the app). Any button anywhere can also open the checkout with href=\"#plexo-buy-<productId>\" (the reply's buyLink) or data-plexo-buy=\"<productId>\". " +
+      "Safe to repeat. If the page has several different payment links it leaves them alone and lists them in unclearLinks — ask which one is this product's and pass part of its URL as paymentLink. Pass the reply's warnings on to the owner in plain words.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        siteId: { type: "string", description: "The site's home page id (list_landing_pages shows it)." },
+        productId: { type: "string", description: "An existing product to sell (list_commerce_products). Services are booked, not bought — they can't be used here. Leave out to create one with name + price." },
+        name: { type: "string", description: "Creates the product: its name, e.g. \"AI Video Creation Course\"." },
+        price: { type: "number", description: "Creates the product: price in whole currency units, e.g. 5000 for ₦5,000 (the site's currency)." },
+        description: { type: "string", description: "Creates the product: a short description shown on the buy card." },
+        imageUrl: { type: "string", description: "Creates the product: a picture for the buy card." },
+        deliveryUrl: { type: "string", description: "Creates the product: the link buyers are sent after paying (the course, a drive folder, a members' area)." },
+        deliveryInstructions: { type: "string", description: "Creates the product: instructions emailed to buyers instead of a link." },
+        fileUrl: { type: "string", description: "Creates the product: a file already uploaded to Plexo that buyers can download." },
+        pageId: { type: "string", description: "Optional: put it on this page of the site instead of the home page." },
+        convertLinks: { type: "boolean", description: "Switch the page's existing hosted payment links to the new checkout. Default true." },
+        paymentLink: { type: "string", description: "When the page has several different payment links: part of the URL of the one that is this product's (e.g. \"aivideocreationcourse\")." },
+        addCard: { type: "boolean", description: "Also add a buy card. Default: only when the page had no payment link to switch." },
+        heading: { type: "string", description: "Visual pages: the heading above the buy card. Default: the product's name." },
+        text: { type: "string", description: "Visual pages: one line of text under the heading." },
+        buttonLabel: { type: "string", description: "Text on the buy card's button. Default \"Buy now\"." },
+        publish: { type: "boolean", description: "Visual pages: publish too. Default true — skipped automatically if the page has other unpublished edits." },
+      },
+      required: ["siteId"],
     },
   },
 ];
@@ -291,6 +328,8 @@ export async function handlePageTool(toolName: string, args: any, resolved: Reso
       }
       case "page_publish":
         return await publishPage(resolved, args ?? {});
+      case "sell_product_on_page":
+        return { success: true, ...(await sellProductOnPage(resolved, args ?? {})) };
       case "blog_layout_describe":
         return await describeBlogLayout(resolved, args ?? {});
       case "blog_layout_edit":

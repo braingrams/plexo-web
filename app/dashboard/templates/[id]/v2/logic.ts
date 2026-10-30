@@ -1,6 +1,7 @@
 import type { DesignSystem, PageDefinition } from "@charisol/plexo-sdk/v2/compile";
 
 import { V2_FORMAT, type DesignSystemRef, type V2Design, type V2Meta } from "@/lib/v2/design";
+import { formatMoney } from "@/lib/commerce/formatMoney";
 
 // The decisions the template editor makes for a new-editor (V2) page, kept free of React so they
 // can be tested: what a save sends, how the site's pages are listed, and "save first, then move".
@@ -110,6 +111,20 @@ export function newPageBody(input: { name: string; rootId: string; templateId: s
     designFormat: "v2" as const,
     ...(input.templateId && input.templateId !== "blank" ? { pageTemplate: input.templateId } : {}),
   };
+}
+
+/**
+ * The site's products as the editor's product picker lists them (picture, name, formatted price). Services are
+ * left out — they're booked, not bought, so a "Buy now" card can't sell one. Rejects with a plain message the
+ * picker shows as is.
+ */
+export async function productChoices(siteId: string): Promise<Array<{ id: string; name: string; priceLabel: string; imageUrl?: string; kind: string }>> {
+  const res = await fetch(`/api/v1/commerce/${siteId}/products`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || "We couldn't load your products.");
+  return (data.products as Array<{ id: string; name: string; kind: string; priceMinor: number; currency: string; imageUrl?: string | null; active?: boolean }>)
+    .filter((p) => p.active !== false && p.kind !== "SERVICE")
+    .map((p) => ({ id: p.id, name: p.name, kind: p.kind, priceLabel: formatMoney(p.priceMinor, p.currency), ...(p.imageUrl ? { imageUrl: p.imageUrl } : {}) }));
 }
 
 export function stockProviders(keys: { unsplash?: string; pexels?: string; pixabay?: string }) {

@@ -10,7 +10,6 @@ import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { ensureUniqueSlug, isValidUuid } from "@/server/slugDynamo";
 import { ensureUniqueTemplateName } from "@/server/templateNameDynamo";
-import { getTierFeatures } from "@/lib/subscription";
 
 /**
  * POST /api/templates/:id/duplicate
@@ -29,13 +28,6 @@ export async function POST(
   if (!resolved) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!getTierFeatures(resolved.subscriptionPlan).multiPageSitesEnabled) {
-    return NextResponse.json(
-      { error: "Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages.", plan: resolved.subscriptionPlan },
-      { status: 403 },
-    );
-  }
-
   const permissionError = requirePermission(resolved.role, { template: ["create"] });
   if (permissionError) return permissionError;
 

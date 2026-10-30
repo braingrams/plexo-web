@@ -1300,11 +1300,6 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
     }
 
     case "create_landing_page_subpage": {
-      const features = getTierFeatures(resolved.subscriptionPlan);
-      if (!features.multiPageSitesEnabled) {
-        throw new Error("Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages.");
-      }
-
       const parentTemplateId = typeof args.parentTemplateId === "string" ? args.parentTemplateId.trim() : "";
       const name = typeof args.name === "string" ? args.name.trim() : "";
       if (!parentTemplateId || !name) {
@@ -1570,11 +1565,6 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
     }
 
     case "duplicate_landing_page_page": {
-      const features = getTierFeatures(resolved.subscriptionPlan);
-      if (!features.multiPageSitesEnabled) {
-        throw new Error("Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages.");
-      }
-
       const templateId = typeof args.templateId === "string" ? args.templateId.trim() : "";
       if (!templateId) {
         throw new Error("templateId is required.");

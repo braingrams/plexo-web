@@ -127,7 +127,7 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
         <span>
           {status.previousPlan
             ? <>Your site contains secondary pages archived from your {previous} plan. Reactivate {previous} to publish them, or keep only 1 page to continue editing on the Free tier.</>
-            : <>Your site has more pages than the Free plan publishes — only the homepage is live. Upgrade to Pro to publish them, or keep only 1 page to continue editing on the Free tier.</>}
+            : <>You can build and preview every page, but the Free plan publishes only your homepage — visitors can't open the others yet. Upgrade to Pro to put them live.</>}
         </span>
         <span style={actions}>
           <Upgrade label={status.previousPlan ? `Reactivate ${previous}` : "Upgrade to Pro"} />

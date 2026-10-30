@@ -13,7 +13,7 @@ import { askSolStreaming } from "@/lib/ai/clientAssist";
 import { PageSettings } from "./PageSettings";
 import { BRAND_EMBED_MAX_CHARS, fetchBrand, uploadBrand } from "@/lib/v2/brandClient";
 import type { DesignSystemRef } from "@/lib/v2/design";
-import { buildV2SavePayload, leaveAfterSaving, newPageBody, pageSourcePages, postV2Draft, stockProviders, type TreePage } from "./logic";
+import { buildV2SavePayload, leaveAfterSaving, newPageBody, pageSourcePages, postV2Draft, productChoices, stockProviders, type TreePage } from "./logic";
 
 // The new visual editor (<V2Editor> from @charisol/plexo-sdk/v2) for a template page. One Template
 // row is one page; the site's other pages are other rows, so "switching pages" opens that row
@@ -84,6 +84,15 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
   const extras = useRef({ meta, customJs });
   extras.current = { meta, customJs };
   const strata = useMemo(() => createStrataAdapter(), []);
+  // "Which product to sell" lists this site's products (the Sell a product section and the product block).
+  const products = useMemo(
+    () => ({
+      list: () => productChoices(rootId),
+      onCreate: () => window.open(`/dashboard/commerce/${rootId}/products`, "_blank", "noopener"),
+      createLabel: "Create a product",
+    }),
+    [rootId],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -362,6 +371,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             onUploadFont={uploadFont}
             loadMedia={loadMedia}
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
+            products={props.kind === "EMAIL" ? undefined : products}
             // Plexo purple on Plexo's own background, so the editor looks like the rest of the app (and follows lib/theme.ts).
             theme={EDITOR_THEME}
             strata={strataOn ? strata : undefined}

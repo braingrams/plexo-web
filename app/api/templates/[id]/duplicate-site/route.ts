@@ -100,12 +100,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
 
   const features = getTierFeatures(resolved.subscriptionPlan);
-  if (descendants.length > 0 && !features.multiPageSitesEnabled) {
-    return NextResponse.json(
-      { error: "This site has multiple pages — duplicating it requires an Ultra subscription plan.", plan: resolved.subscriptionPlan },
-      { status: 403 },
-    );
-  }
   {
     const limit = existing.kind === "LANDING_PAGE" ? features.maxLandingPages : features.maxEmailTemplates;
     const { data: orgRoots } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });

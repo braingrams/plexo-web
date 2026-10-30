@@ -117,14 +117,6 @@ function IconEdit() {
 	);
 }
 
-function IconSparkle() {
-	return (
-		<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-			<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />
-		</svg>
-	);
-}
-
 function IconArrowRight() {
 	return (
 		<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -184,8 +176,6 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 	const [manageOpen, setManageOpen] = useState(false);
 	const [nudgeDismissed, setNudgeDismissed] = useState(false);
 	const [domainPreview, setDomainPreview] = useState<string | null>(null);
-
-	const isUltra = getTierFeatures(subscriptionPlan).multiPageSitesEnabled;
 
 	async function loadTree() {
 		try {
@@ -289,7 +279,7 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 
 			{/* Actions */}
 			<div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-				{isUltra && subPageCount === 0 && !nudgeDismissed && (
+				{subPageCount === 0 && !nudgeDismissed && (
 					<span style={{
 						display: "inline-flex", alignItems: "center", gap: "0.4rem",
 						fontSize: "0.72rem", color: "var(--brand)", fontWeight: 600,
@@ -329,7 +319,6 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 					childrenOf={childrenOf}
 					rootId={rootId}
 					currentId={templateId}
-					isUltra={isUltra}
 					homeOnly={getTierFeatures(subscriptionPlan).maxPublishedPagesPerSite === 1}
 					domainPreview={domainPreview}
 					onClose={() => setManageOpen(false)}
@@ -351,7 +340,6 @@ function ManagePagesModal({
 	childrenOf,
 	rootId,
 	currentId,
-	isUltra,
 	homeOnly,
 	domainPreview,
 	onClose,
@@ -363,7 +351,6 @@ function ManagePagesModal({
 	childrenOf: Map<string | null, PageNode[]>;
 	rootId: string;
 	currentId: string;
-	isUltra: boolean;
 	/** The plan publishes only the homepage (Free). */
 	homeOnly: boolean;
 	domainPreview: string | null;
@@ -750,7 +737,6 @@ function ManagePagesModal({
 								</span>
 							</button>
 							<div style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
-								{isUltra && (
 									<button
 										type="button"
 										title="Add DnD sub-page"
@@ -759,8 +745,6 @@ function ManagePagesModal({
 									>
 										<IconPlus />
 									</button>
-								)}
-								{isUltra && (
 									<button
 										type="button"
 										title="Upload sub-page (.html/.zip)"
@@ -769,7 +753,6 @@ function ManagePagesModal({
 									>
 										<IconUpload />
 									</button>
-								)}
 								{node.sourceType === "BUILDER" ? (
 									<button
 										type="button"
@@ -789,7 +772,7 @@ function ManagePagesModal({
 										<IconSwitch />
 									</button>
 								)}
-								{!isHome && isUltra && (
+								{!isHome && (
 									<button type="button" title="Duplicate" onClick={() => void duplicatePage(node.id)} style={iconBtn}>
 										<IconCopy />
 									</button>
@@ -880,9 +863,9 @@ function ManagePagesModal({
 				</div>
 
 				<div style={{ flex: 1, overflowY: "auto", padding: "0.75rem" }}>
-					{!isUltra && (
-						<div style={{ margin: "0.25rem 0.25rem 0.75rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "var(--brand-subtle)", border: "1px solid rgba(var(--brand-rgb),0.25)", fontSize: "0.8rem", color: "rgba(240,242,255,0.8)", display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
-							<IconSparkle /> <span>Multi-page sites (adding, duplicating pages) need a <strong>Pro</strong> or <strong>Ultra</strong> plan. Existing pages remain fully usable below.</span>
+					{homeOnly && (
+						<div style={{ margin: "0.25rem 0.25rem 0.75rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "var(--brand-subtle)", border: "1px solid rgba(var(--brand-rgb),0.25)", fontSize: "0.8rem", color: "rgba(240,242,255,0.8)" }}>
+							Build and preview as many pages as you like. On the Free plan only your <strong>home page</strong> goes live for visitors — upgrade to <strong>Pro</strong> to publish the rest.
 						</div>
 					)}
 					{root && renderNode(root, 0)}
@@ -892,7 +875,6 @@ function ManagePagesModal({
 					<p style={{ padding: "0 1.25rem", fontSize: "0.78rem", color: "#f87171" }}>{error}</p>
 				)}
 
-				{isUltra && (
 					<div style={{ padding: "0.6rem 1.25rem 1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
 						<button
 							type="button"
@@ -902,7 +884,6 @@ function ManagePagesModal({
 							<IconPlus /> Add top-level page
 						</button>
 					</div>
-				)}
 			</div>
 
 			{deleteTarget && (

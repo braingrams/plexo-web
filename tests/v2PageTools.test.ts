@@ -163,9 +163,10 @@ describe("page_create_from_template", () => {
     expect(h.templates.get(b.templateId)).toMatchObject({ parentId: home.templateId, order: 1, designFormat: "v2" });
   });
 
-  it("Free plan: a plain-English limit message, nothing created", async () => {
+  it("Free plan: can build extra pages (only the home page goes live), and gets a plain-English limit on sites", async () => {
     const home = await call("page_create_from_template", { name: "Home" }, FREE);
-    await expect(call("page_create_from_template", { name: "About", siteId: home.templateId }, FREE)).rejects.toThrow(/Ultra plan/);
+    const about = await call("page_create_from_template", { name: "About", siteId: home.templateId }, FREE);
+    expect(h.templates.get(about.templateId)).toMatchObject({ parentId: home.templateId, designFormat: "v2" });
     for (let i = 0; i < 4; i++) await call("page_create_from_template", { name: `S${i}` }, FREE);
     const before = h.templates.size;
     await expect(call("page_create_from_template", { name: "One too many" }, FREE)).rejects.toThrow(/limit of 5 sites/);
