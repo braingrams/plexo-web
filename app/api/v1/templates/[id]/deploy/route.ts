@@ -6,6 +6,7 @@ import { Template } from "@/lib/db/contentEntities";
 import { DeployedApp, type RedirectRule } from "@/lib/db/appEntities";
 import { uploadObject } from "@/lib/storage";
 import { getTierFeatures } from "@/lib/subscription";
+import { updateProvisionedConcurrency } from "@/lib/pub/updateProvisionedConcurrency";
 
 type HostingTier = "STATIC" | "LAMBDA" | "PROVISIONED";
 
@@ -246,6 +247,10 @@ export async function POST(
     }).go();
   }
 
+  if (hostingTier === "PROVISIONED") {
+    void updateProvisionedConcurrency().catch(console.error);
+  }
+
   return NextResponse.json({
     ok: true,
     framework,
@@ -344,7 +349,16 @@ export async function PATCH(
     }, { status: 403 });
   }
 
+  const previousTier = deployedApp.hostingTier ?? "LAMBDA";
   await DeployedApp.update({ templateId }).set({ hostingTier }).go();
+
+  // Recalculate Lambda provisioned concurrency whenever a customer moves to or from
+  // PROVISIONED tier. Fire-and-forget: the PC update completes asynchronously (Lambda's
+  // PutProvisionedConcurrencyConfig takes a few seconds) but the customer's tier is already
+  // stored in DynamoDB, so re-deploys and new requests immediately use the new tier label.
+  if (hostingTier === "PROVISIONED" || previousTier === "PROVISIONED") {
+    void updateProvisionedConcurrency().catch(console.error);
+  }
 
   return NextResponse.json({
     ok: true,

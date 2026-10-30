@@ -199,7 +199,11 @@ export class PublishedSitesStack extends cdk.Stack {
       comment: "Short-TTL cache for published page HTML — see published-sites-stack.ts's own comment at this resource",
       defaultTtl: cdk.Duration.seconds(10),
       minTtl: cdk.Duration.seconds(0),
-      maxTtl: cdk.Duration.seconds(60),
+      // Raised from 60s to 3600s: STATIC-tier apps return Cache-Control: s-maxage=3600 for
+      // HTML (serveDeployedStatic.ts cacheControlFor), so CloudFront can cache them for up
+      // to an hour. LAMBDA/PROVISIONED tiers still return no-cache, which CloudFront treats
+      // as defaultTtl (10s) — behaviour unchanged for those tiers.
+      maxTtl: cdk.Duration.seconds(3600),
       cookieBehavior: cloudfront.CacheCookieBehavior.none(),
       queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("p", "page_id"),
       // The CloudFront-Viewer-* headers are how the app learns where a visit came from (the analytics

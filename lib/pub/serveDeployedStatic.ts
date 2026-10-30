@@ -13,10 +13,16 @@ function isHashedAsset(filename: string): boolean {
   return lastSegment.length >= 8 && /^[a-zA-Z0-9]+$/.test(lastSegment);
 }
 
-export function cacheControlFor(filePath: string): string {
+export function cacheControlFor(filePath: string, hostingTier?: string | null): string {
   const filename = filePath.split("/").pop() ?? filePath;
   const ext = filename.includes(".") ? filename.slice(filename.lastIndexOf(".") + 1).toLowerCase() : "";
-  if (ext === "html" || ext === "htm") return "no-cache";
+  if (ext === "html" || ext === "htm") {
+    // STATIC-tier apps: allow CloudFront to cache HTML for up to 1 hour so repeat visits
+    // never invoke Lambda. pageCachePolicy.maxTtl in published-sites-stack.ts is raised to
+    // 3600s to match. LAMBDA/PROVISIONED tiers: no-cache keeps Lambda in the critical path
+    // for every request (server-rendered or personalized content).
+    return hostingTier === "STATIC" ? "public, s-maxage=3600, max-age=300" : "no-cache";
+  }
   if (isHashedAsset(filename)) return "public, max-age=31536000, immutable";
   return "public, max-age=60, stale-while-revalidate=3600";
 }
@@ -90,9 +96,9 @@ export async function serveDeployedStatic(
 
     const headers = new Headers({
       "Content-Type": s3Res.headers.get("content-type") || "application/octet-stream",
-      "Cache-Control": cacheControlFor(candidate),
+      "Cache-Control": cacheControlFor(candidate, app.hostingTier),
       "X-Content-Type-Options": "nosniff",
-      "X-Plexo-Hosting-Tier": app.hostingTier ?? "STATIC",
+      "X-Plexo-Hosting-Tier": app.hostingTier ?? "LAMBDA",
     });
     const etag = s3Res.headers.get("etag");
     if (etag) headers.set("ETag", etag);

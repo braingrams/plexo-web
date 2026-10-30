@@ -511,14 +511,52 @@ export class ComputeStack extends cdk.Stack {
         ]),
       }),
     );
-    const serverFnUrl = serverFn.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.NONE });
-    // AuthType.NONE still requires an explicit resource policy granting invocation — CDK
-    // does not add this automatically the way it does for the AWS_IAM+OAC case above.
-    serverFn.addPermission("AllowPublicInvokeServerFnUrl", {
+    // PROVISIONED concurrency — Lambda only supports PC on a version alias, not on
+    // $LATEST. Route all CloudFront traffic through the "live" alias so that any
+    // PROVISIONED-tier DeployedApp benefits from warm instances without a code re-deploy.
+    // PROVISIONED_CONCURRENCY_COUNT is set by CI at deploy time when at least one
+    // PROVISIONED-tier app exists; lib/pub/updateProvisionedConcurrency.ts also calls the
+    // Lambda API directly at runtime when a customer upgrades/downgrades their tier, so PC
+    // self-heals without a full CDK re-deploy (which would be impractical for a per-customer
+    // change). When unset (zero PROVISIONED apps), no CfnProvisionedConcurrencyConfig is
+    // created and existing PC is left to whatever runtime last set (or none).
+    const serverFnAlias = new lambda.Alias(this, "ServerFnLiveAlias", {
+      aliasName: "live",
+      version: serverFn.currentVersion,
+      ...(process.env.PROVISIONED_CONCURRENCY_COUNT
+        ? { provisionedConcurrentExecutions: parseInt(process.env.PROVISIONED_CONCURRENCY_COUNT, 10) }
+        : {}),
+    });
+    // Function URL on the alias (not the bare function) — traffic that arrives via this URL
+    // is the traffic that can actually be served by provisioned-concurrency warm instances.
+    // invokeMode RESPONSE_STREAM removes the 6 MB buffered-response ceiling for large static
+    // assets served via serveDeployedStatic (lib/pub/serveDeployedStatic.ts).
+    const serverFnUrl = serverFnAlias.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
+    });
+    // AuthType.NONE still requires an explicit resource policy granting invocation.
+    serverFnAlias.addPermission("AllowPublicInvokeServerFnUrl", {
       principal: new iam.AnyPrincipal(),
       action: "lambda:InvokeFunctionUrl",
       functionUrlAuthType: lambda.FunctionUrlAuthType.NONE,
     });
+    // Let serverFn manage its own alias's PC at runtime (called by
+    // lib/pub/updateProvisionedConcurrency.ts when a customer changes hosting tier) — the
+    // runtime path updates PC immediately without waiting for a full CDK re-deploy.
+    serverFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "lambda:PutProvisionedConcurrencyConfig",
+          "lambda:DeleteProvisionedConcurrencyConfig",
+          "lambda:GetProvisionedConcurrencyConfig",
+        ],
+        resources: [serverFnAlias.aliasArn],
+      }),
+    );
+    // Injected so updateProvisionedConcurrency.ts can construct the alias ARN at runtime
+    // (function name + ":live" suffix) without a separate SSM lookup.
+    serverFn.addEnvironment("PLEXO_ACCOUNT_ID", this.account);
 
     const imageFn = new lambda.Function(this, "ImageOptimizationFn", {
       runtime: lambda.Runtime.NODEJS_24_X,
@@ -1114,6 +1152,9 @@ export class ComputeStack extends cdk.Stack {
     // of cross-stack reference (see cdk/bin/app.ts — one STACK_KIND per invocation).
     new cdk.CfnOutput(this, "ServerFnArn", { value: serverFn.functionArn, exportName: `${this.stackName}-ServerFnArn` });
     new cdk.CfnOutput(this, "ServerFnUrl", { value: serverFnUrl.url, exportName: `${this.stackName}-ServerFnUrl` });
+    // Alias ARN — consumed by lib/pub/updateProvisionedConcurrency.ts at runtime and by
+    // the deploy CI to call PutProvisionedConcurrencyConfig without a full CDK re-deploy.
+    new cdk.CfnOutput(this, "ServerFnAliasArn", { value: serverFnAlias.aliasArn, exportName: `${this.stackName}-ServerFnAliasArn` });
     new cdk.CfnOutput(this, "ImageFnArn", { value: imageFn.functionArn, exportName: `${this.stackName}-ImageFnArn` });
     new cdk.CfnOutput(this, "ImageFnUrl", { value: imageFnUrl.url, exportName: `${this.stackName}-ImageFnUrl` });
     new cdk.CfnOutput(this, "AssetsBucketName", { value: assetsBucket.bucketName, exportName: `${this.stackName}-AssetsBucketName` });
