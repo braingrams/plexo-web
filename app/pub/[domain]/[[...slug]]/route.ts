@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import type { EntityItem } from "electrodb";
 import { parseUserAgent, extractGeoFromHeaders } from "@/server/analytics";
-import { resolveHideBranding, canWhiteLabel, isHomePageOnlyPlan } from "@/lib/subscription";
+import { resolveHideBranding, canWhiteLabel, isHomePageOnlyPlan, getTierFeatures } from "@/lib/subscription";
 import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
@@ -540,7 +540,12 @@ async function serveSite(
   // a domain that has a DeployedApp entity.
   const { data: deployedApp } = await DeployedApp.get({ templateId: published.templateId }).go();
   if (deployedApp?.type === "STATIC") {
-    return serveDeployedStatic(request, deployedApp, slugSegments, { onNotFound: notFoundResponse });
+    const { deployedAppDailyRequestLimit } = getTierFeatures(published.user.subscriptionPlan);
+    return serveDeployedStatic(request, deployedApp, slugSegments, {
+      onNotFound: notFoundResponse,
+      templateId: published.templateId,
+      dailyRequestLimit: deployedAppDailyRequestLimit,
+    });
   }
 
   // WordPress's "Reading Settings: your homepage displays" toggle — when a site has

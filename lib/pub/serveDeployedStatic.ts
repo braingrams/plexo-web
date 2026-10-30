@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { RedirectRule } from "@/lib/db/appEntities";
 import { deployedAppFileUrl } from "@/lib/storage";
+import { checkDeployedAppDailyLimit } from "@/lib/pub/deployedAppRateLimit";
 
 // Hashed asset detection: Vite ("main-BszCFdh3.js"), Webpack ("main.abc12345.chunk.js"),
 // CRA ("runtime-main.a1b2c3d4.js"), Next.js export ("page-Abc12345.js") — all share the
@@ -55,9 +56,21 @@ export async function serveDeployedStatic(
   request: NextRequest,
   app: DeployedAppShape,
   slugSegments: string[],
-  options: { onNotFound?: () => NextResponse } = {},
+  options: { onNotFound?: () => NextResponse; dailyRequestLimit?: number | null; templateId?: string } = {},
 ): Promise<NextResponse> {
   const notFound = options.onNotFound ?? (() => new NextResponse(null, { status: 404 }));
+
+  // Daily Lambda-invocation cap — charged against the owner's plan limit.
+  // STATIC requests served from CloudFront cache never reach here, so they don't count.
+  if (options.templateId && options.dailyRequestLimit !== undefined) {
+    const allowed = await checkDeployedAppDailyLimit(options.templateId, options.dailyRequestLimit ?? null);
+    if (!allowed) {
+      return new NextResponse("Daily request limit reached. Upgrade your plan for more capacity.", {
+        status: 429,
+        headers: { "Retry-After": "86400", "Content-Type": "text/plain" },
+      });
+    }
+  }
   const s3Prefix = app.s3Prefix;
   if (!s3Prefix) return notFound();
 

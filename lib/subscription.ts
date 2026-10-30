@@ -95,6 +95,12 @@ export type TierFeatures = {
    * PROVISIONED = Lambda with provisioned concurrency, no cold starts, fixed monthly cost.
    */
   deployedAppHostingTiers: ("STATIC" | "LAMBDA" | "PROVISIONED")[];
+  /**
+   * Maximum Lambda invocations per calendar day for a deployed framework app. STATIC-tier
+   * requests served from CloudFront cache don't count (Lambda never runs). Enforced by
+   * lib/pub/deployedAppRateLimit.ts — returns 429 once exceeded. `null` = no daily cap.
+   */
+  deployedAppDailyRequestLimit: number | null;
 };
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
@@ -125,6 +131,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     maxPublishedSites: 1,
     maxPublishedPagesPerSite: 1,
     deployedAppHostingTiers: ["STATIC"],
+    deployedAppDailyRequestLimit: 1_000,
   },
   PRO: {
     maxEmailTemplates: 25,
@@ -146,6 +153,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     maxPublishedSites: null,
     maxPublishedPagesPerSite: null,
     deployedAppHostingTiers: ["STATIC", "LAMBDA"],
+    deployedAppDailyRequestLimit: 100_000,
   },
   ULTRA: {
     maxEmailTemplates: 100,
@@ -167,6 +175,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     maxPublishedSites: null,
     maxPublishedPagesPerSite: null,
     deployedAppHostingTiers: ["STATIC", "LAMBDA", "PROVISIONED"],
+    deployedAppDailyRequestLimit: null,
   },
 };
 
