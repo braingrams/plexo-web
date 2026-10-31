@@ -62,7 +62,7 @@ export default function TestimonialSubmitPage() {
       <div className="w-full max-w-xl space-y-6">
         {/* Back Link */}
         <Link
-          href="/"
+          href="https://www.plexopages.com"
           className="inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -106,7 +106,7 @@ export default function TestimonialSubmitPage() {
 
               <div className="pt-4">
                 <Link
-                  href="/"
+                  href="https://www.plexopages.com"
                   className={`bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white font-extrabold text-sm px-8 py-3.5 rounded-2xl shadow-lg inline-block transition-all`}
                 >
                   Return to Home
