@@ -71,6 +71,13 @@ export class PasswordResetRequiredError extends CredentialsSignin {
   code = "password_reset_required";
 }
 
+// The typed password is this person's OLD Plexo password: Charisol holds a newer one (changed there or in another
+// Charisol app). Said plainly instead of "incorrect password" so they know to use their latest Charisol password. Only
+// thrown when what they typed really is that old password, so it reveals nothing to someone who doesn't know it.
+export class PasswordChangedError extends CredentialsSignin {
+  code = "password_changed";
+}
+
 // Charisol holds this person's password but couldn't be reached — there's nothing else that
 // could safely check it, so say so rather than "wrong password".
 export class SignInUnavailableError extends CredentialsSignin {
@@ -153,8 +160,15 @@ export async function authorizePassword(
       throw new TooManyLoginAttemptsError();
     case "wrong_password":
     case "not_enabled":
-      if (enforced) return signInWithPlexoPassword(user, password, heldByCharisol, request);
-      if (charisol.kind === "wrong_password" && heldByCharisol) return null;
+      if (enforced) {
+        const viaPlexo = await signInWithPlexoPassword(user, password, heldByCharisol, request);
+        if (!viaPlexo && heldByCharisol) await throwIfOldPlexoPassword(user, password);
+        return viaPlexo;
+      }
+      if (charisol.kind === "wrong_password" && heldByCharisol) {
+        await throwIfOldPlexoPassword(user, password);
+        return null;
+      }
       break;
     case "unavailable":
       if (enforced || heldByCharisol) throw new SignInUnavailableError();
@@ -182,6 +196,13 @@ async function signInWithPlexoPassword(
 ): Promise<CharisolLocalUser | null> {
   if (heldByCharisol || !user?.passwordHash || !user.isConfirmed) return null;
   return localPasswordCheck(user, password, request);
+}
+
+/** Throws PasswordChangedError when `password` is the person's old Plexo password (so they can be told it was changed). */
+async function throwIfOldPlexoPassword(user: EntityItem<typeof User> | undefined, password: string): Promise<void> {
+  if (!user?.passwordHash || !user.isConfirmed || user.suspendedAt) return;
+  if (password.trim().toLowerCase() === user.email.toLowerCase()) return;
+  if (await verifyPassword(user.passwordHash, password)) throw new PasswordChangedError();
 }
 
 /** Plexo's own stored password — for accounts Charisol doesn't hold a password for yet. */

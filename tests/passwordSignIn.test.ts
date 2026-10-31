@@ -107,9 +107,9 @@ describe("authorizePassword — Charisol rejects the password", () => {
     expect(await authorizePassword("ada@example.com", "Wrong-Password-1", request, deps({ kind: "wrong_password" }))).toBeNull();
   });
 
-  it("Charisol holds the password: the old Plexo password is NOT accepted", async () => {
+  it("Charisol holds the password: the old Plexo password is NOT accepted, and they're told it was changed", async () => {
     await seed({ charisolPasswordAt: "2026-10-01T00:00:00.000Z" });
-    expect(await authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "wrong_password" }))).toBeNull();
+    expect(await codeOf(authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "wrong_password" })))).toBe("password_changed");
   });
 
   it("a Google-linked user (charisolSub but no Charisol password) can still use their Plexo password", async () => {
@@ -188,11 +188,16 @@ describe("authorizePassword — CHARISOL_PASSWORD_ENFORCED on", () => {
     expect(d.sendResetCode).not.toHaveBeenCalled();
   });
 
-  it("wrong at Charisol + old Plexo password, but Charisol holds their password: refused, old password is dead", async () => {
+  it("wrong at Charisol + old Plexo password, but Charisol holds their password: refused and told it was changed", async () => {
     await seed({ charisolPasswordAt: "2026-10-01T00:00:00.000Z" });
     const d = deps({ kind: "wrong_password" });
-    expect(await authorizePassword("ada@example.com", PASSWORD, request, d)).toBeNull();
+    expect(await codeOf(authorizePassword("ada@example.com", PASSWORD, request, d))).toBe("password_changed");
     expect(d.sendResetCode).not.toHaveBeenCalled();
+  });
+
+  it("wrong at Charisol + a password that was never theirs: plain wrong password, nothing revealed", async () => {
+    await seed({ charisolPasswordAt: "2026-10-01T00:00:00.000Z" });
+    expect(await authorizePassword("ada@example.com", "Wrong-Password-1", request, deps({ kind: "wrong_password" }))).toBeNull();
   });
 
   it("wrong at Charisol + wrong local password: generic refusal, no code", async () => {

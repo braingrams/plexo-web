@@ -47,6 +47,8 @@ export const authClient = {
           google_account_only: { status: 409, message: "This account uses Google sign-in — there's no password to check." },
           // server/passwordSignIn.ts: Charisol Auth needs a new password; a code has been emailed.
           password_reset_required: { status: 428, message: "Your Charisol password was set in another app (or needs to be stronger). We've emailed you a code to set one password for every Charisol app." },
+          // server/passwordSignIn.ts: they typed their old Plexo password; Charisol holds a newer one.
+          password_changed: { status: 401, message: "Your password was changed recently, so your old Plexo password no longer works. Sign in with your latest Charisol password, or choose “Forgot password” to set a new one." },
           account_suspended: { status: 403, message: "This account has been suspended, so you can't sign in right now. If you think that's a mistake, contact Plexo support." },
           sign_in_unavailable: { status: 503, message: "Sign-in is temporarily unavailable. Please try again in a few minutes." },
         };
