@@ -7,7 +7,7 @@ import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "node:path";
 import { buildLogGroup } from "./conventions";
-import { ssrFunctionScope } from "../../lib/appFunctions/ssrNames";
+import { ssrFunctionScope } from "./ssrScope";
 
 /** A PR's throwaway preview stack (STACK_ID "pr-<number>-plexo"), not staging or production. */
 const IS_PR_PREVIEW = /^pr-\d+/.test(process.env.STACK_ID ?? "");

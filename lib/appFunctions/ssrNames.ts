@@ -21,12 +21,3 @@ export function ssrFunctionName(templateId: string, target: SsrTarget = "live", 
   const room = LAMBDA_NAME_LIMIT - prefix.length - suffix.length - hash.length - 1;
   return `${prefix}${templateId.slice(0, room)}-${hash}${suffix}`;
 }
-
-/** Short tag for a stack's SSR function names: "pr173" for a PR preview, "stg" for staging,
- * "prod" for production. Short so names stay inside Lambda's 64-character limit. */
-export function ssrFunctionScope(stackId: string): string {
-  const pr = /^pr-(\d+)-plexo$/.exec(stackId);
-  if (pr) return `pr${pr[1]}`;
-  if (stackId.startsWith("staging")) return "stg";
-  return "prod";
-}

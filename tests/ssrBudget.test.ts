@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { SSR_BUILD_PROJECTED_COST_USD, fitsBudget, monthKey } from "@/lib/projects/ssrBudget";
 import { getTierFeatures } from "@/lib/subscription";
-import { ssrFunctionName, ssrFunctionScope } from "@/lib/appFunctions/ssrNames";
+import { ssrFunctionName } from "@/lib/appFunctions/ssrNames";
+import { ssrFunctionScope } from "../cdk/lib/ssrScope";
 import { SSR_DISABLED_FRAMEWORKS } from "@/lib/projects/ssrSource";
 
 describe("SSR monthly budget", () => {
