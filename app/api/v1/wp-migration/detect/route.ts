@@ -9,6 +9,22 @@ import { estimateMigrationSeconds, formatDuration } from "@/lib/wpMigration/esti
 export const maxDuration = 60;
 
 /**
+ * The owner gave an address with a folder in it ("example.com/blog"), so only that WordPress would be moved. When the
+ * domain itself has pages in front of it (a splash page, a chooser) they'd be silently left behind — so say so and offer
+ * the whole site instead. Undefined when the folder really is all there is, or the domain root can't be read.
+ */
+async function wholeSiteOption(origin: string, homeUrl: string): Promise<{ url: string; staticPages: string[] } | undefined> {
+  try {
+    const whole = await discoverWordPressInstall(`${origin}/`);
+    const sameWordPress = whole.homeUrl.replace(/\/+$/, "") === homeUrl.replace(/\/+$/, "");
+    if (!sameWordPress || whole.staticPages.length === 0) return undefined;
+    return { url: `${origin}/`, staticPages: whole.staticPages };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * POST /api/v1/wp-migration/detect
  *
  * Finds the WordPress install behind any URL (domain root, deep link, subdirectory install,
@@ -37,7 +53,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "That site was flagged as unsafe (malware or phishing), so it can't be moved." }, { status: 400 });
     }
     const preview = await previewInstall(install);
-    return NextResponse.json({ install, preview, estimatedDuration: formatDuration(estimateMigrationSeconds(preview.counts)) });
+    const wholeSite = install.scopedToPath ? await wholeSiteOption(install.origin, install.homeUrl) : undefined;
+    return NextResponse.json({ install, preview: wholeSite ? { ...preview, wholeSite } : preview, estimatedDuration: formatDuration(estimateMigrationSeconds(preview.counts)) });
   } catch (err) {
     if (err instanceof WordPressNotFoundError) return NextResponse.json({ error: err.message, notWordPress: true }, { status: 422 });
     if (err instanceof Error && err.name === "SsrfBlockedError") {

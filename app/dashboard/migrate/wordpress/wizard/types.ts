@@ -10,6 +10,8 @@ export interface Preview {
   homeUrl: string;
   inSubdirectory: boolean;
   staticPages: string[];
+  /** Set when the owner gave a folder but the domain has pages in front of it: moving the whole site is possible. */
+  wholeSite?: { url: string; staticPages: string[] };
   counts: { pages: number; posts: number; media: number; categories: number; tags: number };
   theme: { slug: string; parentSlug: string | null } | null;
   plugins: Plugin[];
