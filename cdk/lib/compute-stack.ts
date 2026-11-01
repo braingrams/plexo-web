@@ -551,7 +551,7 @@ export class ComputeStack extends cdk.Stack {
           "lambda:DeleteProvisionedConcurrencyConfig",
           "lambda:GetProvisionedConcurrencyConfig",
         ],
-        resources: [serverFnAlias.aliasArn],
+        resources: [serverFnAlias.functionArn],
       }),
     );
     // Injected so updateProvisionedConcurrency.ts can construct the alias ARN at runtime
@@ -1154,7 +1154,7 @@ export class ComputeStack extends cdk.Stack {
     new cdk.CfnOutput(this, "ServerFnUrl", { value: serverFnUrl.url, exportName: `${this.stackName}-ServerFnUrl` });
     // Alias ARN — consumed by lib/pub/updateProvisionedConcurrency.ts at runtime and by
     // the deploy CI to call PutProvisionedConcurrencyConfig without a full CDK re-deploy.
-    new cdk.CfnOutput(this, "ServerFnAliasArn", { value: serverFnAlias.aliasArn, exportName: `${this.stackName}-ServerFnAliasArn` });
+    new cdk.CfnOutput(this, "ServerFnAliasArn", { value: serverFnAlias.functionArn, exportName: `${this.stackName}-ServerFnAliasArn` });
     new cdk.CfnOutput(this, "ImageFnArn", { value: imageFn.functionArn, exportName: `${this.stackName}-ImageFnArn` });
     new cdk.CfnOutput(this, "ImageFnUrl", { value: imageFnUrl.url, exportName: `${this.stackName}-ImageFnUrl` });
     new cdk.CfnOutput(this, "AssetsBucketName", { value: assetsBucket.bucketName, exportName: `${this.stackName}-AssetsBucketName` });
