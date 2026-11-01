@@ -29,6 +29,16 @@ export type BuildJob = {
   publicEnv: Record<string, string>;
   /** DynamoDB table holding the ProjectBuild row (ElectroDB lowercases keys: pk `pbuild#<buildId>`, sk `pbuild`). */
   buildsTable: string;
+  /** "app" (default, a static site plus server functions) or "ssr" (a server-rendered app
+   * built into a per-customer Lambda). Absent on jobs queued before SSR existed, so readers
+   * must treat a missing kind as "app". */
+  kind?: "app" | "ssr";
+  /** SSR only: S3 key of the uploaded source zip (lib/projects/ssrSource.ts validated it). */
+  ssrSourceKey?: string;
+  /** SSR only: the framework detected at upload, which picks the build path. */
+  ssrFramework?: "nextjs" | "nuxt" | "nitro" | "remix" | "astro";
+  /** SSR only: the app-root folder inside the zip ("" or "my-site/"). */
+  ssrRoot?: string;
 };
 
 export type BuildDiagnostic = {

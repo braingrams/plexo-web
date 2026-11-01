@@ -101,6 +101,16 @@ export type TierFeatures = {
    * lib/pub/deployedAppRateLimit.ts — returns 429 once exceeded. `null` = no daily cap.
    */
   deployedAppDailyRequestLimit: number | null;
+  /**
+   * Server-rendered (SSR) apps: upload, build, publish, env vars, and serving. Only ULTRA for now.
+   * Every SSR endpoint and the SSR serving paths check this flag.
+   */
+  ssrEnabled: boolean;
+  /**
+   * Monthly budget, in projected USD, for SSR builds. Each build reserves a fixed projected cost
+   * (lib/projects/ssrBudget.ts), so the budget caps builds per month. 0 when SSR is off.
+   */
+  ssrMonthlyBudgetUsd: number;
 };
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
@@ -132,6 +142,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     maxPublishedPagesPerSite: 1,
     deployedAppHostingTiers: ["STATIC"],
     deployedAppDailyRequestLimit: 1_000,
+    ssrEnabled: false,
+    ssrMonthlyBudgetUsd: 0,
   },
   PRO: {
     maxEmailTemplates: 25,
@@ -154,6 +166,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     maxPublishedPagesPerSite: null,
     deployedAppHostingTiers: ["STATIC", "LAMBDA"],
     deployedAppDailyRequestLimit: 100_000,
+    ssrEnabled: false,
+    ssrMonthlyBudgetUsd: 0,
   },
   ULTRA: {
     maxEmailTemplates: 100,
@@ -176,6 +190,8 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     maxPublishedPagesPerSite: null,
     deployedAppHostingTiers: ["STATIC", "LAMBDA", "PROVISIONED"],
     deployedAppDailyRequestLimit: null,
+    ssrEnabled: true,
+    ssrMonthlyBudgetUsd: 6,
   },
 };
 

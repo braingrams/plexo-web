@@ -4,7 +4,7 @@ import type { EntityItem } from "electrodb";
 import { ProjectBuild, type ProjectBuildError } from "@/lib/db/projectEntities";
 import { Template } from "@/lib/db/contentEntities";
 import { TABLES } from "@/lib/db/client";
-import { projectBucket, projectPrefix, versionManifestKey, buildPrefix, buildSitePrefix, buildResultKey, getObject } from "./blobStore";
+import { projectBucket, projectPrefix, versionManifestKey, buildPrefix, buildSitePrefix, buildResultKey, getObject, putObject } from "./blobStore";
 import { BUILD_JOB_VERSION, assetBaseFor, type BuildJob } from "./buildJob";
 
 // Queues and tracks builds. Builds run in lambda/project-build, fed by an SQS queue: the
@@ -78,6 +78,64 @@ export async function startBuild(
     requestedBy: input.requestedBy,
     postStatus: "PENDING",
     publishSubdomain: input.publishSubdomain,
+  }).go();
+
+  await queue().send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify(job) }));
+  return created.data;
+}
+
+/** Queues a server-rendered (SSR) build: stores the source zip, then enqueues a job the
+ * build Lambda runs down its SSR path (lambda/project-build). Finalizing an SSR build deploys
+ * the per-customer plexo-ssr-<templateId> function instead of switching a static site live. */
+export async function startSsrBuild(input: {
+  templateId: string;
+  organizationId: string;
+  requestedBy?: string;
+  sourceZip: Uint8Array;
+  framework: NonNullable<BuildJob["ssrFramework"]>;
+  root: string;
+}): Promise<ProjectBuildItem> {
+  const queueUrl = process.env.PROJECT_BUILD_QUEUE_URL;
+  if (!queueUrl) throw new BuildUnavailableError("App builds aren't available in this environment yet (PROJECT_BUILD_QUEUE_URL isn't set).");
+
+  const id = randomUUID();
+  const bucket = projectBucket();
+  const sourceKey = `${buildPrefix(input.templateId, id)}/ssr-source.zip`;
+  await putObject(sourceKey, input.sourceZip, "application/zip");
+
+  const job: BuildJob = {
+    v: BUILD_JOB_VERSION,
+    buildId: id,
+    templateId: input.templateId,
+    versionId: `ssr-${id}`,
+    mode: "preview",
+    bucket,
+    manifestKey: "",
+    blobPrefix: "",
+    sitePrefix: buildSitePrefix(input.templateId, id),
+    functionsPrefix: `${buildPrefix(input.templateId, id)}/functions`,
+    resultKey: buildResultKey(input.templateId, id),
+    logKey: `${buildPrefix(input.templateId, id)}/log.txt`,
+    assetBase: assetBaseFor(id),
+    publicEnv: {},
+    buildsTable: TABLES.content,
+    kind: "ssr",
+    ssrSourceKey: sourceKey,
+    ssrFramework: input.framework,
+    ssrRoot: input.root,
+  };
+
+  const created = await ProjectBuild.create({
+    id,
+    templateId: input.templateId,
+    organizationId: input.organizationId,
+    versionId: job.versionId,
+    status: "QUEUED",
+    mode: "preview",
+    kind: "ssr",
+    outputPrefix: job.sitePrefix,
+    requestedBy: input.requestedBy,
+    postStatus: "PENDING",
   }).go();
 
   await queue().send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify(job) }));

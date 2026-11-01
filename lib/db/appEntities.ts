@@ -39,6 +39,19 @@ export const DeployedApp = new Entity(
       redirectRules: { type: "any" },
       // Framework detected from the zip's output structure at upload time.
       framework: { type: "string" },
+      // SSR sites (type SSR): the per-customer function and its IAM Function URL, the build that
+      // produced them, and the S3 prefix of its static files (served without invoking the function).
+      functionName: { type: "string" },
+      functionUrl: { type: "string" },
+      buildId: { type: "string" },
+      ssrSitePrefix: { type: "string" },
+      // SSR previews: a separate function (plexo-ssr-<id>-pv) that serves the latest SSR build
+      // before it is published. Publishing copies these into the live fields above.
+      previewFunctionName: { type: "string" },
+      previewFunctionUrl: { type: "string" },
+      previewBuildId: { type: "string" },
+      previewSitePrefix: { type: "string" },
+      previewBundleKey: { type: "string" },
       // Pointer to the most recent Deployment entity (Phase 2). Null until then.
       activeDeploymentId: { type: "string" },
       createdAt: {
@@ -231,5 +244,32 @@ export const AppRuntimeError = new Entity(
 
 export const plexoAppsService = new Service(
   { AppDatabase, AppSecret, AppSettings, AppFunction },
+  { table, client: docClient },
+);
+
+// Projected SSR build spend per organization per calendar month (UTC), for the plan budget
+// (lib/projects/ssrBudget.ts). Each build adds its projected cost, not its measured cost.
+export const SsrUsage = new Entity(
+  {
+    model: { entity: "ssrUsage", version: "1", service: "plexoContent" },
+    attributes: {
+      organizationId: { type: "string", required: true },
+      month: { type: "string", required: true }, // "YYYY-MM"
+      projectedCostUsd: { type: "number", default: 0 },
+      buildCount: { type: "number", default: 0 },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["organizationId"], template: "ORG#${organizationId}" },
+        sk: { field: "sk", composite: ["month"], template: "SSRUSAGE#${month}" },
+      },
+    },
+  },
   { table, client: docClient },
 );
