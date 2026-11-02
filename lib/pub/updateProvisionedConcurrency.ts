@@ -1,10 +1,9 @@
-import { LambdaClient, PutProvisionedConcurrencyConfigCommand, DeleteProvisionedConcurrencyConfigCommand } from "@aws-sdk/client-lambda";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DeployedApp } from "@/lib/db/appEntities";
 
-// The alias that all CloudFront traffic routes through (compute-stack.ts "ServerFnLiveAlias").
-// PC is set on the alias, not on $LATEST, so only traffic arriving via this qualifier
-// benefits from pre-warmed instances.
-const ALIAS_NAME = "live";
+// The warm-copy count is set by the separate PcScalerFn (compute-stack.ts), which is the only
+// function allowed to change it. This module only decides the number and asks that function to
+// apply it. The alias it targets is "live" (the qualifier all CloudFront traffic uses).
 
 async function countProvisionedApps(): Promise<number> {
   // Full scan with filter — acceptable because DeployedApp is one row per deployed site
@@ -24,33 +23,20 @@ async function countProvisionedApps(): Promise<number> {
 // No-ops outside a real Lambda environment (no AWS_LAMBDA_FUNCTION_NAME / PLEXO_ACCOUNT_ID)
 // so it's safe to call in local dev where those vars are absent.
 export async function updateProvisionedConcurrency(): Promise<void> {
-  if (!process.env.AWS_LAMBDA_FUNCTION_NAME || !process.env.PLEXO_ACCOUNT_ID) return;
+  const scaler = process.env.PC_SCALER_FUNCTION_NAME;
+  if (!process.env.AWS_LAMBDA_FUNCTION_NAME || !scaler) return;
 
-  const functionName = process.env.AWS_LAMBDA_FUNCTION_NAME;
   const count = await countProvisionedApps();
+  // No PROVISIONED customers: 0 removes warm copies. Otherwise 2 per customer, floored at 5.
+  // Each warm instance serves one concurrent request; 2x headroom handles short bursts.
+  const desired = count === 0 ? 0 : Math.max(count * 2, 5);
+
   const client = new LambdaClient({ region: process.env.AWS_REGION });
-
-  if (count === 0) {
-    // No PROVISIONED customers — remove PC so the function scales to zero normally.
-    try {
-      await client.send(
-        new DeleteProvisionedConcurrencyConfigCommand({ FunctionName: functionName, Qualifier: ALIAS_NAME }),
-      );
-    } catch (err: unknown) {
-      // ResourceNotFoundException = PC was never set. Fine — nothing to delete.
-      if ((err as { name?: string }).name !== "ResourceNotFoundException") throw err;
-    }
-    return;
-  }
-
-  // 2 warm instances per PROVISIONED customer, floored at 5.
-  // Each warm instance can serve one concurrent request; 2× headroom handles short bursts.
-  const targetPc = Math.max(count * 2, 5);
-  await client.send(
-    new PutProvisionedConcurrencyConfigCommand({
-      FunctionName: functionName,
-      Qualifier: ALIAS_NAME,
-      ProvisionedConcurrentExecutions: targetPc,
-    }),
+  const res = await client.send(
+    new InvokeCommand({ FunctionName: scaler, Payload: JSON.stringify({ provisionedConcurrency: desired }) }),
   );
+  const body = JSON.parse(Buffer.from(res.Payload ?? new Uint8Array()).toString("utf8") || "{}");
+  if (res.FunctionError || !body.ok) {
+    throw new Error(`Setting provisioned concurrency failed: ${body.error ?? res.FunctionError ?? "unknown error"}`);
+  }
 }
