@@ -8,16 +8,22 @@ import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
 import { fillLatestPostLists } from "@/lib/pub/livePostQueries";
 import { Template, TemplateAsset, BlogSite, PublishedDomain } from "@/lib/db/contentEntities";
+import { DeployedApp } from "@/lib/db/appEntities";
+import { serveDeployedStatic } from "@/lib/pub/serveDeployedStatic";
 import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
 import { getStorefrontPath, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
+import { orderLinkOnHomepage } from "@/lib/commerce/returnPath";
 import { deriveCommerceTheme, type CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
-import { PageView } from "@/lib/db/opsEntities";
+import { FormSettings, PageView } from "@/lib/db/opsEntities";
 import { recordPageViewRollup } from "@/lib/analyticsRollup";
-import { escapeHtmlAttr, injectBrandingBar, injectFavicon, injectSeoTags } from "@/lib/pub/htmlInject";
+import { renderContentBlocks } from "@/lib/customContent/render";
+import { applyActiveNav } from "@/lib/pub/activeNav";
+import { CONTENT_MARKER_ATTR, escapeHtmlAttr, injectBrandingBar, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags } from "@/lib/pub/htmlInject";
 import { serveProject } from "@/lib/projects/serve";
 import { resolvePreviewHost } from "@/lib/projects/previewHost";
 import { User, Organization } from "@/lib/db/coreEntities";
 import { buildSiteRobotsTxt, buildSiteSitemap } from "@/lib/pub/siteSitemap";
+import { cleanPathFor, mountedSegments, normalizeMountPrefix, unmountLocation, unmountText } from "@/lib/pub/mountPrefix";
 import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 
@@ -114,7 +120,10 @@ function inactiveDomainResponse(domain: string, domainType: "SUBDOMAIN" | "CUSTO
 /** Free serves only a site's homepage: anything else sends the visitor home. Never cached,
  * so the page is back the moment the owner upgrades. */
 function homePageRedirect(request: NextRequest): NextResponse {
-  return NextResponse.redirect(new URL("/", request.url), { status: 302, headers: { "Cache-Control": "no-store" } });
+  // A payment/confirmation link keeps its order on the way home, so a one-page site can still show it.
+  const requestUrl = new URL(request.url);
+  const target = orderLinkOnHomepage(requestUrl.pathname, requestUrl.search) ?? "/";
+  return NextResponse.redirect(new URL(target, request.url), { status: 302, headers: { "Cache-Control": "no-store" } });
 }
 
 const NON_HTML_FILE = /\.(css|js|mjs|map|json|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot|mp4|webm|mp3|wav|pdf|zip|txt|xml)$/i;
@@ -151,49 +160,6 @@ function resolveCommerceTheme(
     };
   }
   return deriveCommerceTheme(rootDesignJson);
-}
-
-// Plexo Commerce's runtime — the marker divs product/booking/shop_grid/etc. compile to
-// (see plexo-sdk's compiler.ts) carry no inline <script> of their own (sanitizeCompiledHtml.ts
-// strips script tags from the compiled body itself, BUILDER or RAW_UPLOAD), so this is
-// injected outside that sanitized body, the same way as injectBrandingBar below — a
-// Commerce-disabled site never gets this tag at all, see the call site's CommerceSettings
-// gate.
-function injectCommerceScript(html: string, storefrontPath: string, checkoutPath: string | null, theme: CommerceTheme | null, productBase: string | null = null): string {
-  // ?v=<deploy sha> busts both CloudFront and any visitor's browser cache on every
-  // deploy — see cdk/lib/compute-stack.ts's assetVersion comment for why the origin's
-  // own shorter Cache-Control on commerce.js isn't enough by itself (a browser that
-  // already cached the pre-fix immutable response never re-requests this exact URL).
-  // The config script must load BEFORE commerce.js reads window.__PLEXO_COMMERCE__ at
-  // parse time — storefrontPath lets the site owner rename the storefront's URL (default
-  // /store) without a commerce.js code change. checkoutPath is the checkout page's own
-  // REAL resolved path (see getCheckoutPath) — commerce.js used to assume it always lives
-  // at "{storefrontPath}/checkout" (true for the auto-provisioned flow, where checkout is
-  // a genuine child of the storefront page), which 404ed for a hand-built site whose
-  // checkout page isn't nested under its shop page at all; null falls back to that same
-  // old assumption client-side, for a site with no CommerceSettings row yet. `theme` is
-  // null when there's neither a merchant override nor an auto-detected signal (see the
-  // call site) — commerce.js falls back to its own hardcoded look in that case, unchanged
-  // from before theming existed. JSON.stringify already escapes quotes; the "</" replace
-  // is defense in depth against a slug somehow containing it.
-  // productBase: where product pages live (CommerceSettings.productUrlBase, e.g. a migrated
-  // WooCommerce store's "/product"); null = under the storefront page.
-  const configTag = `<script>window.__PLEXO_COMMERCE__=${JSON.stringify({ storefrontPath, checkoutPath, theme, productBase }).replace(/<\//g, "<\\/")};</script>`;
-  const scriptTag = `${configTag}<script src="/commerce.js?v=${process.env.ASSET_VERSION ?? "dev"}" defer></script>`;
-  const maskedHtml = html.replace(
-    /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
-    (block) => " ".repeat(block.length),
-  );
-  let insertAt = -1;
-  const bodyCloseRe = /<\/body\s*>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = bodyCloseRe.exec(maskedHtml)) !== null) {
-    insertAt = match.index;
-  }
-  if (insertAt !== -1) {
-    return html.slice(0, insertAt) + scriptTag + html.slice(insertAt);
-  }
-  return html + scriptTag;
 }
 
 // The Funnel/LMS module's runtime — same shape as injectCommerceScript above, and the
@@ -363,6 +329,12 @@ function optimizeImages(html: string): string {
   });
 }
 
+// ─── Deployed static app serving ─────────────────────────────────────────────
+// serveDeployedStatic is imported from lib/pub/serveDeployedStatic.ts, which is
+// also used by app/pub/[domain]/_dp/[[...path]]/route.ts (the blog-path proxy).
+
+// ─── Builder / RAW_UPLOAD serving (existing path) ────────────────────────────
+
 /** Prisma's `prisma.template.findFirst({ where: { parentId, slug } })` — Template has no
  * (parentId, slug) direct index, only byParent (GSI2, sorted by order), so this fetches the
  * parent's children (small in practice — a site's own page tree) and matches in memory,
@@ -415,7 +387,60 @@ async function servePreviewHost(request: NextRequest, host: string, templateId: 
   });
 }
 
+const MOUNTED_TEXT_TYPE = /^(text\/(html|css|javascript|plain|xml)|application\/(javascript|json|xml|ld\+json)|image\/svg\+xml)/i;
+
+/**
+ * A site stored under a folder ("/serenity") that is served at the domain root: /about serves the stored
+ * /serenity/about, the folder's own addresses redirect to the clean ones, and the links the site sends are
+ * shortened to match (lib/pub/mountPrefix.ts). Every other site goes straight to serveSite.
+ */
 export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ domain: string; slug?: string[] }> },
+): Promise<NextResponse> {
+  const params = await context.params;
+  const rawDomain = decodeURIComponent(params.domain);
+  const site = await resolveSite(rawDomain);
+  const prefix = site.status === "ok" ? normalizeMountPrefix(site.published.template.servedFromPrefix) : null;
+  if (!prefix || site.status !== "ok") return serveSite(request, context);
+
+  const segments = params.slug ?? [];
+  const url = new URL(request.url);
+  // Files Plexo writes for the whole site (not stored pages) are answered as they are; their web addresses are then cleaned like the rest.
+  const platformFile = segments.length === 1 && /^(sitemap\.xml|robots\.txt)$/i.test(segments[0]);
+  const clean = platformFile ? null : cleanPathFor(prefix, segments.map(safeDecode));
+  if (clean !== null) {
+    const slash = url.pathname.endsWith("/") && clean !== "/" ? "/" : "";
+    return NextResponse.redirect(new URL(`${clean}${slash}${url.search}`, request.url), 301);
+  }
+
+  // The site renders as if the visitor had asked for the stored address (its trailing-slash and canonical rules
+  // compare against the request's path), so hand it that address; what it sends back is cleaned up below.
+  const mappedUrl = new URL(request.url);
+  mappedUrl.pathname = `${prefix}${url.pathname === "/" ? "/" : url.pathname}`;
+  const res = platformFile
+    ? await serveSite(request, context)
+    : await serveSite(new NextRequest(mappedUrl, request), { params: Promise.resolve({ domain: params.domain, slug: mountedSegments(prefix, segments) }) });
+  const location = res.headers.get("location");
+  if (res.status >= 300 && res.status < 400 && location) {
+    const headers = new Headers(res.headers);
+    headers.set("location", unmountLocation(prefix, location, request.url));
+    return new NextResponse(null, { status: res.status, headers });
+  }
+  const type = res.headers.get("content-type") ?? "";
+  if (!res.body || !MOUNTED_TEXT_TYPE.test(type)) return res;
+  const text = unmountText(await res.text(), {
+    prefix,
+    sourceOrigin: site.published.template.migratedFrom ?? null,
+    siteOrigin: `${rawDomain.endsWith(".localhost") ? "http" : "https"}://${rawDomain}`,
+  });
+  const headers = new Headers(res.headers);
+  headers.delete("content-length");
+  headers.delete("etag");
+  return new NextResponse(text, { status: res.status, headers });
+}
+
+async function serveSite(
   request: NextRequest,
   context: { params: Promise<{ domain: string; slug?: string[] }> }
 ): Promise<NextResponse> {
@@ -468,6 +493,15 @@ export async function GET(
       const target = new URL(request.url);
       return NextResponse.redirect(`https://${canonicalHost}${target.pathname}${target.search}`, 301);
     }
+  }
+
+  // Deployed framework app (Phase 1: static; Phase 3: SSR) — checked before the builder
+  // path so a site that has been migrated to a framework build is served correctly even if
+  // its underlying Template row still exists. The builder/RAW_UPLOAD path never runs for
+  // a domain that has a DeployedApp entity.
+  const { data: deployedApp } = await DeployedApp.get({ templateId: published.templateId }).go();
+  if (deployedApp?.type === "STATIC") {
+    return serveDeployedStatic(request, deployedApp, slugSegments, { onNotFound: notFoundResponse });
   }
 
   // WordPress's "Reading Settings: your homepage displays" toggle — when a site has
@@ -542,6 +576,12 @@ export async function GET(
     const last = slugSegments[slugSegments.length - 1] ?? "";
     if (homeOnly) return remainingSegments.length > 0 && NON_HTML_FILE.test(last) ? notFoundResponse() : homePageRedirect(request);
     if (unpublishedOnPath) return notFoundResponse();
+    // "about.html" and "/about" are the same page; one address for search engines and bookmarks
+    // (the uploaded site's own links often say "about.html").
+    if (remainingSegments.length === 0 && /\.html?$/i.test(last)) {
+      const clean = [...slugSegments.slice(0, -1), last.replace(/\.html?$/i, "")];
+      return NextResponse.redirect(new URL(`/${clean.join("/")}${new URL(request.url).search}`, request.url), 301);
+    }
   }
 
   // A raw-uploaded page's own root document is never itself a TemplateAsset — the zip
@@ -619,7 +659,11 @@ export async function GET(
       siteName: published.template.name || rawDomain,
     });
     html = optimizeImages(html);
-    if (cursor.sourceType !== "RAW_UPLOAD") {
+    // The menu link for the page the visitor is on is marked (and underlined in the editor's own menus).
+    html = applyActiveNav(html, new URL(request.url).pathname, rawDomain);
+    // New-editor (V2) pages have their custom script baked into compiledHtml at compile time
+    // (lib/v2/compile.ts); only classic pages re-inject it from designJson here.
+    if (cursor.sourceType !== "RAW_UPLOAD" && cursor.designFormat !== "v2") {
       html = injectCustomJs(html, (cursor.designJson as { body?: { style?: { customJs?: string } } } | null)?.body?.style?.customJs);
     }
 
@@ -669,6 +713,17 @@ export async function GET(
     // live on the same entity) rather than a second DB read.
     if (commerceSettings?.newsletterPopupEnabled && commerceSettings?.maildripNewsletterGroupId) {
       html = injectNewsletterPopupScript(html);
+    }
+
+    // Content widget + form connector: gated on what the page actually contains, so a page
+    // with neither never loads them. Same for builder pages and raw uploads.
+    if (html.includes(CONTENT_MARKER_ATTR)) {
+      // Written into the page itself so search engines read it; the script then keeps it live.
+      html = await renderContentBlocks(html, published.templateId, `https://${rawDomain}`);
+      html = injectContentScript(html);
+    }
+    if (/<form[\s>]/i.test(html) || html.includes("data-plexo-form")) {
+      html = injectFormsScript(html, published.templateId, { auto: true });
     }
 
     // Record analytics view asynchronously (does not block client response)
@@ -873,6 +928,20 @@ export async function GET(
   if (/^(font\/|application\/(font|x-font|vnd\.ms-fontobject))/i.test(asset.contentType) || /\.(woff2?|ttf|otf|eot)$/i.test(remainingSegments.join("/"))) {
     headers.set("Access-Control-Allow-Origin", "*");
   }
+  // An HTML file that is served as a page of the site gets the same form + content support as any
+  // page, so its contact form works and says thank you.
+  if (/^text\/html/i.test(asset.contentType)) {
+    let html = applyActiveNav(await assetRes.text(), new URL(request.url).pathname, rawDomain);
+    if (html.includes(CONTENT_MARKER_ATTR)) {
+      html = await renderContentBlocks(html, published.templateId, `https://${rawDomain}`);
+      html = injectContentScript(html);
+    }
+    if (/<form[\s>]/i.test(html) || html.includes("data-plexo-form")) {
+      html = injectFormsScript(html, published.templateId, { auto: true });
+    }
+    headers.set("Cache-Control", "public, max-age=0, s-maxage=30, must-revalidate");
+    return new NextResponse(html, { headers });
+  }
   const etag = assetRes.headers.get("etag");
   if (etag) headers.set("ETag", etag);
   const lastModified = assetRes.headers.get("last-modified");
@@ -931,6 +1000,57 @@ function humanizeRoute(path: string): string {
   return tail.join(" — ") || "Website form";
 }
 
+/** Where the visitor goes back to after a form on `path` was sent: the thank-you page the owner set, else the same page. */
+async function handlePageFormPost(
+  request: NextRequest,
+  published: { templateId: string; organization: { id: string } },
+  host: string,
+  path: string,
+): Promise<NextResponse> {
+  const templateId = published.templateId;
+  const back = (target: string) => NextResponse.redirect(new URL(target, request.url), { status: 303 });
+  const samePage = `${path}${path.includes("?") ? "&" : "?"}submitted=1`;
+
+  // Only a real page of this site can receive a form. Internet scanners POST to made-up addresses
+  // (/api, /next, /login …) all day; those must never land in the owner's Form Submissions.
+  let cursorId = templateId;
+  for (const segment of path.split("/").filter(Boolean)) {
+    const child =
+      (await findChildBySlug(cursorId, segment)) ??
+      (/\.html?$/i.test(segment) ? await findChildBySlug(cursorId, segment.replace(/\.html?$/i, "")) : null);
+    if (!child) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    cursorId = child.id;
+  }
+
+  // Same-site browsers only: a post that names another site as its origin is dropped without a signal.
+  const originHeader = request.headers.get("origin") ?? request.headers.get("referer");
+  if (originHeader) {
+    try {
+      if (new URL(originHeader).hostname !== host.split(":")[0]) return back(samePage);
+    } catch { /* unreadable origin: carry on */ }
+  }
+  if (!(await checkCommerceRateLimit(`forms:page:${templateId}:${clientIp(request)}`, 10))) {
+    return NextResponse.json({ error: "Too many submissions. Please try again shortly." }, { status: 429 });
+  }
+  const fields = await readSubmittedFields(request);
+  // Spam trap: a filled-in hidden field means a bot — answer as if it worked.
+  if (fields["_hp_field"]) return back(samePage);
+  delete fields["_hp_field"];
+  // Exploit probes (e.g. React Server Components "__proto__" payloads) are never a person's message.
+  if (Object.entries(fields).some(([k, v]) => /__proto__|\$ACTION_|resolved_model/.test(k + v))) return back(samePage);
+  if (Object.keys(fields).length === 0) return NextResponse.json({ error: "Please fill in the form before sending." }, { status: 400 });
+
+  const url = new URL(request.url);
+  const lastSegment = path.split("/").filter(Boolean).pop() ?? "";
+  const formName = (url.searchParams.get("form") || (lastSegment ? lastSegment.replace(/\.html?$/i, "").replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Website Form")).slice(0, 100);
+  await recordFormSubmission({ templateId, organizationId: published.organization.id, formName, fields, submitterIp: clientIp(request), siteHost: host });
+
+  const { data: settings } = await FormSettings.get({ templateId, formName }).go();
+  const thankYou = settings?.redirectUrl;
+  if (thankYou && (thankYou.startsWith("/") && !thankYou.startsWith("//") || /^https:\/\//i.test(thankYou))) return back(thankYou);
+  return back(samePage);
+}
+
 /**
  * POSTs on a published site. Only WordPress-compatibility endpoints of a site migrated
  * from WordPress live here:
@@ -954,6 +1074,12 @@ export async function POST(
   const root = siteResult.published.template;
   const captureRoutes = Array.isArray(root.migratedApiCaptureRoutes) ? (root.migratedApiCaptureRoutes as string[]) : [];
   const isCaptureRoute = captureRoutes.some((r) => path === r || path === `${r}/`);
+  // A form that posts to its own page (<form method="post"> with no action — what a hand-built or uploaded
+  // site's contact form usually is) lands here. Collect it like any other Plexo form instead of refusing it.
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!isAjax && !isCaptureRoute && /application\/x-www-form-urlencoded|multipart\/form-data/i.test(contentType)) {
+    return handlePageFormPost(request, siteResult.published, decodeURIComponent(domain), path);
+  }
   if (!isAjax && !isCaptureRoute) return NextResponse.json({ error: "Method not allowed." }, { status: 405 });
   if (!root.migratedFrom) return isAjax ? wordPressAjaxStub() : NextResponse.json({ error: "Method not allowed." }, { status: 405 });
 

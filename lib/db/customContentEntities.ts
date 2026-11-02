@@ -43,7 +43,7 @@ import { docClient, TABLES } from "./client";
 
 const table = TABLES.content;
 
-export type CustomContentFieldType = "text" | "textarea" | "richtext" | "number" | "boolean" | "date" | "image_url" | "url";
+export type CustomContentFieldType = "text" | "textarea" | "richtext" | "number" | "boolean" | "date" | "image_url" | "url" | "video" | "datetime";
 
 export type CustomContentField = {
   id: string;

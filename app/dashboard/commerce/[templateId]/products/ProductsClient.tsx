@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { VariantsEditor, draftsFromProduct, variantPayload, type OptionDraft, type VariantDraft } from "./VariantsEditor";
 import { formatMoney } from "@/lib/commerce/formatMoney";
+import { SellProductModal } from "./SellProductModal";
 import { SUPPORTED_STORE_CURRENCIES } from "@/lib/commerce/currency";
 import { CsvImportDialog } from "./CsvImportDialog";
 import { AiImportDialog } from "./AiImportDialog";
@@ -153,6 +154,7 @@ export function ProductsClient({
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProductSummary | null>(null);
+  const [sellTarget, setSellTarget] = useState<ProductSummary | null>(null);
   const mainFileInputRef = useRef<HTMLInputElement>(null);
   const galleryFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -929,6 +931,26 @@ export function ProductsClient({
                         marginTop: "0.8rem",
                       }}
                     >
+                      {product.active && product.kind !== "SERVICE" && (
+                        <button
+                          type="button"
+                          onClick={() => setSellTarget(product)}
+                          title="Put this product on your home page so people can buy it"
+                          style={{
+                            padding: "0.4rem 0.7rem",
+                            borderRadius: 8,
+                            border: "1px solid rgba(var(--brand-rgb),0.35)",
+                            background: "rgba(var(--brand-rgb),0.12)",
+                            color: "var(--brand)",
+                            fontSize: "0.78rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          Sell on my site
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => openEdit(product)}
@@ -1083,6 +1105,26 @@ export function ProductsClient({
                   <div
                     style={{ display: "flex", gap: "0.4rem", flexShrink: 0 }}
                   >
+                    {product.active && product.kind !== "SERVICE" && (
+                      <button
+                        type="button"
+                        onClick={() => setSellTarget(product)}
+                        title="Put this product on your home page so people can buy it"
+                        style={{
+                          padding: "0.35rem 0.6rem",
+                          borderRadius: 7,
+                          border: "1px solid rgba(var(--brand-rgb),0.35)",
+                          background: "rgba(var(--brand-rgb),0.12)",
+                          color: "var(--brand)",
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        Sell on my site
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => openEdit(product)}
@@ -1866,6 +1908,8 @@ export function ProductsClient({
       )}
 
       {/* ── DEACTIVATE CONFIRM ────────────────────────── */}
+      {sellTarget && <SellProductModal siteId={templateId} product={sellTarget} onClose={() => setSellTarget(null)} />}
+
       {deleteTarget && (
         <div
           role="dialog"

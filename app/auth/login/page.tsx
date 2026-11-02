@@ -8,6 +8,7 @@ import { authClient } from "@/lib/auth-client";
 import { Mulish } from "next/font/google";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
+import { DashboardSkeleton } from "@/app/auth/charisol/callback/dashboard-skeleton";
 
 const mulish = Mulish({
   subsets: ["latin"],
@@ -24,6 +25,8 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Signed in, on the way to the dashboard: its first render takes a moment, so the page shows the dashboard's own outline instead of freezing.
+  const [redirecting, setRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(() => params.get("error"));
 
   // A failed Charisol/Google sign-in routes back here with ?error=... (see
@@ -48,7 +51,9 @@ function LoginForm() {
 
     setLoading(true);
 
-    const redirectTo = params.get("redirectTo") ?? "/dashboard";
+    // Only ever a path on this site (never another address someone put in the link).
+    const wanted = params.get("redirectTo") ?? "/dashboard";
+    const redirectTo = wanted.startsWith("/") && !wanted.startsWith("//") ? wanted : "/dashboard";
 
     try {
       const result = await authClient.signIn.email({
@@ -83,13 +88,25 @@ function LoginForm() {
         return;
       }
 
-      router.push(redirectTo);
+      if (redirectTo.startsWith("/dashboard")) setRedirecting(true);
+      // A full page load, not a client-side push: the sign-in cookie is fresh, and a client-side push can reuse a copy of the
+      // destination fetched while signed out (which just bounces back here) and leave the person on this screen for good.
+      window.location.assign(redirectTo);
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Invalid credentials.";
       setError(message);
     } finally {
       setLoading(false);
     }
+  }
+
+  if (redirecting) {
+    // Covers the whole screen (the sign-in layout's own panels included) until the dashboard replaces it.
+    return (
+      <div style={{ position: "fixed", inset: 0, zIndex: 100, overflow: "auto", background: "#0b0f19" }}>
+        <DashboardSkeleton />
+      </div>
+    );
   }
 
   return (
@@ -190,7 +207,7 @@ function LoginForm() {
             id="login-submit"
             type="submit"
             disabled={loading}
-            className="w-full bg-[#6b3bf9] hover:bg-[#5b2be6] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className={`w-full bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
           >
             {loading ? <span>Signing in...</span> : <span>Sign In</span>}
           </button>

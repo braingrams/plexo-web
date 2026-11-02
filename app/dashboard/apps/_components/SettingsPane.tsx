@@ -7,6 +7,7 @@ import { Check, Copy, ExternalLink, FolderOpen, Globe, Image as ImageIcon, KeyRo
 import { api, appsApi, ApiError, type AppSummary } from "./api";
 import { Button, C, Notice, Panel, Pill, ProblemState, Shimmer, StateStyles, hueGradient, inputStyle } from "./ui";
 
+import { BRAND } from "@/lib/theme";
 type Access = "public" | "private";
 type Settings = {
   auth: {
@@ -51,8 +52,8 @@ function AppBanner({ summary }: { summary: AppSummary | null }) {
   if (!summary) return <Shimmer height={92} radius={20} />;
   const address = summary.domains.find((d) => d.verified)?.domain ?? summary.liveUrl?.replace(/^https:\/\//, "") ?? null;
   return (
-    <section style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "1.2rem 1.4rem", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(60% 140% at 100% 0%, rgba(139,92,246,0.2), transparent 60%), radial-gradient(50% 120% at 0% 100%, rgba(99,102,241,0.12), transparent 60%), rgba(255,255,255,0.015)" }}>
-      <span aria-hidden style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, display: "grid", placeItems: "center", background: hueGradient(summary.name), color: "#fff", fontSize: "clamp(1.15rem, 4.2vw, 1.4rem)", fontWeight: 800, boxShadow: "0 10px 28px rgba(139,92,246,0.3)" }}>
+    <section style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "1.2rem 1.4rem", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(60% 140% at 100% 0%, rgba(var(--brand-rgb), 0.2), transparent 60%), radial-gradient(50% 120% at 0% 100%, rgba(99,102,241,0.12), transparent 60%), rgba(255,255,255,0.015)" }}>
+      <span aria-hidden style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, display: "grid", placeItems: "center", background: hueGradient(summary.name), color: "#fff", fontSize: "clamp(1.15rem, 4.2vw, 1.4rem)", fontWeight: 800, boxShadow: "0 10px 28px rgba(var(--brand-rgb), 0.3)" }}>
         {summary.name.charAt(0).toUpperCase()}
       </span>
       <div style={{ flex: "1 1 240px", minWidth: 0 }}>
@@ -227,7 +228,7 @@ function SeoSection({ appId, summary, settings, onSaved }: { appId: string; summ
             <TextField label="Description" value={draft.description} max={200} multiline placeholder="One or two sentences about what your app does and who it's for." onChange={(v) => set("description", v)} />
           </div>
         </Panel>
-        <Panel icon={<ImageIcon size={18} />} iconColor="#c084fc" title="Images">
+        <Panel icon={<ImageIcon size={18} />} iconColor={BRAND[300]} title="Images">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.9rem" }}>
             <ImageField label="Sharing image" hint="Shown on link previews. 1200 × 630 works best." value={draft.imageUrl} busy={uploading === "imageUrl"} wide onUpload={(f) => void upload("imageUrl", f)} onClear={() => set("imageUrl", "")} />
             <ImageField label="Browser-tab icon" hint="A square image, at least 64 × 64." value={draft.faviconUrl} busy={uploading === "faviconUrl"} onUpload={(f) => void upload("faviconUrl", f)} onClear={() => set("faviconUrl", "")} />
@@ -274,7 +275,7 @@ function SeoSection({ appId, summary, settings, onSaved }: { appId: string; summ
         </div>
         <div style={previewLabel}>When shared</div>
         <div style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${C.borderStrong}`, background: C.panelSolid }}>
-          <div style={{ aspectRatio: "1200 / 630", background: draft.imageUrl ? `center / cover no-repeat url("${draft.imageUrl}")` : "linear-gradient(135deg, rgba(139,92,246,0.35), rgba(124,58,237,0.1))", display: "grid", placeItems: "center" }}>
+          <div style={{ aspectRatio: "1200 / 630", background: draft.imageUrl ? `center / cover no-repeat url("${draft.imageUrl}")` : "linear-gradient(135deg, rgba(var(--brand-rgb), 0.35), rgba(var(--brand-deep-rgb), 0.1))", display: "grid", placeItems: "center" }}>
             {!draft.imageUrl && <ImageIcon size={28} color="rgba(255,255,255,0.5)" />}
           </div>
           <div style={{ padding: "0.65rem 0.8rem" }}>
@@ -621,13 +622,13 @@ function MethodTile({ icon, label, hint, checked, busy, onChange }: { icon: Reac
         cursor: busy ? "wait" : "pointer",
         fontFamily: "inherit",
         color: C.text,
-        border: `1px solid ${checked ? "rgba(139,92,246,0.55)" : C.border}`,
-        background: checked ? "linear-gradient(135deg, rgba(139,92,246,0.16), rgba(99,102,241,0.05))" : "rgba(255,255,255,0.02)",
+        border: `1px solid ${checked ? "rgba(var(--brand-rgb), 0.55)" : C.border}`,
+        background: checked ? "linear-gradient(135deg, rgba(var(--brand-rgb), 0.16), rgba(99,102,241,0.05))" : "rgba(255,255,255,0.02)",
         opacity: busy ? 0.7 : 1,
       }}
     >
       <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: checked ? "rgba(139,92,246,0.25)" : "rgba(255,255,255,0.06)", color: checked ? "#c4b5fd" : C.muted }}>{icon}</span>
+        <span style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: checked ? "rgba(var(--brand-rgb), 0.25)" : "rgba(255,255,255,0.06)", color: checked ? "#c4b5fd" : C.muted }}>{icon}</span>
         <span aria-hidden style={{ width: 34, height: 20, borderRadius: 99, padding: 2, background: checked ? C.brand : "rgba(255,255,255,0.15)", transition: "background 0.15s" }}>
           <span style={{ display: "block", width: 16, height: 16, borderRadius: 99, background: "#fff", transform: checked ? "translateX(14px)" : "none", transition: "transform 0.15s" }} />
         </span>
@@ -736,7 +737,7 @@ function BucketsSection({ appId, settings, onSaved }: { appId: string; settings:
   return (
     <Panel
       icon={<FolderOpen size={18} />}
-      iconColor="#c084fc"
+      iconColor={BRAND[300]}
       title="Upload folders"
       description={
         <>

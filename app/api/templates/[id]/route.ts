@@ -43,8 +43,11 @@ export async function GET(
   }
 
   const { data: assets } = await TemplateAsset.query.primary({ templateId: id }).go();
-  const previewHtml = await buildLivePreviewHtml(template.compiledHtml, assets.map((a) => ({ path: a.path, blobUrl: a.blobUrl })));
-  return NextResponse.json({ page: { id: template.id, name: template.name, kind: template.kind, compiledHtml: template.compiledHtml, previewHtml } });
+  // ?draft=1 (SOL's canvas): show the page as the owner's latest edits left it — a visual page
+  // changed by page_edit waits in its working copy until it is published.
+  const html = request.nextUrl.searchParams.get("draft") === "1" && template.draftHtml ? template.draftHtml : template.compiledHtml;
+  const previewHtml = await buildLivePreviewHtml(html, assets.map((a) => ({ path: a.path, blobUrl: a.blobUrl })));
+  return NextResponse.json({ page: { id: template.id, name: template.name, kind: template.kind, compiledHtml: html, previewHtml } });
 }
 
 export async function PATCH(

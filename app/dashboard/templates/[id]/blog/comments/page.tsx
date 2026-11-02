@@ -14,8 +14,7 @@ export default async function BlogCommentsPage({ params }: { params: Promise<{ i
   const commentBatches = await Promise.all(posts.map((p) => BlogComment.query.primary({ postId: p.id }).go({ pages: "all" })));
   const comments = commentBatches
     .flatMap((b) => b.data)
-    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
-    .slice(0, 200);
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   return (
     <CommentsModerationClient

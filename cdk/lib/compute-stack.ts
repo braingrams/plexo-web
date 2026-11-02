@@ -152,6 +152,10 @@ for (const key of ["SYSTEM_AI_PROVIDER", "SYSTEM_AI_KEY_ANTHROPIC_CLAUDE", "SYST
   if (value) systemAiEnv[key] = value;
 }
 
+// The unhashed scripts under public/ that the platform injects into published pages (see DeployCommerceJs and
+// published-sites-stack.ts's behaviors for them).
+export const PLATFORM_SCRIPTS = ["commerce.js", "plexo-content.js", "plexo-content.css", "plexo-forms.js", "lms-signup.js", "newsletter-popup.js"];
+
 // Cache-busting suffix for the unhashed, unversioned public/commerce.js URL that
 // app/pub/[domain]/[[...slug]]/route.ts's injectCommerceScript() embeds into every
 // published storefront — see that file's own comment. The deploy workflows set this to
@@ -239,8 +243,12 @@ export class ComputeStack extends cdk.Stack {
     // origin. This second deployment overwrites just that one object with a short,
     // revalidating Cache-Control — ordered (via addDependency) to run after DeployAssets
     // so its header is the one left standing on the shared key both deployments write.
+    // Every script the platform injects into published pages is served the same way (a published site's own
+    // distribution only routes the names listed in published-sites-stack.ts to this bucket — anything else under
+    // public/ falls through to the server function, which doesn't carry public/, and 404s): commerce.js, the
+    // content widget + form connector (plexo-content.js/.css, plexo-forms.js), the funnel sign-up and the newsletter popup.
     const deployCommerceJs = new s3deploy.BucketDeployment(this, "DeployCommerceJs", {
-      sources: [s3deploy.Source.data("commerce.js", fs.readFileSync(path.join(OPEN_NEXT_DIR, "assets", "commerce.js"), "utf-8"))],
+      sources: PLATFORM_SCRIPTS.map((name) => s3deploy.Source.data(name, fs.readFileSync(path.join(OPEN_NEXT_DIR, "assets", name), "utf-8"))),
       destinationBucket: assetsBucket,
       destinationKeyPrefix: "_assets",
       cacheControl: [s3deploy.CacheControl.fromString("public,max-age=60,must-revalidate")],
@@ -503,7 +511,16 @@ export class ComputeStack extends cdk.Stack {
         ]),
       }),
     );
-    const serverFnUrl = serverFn.addFunctionUrl({ authType: lambda.FunctionUrlAuthType.NONE });
+    // RESPONSE_STREAM removes the 6 MB buffered-response ceiling — large static assets
+    // served via serveDeployedStatic (lib/pub/serveDeployedStatic.ts) would otherwise
+    // hit "payload is too large for the RequestResponse invocation type". The handler
+    // uses OpenNext's aws-lambda-streaming wrapper (open-next.config.ts) which wraps
+    // the export in awslambda.streamifyResponse — Lambda streams response bytes to
+    // CloudFront instead of buffering the whole payload in memory first.
+    const serverFnUrl = serverFn.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
+    });
     // AuthType.NONE still requires an explicit resource policy granting invocation — CDK
     // does not add this automatically the way it does for the AWS_IAM+OAC case above.
     serverFn.addPermission("AllowPublicInvokeServerFnUrl", {
@@ -1052,6 +1069,13 @@ export class ComputeStack extends cdk.Stack {
           cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
           responseHeadersPolicy: securityHeadersPolicy,
         },
+        // The other platform scripts (content widget, form connector, sign-up, newsletter popup) — same bucket, same cache.
+        ...Object.fromEntries(["plexo-*", "lms-signup.js", "newsletter-popup.js"].map((pattern) => [pattern, {
+          origin: origins.S3BucketOrigin.withOriginAccessControl(assetsBucket, { originPath: "/_assets" }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          responseHeadersPolicy: securityHeadersPolicy,
+        }])),
         // The app editor's self-hosted code editor (scripts/copy-monaco.mjs). Versioned paths,
         // so the immutable cache DeployAssets stamps on them is safe. Without this behavior the
         // requests fell through to the server function, which doesn't carry public/ — 404s,

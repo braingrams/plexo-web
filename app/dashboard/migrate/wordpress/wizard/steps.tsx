@@ -194,6 +194,9 @@ function pluginSummary(plugins: Plugin[]): string {
 
 export function ReviewStep(props: {
   preview: Preview;
+  /** Only used when the preview offers the whole site: true moves everything, false just the folder. */
+  wholeSite: boolean;
+  onWholeSite: (value: boolean) => void;
   owns: boolean;
   onOwns: (value: boolean) => void;
   needsAup: boolean;
@@ -244,6 +247,26 @@ export function ReviewStep(props: {
           </p>
         )}
       </Panel>
+
+      {preview.wholeSite && (
+        <Panel style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "var(--text-main)" }}>Your domain has more than this WordPress folder</p>
+          <p style={{ ...text.small, margin: 0 }}>
+            In front of WordPress we found {preview.wholeSite.staticPages.length} other page{preview.wholeSite.staticPages.length > 1 ? "s" : ""} ({preview.wholeSite.staticPages.map((p) => new URL(p).pathname).join(", ")}). What should we move?
+          </p>
+          {[
+            { whole: true, title: "The whole site", hint: "WordPress and those pages, working together exactly as they do now." },
+            { whole: false, title: `Only ${new URL(preview.homeUrl).pathname.replace(/\/+$/, "")}`, hint: "Just the WordPress site. The other pages stay behind." },
+          ].map((o) => (
+            <label key={String(o.whole)} style={{ display: "flex", gap: 12, alignItems: "flex-start", cursor: "pointer" }}>
+              <input type="radio" name="move-scope" checked={props.wholeSite === o.whole} onChange={() => props.onWholeSite(o.whole)} style={{ width: 18, height: 18, marginTop: 2, accentColor: "var(--brand)" }} />
+              <span style={{ fontSize: 14, color: "var(--text-main)", lineHeight: 1.5 }}>
+                <strong>{o.title}</strong>{o.whole ? " (recommended)" : ""}<br /><span style={text.small}>{o.hint}</span>
+              </span>
+            </label>
+          ))}
+        </Panel>
+      )}
 
       <Disclosure title="Your plugins" hint={pluginSummary(preview.plugins)} defaultOpen={attention > 0}>
         <p style={{ ...text.small, marginBottom: 16 }}>Here&rsquo;s what happens to each one. You&rsquo;ll get a simple checklist for anything that needs you at the end.</p>

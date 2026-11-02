@@ -128,6 +128,29 @@ function withTrailingSlash(url: string): string {
 }
 
 /**
+ * "Only this path": when the owner gives an address with a folder in it (playmuzingo.com/serenity) and a WordPress
+ * install lives exactly there, that install — and nothing else on the domain — is the site to migrate. The domain
+ * root can be a completely different site (or another WordPress); it is never probed, crawled or copied.
+ * Probes the folder and its parents, deepest first, so a deep link inside the install (…/serenity/about) works too.
+ */
+async function findInstallAtPath(start: string, origin: string): Promise<{ index: RestIndex; restRoot: string; path: string } | null> {
+  const segments = new URL(start).pathname.split("/").filter(Boolean);
+  for (let n = Math.min(segments.length, 4); n >= 1; n--) {
+    const path = `/${segments.slice(0, n).join("/")}`;
+    const restRoot = `${origin}${path}/wp-json/`;
+    const index = await readRestIndex(restRoot);
+    if (!index) continue;
+    try {
+      const homePath = new URL((index.home ?? index.url ?? "").replace(/\/+$/, "")).pathname.replace(/\/+$/, "");
+      if (homePath === path) return { index, restRoot, path };
+    } catch {
+      // an index with no usable home URL isn't a match
+    }
+  }
+  return null;
+}
+
+/**
  * Locates the WordPress install behind any URL the owner gives us — their domain root,
  * a deep link, or a subdirectory install's own URL — and returns its REST root plus any
  * non-WordPress pages in front of it. Throws WordPressNotFoundError with an
@@ -136,6 +159,21 @@ function withTrailingSlash(url: string): string {
 export async function discoverWordPressInstall(inputUrl: string): Promise<WpInstall> {
   const start = normalizeSiteUrl(inputUrl);
   const origin = new URL(start).origin;
+
+  const scoped = await findInstallAtPath(start, origin);
+  if (scoped) {
+    return {
+      origin,
+      homeUrl: (scoped.index.home ?? scoped.index.url ?? `${origin}${scoped.path}`).replace(/\/+$/, ""),
+      restRoot: scoped.restRoot,
+      siteName: scoped.index.name ?? "",
+      siteDescription: scoped.index.description ?? "",
+      namespaces: scoped.index.namespaces ?? [],
+      staticPages: [],
+      customRoutes: customRoutesFrom(scoped.index),
+      scopedToPath: scoped.path,
+    };
+  }
 
   // Fast path: the conventional location answers with a real REST index.
   const conventional = await readRestIndex(`${origin}/wp-json/`);

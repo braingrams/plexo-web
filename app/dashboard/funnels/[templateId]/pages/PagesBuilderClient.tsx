@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FunnelRichTextEditor } from "./FunnelRichTextEditor";
 
+import { BRAND } from "@/lib/theme";
 type PageKind = "WELCOME" | "VIDEO" | "DOCUMENT" | "IMAGE";
 type BuilderLevel = "BEGINNER" | "INTERMEDIATE" | "PROFESSIONAL";
 
@@ -498,7 +499,7 @@ function UnlockRuleControl({
     return (
       <div style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.5)" }}>
         {unlockSummary(page, previousPage)} —{" "}
-        <button type="button" onClick={() => setShowAdvanced(true)} style={{ background: "none", border: "none", color: "var(--brand, #a78bfa)", cursor: "pointer", padding: 0, fontSize: "0.8rem" }}>
+        <button type="button" onClick={() => setShowAdvanced(true)} style={{ background: "none", border: "none", color: `var(--brand, ${BRAND[400]})`, cursor: "pointer", padding: 0, fontSize: "0.8rem" }}>
           Show advanced options
         </button>
       </div>
@@ -509,7 +510,7 @@ function UnlockRuleControl({
     return (
       <div style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.6)" }}>
         {unlockSummary(page, previousPage)} —{" "}
-        <button type="button" onClick={() => setEditing(true)} style={{ background: "none", border: "none", color: "var(--brand, #a78bfa)", cursor: "pointer", padding: 0, fontSize: "0.8rem" }}>
+        <button type="button" onClick={() => setEditing(true)} style={{ background: "none", border: "none", color: `var(--brand, ${BRAND[400]})`, cursor: "pointer", padding: 0, fontSize: "0.8rem" }}>
           Change
         </button>
       </div>
@@ -618,7 +619,7 @@ function UnlockRuleControl({
         <button
           type="button"
           onClick={() => setConditions([...conditions, { type: "PREREQUISITE_PAGES", pageIds: previousPage ? [previousPage.id] : [] }])}
-          style={{ fontSize: "0.78rem", color: "var(--brand, #a78bfa)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+          style={{ fontSize: "0.78rem", color: `var(--brand, ${BRAND[400]})`, background: "none", border: "none", cursor: "pointer", padding: 0 }}
         >
           + Add condition
         </button>

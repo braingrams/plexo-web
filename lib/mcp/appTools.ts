@@ -17,6 +17,8 @@ import { functionLogs } from "@/lib/appFunctions/invoke";
 import { AppRuntimeError, AppSettings } from "@/lib/db/appEntities";
 import { ProjectBuild } from "@/lib/db/projectEntities";
 import { getSignedDownloadUrl } from "@/lib/storage";
+import { describeDesigns, editDesign } from "@/lib/projects/designEdit";
+import { DesignError } from "@/lib/projects/designs";
 import { findStockPhotos } from "@/lib/media/stockPhotos";
 import { getAppSettings, forgetAppContext } from "@/lib/appRuntime/context";
 
@@ -159,6 +161,29 @@ export const APP_MCP_TOOLS = [
     description:
       "Runs SQL on the app's PREVIEW database as its owner (sees every row; new tables get row-level security on). For exploring data or quick fixes while developing. Lasting schema changes belong in a new db/migrations/NNNN_name.sql file instead, so they reach the live database on publish.",
     inputSchema: { type: "object", properties: { appId, sql: { type: "string" } }, required: ["appId", "sql"] },
+  },
+  {
+    name: "app_design_describe",
+    description:
+      "Reads the app's visually designed pages (the Design tab, src/plexo-canvas): for each page its slug, name, address and its sections in order (id, kind, layout, a few words of what it says), plus the brand (colours, fonts, corners) and the catalog of every section kind with its layouts and the fields you can fill in, and the ready-made page templates. Call this before app_design_edit, and again after you change a page if you need fresh section ids. Pages marked codeEdited were changed in code — edit those with app_edit_file, not app_design_edit.",
+    inputSchema: { type: "object", properties: { appId }, required: ["appId"] },
+  },
+  {
+    name: "app_design_edit",
+    description:
+      "Changes designed pages section by section — the right way to edit a page built in the Design tab, instead of editing its generated .tsx. Pass commands, each one of: " +
+      '{op:"addSection", pageId, kind, variant?, content?, style?, afterSectionId? | index?} · {op:"updateSection", sectionId, content?, variant?, style?} · {op:"removeSection", sectionId} · {op:"moveSection", sectionId, index? | afterSectionId?} · {op:"duplicateSection", sectionId} · {op:"setBrand", tokens:{primaryColor?, secondaryColor?, headingFont?, bodyFont?, neutrals? (cool|warm|dark), roundness? (sharp|soft|round)}} · {op:"addPage", name, templateId?} (templateId from the catalog: home, landing, about, services, contact, pricing, blank — gives a complete, filled-in page) · {op:"renamePage", pageId, name}. ' +
+      "pageId is the page's slug from app_design_describe; sectionId is a section id from it. Content keys are the field paths from the catalog (\"headline\", \"items.0.title\"); a list field needs the whole list; write real copy for the business. Each command is checked on its own — good ones are saved, bad ones come back with a plain-English reason, so read results. slug (optional) is the page you're working on: an addSection without a pageId goes there. A page that was edited in code is not changed (the reply says so); only pass overwrite: true if the owner chose to replace their code edits. Saving regenerates the page's React code and its route. Run app_build afterwards, then app_screenshot.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        appId,
+        slug: { type: "string", description: "The designed page being edited (from app_design_describe)." },
+        commands: { type: "array", maxItems: 40, items: { type: "object", properties: { op: { type: "string" } }, required: ["op"], additionalProperties: true } },
+        overwrite: { type: "boolean", description: "Replace hand edits made to the page's code. Only when the owner asked for it." },
+      },
+      required: ["appId", "commands"],
+    },
   },
   {
     name: "app_publish",
@@ -374,6 +399,19 @@ export async function handleAppTool(toolName: string, args: any, resolved: Resol
         return { rows: result.rows, rowCount: result.rowCount, truncated: !!result.truncated, database: ctx?.database && "preview" };
       } catch (err) {
         if (err instanceof AppDbError) throw new Error(`${err.error.message}${err.error.hint ? ` (hint: ${err.error.hint})` : ""}`);
+        throw err;
+      }
+    }
+    case "app_design_describe": {
+      const app = await ownApp(resolved, args?.appId);
+      return describeDesigns(app.id);
+    }
+    case "app_design_edit": {
+      const app = await ownApp(resolved, args?.appId);
+      try {
+        return await editDesign(app.id, { slug: args?.slug, commands: args?.commands, overwrite: args?.overwrite }, resolved.userId);
+      } catch (err) {
+        if (err instanceof DesignError) throw new Error(err.message);
         throw err;
       }
     }

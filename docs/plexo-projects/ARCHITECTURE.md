@@ -283,18 +283,17 @@ with a message written for a non-technical reader.
 | `POST /api/v1/deploy` | `{ appId?, name?, files?: [{ path, content? , base64? }], dist?: [...], publish?: boolean, subdomain? }` → `{ appId, versionId, buildId, previewUrl, liveUrl? }` |
 | `GET /api/v1/deploy/:buildId` | → `{ status, errors[], previewUrl, liveUrl? }` |
 
-## Visual design (SDK v2 canvas) — `lib/projects/designs.ts`
-The editor's **Design** tab is the SDK v2 canvas (`@charisol/plexo-sdk/v2`, loaded in the
+## Visual design (SDK v2 editor) — `lib/projects/designs.ts`
+The editor's **Design** tab is the SDK v2 editor (`<V2Editor>` from `@charisol/plexo-sdk/v2`, loaded in the
 browser only). Each design is one page of the app, stored as ordinary project files:
-- `src/plexo-canvas/<slug>.canvas.json` — the design (nodes, page order, name, route) and the
+- `src/plexo-canvas/<slug>.canvas.json` — the design (`plexo-canvas@2`: the page's node tree, name, route; older `@1` files are upgraded on read) and the
   hash of the code last generated from it.
 - `src/plexo-canvas/<Name>Page.tsx` — the page, compiled **on the server** with the
-  React-free `@charisol/plexo-sdk/v2/compile` (`compilePageToReact`: exact layout at the
-  1400px design width, scaled on narrower screens; content always emitted as string literals).
+  React-free `@charisol/plexo-sdk/v2/compile` (`compilePageToReact`: desktop, tablet and mobile layouts from the design system; content always emitted as string literals).
 - `src/plexo-canvas/routes.tsx` — every design's route; `src/App.tsx` renders them first
   inside `<Routes>` (new apps ship wired; older ones are wired on the first save, or the
   owner gets an "Ask SOL to add it" button when App.tsx was rewritten).
-- `src/plexo-canvas/brand.json` — the app's brand kit; changing it restyles every design.
+- `src/plexo-canvas/design-system.json` — the app's design system (colours, fonts, shapes, components); changing it restyles every design. A leftover `brand.json` from the old editor is ignored.
 
 Saves happen automatically a moment after each change, then the preview rebuilds. If a
 page's `.tsx` was edited by hand (Code Mode, SOL, a GitHub push), saving the design asks

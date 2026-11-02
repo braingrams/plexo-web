@@ -221,7 +221,7 @@ function RegisterForm() {
             id="register-submit"
             type="submit"
             disabled={loading}
-            className="w-full bg-[#6b3bf9] hover:bg-[#5b2be6] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className={`w-full bg-[color:var(--brand)] hover:bg-[color:var(--brand-deep)] text-white font-extrabold text-base py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50`}
           >
             {loading ? <span>Creating account...</span> : <span>Create Account</span>}
           </button>

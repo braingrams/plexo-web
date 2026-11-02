@@ -22,7 +22,7 @@ export type StartMigrationResult =
 
 export async function startWordPressMigration(
   access: MigrationAccess,
-  input: { sourceUrl?: string; ownershipAttested?: boolean; acceptAup?: boolean },
+  input: { sourceUrl?: string; ownershipAttested?: boolean; acceptAup?: boolean; /** A one-folder migration is served at the domain root unless this is false. */ serveAtRoot?: boolean },
 ): Promise<StartMigrationResult> {
   const sourceUrl = input.sourceUrl?.trim();
   if (!sourceUrl) return { ok: false, status: 400, error: "Enter your WordPress site's address, like example.com." };
@@ -79,6 +79,8 @@ export async function startWordPressMigration(
     designJson: {},
     compiledHtml: `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${siteName.replace(/</g, "&lt;")}</title></head><body><p>This site is being moved to Plexo…</p></body></html>`,
     migratedFrom: install.origin,
+    // Moved out of a folder of someone else's domain: it gets a domain of its own, so visitors shouldn't see the folder.
+    ...(install.scopedToPath && input.serveAtRoot !== false ? { servedFromPrefix: install.scopedToPath } : {}),
   }).go();
 
   const jobId = randomUUID();

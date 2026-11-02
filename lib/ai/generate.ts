@@ -38,6 +38,8 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   agent_chat: 32000,
   // A catalog's product rows as JSON — ample for a few hundred products in one pass.
   import_products: 8000,
+  // A few sentences plus the section and element commands — rebuilding a hand-designed section writes a whole element tree. It sets the credit hold.
+  page_assist: 16000,
 };
 
 /** Ceiling for the one-time adaptive retry when a response comes back truncated (see

@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import type { DonationsOverview } from "@/lib/commerce/donations";
+import { paginate } from "@/lib/pagination";
+import { Pagination } from "../../../_components/Pagination";
 
 type Campaign = DonationsOverview["campaigns"][number];
 
@@ -63,6 +65,10 @@ function draftFrom(c: Campaign): Draft {
 export function DonationsClient({ templateId, initial }: { templateId: string; initial: DonationsOverview }) {
   const [data, setData] = useState(initial);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [donorPaging, setDonorPaging] = useState({ page: 1, pageSize: 25 });
+  const [giftPaging, setGiftPaging] = useState({ page: 1, pageSize: 25 });
+  const donorsPage = paginate(data.monthlyDonors, donorPaging);
+  const giftsPage = paginate(data.recentGifts, giftPaging);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -241,7 +247,7 @@ export function DonationsClient({ templateId, initial }: { templateId: string; i
         {data.monthlyDonors.length === 0 ? (
           <p style={muted}>Nobody gives monthly yet.</p>
         ) : (
-          data.monthlyDonors.map((s) => (
+          donorsPage.items.map((s) => (
             <div key={s.id} style={{ display: "flex", gap: 12, alignItems: "center", padding: "0.55rem 0", borderTop: "1px solid rgba(255,255,255,0.06)", flexWrap: "wrap" }}>
               <span style={{ flex: "1 1 200px", color: "#f0f2ff", fontSize: "0.82rem" }}>{s.donorName ?? s.donorEmail}<span style={{ ...muted, marginLeft: 6 }}>{s.donorName ? s.donorEmail : ""}</span></span>
               <span style={{ color: "#f0f2ff", fontSize: "0.82rem" }}>{formatMoney(s.amountMinor, s.currency)}/mo</span>
@@ -252,14 +258,15 @@ export function DonationsClient({ templateId, initial }: { templateId: string; i
             </div>
           ))
         )}
+        <Pagination page={donorsPage.page} pageSize={donorsPage.pageSize} total={donorsPage.total} noun="monthly donors" onChange={setDonorPaging} />
       </div>
 
       <div style={card}>
-        <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", margin: "0 0 0.8rem" }}>Recent gifts</h2>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", margin: "0 0 0.8rem" }}>Gifts</h2>
         {data.recentGifts.length === 0 ? (
           <p style={muted}>Gifts will appear here (and in Orders) as they come in.</p>
         ) : (
-          data.recentGifts.map((g) => (
+          giftsPage.items.map((g) => (
             <div key={g.id} style={{ display: "flex", gap: 12, padding: "0.5rem 0", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: "0.82rem", color: "#f0f2ff", flexWrap: "wrap" }}>
               <span style={{ flex: "1 1 200px" }}>{g.donorName ?? g.donorEmail}</span>
               <span style={{ ...muted, flex: "1 1 160px" }}>{g.campaignName}{g.monthly ? " · monthly" : ""}</span>
@@ -268,6 +275,7 @@ export function DonationsClient({ templateId, initial }: { templateId: string; i
             </div>
           ))
         )}
+        <Pagination page={giftsPage.page} pageSize={giftsPage.pageSize} total={giftsPage.total} noun="gifts" onChange={setGiftPaging} />
       </div>
 
       {draft && (

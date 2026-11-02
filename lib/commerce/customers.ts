@@ -82,8 +82,10 @@ export async function resolveCommerceCustomers(
   const all = Array.from(byEmail.values()).sort((a, b) => b.lastOrderAt.localeCompare(a.lastOrderAt));
   const total = all.length;
   const pageCount = Math.max(1, Math.ceil(total / perPage));
-  const start = (page - 1) * perPage;
+  // A page past the end (a bookmark, or the last page after it emptied) shows the last page.
+  const shownPage = Math.min(Math.max(1, page), pageCount);
+  const start = (shownPage - 1) * perPage;
   const customers = all.slice(start, start + perPage);
 
-  return { customers, total, page, pageCount };
+  return { customers, total, page: shownPage, pageCount };
 }

@@ -6,6 +6,7 @@ import { dropAppDatabase } from "@/lib/appData/provision";
 import { clusterConfigured } from "@/lib/appData/admin";
 import { chunk } from "./concurrency";
 import { deleteAppConversations } from "./appConversations";
+import { removeAutoUpdateForApp } from "@/lib/strata/autoUpdate";
 
 // Everything a React app owns outside its content partition (that partition — files,
 // versions, database records, secrets, settings, functions, GitHub link — is swept by
@@ -46,6 +47,7 @@ export async function purgeAppProject(templateId: string): Promise<void> {
         for (const batch of chunk(data, 25)) await ProjectBuild.delete(batch.map((b) => ({ id: b.id }))).go();
       },
     ],
+    ["automatic Strata updates", () => removeAutoUpdateForApp(templateId)],
     ["preview address", async () => (template?.previewHost ? ProjectPreviewHost.delete({ host: template.previewHost }).go() : undefined)],
     ["SOL chats", async () => (template?.organizationId ? deleteAppConversations({ id: templateId, userId: template.userId, organizationId: template.organizationId }) : undefined)],
   ];

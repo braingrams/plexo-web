@@ -142,7 +142,7 @@ export function FunnelRichTextEditor({
         .plexo-funnel-editor-prose .ProseMirror > *:first-child { margin-top: 0; }
         .plexo-funnel-editor-prose .ProseMirror img { max-width: 100%; border-radius: 8px; }
         .plexo-funnel-editor-prose .ProseMirror ul, .plexo-funnel-editor-prose .ProseMirror ol { padding-left: 1.4em; margin: 0.6em 0; }
-        .plexo-funnel-editor-prose .ProseMirror a { color: #a78bfa; }
+        .plexo-funnel-editor-prose .ProseMirror a { color: var(--brand-soft); }
       `}</style>
     </div>
   );

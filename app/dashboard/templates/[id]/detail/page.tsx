@@ -11,6 +11,7 @@ import {
   BlogSite,
   SiteLayout,
 } from "@/lib/db/contentEntities";
+import { DeployedApp } from "@/lib/db/appEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
 import { PageView, FormSubmission } from "@/lib/db/opsEntities";
 import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
@@ -72,6 +73,11 @@ export default async function TemplateDetailPage(props: {
     blogEnabled: boolean;
     siteLayoutEnabled: boolean;
     commerceEnabled: boolean;
+    deployedApp: {
+      framework: string;
+      spaMode: boolean;
+      updatedAt: string;
+    } | null;
   } | null = null;
 
   if (template.kind === "LANDING_PAGE") {
@@ -83,6 +89,7 @@ export default async function TemplateDetailPage(props: {
       { data: blogSite },
       { data: siteLayout },
       { data: commerceSettings },
+      { data: deployedAppRow },
     ] = await Promise.all([
       PublishedDomain.query.primary({ templateId: template.id }).go({ pages: "all" }),
       PageView.query
@@ -92,6 +99,7 @@ export default async function TemplateDetailPage(props: {
       BlogSite.get({ templateId: template.id }).go(),
       SiteLayout.get({ templateId: template.id }).go(),
       CommerceSettings.get({ templateId: template.id }).go(),
+      DeployedApp.get({ templateId: template.id }).go(),
     ]);
 
     const domain = pickPrimaryDomain(domains);
@@ -109,6 +117,13 @@ export default async function TemplateDetailPage(props: {
       blogEnabled: blogSite?.enabled ?? false,
       siteLayoutEnabled: siteLayout?.enabled ?? false,
       commerceEnabled: commerceSettings?.enabled ?? false,
+      deployedApp: deployedAppRow
+        ? {
+            framework: deployedAppRow.framework ?? "spa",
+            spaMode: deployedAppRow.spaMode ?? false,
+            updatedAt: deployedAppRow.updatedAt ?? deployedAppRow.createdAt ?? new Date().toISOString(),
+          }
+        : null,
     };
   }
 

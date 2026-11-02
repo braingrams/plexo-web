@@ -119,7 +119,7 @@ POST {yourWebhookUrl}/ai-charge
             <div>
               <h1 className="text-lg sm:text-2xl font-bold text-white tracking-tight leading-snug">
                 AI & MCP Integration Hub{" "}
-                <Sparkles className="w-4 h-4 text-[#a78bfa] inline-block align-middle" />
+                <Sparkles className={`w-4 h-4 text-[color:var(--brand-400)] inline-block align-middle`} />
               </h1>
               <p className="text-xs sm:text-sm text-white/60 mt-0.5">
                 Connect Claude, ChatGPT, Cursor, and Gemini to generate, compile, and publish landing pages directly from chat.
@@ -131,7 +131,7 @@ POST {yourWebhookUrl}/ai-charge
         <a
           href="/mcp/login"
           target="_blank"
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--brand)]/10 border border-[var(--brand)]/25 text-[#a78bfa] hover:bg-[var(--brand)]/20 text-xs font-semibold transition shrink-0 self-start sm:self-auto"
+          className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--brand)]/10 border border-[var(--brand)]/25 text-[color:var(--brand-400)] hover:bg-[var(--brand)]/20 text-xs font-semibold transition shrink-0 self-start sm:self-auto`}
         >
           <Lock className="w-4 h-4" />
           Authenticate Session Token
@@ -177,10 +177,10 @@ POST {yourWebhookUrl}/ai-charge
               </div>
               <div>
                 <h2 className="text-base sm:text-lg font-bold text-white leading-tight">Claude Web Custom Connector Setup</h2>
-                <p className="text-xs text-white/60 mt-0.5">Connect Plexo in Claude Web under <code className="text-[#a78bfa]">Customize → Connectors</code>.</p>
+                <p className="text-xs text-white/60 mt-0.5">Connect Plexo in Claude Web under <code className={`text-[color:var(--brand-400)]`}>Customize → Connectors</code>.</p>
               </div>
             </div>
-            <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-[var(--brand)]/10 text-[#a78bfa] border border-[var(--brand)]/20 self-start sm:self-auto shrink-0">
+            <span className={`text-xs font-mono px-2.5 py-1 rounded-lg bg-[var(--brand)]/10 text-[color:var(--brand-400)] border border-[var(--brand)]/20 self-start sm:self-auto shrink-0`}>
               Remote MCP
             </span>
           </div>
@@ -199,7 +199,7 @@ POST {yourWebhookUrl}/ai-charge
               </ol>
 
               <div className="p-4 rounded-2xl bg-[#090d16] border border-white/10 space-y-2">
-                <span className="text-[11px] font-semibold text-[#a78bfa] block flex items-center gap-1.5">
+                <span className={`text-[11px] font-semibold text-[color:var(--brand-400)] block flex items-center gap-1.5`}>
                   <Info className="w-3.5 h-3.5" />
                   How to Use in Claude Chat
                 </span>
@@ -227,7 +227,7 @@ POST {yourWebhookUrl}/ai-charge
                       type="text"
                       readOnly
                       value={serverMcpUrl}
-                      className="w-full min-w-0 p-2.5 bg-white/[0.04] border border-white/10 rounded-xl font-mono text-[#a78bfa] select-all truncate"
+                      className={`w-full min-w-0 p-2.5 bg-white/[0.04] border border-white/10 rounded-xl font-mono text-[color:var(--brand-400)] select-all truncate`}
                     />
                     <button
                       onClick={() => handleCopy(serverMcpUrl, "claude-url")}

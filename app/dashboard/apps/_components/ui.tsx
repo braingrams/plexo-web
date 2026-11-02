@@ -3,6 +3,7 @@
 import type { CSSProperties, ReactNode, ButtonHTMLAttributes, ComponentType } from "react";
 import { CloudOff, RefreshCw } from "lucide-react";
 
+import { BRAND } from "@/lib/theme";
 // The app editor's visual language — the same dark, translucent surfaces as SOL (see
 // app/dashboard/sol/_components), so the editor reads as one product with the chat beside it.
 
@@ -15,8 +16,8 @@ export const C = {
   text: "#f0f2ff",
   muted: "rgba(240,242,255,0.55)",
   faint: "rgba(240,242,255,0.35)",
-  brand: "#8b5cf6",
-  brandDeep: "#7c3aed",
+  brand: BRAND.primary,
+  brandDeep: BRAND.deep,
   danger: "#f87171",
   warning: "#fbbf24",
   success: "#34d399",
@@ -104,7 +105,7 @@ export function EnvSwitch({ value, onChange }: { value: "dev" | "live"; onChange
           role="tab"
           aria-selected={value === env}
           onClick={() => onChange(env)}
-          style={{ padding: "0.32rem 0.7rem", fontSize: "0.74rem", fontWeight: 600, border: "none", cursor: "pointer", background: value === env ? "rgba(139,92,246,0.25)" : "transparent", color: value === env ? C.text : C.muted }}
+          style={{ padding: "0.32rem 0.7rem", fontSize: "0.74rem", fontWeight: 600, border: "none", cursor: "pointer", background: value === env ? "rgba(var(--brand-rgb), 0.25)" : "transparent", color: value === env ? C.text : C.muted }}
         >
           {env === "dev" ? "Preview" : "Live"}
         </button>
@@ -169,10 +170,10 @@ export function GettingStarted({ icon, title, body, children }: { icon: ReactNod
         padding: "1.6rem",
         borderRadius: 16,
         border: `1px dashed ${C.borderStrong}`,
-        background: "radial-gradient(90% 120% at 100% 0%, rgba(139,92,246,0.12), transparent 60%), rgba(255,255,255,0.015)",
+        background: "radial-gradient(90% 120% at 100% 0%, rgba(var(--brand-rgb), 0.12), transparent 60%), rgba(255,255,255,0.015)",
       }}
     >
-      <span style={{ width: 46, height: 46, borderRadius: 13, display: "grid", placeItems: "center", background: "rgba(139,92,246,0.16)", color: "#c4b5fd" }}>{icon}</span>
+      <span style={{ width: 46, height: 46, borderRadius: 13, display: "grid", placeItems: "center", background: "rgba(var(--brand-rgb), 0.16)", color: "#c4b5fd" }}>{icon}</span>
       <div style={{ minWidth: 0 }}>
         <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: C.text }}>{title}</h3>
         <p style={{ margin: "0.3rem 0 0", fontSize: "0.82rem", color: C.muted, lineHeight: 1.55, maxWidth: 720 }}>{body}</p>
@@ -217,7 +218,7 @@ export function StateStyles() {
 .plx-row { transition: background 0.15s; }
 .plx-row:hover { background: rgba(255,255,255,0.025); }
 .plx-lift { transition: transform 0.15s, border-color 0.15s, background 0.15s; }
-.plx-lift:not(:disabled):hover { transform: translateY(-1px); border-color: rgba(139,92,246,0.5) !important; }
+.plx-lift:not(:disabled):hover { transform: translateY(-1px); border-color: rgba(var(--brand-rgb), 0.5) !important; }
 @media (max-width: 1000px) { .plx-hero { grid-template-columns: minmax(0, 1fr) !important; } .plx-hero-art { display: none !important; } }
 @media (prefers-reduced-motion: reduce) { .plx-shimmer { animation: none; } .plx-lift:hover { transform: none !important; } }
 `}</style>
@@ -270,7 +271,7 @@ export function ProblemState({ title, message, onRetry }: { title: string; messa
 
 /** A page with nothing in it yet: a wide, tinted panel — words and actions on the left, a
  *  picture on the right. `tint` colours the glow (defaults to brand purple). */
-export function EmptyHero({ title, body, children, art, tint = "#8b5cf6" }: { title: string; body: ReactNode; children?: ReactNode; art?: ReactNode; tint?: string }) {
+export function EmptyHero({ title, body, children, art, tint = BRAND.primary }: { title: string; body: ReactNode; children?: ReactNode; art?: ReactNode; tint?: string }) {
   return (
     <section
       className="plx-hero"
@@ -282,7 +283,7 @@ export function EmptyHero({ title, body, children, art, tint = "#8b5cf6" }: { ti
         padding: "clamp(1.2rem, 4.5vw, 2.2rem)",
         borderRadius: 20,
         border: `1px solid ${C.border}`,
-        background: `radial-gradient(70% 90% at 100% 0%, ${tint}24, transparent 60%), radial-gradient(60% 80% at 0% 100%, rgba(139,92,246,0.08), transparent 60%), rgba(255,255,255,0.015)`,
+        background: `radial-gradient(70% 90% at 100% 0%, ${tint}24, transparent 60%), radial-gradient(60% 80% at 0% 100%, rgba(var(--brand-rgb), 0.08), transparent 60%), rgba(255,255,255,0.015)`,
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "1.2rem", minWidth: 0 }}>
@@ -345,7 +346,7 @@ export function IconButton({ label, danger, disabled, onClick, children }: { lab
 
 // Picked per name so the same thing always gets the same colour. Plexo's own purple family only:
 // brand, orchid, indigo, deep violet — status colours (C.success/warning/danger) are the only others.
-export const HUES = ["#8b5cf6", "#c084fc", "#6366f1", "#7c3aed", "#a78bfa", "#6d28d9", "#9333ea", "#818cf8"];
+export const HUES = [BRAND.primary, BRAND[300], "#6366f1", BRAND.deep, BRAND[400], BRAND[700], "#9333ea", "#818cf8"];
 export function hueGradient(key: string): string {
   let h = 0;
   for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;

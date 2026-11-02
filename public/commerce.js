@@ -816,6 +816,294 @@
   // product — a single Buy card
   // ---------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------
+  // Buy now — a complete purchase on the page the visitor is already on.
+  //
+  // The product block's "buy" mode (what "Sell this product" adds) must work wherever the
+  // block is pasted: a Free site only serves its homepage (so /store/checkout would send the
+  // buyer home), a raw upload or React app has no checkout page at all. So instead of
+  // navigating to one, this opens a small checkout over the page, takes payment with the
+  // site's own provider, and the payment return lands back on the same page, where
+  // showOrderReturn() thanks the buyer in place.
+  //
+  // Digital products (a course, an ebook) only — they need no address. A physical product
+  // still needs delivery details, so its button adds to the cart and continues to the
+  // full checkout page (see buyNowCard).
+  // ---------------------------------------------------------------------
+  function openOverlay(contentNode, onClose) {
+    injectStyles();
+    var overlay = el("div", {
+      class: "pc-root",
+      role: "dialog",
+      "aria-modal": "true",
+      style: { position: "fixed", inset: "0", zIndex: "997", background: "rgba(6,7,15,0.7)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "24px", overflow: "auto" },
+    });
+    var box = el("div", { style: { background: "#fff", width: "100%", maxWidth: "460px", margin: "auto", position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.5)", borderRadius: "14px", padding: "26px 24px 24px" } });
+    function close() {
+      document.removeEventListener("keydown", onKey);
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      if (onClose) onClose();
+    }
+    function onKey(e) {
+      if (e.key === "Escape") close();
+    }
+    box.appendChild(
+      el("button", { type: "button", "aria-label": "Close", onclick: close, style: { position: "absolute", top: "10px", right: "12px", width: "30px", height: "30px", background: "transparent", border: "none", color: "#8A93A6", cursor: "pointer", fontSize: "16px", lineHeight: "1" } }, ["✕"])
+    );
+    box.appendChild(contentNode);
+    overlay.appendChild(box);
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) close();
+    });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(overlay);
+    return close;
+  }
+
+  function openQuickCheckout(p) {
+    var answers = {};
+    var priceText = money(p.priceMinor, p.currency);
+    var body = el("div", { style: { display: "flex", flexDirection: "column", gap: "16px" } });
+    var close = openOverlay(body);
+    showSpinner(body);
+
+    fetchCheckoutConfig().then(function (config) {
+      if (!config.payment.online && !config.payment.bankTransfer) {
+        showError(body, "This store isn't taking payments yet — please check back soon.");
+        return;
+      }
+      if (!checkoutFormState.paymentMethod) checkoutFormState.paymentMethod = defaultPaymentMethod(config);
+      clear(body);
+
+      function field(label, type, autocomplete) {
+        var input = el("input", { class: "pc-input", type: type || "text", autocomplete: autocomplete || null });
+        return { wrap: el("div", {}, [el("label", { class: "pc-label" }, [label]), input]), input: input };
+      }
+      var nameField = field("Full name", "text", "name");
+      var emailField = field("Email", "email", "email");
+      var errorBox = null;
+      var payBtn;
+
+      function payLabel() {
+        return checkoutFormState.paymentMethod === "BANK_TRANSFER" ? "I've sent the transfer — place order" : "Pay " + priceText;
+      }
+      var paymentBox = el("div", {});
+      function paintPayment() {
+        clear(paymentBox);
+        var section = paymentChoiceSection(config, priceText, function (method) {
+          checkoutFormState.paymentMethod = method;
+          paintPayment();
+          if (payBtn && !payBtn.dataset.busy) payBtn.textContent = payLabel();
+        });
+        if (section) paymentBox.appendChild(section);
+      }
+      function fail(message) {
+        if (errorBox) errorBox.remove();
+        errorBox = el("div", { class: "pc-error" }, [message]);
+        payBtn.parentNode.insertBefore(errorBox, payBtn);
+      }
+      function idle() {
+        payBtn.disabled = false;
+        delete payBtn.dataset.busy;
+        payBtn.textContent = payLabel();
+      }
+
+      payBtn = el(
+        "button",
+        {
+          class: "pc-btn pc-btn-gold",
+          style: { width: "100%" },
+          onclick: function () {
+            if (errorBox) {
+              errorBox.remove();
+              errorBox = null;
+            }
+            if (!emailField.input.value || emailField.input.value.indexOf("@") === -1) return fail("Please enter a valid email — it's where your receipt and access details are sent.");
+            var missing = missingRequiredField(config.fields, answers, null);
+            if (missing) return fail('Please answer "' + missing + '".');
+            if (!checkoutFormState.paymentMethod) return fail("This store isn't taking payments yet — please check back soon.");
+            payBtn.disabled = true;
+            payBtn.dataset.busy = "1";
+            payBtn.textContent = checkoutFormState.paymentMethod === "BANK_TRANSFER" ? "Placing order…" : "Starting payment…";
+            // replace: the buyer pays for exactly this product, not whatever else was in the cart.
+            api("/api/public/commerce/cart/items", { method: "POST", body: JSON.stringify({ productId: p.id, quantity: 1, replace: true }) })
+              .then(function (snapshot) {
+                broadcastCart(snapshot);
+                return api("/api/public/commerce/checkout/cart", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    customerName: nameField.input.value || undefined,
+                    customerEmail: emailField.input.value,
+                    paymentMethod: checkoutFormState.paymentMethod || undefined,
+                    customFields: answers,
+                    returnPath: window.location.pathname,
+                  }),
+                });
+              })
+              .then(function (result) {
+                if (result.redirectUrl) {
+                  window.location.href = result.redirectUrl;
+                  return;
+                }
+                if (result.checkout && result.checkout.provider === "stripe") {
+                  idle();
+                  openStripeEmbeddedCheckout(result.checkout, function (err) {
+                    fail(err.message);
+                  });
+                  return;
+                }
+                window.location.href = result.authorizationUrl;
+              })
+              .catch(function (err) {
+                idle();
+                fail(err.message);
+              });
+          },
+        },
+        [payLabel()]
+      );
+      paintPayment();
+
+      body.appendChild(
+        el("div", { style: { display: "flex", gap: "14px", alignItems: "center", paddingRight: "28px" } }, [
+          p.imageUrl ? el("img", { src: p.imageUrl, alt: "", style: { width: "56px", height: "56px", objectFit: "cover", flexShrink: "0", borderRadius: "6px" } }) : null,
+          el("div", { style: { minWidth: "0" } }, [
+            el("div", { style: { fontSize: "15px", fontWeight: "700", color: "#16233F" } }, [p.name]),
+            el("div", { class: "pc-muted", style: { fontSize: "13.5px", marginTop: "2px" } }, [priceText]),
+          ]),
+        ])
+      );
+      body.appendChild(el("div", { style: { height: "1px", background: "#E4E1D6" } }));
+      body.appendChild(nameField.wrap);
+      body.appendChild(emailField.wrap);
+      var extra = customFieldsSection(config.fields, answers, null);
+      if (extra) body.appendChild(extra);
+      body.appendChild(paymentBox);
+      body.appendChild(payBtn);
+      body.appendChild(el("p", { class: "pc-muted", style: { margin: "0", fontSize: "11.5px", textAlign: "center" } }, ["Secure checkout — you'll stay on this page."]));
+      emailField.input.focus();
+    }).catch(function (err) {
+      showError(body, err.message);
+    });
+    return close;
+  }
+
+  // The buyer's own page, after paying: shows their order in place of the confirmation page a
+  // one-page site doesn't have. (A site that does have the confirmation block on this page
+  // keeps showing it there instead — see mountAll.)
+  function showOrderReturn() {
+    var params = new URLSearchParams(window.location.search);
+    var orderNumber = params.get("plexo_order");
+    var email = params.get("email");
+    if (!orderNumber || !email) return;
+    if (document.querySelector("[data-plexo-commerce-orderConfirmation]")) return;
+    var holder = el("div", { style: { minHeight: "120px" } });
+    openOverlay(holder);
+    // The order details belong to this one visit; don't leave them in the address bar to be shared.
+    try {
+      var clean = new URL(window.location.href);
+      ["plexo_order", "email", "trxref", "reference", "session_id"].forEach(function (k) {
+        clean.searchParams.delete(k);
+      });
+      window.history.replaceState(null, "", clean.pathname + clean.search + clean.hash);
+    } catch (e) {}
+    renderOrderConfirmation(holder, { orderNumber: orderNumber, email: email, inline: true });
+  }
+
+  // Starts buying `p` from wherever the visitor clicked. Digital: the checkout over this page.
+  // Otherwise (needs a delivery address, or has options): the cart and the full checkout page.
+  // `onWait(true|false)` lets the caller show a busy state while this runs.
+  function startBuyNow(p, onWait) {
+    var wait = onWait || function () {};
+    if (p.kind === "DIGITAL" && !needsOptions(p)) {
+      openQuickCheckout(p);
+      return;
+    }
+    wait(true);
+    if (needsOptions(p)) {
+      window.location.href = productHref(p);
+      return;
+    }
+    api("/api/public/commerce/cart/items", { method: "POST", body: JSON.stringify({ productId: p.id, quantity: 1, replace: true }) })
+      .then(function (snapshot) {
+        broadcastCart(snapshot);
+        window.location.href = CHECKOUT_PATH;
+      })
+      .catch(function (err) {
+        wait(false);
+        alert(err.message);
+      });
+  }
+
+  // Any link or button that points at a product opens its Buy now — so an existing page's own
+  // "Buy" buttons (a hand-written landing page, a React app) become real checkouts by changing
+  // only the link: href="#plexo-buy-<productId>", or data-plexo-buy="<productId>" on anything
+  // clickable. Delegated, so buttons an app renders later work without any wiring.
+  var BUY_HREF = /^#plexo-buy-(.+)$/;
+  function buyTargetOf(node) {
+    var hit = node && node.closest ? node.closest("[data-plexo-buy], a[href^='#plexo-buy-']") : null;
+    if (!hit) return null;
+    var id = hit.getAttribute("data-plexo-buy");
+    if (!id) {
+      var m = BUY_HREF.exec(hit.getAttribute("href") || "");
+      id = m ? decodeURIComponent(m[1]) : "";
+    }
+    return id ? { node: hit, id: id } : null;
+  }
+  function watchBuyLinks() {
+    document.addEventListener("click", function (e) {
+      var target = buyTargetOf(e.target);
+      if (!target || target.node.getAttribute("aria-busy") === "true") return;
+      e.preventDefault();
+      injectStyles();
+      function busy(on) {
+        if (on) target.node.setAttribute("aria-busy", "true");
+        else target.node.removeAttribute("aria-busy");
+        target.node.style.opacity = on ? "0.6" : "";
+      }
+      busy(true);
+      api("/api/public/commerce/products/" + encodeURIComponent(target.id))
+        .then(function (data) {
+          busy(false);
+          startBuyNow(data.product, busy);
+        })
+        .catch(function (err) {
+          busy(false);
+          alert(err.message);
+        });
+    });
+  }
+
+  // The "buy" mode card: picture, name, description, price, one Buy now button.
+  function buyNowCard(node, p) {
+    var label = node.getAttribute("data-plexo-commerce-button-label") || "Buy now";
+    var soldOut = p.stockQuantity === 0;
+    var btn = el(
+      "button",
+      {
+        class: "pc-btn pc-btn-gold",
+        style: { width: "100%", padding: "15px 0", fontSize: "15px" },
+        disabled: soldOut ? "disabled" : null,
+        onclick: function () {
+          startBuyNow(p, function (on) {
+            btn.disabled = on;
+            btn.textContent = on ? "One moment…" : needsOptions(p) ? "Choose options" : label + " — " + money(p.priceMinor, p.currency);
+          });
+        },
+      },
+      [soldOut ? "Out of Stock" : needsOptions(p) ? "Choose options" : label + " — " + money(p.priceMinor, p.currency)]
+    );
+    return el("div", { style: { background: "#fff", border: "1px solid #E4E1D6", overflow: "hidden", height: "100%" } }, [
+      p.imageUrl ? el("img", { src: p.imageUrl, alt: p.name, style: { width: "100%", maxHeight: "320px", objectFit: "cover", display: "block" } }) : null,
+      el("div", { style: { padding: "22px", display: "flex", flexDirection: "column", gap: "12px" } }, [
+        el("h3", { class: "pc-serif", style: { margin: "0", fontSize: "20px", fontWeight: "600", color: "#16233F" } }, [p.name]),
+        p.description ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "14px", lineHeight: "1.6", whiteSpace: "pre-line" } }, [p.description]) : null,
+        el("div", { class: "pc-mono", style: { fontSize: "18px", color: "#16233F" } }, priceChildren(p)),
+        btn,
+      ]),
+    ]);
+  }
+
   function renderProduct(node) {
     // "detail" mode: a single, reusable Product Detail page (see CommerceSettings.
     // productDetailTemplateId) with no productId of its own — the site owner never picks
@@ -880,6 +1168,11 @@
           node.appendChild(
             el("a", { class: "pc-btn pc-btn-gold", href: "#" + node.getAttribute("data-plexo-id"), style: bare ? { width: "100%" } : {}, onclick: function (e) { e.preventDefault(); var target = document.querySelector('[data-plexo-commerce-booking][data-plexo-service-id="' + p.id + '"]'); if (target) target.scrollIntoView({ behavior: "smooth", block: "center" }); } }, ["Book this service"])
           );
+          return;
+        }
+
+        if (node.getAttribute("data-plexo-commerce-mode") === "buy") {
+          node.appendChild(buyNowCard(node, p));
           return;
         }
 
@@ -2595,10 +2888,11 @@
   // order_confirmation — thank-you screen
   // ---------------------------------------------------------------------
 
-  function renderOrderConfirmation(node) {
+  function renderOrderConfirmation(node, opts) {
+    opts = opts || {};
     var params = new URLSearchParams(window.location.search);
-    var orderNumber = params.get("order");
-    var email = params.get("email");
+    var orderNumber = opts.orderNumber || params.get("order");
+    var email = opts.email || params.get("email");
     if (!orderNumber || !email) {
       showError(node, "No order to show here yet.");
       return;
@@ -2646,7 +2940,12 @@
               ? el("div", { class: "pc-muted", style: { fontSize: "13px" } }, ["Scheduled for " + new Date(order.booking.scheduledStart).toLocaleString()])
               : null,
             el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "16px", fontWeight: "700", color: "#16233F" } }, [el("span", {}, ["Total"]), el("span", {}, [money(order.amountMinor, order.currency)])]),
-            el("a", { class: "pc-btn", href: "/track-order?order=" + encodeURIComponent(order.orderNumber) + "&email=" + encodeURIComponent(email), style: { textAlign: "center", textDecoration: "none" } }, ["Track my order"]),
+            order.status === "PAID" && opts.inline
+              ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13px", lineHeight: "1.55" } }, ["Thank you! A receipt and any download or access details are on their way to " + email + "."])
+              : null,
+            opts.inline
+              ? null
+              : el("a", { class: "pc-btn", href: "/track-order?order=" + encodeURIComponent(order.orderNumber) + "&email=" + encodeURIComponent(email), style: { textAlign: "center", textDecoration: "none" } }, ["Track my order"]),
           ])
         );
       })
@@ -3022,19 +3321,64 @@
     }, true);
   }
 
+  // Every marker is painted once. Tracking painted nodes (not just running at load) lets this
+  // also pick up markers that appear later — a React app renders its page after the script
+  // has loaded, and a marker that is re-created on navigation needs painting again.
+  var painted = typeof WeakSet === "function" ? new WeakSet() : null;
+  var MARKER_SELECTORS = [
+    ["[data-plexo-commerce-product]", renderProduct],
+    ["[data-plexo-commerce-booking]", renderBooking],
+    ["[data-plexo-commerce-shopGrid]", renderShopGrid],
+    ["[data-plexo-commerce-cartSummary]", renderCartSummary],
+    ["[data-plexo-commerce-checkoutFlow]", renderCheckoutFlow],
+    ["[data-plexo-commerce-orderConfirmation]", renderOrderConfirmation],
+    ["[data-plexo-commerce-orderTracking]", renderOrderTracking],
+    ["[data-plexo-newsletter-signup]", renderNewsletterSignup],
+    ["[data-plexo-donation]", renderDonation],
+  ];
+  function mountAll(root) {
+    MARKER_SELECTORS.forEach(function (pair) {
+      var nodes = [];
+      if (root.nodeType === 1 && root.matches(pair[0])) nodes.push(root);
+      root.querySelectorAll(pair[0]).forEach(function (n) {
+        nodes.push(n);
+      });
+      nodes.forEach(function (n) {
+        if (painted) {
+          if (painted.has(n)) return;
+          painted.add(n);
+        }
+        pair[1](n);
+      });
+    });
+  }
+
+  function watchForNewMarkers() {
+    if (!window.MutationObserver || !painted) return;
+    var pending = false;
+    new MutationObserver(function (mutations) {
+      if (pending) return;
+      var added = mutations.some(function (m) {
+        return m.addedNodes && m.addedNodes.length > 0;
+      });
+      if (!added) return;
+      pending = true;
+      // One pass per frame, however many nodes a framework just inserted.
+      (window.requestAnimationFrame || setTimeout)(function () {
+        pending = false;
+        mountAll(document.body);
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+
   function init() {
     injectStyles();
-    document.querySelectorAll("[data-plexo-commerce-product]").forEach(renderProduct);
-    document.querySelectorAll("[data-plexo-commerce-booking]").forEach(renderBooking);
-    document.querySelectorAll("[data-plexo-commerce-shopGrid]").forEach(renderShopGrid);
-    document.querySelectorAll("[data-plexo-commerce-cartSummary]").forEach(renderCartSummary);
-    document.querySelectorAll("[data-plexo-commerce-checkoutFlow]").forEach(renderCheckoutFlow);
-    document.querySelectorAll("[data-plexo-commerce-orderConfirmation]").forEach(renderOrderConfirmation);
-    document.querySelectorAll("[data-plexo-commerce-orderTracking]").forEach(renderOrderTracking);
-    document.querySelectorAll("[data-plexo-newsletter-signup]").forEach(renderNewsletterSignup);
-    document.querySelectorAll("[data-plexo-donation]").forEach(renderDonation);
+    mountAll(document);
     renderProductCounts();
     fetchCart().then(broadcastCart).catch(function () {});
+    showOrderReturn();
+    watchBuyLinks();
+    watchForNewMarkers();
   }
 
   if (document.readyState === "loading") {

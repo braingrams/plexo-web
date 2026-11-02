@@ -26,6 +26,9 @@ const APP_SECRET_KEYS = [
   // deploy-production.yml/deploy-staging.yml's "Build the app" step) since only the server
   // ever needs it.
   "CHARISOL_USER_POOL_ID",
+  // Strata's Cognito app client id(s), comma-separated: Charisol sign-ins issued to them are accepted by
+  // the Strata publish routes (server/charisolVerifier.ts getCharisolPartnerVerifier).
+  "CHARISOL_TRUSTED_CLIENT_IDS",
   "AI_KEY_ENCRYPTION_SECRET",
   "PAYSTACK_KEY_ENCRYPTION_SECRET",
   "COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET",
@@ -39,6 +42,10 @@ const APP_SECRET_KEYS = [
   // the app-visitor Cognito pool for zero-setup "Sign in with Google" (lib/appAuth/oauth.ts;
   // the three APP_SIGNIN_* values are written by cdk/lib/app-data-stack.ts).
   "APP_SECRETS_ENCRYPTION_SECRET",
+  // Connecting a person's Strata account from the editor's Branding panel (lib/strata): the key
+  // that encrypts their Strata session at rest, and Strata's API root (incl. /v1).
+  "STRATA_TOKEN_ENCRYPTION_SECRET",
+  "STRATA_API_URL",
   "APP_SIGNIN_COGNITO_CLIENT_ID",
   "APP_SIGNIN_COGNITO_USER_POOL_ID",
   "APP_SIGNIN_COGNITO_DOMAIN",
@@ -52,6 +59,12 @@ const APP_SECRET_KEYS = [
   // Production only: one GitHub App serves both environments, so production passes
   // staging's webhooks and install redirects on (lib/projects/github/relay.ts).
   "PLEXO_GITHUB_RELAY_ORIGIN",
+  // Plain on/off flag ("true" to enable) for server/passwordSignIn.ts; set directly in SSM
+  // like the relay origin above. Leave unset until Charisol has approved legacy-verify.
+  "CHARISOL_PASSWORD_ENFORCED",
+  // Runtime flag (not a secret): "true" creates NEW landing pages in the new editor's V2 format
+  // (lib/v2/design.ts defaultDesignFormat). Unset/anything else = classic V1.
+  "TEMPLATES_V2_NEW",
   "MAILDRIP_API_URL",
   "MAILDRIP_API_KEY",
   "STRIPE_SECRET_KEY",

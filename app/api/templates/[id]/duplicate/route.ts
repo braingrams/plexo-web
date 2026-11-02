@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { recompileCopiedV2Page } from "@/lib/v2/copy";
 import { NextRequest, NextResponse } from "next/server";
 import { uploadObject } from "@/lib/storage";
 
@@ -9,7 +10,6 @@ import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { ensureUniqueSlug, isValidUuid } from "@/server/slugDynamo";
 import { ensureUniqueTemplateName } from "@/server/templateNameDynamo";
-import { getTierFeatures } from "@/lib/subscription";
 
 /**
  * POST /api/templates/:id/duplicate
@@ -28,13 +28,6 @@ export async function POST(
   if (!resolved) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!getTierFeatures(resolved.subscriptionPlan).multiPageSitesEnabled) {
-    return NextResponse.json(
-      { error: "Multi-page sites require an Ultra subscription plan.", plan: resolved.subscriptionPlan },
-      { status: 403 },
-    );
-  }
-
   const permissionError = requirePermission(resolved.role, { template: ["create"] });
   if (permissionError) return permissionError;
 
@@ -99,6 +92,7 @@ export async function POST(
     organizationId: resolved.organizationId,
     name,
     kind: existing.kind,
+    designFormat: existing.designFormat ?? "v1",
     sourceType: existing.sourceType,
     parentId: existing.parentId,
     slug,
@@ -106,6 +100,7 @@ export async function POST(
     designJson: existing.designJson,
     compiledHtml: existing.compiledHtml,
   }).go();
+  await recompileCopiedV2Page(newId);
   const { data: duplicate } = await Template.get({ id: newId }).go();
   if (!duplicate) throw new Error(`Template ${newId} vanished immediately after being created`);
 

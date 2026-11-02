@@ -16,6 +16,7 @@ import { resolveOrderDeliveryMethod, InvalidDeliveryMethodError, pickupLocationF
 import { readCheckoutFields, resolveCheckoutFieldAnswers, CheckoutFieldsError } from "@/lib/commerce/checkoutFields";
 import { chooseCheckoutPaymentMethod } from "@/lib/commerce/checkoutPayment";
 import { isBankTransferReady, generateBankTransferToken, notifyBankTransferPlaced, BANK_TRANSFER_HOLD_MS } from "@/lib/commerce/bankTransfer";
+import { orderReturnUrl, safeReturnPath } from "@/lib/commerce/returnPath";
 import { CommerceOrder, CommerceSettings, CommerceProduct, CommerceDiscountCode, CommerceAvailabilityRule, CommerceAvailabilityException, CommerceBooking } from "@/lib/db/commerceEntities";
 
 function generateOrderNumber(): string {
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     discountCode: rawDiscountCode,
     paymentMethod: requestedPaymentMethod,
     customFields: rawCustomFields,
+    returnPath: rawReturnPath,
   } = body;
 
   if (typeof productId !== "string" || !productId) {
@@ -299,7 +301,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     throw err;
   }
 
-  const callbackUrl = `${request.nextUrl.origin}/order-confirmation?order=${order.orderNumber}&email=${encodeURIComponent(customerEmail)}`;
+  const callbackUrl = orderReturnUrl(request.nextUrl.origin, order.orderNumber, customerEmail, safeReturnPath(rawReturnPath));
 
   // Bank transfer: the order (and any booking slot) is held until the owner confirms the
   // money arrived — see lib/commerce/bankTransfer.ts.

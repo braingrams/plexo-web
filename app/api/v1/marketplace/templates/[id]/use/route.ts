@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { recompileCopiedV2Page } from "@/lib/v2/copy";
 import { NextRequest, NextResponse } from "next/server";
 import { uploadObject } from "@/lib/storage";
 
@@ -86,6 +87,7 @@ export async function POST(
         organizationId: resolved.organizationId,
         name,
         kind: listing.kind,
+        designFormat: listing.designFormat ?? "v1",
         sourceType: listing.sourceType,
         designJson: listing.designJson,
         compiledHtml: listing.compiledHtml,
@@ -101,10 +103,12 @@ export async function POST(
     organizationId: resolved.organizationId,
     name,
     kind: listing.kind,
+    designFormat: listing.designFormat ?? "v1",
     sourceType: listing.sourceType,
     designJson: listing.designJson,
     compiledHtml: listing.compiledHtml,
   }).go();
+  await recompileCopiedV2Page(newId);
 
   return NextResponse.json({ template: { id: newId, name, kind: listing.kind } }, { status: 201 });
 }

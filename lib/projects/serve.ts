@@ -4,10 +4,13 @@ import { Template } from "@/lib/db/contentEntities";
 import { ProjectBuild } from "@/lib/db/projectEntities";
 import { resolveHideBranding, canWhiteLabel } from "@/lib/subscription";
 import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
-import { injectBrandingBar, injectFavicon, injectSeoTags, insertBeforeBodyEnd } from "@/lib/pub/htmlInject";
+import { injectBrandingBar, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags, insertBeforeBodyEnd } from "@/lib/pub/htmlInject";
 import { buildSitePrefix, getObject } from "./blobStore";
 import { ANALYTICS_BEACON_JS, previewRuntimeJs } from "./previewRuntime";
 import { latestSuccessfulBuild, recordLatestBuild } from "./builds";
+import { orderLinkOnHomepage } from "@/lib/commerce/returnPath";
+import { DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
+import { CommerceSettings } from "@/lib/db/commerceEntities";
 import { injectAppSeo, type AppSeo } from "./appSeo";
 import { AppSettings } from "@/lib/db/appEntities";
 
@@ -114,7 +117,7 @@ export async function serveProject(request: Request, ctx: ServeContext): Promise
   // and images still load (the first screen needs them). The in-app router is covered too:
   // HOME_ONLY_GUARD_JS (htmlResponse) stops client-side navigation to other screens.
   if (ctx.homeOnly && wantsFile && !isAsset && !looksLikeFile) {
-    return NextResponse.redirect(new URL(`/${url.search}`, url), { status: 302, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.redirect(new URL(orderLinkOnHomepage(url.pathname, url.search) ?? `/${url.search}`, url), { status: 302, headers: { "Cache-Control": "no-store" } });
   }
 
   if (wantsFile) {
@@ -170,6 +173,18 @@ async function appSeo(templateId: string): Promise<AppSeo | null> {
   return seo;
 }
 
+const commerceCache = new Map<string, { enabled: boolean; at: number }>();
+
+async function commerceEnabled(templateId: string): Promise<boolean> {
+  const hit = commerceCache.get(templateId);
+  if (hit && Date.now() - hit.at < SEO_TTL_MS) return hit.enabled;
+  const { data } = await CommerceSettings.get({ templateId }).go({ attributes: ["enabled"] }).catch(() => ({ data: null }));
+  const enabled = Boolean(data?.enabled);
+  commerceCache.set(templateId, { enabled, at: Date.now() });
+  if (commerceCache.size > 2000) commerceCache.delete(commerceCache.keys().next().value!);
+  return enabled;
+}
+
 async function htmlResponse(source: string, url: URL, ctx: ServeContext): Promise<NextResponse> {
   let html = source;
   const seo = await appSeo(ctx.template.id);
@@ -189,6 +204,14 @@ async function htmlResponse(source: string, url: URL, ctx: ServeContext): Promis
     html = html.replace(/<head[^>]*>/i, (m) => `${m}<script>${HOME_ONLY_GUARD_JS}</script>`);
   }
   html = insertBeforeBodyEnd(html, `<script>${ANALYTICS_BEACON_JS}</script>`);
+  // Plexo content blocks and form collection for apps: both watch the page, so they also pick up
+  // what the app renders after load. Forms are connected only when marked data-plexo-form.
+  html = injectContentScript(html);
+  html = injectFormsScript(html, ctx.template.id, { auto: false });
+  // Commerce for apps: a buy card (data-plexo-commerce-product, see lib/commerce/embedSnippets.ts)
+  // anywhere in the app's pages. The runtime watches the page, so a card the app renders after
+  // load is picked up. Only when the owner has turned Commerce on — otherwise it costs nothing.
+  if (!ctx.isPreview && (await commerceEnabled(ctx.template.id))) html = injectCommerceScript(html, `/${DEFAULT_STOREFRONT_SLUG}`, null, null);
   if (!resolveHideBranding(ctx.owner.subscriptionPlan, ctx.owner.hideBranding)) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);

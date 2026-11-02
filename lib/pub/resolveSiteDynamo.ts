@@ -1,6 +1,7 @@
 import { EntityItem } from "electrodb";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { Template, PublishedDomain, BlogSite } from "@/lib/db/contentEntities";
+import { DeployedApp } from "@/lib/db/appEntities";
 import { User, Organization } from "@/lib/db/coreEntities";
 import { after } from "next/server";
 import { effectivePlan, planSyncAction } from "@/lib/plan/entitlement";
@@ -97,6 +98,9 @@ export type ResolveBlogSiteResult =
   | { status: "suspended" }
   | { status: "inactive"; domain: string; domainType: "SUBDOMAIN" | "CUSTOM" }
   | { status: "blog_disabled" }
+  // A DeployedApp entity exists for this template — blog/feed.xml and blog/sitemap.xml
+  // use this to return 404 rather than Plexo's own feed for a static-deployed site.
+  | { status: "deployed" }
   | { status: "ok"; published: ResolvedPublishedDomain; blogSite: EntityItem<typeof BlogSite> };
 
 /**
@@ -107,6 +111,10 @@ export type ResolveBlogSiteResult =
 export async function resolveBlogSite(rawDomain: string): Promise<ResolveBlogSiteResult> {
   const site = await resolveSite(rawDomain);
   if (site.status !== "ok") return site;
+
+  // A deployed static app owns all its routes — Plexo's own blog feature doesn't apply.
+  const { data: deployedApp } = await DeployedApp.get({ templateId: site.published.template.id }).go();
+  if (deployedApp?.type === "STATIC") return { status: "deployed" };
 
   // Free serves a site's homepage only — the blog is kept, but not served, until an upgrade.
   if (isHomePageOnlyPlan(site.published.user.subscriptionPlan)) return { status: "blog_disabled" };

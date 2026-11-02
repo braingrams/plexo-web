@@ -532,7 +532,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
             onClick={() => openFile(node.path)}
             title={node.path}
             aria-label={`Open ${node.path}`}
-            style={{ ...rowStyle, paddingLeft: pad + 17, background: isActive ? "rgba(139,92,246,0.16)" : "transparent", color: isActive ? C.text : "rgba(240,242,255,0.8)", paddingRight: 56 }}
+            style={{ ...rowStyle, paddingLeft: pad + 17, background: isActive ? "rgba(var(--brand-rgb), 0.16)" : "transparent", color: isActive ? C.text : "rgba(240,242,255,0.8)", paddingRight: 56 }}
           >
             <FileText size={13} color={C.faint} aria-hidden />
             <span style={nameStyle}>{node.name}</span>

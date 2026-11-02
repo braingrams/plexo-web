@@ -148,6 +148,7 @@ export class DataStack extends cdk.Stack {
       // rebuilt on demand (tagged by the build Lambda, since its prefix varies per project).
       lifecycleRules: [
         { id: "deploy-uploads", prefix: "private/deploy-uploads/", expiration: cdk.Duration.days(1) },
+        { id: "deploy-staging-chunks", prefix: "private/deployStaging/", expiration: cdk.Duration.days(1) },
         { id: "sol-screenshots", tagFilters: { "plexo-expire": "screenshot" }, expiration: cdk.Duration.days(7) },
         { id: "project-deps-cache", tagFilters: { "plexo-cache": "deps" }, expiration: cdk.Duration.days(30) },
         { id: "abort-incomplete-uploads", abortIncompleteMultipartUploadAfter: cdk.Duration.days(1) },

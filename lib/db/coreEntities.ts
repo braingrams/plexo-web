@@ -189,6 +189,88 @@ export const UserEmailLock = new Entity(
   { table, client: docClient },
 );
 
+// A person's Strata (Charisol design system) session — what lets the editor's Branding panel
+// read and update their Strata projects on their behalf (lib/strata). One row per Plexo
+// user. The token is a Strata session JWT (~24h), stored ENCRYPTED (lib/crypto.ts
+// encryptStrataToken) and never sent back to the browser; connectedAt is when Strata issued
+// it, which is how "expired" is told apart from "never connected". Only a primary-key lookup
+// is ever needed, so no GSI.
+export const StrataSession = new Entity(
+  {
+    model: { entity: "strataSession", version: "1", service: "plexoCore" },
+    attributes: {
+      userId: { type: "string", required: true },
+      ciphertext: { type: "string", required: true },
+      // Who the Strata account is — shown as "Connected as …", never used for access decisions.
+      strataEmail: { type: "string" },
+      strataName: { type: "string" },
+      connectedAt: { type: "string", required: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["userId"], template: "USER#${userId}" },
+        sk: { field: "sk", composite: [], template: "STRATASESSION" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// The person's Charisol sign-in, kept on the server (encrypted) so another Charisol product — Strata today — can be opened as
+// them without asking them to sign in again: Charisol's own browser session only lasts about an hour, but this renews a fresh
+// ID token whenever it's needed (lib/charisolLink.ts). Never returned to the browser; removed when they sign out of Plexo.
+export const CharisolLink = new Entity(
+  {
+    model: { entity: "charisolLink", version: "1", service: "plexoCore" },
+    attributes: {
+      userId: { type: "string", required: true },
+      ciphertext: { type: "string", required: true },
+      storedAt: { type: "string", required: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["userId"], template: "USER#${userId}" },
+        sk: { field: "sk", composite: [], template: "CHARISOLLINK" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// "Keep my website up to date with Strata" (lib/strata/autoUpdate.ts): one row per app that has
+// automatic updates on. It holds a read-only Strata integration key (scope design-system:read,
+// limited to the one linked project), stored ENCRYPTED and never sent to the browser, so a
+// scheduled job can check Strata without the owner being signed in. runningAt is the per-app
+// lock (a run older than a few minutes is treated as dead). The scheduled sweep scans this
+// small table for status "active".
+export const StrataAutoUpdate = new Entity(
+  {
+    model: { entity: "strataAutoUpdate", version: "1", service: "plexoCore" },
+    attributes: {
+      appId: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      strataProjectId: { type: "string", required: true },
+      keyId: { type: "string", required: true },
+      ciphertext: { type: "string", required: true },
+      status: { type: ["active", "needs-reconnect"] as const, required: true },
+      createdAt: { type: "string", required: true },
+      lastCheckedAt: { type: "string" },
+      lastRevision: { type: "string" },
+      // What the last check found, for the Design tab: "updated" | "up-to-date" | "needs-review" | "error" | "reconnect".
+      lastResultKind: { type: "string" },
+      lastResult: { type: "string" },
+      runningAt: { type: "string" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["appId"], template: "APP#${appId}" },
+        sk: { field: "sk", composite: [], template: "STRATAAUTOUPDATE" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const Organization = new Entity(
   {
     model: { entity: "organization", version: "1", service: "plexoCore" },
@@ -499,6 +581,8 @@ export const plexoCoreService = new Service(
   {
     User,
     UserEmailLock,
+    StrataSession,
+    CharisolLink,
     Organization,
     Member,
     ApiKey,

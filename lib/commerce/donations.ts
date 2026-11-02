@@ -773,7 +773,11 @@ export async function ensureDonationsReady(templateId: string, organizationId: s
 }
 
 /** Everything the Donations dashboard (and the MCP list tool) shows, in one read. */
-export async function listDonationsOverview(templateId: string) {
+/**
+ * The donations screen's data. `allGifts` is for the dashboard, which pages through every gift itself;
+ * callers that hand the result to an assistant keep the short "recent" list so the reply stays small.
+ */
+export async function listDonationsOverview(templateId: string, opts: { allGifts?: boolean } = {}) {
   const [{ data: campaigns }, { data: subs }, { data: orders }, { data: settings }] = await Promise.all([
     CommerceDonationCampaign.query.primary({ templateId }).go({ pages: "all" }),
     CommerceDonationSubscription.query.primary({ templateId }).go({ pages: "all" }),
@@ -836,7 +840,8 @@ export async function listDonationsOverview(templateId: string) {
         lastChargedAt: s.lastChargedAt ?? null,
         source: s.source ?? "plexo",
       })),
-    recentGifts: gifts.slice(0, 50).map((o) => {
+    giftsTotal: gifts.length,
+    recentGifts: (opts.allGifts ? gifts : gifts.slice(0, 50)).map((o) => {
       const meta = (o.metadata ?? {}) as { campaignName?: string; frequency?: string; renewal?: boolean };
       return {
         id: o.id,

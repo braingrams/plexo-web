@@ -6,6 +6,9 @@ import { AI_UNREACHABLE } from "@/lib/ai/requestErrors";
 import { checkAiCredits, generateWithProgress, type AiRequestBody } from "@/lib/ai/clientGenerate";
 import type { DragEvent, FormEvent } from "react";
 import Link from "next/link";
+import type { MarketplaceListItem } from "@/lib/marketplace";
+import { MarketplaceRowExpandGrid } from "@/app/marketplace/MarketplaceRowExpandGrid";
+import { MarketplaceSkeletonGrid } from "@/app/marketplace/MarketplaceBrowse";
 import { CustomSelect } from "../../_components/CustomSelect";
 
 // Same four tiers/labels as Settings → AI's own Creativity Tier picker (AiSettingsClient.tsx)
@@ -29,25 +32,12 @@ const AI_TIER_OPTIONS: Array<{ label: string; value: "AUTO" | "BASIC" | "MEDIUM"
   { label: "Most Capable", value: "HIGH", description: "Most creative & thorough" },
 ];
 
-type MarketplaceItem = {
-  id: string;
-  name: string;
-  kind: "EMAIL" | "LANDING_PAGE";
-  category: string | null;
-  priceCents: number;
-};
+type MarketplaceItem = MarketplaceListItem;
 
 type CreatedTemplate = { id: string; name: string };
 
 const hairline = "rgba(255,255,255,0.09)";
 const hairlineSoft = "rgba(255,255,255,0.055)";
-
-const SWATCHES = [
-  "linear-gradient(150deg,#312e81,var(--brand-deep) 60%,var(--brand-light))",
-  "linear-gradient(150deg,#0f172a,#0ea5e9 65%,#67e8f9)",
-  "linear-gradient(150deg,#134e4a,#10b981 65%,#6ee7b7)",
-  "linear-gradient(150deg,#450a0a,#f43f5e 65%,#fda4af)",
-];
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
@@ -303,7 +293,7 @@ export function NewSiteWizard() {
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/v1/marketplace/templates?sort=popular&free=true")
+    fetch("/api/v1/marketplace/templates?sort=popular&free=true&kind=LANDING_PAGE")
       .then((res) => res.json())
       .then((data) => setItems(data.templates ?? []))
       .catch(() => setItems([]))
@@ -681,7 +671,7 @@ export function NewSiteWizard() {
 
               {startTab === "marketplace" ? (
                 loadingItems ? (
-                  <p style={{ fontSize: "12.5px", color: "var(--text-faint)" }}>Loading templates…</p>
+                  <MarketplaceSkeletonGrid />
                 ) : items.length === 0 ? (
                   <p style={{ fontSize: "12.5px", color: "var(--text-faint)" }}>
                     No free templates available right now — try{" "}
@@ -695,41 +685,7 @@ export function NewSiteWizard() {
                     .
                   </p>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 18 }}>
-                    {items.slice(0, 8).map((item, i) => {
-                      const busy = busyId === item.id;
-                      return (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => void handleUseMarketplace(item)}
-                          disabled={busy}
-                          style={{
-                            textAlign: "left",
-                            background: "rgba(255,255,255,0.02)",
-                            border: `1px solid ${hairline}`,
-                            borderRadius: 12,
-                            padding: 10,
-                            cursor: busy ? "wait" : "pointer",
-                            fontFamily: "inherit",
-                            color: "inherit",
-                            transition: "border-color 0.15s, transform 0.15s",
-                          }}
-                        >
-                          <div style={{ height: 72, borderRadius: 8, background: SWATCHES[i % SWATCHES.length], marginBottom: 10 }} />
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
-                            <div style={{ minWidth: 0 }}>
-                              <div style={{ fontSize: "12.5px", fontWeight: 650, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {item.name}
-                              </div>
-                              <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>{item.category ?? (item.kind === "LANDING_PAGE" ? "Landing Page" : "Email")}</div>
-                            </div>
-                            <span style={{ fontSize: "11px", fontWeight: 650, color: "var(--success)", flexShrink: 0 }}>{busy ? "…" : "Use →"}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <MarketplaceRowExpandGrid templates={items} busyId={busyId} onSelect={(t) => void handleUseMarketplace(t)} />
                 )
               ) : startTab === "ai" ? (
                 <div style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 18 }}>

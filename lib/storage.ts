@@ -26,6 +26,16 @@ function publicUrlFor(key: string): string {
   return `https://${bucketName()}.s3.${REGION}.amazonaws.com/${key}`;
 }
 
+/** The origin user uploads are served from, or null when storage isn't configured (tests, local). Used to
+ * allow the owner's own uploaded font files in compiled pages' @font-face rules. */
+export function userContentOrigin(): string | null {
+  try {
+    return `https://${bucketName()}.s3.${REGION}.amazonaws.com`;
+  } catch {
+    return null;
+  }
+}
+
 /** Extracts the S3 key from a URL this module minted (publicUrlFor's inverse). Throws on
  * a URL from a different bucket/format — every real caller only ever passes back a URL
  * this module itself produced. */
@@ -107,6 +117,14 @@ export async function getSignedDownloadUrl(privateUrl: string, expiresInSeconds:
   return getSignedUrl(s3(), new GetObjectCommand({ Bucket: bucketName(), Key: key }), { expiresIn: expiresInSeconds });
 }
 
+/** Returns the public URL for a file uploaded via uploadDeployedAppFile / uploadObject.
+ * `s3Prefix` is the value stored in DeployedApp.s3Prefix (e.g. "deployedApps/tmpl_abc").
+ * `filePath` is the relative path within that prefix (e.g. "assets/main.js").
+ * The caller never needs to reconstruct the bucket URL format. */
+export function deployedAppFileUrl(s3Prefix: string, filePath: string): string {
+  return publicUrlFor(`public/${s3Prefix}/${filePath}`);
+}
+
 /** Replaces @vercel/blob/client's browser-direct-upload flow (upload() on the client +
  * handleUpload() on the server) — an S3 presigned POST policy the browser submits
  * straight to S3, bypassing the Lambda entirely for the file bytes (same reason Vercel's
@@ -125,6 +143,38 @@ export async function createPresignedUploadPost(
     Expires: 5 * 60,
   });
   return { url, fields, publicUrl: publicUrlFor(key) };
+}
+
+/** Reads a private or public object by its storage path (no URL construction needed).
+ * Use this instead of readObject when the caller already knows the path — e.g. reassembling
+ * staging chunks uploaded via uploadObject. */
+export async function readObjectAtKey(
+  path: string,
+  access: "public" | "private",
+): Promise<{ body: Buffer; contentType: string | undefined }> {
+  const key = `${access}/${path}`;
+  try {
+    const res = await s3().send(new GetObjectCommand({ Bucket: bucketName(), Key: key }));
+    const bytes = await res.Body!.transformToByteArray();
+    return { body: Buffer.from(bytes), contentType: res.ContentType };
+  } catch (err) {
+    throw new StorageError(err instanceof Error ? err.message : "Failed to read file.");
+  }
+}
+
+/** Deletes objects by path (access-prefixed key), complementing uploadObject.
+ * Use for server-side cleanup of staging objects where the caller holds paths, not URLs. */
+export async function deleteObjectsAtPaths(paths: string[], access: "public" | "private"): Promise<void> {
+  const keys = paths.map((p) => `${access}/${p}`);
+  for (let i = 0; i < keys.length; i += 1000) {
+    const batch = keys.slice(i, i + 1000);
+    await s3().send(
+      new DeleteObjectsCommand({
+        Bucket: bucketName(),
+        Delete: { Objects: batch.map((Key) => ({ Key })) },
+      }),
+    );
+  }
 }
 
 /** Reads an object this module minted back into memory — for server-side consumers of a

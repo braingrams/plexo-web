@@ -139,6 +139,20 @@ export function decryptAppSecret(encoded: string): string {
 }
 
 /**
+ * Encrypts/decrypts a person's Strata session token (lib/strata/session.ts) — another
+ * DELIBERATELY separate secret (STRATA_TOKEN_ENCRYPTION_SECRET): the token lets whoever
+ * holds it act as that person in Strata, so a leak of any other secret in this file must
+ * never expose it, and vice versa.
+ */
+export function encryptStrataToken(plainText: string): string {
+  return encryptWithKey(plainText, deriveKey(requireEnv("STRATA_TOKEN_ENCRYPTION_SECRET")));
+}
+
+export function decryptStrataToken(encoded: string): string {
+  return decryptWithKey(encoded, deriveKey(requireEnv("STRATA_TOKEN_ENCRYPTION_SECRET")));
+}
+
+/**
  * Wraps any of the decryptX functions above and turns a failure into `null` instead of
  * throwing — every decrypt* function here throws on a wrong/rotated key or corrupted
  * ciphertext (AES-GCM auth-tag mismatch), which is a REAL possibility for pre-existing

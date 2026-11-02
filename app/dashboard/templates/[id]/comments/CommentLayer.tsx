@@ -2,11 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { RefObject } from "react";
-import type { PlexoBuilderRef, CommentTarget } from "@charisol/plexo-sdk";
 
 import { useComments } from "./useComments";
 import { CommentPanel } from "./CommentPanel";
 import { MentionComposer } from "./MentionComposer";
+
+/** What the layer needs from whichever editor is open: the classic builder's ref and the new editor's ref both have it. */
+export type NodeRectSource = { getNodeRect: (nodeId: string) => DOMRect | null };
+/** Where a comment is being placed — same fields the classic and the new editor both report. */
+export type PendingPin = { nodeId: string; nodeType: string; clientX: number; clientY: number };
+
+/** Comments only keep row / column / element. The classic builder already says so; the new editor's types (section, heading, …) map onto them. */
+export function anchorTypeOf(nodeType: string): "row" | "column" | "element" {
+  if (nodeType === "row" || nodeType === "column" || nodeType === "element") return nodeType;
+  return nodeType === "section" ? "row" : "element";
+}
 
 type Pin = { id: string; x: number; y: number };
 
@@ -28,7 +38,7 @@ type Pin = { id: string; x: number; y: number };
  * self-heal once the canvas catches up.
  */
 function useCommentPins(
-  builderRef: RefObject<PlexoBuilderRef | null>,
+  builderRef: RefObject<NodeRectSource | null>,
   anchors: { id: string; anchorNodeId: string | null; anchorX: number | null; anchorY: number | null }[],
   active: boolean,
 ) {
@@ -112,13 +122,13 @@ export function CommentLayer({
   onClose,
   deepLinkCommentId,
 }: {
-  builderRef: RefObject<PlexoBuilderRef | null>;
+  builderRef: RefObject<NodeRectSource | null>;
   templateId: string;
   organizationId: string;
   currentUserId: string;
   currentUserRole: string;
   active: boolean;
-  pendingPin: CommentTarget | null;
+  pendingPin: PendingPin | null;
   onConsumePendingPin: () => void;
   onClose: () => void;
   deepLinkCommentId?: string | null;
@@ -215,7 +225,7 @@ export function CommentLayer({
               await create({
                 body,
                 anchorNodeId: pendingPin.nodeId,
-                anchorNodeType: pendingPin.nodeType,
+                anchorNodeType: anchorTypeOf(pendingPin.nodeType),
                 anchorX: 0.5,
                 anchorY: 0.5,
               });

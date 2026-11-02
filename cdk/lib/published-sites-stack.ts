@@ -202,7 +202,17 @@ export class PublishedSitesStack extends cdk.Stack {
       maxTtl: cdk.Duration.seconds(60),
       cookieBehavior: cloudfront.CacheCookieBehavior.none(),
       queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("p", "page_id"),
-      headerBehavior: cloudfront.CacheHeaderBehavior.allowList("x-forwarded-host"),
+      // The CloudFront-Viewer-* headers are how the app learns where a visit came from (the analytics
+      // "Location" column — server/analytics.ts extractGeoFromHeaders). CloudFront adds them, but only passes
+      // them to the origin when a policy names them; naming them here also varies the cache entry by the
+      // viewer's place, which the 10s TTL keeps cheap. Without this every visit was "Unknown" after the move
+      // off Vercel (which sent its own x-vercel-ip-* headers).
+      headerBehavior: cloudfront.CacheHeaderBehavior.allowList(
+        "x-forwarded-host",
+        "cloudfront-viewer-country",
+        "cloudfront-viewer-country-region",
+        "cloudfront-viewer-city",
+      ),
       enableAcceptEncodingGzip: true,
       enableAcceptEncodingBrotli: true,
     });
@@ -353,6 +363,12 @@ export class PublishedSitesStack extends cdk.Stack {
           { pathPattern: "_next/image*", targetOriginId: "ImageFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: imageOptimizerCachePolicy.cachePolicyId, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "_next/*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "commerce.js", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
+          // The rest of the scripts the platform injects into published pages (public/plexo-content.js + .css and
+          // plexo-forms.js, the funnel sign-up, the newsletter popup). Without a behavior they fall through to the server
+          // function, which doesn't carry public/ — a 404, and the feature silently does nothing on the live site.
+          { pathPattern: "plexo-*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
+          { pathPattern: "lms-signup.js", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
+          { pathPattern: "newsletter-popup.js", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "uploads/*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
         ],
       },
@@ -510,6 +526,12 @@ export class PublishedSitesStack extends cdk.Stack {
     // meantime. Daily was a Vercel Hobby cron-plan ceiling this migration is no longer
     // bound by, not the actually-desired cadence.
     scheduledRoute("CommerceExpireStaleHolds", "/api/internal/commerce/expire-stale-holds", events.Schedule.rate(cdk.Duration.minutes(15)));
+
+    // "Keep my website up to date with Strata": pulls Strata changes for every app that turned
+    // it on and rebuilds/republishes when they're safe to apply (lib/strata/autoUpdate.ts).
+    // Every 15 minutes: a brand change should reach visitors the same day without anyone
+    // opening the editor; an unchanged revision costs one tiny request per app.
+    scheduledRoute("StrataAutoUpdate", "/api/internal/strata-auto-update", events.Schedule.rate(cdk.Duration.minutes(15)));
 
     // Optional, non-blocking backstop for the Funnel/LMS module's time-based (drip) page
     // unlocks — see that route's own doc comment. Unlocking itself never depends on this

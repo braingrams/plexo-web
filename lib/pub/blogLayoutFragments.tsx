@@ -102,7 +102,7 @@ export function buildPostListFragment(posts: BlogPostCard[], basePath: string, o
   const heading = opts.heading ? `<h1 class="plexo-listing__heading" style="margin:0 0 24px;">${escapeHtml(opts.heading)}</h1>` : "";
   const body =
     posts.length === 0
-      ? `<p style="color:#6b7280;">${escapeHtml(opts.emptyMessage ?? "No posts published yet.")}</p>`
+      ? `<p style="color:#6b7280;">${escapeHtml(opts.emptyMessage ?? "Posts will appear here as soon as they're published.")}</p>`
       : `<div class="plexo-blog__grid">${posts.map((post) => postCardHtml(post, basePath)).join("")}</div>`;
   return `${heading}${body}${opts.pagination ? paginationHtml(opts.pagination) : ""}`;
 }

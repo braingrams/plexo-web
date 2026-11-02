@@ -105,14 +105,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let slug: string | null = null;
   let order = 0;
   if (parentIdInput) {
-    // Same Ultra-gating as adding a DnD sub-page (app/api/templates/route.ts) — a raw
-    // upload used as a sub-page is still a sub-page for plan-limit purposes.
-    if (!features.multiPageSitesEnabled) {
-      return NextResponse.json(
-        { error: "Multi-page sites require an Ultra subscription plan." },
-        { status: 403 }
-      );
-    }
+    // Same as adding a DnD sub-page (app/api/templates/route.ts): any plan can build one; only
+    // publishing it is limited.
     if (!isValidUuid(parentIdInput)) {
       return NextResponse.json({ error: "Parent page not found." }, { status: 404 });
     }
@@ -195,7 +189,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // as every other multi-page feature (PagesPanel's own nudge) and skipped entirely for a
   // sub-page upload (parentIdInput set) — splitting a page that's ITSELF being nested under
   // another page adds a second level of complexity this isn't trying to solve.
-  const autoSplitPages = !parentIdInput && features.multiPageSitesEnabled;
+  const autoSplitPages = !parentIdInput;
   const extraPageAssets = autoSplitPages
     ? site.assets.filter((a) => !a.path.includes("/") && ["html", "htm"].includes(extensionOf(a.path)))
     : [];

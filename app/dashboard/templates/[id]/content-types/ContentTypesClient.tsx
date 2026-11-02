@@ -3,10 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { slugify } from "@/lib/slugUtils";
+import { contentSnippet } from "@/lib/customContent/embed";
+import { CONTENT_PRESETS, type ContentPresetId } from "@/lib/customContent/presets-meta";
 import { PageContainer } from "../../../_components/PageContainer";
 import { Card } from "../../../_components/Card";
 
-export type CustomContentFieldType = "text" | "textarea" | "richtext" | "number" | "boolean" | "date" | "image_url" | "url";
+export type CustomContentFieldType = "text" | "textarea" | "richtext" | "number" | "boolean" | "date" | "image_url" | "url" | "video" | "datetime";
 
 export type ContentTypeField = {
   id: string;
@@ -32,8 +34,10 @@ const FIELD_TYPE_OPTIONS: { value: CustomContentFieldType; label: string }[] = [
   { value: "number", label: "Number" },
   { value: "boolean", label: "Boolean" },
   { value: "date", label: "Date" },
-  { value: "image_url", label: "Image URL" },
-  { value: "url", label: "URL" },
+  { value: "image_url", label: "Image (upload)" },
+  { value: "video", label: "Video (YouTube, Vimeo or link)" },
+  { value: "datetime", label: "Date & time" },
+  { value: "url", label: "Link" },
 ];
 
 type FieldRow = {
@@ -96,6 +100,32 @@ export function ContentTypesClient({
   const [error, setError] = useState<string | null>(null);
 
   const apiBase = `/api/v1/templates/${templateId}/content-types`;
+  const [adding, setAdding] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  async function addPreset(preset: ContentPresetId) {
+    setAdding(preset);
+    setError(null);
+    try {
+      const res = await fetch(`${apiBase}/presets`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preset }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "That didn't work. Please try again.");
+      window.location.reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "That didn't work. Please try again.");
+      setAdding(null);
+    }
+  }
+
+  async function copySnippet(ct: ContentTypeSummary) {
+    try {
+      await navigator.clipboard.writeText(contentSnippet(ct.slug));
+      setCopiedId(ct.id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      window.prompt("Copy this and paste it into your page:", contentSnippet(ct.slug));
+    }
+  }
 
   function openCreate() {
     setEditingId(null);
@@ -229,9 +259,28 @@ export function ContentTypesClient({
           Content Types
         </h1>
         <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.45)", marginTop: "0.4rem" }}>
-          Define your own structured content — a schema of fields, and entries that fill it in. Published entries are readable via the public content API.
+          Post videos, stories, events and more. Add one below, fill it in, and show it on any page.
         </p>
       </div>
+
+      <Card style={{ padding: "1.25rem 1.5rem", marginBottom: "1.5rem" }}>
+        <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.75rem" }}>Quick start</p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
+          {(Object.keys(CONTENT_PRESETS) as ContentPresetId[]).map((id) => {
+            const done = contentTypes.some((c) => c.slug === CONTENT_PRESETS[id].slug);
+            return (
+              <button
+                key={id} type="button" disabled={done || adding !== null} onClick={() => void addPreset(id)}
+                style={{ textAlign: "left", flex: "1 1 200px", padding: "0.8rem 1rem", borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#e2e4f5", cursor: done ? "default" : "pointer", opacity: done ? 0.5 : 1, fontFamily: "inherit" }}
+              >
+                <span style={{ display: "block", fontWeight: 700, fontSize: "0.85rem" }}>{done ? "✓ " : "+ "}{CONTENT_PRESETS[id].name}</span>
+                <span style={{ display: "block", fontSize: "0.75rem", color: "rgba(240,242,255,0.5)", marginTop: 2 }}>{CONTENT_PRESETS[id].blurb}</span>
+              </button>
+            );
+          })}
+        </div>
+        {error && !modalOpen && <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.6rem" }}>{error}</p>}
+      </Card>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginBottom: "1.5rem" }}>
         <button
@@ -272,6 +321,9 @@ export function ContentTypesClient({
                     <Link href={`/dashboard/templates/${templateId}/content-types/${ct.id}/entries`} style={{ color: "var(--brand)", fontSize: "0.78rem", fontWeight: 600, textDecoration: "none" }}>
                       Manage entries
                     </Link>
+                    <button type="button" onClick={() => void copySnippet(ct)} title="Paste this into an HTML block, a raw HTML page or a React project to show these on a page" style={{ background: "none", border: "none", color: "rgba(240,242,255,0.6)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
+                      {copiedId === ct.id ? "Copied!" : "Copy page code"}
+                    </button>
                     <button type="button" onClick={() => openEdit(ct)} style={{ background: "none", border: "none", color: "rgba(240,242,255,0.6)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
                       Edit
                     </button>

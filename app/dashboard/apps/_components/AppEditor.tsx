@@ -20,6 +20,7 @@ import { HistoryPane } from "./HistoryPane";
 import { PublishDialog } from "./PublishDialog";
 import { GitHubPane } from "./GitHubPane";
 import { DesignPane } from "./DesignPane";
+import { ChatDock, ChatDot, useChatDrawer } from "./ChatDock";
 import { CreditsMeter, CreditsPanel, OutOfCreditsCard, TopUpSheet, useCredits, type Pack } from "./Credits";
 import { takeHandoff, describeExtras, type StartHandoff } from "./startHandoff";
 import { AppPreview, buildSteps, decodePlan, brandGradient, gradientFor } from "./appPlan";
@@ -53,7 +54,7 @@ const SUGGESTIONS = ["Change the colours", "Add a new page", "Make it look great
 
 // Tools whose completion means the preview (and the files/data panes) changed.
 const REFRESHING_TOOLS = new Set(["app_build", "app_build_status", "app_restore_version", "app_publish", "app_sql", "app_update_auth_settings"]);
-const WRITING_TOOLS = new Set(["app_write_files", "app_edit_file", "app_delete_files", "app_rename_file"]);
+const WRITING_TOOLS = new Set(["app_write_files", "app_edit_file", "app_delete_files", "app_rename_file", "app_design_edit"]);
 
 const seg = (active: boolean) => ({
   padding: "0.42rem 0.8rem", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: "0.82rem", whiteSpace: "nowrap" as const,
@@ -98,6 +99,22 @@ export function AppEditor(props: {
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [codePreviewHidden, setCodePreviewHidden] = useState(false);
+  // Full screen for the design canvas: hides the chat and this top bar so the page gets the room. Remembered per browser.
+  const [designFocus, setDesignFocus] = useState(false);
+  useEffect(() => {
+    try {
+      // Full screen unless the person turned it off: the design canvas needs the room more than the chat does.
+      setDesignFocus(localStorage.getItem("plexo.design.focus") !== "0");
+    } catch {}
+  }, []);
+  const toggleDesignFocus = useCallback(() => {
+    setDesignFocus((v) => {
+      try {
+        localStorage.setItem("plexo.design.focus", v ? "0" : "1");
+      } catch {}
+      return !v;
+    });
+  }, []);
   const [turnRunning, setTurnRunning] = useState(false);
   const [hasChatted, setHasChatted] = useState(props.initialMessages.length > 0);
 
@@ -119,6 +136,9 @@ export function AppEditor(props: {
   const [firstBuild, setFirstBuild] = useState(!!props.initialPrompt && props.initialMessages.length === 0);
   const [writes, setWrites] = useState(0);
   const [checked, setChecked] = useState(false);
+  // Design and Code need the room: the chat becomes a drawer there (and stays docked everywhere else).
+  const chatOverlay = !firstBuild && (codeMode || tab === "design");
+  const drawer = useChatDrawer(chatOverlay);
   const stepsDone = firstBuild ? (checked ? steps.length - 1 : Math.min(steps.length - 1, writes)) : steps.length;
 
   // "Since you were last here"
@@ -250,6 +270,8 @@ export function AppEditor(props: {
     (call: { name: string; status: string; result: unknown }) => {
       if (WRITING_TOOLS.has(call.name)) setWrites((w) => w + 1);
       if (call.name === "app_screenshot") setChecked(true);
+      // SOL changed a designed page: the Design tab picks the new version up (unless the owner has unsaved edits open).
+      if (call.name === "app_design_edit") setRefreshKey((k) => k + 1);
       if (!REFRESHING_TOOLS.has(call.name)) return;
       setRefreshKey((k) => k + 1);
       const result = call.result as { ok?: boolean; pending?: boolean; buildId?: string } | undefined;
@@ -271,6 +293,7 @@ export function AppEditor(props: {
   const onTurnEnd = useCallback(
     (outcome: string) => {
       setTurnRunning(false);
+      drawer.noteArrival();
       void refreshCredits();
       if (firstBuild && outcome !== "credit_exhausted" && outcome !== "awaiting_confirmation") {
         setFirstBuild(false);
@@ -278,7 +301,7 @@ export function AppEditor(props: {
         void refreshSummary();
       }
     },
-    [firstBuild, refreshCredits, refreshSummary],
+    [firstBuild, refreshCredits, refreshSummary, drawer.noteArrival],
   );
 
   const transformOutgoing = useCallback(
@@ -287,6 +310,8 @@ export function AppEditor(props: {
       const text = extrasRef.current ? `${typed}\n\n${extrasRef.current}` : typed;
       extrasRef.current = "";
       setTurnRunning(true);
+      // Sent from Design or Code (e.g. "Ask SOL"): show the chat so the answer isn't missed.
+      drawer.openDrawer();
       setHasChatted(true);
       setOutOfCredits(null);
       turnBaseVersion.current = summary.headVersionId;
@@ -297,13 +322,14 @@ export function AppEditor(props: {
       const where = el.file ? `${el.file}${el.line ? `:${el.line}` : ""}` : "unknown file";
       return `${text}\n\n[Selected element: <${el.tag}> in ${where} on page ${el.path}${el.text ? ` — its text: "${el.text.slice(0, 160)}"` : ""}${el.classes ? ` — classes: "${el.classes.slice(0, 200)}"` : ""}. Change this element.]`;
     },
-    [summary.headVersionId],
+    [summary.headVersionId, drawer.openDrawer],
   );
 
   const sendToSol = useCallback((text: string) => {
     setMobileView("chat");
+    drawer.openDrawer();
     sendRef.current?.(text);
-  }, []);
+  }, [drawer.openDrawer]);
 
   const fixWithAi = useCallback(
     (error: { message: string; stack?: string | null; url?: string | null; file?: string; line?: number }) => {
@@ -399,7 +425,7 @@ export function AppEditor(props: {
         // Free plans on Plexo's AI run on Basic (the server enforces it — lib/ai/solEngine.ts).
         lockedModelTier: props.lockedModelTier ?? undefined,
         afterMessages: firstBuild ? (
-          <div style={{ width: "100%", boxSizing: "border-box", maxWidth: 760, margin: "0.5rem auto 1rem", border: "1px solid rgba(139,92,246,0.28)", background: "linear-gradient(180deg, rgba(139,92,246,0.10), rgba(139,92,246,0.03))", borderRadius: 14, padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+          <div style={{ width: "100%", boxSizing: "border-box", maxWidth: 760, margin: "0.5rem auto 1rem", border: "1px solid rgba(var(--brand-rgb), 0.28)", background: "linear-gradient(180deg, rgba(var(--brand-rgb), 0.10), rgba(var(--brand-rgb), 0.03))", borderRadius: 14, padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
             <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.faint }}>What I&rsquo;m doing</div>
             {steps.map((label, i) => {
               const state = i < stepsDone ? "done" : i === stepsDone ? "active" : "todo";
@@ -455,7 +481,7 @@ export function AppEditor(props: {
               </div>
             )}
             {selected && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "0.45rem 0.6rem", borderRadius: 10, background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.35)", fontSize: "0.76rem", color: C.text }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "0.45rem 0.6rem", borderRadius: 10, background: "rgba(var(--brand-rgb), 0.12)", border: "1px solid rgba(var(--brand-rgb), 0.35)", fontSize: "0.76rem", color: C.text }}>
                 <MousePointerClick size={14} color={C.brand} />
                 <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   Changing this {selected.tag === "img" ? "picture" : selected.tag === "button" || selected.tag === "a" ? "button" : "part"}
@@ -542,7 +568,7 @@ export function AppEditor(props: {
         {plan ? (
           <AppPreview audience={plan.audience} features={plan.features} other={plan.other} name={plan.name} />
         ) : (
-          <div style={{ flex: 1, borderRadius: 16, border: `1px solid ${C.border}`, display: "grid", placeItems: "center", color: C.muted, fontSize: "0.86rem", background: "radial-gradient(60% 50% at 30% 20%, rgba(192,132,252,0.12), transparent 70%), radial-gradient(60% 60% at 75% 80%, rgba(139,92,246,0.18), transparent 70%)" }}>
+          <div style={{ flex: 1, borderRadius: 16, border: `1px solid ${C.border}`, display: "grid", placeItems: "center", color: C.muted, fontSize: "0.86rem", background: "radial-gradient(60% 50% at 30% 20%, rgba(192,132,252,0.12), transparent 70%), radial-gradient(60% 60% at 75% 80%, rgba(var(--brand-rgb), 0.18), transparent 70%)" }}>
             Your app appears here as it&rsquo;s built.
           </div>
         )}
@@ -601,6 +627,7 @@ export function AppEditor(props: {
     </div>
   );
 
+  const focusing = designFocus && tab === "design" && !codeMode;
   const moreActive = MORE_TABS.find((t) => t.id === tab && !codeMode);
   const publishable = !firstBuild && !!summary.latestBuild;
 
@@ -609,7 +636,7 @@ export function AppEditor(props: {
   return (
     <div className={`app-editor ${props.fontClassName ?? ""}`} style={{ height: "100dvh", display: "flex", flexDirection: "column", background: C.bg, color: C.text }}>
       {/* Top bar */}
-      <header className="ed-top" style={{ display: "flex", alignItems: "center", gap: 14, padding: "0 1.1rem", borderBottom: `1px solid ${C.border}`, minHeight: 60 }}>
+      {!focusing && <header className="ed-top" style={{ display: "flex", alignItems: "center", gap: 14, padding: "0 1.1rem", borderBottom: `1px solid ${C.border}`, minHeight: 60 }}>
         <Link href="/dashboard/apps" aria-label="Back to apps" style={{ color: C.muted, display: "inline-flex" }}>
           <ArrowLeft size={18} />
         </Link>
@@ -657,6 +684,11 @@ export function AppEditor(props: {
           >
             <Code2 size={14} /> Code
           </button>
+          {chatOverlay && (
+            <button type="button" aria-expanded={drawer.open} onClick={drawer.toggleDrawer} title="Open the chat with SOL" style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "0.45rem 0.8rem", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 600, whiteSpace: "nowrap", border: `1px solid ${drawer.open ? C.text : C.border}`, background: "transparent", color: C.text }}>
+              <MessageSquare size={14} /> Chat with SOL <ChatDot working={turnRunning} unread={drawer.unread} />
+            </button>
+          )}
         </nav>}
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
@@ -677,12 +709,12 @@ export function AppEditor(props: {
           <button type="button" disabled={!publishable || !summary.previewUrl} onClick={copyPreviewLink} title="Copy a link anyone can open" style={{ padding: "0.5rem 0.85rem", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: publishable ? C.text : C.faint, fontFamily: "inherit", fontSize: "0.8rem", cursor: publishable ? "pointer" : "default" }}>
             {copied ? "Link copied" : "Share"}
           </button>
-          <button type="button" disabled={!publishable} onClick={() => setPublishOpen(true)} style={{ padding: "0.5rem 0.95rem", borderRadius: 10, border: "none", background: publishable ? brandGradient : "rgba(255,255,255,0.12)", color: publishable ? "#fff" : C.faint, boxShadow: publishable ? "0 6px 20px rgba(139,92,246,0.35)" : "none", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 700, cursor: publishable ? "pointer" : "default" }}>
+          <button type="button" disabled={!publishable} onClick={() => setPublishOpen(true)} style={{ padding: "0.5rem 0.95rem", borderRadius: 10, border: "none", background: publishable ? brandGradient : "rgba(255,255,255,0.12)", color: publishable ? "#fff" : C.faint, boxShadow: publishable ? "0 6px 20px rgba(var(--brand-rgb), 0.35)" : "none", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 700, cursor: publishable ? "pointer" : "default" }}>
             {summary.published ? "Publish changes" : "Publish"}
           </button>
         </div>
-      </header>
-      <SitePlanNotice templateId={appId} refreshKey={summary.liveUrl ?? null} />
+      </header>}
+      {!focusing && <SitePlanNotice templateId={appId} refreshKey={summary.liveUrl ?? null} />}
 
       {/* Mobile switcher */}
       <div className="ed-mobile" style={{ display: "none", padding: "0.4rem 0.6rem", gap: 6, borderBottom: `1px solid ${C.border}` }}>
@@ -693,8 +725,8 @@ export function AppEditor(props: {
         ))}
       </div>
 
-      <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
-        <aside className={`ed-chat ${mobileView === "chat" ? "is-active" : ""}`} style={{ width: 420, flexShrink: 0, borderRight: `1px solid ${C.border}`, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", position: "relative" }}>
+        <ChatDock overlay={chatOverlay} open={drawer.open} mobileActive={mobileView === "chat"} onClose={drawer.closeDrawer}>
           {since && !firstBuild && (
             <div style={{ padding: "0.9rem 1.2rem", borderBottom: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.faint }}>Since you were last here</div>
@@ -707,7 +739,7 @@ export function AppEditor(props: {
             </div>
           )}
           <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>{chat}</div>
-        </aside>
+        </ChatDock>
 
         <main className={`ed-main ${mobileView === "app" ? "is-active" : ""}`} style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
@@ -752,6 +784,8 @@ export function AppEditor(props: {
                       refreshKey={refreshKey}
                       stockKeys={props.stockKeys}
                       onSaved={onDesignSaved}
+                      fullScreen={designFocus}
+                      onToggleFullScreen={toggleDesignFocus}
                       onAskSol={sendToSol}
                       onOpenCode={(path) => {
                         setCodeOpen({ path, nonce: Date.now() });

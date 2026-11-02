@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatMoney } from "@/lib/commerce/formatMoney";
+import { Pagination } from "../../../_components/Pagination";
 
 type CommerceCustomer = {
   email: string;
@@ -17,7 +18,7 @@ type CommerceCustomer = {
 export function CustomersClient({ templateId }: { templateId: string }) {
   const [customers, setCustomers] = useState<CommerceCustomer[]>([]);
   const [page, setPage] = useState(1);
-  const [pageCount, setPageCount] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,17 +26,17 @@ export function CustomersClient({ templateId }: { templateId: string }) {
   useEffect(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/v1/commerce/${templateId}/customers?page=${page}`)
+    fetch(`/api/v1/commerce/${templateId}/customers?page=${page}&pageSize=${pageSize}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load customers.");
         setCustomers(data.customers);
-        setPageCount(data.pageCount);
+        if (data.page !== page) setPage(data.page);
         setTotal(data.total);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load customers."))
       .finally(() => setLoading(false));
-  }, [templateId, page]);
+  }, [templateId, page, pageSize]);
 
   return (
     <div>
@@ -82,23 +83,7 @@ export function CustomersClient({ templateId }: { templateId: string }) {
             </table>
           </div>
 
-          {pageCount > 1 && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem", marginTop: "1.25rem" }}>
-              <button
-                type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}
-                style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#f0f2ff", cursor: page <= 1 ? "not-allowed" : "pointer", opacity: page <= 1 ? 0.4 : 1, fontFamily: "inherit", fontSize: "0.8rem" }}
-              >
-                Previous
-              </button>
-              <span style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.5)" }}>Page {page} of {pageCount} · {total} total</span>
-              <button
-                type="button" disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)}
-                style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "#f0f2ff", cursor: page >= pageCount ? "not-allowed" : "pointer", opacity: page >= pageCount ? 0.4 : 1, fontFamily: "inherit", fontSize: "0.8rem" }}
-              >
-                Next
-              </button>
-            </div>
-          )}
+          <Pagination page={page} pageSize={pageSize} total={total} noun="customers" disabled={loading} onChange={(n) => { setPage(n.page); setPageSize(n.pageSize); }} />
         </>
       )}
     </div>

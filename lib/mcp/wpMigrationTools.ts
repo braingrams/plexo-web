@@ -90,7 +90,7 @@ export const WP_MIGRATION_TOOL_NAMES = new Set(WP_MIGRATION_MCP_TOOLS.map((t) =>
 function accessFor(resolved: ResolvedUser, permission: "create" | "update"): MigrationAccess {
   const permissionError = requirePermission(resolved.role, { template: [permission] });
   if (permissionError) throw new Error("Your role in this organization can't create or edit sites.");
-  if (!getTierFeatures(resolved.subscriptionPlan).multiPageSitesEnabled) throw new Error(MIGRATION_PLAN_MESSAGE);
+  if (!getTierFeatures(resolved.subscriptionPlan).siteMigrationEnabled) throw new Error(MIGRATION_PLAN_MESSAGE);
   return { userId: resolved.userId, organizationId: resolved.organizationId, role: resolved.role, subscriptionPlan: resolved.subscriptionPlan };
 }
 

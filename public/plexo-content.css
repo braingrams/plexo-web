@@ -1,0 +1,55 @@
+/* Plexo content widget styles — see plexo-content.js. Loaded by the page (server-injected) or by the script itself. */
+.plx-c{font-family:inherit;color:inherit;box-sizing:border-box}
+.plx-c *{box-sizing:border-box}
+.plx-c-grid{display:grid;grid-template-columns:repeat(var(--plx-c-cols,3),minmax(0,1fr));gap:24px}
+@media(max-width:900px){.plx-c-grid{grid-template-columns:repeat(min(var(--plx-c-cols,3),2),minmax(0,1fr))}}
+@media(max-width:600px){.plx-c-grid{grid-template-columns:minmax(0,1fr)}}
+.plx-c-card{display:flex;flex-direction:column;background:rgba(255,255,255,.6);border:1px solid rgba(0,0,0,.07);border-radius:10px;overflow:hidden;text-align:left;padding:0;font:inherit;color:inherit;cursor:pointer;transition:transform .2s,box-shadow .2s}
+.plx-c-card:hover{transform:translateY(-2px);box-shadow:0 10px 28px rgba(0,0,0,.1)}
+.plx-c-card:focus-visible{outline:2px solid currentColor;outline-offset:3px}
+.plx-c-media{position:relative;aspect-ratio:16/10;background:rgba(0,0,0,.08);overflow:hidden}
+.plx-c-media img{width:100%;height:100%;object-fit:cover;display:block}
+.plx-c-media--empty{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(0,0,0,.06),rgba(0,0,0,.14))}
+.plx-c-play{position:absolute;left:50%;top:50%;width:58px;height:58px;margin:-29px 0 0 -29px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center}
+.plx-c-play:after{content:'';margin-left:4px;border-left:16px solid #fff;border-top:10px solid transparent;border-bottom:10px solid transparent}
+.plx-c-body{padding:16px 18px 20px}
+.plx-c-title{margin:0 0 6px;font-size:1.2em;line-height:1.3;font-weight:inherit}
+.plx-c-desc{margin:0;opacity:.75;line-height:1.55;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.plx-c-meta{margin:0 0 6px;font-size:.85em;opacity:.6}
+.plx-c-more{display:inline-block;margin-top:10px;font-size:.92em;text-decoration:underline;text-underline-offset:3px}
+.plx-c-feature{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:37px;align-items:center}
+@media(max-width:760px){.plx-c-feature{grid-template-columns:minmax(0,1fr);gap:20px}}
+.plx-c-feature .plx-c-media{border-radius:6px;aspect-ratio:2.4/1;cursor:pointer;border:0;padding:0;width:100%}
+@media(max-width:760px){.plx-c-feature .plx-c-media{aspect-ratio:16/9}}
+.plx-c-feature .plx-c-title{font-size:1.95em}
+.plx-c-feature .plx-c-desc{-webkit-line-clamp:unset;display:block;font-size:1.06em;opacity:.9;max-width:310px}
+.plx-c-feature .plx-c-link{font-size:1.06em}
+.plx-c-rule{display:block;width:34px;height:1px;background:currentColor;opacity:.5;margin:18px 0 14px}
+.plx-c-link{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-decoration:none}
+.plx-c-link:hover{text-decoration:underline}
+.plx-c-events{display:flex;flex-direction:column;gap:16px}
+.plx-c-event{display:grid;grid-template-columns:76px minmax(0,1fr) auto;gap:20px;align-items:center;padding:18px 20px;background:rgba(255,255,255,.6);border:1px solid rgba(0,0,0,.07);border-radius:10px}
+@media(max-width:600px){.plx-c-event{grid-template-columns:64px minmax(0,1fr)}.plx-c-event .plx-c-event-cta{grid-column:1/-1}}
+.plx-c-date{text-align:center;line-height:1;padding:10px 0;border-radius:8px;background:rgba(0,0,0,.06)}
+.plx-c-date b{display:block;font-size:1.8em;font-weight:inherit}
+.plx-c-date span{display:block;font-size:.75em;letter-spacing:.1em;text-transform:uppercase;opacity:.7;margin-bottom:4px}
+.plx-c-event-img{width:100%;max-height:220px;object-fit:cover;border-radius:8px;margin-top:12px}
+.plx-c-btn{display:inline-block;padding:9px 18px;border-radius:999px;border:1px solid currentColor;color:inherit;text-decoration:none;font-size:.92em;white-space:nowrap}
+.plx-c-list{list-style:none;margin:0;padding:0}
+.plx-c-list li{padding:14px 0;border-bottom:1px solid rgba(0,0,0,.08)}
+.plx-c-empty{padding:28px 16px;text-align:center;opacity:.65;border:1px dashed rgba(0,0,0,.18);border-radius:10px}
+.plx-c-skel{height:140px;border-radius:10px;background:rgba(0,0,0,.06);animation:plx-c-pulse 1.2s ease-in-out infinite}
+@keyframes plx-c-pulse{50%{opacity:.5}}
+.plx-c-modal{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:flex-start;justify-content:center;padding:4vh 16px;background:rgba(10,8,6,.82);overflow-y:auto}
+.plx-c-dialog{position:relative;width:min(100%,860px);background:#fffdf9;color:#2a2118;border-radius:12px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5);font-family:inherit}
+.plx-c-dialog .plx-c-body{padding:24px 28px 32px}
+.plx-c-dialog h2{margin:0 0 8px;font-size:1.7em;line-height:1.25;font-weight:inherit}
+.plx-c-dialog p{line-height:1.7;margin:0 0 1em}
+.plx-c-dialog img.plx-c-hero{display:block;width:100%;max-height:420px;object-fit:cover}
+.plx-c-frame{position:relative;aspect-ratio:16/9;background:#000}
+.plx-c-frame iframe,.plx-c-frame video{position:absolute;inset:0;width:100%;height:100%;border:0}
+.plx-c-close{position:absolute;right:10px;top:10px;z-index:2;width:38px;height:38px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;font-size:22px;line-height:1;cursor:pointer}
+.plx-c-close:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.plx-c-post{text-decoration:none;color:inherit;border-radius:4px;border-color:transparent;box-shadow:0 1px 6px rgba(70,55,30,.08)}
+.plx-c-post .plx-c-media{aspect-ratio:2/1}
+.plx-c-post .plx-c-title{font-size:1.2em}

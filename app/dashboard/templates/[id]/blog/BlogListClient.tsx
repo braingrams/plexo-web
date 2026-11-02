@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageContainer } from "../../../_components/PageContainer";
 import { UpgradeModal } from "../../../_components/UpgradeModal";
+import { Pagination } from "../../../_components/Pagination";
+import { paginate } from "@/lib/pagination";
 import { formatPublishedQuotaLabel } from "@/lib/blog/publishQuotaLabel";
 
 type PostRow = {
@@ -69,6 +71,8 @@ export function BlogListClient({
   const router = useRouter();
   const [blogEnabled, setBlogEnabled] = useState(initialBlogEnabled);
   const [posts, setPosts] = useState(initialPosts);
+  const [paging, setPaging] = useState({ page: 1, pageSize: 25 });
+  const shown = paginate(posts, paging);
   const [enabling, setEnabling] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -297,6 +301,7 @@ export function BlogListClient({
           </button>
         </div>
       ) : (
+        <>
         <div
           style={{
             border: "1px solid rgba(255,255,255,0.08)",
@@ -304,7 +309,7 @@ export function BlogListClient({
             overflow: "hidden",
           }}
         >
-          {posts.map((post, i) => (
+          {shown.items.map((post, i) => (
             <div
               key={post.id}
               style={{
@@ -375,6 +380,8 @@ export function BlogListClient({
             </div>
           ))}
         </div>
+        <Pagination page={shown.page} pageSize={shown.pageSize} total={shown.total} noun="posts" onChange={setPaging} />
+        </>
       )}
 
       <UpgradeModal

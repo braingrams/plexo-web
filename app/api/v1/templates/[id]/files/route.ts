@@ -15,6 +15,7 @@ import {
 } from "@/server/rawUpload";
 import { Template, TemplateAsset } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
+import { listLoosePages, splitHtmlAssetsIntoPages } from "@/lib/rawSite/splitPages";
 
 export type FileEntry = {
   path: string;
@@ -217,6 +218,20 @@ export async function POST(
     contentType,
     size: buffer.byteLength,
   }).go();
+
+  // A new .html file on a site's home page is a new PAGE of the site (counted, listed, editable, with
+  // its own address) — not a loose file. On every plan: the owner can build and preview all of it, and the
+  // plan only decides which pages go live.
+  if (!template.parentId && (await listLoosePages(template.id)).includes(path)) {
+    const split = await splitHtmlAssetsIntoPages(template).catch((err) => {
+      console.error("Turning the new file into a page failed (non-fatal):", err);
+      return null;
+    });
+    const page = split && [...split.created, ...split.updated][0];
+    if (page) {
+      return NextResponse.json({ success: true, page, message: `"${page.name}" was added as a page of your site, at /${page.slug}.` });
+    }
+  }
 
   const editable = isEditableExtension(path);
   const file: FileEntry = {

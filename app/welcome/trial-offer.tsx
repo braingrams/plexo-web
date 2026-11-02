@@ -126,7 +126,7 @@ export function TrialOffer({ firstName, highlighted, trialDays }: { firstName: s
                       disabled={busy !== null}
                       onClick={() => void choose(key)}
                       className={`mt-7 w-full rounded-2xl py-3.5 text-sm font-extrabold transition-all disabled:opacity-60 ${
-                        isHighlighted ? "bg-[#6b3bf9] text-white shadow-md shadow-purple-600/30 hover:bg-[#5b2be6]" : "border border-slate-700 bg-slate-800 text-white hover:bg-slate-700"
+                        isHighlighted ? `bg-[color:var(--brand)] text-white shadow-md shadow-purple-600/30 hover:bg-[color:var(--brand-deep)]` : "border border-slate-700 bg-slate-800 text-white hover:bg-slate-700"
                       }`}
                     >
                       {busy === key ? "Starting your trial…" : `Try ${plan.name} free`}

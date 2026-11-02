@@ -1,0 +1,179 @@
+/*!
+ * Plexo form connector.
+ *
+ * Makes any <form> on a published Plexo site send its answers to the site's Form Submissions inbox
+ * (with the owner's email notification, MailDrip list and webhook, thank-you page and spam
+ * protection) — with no change to the form's own markup beyond, at most, one attribute:
+ *
+ *   <form data-plexo-form="Contact us"> … </form>
+ *
+ * Connected automatically: forms with no real destination (no action, "#", or a mailto: link), which
+ * today go nowhere. Never touched: forms that already post to somewhere else, search/login forms,
+ * and anything marked data-plexo-form="off".
+ *
+ * Optional attributes on the form:
+ *   data-plexo-form      the name shown in the inbox ("Contact us"); defaults to the form's name/id
+ *   data-plexo-success   the message shown after sending
+ *   data-plexo-redirect  a page on this site to go to after sending (overrides the success message)
+ *
+ * One delegated listener on the document, so it works for forms that are added later (React and
+ * other single-page apps) and for forms in the visual builder, raw HTML uploads and React projects.
+ * The script tag carries data-template-id (the site) and data-auto ("false" for React projects,
+ * where only explicitly marked forms are connected).
+ */
+(function () {
+  "use strict";
+  if (window.__plexoFormsLoaded) return;
+  window.__plexoFormsLoaded = true;
+
+  var script = document.currentScript;
+  var TEMPLATE_ID = script && script.getAttribute("data-template-id");
+  var AUTO = !(script && script.getAttribute("data-auto") === "false");
+  if (!TEMPLATE_ID) return;
+
+  var HONEYPOT = "_hp_field"; // must match lib/v2/forms.ts V2_FORM_HONEYPOT_FIELD_NAME
+  var DEFAULT_SUCCESS = "Thank you! Your message has been sent.";
+  var ERROR_TEXT = "Sorry, that didn't send. Please check your details and try again.";
+
+  function marker(form) {
+    var v = form.getAttribute("data-plexo-form");
+    return v === null ? null : v.trim();
+  }
+
+  function isClaimed(form) {
+    var m = marker(form);
+    if (m === "off") return false;
+    if (m !== null) return true; // explicitly connected
+    if (!AUTO) return false;
+    if (form.hasAttribute("data-plexo-ignore")) return false;
+    // Already posts somewhere real (another service, or Plexo's own native form action)?
+    var action = (form.getAttribute("action") || "").trim();
+    if (action && action !== "#" && !/^(javascript|mailto):/i.test(action)) return false;
+    if ((form.getAttribute("method") || "").toLowerCase() === "get" && action === "") {
+      // A GET form with no action is almost always a search box.
+      if (form.querySelector('input[type="search"]') || form.getAttribute("role") === "search") return false;
+    }
+    if (form.querySelector('input[type="password"]')) return false;
+    if (form.getAttribute("role") === "search") return false;
+    // Nothing a visitor can fill in → nothing to collect.
+    return !!form.querySelector("input:not([type=hidden]):not([type=submit]):not([type=button]), textarea, select");
+  }
+
+  function formName(form) {
+    var m = marker(form);
+    if (m) return m;
+    var n = form.getAttribute("name") || form.getAttribute("aria-label") || form.id;
+    return (n || "Website Form").replace(/[-_]+/g, " ").slice(0, 100);
+  }
+
+  function labelFor(el) {
+    var text = "";
+    if (el.id) {
+      var l = el.ownerDocument.querySelector('label[for="' + (window.CSS && CSS.escape ? CSS.escape(el.id) : el.id) + '"]');
+      if (l) text = l.textContent;
+    }
+    if (!text) { var wrap = el.closest("label"); if (wrap) text = wrap.textContent; }
+    text = text || el.getAttribute("aria-label") || el.getAttribute("placeholder") || el.id || "";
+    return text.replace(/\s+/g, " ").replace(/[*:]+$/, "").trim().slice(0, 60);
+  }
+
+  // A form built without name="" attributes would lose every answer — name each field after its label.
+  function ensureNames(form) {
+    var used = {};
+    var fields = form.querySelectorAll("input, textarea, select");
+    for (var i = 0; i < fields.length; i++) if (fields[i].name) used[fields[i].name] = 1;
+    for (var j = 0; j < fields.length; j++) {
+      var f = fields[j];
+      if (f.name || f.type === "submit" || f.type === "button" || f.type === "file") continue;
+      var base = labelFor(f) || "Field " + (j + 1), name = base, n = 2;
+      while (used[name]) name = base + " (" + n++ + ")";
+      used[name] = 1;
+      f.name = name;
+    }
+  }
+
+  function ensureHoneypot(form) {
+    if (form.querySelector('input[name="' + HONEYPOT + '"]')) return;
+    var hp = document.createElement("input");
+    hp.type = "text"; hp.name = HONEYPOT; hp.tabIndex = -1; hp.autocomplete = "off";
+    hp.setAttribute("aria-hidden", "true");
+    hp.style.cssText = "position:absolute;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none";
+    form.appendChild(hp);
+  }
+
+  function showMessage(form, text, isError) {
+    var box = form.querySelector("[data-plexo-form-message]");
+    if (!box) {
+      box = document.createElement("div");
+      box.setAttribute("data-plexo-form-message", "");
+      box.setAttribute("role", isError ? "alert" : "status");
+      box.style.cssText = "margin-top:14px;padding:12px 14px;border-radius:8px;font-size:.95em;line-height:1.5";
+      form.appendChild(box);
+    }
+    box.setAttribute("role", isError ? "alert" : "status");
+    box.style.background = isError ? "rgba(185,28,28,.1)" : "rgba(22,101,52,.1)";
+    box.style.color = isError ? "#991b1b" : "#14532d";
+    box.textContent = text;
+  }
+
+  function sameSitePath(p) {
+    return typeof p === "string" && p.charAt(0) === "/" && p.charAt(1) !== "/" ? p : null;
+  }
+
+  // Back from a plain (no-script) form post: the server sends the visitor to "?submitted=1". Say thank you.
+  function showReturnThanks() {
+    if (!/[?&]submitted=1(&|$)/.test(location.search)) return;
+    var forms = document.querySelectorAll("form");
+    for (var i = 0; i < forms.length; i++) {
+      if (isClaimed(forms[i]) || forms[i].querySelector("[data-plexo-form-message]")) {
+        showMessage(forms[i], forms[i].getAttribute("data-plexo-success") || DEFAULT_SUCCESS, false);
+        try { forms[i].scrollIntoView({ block: "center" }); } catch (err) { /* old browsers */ }
+        return;
+      }
+    }
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", showReturnThanks);
+  else showReturnThanks();
+
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form || form.tagName !== "FORM" || !isClaimed(form)) return;
+    // Our handler takes over; the form's own handlers (a React onSubmit etc.) don't also fire a second send.
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (form.__plexoSending) return;
+    if (form.checkValidity && !form.checkValidity()) { form.reportValidity && form.reportValidity(); return; }
+
+    ensureNames(form);
+    ensureHoneypot(form);
+
+    var url = "/api/public/forms/" + encodeURIComponent(TEMPLATE_ID) + "/submit?form=" + encodeURIComponent(formName(form)) +
+      "&redirect=" + encodeURIComponent(location.pathname);
+    var buttons = form.querySelectorAll('button:not([type="button"]), input[type="submit"]');
+    var labels = [];
+    form.__plexoSending = true;
+    for (var i = 0; i < buttons.length; i++) { labels.push(buttons[i].tagName === "BUTTON" ? buttons[i].innerHTML : buttons[i].value); buttons[i].disabled = true; }
+    var firstBtn = buttons[0];
+    if (firstBtn && firstBtn.tagName === "BUTTON") firstBtn.textContent = "Sending…";
+
+    fetch(url, { method: "POST", body: new FormData(form), headers: { Accept: "application/json" }, credentials: "same-origin" })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { if (!r.ok) throw new Error(d.error || ERROR_TEXT); return d; }); })
+      .then(function (d) {
+        var go = sameSitePath(form.getAttribute("data-plexo-redirect")) || (d.redirect && (sameSitePath(d.redirect) || (/^https:\/\//i.test(d.redirect) ? d.redirect : null)));
+        if (go) { location.assign(go); return; }
+        form.reset();
+        showMessage(form, form.getAttribute("data-plexo-success") || DEFAULT_SUCCESS, false);
+        try { form.dispatchEvent(new CustomEvent("plexo:form-sent", { bubbles: true })); } catch (err) { /* old browsers */ }
+      })
+      .catch(function (err) {
+        showMessage(form, (err && err.message) || ERROR_TEXT, true);
+      })
+      .then(function () {
+        form.__plexoSending = false;
+        for (var k = 0; k < buttons.length; k++) {
+          buttons[k].disabled = false;
+          if (buttons[k].tagName === "BUTTON") buttons[k].innerHTML = labels[k]; else buttons[k].value = labels[k];
+        }
+      });
+  }, true);
+})();

@@ -42,6 +42,9 @@ const CANVAS_TOOL_NAMES = new Set([
   "publish_raw_landing_page",
   "update_template",
   "update_raw_landing_page",
+  "page_create_from_template",
+  "page_edit",
+  "page_publish",
 ]);
 
 function artifactFromResult(name: string, result: { templateId?: string; name?: string; publishedUrl?: string | null } | undefined): ActiveArtifact | null {
@@ -608,7 +611,7 @@ export function SolChatView({
                         key={suggestion}
                         type="button"
                         onClick={() => void handleSend(suggestion, [])}
-                        style={{ padding: "0.5rem 0.85rem", borderRadius: 12, border: "1px solid rgba(139,92,246,0.25)", background: "rgba(139,92,246,0.08)", color: "rgba(240,242,255,0.88)", fontSize: "0.8rem", textAlign: "left", cursor: "pointer" }}
+                        style={{ padding: "0.5rem 0.85rem", borderRadius: 12, border: "1px solid rgba(var(--brand-rgb), 0.25)", background: "rgba(var(--brand-rgb), 0.08)", color: "rgba(240,242,255,0.88)", fontSize: "0.8rem", textAlign: "left", cursor: "pointer" }}
                       >
                         {suggestion}
                       </button>

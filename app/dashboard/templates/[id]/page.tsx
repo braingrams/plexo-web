@@ -15,6 +15,12 @@ import { resolveActiveApiKeyForUser } from "@/lib/ai/resolveUserAiKey";
 import { TemplateEditorDynamic } from "./template-editor-dynamic";
 import { RawFileEditor } from "./raw-file-editor";
 import { migratedPreviewBase } from "@/lib/wpMigration/previewBase";
+import { canMoveToV2 } from "@/lib/v2/convertV1";
+import { designFormatOf, parseV2Design } from "@/lib/v2/design";
+import { designSystemDownloadUrl, resolveDesignSystem } from "@/lib/v2/designSystemStore";
+
+/** Up to this many characters of brand are handed to the editor with the page; beyond it the browser loads the brand itself. */
+const BRAND_INLINE_MAX_CHARS = 2_000_000;
 
 function isTemplateJson(value: unknown): value is TemplateJSON {
   if (typeof value !== "object" || value === null) {
@@ -90,6 +96,7 @@ export default async function TemplateEditorPage(props: {
     return (
       <RawFileEditor
         templateId={template.id}
+        siteId={rootTemplateId}
         templateName={template.name}
         templateKind={template.kind}
         subscriptionPlan={effectivePlan(user)}
@@ -99,6 +106,38 @@ export default async function TemplateEditorPage(props: {
         previewBaseHref={await migratedPreviewBase(template)}
       />
     );
+  }
+
+  const designFormat = designFormatOf(template);
+  let initialV2Design = null;
+  if (designFormat === "v2") {
+    const parsed = parseV2Design(template.draftJson ?? template.designJson);
+    if (!parsed.ok) {
+      // Never open an editor on a design it can't read: saving would overwrite the real one.
+      return (
+        <div style={{ padding: "3rem 1.5rem", maxWidth: 560, margin: "0 auto", textAlign: "center", color: "rgba(240,242,255,0.8)" }}>
+          <h1 style={{ fontSize: "1.2rem", fontWeight: 800 }}>This page can&rsquo;t be opened right now</h1>
+          <p style={{ fontSize: "0.9rem", lineHeight: 1.6 }}>{parsed.error} Nothing has been changed. You can restore an earlier version from the site&rsquo;s version history, or contact support.</p>
+        </div>
+      );
+    }
+    initialV2Design = parsed.design;
+    // A big brand lives in storage: a modest one is loaded here and handed over as usual; a very large one is left for the browser
+    // to fetch straight from storage (it can be larger than this page's own response may be).
+    const ref = parsed.design.designSystemRef;
+    if (ref) {
+      try {
+        if (ref.size <= BRAND_INLINE_MAX_CHARS) initialV2Design = await resolveDesignSystem(parsed.design);
+        else initialV2Design = { ...parsed.design, designSystemUrl: await designSystemDownloadUrl(ref.hash) };
+      } catch (err) {
+        return (
+          <div style={{ padding: "3rem 1.5rem", maxWidth: 560, margin: "0 auto", textAlign: "center", color: "rgba(240,242,255,0.8)" }}>
+            <h1 style={{ fontSize: "1.2rem", fontWeight: 800 }}>This page can&rsquo;t be opened right now</h1>
+            <p style={{ fontSize: "0.9rem", lineHeight: 1.6 }}>{err instanceof Error ? err.message : "Its colours and fonts couldn't be loaded."} Nothing has been changed. Please try again in a moment.</p>
+          </div>
+        );
+      }
+    }
   }
 
   const liveDesignJson = isTemplateJson(template.designJson)
@@ -136,6 +175,11 @@ export default async function TemplateEditorPage(props: {
       commerceEnabled={commerceSettings?.enabled ?? false}
       maildripConnected={Boolean(commerceSettings?.maildripApiKeyEncrypted)}
       rootTemplateId={rootTemplateId}
+      designFormat={designFormat}
+      initialV2Design={initialV2Design}
+      canTryNewEditor={canMoveToV2(template)}
+      canGoBackToClassic={designFormat === "v2" && !!template.classicBackupId}
+      templateSlug={template.slug ?? null}
     />
   );
 }

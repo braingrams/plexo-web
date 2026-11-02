@@ -11,15 +11,6 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // enforced when the secret is actually configured (deployed environments, loaded from SSM
   // at cold start) — local dev has no CloudFront in front of it, so there's nothing to check.
   const expectedOriginSecret = process.env.PLEXO_ORIGIN_VERIFY_SECRET;
-  console.log("MIDDLEWARE DEBUG:", {
-  pathname: request.nextUrl.pathname,
-  host: request.headers.get("host"),
-  forwardedHost: request.headers.get("x-forwarded-host"),
-  appUrl: process.env.NEXT_PUBLIC_APP_URL,
-  pagesDomain: process.env.NEXT_PUBLIC_PAGES_DOMAIN,
-  hasOriginSecret: !!expectedOriginSecret,
-  hasOriginHeader: !!request.headers.get("x-origin-verify"),
-});
   if (expectedOriginSecret && request.headers.get("x-origin-verify") !== expectedOriginSecret) {
     return new NextResponse("Not found.", { status: 404 });
   }
@@ -156,21 +147,30 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   // 0. The wildcard pages domain's own bare apex (e.g. "plexopages.com" with no
   // subdomain) has no site of its own — nobody publishes a site there, only at
-  // "<subdomain>.plexopages.com" — so it previously 404'd via the generic /pub lookup
-  // below (resolveSite() finding no PublishedDomain row for the bare apex). Redirect it
-  // to the real marketing/app site instead, the same "bare platform domain sends you to
-  // the actual product" convention as e.g. vercel.app -> vercel.com. Same treatment for
-  // "www.<pagesDomain>" — "www" is in RESERVED_SUBDOMAINS (app/api/v1/publish/route.ts),
-  // so it can never be a real tenant, and it otherwise 404s the same way the bare apex
-  // did. Exact match only — "foo.plexopages.com" must fall through to the normal
+  // "<subdomain>.plexopages.com" — so redirect it to www.plexopages.com, which is
+  // registered as a custom domain hosting the Plexo marketing page.
+  // Note: "www.<pagesDomain>" is intentionally NOT redirected here — it is registered as
+  // a CUSTOM domain and must fall through to the normal tenant-resolution path below.
+  // Exact match only — "foo.plexopages.com" must fall through to the normal
   // tenant-resolution path below.
   // Gated on isSubdomainOrCustom (not a bare `hostname === pagesDomain` check) because
   // staging has no separate wildcard domain configured yet — its own
   // NEXT_PUBLIC_PAGES_DOMAIN is literally the same value as its NEXT_PUBLIC_APP_URL — so
   // an ungated check here would redirect the dashboard's own known host to itself,
   // an infinite loop.
-  if (isSubdomainOrCustom && (hostname === pagesDomain || hostname === `www.${pagesDomain}`)) {
-    return NextResponse.redirect(baseAppUrl);
+  if (isSubdomainOrCustom && hostname === pagesDomain) {
+    // Redirect bare apex (plexopages.com) to www.plexopages.com, which is registered as a
+    // custom domain hosting the Plexo marketing page. Path is intentionally dropped —
+    // bare-apex paths have no guaranteed equivalent on the www site. Only the query string
+    // is preserved so UTM parameters survive the redirect.
+    // Cache-Control: no-store prevents CloudFront from caching this response (pageCachePolicy
+    // keys only on ?p=, so a cached redirect for "/" would be served to "/?utm_source=X"
+    // visitors too). With minTtl=0, CloudFront honours no-store and never stores this.
+    // Status 307 (not 301/308) avoids browsers permanently caching the redirect.
+    const dest = new URL("/" + request.nextUrl.search, `https://www.${pagesDomain}`);
+    const res = NextResponse.redirect(dest.toString(), { status: 307 });
+    res.headers.set("Cache-Control", "no-store");
+    return res;
   }
 
   // 1. If it's a pages subdomain or a custom domain, rewrite internally to /pub/[domain]/[path]

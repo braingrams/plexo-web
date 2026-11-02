@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hashPassword } from "@better-auth/utils/password";
 
 const { store } = vi.hoisted(() => ({ store: new Map<string, import("./userStoreMock").FakeUser>() }));
@@ -21,6 +21,9 @@ vi.mock("@/lib/commerceRateLimitDynamo", () => ({
   checkCommerceRateLimit: vi.fn(async () => true),
   clientIp: () => "203.0.113.7",
 }));
+
+const saved = vi.hoisted(() => vi.fn(async (_userId: string, _token: string) => undefined));
+vi.mock("@/lib/charisolLink", () => ({ saveCharisolRefresh: saved }));
 
 import { authorizePassword } from "@/server/passwordSignIn";
 import type { PasswordSignInResult } from "@/server/charisolCognito";
@@ -51,6 +54,19 @@ describe("authorizePassword — Charisol accepts the password", () => {
     expect(user?.id).toBe("u1");
     expect(store.get("u1")).toMatchObject({ charisolSub: "charisol-sub-1" });
     expect(store.get("u1")?.charisolPasswordAt).toBeTruthy();
+  });
+
+  it("keeps the Charisol sign-in (server-side) so Strata can be connected without another login, and never fails the sign-in over it", async () => {
+    await seed();
+    saved.mockClear();
+    const user = await authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "ok", idToken: "t", refreshToken: "refresh.tok" }));
+    expect(user?.id).toBe("u1");
+    expect(saved).toHaveBeenCalledWith("u1", "refresh.tok");
+    saved.mockRejectedValueOnce(new Error("db down"));
+    expect((await authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "ok", idToken: "t", refreshToken: "r2" })))?.id).toBe("u1");
+    saved.mockClear();
+    await authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "ok", idToken: "t" })); // Charisol gave no refresh token: nothing to keep
+    expect(saved).not.toHaveBeenCalled();
   });
 
   it("matches the existing account by legacy_user_id (moved across via Plexo's verifier)", async () => {
@@ -91,9 +107,9 @@ describe("authorizePassword — Charisol rejects the password", () => {
     expect(await authorizePassword("ada@example.com", "Wrong-Password-1", request, deps({ kind: "wrong_password" }))).toBeNull();
   });
 
-  it("Charisol holds the password: the old Plexo password is NOT accepted", async () => {
+  it("Charisol holds the password: the old Plexo password is NOT accepted, and they're told it was changed", async () => {
     await seed({ charisolPasswordAt: "2026-10-01T00:00:00.000Z" });
-    expect(await authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "wrong_password" }))).toBeNull();
+    expect(await codeOf(authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "wrong_password" })))).toBe("password_changed");
   });
 
   it("a Google-linked user (charisolSub but no Charisol password) can still use their Plexo password", async () => {
@@ -129,7 +145,14 @@ describe("authorizePassword — other Charisol answers", () => {
     expect((await authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "unavailable" })))?.id).toBe("u1");
   });
 
-  it("must choose a new password: emails a code and sends them to the reset form", async () => {
+  it("must choose a new password but the Plexo password is right: signs in, no code", async () => {
+    await seed();
+    const d = deps({ kind: "reset_required" });
+    expect((await authorizePassword("ada@example.com", PASSWORD, request, d))?.id).toBe("u1");
+    expect(d.sendResetCode).not.toHaveBeenCalled();
+  });
+
+  it("must choose a new password and Plexo can't vouch for it: emails a code and sends them to the reset form", async () => {
     await seed();
     const d = deps({ kind: "reset_required" });
     expect(await codeOf(authorizePassword("ada@example.com", "weakpass", request, d))).toBe("password_reset_required");
@@ -146,5 +169,61 @@ describe("authorizePassword — other Charisol answers", () => {
     expect(await authorizePassword("", PASSWORD, request, d)).toBeNull();
     expect(await authorizePassword("ada@example.com", "", request, d)).toBeNull();
     expect(d.passwordSignIn).not.toHaveBeenCalled();
+  });
+});
+
+describe("authorizePassword — CHARISOL_PASSWORD_ENFORCED on", () => {
+  beforeEach(() => { process.env.CHARISOL_PASSWORD_ENFORCED = "true"; });
+  afterEach(() => { delete process.env.CHARISOL_PASSWORD_ENFORCED; });
+
+  it("ok at Charisol still signs in", async () => {
+    await seed();
+    expect((await authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "ok", idToken: "t" })))?.id).toBe("u1");
+  });
+
+  it.each(["wrong_password", "not_enabled"] as const)("%s + correct Plexo password: signs in, no reset", async (kind) => {
+    await seed();
+    const d = deps({ kind });
+    expect((await authorizePassword("ada@example.com", PASSWORD, request, d))?.id).toBe("u1");
+    expect(d.sendResetCode).not.toHaveBeenCalled();
+  });
+
+  it("wrong at Charisol + old Plexo password, but Charisol holds their password: refused and told it was changed", async () => {
+    await seed({ charisolPasswordAt: "2026-10-01T00:00:00.000Z" });
+    const d = deps({ kind: "wrong_password" });
+    expect(await codeOf(authorizePassword("ada@example.com", PASSWORD, request, d))).toBe("password_changed");
+    expect(d.sendResetCode).not.toHaveBeenCalled();
+  });
+
+  it("wrong at Charisol + a password that was never theirs: plain wrong password, nothing revealed", async () => {
+    await seed({ charisolPasswordAt: "2026-10-01T00:00:00.000Z" });
+    expect(await authorizePassword("ada@example.com", "Wrong-Password-1", request, deps({ kind: "wrong_password" }))).toBeNull();
+  });
+
+  it("wrong at Charisol + wrong local password: generic refusal, no code", async () => {
+    await seed();
+    const d = deps({ kind: "wrong_password" });
+    expect(await authorizePassword("ada@example.com", "Wrong-Password-1", request, d)).toBeNull();
+    expect(d.sendResetCode).not.toHaveBeenCalled();
+  });
+
+  it("unknown email stays generic", async () => {
+    const d = deps({ kind: "wrong_password" });
+    expect(await authorizePassword("nobody@example.com", PASSWORD, request, d)).toBeNull();
+    expect(d.sendResetCode).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false])("unavailable fails closed (held=%s)", async (held) => {
+    await seed(held ? { charisolPasswordAt: "2026-10-01T00:00:00.000Z" } : {});
+    expect(await codeOf(authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "unavailable" })))).toBe("sign_in_unavailable");
+  });
+});
+
+describe("authorizePassword — flag explicitly off", () => {
+  it("falls back to Plexo's password as before", async () => {
+    process.env.CHARISOL_PASSWORD_ENFORCED = "false";
+    await seed();
+    expect((await authorizePassword("ada@example.com", PASSWORD, request, deps({ kind: "wrong_password" })))?.id).toBe("u1");
+    delete process.env.CHARISOL_PASSWORD_ENFORCED;
   });
 });

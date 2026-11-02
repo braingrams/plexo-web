@@ -6,6 +6,8 @@ import { PageHeader } from "../_components/PageHeader";
 import { Card } from "../_components/Card";
 import { IntegrationSubTabs } from "../integrations/_components/IntegrationSubTabs";
 import { CustomSelect } from "@/app/_components/CustomSelect";
+import { SDK_V2_API, SDK_V2_COMPILE, SDK_V2_EMBED, SDK_V2_INSTALL } from "@/lib/sdk/v2-snippets";
+import { V2Playground } from "./v2-playground";
 
 type SimpleKey = {
   id: string;
@@ -44,19 +46,13 @@ function IconCopy() {
   );
 }
 
-function IconLink() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" />
-    </svg>
-  );
-}
-
 export function SdkClient({ initialKeys, initialManageLandingPagePublishing, isUltra }: Props) {
   const [selectedKeyId, setSelectedKeyId] = useState<string>(initialKeys[0]?.id ?? "");
   const [copiedInstall, setCopiedInstall] = useState(false);
   const [copiedReact, setCopiedReact] = useState(false);
   const [copiedNode, setCopiedNode] = useState(false);
+  const [tab, setTab] = useState<"v2" | "classic">("v2");
+  const [copiedV2, setCopiedV2] = useState<string | null>(null);
   const [manageLandingPagePublishing, setManageLandingPagePublishing] = useState<boolean>(initialManageLandingPagePublishing);
   const [publishSettingSaving, setPublishSettingSaving] = useState(false);
   const [publishSettingError, setPublishSettingError] = useState<string | null>(null);
@@ -136,6 +132,19 @@ const html = compileToHTML(template.designJson);
 const text = compileToPlainText(template.designJson);
 `;
 
+  async function copyV2(id: string, text: string) {
+    await navigator.clipboard.writeText(text);
+    setCopiedV2(id);
+    setTimeout(() => setCopiedV2(null), 2000);
+  }
+
+  const v2Steps: Array<{ id: string; title: string; note: string; code: string }> = [
+    { id: "install", title: "Step 1: Install", note: "", code: SDK_V2_INSTALL },
+    { id: "embed", title: "Step 2: Add the editor", note: "Everything is optional: with no props you get a complete builder on a blank page.", code: SDK_V2_EMBED },
+    { id: "compile", title: "Step 3: Turn pages into HTML on your server", note: "Runs anywhere on your backend. No React or editor needed.", code: SDK_V2_COMPILE },
+    { id: "api", title: "Or compile with a hosted call", note: "Uses your API key. Up to 50 pages and 2 MB per request.", code: SDK_V2_API.replace("process.env.PLEXO_API_KEY!", selectedKey ? `process.env.PLEXO_API_KEY! /* ${selectedKey.maskedKey} */` : "process.env.PLEXO_API_KEY!") },
+  ];
+
   async function copyText(text: string, setCopied: (v: boolean) => void) {
     await navigator.clipboard.writeText(text);
     setCopied(true);
@@ -148,7 +157,7 @@ const text = compileToPlainText(template.designJson);
       <PageHeader
         eyebrow="Integration"
         title="Plexo SDK Client"
-        subtitle="Connect your application visually and programmatically using our SDK."
+        subtitle="Add a visual website builder to your own product. SDK 2 is recommended; the classic builder keeps working."
       />
 
       <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", marginTop: "-0.75rem", marginBottom: "1.25rem" }}>
@@ -157,6 +166,26 @@ const text = compileToPlainText(template.designJson);
           Open the Compile tool
         </Link>
       </p>
+
+      <div role="tablist" aria-label="SDK version" style={{ display: "flex", gap: "0.5rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
+        {([["v2", "SDK 2 (recommended)"], ["classic", "Classic (V1)"]] as const).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            style={{
+              padding: "0.5rem 1.1rem", borderRadius: 999, cursor: "pointer", fontFamily: "inherit", fontSize: "0.82rem", fontWeight: 700,
+              border: tab === id ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.12)",
+              background: tab === id ? "var(--brand-subtle)" : "transparent",
+              color: tab === id ? "var(--brand)" : "rgba(240,242,255,0.6)",
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       {/* Select key warning/option */}
       <Card padded={false} style={{ padding: "1rem 1.25rem", marginBottom: "1.25rem" }}>
@@ -238,7 +267,43 @@ const text = compileToPlainText(template.designJson);
         )}
       </Card>
 
+      {tab === "v2" && (
+        <div style={{ display: "grid", gap: "1.25rem", gridTemplateColumns: "1fr", marginBottom: "1.25rem" }}>
+          <Card padded={false} style={{ padding: "1rem 0.85rem" }}>
+            <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.4rem" }}>
+              Try SDK 2 right here
+            </h3>
+            <V2Playground />
+          </Card>
+
+          {v2Steps.map((step) => (
+            <Card key={step.id} padded={false} style={{ padding: "1rem 0.85rem", overflow: "hidden", maxWidth: "100%" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem", flexWrap: "wrap", gap: "0.5rem" }}>
+                <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", flex: "1 1 200px", minWidth: 0 }}>{step.title}</h3>
+                <button
+                  onClick={() => void copyV2(step.id, step.code)}
+                  style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "0.35rem", color: copiedV2 === step.id ? "#34d399" : "rgba(240,242,255,0.4)", fontSize: "0.75rem", fontWeight: 600, fontFamily: "inherit", marginLeft: "auto" }}
+                >
+                  {copiedV2 === step.id ? <IconCheck /> : <IconCopy />}
+                  {copiedV2 === step.id ? "Copied!" : "Copy"}
+                </button>
+              </div>
+              {step.note && <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)", margin: "0 0 0.6rem" }}>{step.note}</p>}
+              <div style={{ width: "100%", overflowX: "auto" }}>
+                <pre style={{ background: "rgba(0, 0, 0, 0.4)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: "0.85rem", fontFamily: "monospace", fontSize: "0.78rem", color: "rgba(240,242,255,0.85)", overflowX: "auto", lineHeight: 1.5, maxWidth: "100%", whiteSpace: "pre", margin: 0 }}>
+                  {step.code}
+                </pre>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {tab === "classic" && (
       <div style={{ display: "grid", gap: "1.25rem", gridTemplateColumns: "1fr" }}>
+        <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.5)", margin: 0 }}>
+          The classic builder is unchanged and fully supported. Your existing integration needs no changes.
+        </p>
 
         {/* 1. Install */}
         <Card padded={false} style={{ padding: "1rem 0.85rem", overflow: "hidden", maxWidth: "100%" }}>
@@ -336,33 +401,9 @@ const text = compileToPlainText(template.designJson);
           </div>
         </Card>
 
-        {/* Documentation links */}
-        <div style={{
-          background: "linear-gradient(135deg, rgba(var(--brand-rgb),0.08) 0%, rgba(100,50,255,0.06) 100%)",
-          border: "1px solid rgba(var(--brand-rgb),0.15)", borderRadius: 16, padding: "1.5rem",
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap",
-        }}>
-          <div>
-            <h4 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff" }}>
-              Looking for full API specifications?
-            </h4>
-            <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", marginTop: "0.25rem" }}>
-              Browse the complete list of types, helper methods, design tokens, and compile functions.
-            </p>
-          </div>
-          <Link href="/sdk" target="_blank" style={{
-            display: "inline-flex", alignItems: "center", gap: "0.45rem",
-            padding: "0.6rem 1.1rem", borderRadius: 9,
-            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-            color: "#f0f2ff", fontSize: "0.82rem", fontWeight: 600, textDecoration: "none",
-            transition: "background 0.15s",
-          }}>
-            Public Docs
-            <IconLink />
-          </Link>
         </div>
+      )}
 
-      </div>
     </>
   );
 }

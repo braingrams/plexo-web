@@ -520,6 +520,10 @@ export function WordPressMigrationClient() {
   const [error, setError] = useState<string | null>(null);
   const [upgradeNeeded, setUpgradeNeeded] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
+  // The address that was checked — the move starts from THIS, never from the WordPress address we found behind it
+  // (starting from the found address would drop any page in front of WordPress, e.g. a splash page).
+  const [checkedUrl, setCheckedUrl] = useState("");
+  const [wholeSite, setWholeSite] = useState(true);
   const [owns, setOwns] = useState(false);
   const [needsAup, setNeedsAup] = useState(false);
   const [aup, setAup] = useState(false);
@@ -629,6 +633,8 @@ export function WordPressMigrationClient() {
         setUpgradeNeeded(Boolean(data.requiresUpgrade));
         return;
       }
+      setCheckedUrl(url.trim());
+      setWholeSite(true);
       setPreview(data.preview as Preview);
     } catch {
       setError("We couldn't reach Plexo — check your connection and try again.");
@@ -645,7 +651,7 @@ export function WordPressMigrationClient() {
       const res = await fetch("/api/v1/wp-migration", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceUrl: preview.homeUrl, ownershipAttested: true, acceptAup: aup || undefined, drivenByDashboard: true }),
+        body: JSON.stringify({ sourceUrl: preview.wholeSite && wholeSite ? preview.wholeSite.url : checkedUrl || preview.homeUrl, ownershipAttested: true, acceptAup: aup || undefined, drivenByDashboard: true }),
       });
       const data = await res.json();
       if (res.status === 403 && data.requiresAupAcceptance) {
@@ -760,6 +766,8 @@ export function WordPressMigrationClient() {
       1,
       <ReviewStep
         preview={preview}
+        wholeSite={wholeSite}
+        onWholeSite={setWholeSite}
         owns={owns}
         onOwns={setOwns}
         needsAup={needsAup}

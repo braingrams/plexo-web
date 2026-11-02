@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 
 import type { MarketplaceListItem } from "@/lib/marketplace";
 import { MarketplaceFilters } from "@/app/marketplace/MarketplaceFilters";
+import { MarketplaceSkeletonGrid } from "@/app/marketplace/MarketplaceBrowse";
 import { MarketplaceRowExpandGrid } from "@/app/marketplace/MarketplaceRowExpandGrid";
 
 type Filters = { category?: string; kind?: string; free?: string; q?: string; sort: string };
@@ -143,10 +144,8 @@ export function MarketplaceBrowseModal({ onClose }: { onClose: () => void }) {
             />
           </div>
 
-          {loading && !data ? (
-            <div style={{ textAlign: "center", color: "rgba(240,242,255,0.4)", padding: "5rem 0", fontSize: "0.875rem" }}>
-              Loading templates…
-            </div>
+          {loading ? (
+            <MarketplaceSkeletonGrid />
           ) : data && data.templates.length > 0 ? (
             <MarketplaceRowExpandGrid templates={data.templates} />
           ) : (

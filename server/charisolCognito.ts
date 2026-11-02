@@ -11,7 +11,7 @@
 // reset (see Charisol's docs/legacy-user-migration.md).
 
 export type PasswordSignInResult =
-  | { kind: "ok"; idToken: string }
+  | { kind: "ok"; idToken: string; /** Kept (encrypted, server-side) so other Charisol products open without another login. */ refreshToken?: string }
   /** Wrong password, or no Charisol account Cognito could find/migrate. */
   | { kind: "wrong_password" }
   /** The account exists but must choose a new password (e.g. a migrated password that's
@@ -78,7 +78,8 @@ export async function passwordSignIn(email: string, password: string): Promise<P
   });
   if (res.ok) {
     const idToken = res.body?.AuthenticationResult?.IdToken;
-    if (typeof idToken === "string" && idToken) return { kind: "ok", idToken };
+    const refreshToken = res.body?.AuthenticationResult?.RefreshToken;
+    if (typeof idToken === "string" && idToken) return { kind: "ok", idToken, ...(typeof refreshToken === "string" && refreshToken ? { refreshToken } : {}) };
     // A challenge instead of tokens. NEW_PASSWORD_REQUIRED (an admin-created account) is
     // handled the same way as a required reset; Plexo doesn't enrol MFA, so anything else
     // is unexpected — treat it as unavailable rather than guess.

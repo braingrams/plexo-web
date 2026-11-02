@@ -2,52 +2,58 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Layout, Mail, ArrowRight, Users, Maximize2, Layers } from "lucide-react";
+import { Layout, Mail, Eye, Layers, ArrowRight } from "lucide-react";
 
 import type { MarketplaceListItem } from "@/lib/marketplace";
 import { TemplatePreviewModal } from "./TemplatePreviewModal";
 
 /**
- * Grid of marketplace template cards. Each card is preview-first: a live, scaled-down
- * iframe of the template's own compiledHtml fills the card by default (this is a template
- * marketplace — the design itself is the product, not a paragraph about it), with just the
- * name as a small always-visible label. Everything else — description, badges, price,
- * import count, and the Use/Preview actions — surfaces as an overlay on hover instead of
- * competing with the image for space at rest.
+ * The template cards. Each is a picture of the design with its name, what it is for and its price printed
+ * underneath, never over it, so every card reads at a glance without hovering (and on a phone, where there is no
+ * hover). The whole card opens the template's page; "Preview" opens a full-size look without leaving the list.
  *
- * The iframe scaling here is a lightweight CSS-only thumbnail trick (render at 4x, scale
- * back to 25%) — a separate, much simpler mechanism from both the old hover-triggered
- * row-reflow this replaces and the page builder's own live-editable preview mode in
- * plexo-sdk (PlexoBuilder.tsx's internalPreviewMode), which this deliberately does not
- * touch or reuse. TemplatePreviewModal (the fullscreen Maximize2 preview) is unchanged.
+ * The picture is a live, scaled-down copy of the template's own compiled page (rendered at 4x and shrunk to 25%).
  */
 export function MarketplaceRowExpandGrid({
   templates,
+  onSelect,
+  busyId,
 }: {
   templates: MarketplaceListItem[];
+  /** When given, picking a card calls this (e.g. the new-site wizard) instead of opening the template's page. */
+  onSelect?: (t: MarketplaceListItem) => void;
+  busyId?: string | null;
 }) {
   const [previewingModalId, setPreviewingModalId] = useState<string | null>(null);
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-9 w-full">
       {templates.map((t) => {
         const isFree = t.priceCents === 0;
+        const what = t.kind === "LANDING_PAGE" ? "Web page" : "Email";
 
         return (
-          <div
-            key={t.id}
-            className="group relative aspect-[4/3] rounded-2xl border border-[var(--surface-border)] bg-[var(--surface)] overflow-hidden transition-all duration-300 cursor-pointer backdrop-blur-xl hover:border-[var(--brand-glow)] hover:-translate-y-1 hover:shadow-xl hover:shadow-[var(--brand-glow)]"
-          >
-            <Link href={`/marketplace/${t.id}`} className="absolute inset-0 z-10" aria-label={t.name} />
+          <article key={t.id} className="group relative flex flex-col">
+            {onSelect ? (
+              <button
+                type="button"
+                onClick={() => onSelect(t)}
+                disabled={!!busyId}
+                className="absolute inset-0 z-10 rounded-2xl cursor-pointer disabled:cursor-wait"
+                aria-label={`Use ${t.name}`}
+              />
+            ) : (
+              <Link href={`/marketplace/${t.id}`} className="absolute inset-0 z-10 rounded-2xl" aria-label={`${t.name}: open template`} />
+            )}
 
-            {/* Preview — dominant, always visible */}
-            <div className="absolute inset-0 bg-white">
+            <div className="relative aspect-[4/3] rounded-2xl border border-[var(--surface-border)] bg-white overflow-hidden transition-all duration-300 group-hover:border-[var(--brand-glow)] group-hover:-translate-y-1 group-hover:shadow-xl group-hover:shadow-[var(--brand-glow)]">
               {t.compiledHtml ? (
                 <iframe
                   title={`Preview of ${t.name}`}
                   srcDoc={t.compiledHtml}
                   sandbox=""
                   tabIndex={-1}
+                  loading="lazy"
                   style={{ width: "400%", height: "400%", transform: "scale(0.25)", transformOrigin: "top left", pointerEvents: "none" }}
                   className="border-none"
                 />
@@ -57,69 +63,37 @@ export function MarketplaceRowExpandGrid({
                   <span className="text-xs font-medium">No preview yet</span>
                 </div>
               )}
-            </div>
-
-            {/* Always-on name label — just enough to orient while scanning */}
-            <div className="absolute inset-x-0 bottom-0 z-20 p-3 bg-gradient-to-t from-black/70 to-transparent pointer-events-none transition-opacity duration-200 group-hover:opacity-0">
-              <h3 className="text-sm font-bold text-white line-clamp-1 drop-shadow">{t.name}</h3>
-            </div>
-
-            {/* Hover overlay — everything else lives here */}
-            <div className="absolute inset-0 z-20 flex flex-col justify-between p-5 bg-black/80 opacity-0 pointer-events-none transition-opacity duration-200 group-hover:opacity-100 group-hover:pointer-events-auto">
-              <div className="flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-white/10 text-white border border-white/15">
-                  {t.kind === "LANDING_PAGE" ? <Layout className="w-3 h-3" /> : <Mail className="w-3 h-3" />}
-                  {t.category ?? (t.kind === "LANDING_PAGE" ? "Landing Page" : "Email")}
+              <span className="absolute left-3 top-3 z-20 px-2.5 py-1 rounded-full text-[11px] font-bold shadow-sm bg-white/95 text-slate-900">
+                {isFree ? "Free" : `$${(t.priceCents / 100).toFixed(2)}`}
+              </span>
+              <span className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center p-3 opacity-0 translate-y-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-y-0 focus-within:opacity-100">
+                <span className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[var(--brand)] text-xs font-bold text-white shadow-lg">
+                  {busyId === t.id ? "Setting up…" : <>Use this template <ArrowRight className="w-3.5 h-3.5" /></>}
                 </span>
-                <span
-                  className={`text-xs font-bold px-3 py-1 rounded-full ${
-                    isFree
-                      ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-                      : "bg-[var(--brand-subtle)] text-[var(--brand)] border border-[var(--brand-glow)]"
-                  }`}
-                >
-                  {isFree ? "Free" : `$${(t.priceCents / 100).toFixed(2)}`}
-                </span>
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-base font-bold text-white line-clamp-1">{t.name}</h3>
-                {t.description && <p className="text-xs text-white/70 line-clamp-2 leading-relaxed">{t.description}</p>}
-
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/15">
-                  <div className="flex items-center gap-1.5 text-xs text-white/60">
-                    <Users className="w-3.5 h-3.5" />
-                    <span>{t.purchaseCount.toLocaleString()} imports</span>
-                  </div>
-                  <div className="relative z-30 flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setPreviewingModalId(t.id);
-                      }}
-                      className="p-2 rounded-lg bg-white/10 border border-white/15 text-white hover:bg-white/20 transition-colors"
-                      title="Fullscreen preview"
-                    >
-                      <Maximize2 className="w-3.5 h-3.5" />
-                    </button>
-                    <Link
-                      href={`/marketplace/${t.id}`}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-[var(--brand)] text-xs font-bold text-white shadow-lg shadow-[var(--brand-glow)] hover:opacity-90 transition-all"
-                    >
-                      Use Template <ArrowRight className="w-3.5 h-3.5" />
-                    </Link>
-                  </div>
-                </div>
-              </div>
+              </span>
             </div>
-          </div>
+
+            <div className="flex items-start justify-between gap-3 pt-3.5 px-1">
+              <div className="min-w-0">
+                <h3 className="text-[15px] font-bold leading-snug text-[var(--text-main)] group-hover:text-[var(--brand)] transition-colors line-clamp-2">{t.name}</h3>
+                <p className="mt-1 flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
+                  {t.kind === "LANDING_PAGE" ? <Layout className="w-3.5 h-3.5 shrink-0" /> : <Mail className="w-3.5 h-3.5 shrink-0" />}
+                  <span className="truncate">{what}{t.category ? ` · ${t.category}` : ""}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewingModalId(t.id)}
+                className="relative z-20 shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--surface-border)] bg-[var(--surface)] text-xs font-semibold text-[var(--text-main)] hover:border-[var(--brand-glow)] hover:text-[var(--brand)] transition-colors"
+              >
+                <Eye className="w-3.5 h-3.5" /> Preview
+              </button>
+            </div>
+          </article>
         );
       })}
 
-      {previewingModalId && (
-        <TemplatePreviewModal templateId={previewingModalId} onClose={() => setPreviewingModalId(null)} />
-      )}
+      {previewingModalId && <TemplatePreviewModal templateId={previewingModalId} onClose={() => setPreviewingModalId(null)} />}
     </div>
   );
 }

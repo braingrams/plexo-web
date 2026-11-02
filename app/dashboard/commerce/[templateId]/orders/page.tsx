@@ -1,13 +1,17 @@
 import { CommerceOrder, CommerceOrderItem, CommerceBooking, CommerceDigitalDelivery, CommerceProduct } from "@/lib/db/commerceEntities";
 import { orderDeliveryDetails } from "@/lib/commerce/bankTransfer";
 import { orderDeleteBlocker } from "@/lib/commerce/orderDeletion";
+import { parsePageRequest, paginate } from "@/lib/pagination";
 import { OrdersClient, type OrderSummary } from "./OrdersClient";
 
-export default async function CommerceOrdersPage({ params }: { params: Promise<{ templateId: string }> }) {
+export default async function CommerceOrdersPage({ params, searchParams }: { params: Promise<{ templateId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { templateId } = await params;
 
   const { data: allOrders } = await CommerceOrder.query.primary({ templateId }).go({ pages: "all" });
-  const orders = [...allOrders].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, 25);
+  const { items: orders, total, page, pageSize } = paginate(
+    [...allOrders].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),
+    parsePageRequest(await searchParams),
+  );
 
   const initialOrders: OrderSummary[] = await Promise.all(
     orders.map(async (o) => {
@@ -54,5 +58,5 @@ export default async function CommerceOrdersPage({ params }: { params: Promise<{
     }),
   );
 
-  return <OrdersClient templateId={templateId} initialOrders={initialOrders} initialTotal={initialOrders.length} />;
+  return <OrdersClient templateId={templateId} initialOrders={initialOrders} initialAwaiting={allOrders.filter((o) => o.status === "PENDING" && o.paymentMethod === "BANK_TRANSFER").length} initialTotal={total} initialPage={page} initialPageSize={pageSize} />;
 }

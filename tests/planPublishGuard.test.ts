@@ -14,7 +14,7 @@ vi.mock("@/lib/auth/resolveUser", () => ({
 }));
 vi.mock("@/server/requirePermissionDynamo", () => ({ requirePermission: () => null }));
 vi.mock("@/server/requireTemplateScope", () => ({ requireTemplateScope: () => null }));
-vi.mock("@/lib/siteLayoutDynamo", () => ({ compileWithSiteLayout: async (_t: unknown, json: unknown) => json, onTemplateSaved: async () => {} }));
+vi.mock("@/lib/siteLayoutDynamo", () => ({ compileTemplateWithSiteLayout: async () => "<html><body>page</body></html>", onTemplateSaved: async () => {} }));
 vi.mock("@/lib/compiler", () => ({ compileToHTML: () => "<html><body>page</body></html>" }));
 vi.mock("@/server/sanitizer", () => ({ sanitizeHtml: (h: string) => h }));
 vi.mock("@/lib/templateVersions", () => ({

@@ -7,6 +7,7 @@ import { PageContainer } from "../../../_components/PageContainer";
 import { Card } from "../../../_components/Card";
 import { CustomSelect } from "../../../../_components/CustomSelect";
 import { SiteAppearancePanel } from "./SiteAppearancePanel";
+import { DeployPanel } from "./DeployPanel";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
@@ -21,6 +22,11 @@ type SiteData = {
   blogEnabled: boolean;
   siteLayoutEnabled: boolean;
   commerceEnabled: boolean;
+  deployedApp: {
+    framework: string;
+    spaMode: boolean;
+    updatedAt: string;
+  } | null;
 };
 
 type PreviewPage = {
@@ -1133,6 +1139,12 @@ export function DetailClient({
                   </div>
                 </div>
               </Card>
+
+              <DeployPanel
+                templateId={templateId}
+                initialDeployedApp={siteData.deployedApp}
+                liveDomain={siteData.domain?.domain ?? null}
+              />
 
               <Card>
                 <div style={ROW}>

@@ -2,19 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveSiteLayoutAdmin } from "@/lib/siteLayoutDynamo";
 import { FormSubmission } from "@/lib/db/opsEntities";
 import { isLikelySpam } from "@/lib/forms/spamHeuristics";
+import { paginate, parsePageRequest } from "@/lib/pagination";
 
-/** Lists this site's form submissions (newest first, capped at 200 — same bound the
- * dashboard page used before this route existed) with a `likelySpam` flag computed
- * per-submission so the dashboard can show a badge and power "select all likely spam". */
+/** Lists this site's form submissions, newest first, one page at a time (?page=&pageSize=), with a
+ * `likelySpam` flag per submission for the badge. `total` is the real total and `likelySpamIds` covers
+ * every page, so "select all likely spam" reaches messages that aren't on the page being viewed. */
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const { id } = await context.params;
   const resolved = await resolveSiteLayoutAdmin(request, id);
   if ("error" in resolved) return resolved.error;
 
   const { data: allSubmissions } = await FormSubmission.query.primary({ templateId: resolved.context.templateId }).go({ pages: "all" });
-  const submissions = allSubmissions
+  const sorted = allSubmissions
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
-    .slice(0, 200)
     .map((s) => ({
       id: s.id,
       formName: s.formName ?? "Website Form",
@@ -22,8 +22,15 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       createdAt: s.createdAt ?? new Date().toISOString(),
       likelySpam: isLikelySpam(s.fields as Record<string, string>),
     }));
+  const { items, total, page, pageSize } = paginate(sorted, parsePageRequest(request.nextUrl.searchParams));
 
-  return NextResponse.json({ submissions });
+  return NextResponse.json({
+    submissions: items,
+    total,
+    page,
+    pageSize,
+    likelySpamIds: sorted.filter((s) => s.likelySpam).map((s) => s.id),
+  });
 }
 
 /** Bulk-deletes submissions by id — the only delete path this entity has ever had (see
