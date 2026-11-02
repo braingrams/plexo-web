@@ -577,6 +577,9 @@ export class ComputeStack extends cdk.Stack {
     // Injected so updateProvisionedConcurrency.ts can construct the alias ARN at runtime
     // (function name + ":live" suffix) without a separate SSM lookup.
     serverFn.addEnvironment("PLEXO_ACCOUNT_ID", this.account);
+    // Internal admin-grant endpoint (app/api/internal/admins): on the staging stack only. PR
+    // previews share staging's data but are a different stack, so PLEXO_ENV alone isn't enough.
+    serverFn.addEnvironment("ADMIN_ENDPOINTS_ENABLED", stackID === "staging-plexo" ? "true" : "false");
 
     const imageFn = new lambda.Function(this, "ImageOptimizationFn", {
       runtime: lambda.Runtime.NODEJS_24_X,
