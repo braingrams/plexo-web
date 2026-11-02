@@ -541,19 +541,38 @@ export class ComputeStack extends cdk.Stack {
       action: "lambda:InvokeFunctionUrl",
       functionUrlAuthType: lambda.FunctionUrlAuthType.NONE,
     });
-    // Let serverFn manage its own alias's PC at runtime (called by
-    // lib/pub/updateProvisionedConcurrency.ts when a customer changes hosting tier) — the
-    // runtime path updates PC immediately without waiting for a full CDK re-deploy.
-    serverFn.addToRolePolicy(
+    // Changing the warm-copy count (PROVISIONED tier) runs in a separate function that alone
+    // holds the permission. The server function can only invoke it, so a bug or compromise in
+    // app code can't change how many copies stay warm (cost). lib/pub/updateProvisionedConcurrency.ts
+    // calls it when a customer changes hosting tier, with no full CDK re-deploy needed.
+    // The scaler's name is a fixed string, not a token, so the server function doesn't depend on
+    // the scaler and the two don't form a dependency loop.
+    const pcScalerName = `${this.stackName}-pc-scaler`;
+    const pcScaler = new lambda.Function(this, "PcScalerFn", {
+      functionName: pcScalerName,
+      runtime: lambda.Runtime.NODEJS_24_X,
+      handler: "index.handler",
+      code: lambda.Code.fromAsset(path.join(__dirname, "..", "..", "lambda", "pc-scaler")),
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(30),
+      environment: { TARGET_FUNCTION_NAME: serverFn.functionName, TARGET_ALIAS: "live" },
+    });
+    pcScaler.addToRolePolicy(
       new iam.PolicyStatement({
         actions: [
           "lambda:PutProvisionedConcurrencyConfig",
           "lambda:DeleteProvisionedConcurrencyConfig",
-          "lambda:GetProvisionedConcurrencyConfig",
         ],
         resources: [serverFnAlias.functionArn],
       }),
     );
+    // Resource-policy grant: the server function's role may invoke the scaler. Granting it here
+    // (not in the server function's own role policy) keeps the dependency one-way.
+    pcScaler.addPermission("AllowServerFnRoleInvoke", {
+      principal: new iam.ArnPrincipal(serverFn.role!.roleArn),
+      action: "lambda:InvokeFunction",
+    });
+    serverFn.addEnvironment("PC_SCALER_FUNCTION_NAME", pcScalerName);
     // Injected so updateProvisionedConcurrency.ts can construct the alias ARN at runtime
     // (function name + ":live" suffix) without a separate SSM lookup.
     serverFn.addEnvironment("PLEXO_ACCOUNT_ID", this.account);
