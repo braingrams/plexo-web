@@ -529,11 +529,12 @@ export class ComputeStack extends cdk.Stack {
     });
     // Function URL on the alias (not the bare function) — traffic that arrives via this URL
     // is the traffic that can actually be served by provisioned-concurrency warm instances.
-    // invokeMode RESPONSE_STREAM removes the 6 MB buffered-response ceiling for large static
-    // assets served via serveDeployedStatic (lib/pub/serveDeployedStatic.ts).
+    // BUFFERED: serverFn's handler (index.handler) returns a plain response object. RESPONSE_STREAM
+    // would stream that object back as text, so pages came out as raw JSON. Responses are capped
+    // at 6 MB until serverFn gets a streaming handler; large static files should go through S3.
     const serverFnUrl = serverFnAlias.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
-      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
+      invokeMode: lambda.InvokeMode.BUFFERED,
     });
     // AuthType.NONE still requires an explicit resource policy granting invocation.
     serverFnAlias.addPermission("AllowPublicInvokeServerFnUrl", {
