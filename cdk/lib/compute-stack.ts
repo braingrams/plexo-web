@@ -529,14 +529,18 @@ export class ComputeStack extends cdk.Stack {
     });
     // Function URL on the alias (not the bare function) — traffic that arrives via this URL
     // is the traffic that can actually be served by provisioned-concurrency warm instances.
-    // BUFFERED: serverFn's handler (index.handler) returns a plain response object. RESPONSE_STREAM
-    // would stream that object back as text, so pages came out as raw JSON. Responses are capped
-    // at 6 MB until serverFn gets a streaming handler; large static files should go through S3.
+    // RESPONSE_STREAM removes the 6 MB buffered-response ceiling — large static assets
+    // served via serveDeployedStatic (lib/pub/serveDeployedStatic.ts) would otherwise
+    // hit "payload is too large for the RequestResponse invocation type". The handler
+    // uses OpenNext's aws-lambda-streaming wrapper (open-next.config.ts) which wraps
+    // the export in awslambda.streamifyResponse — Lambda streams response bytes to
+    // CloudFront instead of buffering the whole payload in memory first.
     const serverFnUrl = serverFnAlias.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
-      invokeMode: lambda.InvokeMode.BUFFERED,
+      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
     });
-    // AuthType.NONE still requires an explicit resource policy granting invocation.
+    // AuthType.NONE still requires an explicit resource policy granting invocation — CDK
+    // does not add this automatically the way it does for the AWS_IAM+OAC case above.
     serverFnAlias.addPermission("AllowPublicInvokeServerFnUrl", {
       principal: new iam.AnyPrincipal(),
       action: "lambda:InvokeFunctionUrl",

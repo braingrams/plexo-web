@@ -23,96 +23,22 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL?.startsWith("http")
-  ? process.env.NEXT_PUBLIC_APP_URL
-  : "https://plexo.charisol.io";
-
-const TITLE = "Plexo — Visual Template Builder for Email & Landing Pages";
-const DESCRIPTION =
-  "Plexo is a drag-and-drop visual builder for email campaigns and landing pages. AI-powered generation, an embeddable SDK, MCP support for Claude/ChatGPT, custom domains, and export-ready HTML — free to start.";
-
+// plexo.charisol.io is the product/dashboard app only — all public marketing and
+// SEO lives on www.plexopages.com. The root metadata is therefore deliberately
+// minimal and noindex: no canonical, OpenGraph, keywords, verification, or
+// Organization/WebSite/SoftwareApplication JSON-LD that would compete with the
+// marketing site for search presence. (Previous SEO config: git history / _archive.)
 export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
   title: {
-    default: TITLE,
+    default: "Plexo",
     template: "%s | Plexo",
   },
-  description: DESCRIPTION,
+  description: "Plexo — visual builder dashboard.",
   applicationName: "Plexo",
-  keywords: [
-    "Plexo",
-    "email builder",
-    "landing page builder",
-    "template builder",
-    "drag and drop email editor",
-    "MJML editor",
-    "no code website builder",
-    "email template SDK",
-  ],
-  alternates: {
-    canonical: "/",
-  },
   robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-      "max-video-preview": -1,
-    },
+    index: false,
+    follow: false,
   },
-  // Fill in once verified in Google Search Console / Bing Webmaster Tools.
-  verification: {
-    google: process.env.GOOGLE_SITE_VERIFICATION,
-  },
-  openGraph: {
-    title: TITLE,
-    description: DESCRIPTION,
-    url: "/",
-    siteName: "Plexo",
-    type: "website",
-    locale: "en_US",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: TITLE,
-    description: DESCRIPTION,
-  },
-};
-
-// Site-wide Organization + SoftwareApplication graph — read by Google's rich-result
-// parser and by AI answer engines that ground responses in schema.org markup, so it
-// lives once in the root layout rather than being re-declared per page.
-const JSON_LD = {
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "Organization",
-      "@id": `${SITE_URL}/#organization`,
-      name: "Plexo",
-      url: SITE_URL,
-      logo: `${SITE_URL}/icon`,
-    },
-    {
-      "@type": "WebSite",
-      "@id": `${SITE_URL}/#website`,
-      name: "Plexo",
-      url: SITE_URL,
-      publisher: { "@id": `${SITE_URL}/#organization` },
-    },
-    {
-      "@type": "SoftwareApplication",
-      name: "Plexo",
-      url: SITE_URL,
-      applicationCategory: "DesignApplication",
-      operatingSystem: "Web",
-      description: DESCRIPTION,
-      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-      publisher: { "@id": `${SITE_URL}/#organization` },
-    },
-  ],
 };
 
 export default function RootLayout({
@@ -130,11 +56,6 @@ export default function RootLayout({
         <style id="plexo-theme" dangerouslySetInnerHTML={{ __html: themeCss() }} />
       </head>
       <body>
-        <script
-          type="application/ld+json"
-          // eslint-disable-next-line react/no-danger
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
-        />
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           {children}
         </ThemeProvider>

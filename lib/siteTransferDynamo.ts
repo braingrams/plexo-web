@@ -79,13 +79,6 @@ export async function computeTransferWarnings(
   ]);
   const subPageCount = subPages.length;
 
-  if (subPageCount > 0 && !recipientFeatures.multiPageSitesEnabled) {
-    warnings.push({
-      title: "Multi-page site on a plan that doesn't support it",
-      detail: `This site has ${subPageCount} sub-page${subPageCount === 1 ? "" : "s"} beyond its home page. Multi-page sites are a Pro/Ultra feature — on a Free plan, the recipient won't be able to create new sub-pages, though already-published ones will keep serving.`,
-    });
-  }
-
   const customDomain = domains.find((d) => d.type === "CUSTOM");
   if (customDomain && !recipientFeatures.customDomainEnabled) {
     warnings.push({

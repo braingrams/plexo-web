@@ -13,12 +13,13 @@ import { serveDeployedSsr } from "@/lib/pub/serveDeployedSsr";
 import { serveDeployedStatic } from "@/lib/pub/serveDeployedStatic";
 import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
 import { getStorefrontPath, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
+import { orderLinkOnHomepage } from "@/lib/commerce/returnPath";
 import { deriveCommerceTheme, type CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
 import { FormSettings, PageView } from "@/lib/db/opsEntities";
 import { recordPageViewRollup } from "@/lib/analyticsRollup";
 import { renderContentBlocks } from "@/lib/customContent/render";
 import { applyActiveNav } from "@/lib/pub/activeNav";
-import { CONTENT_MARKER_ATTR, escapeHtmlAttr, injectBrandingBar, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags } from "@/lib/pub/htmlInject";
+import { CONTENT_MARKER_ATTR, escapeHtmlAttr, injectBrandingBar, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags } from "@/lib/pub/htmlInject";
 import { serveProject } from "@/lib/projects/serve";
 import { resolvePreviewHost } from "@/lib/projects/previewHost";
 import { User, Organization } from "@/lib/db/coreEntities";
@@ -120,7 +121,10 @@ function inactiveDomainResponse(domain: string, domainType: "SUBDOMAIN" | "CUSTO
 /** Free serves only a site's homepage: anything else sends the visitor home. Never cached,
  * so the page is back the moment the owner upgrades. */
 function homePageRedirect(request: NextRequest): NextResponse {
-  return NextResponse.redirect(new URL("/", request.url), { status: 302, headers: { "Cache-Control": "no-store" } });
+  // A payment/confirmation link keeps its order on the way home, so a one-page site can still show it.
+  const requestUrl = new URL(request.url);
+  const target = orderLinkOnHomepage(requestUrl.pathname, requestUrl.search) ?? "/";
+  return NextResponse.redirect(new URL(target, request.url), { status: 302, headers: { "Cache-Control": "no-store" } });
 }
 
 const NON_HTML_FILE = /\.(css|js|mjs|map|json|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|eot|mp4|webm|mp3|wav|pdf|zip|txt|xml)$/i;
@@ -157,49 +161,6 @@ function resolveCommerceTheme(
     };
   }
   return deriveCommerceTheme(rootDesignJson);
-}
-
-// Plexo Commerce's runtime — the marker divs product/booking/shop_grid/etc. compile to
-// (see plexo-sdk's compiler.ts) carry no inline <script> of their own (sanitizeCompiledHtml.ts
-// strips script tags from the compiled body itself, BUILDER or RAW_UPLOAD), so this is
-// injected outside that sanitized body, the same way as injectBrandingBar below — a
-// Commerce-disabled site never gets this tag at all, see the call site's CommerceSettings
-// gate.
-function injectCommerceScript(html: string, storefrontPath: string, checkoutPath: string | null, theme: CommerceTheme | null, productBase: string | null = null): string {
-  // ?v=<deploy sha> busts both CloudFront and any visitor's browser cache on every
-  // deploy — see cdk/lib/compute-stack.ts's assetVersion comment for why the origin's
-  // own shorter Cache-Control on commerce.js isn't enough by itself (a browser that
-  // already cached the pre-fix immutable response never re-requests this exact URL).
-  // The config script must load BEFORE commerce.js reads window.__PLEXO_COMMERCE__ at
-  // parse time — storefrontPath lets the site owner rename the storefront's URL (default
-  // /store) without a commerce.js code change. checkoutPath is the checkout page's own
-  // REAL resolved path (see getCheckoutPath) — commerce.js used to assume it always lives
-  // at "{storefrontPath}/checkout" (true for the auto-provisioned flow, where checkout is
-  // a genuine child of the storefront page), which 404ed for a hand-built site whose
-  // checkout page isn't nested under its shop page at all; null falls back to that same
-  // old assumption client-side, for a site with no CommerceSettings row yet. `theme` is
-  // null when there's neither a merchant override nor an auto-detected signal (see the
-  // call site) — commerce.js falls back to its own hardcoded look in that case, unchanged
-  // from before theming existed. JSON.stringify already escapes quotes; the "</" replace
-  // is defense in depth against a slug somehow containing it.
-  // productBase: where product pages live (CommerceSettings.productUrlBase, e.g. a migrated
-  // WooCommerce store's "/product"); null = under the storefront page.
-  const configTag = `<script>window.__PLEXO_COMMERCE__=${JSON.stringify({ storefrontPath, checkoutPath, theme, productBase }).replace(/<\//g, "<\\/")};</script>`;
-  const scriptTag = `${configTag}<script src="/commerce.js?v=${process.env.ASSET_VERSION ?? "dev"}" defer></script>`;
-  const maskedHtml = html.replace(
-    /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
-    (block) => " ".repeat(block.length),
-  );
-  let insertAt = -1;
-  const bodyCloseRe = /<\/body\s*>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = bodyCloseRe.exec(maskedHtml)) !== null) {
-    insertAt = match.index;
-  }
-  if (insertAt !== -1) {
-    return html.slice(0, insertAt) + scriptTag + html.slice(insertAt);
-  }
-  return html + scriptTag;
 }
 
 // The Funnel/LMS module's runtime — same shape as injectCommerceScript above, and the

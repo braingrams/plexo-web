@@ -385,8 +385,9 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
           bankTransferInstructions: bankTransfer.instructions,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to save settings.");
+      // The server can answer with an empty body (e.g. a crash or timeout) — never show the raw JSON parse error.
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "We couldn't save your settings just now. Please try again in a moment.");
       setPaystackTestSecretKey("");
       setPaystackLiveSecretKey("");
       setStripeTestSecretKey("");

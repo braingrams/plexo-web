@@ -96,6 +96,7 @@ export default async function TemplateEditorPage(props: {
     return (
       <RawFileEditor
         templateId={template.id}
+        siteId={rootTemplateId}
         templateName={template.name}
         templateKind={template.kind}
         subscriptionPlan={effectivePlan(user)}

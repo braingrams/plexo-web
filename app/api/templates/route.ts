@@ -123,15 +123,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const parentId = body.parentId?.trim() || null;
   let parent: { id: string; kind: TemplateKind; designFormat: DesignFormat } | null = null;
   if (parentId) {
-    // Multi-page sites are a Pro and Ultra feature. A page's sub-pages are unlimited
-    // once enabled (see the template-limit check below, which only counts
-    // root/home pages); Free stays a single page.
-    if (!features.multiPageSitesEnabled) {
-      return NextResponse.json(
-        { error: "Multi-page sites need a Pro or Ultra plan. Upgrade in Settings → Billing to add more pages.", plan: resolved.subscriptionPlan },
-        { status: 403 },
-      );
-    }
+    // Every plan can build and preview a multi-page site; what the plan limits is what goes
+    // LIVE (Free serves the homepage only — lib/plan/publishGuard.ts and the serve route), so
+    // an owner sees the whole site before deciding to upgrade. A page's sub-pages are unlimited
+    // (the template-limit check below only counts root/home pages).
     const { data: parentRecord } = await Template.get({ id: parentId }).go();
     if (!parentRecord || parentRecord.organizationId !== resolved.organizationId) {
       return NextResponse.json({ error: "Parent page not found." }, { status: 404 });

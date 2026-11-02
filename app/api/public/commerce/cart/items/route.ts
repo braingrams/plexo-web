@@ -8,9 +8,13 @@ import { lineName, resolvePurchasable } from "@/lib/commerce/variants";
 
 const MAX_QUANTITY = 50;
 
-/** Adds a PHYSICAL product to the visitor's cart (upserts quantity if it's already in
- * there). Services never go through the cart — a booking's time-slot hold checks out
- * immediately via /api/public/commerce/checkout, same as before this cart existed. */
+/** Adds a PHYSICAL or DIGITAL product to the visitor's cart (upserts quantity if it's already
+ * in there). Services never go through the cart — a booking's time-slot hold checks out
+ * immediately via /api/public/commerce/checkout, same as before this cart existed.
+ *
+ * A digital product (a course, an ebook) is a one-off: quantity is always 1, and there is no
+ * stock to run out of. `replace: true` is the "Buy now" path — it empties the cart first so
+ * the buyer pays for exactly the product they clicked, not whatever else was left in it. */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const hostname = (request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "").split(":")[0];
   const siteResult = await resolveSite(hostname);
@@ -24,24 +28,24 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as { productId?: unknown; variantId?: unknown; quantity?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { productId?: unknown; variantId?: unknown; quantity?: unknown; replace?: unknown };
   if (typeof body.productId !== "string" || !body.productId) {
     return NextResponse.json({ error: "productId is required." }, { status: 400 });
   }
   const requestedQty = typeof body.quantity === "number" && Number.isInteger(body.quantity) && body.quantity > 0 ? body.quantity : 1;
-  const quantity = Math.min(requestedQty, MAX_QUANTITY);
 
   const { data: product } = await CommerceProduct.get({ templateId, id: body.productId }).go();
   if (!product || !(product.active ?? true)) {
     return NextResponse.json({ error: "Product not found." }, { status: 404 });
   }
-  if (product.kind !== "PHYSICAL") {
+  if (product.kind === "SERVICE") {
     return NextResponse.json({ error: "This item is booked directly, not added to a cart." }, { status: 400 });
   }
+  const quantity = product.kind === "DIGITAL" ? 1 : Math.min(requestedQty, MAX_QUANTITY);
   // Products with options (Size, Colour…) go in the cart as one specific variant.
   const purchase = resolvePurchasable(product, typeof body.variantId === "string" ? body.variantId : null);
   if (!purchase.ok) return NextResponse.json({ error: purchase.error }, { status: 400 });
-  if (purchase.stockQuantity !== null && purchase.stockQuantity <= 0) {
+  if (product.kind === "PHYSICAL" && purchase.stockQuantity !== null && purchase.stockQuantity <= 0) {
     return NextResponse.json({ error: `${lineName(product.name, purchase.label)} is out of stock.` }, { status: 409 });
   }
   const variantId = purchase.variant?.id;
@@ -49,12 +53,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let cart = await findOpenCart(templateId, readCartToken(request));
   if (!cart) cart = await createCart(templateId, organization.id);
 
-  const { data: existingItems } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go({ pages: "all" });
+  let { data: existingItems } = await CommerceCartItem.query.primary({ templateId, cartId: cart.id }).go({ pages: "all" });
+  if (body.replace === true && existingItems.length > 0) {
+    await Promise.all(existingItems.map((i) => CommerceCartItem.remove({ templateId, cartId: cart!.id, id: i.id }).go()));
+    existingItems = [];
+  }
   // Same product in a different size is a separate line.
   const existing = existingItems.find((i) => i.productId === product.id && (i.variantId ?? undefined) === variantId);
   if (existing) {
     await CommerceCartItem.patch({ templateId, cartId: cart.id, id: existing.id })
-      .set({ quantity: Math.min((existing.quantity ?? 1) + quantity, MAX_QUANTITY), unitPriceMinorSnapshot: purchase.unitPriceMinor })
+      .set({ quantity: product.kind === "DIGITAL" ? 1 : Math.min((existing.quantity ?? 1) + quantity, MAX_QUANTITY), unitPriceMinorSnapshot: purchase.unitPriceMinor })
       .go();
   } else {
     await CommerceCartItem.create({

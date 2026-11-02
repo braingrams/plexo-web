@@ -16,6 +16,7 @@ import { resolveOrderDeliveryMethod, InvalidDeliveryMethodError, pickupLocationF
 import { readCheckoutFields, resolveCheckoutFieldAnswers, CheckoutFieldsError } from "@/lib/commerce/checkoutFields";
 import { chooseCheckoutPaymentMethod } from "@/lib/commerce/checkoutPayment";
 import { isBankTransferReady, generateBankTransferToken, notifyBankTransferPlaced } from "@/lib/commerce/bankTransfer";
+import { orderReturnUrl, safeReturnPath } from "@/lib/commerce/returnPath";
 import { CommerceOrder, CommerceSettings, CommerceCartItem, CommerceProduct, CommerceDiscountCode } from "@/lib/db/commerceEntities";
 
 function generateOrderNumber(): string {
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
-  const { customerEmail, customerName, customerPhone, deliveryMethodId, shippingCountry, shippingState, shippingAddressLine, discountCode: rawDiscountCode, paymentMethod: requestedPaymentMethod, customFields: rawCustomFields } = body;
+  const { customerEmail, customerName, customerPhone, deliveryMethodId, shippingCountry, shippingState, shippingAddressLine, discountCode: rawDiscountCode, paymentMethod: requestedPaymentMethod, customFields: rawCustomFields, returnPath: rawReturnPath } = body;
 
   if (typeof customerEmail !== "string" || !isValidEmail(customerEmail)) {
     return NextResponse.json({ error: "A valid customerEmail is required." }, { status: 400 });
@@ -236,7 +237,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     throw err;
   }
 
-  const callbackUrl = `${request.nextUrl.origin}/order-confirmation?order=${order.orderNumber}&email=${encodeURIComponent(customerEmail)}`;
+  const callbackUrl = orderReturnUrl(request.nextUrl.origin, order.orderNumber, customerEmail, safeReturnPath(rawReturnPath));
 
   // Bank transfer: nothing to hand off to a gateway — the order is placed (stock reserved)
   // and waits for the owner to confirm the money arrived. See lib/commerce/bankTransfer.ts.

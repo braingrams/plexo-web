@@ -57,7 +57,7 @@ function headingRow(text: string): any {
   };
 }
 
-function markerRow(type: string, attributes: Record<string, unknown> = {}, minHeight = "400px"): any {
+export function markerRow(type: string, attributes: Record<string, unknown> = {}, minHeight = "400px"): any {
   return {
     id: `row-${randomUUID()}`,
     style: { padding: "16px 24px 48px" },

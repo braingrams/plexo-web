@@ -41,10 +41,10 @@ export type TierFeatures = {
    */
   hostManagedAiEnabled: boolean;
   /**
-   * Whether the account can turn a landing page into a multi-page site
-   * (add sub-pages nested under it, e.g. /about, /blog/post-1). Pro and Ultra:
-   * sub-pages are unlimited per site (maxLandingPages only counts root/home
-   * pages); Free is a single page.
+   * Pro and Ultra. NOT a limit on building: every plan can add sub-pages and preview them
+   * (so an owner sees the whole site before upgrading) — what Free cannot do is put them live,
+   * which is maxPublishedPagesPerSite below. Today this only gates the bulk "import a whole
+   * site" flows (lib/siteImport), which crawl and create many pages at once.
    */
   multiPageSitesEnabled: boolean;
   /**

@@ -109,7 +109,7 @@ async function resolveTargetRow(resolved: ResolvedUser, id: unknown, slug: unkno
 }
 
 /** The design as the owner would see it now: the working draft when there is one, else the live one. */
-async function currentDesign(row: Row): Promise<V2Design> {
+export async function currentDesign(row: Row): Promise<V2Design> {
   // A big brand lives in storage with a reference in the row: bring it back so the tools see the whole design.
   const parsed = parseV2Design(await resolveDesignSystem(row.draftJson ?? row.designJson));
   if (!parsed.ok) throw new PageToolError(`I can't read the design of "${row.name}" (${parsed.error}). Open it in the dashboard editor to check it.`);
@@ -366,7 +366,6 @@ export async function createV2Page(
   const siteId = str(args.siteId);
   let parent: Row | null = null;
   if (siteId) {
-    if (!features.multiPageSitesEnabled) throw new PageToolError("Adding pages to a site needs the Pro or Ultra plan — a single-page site is available on your current plan. Upgrade to add more pages.");
     parent = await loadOwnedRow(resolved, siteId);
     if (formatLabel(parent) !== "v2") {
       throw new PageToolError(

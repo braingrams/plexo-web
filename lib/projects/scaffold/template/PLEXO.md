@@ -112,10 +112,34 @@ const { data: link } = await plexo.storage.from("documents").createSignedUrl(`${
   file can open it, through `createSignedUrl`.
 - Files a server function writes (`ctx.db` has full access) can go anywhere.
 
+## Selling a product or course
+
+To sell something with orders, customers, receipts and (for a course or download) delivery handled
+for you, use **Plexo Commerce** instead of wiring Stripe yourself. The owner creates the product
+once (Plexo → Commerce → Products, or the `create_commerce_product` tool) and you place one line
+wherever the design wants a buy card:
+
+```tsx
+<div data-plexo-commerce-product data-plexo-product-id="PRODUCT_ID" data-plexo-commerce-mode="buy" />
+```
+
+- It shows the product's picture, name, price and a **Buy now** button. Buying opens a checkout over
+  the page, takes payment and brings the buyer back to the same page — no checkout page to build.
+- Leave the `div` empty and don't give it React children: Plexo fills it in, and picks it up even
+  though your app renders after the page loads.
+- Optional button text: `data-plexo-commerce-button-label="Enrol now"`.
+- Get `PRODUCT_ID` from `list_commerce_products`, or call `sell_product_on_page` and use the
+  `snippet` it returns. Commerce must be turned on for the app (Commerce → Settings); it only works
+  on the published app, not in the preview.
+- Digital products (a course, an ebook) are the fit here. A product people book at a time, or ship
+  to an address, needs Plexo's storefront pages rather than a single card.
+
 ## Payments
 
-Take payments with Stripe Checkout from a server function — `fetch`, no Stripe package. The
-owner adds their key in Plexo → your app → Secret keys as `STRIPE_SECRET_KEY`.
+For a product or course with orders recorded, see "Selling a product or course" above. For anything
+custom — a subscription, or a charge tied to your own data — take payments with Stripe Checkout from
+a server function (`fetch`, no Stripe package). The owner adds their key in Plexo → your app →
+Secret keys as `STRIPE_SECRET_KEY`.
 
 ```ts
 // functions/create-checkout.ts

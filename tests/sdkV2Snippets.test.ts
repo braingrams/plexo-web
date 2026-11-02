@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import ts from "typescript";
 
-import { SDK_V2_ALL, SDK_V2_INSTALL } from "@/app/sdk/v2-snippets";
+import { SDK_V2_ALL, SDK_V2_INSTALL } from "@/lib/sdk/v2-snippets";
 
 // The copy-paste code on /sdk, /developers and the dashboard must really compile against the installed SDK.
 // Each snippet is type-checked as a file of its own, with stand-ins for the app code it refers to.

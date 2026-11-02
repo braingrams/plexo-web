@@ -86,6 +86,17 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
 }
 
 export async function PUT(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
+  // An unhandled throw below would reach the dashboard as an empty 500 (which the settings page can't read as JSON) and
+  // leave no trace of what broke — log it and answer with a message the site owner can act on.
+  try {
+    return await saveSettings(request, context);
+  } catch (err) {
+    console.error("Commerce settings save failed", err);
+    return NextResponse.json({ error: "We couldn't save your settings just now. Nothing was lost — please try again, and contact support if it keeps happening." }, { status: 500 });
+  }
+}
+
+async function saveSettings(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
   const { templateId } = await context.params;
   const resolved = await resolveCommerceAdmin(request, templateId);
   if (resolved.error) return resolved.error;

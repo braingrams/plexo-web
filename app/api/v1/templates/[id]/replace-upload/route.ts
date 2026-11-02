@@ -14,8 +14,6 @@ import {
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
-import { getTierFeatures } from "@/lib/subscription";
-import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
 import { splitHtmlAssetsIntoPages } from "@/lib/rawSite/splitPages";
 
 /**
@@ -159,12 +157,10 @@ export async function POST(
   // they count as pages, show in the dashboard and are editable — same as a fresh multi-page upload.
   let pages: Awaited<ReturnType<typeof splitHtmlAssetsIntoPages>> | null = null;
   if (!template.parentId) {
-    if (getTierFeatures(await getOrganizationOwnerPlanDynamo(template.organizationId)).multiPageSitesEnabled) {
-      pages = await splitHtmlAssetsIntoPages(template).catch((err) => {
-        console.error("Splitting replaced upload into pages failed (non-fatal):", err);
-        return null;
-      });
-    }
+    pages = await splitHtmlAssetsIntoPages(template).catch((err) => {
+      console.error("Splitting replaced upload into pages failed (non-fatal):", err);
+      return null;
+    });
   }
 
   return NextResponse.json({

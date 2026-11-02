@@ -19,6 +19,8 @@ import { EmbedCodeModal } from "./EmbedCodeModal";
 
 type Props = {
   templateId: string;
+  /** The site this page belongs to (its home page id) — Commerce products are per site. */
+  siteId?: string;
   templateName: string;
   templateKind: "EMAIL" | "LANDING_PAGE";
   subscriptionPlan: string;
@@ -152,7 +154,7 @@ const editorTheme = EditorView.theme(
   { dark: true }
 );
 
-export function RawFileEditor({ templateId, templateName, templateKind, subscriptionPlan, useAi, aiProvider, aiTier, previewBaseHref }: Props) {
+export function RawFileEditor({ templateId, siteId, templateName, templateKind, subscriptionPlan, useAi, aiProvider, aiTier, previewBaseHref }: Props) {
   const router = useRouter();
   // Text Content is the friendlier, non-technical default for a freshly-opened raw page —
   // Code is a step down into the file tree for people who actually want to touch markup.
@@ -875,7 +877,7 @@ export function RawFileEditor({ templateId, templateName, templateKind, subscrip
         </>
       )}
 
-      {embedModalOpen && <EmbedCodeModal onClose={() => setEmbedModalOpen(false)} />}
+      {embedModalOpen && <EmbedCodeModal onClose={() => setEmbedModalOpen(false)} siteId={siteId} pageId={templateId} canAddForMe={!anyDirty} onAdded={() => void loadFiles({ silent: true })} />}
 
       <style jsx>{`
         @media (max-width: 900px) {
