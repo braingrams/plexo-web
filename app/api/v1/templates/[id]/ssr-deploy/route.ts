@@ -9,6 +9,7 @@ import { ssrFunctionName } from "@/lib/appFunctions/ssrNames";
 import { listSsrVariables } from "@/lib/appFunctions/ssrVariableStore";
 import { buildVariablesFor, buildVarsHash } from "@/lib/appFunctions/ssrVariables";
 import { DeployedApp } from "@/lib/db/appEntities";
+import { markBuildQueued } from "@/lib/projects/ssrRebuild";
 
 /**
  * POST /api/v1/templates/:id/ssr-deploy
@@ -90,7 +91,7 @@ export async function POST(
     });
     const hash = buildVarsHash(buildVars);
     const { data: existing } = await DeployedApp.get({ templateId }).go();
-    if (existing) await DeployedApp.patch({ templateId }).set({ previewBuildVarsHash: hash }).go();
+    if (existing) await markBuildQueued(templateId, hash);
     else await DeployedApp.create({ templateId, type: "SSR", previewBuildVarsHash: hash }).go();
     return NextResponse.json(
       {

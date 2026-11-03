@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } 
 type Scope = "all" | "dev" | "live";
 type Variable = { name: string; scope: Scope; value: string; buildTime: boolean; updatedAt: string | null };
 type Secret = { name: string; scope: Scope; hint: string | null; updatedAt: string };
+type RebuildState = { needsRebuild: boolean; hasSource: boolean };
 
 const PUBLIC_PREFIXES = ["NEXT_PUBLIC_", "NUXT_PUBLIC_", "VITE_", "PUBLIC_", "REACT_APP_"];
 const SCOPE_LABEL: Record<Scope, string> = { all: "Preview and Live", dev: "Preview only", live: "Live only" };
@@ -39,6 +40,8 @@ export function ServerSettingsPanel({ templateId }: { templateId: string }) {
   const [locked, setLocked] = useState<string | null>(null);
   const [variables, setVariables] = useState<Variable[]>([]);
   const [secrets, setSecrets] = useState<Secret[]>([]);
+  const [rebuild, setRebuild] = useState<RebuildState>({ needsRebuild: false, hasSource: false });
+  const [rebuilding, setRebuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -52,10 +55,16 @@ export function ServerSettingsPanel({ templateId }: { templateId: string }) {
   const [sScope, setSScope] = useState<Scope>("all");
 
   const load = useCallback(async () => {
-    const [v, s] = await Promise.all([call<{ variables: Variable[] }>(`${base}/ssr-variables`), call<{ secrets: Secret[] }>(`${base}/ssr-secrets`)]);
+    const [v, s] = await Promise.all([
+      call<{ variables: Variable[] }>(`${base}/ssr-variables`),
+      call<{ secrets: Secret[] } & RebuildState>(`${base}/ssr-secrets`),
+    ]);
     if (!v.ok && v.status === 403) return setLocked(v.error);
     if (v.ok) setVariables(v.data.variables);
-    if (s.ok) setSecrets(s.data.secrets);
+    if (s.ok) {
+      setSecrets(s.data.secrets);
+      setRebuild({ needsRebuild: s.data.needsRebuild, hasSource: s.data.hasSource });
+    }
     if (!v.ok) setError(v.error);
   }, [base]);
 
@@ -73,7 +82,7 @@ export function ServerSettingsPanel({ templateId }: { templateId: string }) {
       method: "PUT", body: JSON.stringify({ name: vName, value: vValue, scope: vScope, buildTime: vBuild || publicName }),
     });
     if (!res.ok) return setError(res.error);
-    setNotice(res.data.warning ?? (vBuild || publicName ? "Saved. Build-time variables take effect after the source is uploaded again." : "Saved."));
+    setNotice(res.data.warning ?? (vBuild || publicName ? "Saved. Build-time variables take effect on the next rebuild." : "Saved."));
     setVName(""); setVValue(""); setVBuild(false);
     await load();
   }
@@ -95,8 +104,20 @@ export function ServerSettingsPanel({ templateId }: { templateId: string }) {
   }
 
   async function deleteSecret(s: Secret) {
-    const res = await call(`${base}/ssr-secrets?name=${encodeURIComponent(s.name)}&scope=${s.scope}`, { method: "DELETE" });
+    setError(null); setNotice(null);
+    const res = await call<{ note: string }>(`${base}/ssr-secrets?name=${encodeURIComponent(s.name)}&scope=${s.scope}`, { method: "DELETE" });
     if (!res.ok) return setError(res.error);
+    setNotice(res.data.note);
+    await load();
+  }
+
+  // Queues a build from the stored source. Secret changes take effect once it's published.
+  async function rebuildNow() {
+    setError(null); setNotice(null); setRebuilding(true);
+    const res = await call<{ message: string; warnings: string[] }>(`${base}/ssr-rebuild`, { method: "POST" });
+    setRebuilding(false);
+    if (!res.ok) return setError(res.error);
+    setNotice([res.data.message, ...res.data.warnings].join(" "));
     await load();
   }
 
@@ -119,7 +140,7 @@ export function ServerSettingsPanel({ templateId }: { templateId: string }) {
         <p style={muted}>
           Visible settings, shown in full here. Anything marked "needed at build", or named with a public prefix
           (NEXT_PUBLIC_, VITE_, …), is baked into the site, so visitors can read it. Changes to build-time
-          variables take effect after the source is uploaded again.
+          variables take effect on the next rebuild.
         </p>
         {variables.length === 0 ? <p style={muted}>No variables yet.</p> : (
           <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
@@ -157,10 +178,22 @@ export function ServerSettingsPanel({ templateId }: { templateId: string }) {
       <div style={card}>
         <h3 style={heading}>Secrets</h3>
         <p style={muted}>
-          Write-only: a value is never shown again, only its last four characters. The server fetches secrets when it
-          starts, so a change reaches the site on its next start. Secrets are never used in the build. Anything the build
-          needs goes in Variables, where it's visible.
+          Write-only: a value is never shown again, only its last four characters. A running server keeps the values
+          it started with. After a change, rebuild to restart it with the current values. Secrets are never used in the
+          build. Anything the build needs goes in Variables, where it's visible.
         </p>
+        {rebuild.needsRebuild ? (
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14, padding: "10px 12px", borderRadius: 10, background: "rgba(251,191,36,0.08)" }}>
+            <span style={{ fontSize: 13, color: "#fbbf24" }}>
+              {rebuild.hasSource ? "A secret changed. Rebuild to apply it." : "A secret changed. Upload the project to rebuild."}
+            </span>
+            {rebuild.hasSource ? (
+              <button type="button" onClick={() => void rebuildNow()} disabled={rebuilding} style={button(!rebuilding)}>
+                {rebuilding ? "Queuing…" : "Rebuild"}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {secrets.length === 0 ? <p style={muted}>No secrets yet.</p> : (
           <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
             {secrets.map((s) => (

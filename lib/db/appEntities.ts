@@ -54,6 +54,8 @@ export const DeployedApp = new Entity(
       // Hash of the build-time variables the preview was built with (see ssrVariables.ts). Publish
       // compares it with the live values and warns when they differ.
       previewBuildVarsHash: { type: "string" },
+      // Set when a secret is saved or removed; cleared when a rebuild is queued. Shows the rebuild button.
+      secretsChangedAt: { type: "string" },
       previewBundleKey: { type: "string" },
       // Next.js apps: the image optimizer (/_next/image). "" when the build has none.
       imageFunctionUrl: { type: "string" },

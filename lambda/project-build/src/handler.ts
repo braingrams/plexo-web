@@ -13,7 +13,7 @@ import { mkdirSync, rmSync, writeFileSync, readFileSync, readdirSync, statSync, 
 import { dirname, join, relative } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { Readable } from "node:stream";
-import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
@@ -67,8 +67,8 @@ async function scopedClients(job: BuildJob) {
     Statement: [
       { Effect: "Allow", Action: ["s3:GetObject"], Resource: [`${projectArn}/blobs/*`, `${projectArn}/versions/*`, `${projectArn}/deps/*`, `${projectArn}/builds/${job.buildId}/*`] },
       { Effect: "Allow", Action: ["s3:PutObject"], Resource: [`${projectArn}/builds/${job.buildId}/*`, `${projectArn}/deps/*`] },
-      // An SSR build deletes its uploaded source zip when it ends (buildSsr).
-      { Effect: "Allow", Action: ["s3:DeleteObject"], Resource: `${projectArn}/builds/${job.buildId}/ssr-source.zip` },
+      // The app's latest uploaded source (kept after builds so a rebuild needs no re-upload).
+      { Effect: "Allow", Action: ["s3:GetObject"], Resource: `${projectArn}/ssr/*` },
       {
         Effect: "Allow",
         Action: ["dynamodb:UpdateItem"],
@@ -345,23 +345,8 @@ async function processJob(job: BuildJob): Promise<void> {
 
 /** An SSR build: unpack the uploaded source, run the framework's build in a child process,
  * upload the server function as builds/<id>/functions/server.zip and the static files to the site prefix.
- * The uploaded source zip is deleted when the build ends, whatever the outcome. */
+ * The source zip is only read; it stays so the app can be rebuilt without uploading again. */
 async function buildSsr(
-  job: BuildJob,
-  s3: S3Client,
-  finish: (errors: BuildDiagnostic[], warnings: BuildDiagnostic[], log: string, functionBundles?: BuildResult["functionBundles"]) => Promise<void>,
-  dirs: { workDir: string; outDir: string; fnOutDir: string; imgFnOut: string; cacheDir: string },
-): Promise<void> {
-  try {
-    return await buildSsrInner(job, s3, finish, dirs);
-  } finally {
-    if (job.ssrSourceKey) {
-      await s3.send(new DeleteObjectCommand({ Bucket: job.bucket, Key: job.ssrSourceKey })).catch((err) => console.error("could not delete the source zip", err));
-    }
-  }
-}
-
-async function buildSsrInner(
   job: BuildJob,
   s3: S3Client,
   finish: (errors: BuildDiagnostic[], warnings: BuildDiagnostic[], log: string, functionBundles?: BuildResult["functionBundles"]) => Promise<void>,

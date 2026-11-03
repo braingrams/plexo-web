@@ -48,7 +48,7 @@ const bundleBody = Buffer.from("fake-zip-bytes");
 const getObject = vi.fn(async (_key: string) => ({ body: bundleBody, contentType: "application/zip" }));
 vi.mock("@/lib/projects/blobStore", () => ({ getObject: (key: string) => getObject(key), projectBucket: () => "plexo-user-content-test" }));
 
-import { deploySsrFunction } from "@/lib/appFunctions/deploy";
+import { deploySsrFunction, applySsrVariables } from "@/lib/appFunctions/deploy";
 
 const TEMPLATE = "tmpl-abc";
 const FUNCTION = `plexo-ssr-${TEMPLATE}`;
@@ -135,5 +135,31 @@ describe("the Next.js image function", () => {
     responses.GetFunctionUrlConfigCommand = { FunctionUrl: "https://abc.lambda-url.us-east-1.on.aws/" };
     await deploySsrFunction({ templateId: TEMPLATE, buildId: "b9", bundleKey: "k" });
     expect(input("CreateFunctionCommand")).toMatchObject({ Architectures: ["x86_64"], Role: "arn:aws:iam::123456789012:role/plexo-fn-exec" });
+  });
+});
+
+describe("PLEXO_BUILD_ID (secrets reach the server on a rebuild)", () => {
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://plexo.test";
+    sent.length = 0;
+    responses = {};
+    process.env.FUNCTIONS_EXECUTION_ROLE_ARN = "arn:aws:iam::123456789012:role/plexo-fn-exec";
+  });
+
+  const input = (name: string) => sent.find((s) => s.name === name)?.input;
+
+  it("sets the server's environment to the build being deployed", async () => {
+    const { ResourceNotFoundException } = await import("@aws-sdk/client-lambda");
+    responses.GetFunctionConfigurationCommand = new (ResourceNotFoundException as any)({ message: "missing", $metadata: {} });
+    responses.GetFunctionUrlConfigCommand = new (ResourceNotFoundException as any)({ message: "missing", $metadata: {} });
+    responses.CreateFunctionUrlConfigCommand = { FunctionUrl: "https://abc.lambda-url.us-east-1.on.aws/" };
+    await deploySsrFunction({ templateId: TEMPLATE, buildId: "build-42", bundleKey: "k" });
+    expect(input("CreateFunctionCommand").Environment.Variables.PLEXO_BUILD_ID).toBe("build-42");
+  });
+
+  it("keeps the function's current build id when variables are applied without a build", async () => {
+    responses.GetFunctionConfigurationCommand = { Environment: { Variables: { PLEXO_BUILD_ID: "build-7" } } };
+    await applySsrVariables(TEMPLATE, "live");
+    expect(input("UpdateFunctionConfigurationCommand").Environment.Variables.PLEXO_BUILD_ID).toBe("build-7");
   });
 });

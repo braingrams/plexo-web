@@ -84,6 +84,12 @@ export async function startBuild(
   return created.data;
 }
 
+/** The app's latest uploaded source: one copy per app, overwritten by each upload, and kept after
+ * builds so the app can be rebuilt (e.g. after a secret changes) without uploading again. */
+export function ssrLatestSourceKey(templateId: string): string {
+  return `${projectPrefix(templateId)}/ssr/latest.zip`;
+}
+
 /** Queues a server-rendered (SSR) build: stores the source zip, then enqueues a job the
  * build Lambda runs down its SSR path (lambda/project-build). Finalizing an SSR build deploys
  * the per-customer plexo-ssr-<templateId> function instead of switching a static site live. */
@@ -91,7 +97,8 @@ export async function startSsrBuild(input: {
   templateId: string;
   organizationId: string;
   requestedBy?: string;
-  sourceZip: Uint8Array;
+  /** A new upload. Omit it to rebuild from the app's stored latest source. */
+  sourceZip?: Uint8Array;
   framework: NonNullable<BuildJob["ssrFramework"]>;
   root: string;
   /** Build-time variables (never secrets). They're baked into the build. */
@@ -102,8 +109,8 @@ export async function startSsrBuild(input: {
 
   const id = randomUUID();
   const bucket = projectBucket();
-  const sourceKey = `${buildPrefix(input.templateId, id)}/ssr-source.zip`;
-  await putObject(sourceKey, input.sourceZip, "application/zip");
+  const sourceKey = ssrLatestSourceKey(input.templateId);
+  if (input.sourceZip) await putObject(sourceKey, input.sourceZip, "application/zip");
 
   const job: BuildJob = {
     v: BUILD_JOB_VERSION,

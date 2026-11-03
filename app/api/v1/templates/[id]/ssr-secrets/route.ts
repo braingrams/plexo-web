@@ -3,13 +3,16 @@ import { guardSsrSettings } from "@/lib/appFunctions/ssrGuard";
 import { listSecrets, setSecret, deleteSecret, SecretError } from "@/lib/appFunctions/secrets";
 import { isPublicName } from "@/lib/appFunctions/ssrVariables";
 import { resolveUser } from "@/lib/auth/resolveUser";
+import { markSecretsChanged, rebuildState } from "@/lib/projects/ssrRebuild";
+
+const SECRET_NOTE = "Saved. The running server keeps its current value until it restarts. Rebuild to apply it now.";
 
 /**
  * /api/v1/templates/:id/ssr-secrets — the app's secrets (API keys, passwords). Write-only: values
- * are never returned, only a short hint. A secret is fetched by the server when it starts, so a
- * change reaches the site on the server's next cold start. Secrets never go to the build.
+ * are never returned, only a short hint. A running server keeps the values it started with; a rebuild
+ * restarts it with the current ones. Secrets never go to the build.
  *
- *   GET                        → { secrets: [{ name, scope, hint, updatedAt }] }
+ *   GET                        → { secrets, needsRebuild, hasSource }
  *   PUT  { name, value, scope? }
  *   DELETE ?name=…&scope=…
  */
@@ -20,7 +23,7 @@ export async function GET(request: NextRequest, { params }: Ctx): Promise<NextRe
   const { id: templateId } = await params;
   const guard = await guardSsrSettings(request, templateId);
   if ("error" in guard) return guard.error;
-  return NextResponse.json({ secrets: await listSecrets(templateId) });
+  return NextResponse.json({ secrets: await listSecrets(templateId), ...(await rebuildState(templateId)) });
 }
 
 export async function PUT(request: NextRequest, { params }: Ctx): Promise<NextResponse> {
@@ -37,7 +40,8 @@ export async function PUT(request: NextRequest, { params }: Ctx): Promise<NextRe
   }
   try {
     const saved = await setSecret(templateId, body, resolved?.userId);
-    return NextResponse.json({ saved, note: "Takes effect on the server's next cold start." });
+    await markSecretsChanged(templateId);
+    return NextResponse.json({ saved, note: SECRET_NOTE });
   } catch (err) {
     if (err instanceof SecretError) return NextResponse.json({ error: err.message }, { status: 400 });
     throw err;
@@ -54,7 +58,8 @@ export async function DELETE(request: NextRequest, { params }: Ctx): Promise<Nex
   if (!name || (scope !== "all" && scope !== "dev" && scope !== "live")) return NextResponse.json({ error: "Send name and scope." }, { status: 400 });
   try {
     await deleteSecret(templateId, name, scope);
-    return NextResponse.json({ deleted: { name, scope } });
+    await markSecretsChanged(templateId);
+    return NextResponse.json({ deleted: { name, scope }, note: SECRET_NOTE });
   } catch (err) {
     if (err instanceof SecretError) return NextResponse.json({ error: err.message }, { status: 400 });
     throw err;

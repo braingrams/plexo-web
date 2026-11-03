@@ -245,19 +245,33 @@ export { ssrFunctionName, type SsrTarget };
 /** The environment a server-rendered function runs with: Plexo's secrets address and this
  * environment's service key (secrets are fetched at cold start, not stored here), plus the
  * variables that apply to this environment. Visible variables are set here; secrets never are. */
-async function ssrServerEnvironment(templateId: string, env: AppEnv, existingFunctionName?: string): Promise<Record<string, string>> {
+async function ssrServerEnvironment(templateId: string, env: AppEnv, functionName: string, buildId?: string): Promise<Record<string, string>> {
   const origin = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
   if (!origin) throw new Error("Plexo's public address isn't set (NEXT_PUBLIC_APP_URL), so the server can't load its secrets.");
   const { data: template } = await Template.get({ id: templateId }).go({ attributes: ["organizationId"] });
   const { lambda } = await clients();
-  const serviceKey = await serviceKeyFor(lambda, templateId, template!.organizationId, env, existingFunctionName);
+  const serviceKey = await serviceKeyFor(lambda, templateId, template!.organizationId, env, functionName);
   const variables = runtimeVariablesFor(await listSsrVariables(templateId), env);
   return {
     ...variables,
     NODE_ENV: "production",
     PLEXO_SECRETS_URL: `${origin}/api/internal/ssr-secrets/${templateId}?env=${env}`,
     PLEXO_SERVICE_KEY: serviceKey,
+    // Secrets are read once per server, at its start. A new build id changes this variable, which
+    // makes Lambda start fresh servers that read the current secrets. Applying variables without a
+    // build keeps the id the function already has.
+    PLEXO_BUILD_ID: buildId ?? (await currentBuildId(lambda, functionName)) ?? "",
   };
+}
+
+async function currentBuildId(lambda: LambdaClient, functionName: string): Promise<string | undefined> {
+  try {
+    const config = await lambda.send(new GetFunctionConfigurationCommand({ FunctionName: functionName }));
+    return config.Environment?.Variables?.PLEXO_BUILD_ID;
+  } catch (err) {
+    if (err instanceof ResourceNotFoundException) return undefined;
+    throw err;
+  }
 }
 
 /** Re-applies an SSR app's variables to one environment's function without a deploy. Used when a
@@ -309,7 +323,7 @@ export async function deploySsrFunction(input: {
   const environment: Record<string, string> =
     part === "image"
       ? { NODE_ENV: "production", BUCKET_NAME: projectBucket(), BUCKET_KEY_PREFIX: input.sitePrefix!, BUCKET_REGION: REGION }
-      : await ssrServerEnvironment(input.templateId, env, functionName);
+      : await ssrServerEnvironment(input.templateId, env, functionName, input.buildId);
 
   let current: { CodeSha256?: string } | null = null;
   try {
@@ -426,7 +440,7 @@ export async function publishSsrPreview(templateId: string): Promise<{ functionN
   const warnings: string[] = [];
   const variables = await listSsrVariables(templateId);
   if (app.previewBuildVarsHash && app.previewBuildVarsHash !== buildVarsHash(buildVariablesFor(variables, "live"))) {
-    warnings.push("Build-time variables changed since the preview was built. Upload the source again to rebuild the live version.");
+    warnings.push("Build-time variables changed since the preview was built. Rebuild the app, then publish again, to apply them.");
   }
   for (const name of previewOnlySecrets(await listSecrets(templateId))) {
     warnings.push(`${name} is set for Preview only. Add a Live value before the live app needs it.`);

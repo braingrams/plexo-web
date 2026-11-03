@@ -13,8 +13,8 @@ import { resolveUser } from "@/lib/auth/resolveUser";
  *   PUT  { name, value, scope?, buildTime? }
  *   DELETE ?name=…&scope=…
  *
- * A change applies to the running functions straight away. A build-time change only reaches the
- * site after the source is uploaded again (the build reads it once).
+ * A change applies to the running functions straight away. A build-time change reaches the site
+ * on the next build (the build reads it once).
  */
 
 function envsFor(scope: string): VariableEnv[] {
