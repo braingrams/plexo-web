@@ -100,7 +100,10 @@ export class PublishedSitesStack extends cdk.Stack {
     // own comment on why: this app's cdk/bin/app.ts deploys one STACK_KIND per invocation,
     // never multiple stacks in one synthesis pass). ---
     const serverFnArn = cdk.Fn.importValue(`${computeStackName}-ServerFnArn`);
-    const serverFnUrlValue = cdk.Fn.importValue(`${computeStackName}-ServerFnUrl`);
+    // The alias URL, not the bare-function ServerFnUrl: provisioned concurrency is set on the
+    // "live" alias, so only traffic through this URL can use the warm instances (PR 173).
+    // compute-stack deploys first in the staging and production workflows, so the export exists.
+    const serverFnUrlValue = cdk.Fn.importValue(`${computeStackName}-ServerFnAliasUrl`);
     const imageFnArn = cdk.Fn.importValue(`${computeStackName}-ImageFnArn`);
     const imageFnUrlValue = cdk.Fn.importValue(`${computeStackName}-ImageFnUrl`);
     const assetsBucketName = cdk.Fn.importValue(`${computeStackName}-AssetsBucketName`);
