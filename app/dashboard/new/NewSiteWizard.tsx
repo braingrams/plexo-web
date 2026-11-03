@@ -924,7 +924,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                 <div>
                   <h2 style={{ margin: "0 0 4px", fontSize: "17px", fontWeight: 700 }}>Server app</h2>
                   <p style={{ margin: "0 0 20px", fontSize: "13px", color: "var(--text-muted)" }}>
-                    Upload the source of a Remix, Astro, Nuxt, or Nitro app. Plexo builds it and runs it on its own server.
+                    Upload the source of a Next.js, Remix, Astro, Nuxt, or Nitro app. Plexo builds it and runs it on its own server.
                   </p>
                   {plan !== "ULTRA" ? (
                     <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>
