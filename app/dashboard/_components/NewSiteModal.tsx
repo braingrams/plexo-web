@@ -39,12 +39,25 @@ export function NewSiteProvider({ plan, children }: { plan: Plan; children: Reac
           aria-label="Create a new site"
           onClick={close}
           style={{
-            position: "fixed", inset: 0, zIndex: 1000, background: "rgba(5,6,12,0.72)",
+            position: "fixed", inset: 0, zIndex: 1000,
+            background: "rgba(0,0,0,0.85)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
             display: "flex", alignItems: "flex-start", justifyContent: "center",
             overflowY: "auto", padding: "48px 24px",
           }}
         >
-          <div onClick={(event) => event.stopPropagation()} style={{ width: "100%", maxWidth: 1080 }}>
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              width: "100%", maxWidth: 1080,
+              background: "#0d0f1a",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 18,
+              padding: "28px 32px",
+              boxShadow: "0 30px 80px rgba(0,0,0,0.6)",
+            }}
+          >
             <NewSiteWizard onClose={close} plan={plan} />
           </div>
         </div>

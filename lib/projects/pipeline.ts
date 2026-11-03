@@ -174,7 +174,14 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
         // "server" bundle; its static files are already at the site prefix (outputPrefix). Publishing
         // promotes it to the live function (publishSsrPreview).
         functionResult = bundles.server
-          ? await deploySsrApp({ templateId: build.templateId, buildId: build.id, bundleKey: bundles.server.key, sitePrefix: build.outputPrefix, target: "preview" }).catch(failedOutcome)
+          ? await deploySsrApp({
+              templateId: build.templateId,
+              buildId: build.id,
+              bundleKey: bundles.server.key,
+              sitePrefix: build.outputPrefix,
+              target: "preview",
+              imageBundleKey: bundles.image?.key,
+            }).catch(failedOutcome)
           : failedOutcome(new Error("The SSR build didn't produce a server function."));
       } else {
         functionResult = await deployFunctions({ templateId: build.templateId, organizationId: template.organizationId, env, buildId: build.id, bundles }).catch(failedOutcome);

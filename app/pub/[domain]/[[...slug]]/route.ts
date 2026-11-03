@@ -385,7 +385,7 @@ async function servePreviewHost(request: NextRequest, host: string, templateId: 
     if (!features.ssrEnabled) return notFoundResponse();
     return serveDeployedSsr(
       request,
-      { functionUrl: deployed.previewFunctionUrl, ssrSitePrefix: deployed.previewSitePrefix, hostingTier: deployed.hostingTier },
+      { functionUrl: deployed.previewFunctionUrl, imageFunctionUrl: deployed.previewImageFunctionUrl, ssrSitePrefix: deployed.previewSitePrefix, hostingTier: deployed.hostingTier },
       slugSegments,
       { onNotFound: notFoundResponse, templateId, dailyRequestLimit: features.deployedAppDailyRequestLimit },
     );

@@ -15,12 +15,9 @@ export type SsrSourceResult =
   | { ok: true; framework: SsrFramework; root: string; packageJson: Record<string, unknown>; warnings: string[] }
   | { ok: false; error: string };
 
-/** Frameworks that are switched off at upload for now. Their build code stays in
- * lambda/project-build/src/ssrPlan.ts, so turning one back on is a one-line change here.
- *
- * nextjs: switched off until `next/image` is handled. Image optimization needs its own function
- * and a working `sharp` install, and the build installs with --ignore-scripts today. */
-export const SSR_DISABLED_FRAMEWORKS: SsrFramework[] = ["nextjs"];
+/** Frameworks that are switched off at upload. Empty: every supported framework is on. To switch
+ * one off, list it here; its build code stays in lambda/project-build/src/ssrPlan.ts. */
+export const SSR_DISABLED_FRAMEWORKS: SsrFramework[] = [];
 const FRAMEWORK_NAMES: Record<SsrFramework, string> = { nextjs: "Next.js", nuxt: "Nuxt", nitro: "Nitro", remix: "Remix", astro: "Astro" };
 const SUPPORTED_LIST = "Remix, Astro, Nuxt, Nitro";
 

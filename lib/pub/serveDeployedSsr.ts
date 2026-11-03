@@ -16,6 +16,8 @@ const REGION = process.env.AWS_REGION || "us-east-1";
 
 export type DeployedSsrShape = {
   functionUrl?: string | null;
+  /** The image optimizer, for apps that use next/image. Empty or missing means no image function. */
+  imageFunctionUrl?: string | null;
   ssrSitePrefix?: string | null;
   hostingTier?: string | null;
 };
@@ -71,6 +73,18 @@ export async function invokeSsrFunction(functionUrl: string, request: NextReques
   });
 }
 
+/** Copies an upstream (function) response back to the visitor. */
+function relay(upstream: Response, app: DeployedSsrShape, rawPath: string): Promise<NextResponse> | NextResponse {
+  const headers = new Headers();
+  upstream.headers.forEach((value, key) => {
+    if (!DROP_FROM_RESPONSE.has(key)) headers.append(key, value);
+  });
+  if (!headers.has("cache-control")) headers.set("Cache-Control", cacheControlFor(rawPath || "index.html", app.hostingTier));
+  headers.set("X-Plexo-Hosting-Tier", app.hostingTier ?? "LAMBDA");
+  // Decoded by fetch above, so the bytes are identity: send them as-is.
+  return upstream.arrayBuffer().then((body) => new NextResponse(new Uint8Array(body), { status: upstream.status, headers }));
+}
+
 export async function serveDeployedSsr(
   request: NextRequest,
   app: DeployedSsrShape,
@@ -98,7 +112,8 @@ export async function serveDeployedSsr(
 
   if (!app.functionUrl) return notFound();
 
-  // Everything else runs the app's code, so it's charged against the owner's daily cap.
+  // Everything else runs the app's code (or its image optimizer), so it's charged against the
+  // owner's daily cap. Image requests count too, so a busy image page can't bypass the cap.
   if (options.dailyRequestLimit !== undefined) {
     const allowed = await checkDeployedAppDailyLimit(options.templateId, options.dailyRequestLimit ?? null);
     if (!allowed) {
@@ -109,13 +124,14 @@ export async function serveDeployedSsr(
     }
   }
 
-  const upstream = await invokeSsrFunction(app.functionUrl, request, slugSegments);
-  const headers = new Headers();
-  upstream.headers.forEach((value, key) => {
-    if (!DROP_FROM_RESPONSE.has(key)) headers.append(key, value);
-  });
-  if (!headers.has("cache-control")) headers.set("Cache-Control", cacheControlFor(rawPath || "index.html", app.hostingTier));
-  headers.set("X-Plexo-Hosting-Tier", app.hostingTier ?? "LAMBDA");
-  // Decoded by fetch above, so the bytes are identity: send them as-is.
-  return new NextResponse(new Uint8Array(await upstream.arrayBuffer()), { status: upstream.status, headers });
+  // next/image: the optimizer is GET-only, so anything else is refused without invoking it.
+  if (slugSegments[0] === "_next" && slugSegments[1] === "image") {
+    if (!app.imageFunctionUrl) return notFound();
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      return new NextResponse(null, { status: 405, headers: { Allow: "GET, HEAD" } });
+    }
+    return relay(await invokeSsrFunction(app.imageFunctionUrl, request, slugSegments), app, rawPath);
+  }
+
+  return relay(await invokeSsrFunction(app.functionUrl, request, slugSegments), app, rawPath);
 }

@@ -120,6 +120,20 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
   });
   schedulerRole.addToPolicy(new iam.PolicyStatement({ actions: ["lambda:InvokeFunction"], resources: [fnArnPattern] }));
 
+  // The next/image optimizer of a customer's Next.js app. It reads that app's built site files from
+  // S3 and nothing else; it gets this role instead of the logging-only one the server functions use.
+  const ssrImageRole = new iam.Role(scope, "SsrImageRole", {
+    assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+    description: "A customer app's image optimizer: reads that app's built site files from S3.",
+    managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole")],
+  });
+  ssrImageRole.addToPolicy(
+    new iam.PolicyStatement({
+      actions: ["s3:GetObject"],
+      resources: ["arn:aws:s3:::plexo-user-content*/private/projects/*/builds/*/site/*"],
+    }),
+  );
+
   // ---------------------------------------------------------------- finalizer
   const finalizeFn = new NodejsFunction(scope, "BuildFinalizeFn", {
     runtime: lambda.Runtime.NODEJS_24_X,
@@ -165,7 +179,7 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
       ],
       resources: [fnArnPattern],
     }),
-    new iam.PolicyStatement({ actions: ["iam:PassRole"], resources: [functionExecutionRole.roleArn, schedulerRole.roleArn] }),
+    new iam.PolicyStatement({ actions: ["iam:PassRole"], resources: [functionExecutionRole.roleArn, schedulerRole.roleArn, ssrImageRole.roleArn] }),
     new iam.PolicyStatement({
       actions: ["scheduler:CreateSchedule", "scheduler:UpdateSchedule", "scheduler:DeleteSchedule", "scheduler:GetSchedule"],
       resources: [`arn:aws:scheduler:${stack.region}:${stack.account}:schedule/default/plexo-fn-*`],
@@ -180,6 +194,7 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
     PROJECT_BUILD_QUEUE_URL: buildQueue.queueUrl,
     FUNCTIONS_EXECUTION_ROLE_ARN: functionExecutionRole.roleArn,
     FUNCTIONS_SCHEDULER_ROLE_ARN: schedulerRole.roleArn,
+    SSR_IMAGE_ROLE_ARN: ssrImageRole.roleArn,
     APP_DB_FUNCTION_NAME: `plexo-app-db-${props.envName}`,
   };
   for (const fn of [...props.appFunctions, finalizeFn]) {
