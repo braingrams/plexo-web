@@ -527,21 +527,34 @@ export class ComputeStack extends cdk.Stack {
         ? { provisionedConcurrentExecutions: parseInt(process.env.PROVISIONED_CONCURRENCY_COUNT, 10) }
         : {}),
     });
-    // Function URL on the alias (not the bare function) — traffic that arrives via this URL
-    // is the traffic that can actually be served by provisioned-concurrency warm instances.
     // RESPONSE_STREAM removes the 6 MB buffered-response ceiling — large static assets
     // served via serveDeployedStatic (lib/pub/serveDeployedStatic.ts) would otherwise
     // hit "payload is too large for the RequestResponse invocation type". The handler
     // uses OpenNext's aws-lambda-streaming wrapper (open-next.config.ts) which wraps
     // the export in awslambda.streamifyResponse — Lambda streams response bytes to
     // CloudFront instead of buffering the whole payload in memory first.
-    const serverFnUrl = serverFnAlias.addFunctionUrl({
+    //
+    // serverFnUrl stays on the bare function, exactly as deployed before the alias work. It is
+    // exported as ServerFnUrl, and published-sites-stack imports that export. CloudFormation won't
+    // change an export another stack uses, so changing its value broke the staging deploy.
+    const serverFnUrl = serverFn.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
       invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
     });
     // AuthType.NONE still requires an explicit resource policy granting invocation — CDK
     // does not add this automatically the way it does for the AWS_IAM+OAC case above.
-    serverFnAlias.addPermission("AllowPublicInvokeServerFnUrl", {
+    serverFn.addPermission("AllowPublicInvokeServerFnUrl", {
+      principal: new iam.AnyPrincipal(),
+      action: "lambda:InvokeFunctionUrl",
+      functionUrlAuthType: lambda.FunctionUrlAuthType.NONE,
+    });
+    // The live alias gets its own URL. Provisioned concurrency is set on the alias, so this is
+    // the URL that can use warm instances. Nothing consumes it yet; exported as ServerFnAliasUrl.
+    const serverFnAliasUrl = serverFnAlias.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
+    });
+    serverFnAlias.addPermission("AllowPublicInvokeServerFnAliasUrl", {
       principal: new iam.AnyPrincipal(),
       action: "lambda:InvokeFunctionUrl",
       functionUrlAuthType: lambda.FunctionUrlAuthType.NONE,
@@ -1179,6 +1192,7 @@ export class ComputeStack extends cdk.Stack {
     // of cross-stack reference (see cdk/bin/app.ts — one STACK_KIND per invocation).
     new cdk.CfnOutput(this, "ServerFnArn", { value: serverFn.functionArn, exportName: `${this.stackName}-ServerFnArn` });
     new cdk.CfnOutput(this, "ServerFnUrl", { value: serverFnUrl.url, exportName: `${this.stackName}-ServerFnUrl` });
+    new cdk.CfnOutput(this, "ServerFnAliasUrl", { value: serverFnAliasUrl.url, exportName: `${this.stackName}-ServerFnAliasUrl` });
     // Alias ARN — consumed by lib/pub/updateProvisionedConcurrency.ts at runtime and by
     // the deploy CI to call PutProvisionedConcurrencyConfig without a full CDK re-deploy.
     new cdk.CfnOutput(this, "ServerFnAliasArn", { value: serverFnAlias.functionArn, exportName: `${this.stackName}-ServerFnAliasArn` });
