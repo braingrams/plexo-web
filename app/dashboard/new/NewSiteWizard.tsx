@@ -245,9 +245,19 @@ function Dropzone({ file, onFile }: { file: File | null; onFile: (f: File | null
   );
 }
 
-export function NewSiteWizard() {
+/**
+ * The "create a site" flow. Works as the /dashboard/new page, and inside the shared modal
+ * (NewSiteProvider), where `onClose` is set and the page header is hidden.
+ * `plan` decides whether the Server app tab is usable.
+ */
+export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void; plan?: "FREE" | "PRO" | "ULTRA" } = {}) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [startTab, setStartTab] = useState<"marketplace" | "ai" | "upload" | "wordpress">("marketplace");
+  const [startTab, setStartTab] = useState<"marketplace" | "blank" | "ai" | "upload" | "server" | "wordpress">("marketplace");
+  const [creatingBlank, setCreatingBlank] = useState(false);
+  const [serverFile, setServerFile] = useState<File | null>(null);
+  const [serverName, setServerName] = useState("");
+  const [serverBusy, setServerBusy] = useState(false);
+  const [serverResult, setServerResult] = useState<{ templateId: string; buildId: string; framework: string; warnings: string[] } | null>(null);
 
   const [items, setItems] = useState<MarketplaceItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
@@ -366,6 +376,59 @@ export function NewSiteWizard() {
     setTemplate(created);
     if (!slugTouched) setSlug(slugify(created.name));
     setStep(2);
+  }
+
+  async function handleStartBlank() {
+    setCreatingBlank(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "New Site", kind: "LANDING_PAGE" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Couldn't create the site. Please try again.");
+        return;
+      }
+      advanceToConnect(data.template);
+    } finally {
+      setCreatingBlank(false);
+    }
+  }
+
+  // The site record is created first (ssr-deploy needs a template), then the source is uploaded.
+  // If the upload fails, the empty site stays on the account and can be deleted from its page.
+  async function handleServerDeploy(event: React.FormEvent) {
+    event.preventDefault();
+    if (!serverFile || !serverName.trim()) return;
+    setServerBusy(true);
+    setError(null);
+    try {
+      const created = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: serverName.trim(), kind: "LANDING_PAGE" }),
+      });
+      const createdData = await created.json().catch(() => ({}));
+      if (!created.ok) {
+        setError(createdData.error ?? "Couldn't create the site. Please try again.");
+        return;
+      }
+      const templateId = createdData.template.id as string;
+      const fd = new FormData();
+      fd.append("file", serverFile);
+      const res = await fetch(`/api/v1/templates/${templateId}/ssr-deploy`, { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "The upload failed. Check the zip and try again.");
+        return;
+      }
+      setServerResult({ templateId, buildId: data.buildId, framework: data.framework, warnings: data.warnings ?? [] });
+    } finally {
+      setServerBusy(false);
+    }
   }
 
   async function handleUseMarketplace(item: MarketplaceItem) {
@@ -519,17 +582,26 @@ export function NewSiteWizard() {
 
   return (
     <div style={{ color: "var(--text-main)", minHeight: "calc(100vh - 180px)", display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <div style={{ width: "100%", maxWidth: cardWidth, transition: "max-width 0.25s ease" }}>
-        <Link href="/dashboard" style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-muted)", textDecoration: "none" }}>
-          &larr; Overview
-        </Link>
+      <div style={{ width: "100%", maxWidth: cardWidth, transition: "max-width 0.25s ease", position: "relative" }}>
+        {onClose && (
+          <button type="button" onClick={onClose} aria-label="Close" style={{ position: "absolute", top: 0, right: 0, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 8 }}>
+            &times;
+          </button>
+        )}
+        {!onClose && (
+          <>
+          <Link href="/dashboard" style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-muted)", textDecoration: "none" }}>
+            &larr; Overview
+          </Link>
 
-        <div style={{ margin: "18px 0 2.5rem" }}>
-          <h1 style={{ margin: "0 0 8px", fontSize: "30px", fontWeight: 700, letterSpacing: "-0.02em" }}>Host a site</h1>
-          <p style={{ margin: 0, fontSize: "14px", color: "var(--text-muted)" }}>
-            Pick a starting point, choose a web address, and publish — no experience needed.
-          </p>
-        </div>
+          <div style={{ margin: "18px 0 2.5rem" }}>
+            <h1 style={{ margin: "0 0 8px", fontSize: "30px", fontWeight: 700, letterSpacing: "-0.02em" }}>Host a site</h1>
+            <p style={{ margin: 0, fontSize: "14px", color: "var(--text-muted)" }}>
+              Pick a starting point, choose a web address, and publish — no experience needed.
+            </p>
+          </div>
+          </>
+        )}
 
         {/* Stepper */}
         <div style={{ display: "flex", alignItems: "center", marginBottom: 32 }}>
@@ -618,6 +690,23 @@ export function NewSiteWizard() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setStartTab("blank")}
+                  style={{
+                    fontSize: "12.5px",
+                    fontWeight: 650,
+                    padding: "7px 14px",
+                    borderRadius: 999,
+                    border: "none",
+                    cursor: "pointer",
+                    background: startTab === "blank" ? "var(--brand)" : "transparent",
+                    color: startTab === "blank" ? "#fff" : "var(--text-muted)",
+                    transition: "background 0.15s, color 0.15s",
+                  }}
+                >
+                  Blank canvas
+                </button>
+                <button
+                  type="button"
                   onClick={() => setStartTab("ai")}
                   style={{
                     fontSize: "12.5px",
@@ -649,6 +738,23 @@ export function NewSiteWizard() {
                   }}
                 >
                   Upload your own
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStartTab("server")}
+                  style={{
+                    fontSize: "12.5px",
+                    fontWeight: 650,
+                    padding: "7px 14px",
+                    borderRadius: 999,
+                    border: "none",
+                    cursor: "pointer",
+                    background: startTab === "server" ? "var(--brand)" : "transparent",
+                    color: startTab === "server" ? "#fff" : "var(--text-muted)",
+                    transition: "background 0.15s, color 0.15s",
+                  }}
+                >
+                  Server app
                 </button>
                 <button
                   type="button"
@@ -687,6 +793,16 @@ export function NewSiteWizard() {
                 ) : (
                   <MarketplaceRowExpandGrid templates={items} busyId={busyId} onSelect={(t) => void handleUseMarketplace(t)} />
                 )
+              ) : startTab === "blank" ? (
+                <div>
+                  <h2 style={{ margin: "0 0 4px", fontSize: "17px", fontWeight: 700 }}>Start with a blank canvas</h2>
+                  <p style={{ margin: "0 0 20px", fontSize: "13px", color: "var(--text-muted)" }}>
+                    Build the page yourself in the visual editor, then choose an address.
+                  </p>
+                  <button type="button" disabled={creatingBlank} onClick={() => void handleStartBlank()} style={primaryButtonStyle(!creatingBlank)}>
+                    {creatingBlank ? "Creating…" : "Create blank site"}
+                  </button>
+                </div>
               ) : startTab === "ai" ? (
                 <div style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 18 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -802,6 +918,60 @@ export function NewSiteWizard() {
                         </div>
                       )}
                     </>
+                  )}
+                </div>
+              ) : startTab === "server" ? (
+                <div>
+                  <h2 style={{ margin: "0 0 4px", fontSize: "17px", fontWeight: 700 }}>Server app</h2>
+                  <p style={{ margin: "0 0 20px", fontSize: "13px", color: "var(--text-muted)" }}>
+                    Upload the source of a Remix, Astro, Nuxt, or Nitro app. Plexo builds it and runs it on its own server.
+                  </p>
+                  {plan !== "ULTRA" ? (
+                    <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+                      Server apps are available on the ULTRA plan.{" "}
+                      <Link href="/dashboard/settings/subscription" style={{ color: "var(--brand)" }}>See plans</Link>
+                    </p>
+                  ) : serverResult ? (
+                    <div>
+                      <h3 style={{ margin: "0 0 8px", fontSize: "15px", fontWeight: 700 }}>Build queued</h3>
+                      <p style={{ margin: "0 0 8px", fontSize: "13px", color: "var(--text-muted)" }}>
+                        Framework: {serverResult.framework}. Build ID: <span style={{ fontFamily: "var(--font-mono)" }}>{serverResult.buildId}</span>
+                      </p>
+                      {serverResult.warnings.map((w) => (
+                        <p key={w} style={{ margin: "0 0 8px", fontSize: "13px", color: "#fbbf24" }}>{w}</p>
+                      ))}
+                      <p style={{ margin: "0 0 16px", fontSize: "13px", color: "var(--text-muted)" }}>
+                        The build runs in the background. Preview, environment variables, and publishing are not in the dashboard yet.
+                      </p>
+                      <Link href={`/dashboard/templates/${serverResult.templateId}`} style={{ ...primaryButtonStyle(true), textDecoration: "none", display: "inline-block" }}>
+                        Open the site
+                      </Link>
+                    </div>
+                  ) : (
+                    <form onSubmit={(e) => void handleServerDeploy(e)} style={{ display: "grid", gap: 14, maxWidth: 480 }}>
+                      <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
+                        Site name
+                        <input
+                          value={serverName}
+                          onChange={(e) => setServerName(e.target.value)}
+                          placeholder="My app"
+                          style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                        />
+                      </label>
+                      <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
+                        Source (.zip with package.json at its root)
+                        <input type="file" accept=".zip" onChange={(e) => setServerFile(e.target.files?.[0] ?? null)} />
+                      </label>
+                      <div>
+                        <button
+                          type="submit"
+                          disabled={serverBusy || !serverFile || !serverName.trim()}
+                          style={primaryButtonStyle(!serverBusy && !!serverFile && !!serverName.trim())}
+                        >
+                          {serverBusy ? "Uploading…" : "Upload and build"}
+                        </button>
+                      </div>
+                    </form>
                   )}
                 </div>
               ) : startTab === "wordpress" ? (
