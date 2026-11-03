@@ -19,6 +19,7 @@ export type SsrWorkerInput = {
   cacheDir: string; // a per-build npm cache
   framework: Parameters<typeof planSsrBuild>[0];
   hasLockfile: boolean;
+  imageFnDir?: string; // where the image-optimization function is laid out, when the plan has one
 };
 
 export type SsrWorkerOutput = {
@@ -97,6 +98,14 @@ async function main() {
       return finish(false);
     }
     cpSync(src, input.fnDir, { recursive: true });
+    if (plan.image && input.imageFnDir) {
+      const imageSrc = join(input.appDir, plan.image.dir);
+      if (!existsSync(join(imageSrc, "index.mjs"))) {
+        errors.push({ kind: "build", message: `The build didn't produce ${plan.image.dir}/index.mjs (the image optimizer).` });
+        return finish(false);
+      }
+      cpSync(imageSrc, input.imageFnDir, { recursive: true });
+    }
   } else if (plan.server.kind === "shimmed") {
     // Astro: ship dist/server unbundled, plus production node_modules, with index.mjs as the adapter.
     const entryRel = plan.server.entryCandidates.find((candidate) => existsSync(join(input.appDir, candidate)));

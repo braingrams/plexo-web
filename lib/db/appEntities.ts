@@ -52,6 +52,10 @@ export const DeployedApp = new Entity(
       previewBuildId: { type: "string" },
       previewSitePrefix: { type: "string" },
       previewBundleKey: { type: "string" },
+      // Next.js apps: the image optimizer (/_next/image). "" when the build has none.
+      imageFunctionUrl: { type: "string" },
+      previewImageFunctionUrl: { type: "string" },
+      previewImageBundleKey: { type: "string" },
       // Pointer to the most recent Deployment entity (Phase 2). Null until then.
       activeDeploymentId: { type: "string" },
       createdAt: {

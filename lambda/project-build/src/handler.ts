@@ -208,7 +208,8 @@ async function processJob(job: BuildJob): Promise<void> {
   const outDir = join(TMP, "out");
   const fnOutDir = join(TMP, "fn");
   const cacheDir = join(TMP, "cache");
-  for (const d of [workDir, outDir, fnOutDir, cacheDir, join(TMP, "home")]) mkdirSync(d, { recursive: true });
+  const imgFnOut = join(TMP, "imgfn");
+  for (const d of [workDir, outDir, fnOutDir, imgFnOut, cacheDir, join(TMP, "home")]) mkdirSync(d, { recursive: true });
 
   type FinishFn = (errors: BuildDiagnostic[], warnings: BuildDiagnostic[], log: string, functionBundles?: BuildResult["functionBundles"]) => Promise<void>;
   const finish: FinishFn = async (errors, warnings, log, functionBundles = {}) => {
@@ -242,7 +243,7 @@ async function processJob(job: BuildJob): Promise<void> {
   };
 
   try {
-    if (job.kind === "ssr") return await buildSsr(job, s3, finish, { workDir, outDir, fnOutDir, cacheDir });
+    if (job.kind === "ssr") return await buildSsr(job, s3, finish, { workDir, outDir, fnOutDir, imgFnOut, cacheDir });
     const manifestBytes = await getBytes(s3, job.bucket, job.manifestKey);
     if (!manifestBytes) return await finish([{ kind: "build", message: "This version's file list is missing — save the project again and rebuild." }], [], "");
     const manifest = JSON.parse(manifestBytes.toString("utf8")) as { files: Array<{ path: string; sha: string }> };
@@ -349,7 +350,7 @@ async function buildSsr(
   job: BuildJob,
   s3: S3Client,
   finish: (errors: BuildDiagnostic[], warnings: BuildDiagnostic[], log: string, functionBundles?: BuildResult["functionBundles"]) => Promise<void>,
-  dirs: { workDir: string; outDir: string; fnOutDir: string; cacheDir: string },
+  dirs: { workDir: string; outDir: string; fnOutDir: string; imgFnOut: string; cacheDir: string },
 ): Promise<void> {
   try {
     return await buildSsrInner(job, s3, finish, dirs);
@@ -364,7 +365,7 @@ async function buildSsrInner(
   job: BuildJob,
   s3: S3Client,
   finish: (errors: BuildDiagnostic[], warnings: BuildDiagnostic[], log: string, functionBundles?: BuildResult["functionBundles"]) => Promise<void>,
-  dirs: { workDir: string; outDir: string; fnOutDir: string; cacheDir: string },
+  dirs: { workDir: string; outDir: string; fnOutDir: string; imgFnOut: string; cacheDir: string },
 ): Promise<void> {
   if (!job.ssrSourceKey || !job.ssrFramework) {
     return await finish([{ kind: "build", message: "This SSR build is missing its source or framework. Upload the project again." }], [], "");
@@ -406,6 +407,7 @@ async function buildSsrInner(
     cacheDir: dirs.cacheDir,
     framework: job.ssrFramework,
     hasLockfile: existsSync(join(dirs.workDir, "package-lock.json")),
+    imageFnDir: dirs.imgFnOut,
   };
   const output = await runSsrWorker(input, join(TMP, "ssr-input.json"), join(TMP, "ssr-result.json"));
   if (!output.ok) {
@@ -413,12 +415,18 @@ async function buildSsrInner(
     return await finish(errors, [], output.log);
   }
 
-  // The server function: one zip, with index.mjs at its root.
-  const files: Record<string, Uint8Array> = {};
-  for (const file of walk(dirs.fnOutDir)) files[relative(dirs.fnOutDir, file).split("\\").join("/")] = readFileSync(file);
-  const zipped = zipSync(files, { level: 6 });
-  const serverKey = `${job.functionsPrefix}/server.zip`;
-  await s3.send(new PutObjectCommand({ Bucket: job.bucket, Key: serverKey, Body: zipped, ContentType: "application/zip", Metadata: { sha256: createHash("sha256").update(zipped).digest("hex") } }));
+  // Each function is one zip with index.mjs at its root: the server, and the image optimizer when the plan has one.
+  const zipFolder = async (dir: string, key: string) => {
+    const files: Record<string, Uint8Array> = {};
+    for (const file of walk(dir)) files[relative(dir, file).split("\\").join("/")] = readFileSync(file);
+    const body = zipSync(files, { level: 6 });
+    await s3.send(new PutObjectCommand({ Bucket: job.bucket, Key: key, Body: body, ContentType: "application/zip", Metadata: { sha256: createHash("sha256").update(body).digest("hex") } }));
+    return { key, bytes: body.byteLength };
+  };
+  const server = await zipFolder(dirs.fnOutDir, `${job.functionsPrefix}/server.zip`);
+  const imageBundle = existsSync(join(dirs.imgFnOut, "index.mjs"))
+    ? await zipFolder(dirs.imgFnOut, `${job.functionsPrefix}/image.zip`)
+    : null;
 
   // Static files: served from the site prefix, never through the function.
   if (output.hasClient) {
@@ -435,7 +443,7 @@ async function buildSsrInner(
     });
   }
 
-  await finish([], [], output.log, { server: { key: serverKey, bytes: zipped.byteLength } });
+  await finish([], [], output.log, { server, ...(imageBundle ? { image: imageBundle } : {}) });
 }
 
 function runSsrWorker(input: SsrWorkerInput, inputPath: string, resultPath: string): Promise<SsrWorkerOutput> {

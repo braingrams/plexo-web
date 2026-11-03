@@ -40,7 +40,7 @@ vi.mock("@/lib/projects/previewHost", () => ({ previewUrl: () => "https://previe
 
 const bundleBody = Buffer.from("fake-zip-bytes");
 const getObject = vi.fn(async (_key: string) => ({ body: bundleBody, contentType: "application/zip" }));
-vi.mock("@/lib/projects/blobStore", () => ({ getObject: (key: string) => getObject(key) }));
+vi.mock("@/lib/projects/blobStore", () => ({ getObject: (key: string) => getObject(key), projectBucket: () => "plexo-user-content-test" }));
 
 import { deploySsrFunction, ssrEnvNames, updateSsrEnvironment } from "@/lib/appFunctions/deploy";
 
@@ -123,5 +123,41 @@ describe("SSR environment (write-only)", () => {
   it("lists names without values", async () => {
     responses.GetFunctionConfigurationCommand = { Environment: { Variables: { Z: "1", A: "2" } } };
     expect(await ssrEnvNames(TEMPLATE)).toEqual(["A", "Z"]);
+  });
+});
+
+describe("the Next.js image function", () => {
+  const input = (name: string) => sent.find((s) => s.name === name)?.input;
+  beforeEach(() => {
+    sent.length = 0;
+    responses = {};
+    process.env.FUNCTIONS_EXECUTION_ROLE_ARN = "arn:aws:iam::123456789012:role/plexo-fn-exec";
+    process.env.SSR_IMAGE_ROLE_ARN = "arn:aws:iam::123456789012:role/plexo-ssr-image";
+    process.env.AWS_REGION = "us-east-1";
+  });
+
+  it("deploys as arm64 with the image role, its sizing, and the site's file location", async () => {
+    const { ResourceNotFoundException } = await import("@aws-sdk/client-lambda");
+    responses.GetFunctionConfigurationCommand = new (ResourceNotFoundException as any)({ message: "missing", $metadata: {} });
+    responses.GetFunctionUrlConfigCommand = new (ResourceNotFoundException as any)({ message: "missing", $metadata: {} });
+    responses.CreateFunctionUrlConfigCommand = { FunctionUrl: "https://img.lambda-url.us-east-1.on.aws/" };
+    const result = await deploySsrFunction({ templateId: TEMPLATE, buildId: "b9", bundleKey: "k", part: "image", sitePrefix: "private/projects/tmpl-abc/builds/b9/site" });
+    expect(result).toEqual({ functionName: `plexo-ssr-${TEMPLATE}-img`, functionUrl: "https://img.lambda-url.us-east-1.on.aws/" });
+    const create = input("CreateFunctionCommand");
+    expect(create).toMatchObject({ Architectures: ["arm64"], Role: "arn:aws:iam::123456789012:role/plexo-ssr-image", MemorySize: 1536, Timeout: 25 });
+    expect(create.Environment.Variables.BUCKET_KEY_PREFIX).toBe("private/projects/tmpl-abc/builds/b9/site");
+    expect(input("CreateFunctionUrlConfigCommand")).toMatchObject({ AuthType: "AWS_IAM" });
+  });
+
+  it("refuses the image function without a site location", async () => {
+    await expect(deploySsrFunction({ templateId: TEMPLATE, buildId: "b9", bundleKey: "k", part: "image" })).rejects.toThrow(/site/);
+  });
+
+  it("keeps the server function on x86 with the logging-only role", async () => {
+    const { ResourceNotFoundException } = await import("@aws-sdk/client-lambda");
+    responses.GetFunctionConfigurationCommand = new (ResourceNotFoundException as any)({ message: "missing", $metadata: {} });
+    responses.GetFunctionUrlConfigCommand = { FunctionUrl: "https://abc.lambda-url.us-east-1.on.aws/" };
+    await deploySsrFunction({ templateId: TEMPLATE, buildId: "b9", bundleKey: "k" });
+    expect(input("CreateFunctionCommand")).toMatchObject({ Architectures: ["x86_64"], Role: "arn:aws:iam::123456789012:role/plexo-fn-exec" });
   });
 });

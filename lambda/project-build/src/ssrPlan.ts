@@ -24,6 +24,9 @@ export type SsrPlan = {
     | { kind: "folder"; dir: string; entry: "index.mjs" }
     | { kind: "bundle"; entryCandidates: string[]; shim: "remix" }
     | { kind: "shimmed"; serverDir: string; entryCandidates: string[]; shim: "astro" };
+  /** A second function for image optimization (next/image), when the framework produces one.
+   * Its sharp binary is arm64, so it deploys as an arm64 function (see deploy.ts). */
+  image?: { dir: string };
   // "shimmed": the server stays unbundled (bundling Astro's entry stalls at import), ships with
   // production node_modules, and index.mjs (the Lambda adapter) loads it by a runtime URL.
 };
@@ -31,8 +34,8 @@ export type SsrPlan = {
 export function planSsrBuild(framework: SsrFramework): SsrPlan {
   switch (framework) {
     case "nextjs":
-      // open-next packages the Next.js server (and its .next output) into one function folder.
-      // Image optimization (next/image) needs its own function and is not covered yet.
+      // open-next packages the Next.js server (and its .next output) into one function folder,
+      // and the image optimizer (next/image) into a second one.
       return {
         framework,
         env: {},
@@ -41,6 +44,7 @@ export function planSsrBuild(framework: SsrFramework): SsrPlan {
         extraInstalls: [["install", "--no-save", "--ignore-scripts", "--include=dev", "--no-audit", "--no-fund", OPEN_NEXT_PACKAGE]],
         clientDir: ".open-next/assets",
         server: { kind: "folder", dir: ".open-next/server-functions/default", entry: "index.mjs" },
+        image: { dir: ".open-next/image-optimization-function" },
       };
     case "nuxt":
     case "nitro":

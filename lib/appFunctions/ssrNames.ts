@@ -11,9 +11,17 @@ export type SsrTarget = "live" | "preview";
 
 const LAMBDA_NAME_LIMIT = 64;
 
-export function ssrFunctionName(templateId: string, target: SsrTarget = "live", scope: string | undefined = process.env.SSR_FUNCTION_SCOPE): string {
+/** "server" is the app's own code; "image" is the next/image optimizer, deployed beside it. */
+export type SsrPart = "server" | "image";
+
+export function ssrFunctionName(
+  templateId: string,
+  target: SsrTarget = "live",
+  scope: string | undefined = process.env.SSR_FUNCTION_SCOPE,
+  part: SsrPart = "server",
+): string {
   const prefix = scope ? `plexo-ssr-${scope}-` : "plexo-ssr-";
-  const suffix = target === "live" ? "" : "-pv";
+  const suffix = `${part === "image" ? "-img" : ""}${target === "live" ? "" : "-pv"}`;
   const name = `${prefix}${templateId}${suffix}`;
   if (name.length <= LAMBDA_NAME_LIMIT) return name;
   // Too long for Lambda: keep a readable start and a hash of the whole id, so it stays unique.

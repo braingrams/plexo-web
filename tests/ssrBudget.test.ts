@@ -69,7 +69,15 @@ describe("SSR functions and switches", () => {
     const b = "a".repeat(49) + "b";
     expect(ssrFunctionName(a, "live", "pr173")).not.toBe(ssrFunctionName(b, "live", "pr173"));
   });
-  it("keeps Next.js switched off at upload", () => {
-    expect(SSR_DISABLED_FRAMEWORKS).toEqual(["nextjs"]);
+  it("has no frameworks switched off at upload", () => {
+    expect(SSR_DISABLED_FRAMEWORKS).toEqual([]);
+  });
+});
+
+describe("SSR image function names", () => {
+  it("adds -img before the preview suffix, and stays within Lambda's limit", () => {
+    expect(ssrFunctionName("tmpl-1", "live", "stg", "image")).toBe("plexo-ssr-stg-tmpl-1-img");
+    expect(ssrFunctionName("tmpl-1", "preview", "stg", "image")).toBe("plexo-ssr-stg-tmpl-1-img-pv");
+    expect(ssrFunctionName("a".repeat(50), "preview", "pr173", "image").length).toBeLessThanOrEqual(64);
   });
 });

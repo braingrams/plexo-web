@@ -12,9 +12,8 @@ const pkg = (deps: Record<string, string>, devDeps: Record<string, string> = {})
   JSON.stringify({ name: "app", dependencies: deps, devDependencies: devDeps });
 
 describe("detectSsrFramework", () => {
-  it("turns Next.js away while it's switched off", () => {
-    const result = detectSsrFramework({ dependencies: { next: "15.0.0", react: "19" } });
-    expect("error" in result && result.error).toMatch(/Next\.js server hosting is turned off/);
+  it("accepts Next.js now that its image optimizer is deployed", () => {
+    expect(detectSsrFramework({ dependencies: { next: "15.0.0", react: "19" } })).toEqual({ framework: "nextjs" });
   });
   it("detects Nuxt and Nitro, treating Nuxt as the Nitro family without double-counting", () => {
     expect(detectSsrFramework({ dependencies: { nuxt: "3.0.0", nitropack: "2.0.0" } })).toEqual({ framework: "nuxt" });

@@ -10,6 +10,7 @@ describe("planSsrBuild", () => {
     expect(plan.extraInstalls[0]).toContain(OPEN_NEXT_PACKAGE);
     expect(plan.server).toEqual({ kind: "folder", dir: ".open-next/server-functions/default", entry: "index.mjs" });
     expect(plan.clientDir).toBe(".open-next/assets");
+    expect(plan.image).toEqual({ dir: ".open-next/image-optimization-function" });
   });
 
   it("sets NITRO_PRESET=aws-lambda for Nitro-family frameworks", () => {

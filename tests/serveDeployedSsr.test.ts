@@ -77,4 +77,47 @@ describe("serveDeployedSsr", () => {
     const headers = (fetchMock.mock.calls[0] as [string, RequestInit])[1].headers as Record<string, string>;
     expect(headers["accept-encoding"]).toBeUndefined();
   });
+
+  describe("next/image", () => {
+    const IMAGE_URL = "https://img123.lambda-url.us-east-1.on.aws/";
+    const withImage = { ...app, imageFunctionUrl: IMAGE_URL };
+
+    it("sends /_next/image to the image function, keeping the query", async () => {
+      getObject.mockResolvedValue(null);
+      fetchMock.mockResolvedValue(new Response("png-bytes", { status: 200, headers: { "content-type": "image/webp" } }));
+      const res = await serveDeployedSsr(new NextRequest("https://site.test/_next/image?url=%2Flogo.png&w=640&q=75"), withImage, ["_next", "image"], { templateId: "tmpl1", dailyRequestLimit: 100 });
+      const [calledUrl] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(calledUrl).toBe("https://img123.lambda-url.us-east-1.on.aws/_next/image?url=%2Flogo.png&w=640&q=75");
+      expect(res.status).toBe(200);
+    });
+
+    it("counts image requests against the daily cap", async () => {
+      getObject.mockResolvedValue(null);
+      checkLimit.mockResolvedValue(false);
+      const res = await serveDeployedSsr(new NextRequest("https://site.test/_next/image?url=%2Fa.png&w=64&q=75"), withImage, ["_next", "image"], { templateId: "tmpl1", dailyRequestLimit: 1 });
+      expect(res.status).toBe(429);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("refuses writes to the optimizer without invoking it", async () => {
+      getObject.mockResolvedValue(null);
+      const res = await serveDeployedSsr(new NextRequest("https://site.test/_next/image?url=%2Fa.png&w=64&q=75", { method: "POST" }), withImage, ["_next", "image"], { templateId: "tmpl1" });
+      expect(res.status).toBe(405);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("returns not-found when the app has no image function", async () => {
+      getObject.mockResolvedValue(null);
+      const res = await serveDeployedSsr(new NextRequest("https://site.test/_next/image?url=%2Fa.png&w=64&q=75"), { ...app, imageFunctionUrl: "" }, ["_next", "image"], { templateId: "tmpl1" });
+      expect(res.status).toBe(404);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("still sends ordinary pages to the server function, not the optimizer", async () => {
+      getObject.mockResolvedValue(null);
+      fetchMock.mockResolvedValue(new Response("<h1>page</h1>", { status: 200 }));
+      await serveDeployedSsr(new NextRequest("https://site.test/about"), withImage, ["about"], { templateId: "tmpl1" });
+      expect((fetchMock.mock.calls[0] as [string])[0]).toBe("https://abc123.lambda-url.us-east-1.on.aws/about");
+    });
+  });
 });
