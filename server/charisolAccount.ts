@@ -3,6 +3,7 @@ import { hashPassword } from "@better-auth/utils/password";
 
 import { User } from "@/lib/db/coreEntities";
 import { createUserWithEmailLock, EmailAlreadyInUseError } from "@/lib/db/coreOperations";
+import { syncSignupToAlps } from "@/lib/alps";
 
 /**
  * Turns an already signature-verified Charisol ID token's claims into a local Plexo user.
@@ -79,6 +80,7 @@ export async function resolveCharisolUser(
     return signInExisting(winner, email, link);
   }
   await recordCharisolLink(id, {}, link);
+  syncSignupToAlps({ id, email, name, image }, "charisol");
   return { id, email, name, image: image ?? null };
 }
 

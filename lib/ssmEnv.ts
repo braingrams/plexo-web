@@ -67,6 +67,11 @@ const APP_SECRET_KEYS = [
   "TEMPLATES_V2_NEW",
   "MAILDRIP_API_URL",
   "MAILDRIP_API_KEY",
+  // Alps CRM sync (lib/alps.ts). Leave ALPS_API_KEY unset to switch the integration off; the
+  // two stage values are Alps lifecycle-stage IDs (not labels) and are only sent when set.
+  "ALPS_API_KEY",
+  "ALPS_LEAD_STAGE",
+  "ALPS_CUSTOMER_STAGE",
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
   // Plexo's platform-hosted Commerce Stripe account (app/api/webhooks/stripe/commerce,

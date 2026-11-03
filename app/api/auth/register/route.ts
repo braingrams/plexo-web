@@ -6,6 +6,7 @@ import { hashPassword } from "@better-auth/utils/password";
 import { dynamoAdapter } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { createUserWithEmailLock, EmailAlreadyInUseError } from "@/lib/db/coreOperations";
+import { syncSignupToAlps } from "@/lib/alps";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildVerificationEmail } from "@/lib/mail/templates";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
@@ -65,6 +66,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     throw err;
   }
+
+  syncSignupToAlps({ id, email, name }, "email");
 
   const token = randomUUID();
   await dynamoAdapter.createVerificationToken?.({
