@@ -94,6 +94,8 @@ export async function startSsrBuild(input: {
   sourceZip: Uint8Array;
   framework: NonNullable<BuildJob["ssrFramework"]>;
   root: string;
+  /** Build-time variables (never secrets). They're baked into the build. */
+  publicEnv?: Record<string, string>;
 }): Promise<ProjectBuildItem> {
   const queueUrl = process.env.PROJECT_BUILD_QUEUE_URL;
   if (!queueUrl) throw new BuildUnavailableError("App builds aren't available in this environment yet (PROJECT_BUILD_QUEUE_URL isn't set).");
@@ -117,7 +119,7 @@ export async function startSsrBuild(input: {
     resultKey: buildResultKey(input.templateId, id),
     logKey: `${buildPrefix(input.templateId, id)}/log.txt`,
     assetBase: assetBaseFor(id),
-    publicEnv: {},
+    publicEnv: input.publicEnv ?? {},
     buildsTable: TABLES.content,
     kind: "ssr",
     ssrSourceKey: sourceKey,

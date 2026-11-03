@@ -33,8 +33,14 @@ vi.mock("@aws-sdk/client-lambda", () => {
 });
 vi.mock("@aws-sdk/client-scheduler", () => ({ SchedulerClient: class {}, CreateScheduleCommand: class {}, UpdateScheduleCommand: class {}, DeleteScheduleCommand: class {}, ResourceNotFoundException: class extends Error {} }));
 vi.mock("@aws-sdk/client-sts", () => ({ STSClient: class {}, AssumeRoleCommand: class {} }));
-vi.mock("@/lib/db/appEntities", () => ({ AppFunction: {}, AppSettings: {}, DeployedApp: { patch: () => ({ set: () => ({ go: async () => ({}) }) }) } }));
-vi.mock("@/lib/db/contentEntities", () => ({ Template: {}, PublishedDomain: {} }));
+vi.mock("@/lib/db/appEntities", () => ({
+  AppFunction: {},
+  AppSettings: { get: () => ({ go: async () => ({ data: null }) }), create: () => ({ go: async () => ({}) }), patch: () => ({ set: () => ({ go: async () => ({}) }) }) },
+  DeployedApp: { patch: () => ({ set: () => ({ go: async () => ({}) }) }) },
+}));
+vi.mock("@/lib/appFunctions/ssrVariableStore", () => ({ listSsrVariables: async () => [] }));
+vi.mock("@/lib/appFunctions/secrets", () => ({ listSecrets: async () => [] }));
+vi.mock("@/lib/db/contentEntities", () => ({ Template: { get: () => ({ go: async () => ({ data: { organizationId: "org-1" } }) }) }, PublishedDomain: {} }));
 vi.mock("@/server/pagesDomain", () => ({ getPagesDomain: () => "pages.test" }));
 vi.mock("@/lib/projects/previewHost", () => ({ previewUrl: () => "https://preview.test" }));
 
@@ -42,7 +48,7 @@ const bundleBody = Buffer.from("fake-zip-bytes");
 const getObject = vi.fn(async (_key: string) => ({ body: bundleBody, contentType: "application/zip" }));
 vi.mock("@/lib/projects/blobStore", () => ({ getObject: (key: string) => getObject(key), projectBucket: () => "plexo-user-content-test" }));
 
-import { deploySsrFunction, ssrEnvNames, updateSsrEnvironment } from "@/lib/appFunctions/deploy";
+import { deploySsrFunction } from "@/lib/appFunctions/deploy";
 
 const TEMPLATE = "tmpl-abc";
 const FUNCTION = `plexo-ssr-${TEMPLATE}`;
@@ -50,6 +56,7 @@ const BUNDLE_SHA = createHash("sha256").update(bundleBody).digest("base64");
 
 describe("deploySsrFunction", () => {
   beforeEach(() => {
+    process.env.NEXT_PUBLIC_APP_URL = "https://plexo.test";
     sent.length = 0;
     responses = {};
     process.env.FUNCTIONS_EXECUTION_ROLE_ARN = "arn:aws:iam::123456789012:role/plexo-fn-exec";
@@ -92,37 +99,6 @@ describe("deploySsrFunction", () => {
     expect(names()).not.toContain("UpdateFunctionCodeCommand");
     expect(names()).not.toContain("CreateFunctionUrlConfigCommand");
     expect(result.functionUrl).toBe("https://abc.lambda-url.us-east-1.on.aws/");
-  });
-});
-
-describe("SSR environment (write-only)", () => {
-  beforeEach(() => {
-    sent.length = 0;
-    responses = {};
-    process.env.FUNCTIONS_EXECUTION_ROLE_ARN = "arn:aws:iam::123456789012:role/plexo-fn-exec";
-  });
-
-  it("merges a change into the live function and returns names only", async () => {
-    responses.GetFunctionConfigurationCommand = { Environment: { Variables: { A: "secret-a", B: "secret-b" } } };
-    const result = await updateSsrEnvironment(TEMPLATE, { set: { C: "secret-c" }, unset: ["A"] });
-
-    expect(result).toEqual({ names: ["B", "C"] });
-    expect(JSON.stringify(result)).not.toMatch(/secret/);
-    const update = sent.find((s) => s.name === "UpdateFunctionConfigurationCommand")!.input;
-    expect(update.FunctionName).toBe(FUNCTION);
-    expect(update.Environment.Variables).toEqual({ B: "secret-b", C: "secret-c" });
-  });
-
-  it("rejects a reserved name without touching the function", async () => {
-    responses.GetFunctionConfigurationCommand = { Environment: { Variables: {} } };
-    const result = await updateSsrEnvironment(TEMPLATE, { set: { AWS_REGION: "x" }, unset: [] });
-    expect(result).toMatchObject({ error: expect.stringMatching(/reserved/) });
-    expect(sent.map((s) => s.name)).not.toContain("UpdateFunctionConfigurationCommand");
-  });
-
-  it("lists names without values", async () => {
-    responses.GetFunctionConfigurationCommand = { Environment: { Variables: { Z: "1", A: "2" } } };
-    expect(await ssrEnvNames(TEMPLATE)).toEqual(["A", "Z"]);
   });
 });
 

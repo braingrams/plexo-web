@@ -408,6 +408,7 @@ async function buildSsrInner(
     framework: job.ssrFramework,
     hasLockfile: existsSync(join(dirs.workDir, "package-lock.json")),
     imageFnDir: dirs.imgFnOut,
+    buildEnv: job.publicEnv,
   };
   const output = await runSsrWorker(input, join(TMP, "ssr-input.json"), join(TMP, "ssr-result.json"));
   if (!output.ok) {
