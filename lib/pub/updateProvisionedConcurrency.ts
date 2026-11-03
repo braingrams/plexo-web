@@ -27,9 +27,10 @@ export async function updateProvisionedConcurrency(): Promise<void> {
   if (!process.env.AWS_LAMBDA_FUNCTION_NAME || !scaler) return;
 
   const count = await countProvisionedApps();
-  // No PROVISIONED customers: 0 removes warm copies. Otherwise 2 per customer, floored at 5.
-  // Each warm instance serves one concurrent request; 2x headroom handles short bursts.
-  const desired = count === 0 ? 0 : Math.max(count * 2, 5);
+  // No PROVISIONED customers: 0 removes warm copies. Otherwise exactly one warm copy for the
+  // whole platform. Deliberately small: one copy serves one request at a time, so bursts can
+  // still cold-start. Raise this when real traffic shows it's needed.
+  const desired = count === 0 ? 0 : 1;
 
   const client = new LambdaClient({ region: process.env.AWS_REGION });
   const res = await client.send(
