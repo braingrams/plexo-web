@@ -107,6 +107,9 @@ export const ProjectBuild = new Entity(
       status: { type: ["QUEUED", "BUILDING", "SUCCEEDED", "FAILED", "CANCELLED"] as const, required: true },
       // "preview" (editor instrumentation on) or "release" (what gets published).
       mode: { type: ["preview", "release"] as const, default: "preview" },
+      // "app" builds a static site (plus server functions); "ssr" builds a per-customer Lambda.
+      // Rows written before this attribute existed read back as undefined, which means "app".
+      kind: { type: ["app", "ssr"] as const },
       // Where the built site lives: s3 key prefix under the user-content bucket.
       outputPrefix: { type: "string", required: true },
       errors: { type: "any" },

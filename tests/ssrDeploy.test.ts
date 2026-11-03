@@ -1,0 +1,127 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createHash } from "node:crypto";
+
+// Fake Lambda: every command is recorded with its input, and `send` answers from `responses`,
+// keyed by the command's name. A response that is an Error is thrown.
+const sent: Array<{ name: string; input: any }> = [];
+let responses: Record<string, unknown | Error> = {};
+
+vi.mock("@aws-sdk/client-lambda", () => {
+  class ResourceNotFoundException extends Error {}
+  const command = (name: string) => class { name = name; constructor(public input: any) {} };
+  return {
+    LambdaClient: class {
+      async send(cmd: { name: string; input: any }) {
+        sent.push({ name: cmd.name, input: cmd.input });
+        const answer = responses[cmd.name];
+        if (answer instanceof Error) throw answer;
+        return answer ?? {};
+      }
+    },
+    CreateFunctionCommand: command("CreateFunctionCommand"),
+    UpdateFunctionCodeCommand: command("UpdateFunctionCodeCommand"),
+    UpdateFunctionConfigurationCommand: command("UpdateFunctionConfigurationCommand"),
+    GetFunctionConfigurationCommand: command("GetFunctionConfigurationCommand"),
+    GetFunctionUrlConfigCommand: command("GetFunctionUrlConfigCommand"),
+    CreateFunctionUrlConfigCommand: command("CreateFunctionUrlConfigCommand"),
+    DeleteFunctionCommand: command("DeleteFunctionCommand"),
+    GetFunctionCommand: command("GetFunctionCommand"),
+    waitUntilFunctionUpdatedV2: vi.fn(async () => ({})),
+    waitUntilFunctionActiveV2: vi.fn(async () => ({})),
+    ResourceNotFoundException,
+  };
+});
+vi.mock("@aws-sdk/client-scheduler", () => ({ SchedulerClient: class {}, CreateScheduleCommand: class {}, UpdateScheduleCommand: class {}, DeleteScheduleCommand: class {}, ResourceNotFoundException: class extends Error {} }));
+vi.mock("@aws-sdk/client-sts", () => ({ STSClient: class {}, AssumeRoleCommand: class {} }));
+vi.mock("@/lib/db/appEntities", () => ({ AppFunction: {}, AppSettings: {}, DeployedApp: { patch: () => ({ set: () => ({ go: async () => ({}) }) }) } }));
+vi.mock("@/lib/db/contentEntities", () => ({ Template: {}, PublishedDomain: {} }));
+vi.mock("@/server/pagesDomain", () => ({ getPagesDomain: () => "pages.test" }));
+vi.mock("@/lib/projects/previewHost", () => ({ previewUrl: () => "https://preview.test" }));
+
+const bundleBody = Buffer.from("fake-zip-bytes");
+const getObject = vi.fn(async (_key: string) => ({ body: bundleBody, contentType: "application/zip" }));
+vi.mock("@/lib/projects/blobStore", () => ({ getObject: (key: string) => getObject(key) }));
+
+import { deploySsrFunction, ssrEnvNames, updateSsrEnvironment } from "@/lib/appFunctions/deploy";
+
+const TEMPLATE = "tmpl-abc";
+const FUNCTION = `plexo-ssr-${TEMPLATE}`;
+const BUNDLE_SHA = createHash("sha256").update(bundleBody).digest("base64");
+
+describe("deploySsrFunction", () => {
+  beforeEach(() => {
+    sent.length = 0;
+    responses = {};
+    process.env.FUNCTIONS_EXECUTION_ROLE_ARN = "arn:aws:iam::123456789012:role/plexo-fn-exec";
+    delete process.env.FUNCTIONS_ACCOUNT_ROLE_ARN;
+  });
+
+  const names = () => sent.map((s) => s.name);
+  const input = (name: string) => sent.find((s) => s.name === name)?.input;
+
+  it("creates the function on x86_64 with the app's execution role and an IAM Function URL", async () => {
+    const { ResourceNotFoundException } = await import("@aws-sdk/client-lambda");
+    responses.GetFunctionConfigurationCommand = new (ResourceNotFoundException as any)({ message: "missing", $metadata: {} });
+    responses.GetFunctionUrlConfigCommand = new (ResourceNotFoundException as any)({ message: "missing", $metadata: {} });
+    responses.CreateFunctionUrlConfigCommand = { FunctionUrl: "https://abc.lambda-url.us-east-1.on.aws/" };
+
+    const result = await deploySsrFunction({ templateId: TEMPLATE, buildId: "b1", bundleKey: "k" });
+
+    expect(result).toEqual({ functionName: FUNCTION, functionUrl: "https://abc.lambda-url.us-east-1.on.aws/" });
+    expect(names()).toContain("CreateFunctionCommand");
+    expect(names()).not.toContain("UpdateFunctionCodeCommand");
+    const create = input("CreateFunctionCommand");
+    expect(create).toMatchObject({ FunctionName: FUNCTION, Runtime: "nodejs24.x", Handler: "index.handler", Architectures: ["x86_64"], Role: process.env.FUNCTIONS_EXECUTION_ROLE_ARN });
+    expect(create.Code.ZipFile).toBe(bundleBody);
+    expect(input("CreateFunctionUrlConfigCommand")).toMatchObject({ FunctionName: FUNCTION, AuthType: "AWS_IAM" });
+  });
+
+  it("updates the code only when the bundle's SHA-256 differs from the live function's", async () => {
+    responses.GetFunctionConfigurationCommand = { CodeSha256: "some-other-hash" };
+    responses.GetFunctionUrlConfigCommand = { FunctionUrl: "https://abc.lambda-url.us-east-1.on.aws/" };
+    await deploySsrFunction({ templateId: TEMPLATE, buildId: "b2", bundleKey: "k" });
+    expect(names()).toContain("UpdateFunctionCodeCommand");
+    expect(names()).not.toContain("CreateFunctionCommand");
+    expect(input("UpdateFunctionCodeCommand")).toMatchObject({ FunctionName: FUNCTION });
+  });
+
+  it("leaves the code alone when the bundle is unchanged, and reuses the existing URL", async () => {
+    responses.GetFunctionConfigurationCommand = { CodeSha256: BUNDLE_SHA };
+    responses.GetFunctionUrlConfigCommand = { FunctionUrl: "https://abc.lambda-url.us-east-1.on.aws/" };
+    const result = await deploySsrFunction({ templateId: TEMPLATE, buildId: "b3", bundleKey: "k" });
+    expect(names()).not.toContain("UpdateFunctionCodeCommand");
+    expect(names()).not.toContain("CreateFunctionUrlConfigCommand");
+    expect(result.functionUrl).toBe("https://abc.lambda-url.us-east-1.on.aws/");
+  });
+});
+
+describe("SSR environment (write-only)", () => {
+  beforeEach(() => {
+    sent.length = 0;
+    responses = {};
+    process.env.FUNCTIONS_EXECUTION_ROLE_ARN = "arn:aws:iam::123456789012:role/plexo-fn-exec";
+  });
+
+  it("merges a change into the live function and returns names only", async () => {
+    responses.GetFunctionConfigurationCommand = { Environment: { Variables: { A: "secret-a", B: "secret-b" } } };
+    const result = await updateSsrEnvironment(TEMPLATE, { set: { C: "secret-c" }, unset: ["A"] });
+
+    expect(result).toEqual({ names: ["B", "C"] });
+    expect(JSON.stringify(result)).not.toMatch(/secret/);
+    const update = sent.find((s) => s.name === "UpdateFunctionConfigurationCommand")!.input;
+    expect(update.FunctionName).toBe(FUNCTION);
+    expect(update.Environment.Variables).toEqual({ B: "secret-b", C: "secret-c" });
+  });
+
+  it("rejects a reserved name without touching the function", async () => {
+    responses.GetFunctionConfigurationCommand = { Environment: { Variables: {} } };
+    const result = await updateSsrEnvironment(TEMPLATE, { set: { AWS_REGION: "x" }, unset: [] });
+    expect(result).toMatchObject({ error: expect.stringMatching(/reserved/) });
+    expect(sent.map((s) => s.name)).not.toContain("UpdateFunctionConfigurationCommand");
+  });
+
+  it("lists names without values", async () => {
+    responses.GetFunctionConfigurationCommand = { Environment: { Variables: { Z: "1", A: "2" } } };
+    expect(await ssrEnvNames(TEMPLATE)).toEqual(["A", "Z"]);
+  });
+});

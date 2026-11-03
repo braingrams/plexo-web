@@ -511,23 +511,76 @@ export class ComputeStack extends cdk.Stack {
         ]),
       }),
     );
+    // PROVISIONED concurrency — Lambda only supports PC on a version alias, not on
+    // $LATEST. Route all CloudFront traffic through the "live" alias so that any
+    // PROVISIONED-tier DeployedApp benefits from warm instances without a code re-deploy.
+    // PROVISIONED_CONCURRENCY_COUNT is set by CI at deploy time when at least one
+    // PROVISIONED-tier app exists; lib/pub/updateProvisionedConcurrency.ts also calls the
+    // Lambda API directly at runtime when a customer upgrades/downgrades their tier, so PC
+    // self-heals without a full CDK re-deploy (which would be impractical for a per-customer
+    // change). When unset (zero PROVISIONED apps), no CfnProvisionedConcurrencyConfig is
+    // created and existing PC is left to whatever runtime last set (or none).
+    const serverFnAlias = new lambda.Alias(this, "ServerFnLiveAlias", {
+      aliasName: "live",
+      version: serverFn.currentVersion,
+      ...(process.env.PROVISIONED_CONCURRENCY_COUNT
+        ? { provisionedConcurrentExecutions: parseInt(process.env.PROVISIONED_CONCURRENCY_COUNT, 10) }
+        : {}),
+    });
+    // Function URL on the alias (not the bare function) — traffic that arrives via this URL
+    // is the traffic that can actually be served by provisioned-concurrency warm instances.
     // RESPONSE_STREAM removes the 6 MB buffered-response ceiling — large static assets
     // served via serveDeployedStatic (lib/pub/serveDeployedStatic.ts) would otherwise
     // hit "payload is too large for the RequestResponse invocation type". The handler
     // uses OpenNext's aws-lambda-streaming wrapper (open-next.config.ts) which wraps
     // the export in awslambda.streamifyResponse — Lambda streams response bytes to
     // CloudFront instead of buffering the whole payload in memory first.
-    const serverFnUrl = serverFn.addFunctionUrl({
+    const serverFnUrl = serverFnAlias.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
       invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
     });
     // AuthType.NONE still requires an explicit resource policy granting invocation — CDK
     // does not add this automatically the way it does for the AWS_IAM+OAC case above.
-    serverFn.addPermission("AllowPublicInvokeServerFnUrl", {
+    serverFnAlias.addPermission("AllowPublicInvokeServerFnUrl", {
       principal: new iam.AnyPrincipal(),
       action: "lambda:InvokeFunctionUrl",
       functionUrlAuthType: lambda.FunctionUrlAuthType.NONE,
     });
+    // Changing the warm-copy count (PROVISIONED tier) runs in a separate function that alone
+    // holds the permission. The server function can only invoke it, so a bug or compromise in
+    // app code can't change how many copies stay warm (cost). lib/pub/updateProvisionedConcurrency.ts
+    // calls it when a customer changes hosting tier, with no full CDK re-deploy needed.
+    // The scaler's name is a fixed string, not a token, so the server function doesn't depend on
+    // the scaler and the two don't form a dependency loop.
+    const pcScalerName = `${this.stackName}-pc-scaler`;
+    const pcScaler = new lambda.Function(this, "PcScalerFn", {
+      functionName: pcScalerName,
+      runtime: lambda.Runtime.NODEJS_24_X,
+      handler: "index.handler",
+      code: lambda.Code.fromAsset(path.join(__dirname, "..", "..", "lambda", "pc-scaler")),
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(30),
+      environment: { TARGET_FUNCTION_NAME: serverFn.functionName, TARGET_ALIAS: "live" },
+    });
+    pcScaler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "lambda:PutProvisionedConcurrencyConfig",
+          "lambda:DeleteProvisionedConcurrencyConfig",
+        ],
+        resources: [serverFnAlias.functionArn],
+      }),
+    );
+    // Resource-policy grant: the server function's role may invoke the scaler. Granting it here
+    // (not in the server function's own role policy) keeps the dependency one-way.
+    pcScaler.addPermission("AllowServerFnRoleInvoke", {
+      principal: new iam.ArnPrincipal(serverFn.role!.roleArn),
+      action: "lambda:InvokeFunction",
+    });
+    serverFn.addEnvironment("PC_SCALER_FUNCTION_NAME", pcScalerName);
+    // Injected so updateProvisionedConcurrency.ts can construct the alias ARN at runtime
+    // (function name + ":live" suffix) without a separate SSM lookup.
+    serverFn.addEnvironment("PLEXO_ACCOUNT_ID", this.account);
     // Internal admin-grant endpoint (app/api/internal/admins): on the staging stack only. PR
     // previews share staging's data but are a different stack, so PLEXO_ENV alone isn't enough.
     serverFn.addEnvironment("ADMIN_ENDPOINTS_ENABLED", stackID === "staging-plexo" ? "true" : "false");
@@ -1126,6 +1179,9 @@ export class ComputeStack extends cdk.Stack {
     // of cross-stack reference (see cdk/bin/app.ts — one STACK_KIND per invocation).
     new cdk.CfnOutput(this, "ServerFnArn", { value: serverFn.functionArn, exportName: `${this.stackName}-ServerFnArn` });
     new cdk.CfnOutput(this, "ServerFnUrl", { value: serverFnUrl.url, exportName: `${this.stackName}-ServerFnUrl` });
+    // Alias ARN — consumed by lib/pub/updateProvisionedConcurrency.ts at runtime and by
+    // the deploy CI to call PutProvisionedConcurrencyConfig without a full CDK re-deploy.
+    new cdk.CfnOutput(this, "ServerFnAliasArn", { value: serverFnAlias.functionArn, exportName: `${this.stackName}-ServerFnAliasArn` });
     new cdk.CfnOutput(this, "ImageFnArn", { value: imageFn.functionArn, exportName: `${this.stackName}-ImageFnArn` });
     new cdk.CfnOutput(this, "ImageFnUrl", { value: imageFnUrl.url, exportName: `${this.stackName}-ImageFnUrl` });
     new cdk.CfnOutput(this, "AssetsBucketName", { value: assetsBucket.bucketName, exportName: `${this.stackName}-AssetsBucketName` });

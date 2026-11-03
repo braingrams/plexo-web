@@ -2,13 +2,14 @@ import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import type { EntityItem } from "electrodb";
 import { parseUserAgent, extractGeoFromHeaders } from "@/server/analytics";
-import { resolveHideBranding, canWhiteLabel, isHomePageOnlyPlan } from "@/lib/subscription";
+import { resolveHideBranding, canWhiteLabel, isHomePageOnlyPlan, getTierFeatures } from "@/lib/subscription";
 import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
 import { fillLatestPostLists } from "@/lib/pub/livePostQueries";
 import { Template, TemplateAsset, BlogSite, PublishedDomain } from "@/lib/db/contentEntities";
 import { DeployedApp } from "@/lib/db/appEntities";
+import { serveDeployedSsr } from "@/lib/pub/serveDeployedSsr";
 import { serveDeployedStatic } from "@/lib/pub/serveDeployedStatic";
 import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
 import { getStorefrontPath, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
@@ -370,13 +371,26 @@ async function findChildBySlug(parentId: string, slug: string): Promise<Template
   return full ?? null;
 }
 
-async function servePreviewHost(request: NextRequest, host: string, templateId: string): Promise<NextResponse> {
+async function servePreviewHost(request: NextRequest, host: string, templateId: string, slugSegments: string[]): Promise<NextResponse> {
   const { data: template } = await Template.get({ id: templateId }).go();
-  if (!template || template.sourceType !== "REACT_PROJECT") return notFoundResponse();
+  if (!template) return notFoundResponse();
   const [{ data: user }, { data: organization }] = await Promise.all([
     User.get({ id: template.userId }).go(),
     Organization.get({ id: template.organizationId }).go(),
   ]);
+  // An SSR app's preview: its preview function, on the owner's plan (ULTRA only).
+  const { data: deployed } = await DeployedApp.get({ templateId }).go();
+  if (deployed?.previewFunctionUrl) {
+    const features = getTierFeatures(user?.subscriptionPlan);
+    if (!features.ssrEnabled) return notFoundResponse();
+    return serveDeployedSsr(
+      request,
+      { functionUrl: deployed.previewFunctionUrl, ssrSitePrefix: deployed.previewSitePrefix, hostingTier: deployed.hostingTier },
+      slugSegments,
+      { onNotFound: notFoundResponse, templateId, dailyRequestLimit: features.deployedAppDailyRequestLimit },
+    );
+  }
+  if (template.sourceType !== "REACT_PROJECT") return notFoundResponse();
   return serveProject(request, {
     template,
     host,
@@ -451,7 +465,7 @@ async function serveSite(
   if (siteResult.status === "not_found") {
     // A React app's preview address (preview--<id>.<pagesDomain>) isn't a PublishedDomain.
     const previewTarget = await resolvePreviewHost(rawDomain);
-    if (previewTarget) return servePreviewHost(request, rawDomain, previewTarget.templateId);
+    if (previewTarget) return servePreviewHost(request, rawDomain, previewTarget.templateId, params.slug ?? []);
     return notFoundResponse();
   }
   // A suspended domain (abuse takedown — see lib/safeBrowsing.ts /
@@ -501,7 +515,22 @@ async function serveSite(
   // a domain that has a DeployedApp entity.
   const { data: deployedApp } = await DeployedApp.get({ templateId: published.templateId }).go();
   if (deployedApp?.type === "STATIC") {
-    return serveDeployedStatic(request, deployedApp, slugSegments, { onNotFound: notFoundResponse });
+    const { deployedAppDailyRequestLimit } = getTierFeatures(published.user.subscriptionPlan);
+    return serveDeployedStatic(request, deployedApp, slugSegments, {
+      onNotFound: notFoundResponse,
+      templateId: published.templateId,
+      dailyRequestLimit: deployedAppDailyRequestLimit,
+    });
+  }
+  if (deployedApp?.type === "SSR") {
+    // SSR is ULTRA-only for now: a downgraded or ineligible owner's app stops serving.
+    const features = getTierFeatures(published.user.subscriptionPlan);
+    if (!features.ssrEnabled) return notFoundResponse();
+    return serveDeployedSsr(request, deployedApp, slugSegments, {
+      onNotFound: notFoundResponse,
+      templateId: published.templateId,
+      dailyRequestLimit: features.deployedAppDailyRequestLimit,
+    });
   }
 
   // WordPress's "Reading Settings: your homepage displays" toggle — when a site has

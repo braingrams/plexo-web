@@ -21,9 +21,13 @@ export const DeployedApp = new Entity(
     model: { entity: "deployedApp", version: "1", service: "plexoContent" },
     attributes: {
       templateId: { type: "string", required: true },
-      // Only STATIC is implemented in Phase 1; SSR placeholder added now so the entity
-      // shape doesn't need migration when Phase 3 ships.
+      // Build type — STATIC (pre-rendered zip) or SSR (server-rendered, Phase 3).
       type: { type: ["STATIC", "SSR"] as const, required: true, default: "STATIC" },
+      // How the site is served to visitors. Defaults to LAMBDA (on-demand Lambda, cold
+      // starts possible). STATIC = S3-only, cheapest. PROVISIONED = Lambda with provisioned
+      // concurrency, no cold starts, fixed monthly cost. Gated by the owner's plan
+      // (lib/subscription.ts deployedAppHostingTiers).
+      hostingTier: { type: ["STATIC", "LAMBDA", "PROVISIONED"] as const, default: "LAMBDA" },
       // Path prefix within the USER_CONTENT_BUCKET (without the "public/" prefix that
       // uploadObject adds). Stored without leading/trailing slashes. Example:
       // "deployedApps/tmpl_abc123" → actual S3 key "public/deployedApps/tmpl_abc123/index.html"
@@ -35,6 +39,19 @@ export const DeployedApp = new Entity(
       redirectRules: { type: "any" },
       // Framework detected from the zip's output structure at upload time.
       framework: { type: "string" },
+      // SSR sites (type SSR): the per-customer function and its IAM Function URL, the build that
+      // produced them, and the S3 prefix of its static files (served without invoking the function).
+      functionName: { type: "string" },
+      functionUrl: { type: "string" },
+      buildId: { type: "string" },
+      ssrSitePrefix: { type: "string" },
+      // SSR previews: a separate function (plexo-ssr-<id>-pv) that serves the latest SSR build
+      // before it is published. Publishing copies these into the live fields above.
+      previewFunctionName: { type: "string" },
+      previewFunctionUrl: { type: "string" },
+      previewBuildId: { type: "string" },
+      previewSitePrefix: { type: "string" },
+      previewBundleKey: { type: "string" },
       // Pointer to the most recent Deployment entity (Phase 2). Null until then.
       activeDeploymentId: { type: "string" },
       createdAt: {
@@ -227,5 +244,32 @@ export const AppRuntimeError = new Entity(
 
 export const plexoAppsService = new Service(
   { AppDatabase, AppSecret, AppSettings, AppFunction },
+  { table, client: docClient },
+);
+
+// Projected SSR build spend per organization per calendar month (UTC), for the plan budget
+// (lib/projects/ssrBudget.ts). Each build adds its projected cost, not its measured cost.
+export const SsrUsage = new Entity(
+  {
+    model: { entity: "ssrUsage", version: "1", service: "plexoContent" },
+    attributes: {
+      organizationId: { type: "string", required: true },
+      month: { type: "string", required: true }, // "YYYY-MM"
+      projectedCostUsd: { type: "number", default: 0 },
+      buildCount: { type: "number", default: 0 },
+      updatedAt: {
+        type: "string",
+        default: () => new Date().toISOString(),
+        watch: "*",
+        set: () => new Date().toISOString(),
+      },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["organizationId"], template: "ORG#${organizationId}" },
+        sk: { field: "sk", composite: ["month"], template: "SSRUSAGE#${month}" },
+      },
+    },
+  },
   { table, client: docClient },
 );

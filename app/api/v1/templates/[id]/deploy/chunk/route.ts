@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
 import { processDeployZip, DeployError } from "@/lib/pub/processDeployZip";
+import { resolveHostingTier, type HostingTier } from "@/lib/pub/hostingTier";
 import { uploadObject, readObjectAtKey, deleteObjectsAtPaths } from "@/lib/storage";
 
 const MAX_ZIP_BYTES = 50 * 1024 * 1024;
@@ -42,6 +43,9 @@ export async function POST(
     return NextResponse.json({ error: `No template found with id "${templateId}" for this account.` }, { status: 404 });
   }
 
+  const tier = resolveHostingTier(request, resolved.subscriptionPlan);
+  if ("error" in tier) return tier.error;
+
   const uploadSession = request.headers.get("x-upload-session") ?? "";
   const chunkIndex = parseInt(request.headers.get("x-chunk-index") ?? "", 10);
   const chunkTotal = parseInt(request.headers.get("x-chunk-total") ?? "", 10);
@@ -69,7 +73,7 @@ export async function POST(
 
   // Single-chunk fast path — skip S3 staging entirely.
   if (chunkTotal === 1) {
-    return finalize(chunkBuf, templateId);
+    return finalize(chunkBuf, templateId, tier.hostingTier);
   }
 
   const stagingBase = `deployStaging/${templateId}/${uploadSession}`;
@@ -96,15 +100,15 @@ export async function POST(
     await deleteObjectsAtPaths(stagingPaths, "private").catch(() => {});
   }
 
-  return finalize(Buffer.concat(chunks), templateId);
+  return finalize(Buffer.concat(chunks), templateId, tier.hostingTier);
 }
 
-async function finalize(buffer: Buffer, templateId: string): Promise<NextResponse> {
+async function finalize(buffer: Buffer, templateId: string, hostingTier: HostingTier): Promise<NextResponse> {
   if (buffer.byteLength > MAX_ZIP_BYTES) {
     return NextResponse.json({ error: `Zip exceeds the ${MAX_ZIP_BYTES / 1024 / 1024} MB limit.` }, { status: 400 });
   }
   try {
-    const result = await processDeployZip(buffer, templateId);
+    const result = await processDeployZip(buffer, templateId, { hostingTier });
     return NextResponse.json({
       ok: true,
       ...result,

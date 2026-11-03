@@ -5,6 +5,8 @@ import {
   UpdateFunctionCodeCommand,
   UpdateFunctionConfigurationCommand,
   GetFunctionConfigurationCommand,
+  GetFunctionUrlConfigCommand,
+  CreateFunctionUrlConfigCommand,
   DeleteFunctionCommand,
   waitUntilFunctionUpdatedV2,
   waitUntilFunctionActiveV2,
@@ -12,8 +14,9 @@ import {
 } from "@aws-sdk/client-lambda";
 import { SchedulerClient, CreateScheduleCommand, UpdateScheduleCommand, DeleteScheduleCommand, ResourceNotFoundException as ScheduleNotFound } from "@aws-sdk/client-scheduler";
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
-import { AppFunction, AppSettings, type AppEnv } from "@/lib/db/appEntities";
+import { AppFunction, AppSettings, DeployedApp, type AppEnv } from "@/lib/db/appEntities";
 import { getObject } from "@/lib/projects/blobStore";
+import { validateSsrEnvChange, type SsrEnvChange } from "@/lib/appFunctions/ssrEnv";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { previewUrl } from "@/lib/projects/previewHost";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
@@ -225,4 +228,134 @@ export async function deleteAllFunctions(templateId: string): Promise<void> {
     await lambda.send(new DeleteFunctionCommand({ FunctionName: f.lambdaName })).catch(() => undefined);
     await AppFunction.delete({ templateId, env: f.env, name: f.name }).go();
   }
+}
+
+// ---------------------------------------------------------------- SSR apps
+
+/** Lambda's direct-upload limit for a zipped function. Bigger bundles need S3 code deployment. */
+export const SSR_MAX_DIRECT_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+/** One server-rendered function per app (plexo-ssr-<templateId>), not per environment: SSR
+ * apps deploy straight to live for now. */
+import { ssrFunctionName, type SsrTarget } from "@/lib/appFunctions/ssrNames";
+export { ssrFunctionName, type SsrTarget };
+
+/** Creates or updates the app's SSR function, and makes sure it has an IAM-authenticated
+ * Function URL. Only plexo-web may call that URL (lambda:InvokeFunctionUrl, see
+ * cdk/lib/project-runtime.ts). */
+export async function deploySsrFunction(input: { templateId: string; buildId: string; bundleKey: string; target?: SsrTarget }): Promise<{ functionName: string; functionUrl: string }> {
+  const role = process.env.FUNCTIONS_EXECUTION_ROLE_ARN;
+  if (!role) throw new Error("Server functions aren't available in this environment yet (FUNCTIONS_EXECUTION_ROLE_ARN isn't set).");
+  const bundle = await getObject(input.bundleKey);
+  if (!bundle) throw new Error("The server bundle is missing — rebuild the app.");
+  if (bundle.body.byteLength > SSR_MAX_DIRECT_UPLOAD_BYTES) {
+    throw new Error(`The server bundle is ${(bundle.body.byteLength / 1024 / 1024).toFixed(1)}MB, over Lambda's 50MB direct-upload limit.`);
+  }
+  const codeSha256 = createHash("sha256").update(bundle.body).digest("base64");
+  const { lambda } = await clients();
+  const functionName = ssrFunctionName(input.templateId, input.target ?? "live");
+
+  let current: { CodeSha256?: string } | null = null;
+  try {
+    current = await lambda.send(new GetFunctionConfigurationCommand({ FunctionName: functionName }));
+  } catch (err) {
+    if (!(err instanceof ResourceNotFoundException)) throw err;
+  }
+  if (!current) {
+    await lambda.send(
+      new CreateFunctionCommand({
+        FunctionName: functionName,
+        Runtime: "nodejs24.x",
+        Handler: "index.handler",
+        Role: role,
+        Code: { ZipFile: bundle.body },
+        MemorySize: 1024,
+        Timeout: 30,
+        // x86_64 to match the build machine: the server bundle is built there, native addons included.
+        Architectures: ["x86_64"],
+        Environment: { Variables: { NODE_ENV: "production" } },
+        Description: `Plexo SSR app ${input.templateId} — build ${input.buildId}`,
+        Tags: { plexoApp: input.templateId, plexoKind: "ssr" },
+      }),
+    );
+    await waitUntilFunctionActiveV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
+  } else if (current.CodeSha256 !== codeSha256) {
+    await lambda.send(new UpdateFunctionCodeCommand({ FunctionName: functionName, ZipFile: bundle.body }));
+    await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
+  }
+
+  let functionUrl: string | undefined;
+  try {
+    functionUrl = (await lambda.send(new GetFunctionUrlConfigCommand({ FunctionName: functionName }))).FunctionUrl;
+  } catch (err) {
+    if (!(err instanceof ResourceNotFoundException)) throw err;
+    functionUrl = (await lambda.send(new CreateFunctionUrlConfigCommand({ FunctionName: functionName, AuthType: "AWS_IAM", InvokeMode: "BUFFERED" }))).FunctionUrl;
+  }
+  if (!functionUrl) throw new Error("Lambda didn't return a Function URL for the SSR app.");
+  return { functionName, functionUrl };
+}
+
+/** Deploys a finished SSR build. A preview build goes to the preview function and is recorded as
+ * the preview; it's only served to the public after publishSsrPreview promotes it. */
+export async function deploySsrApp(input: { templateId: string; buildId: string; bundleKey: string; sitePrefix: string; target: SsrTarget }): Promise<DeployOutcome> {
+  const { functionName, functionUrl } = await deploySsrFunction({ ...input, target: input.target });
+  if (input.target === "preview") {
+    await DeployedApp.patch({ templateId: input.templateId })
+      .set({ previewFunctionName: functionName, previewFunctionUrl: functionUrl, previewBuildId: input.buildId, previewSitePrefix: input.sitePrefix, previewBundleKey: input.bundleKey })
+      .go();
+  } else {
+    await DeployedApp.patch({ templateId: input.templateId })
+      .set({ type: "SSR", functionName, functionUrl, buildId: input.buildId, ssrSitePrefix: input.sitePrefix })
+      .go();
+  }
+  return { deployed: [functionName], removed: [], failed: [] };
+}
+
+/** Publishes the app's latest SSR preview: the live function runs the same bundle, and the live
+ * fields point at the preview's build and files. Returns the live function's name and URL. */
+export async function publishSsrPreview(templateId: string): Promise<{ functionName: string; functionUrl: string } | { error: string }> {
+  const { data: app } = await DeployedApp.get({ templateId }).go();
+  if (!app?.previewBundleKey || !app.previewBuildId || !app.previewSitePrefix) {
+    return { error: "There's no SSR preview to publish. Upload the server build first." };
+  }
+  const live = await deploySsrFunction({ templateId, buildId: app.previewBuildId, bundleKey: app.previewBundleKey, target: "live" });
+  await DeployedApp.patch({ templateId })
+    .set({ type: "SSR", functionName: live.functionName, functionUrl: live.functionUrl, buildId: app.previewBuildId, ssrSitePrefix: app.previewSitePrefix })
+    .go();
+  return live;
+}
+
+/** Variable names on an SSR app's live function (values are never returned). */
+export async function ssrEnvNames(templateId: string, target: SsrTarget = "live"): Promise<string[] | { error: string }> {
+  const { lambda } = await clients();
+  try {
+    const current = await lambda.send(new GetFunctionConfigurationCommand({ FunctionName: ssrFunctionName(templateId, target) }));
+    return Object.keys(current.Environment?.Variables ?? {}).sort();
+  } catch (err) {
+    if (err instanceof ResourceNotFoundException) return { error: "This app has no server function yet. Deploy its server build first." };
+    throw err;
+  }
+}
+
+/** Applies a change to an SSR app's live function environment (UpdateFunctionConfiguration).
+ * The values go to Lambda and nowhere else: the caller gets the variable names back. */
+export async function updateSsrEnvironment(templateId: string, change: SsrEnvChange, target: SsrTarget = "live"): Promise<{ names: string[] } | { error: string }> {
+  const { lambda } = await clients();
+  const functionName = ssrFunctionName(templateId, target);
+  let current;
+  try {
+    current = await lambda.send(new GetFunctionConfigurationCommand({ FunctionName: functionName }));
+  } catch (err) {
+    if (err instanceof ResourceNotFoundException) return { error: "This app has no server function yet. Deploy its server build first." };
+    throw err;
+  }
+  const variables: Record<string, string> = { ...(current.Environment?.Variables ?? {}) };
+  const problem = validateSsrEnvChange(change, variables);
+  if (problem) return { error: problem };
+  for (const key of change.unset) delete variables[key];
+  Object.assign(variables, change.set);
+
+  await lambda.send(new UpdateFunctionConfigurationCommand({ FunctionName: functionName, Environment: { Variables: variables } }));
+  await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
+  return { names: Object.keys(variables).sort() };
 }

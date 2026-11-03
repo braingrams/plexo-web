@@ -7,9 +7,11 @@ import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "node:path";
 import { buildLogGroup } from "./conventions";
+import { ssrFunctionScope } from "./ssrScope";
 
 /** A PR's throwaway preview stack (STACK_ID "pr-<number>-plexo"), not staging or production. */
 const IS_PR_PREVIEW = /^pr-\d+/.test(process.env.STACK_ID ?? "");
+
 
 // Infrastructure for apps built on Plexo (docs/plexo-projects/ARCHITECTURE.md), added to the
 // compute stack (so every environment, PR previews included, gets its own build pipeline):
@@ -87,7 +89,8 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
   });
   workerRole.addToPolicy(
     new iam.PolicyStatement({
-      actions: ["s3:GetObject", "s3:PutObject", "s3:PutObjectTagging"],
+      // DeleteObject: an SSR build removes its uploaded source zip when it ends.
+      actions: ["s3:GetObject", "s3:PutObject", "s3:PutObjectTagging", "s3:DeleteObject"],
       resources: ["arn:aws:s3:::plexo-user-content*/private/projects/*"],
     }),
   );
@@ -108,6 +111,9 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
     managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole")],
   });
   const fnArnPattern = `arn:aws:lambda:${stack.region}:${stack.account}:function:plexo-fn-*`;
+  // Per-customer SSR Lambdas (plexo-ssr-<templateId>), created by BuildFinalizeFn and reached
+  // only through their IAM-authenticated Function URLs from plexo-web.
+  const ssrFnArnPattern = `arn:aws:lambda:${stack.region}:${stack.account}:function:plexo-ssr-*`;
   const schedulerRole = new iam.Role(scope, "AppFunctionSchedulerRole", {
     assumedBy: new iam.ServicePrincipal("scheduler.amazonaws.com"),
     description: "Lets EventBridge Scheduler run app server functions on their schedules.",
@@ -169,6 +175,8 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
     new iam.PolicyStatement({ actions: ["logs:FilterLogEvents"], resources: [`arn:aws:logs:${stack.region}:${stack.account}:log-group:/aws/lambda/plexo-fn-*`] }),
   ];
   const env: Record<string, string> = {
+    // Scopes SSR function names (lib/appFunctions/ssrNames.ts) so PR stacks never touch staging's.
+    SSR_FUNCTION_SCOPE: ssrFunctionScope(process.env.STACK_ID ?? ""),
     PROJECT_BUILD_QUEUE_URL: buildQueue.queueUrl,
     FUNCTIONS_EXECUTION_ROLE_ARN: functionExecutionRole.roleArn,
     FUNCTIONS_SCHEDULER_ROLE_ARN: schedulerRole.roleArn,
@@ -178,6 +186,30 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
     for (const statement of statements) fn.addToRolePolicy(statement);
     for (const [k, v] of Object.entries(env)) fn.addEnvironment(k, v);
   }
+
+  // SSR: plexo-web may only invoke the customer SSR Lambdas through their Function URLs...
+  const ssrInvokeStatement = new iam.PolicyStatement({ actions: ["lambda:InvokeFunctionUrl"], resources: [ssrFnArnPattern] });
+  for (const fn of props.appFunctions) fn.addToRolePolicy(ssrInvokeStatement);
+  // ...and only BuildFinalizeFn creates, updates, configures, and deletes them. (Its PassRole for
+  // functionExecutionRole already comes from the shared statements above.)
+  finalizeFn.addToRolePolicy(
+    new iam.PolicyStatement({
+      actions: [
+        "lambda:CreateFunction",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:DeleteFunction",
+        "lambda:CreateFunctionUrlConfig",
+        "lambda:UpdateFunctionUrlConfig",
+        "lambda:GetFunctionUrlConfig",
+        "lambda:DeleteFunctionUrlConfig",
+        "lambda:TagResource",
+      ],
+      resources: [ssrFnArnPattern],
+    }),
+  );
 
   return { buildQueue, eventsQueue, buildFn, finalizeFn, functionExecutionRole, schedulerRole };
 }

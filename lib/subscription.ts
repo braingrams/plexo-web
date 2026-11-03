@@ -88,6 +88,29 @@ export type TierFeatures = {
    * app only answers its first screen (lib/projects/serve.ts). `null` = every page.
    */
   maxPublishedPagesPerSite: number | null;
+  /**
+   * Which hosting tiers are available for deployed framework apps (static zip deploys).
+   * STATIC = S3-only, cheapest, no compute per request.
+   * LAMBDA = Lambda on-demand, server-side rendering, cold starts possible.
+   * PROVISIONED = Lambda with provisioned concurrency, no cold starts, fixed monthly cost.
+   */
+  deployedAppHostingTiers: ("STATIC" | "LAMBDA" | "PROVISIONED")[];
+  /**
+   * Maximum Lambda invocations per calendar day for a deployed framework app. STATIC-tier
+   * requests served from CloudFront cache don't count (Lambda never runs). Enforced by
+   * lib/pub/deployedAppRateLimit.ts — returns 429 once exceeded. `null` = no daily cap.
+   */
+  deployedAppDailyRequestLimit: number | null;
+  /**
+   * Server-rendered (SSR) apps: upload, build, publish, env vars, and serving. Only ULTRA for now.
+   * Every SSR endpoint and the SSR serving paths check this flag.
+   */
+  ssrEnabled: boolean;
+  /**
+   * Monthly budget, in projected USD, for SSR builds. Each build reserves a fixed projected cost
+   * (lib/projects/ssrBudget.ts), so the budget caps builds per month. 0 when SSR is off.
+   */
+  ssrMonthlyBudgetUsd: number;
 };
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
@@ -117,6 +140,10 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     includedFunnelSlots: 0,
     maxPublishedSites: 1,
     maxPublishedPagesPerSite: 1,
+    deployedAppHostingTiers: ["STATIC"],
+    deployedAppDailyRequestLimit: 1_000,
+    ssrEnabled: false,
+    ssrMonthlyBudgetUsd: 0,
   },
   PRO: {
     maxEmailTemplates: 25,
@@ -137,6 +164,10 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     includedFunnelSlots: 0,
     maxPublishedSites: null,
     maxPublishedPagesPerSite: null,
+    deployedAppHostingTiers: ["STATIC", "LAMBDA"],
+    deployedAppDailyRequestLimit: 100_000,
+    ssrEnabled: false,
+    ssrMonthlyBudgetUsd: 0,
   },
   ULTRA: {
     maxEmailTemplates: 100,
@@ -157,6 +188,10 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     includedFunnelSlots: 1,
     maxPublishedSites: null,
     maxPublishedPagesPerSite: null,
+    deployedAppHostingTiers: ["STATIC", "LAMBDA", "PROVISIONED"],
+    deployedAppDailyRequestLimit: null,
+    ssrEnabled: true,
+    ssrMonthlyBudgetUsd: 6,
   },
 };
 

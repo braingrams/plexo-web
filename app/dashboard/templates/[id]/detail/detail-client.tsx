@@ -26,6 +26,8 @@ type SiteData = {
     framework: string;
     spaMode: boolean;
     updatedAt: string;
+    hostingTier: string;
+    allowedTiers: string[];
   } | null;
 };
 

@@ -13,14 +13,17 @@ import { mkdirSync, rmSync, writeFileSync, readFileSync, readdirSync, statSync, 
 import { dirname, join, relative } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { Readable } from "node:stream";
-import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, PutObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import type { SQSEvent, SQSBatchResponse } from "aws-lambda";
 import { BUILD_JOB_VERSION, type BuildJob, type BuildResult, type BuildDiagnostic } from "../../../lib/projects/buildJob";
 import { planInstall, InstallPlanError, type BaseVersions } from "./installPlan";
+import { missingAdapterMessage } from "./ssrPlan";
 import type { WorkerInput, WorkerOutput } from "./worker";
+import type { SsrWorkerInput, SsrWorkerOutput } from "./ssrWorker";
+import { unzipSync, zipSync } from "fflate";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 const WORKER_ROLE_ARN = process.env.BUILD_WORKER_ROLE_ARN!;
@@ -62,8 +65,10 @@ async function scopedClients(job: BuildJob) {
   const policy = {
     Version: "2012-10-17",
     Statement: [
-      { Effect: "Allow", Action: ["s3:GetObject"], Resource: [`${projectArn}/blobs/*`, `${projectArn}/versions/*`, `${projectArn}/deps/*`] },
+      { Effect: "Allow", Action: ["s3:GetObject"], Resource: [`${projectArn}/blobs/*`, `${projectArn}/versions/*`, `${projectArn}/deps/*`, `${projectArn}/builds/${job.buildId}/*`] },
       { Effect: "Allow", Action: ["s3:PutObject"], Resource: [`${projectArn}/builds/${job.buildId}/*`, `${projectArn}/deps/*`] },
+      // An SSR build deletes its uploaded source zip when it ends (buildSsr).
+      { Effect: "Allow", Action: ["s3:DeleteObject"], Resource: `${projectArn}/builds/${job.buildId}/ssr-source.zip` },
       {
         Effect: "Allow",
         Action: ["dynamodb:UpdateItem"],
@@ -205,7 +210,8 @@ async function processJob(job: BuildJob): Promise<void> {
   const cacheDir = join(TMP, "cache");
   for (const d of [workDir, outDir, fnOutDir, cacheDir, join(TMP, "home")]) mkdirSync(d, { recursive: true });
 
-  const finish = async (errors: BuildDiagnostic[], warnings: BuildDiagnostic[], log: string, functionBundles: BuildResult["functionBundles"] = {}) => {
+  type FinishFn = (errors: BuildDiagnostic[], warnings: BuildDiagnostic[], log: string, functionBundles?: BuildResult["functionBundles"]) => Promise<void>;
+  const finish: FinishFn = async (errors, warnings, log, functionBundles = {}) => {
     const durationMs = Date.now() - started;
     const failed = errors.length > 0;
     const result: BuildResult = {
@@ -236,6 +242,7 @@ async function processJob(job: BuildJob): Promise<void> {
   };
 
   try {
+    if (job.kind === "ssr") return await buildSsr(job, s3, finish, { workDir, outDir, fnOutDir, cacheDir });
     const manifestBytes = await getBytes(s3, job.bucket, job.manifestKey);
     if (!manifestBytes) return await finish([{ kind: "build", message: "This version's file list is missing — save the project again and rebuild." }], [], "");
     const manifest = JSON.parse(manifestBytes.toString("utf8")) as { files: Array<{ path: string; sha: string }> };
@@ -333,6 +340,122 @@ async function processJob(job: BuildJob): Promise<void> {
   } finally {
     rmSync(TMP, { recursive: true, force: true });
   }
+}
+
+/** An SSR build: unpack the uploaded source, run the framework's build in a child process,
+ * upload the server function as builds/<id>/functions/server.zip and the static files to the site prefix.
+ * The uploaded source zip is deleted when the build ends, whatever the outcome. */
+async function buildSsr(
+  job: BuildJob,
+  s3: S3Client,
+  finish: (errors: BuildDiagnostic[], warnings: BuildDiagnostic[], log: string, functionBundles?: BuildResult["functionBundles"]) => Promise<void>,
+  dirs: { workDir: string; outDir: string; fnOutDir: string; cacheDir: string },
+): Promise<void> {
+  try {
+    return await buildSsrInner(job, s3, finish, dirs);
+  } finally {
+    if (job.ssrSourceKey) {
+      await s3.send(new DeleteObjectCommand({ Bucket: job.bucket, Key: job.ssrSourceKey })).catch((err) => console.error("could not delete the source zip", err));
+    }
+  }
+}
+
+async function buildSsrInner(
+  job: BuildJob,
+  s3: S3Client,
+  finish: (errors: BuildDiagnostic[], warnings: BuildDiagnostic[], log: string, functionBundles?: BuildResult["functionBundles"]) => Promise<void>,
+  dirs: { workDir: string; outDir: string; fnOutDir: string; cacheDir: string },
+): Promise<void> {
+  if (!job.ssrSourceKey || !job.ssrFramework) {
+    return await finish([{ kind: "build", message: "This SSR build is missing its source or framework. Upload the project again." }], [], "");
+  }
+  const sourceBytes = await getBytes(s3, job.bucket, job.ssrSourceKey);
+  if (!sourceBytes) return await finish([{ kind: "build", message: "The uploaded source is missing. Upload the project again." }], [], "");
+
+  // Unpack the app root (the folder with package.json) into the work directory. node_modules
+  // from the upload is dropped: the build installs its own, so an upload can't pre-seed it.
+  const root = job.ssrRoot ?? "";
+  const entries = unzipSync(new Uint8Array(sourceBytes));
+  for (const [name, body] of Object.entries(entries)) {
+    if (name.endsWith("/") || !name.startsWith(root)) continue;
+    const rel = name.slice(root.length);
+    if (rel.startsWith("node_modules/")) continue;
+    const target = join(dirs.workDir, rel);
+    if (relative(dirs.workDir, target).startsWith("..")) continue;
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, body);
+  }
+
+  const pkgPath = join(dirs.workDir, "package.json");
+  if (!existsSync(pkgPath)) return await finish([{ kind: "build", file: "package.json", message: "No package.json was found in the uploaded source." }], [], "");
+  let pkg: { dependencies?: Record<string, unknown>; devDependencies?: Record<string, unknown> };
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  } catch {
+    return await finish([{ kind: "install", file: "package.json", message: "package.json isn't valid JSON." }], [], "");
+  }
+  const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+  const adapterProblem = missingAdapterMessage(job.ssrFramework, deps);
+  if (adapterProblem) return await finish([{ kind: "install", file: "package.json", message: adapterProblem }], [], "");
+
+  const input: SsrWorkerInput = {
+    appDir: dirs.workDir,
+    fnDir: dirs.fnOutDir,
+    clientOut: dirs.outDir,
+    npmCli: NPM_CLI,
+    cacheDir: dirs.cacheDir,
+    framework: job.ssrFramework,
+    hasLockfile: existsSync(join(dirs.workDir, "package-lock.json")),
+  };
+  const output = await runSsrWorker(input, join(TMP, "ssr-input.json"), join(TMP, "ssr-result.json"));
+  if (!output.ok) {
+    const errors: BuildDiagnostic[] = output.errors.map((e) => ({ kind: e.kind === "bundle" ? "build" : e.kind, message: e.message, snippet: e.snippet }));
+    return await finish(errors, [], output.log);
+  }
+
+  // The server function: one zip, with index.mjs at its root.
+  const files: Record<string, Uint8Array> = {};
+  for (const file of walk(dirs.fnOutDir)) files[relative(dirs.fnOutDir, file).split("\\").join("/")] = readFileSync(file);
+  const zipped = zipSync(files, { level: 6 });
+  const serverKey = `${job.functionsPrefix}/server.zip`;
+  await s3.send(new PutObjectCommand({ Bucket: job.bucket, Key: serverKey, Body: zipped, ContentType: "application/zip", Metadata: { sha256: createHash("sha256").update(zipped).digest("hex") } }));
+
+  // Static files: served from the site prefix, never through the function.
+  if (output.hasClient) {
+    await mapLimit(walk(dirs.outDir), 24, async (file) => {
+      const rel = relative(dirs.outDir, file).split("\\").join("/");
+      const ext = rel.split(".").pop()!.toLowerCase();
+      await s3.send(new PutObjectCommand({
+        Bucket: job.bucket,
+        Key: `${job.sitePrefix}/${rel}`,
+        Body: readFileSync(file),
+        ContentType: CONTENT_TYPES[ext] ?? "application/octet-stream",
+        CacheControl: rel.startsWith("_next/static/") || rel.startsWith("assets/") ? "public, max-age=31536000, immutable" : "public, max-age=0, must-revalidate",
+      }));
+    });
+  }
+
+  await finish([], [], output.log, { server: { key: serverKey, bytes: zipped.byteLength } });
+}
+
+function runSsrWorker(input: SsrWorkerInput, inputPath: string, resultPath: string): Promise<SsrWorkerOutput> {
+  writeFileSync(inputPath, JSON.stringify(input));
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, ["/var/task/ssrWorker.mjs", inputPath, resultPath], {
+      cwd: input.appDir,
+      // Same isolation as the static build: no AWS credentials reach the child.
+      env: { PATH: "/var/lang/bin:/usr/local/bin:/usr/bin:/bin", HOME: join(TMP, "home"), NODE_ENV: "production", npm_config_update_notifier: "false", CI: "1" },
+      stdio: ["ignore", "inherit", "inherit"],
+    });
+    const timer = setTimeout(() => child.kill("SIGKILL"), 13 * 60 * 1000);
+    child.on("close", () => {
+      clearTimeout(timer);
+      const output: SsrWorkerOutput = existsSync(resultPath)
+        ? JSON.parse(readFileSync(resultPath, "utf8"))
+        : { ok: false, errors: [{ kind: "build", message: "The server build ran out of time or memory. Large dependencies are the usual cause." }], log: "", hasClient: false };
+      resolve(output);
+    });
+  });
 }
 
 function exec(cmd: string, args: string[]): Promise<void> {
