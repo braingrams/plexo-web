@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { guardSsrSettings } from "@/lib/appFunctions/ssrGuard";
 import { listSsrVariables, upsertSsrVariable, deleteSsrVariable, VariableError } from "@/lib/appFunctions/ssrVariableStore";
-import { applySsrVariables } from "@/lib/appFunctions/deploy";
+import { queueSsrControl } from "@/lib/appFunctions/ssrControl";
 import { isValidScope, type VariableEnv } from "@/lib/appFunctions/ssrVariables";
 import { resolveUser } from "@/lib/auth/resolveUser";
 
@@ -13,7 +13,7 @@ import { resolveUser } from "@/lib/auth/resolveUser";
  *   PUT  { name, value, scope?, buildTime? }
  *   DELETE ?name=…&scope=…
  *
- * A change applies to the running functions straight away. A build-time change reaches the site
+ * A change is applied to the running functions within moments. A build-time change reaches the site
  * on the next build (the build reads it once).
  */
 
@@ -21,13 +21,14 @@ function envsFor(scope: string): VariableEnv[] {
   return scope === "dev" ? ["dev"] : scope === "live" ? ["live"] : ["dev", "live"];
 }
 
+// The running functions are changed by BuildFinalizeFn (the only role allowed to), so this only queues the change.
 async function applyAll(templateId: string, scope: string): Promise<string | null> {
   try {
-    for (const env of envsFor(scope)) await applySsrVariables(templateId, env);
+    for (const env of envsFor(scope)) await queueSsrControl({ kind: "variables", templateId, env: env as "dev" | "live" });
     return null;
   } catch (err) {
-    console.error("applying SSR variables failed", err);
-    return "Saved. The running server will pick the change up on its next deploy.";
+    console.error("queueing SSR variables failed", err);
+    return "Saved, but the running server didn't get the change. Save it again to retry.";
   }
 }
 

@@ -36,15 +36,32 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
     setFile(null);
   }
 
+  // Publishing runs in the background. The request returns straight away, then this polls for the outcome.
   async function publish() {
     if (!window.confirm("Publish the latest preview to the live site? The live site switches to it, and there's no rollback yet.")) return;
     setBusy("publish"); setError(null); setNotice(null); setWarnings([]);
     const res = await fetch(`/api/v1/templates/${templateId}/ssr-publish`, { method: "POST" });
     const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setBusy(null);
+      return setError(data.error ?? `Publishing failed (server responded ${res.status}).`);
+    }
+    setNotice(data.message ?? "Publishing started.");
+    for (let attempt = 0; attempt < 200; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      const status = await fetch(`/api/v1/templates/${templateId}/ssr-publish`).then((r) => r.json()).catch(() => null);
+      if (!status || status.publishing) continue;
+      setBusy(null);
+      if (status.error) {
+        setNotice(null);
+        return setError(status.error);
+      }
+      setNotice(status.warnings?.length ? "The preview is now live, with warnings." : "The preview is now live.");
+      setWarnings(status.warnings ?? []);
+      return;
+    }
     setBusy(null);
-    if (!res.ok) return setError(data.error ?? `Publishing failed (server responded ${res.status}).`);
-    setNotice(data.message ?? "Published to the live site.");
-    setWarnings(data.warnings ?? []);
+    setNotice("Publishing is still running. Reload this page to see the result.");
   }
 
   return (

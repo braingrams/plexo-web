@@ -56,6 +56,12 @@ export const DeployedApp = new Entity(
       previewBuildVarsHash: { type: "string" },
       // Set when a secret is saved or removed; cleared when a rebuild is queued. Shows the rebuild button.
       secretsChangedAt: { type: "string" },
+      // Publishing runs in BuildFinalizeFn (lib/appFunctions/ssrControlRun.ts). The web app sets
+      // publishRequestedAt; the finalizer sets the outcome.
+      publishRequestedAt: { type: "string" },
+      publishFinishedAt: { type: "string" },
+      publishError: { type: "string" },
+      publishWarnings: { type: "string" },
       previewBundleKey: { type: "string" },
       // Next.js apps: the image optimizer (/_next/image). "" when the build has none.
       imageFunctionUrl: { type: "string" },
