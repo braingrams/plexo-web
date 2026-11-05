@@ -81,6 +81,12 @@ export function describeDiff(diff: FileDiff): string {
   return text ? text[0].toUpperCase() + text.slice(1) : "Update";
 }
 
+async function siteTemplate(templateId: string) {
+  const { data: template } = await Template.get({ id: templateId }).go();
+  if (!template) throw new Error("That site no longer exists.");
+  return template;
+}
+
 async function appTemplate(templateId: string) {
   const { data: template } = await Template.get({ id: templateId }).go();
   if (!template || template.sourceType !== "REACT_PROJECT") throw new Error("That isn't an app project.");
@@ -134,7 +140,8 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
   if (build.status !== "SUCCEEDED" || build.postStatus === "DONE") return build;
   if (!(await claimPostSteps(build))) return (await getBuild(build.id)) ?? build;
 
-  const template = await appTemplate(build.templateId);
+  // An SSR build's source is a zip uploaded to a site, so the site needn't be a React app project.
+  const template = build.kind === "ssr" ? await siteTemplate(build.templateId) : await appTemplate(build.templateId);
   const env = build.mode === "release" ? "live" : "dev";
   let migrationResult: MigrationOutcome | null = null;
   let functionResult: DeployOutcome | null = null;
