@@ -172,10 +172,26 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
         actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
         resources: ["arn:aws:s3:::plexo-user-content*/private/projects/*/ssr/cache/*"],
       }),
+      new iam.PolicyStatement({
+        actions: ["s3:ListBucket"],
+        resources: ["arn:aws:s3:::plexo-user-content*"],
+        conditions: { StringLike: { "s3:prefix": ["private/projects/*/ssr/cache", "private/projects/*/ssr/cache/*"] } },
+      }),
+      new iam.PolicyStatement({
+        actions: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:BatchWriteItem"],
+        resources: [`arn:aws:dynamodb:${stack.region}:${stack.account}:table/plexo-ssr-tags-*`, `arn:aws:dynamodb:${stack.region}:${stack.account}:table/plexo-ssr-tags-*/index/*`],
+      }),
     ],
   });
   const ssrExecRoleArnPattern = `arn:aws:iam::${stack.account}:role/plexo-ssr-exec-*`;
   finalizeFn.addEnvironment("SSR_EXEC_BOUNDARY_ARN", ssrExecBoundary.managedPolicyArn);
+  // The finalizer creates each app's tag table (lib/appFunctions/ssrExecRole.ts ensureSsrTagTable).
+  finalizeFn.addToRolePolicy(
+    new iam.PolicyStatement({
+      actions: ["dynamodb:CreateTable", "dynamodb:DescribeTable"],
+      resources: [`arn:aws:dynamodb:${stack.region}:${stack.account}:table/plexo-ssr-tags-*`],
+    }),
+  );
   finalizeFn.addToRolePolicy(
     new iam.PolicyStatement({
       actions: ["iam:CreateRole"],

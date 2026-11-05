@@ -42,6 +42,7 @@ vi.mock("@/lib/db/appEntities", () => ({
 vi.mock("@/lib/appFunctions/ssrExecRole", () => ({
   ensureSsrExecRole: async (templateId: string) => `arn:aws:iam::123456789012:role/plexo-ssr-exec-${templateId}`,
   ssrCachePrefix: (templateId: string) => `private/projects/${templateId}/ssr/cache`,
+  ensureSsrTagTable: async (templateId: string) => `plexo-ssr-tags-${templateId}`,
 }));
 vi.mock("@/lib/appFunctions/ssrVariableStore", () => ({ listSsrVariables: async () => [] }));
 vi.mock("@/lib/appFunctions/secrets", () => ({ listSecrets: async () => [] }));
