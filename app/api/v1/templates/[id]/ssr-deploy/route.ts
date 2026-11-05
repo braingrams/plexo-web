@@ -10,19 +10,29 @@ import { listSsrVariables } from "@/lib/appFunctions/ssrVariableStore";
 import { buildVariablesFor, buildVarsHash } from "@/lib/appFunctions/ssrVariables";
 import { DeployedApp } from "@/lib/db/appEntities";
 import { markBuildQueued } from "@/lib/projects/ssrRebuild";
+import { getObject, deleteObject } from "@/lib/projects/blobStore";
+import { isSsrUploadKey } from "@/lib/projects/ssrUpload";
 
 /**
  * POST /api/v1/templates/:id/ssr-deploy
  *
- * Uploads a server-rendered app as a .zip of its source (package.json at the root, or inside a
- * single wrapper folder). The framework is detected from package.json, the zip is stored, and an
+ * Queues an SSR build from a server-rendered app's source zip (package.json at the root, or inside
+ * a single wrapper folder). The framework is detected from package.json, the zip is stored, and an
  * SSR build is queued. The build produces the per-customer Lambda `plexo-ssr-<templateId>`.
+ *
+ * The zip comes in one of two ways:
+ *   - JSON { uploadKey }: the zip was sent in parts through ssr-upload/chunk, which assembled it in
+ *     the project bucket. This is what the dashboard uses. The assembled object is deleted after.
+ *   - multipart/form-data with a `file` field: for small zips (about 4.5 MB at most, Lambda's limit).
  *
  * Responds 202 with the build to poll; the function isn't live until that build succeeds.
  */
 
 // Lambda function names must be 64 characters or fewer and use [A-Za-z0-9_-]. The prefix uses 10.
 const TEMPLATE_ID_PATTERN = /^[A-Za-z0-9_-]{1,50}$/;
+
+type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
+type Source = { zip: Uint8Array; stagedKey?: string } | { error: string; status: number };
 
 export async function POST(
   request: NextRequest,
@@ -46,31 +56,64 @@ export async function POST(
     return NextResponse.json({ error: "Server-rendered apps are available on the ULTRA plan." }, { status: 403 });
   }
 
+  const source = await readSource(request, templateId);
+  if ("error" in source) return NextResponse.json({ error: source.error }, { status: source.status });
+  try {
+    return await queueBuild(resolved, templateId, plan.ssrMonthlyBudgetUsd, source.zip);
+  } finally {
+    // The staged upload is only needed until it's read; the build keeps its own copy (ssr/latest.zip).
+    if (source.stagedKey) await deleteObject(source.stagedKey).catch(() => undefined);
+  }
+}
+
+async function readSource(request: NextRequest, templateId: string): Promise<Source> {
+  if ((request.headers.get("content-type") ?? "").includes("application/json")) {
+    const body = await request.json().catch(() => null);
+    const uploadKey = typeof body?.uploadKey === "string" ? body.uploadKey : "";
+    if (!isSsrUploadKey(templateId, uploadKey)) {
+      return { error: "That upload isn't valid for this app. Start the upload again.", status: 400 };
+    }
+    const staged = await getObject(uploadKey);
+    if (!staged) return { error: "The upload didn't reach storage. Try again.", status: 400 };
+    if (staged.body.byteLength > SSR_MAX_ZIP_BYTES) {
+      await deleteObject(uploadKey).catch(() => undefined);
+      return { error: `Zip exceeds the ${SSR_MAX_ZIP_BYTES / 1024 / 1024}MB limit.`, status: 400 };
+    }
+    return { zip: new Uint8Array(staged.body), stagedKey: uploadKey };
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();
   } catch {
-    return NextResponse.json({ error: "Expected multipart/form-data with a 'file' field." }, { status: 400 });
+    return { error: "Expected multipart/form-data with a 'file' field, or JSON with an uploadKey.", status: 400 };
   }
   const file = formData.get("file");
   if (!(file instanceof File)) {
-    return NextResponse.json({ error: "No file uploaded. POST a multipart form with a 'file' field containing a .zip of the app's source." }, { status: 400 });
+    return { error: "No file uploaded. POST a multipart form with a 'file' field containing a .zip of the app's source.", status: 400 };
   }
   if (!file.name.toLowerCase().endsWith(".zip")) {
-    return NextResponse.json({ error: "Only .zip files are accepted. Zip the project folder that contains package.json." }, { status: 400 });
+    return { error: "Only .zip files are accepted. Zip the project folder that contains package.json.", status: 400 };
   }
   if (file.size > SSR_MAX_ZIP_BYTES) {
-    return NextResponse.json({ error: `Zip exceeds the ${SSR_MAX_ZIP_BYTES / 1024 / 1024}MB limit.` }, { status: 400 });
+    return { error: `Zip exceeds the ${SSR_MAX_ZIP_BYTES / 1024 / 1024}MB limit.`, status: 400 };
   }
+  return { zip: new Uint8Array(await file.arrayBuffer()) };
+}
 
-  const sourceZip = new Uint8Array(await file.arrayBuffer());
+async function queueBuild(
+  resolved: ResolvedUser,
+  templateId: string,
+  budgetUsd: number,
+  sourceZip: Uint8Array,
+): Promise<NextResponse> {
   const inspected = await inspectSsrSource(sourceZip);
   if (!inspected.ok) {
     return NextResponse.json({ error: inspected.error }, { status: 400 });
   }
 
   // Reserve this build's projected cost first, so concurrent uploads can't overspend the month.
-  const reservation = await reserveSsrBuild({ organizationId: resolved.organizationId, budgetUsd: plan.ssrMonthlyBudgetUsd });
+  const reservation = await reserveSsrBuild({ organizationId: resolved.organizationId, budgetUsd });
   if (!reservation.ok) {
     return NextResponse.json({
       error: `This month's server build budget is used up ($${reservation.usedUsd.toFixed(2)} of $${reservation.budgetUsd.toFixed(2)} projected). It resets on the first of next month.`,

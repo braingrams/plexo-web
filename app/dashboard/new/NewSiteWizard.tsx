@@ -41,6 +41,8 @@ const hairlineSoft = "rgba(255,255,255,0.055)";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
+const SERVER_ZIP_LIMIT_BYTES = 100 * 1024 * 1024;
+
 function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -403,6 +405,10 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
   async function handleServerDeploy(event: React.FormEvent) {
     event.preventDefault();
     if (!serverFile || !serverName.trim()) return;
+    if (serverFile.size > SERVER_ZIP_LIMIT_BYTES) {
+      setError(`That zip is ${(serverFile.size / 1024 / 1024).toFixed(1)}MB. The limit is ${SERVER_ZIP_LIMIT_BYTES / 1024 / 1024}MB.`);
+      return;
+    }
     setServerBusy(true);
     setError(null);
     try {
@@ -417,12 +423,45 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
         return;
       }
       const templateId = createdData.template.id as string;
-      const fd = new FormData();
-      fd.append("file", serverFile);
-      const res = await fetch(`/api/v1/templates/${templateId}/ssr-deploy`, { method: "POST", body: fd });
+
+      // 1. Send the zip in 3 MB parts through this app, which stages them in storage. Each part
+      //    stays under Lambda's request limit, and the file never goes to storage from the browser.
+      const CHUNK = 3 * 1024 * 1024;
+      const total = Math.max(1, Math.ceil(serverFile.size / CHUNK));
+      const session = crypto.randomUUID();
+      let uploadKey: string | null = null;
+      for (let index = 0; index < total; index++) {
+        const part = await fetch(`/api/v1/templates/${templateId}/ssr-upload/chunk`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "X-Upload-Session": session,
+            "X-Chunk-Index": String(index),
+            "X-Chunk-Total": String(total),
+          },
+          body: serverFile.slice(index * CHUNK, (index + 1) * CHUNK),
+        });
+        const partData = await part.json().catch(() => ({}));
+        if (!part.ok) {
+          setError(partData.error ?? `The upload stopped at part ${index + 1} of ${total} (server responded ${part.status}). Try again.`);
+          return;
+        }
+        if (partData.status === "assembled") uploadKey = partData.uploadKey as string;
+      }
+      if (!uploadKey) {
+        setError("The upload didn't finish. Try again.");
+        return;
+      }
+
+      // 3. Queue the build from the uploaded zip.
+      const res = await fetch(`/api/v1/templates/${templateId}/ssr-deploy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploadKey }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? "The upload failed. Check the zip and try again.");
+        setError(data.error ?? `The server couldn't start the build (server responded ${res.status}). Try again.`);
         return;
       }
       setServerResult({ templateId, buildId: data.buildId, framework: data.framework, warnings: data.warnings ?? [] });

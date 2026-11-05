@@ -6,6 +6,7 @@ import {
   HeadObjectCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
+  DeleteObjectCommand,
   NoSuchKey,
 } from "@aws-sdk/client-s3";
 
@@ -94,6 +95,10 @@ export async function getJson<T>(key: string): Promise<T | null> {
 }
 
 /** Deletes everything under a prefix — used when a project is deleted. */
+export async function deleteObject(key: string): Promise<void> {
+  await s3().send(new DeleteObjectCommand({ Bucket: projectBucket(), Key: key }));
+}
+
 export async function deletePrefix(prefix: string): Promise<void> {
   let token: string | undefined;
   do {
