@@ -19,7 +19,7 @@ import { listSsrVariables } from "@/lib/appFunctions/ssrVariableStore";
 import { runtimeVariablesFor, buildVariablesFor, buildVarsHash, previewOnlySecrets } from "@/lib/appFunctions/ssrVariables";
 import { listSecrets } from "@/lib/appFunctions/secrets";
 import { getObject, projectBucket } from "@/lib/projects/blobStore";
-import { ensureSsrExecRole, ssrCachePrefix } from "@/lib/appFunctions/ssrExecRole";
+import { ensureSsrExecRole, ensureSsrTagTable, ssrCachePrefix } from "@/lib/appFunctions/ssrExecRole";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { previewUrl } from "@/lib/projects/previewHost";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
@@ -260,6 +260,8 @@ async function ssrServerEnvironment(templateId: string, env: AppEnv, functionNam
     CACHE_BUCKET_NAME: projectBucket(),
     CACHE_BUCKET_REGION: REGION,
     CACHE_BUCKET_KEY_PREFIX: ssrCachePrefix(templateId),
+    // OpenNext's DynamoDB tag cache (revalidation): the app's own table.
+    CACHE_DYNAMO_TABLE: await ensureSsrTagTable(templateId),
     PLEXO_SECRETS_URL: `${origin}/api/internal/ssr-secrets/${templateId}?env=${env}`,
     PLEXO_SERVICE_KEY: serviceKey,
     // Secrets are read once per server, at its start. A new build id changes this variable, which
