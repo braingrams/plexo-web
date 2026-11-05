@@ -462,6 +462,8 @@ async function serveSite(
   const rawDomain = decodeURIComponent(params.domain);
 
   const siteResult = await resolveSite(rawDomain);
+  // TEMPORARY (debug/pub-route-log): records which branch serves a request, to find the 502 on plexo-next.
+  console.log("[pub-debug] host", rawDomain, "resolve", siteResult.status, "path", params.slug?.join("/") ?? "");
   if (siteResult.status === "not_found") {
     // A React app's preview address (preview--<id>.<pagesDomain>) isn't a PublishedDomain.
     const previewTarget = await resolvePreviewHost(rawDomain);
@@ -514,6 +516,8 @@ async function serveSite(
   // its underlying Template row still exists. The builder/RAW_UPLOAD path never runs for
   // a domain that has a DeployedApp entity.
   const { data: deployedApp } = await DeployedApp.get({ templateId: published.templateId }).go();
+  // TEMPORARY (debug/pub-route-log)
+  console.log("[pub-debug] deployed", rawDomain, "type", deployedApp?.type ?? "none", "plan", published.user.subscriptionPlan, "url", deployedApp?.functionUrl ? "set" : "none");
   if (deployedApp?.type === "STATIC") {
     const { deployedAppDailyRequestLimit } = getTierFeatures(published.user.subscriptionPlan);
     return serveDeployedStatic(request, deployedApp, slugSegments, {
