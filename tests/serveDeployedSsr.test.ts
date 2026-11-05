@@ -70,6 +70,16 @@ describe("serveDeployedSsr", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("does not sign x-forwarded-for (the function URL changes it, so the signature fails); passes the client address as x-plexo-client-ip", async () => {
+    getObject.mockResolvedValue(null);
+    fetchMock.mockResolvedValue(new Response("ok", { status: 200 }));
+    await serveDeployedSsr(new NextRequest("https://site.test/p", { headers: { "x-forwarded-for": "1.2.3.4, 10.0.0.1" } }), app, ["p"], { templateId: "tmpl1" });
+    const headers = (fetchMock.mock.calls[0] as [string, RequestInit])[1].headers as Record<string, string>;
+    expect(headers["x-forwarded-for"]).toBeUndefined();
+    expect(headers["x-plexo-client-ip"]).toBe("1.2.3.4, 10.0.0.1");
+    expect(headers.authorization).not.toMatch(/x-forwarded-for/);
+  });
+
   it("does not forward accept-encoding, so the app returns bytes that need no decoding", async () => {
     getObject.mockResolvedValue(null);
     fetchMock.mockResolvedValue(new Response("ok", { status: 200 }));
