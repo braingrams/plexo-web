@@ -1,52 +1,84 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
+// Stored objects live in a map, so the route's reads and writes can be checked.
+const store = new Map<string, Buffer>();
 vi.mock("@/lib/appFunctions/ssrGuard", () => ({ guardSsrSettings: async () => ({ ok: true }) }));
-const createProjectUploadPost = vi.fn(async (key: string, _opts: unknown) => ({ url: "https://bucket.test/", fields: { key, "Content-Type": "application/zip" } }));
 vi.mock("@/lib/projects/blobStore", () => ({
   projectPrefix: (templateId: string) => `private/projects/${templateId}`,
-  createProjectUploadPost: (key: string, opts: unknown) => createProjectUploadPost(key, opts),
+  putObject: async (key: string, body: Buffer) => { store.set(key, Buffer.from(body)); },
+  getObject: async (key: string) => (store.has(key) ? { body: store.get(key)! } : null),
+  deletePrefix: async (prefix: string) => { for (const key of [...store.keys()]) if (key.startsWith(prefix)) store.delete(key); },
 }));
 
-import { isSsrUploadKey, newSsrUploadKey } from "@/lib/projects/ssrUpload";
-import { POST as slot } from "@/app/api/v1/templates/[id]/ssr-upload/route";
+import { isSsrUploadKey } from "@/lib/projects/ssrUpload";
+import { POST } from "@/app/api/v1/templates/[id]/ssr-upload/chunk/route";
 
-const UUID = "3f2b1c4e-8a9d-4b7e-9c1a-2d3e4f5a6b7c";
+const SESSION = "3f2b1c4e-8a9d-4b7e-9c1a-2d3e4f5a6b7c";
+const MB = 1024 * 1024;
+
+function part(index: number, total: number, body: Buffer, session = SESSION) {
+  return POST(
+    new NextRequest("https://plexo.test/api/v1/templates/t1/ssr-upload/chunk", {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream", "x-upload-session": session, "x-chunk-index": String(index), "x-chunk-total": String(total) },
+      body: new Uint8Array(body),
+    }),
+    { params: Promise.resolve({ id: "t1" }) },
+  );
+}
 
 describe("isSsrUploadKey", () => {
-  it("accepts a key the upload route issued for this app", () => {
-    expect(isSsrUploadKey("t1", `private/projects/t1/ssr/uploads/${UUID}.zip`)).toBe(true);
-    expect(newSsrUploadKey("t1")).toMatch(/^private\/projects\/t1\/ssr\/uploads\/[0-9a-f-]{36}\.zip$/);
+  it("accepts a key the chunk route assembled for this app", () => {
+    expect(isSsrUploadKey("t1", `private/projects/t1/ssr/uploads/${SESSION}.zip`)).toBe(true);
   });
   it("refuses another app's key, the source key, and path tricks", () => {
-    expect(isSsrUploadKey("t1", `private/projects/t2/ssr/uploads/${UUID}.zip`)).toBe(false);
+    expect(isSsrUploadKey("t1", `private/projects/t2/ssr/uploads/${SESSION}.zip`)).toBe(false);
     expect(isSsrUploadKey("t1", "private/projects/t1/ssr/latest.zip")).toBe(false);
     expect(isSsrUploadKey("t1", `private/projects/t1/ssr/uploads/../../latest.zip`)).toBe(false);
-    expect(isSsrUploadKey("t1", `private/projects/t1/ssr/uploads/${UUID}.zip/../x`)).toBe(false);
-    expect(isSsrUploadKey("t1", `private/projects/t1/ssr/uploads/notauuid.zip`)).toBe(false);
+    expect(isSsrUploadKey("t1", `private/projects/t1/ssr/uploads/${SESSION}.zip/../x`)).toBe(false);
     expect(isSsrUploadKey("t1", "")).toBe(false);
   });
 });
 
-describe("POST ssr-upload", () => {
-  const post = (body: unknown) =>
-    slot(new NextRequest("https://plexo.test/api/v1/templates/t1/ssr-upload", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } }), { params: Promise.resolve({ id: "t1" }) });
+describe("POST ssr-upload/chunk", () => {
+  beforeEach(() => store.clear());
 
-  beforeEach(() => createProjectUploadPost.mockClear());
-
-  it("returns a presigned upload for a zip within the limit", async () => {
-    const res = await post({ filename: "site.zip", size: 6 * 1024 * 1024 });
+  it("assembles a single-part zip, and clears the parts", async () => {
+    const body = Buffer.from("zip-bytes");
+    const res = await part(0, 1, body);
     expect(res.status).toBe(200);
     const data = await res.json();
-    expect(data.uploadKey).toMatch(/^private\/projects\/t1\/ssr\/uploads\/.+\.zip$/);
-    expect(data.url).toBe("https://bucket.test/");
-    expect(createProjectUploadPost).toHaveBeenCalledWith(data.uploadKey, expect.objectContaining({ maxBytes: 100 * 1024 * 1024 }));
+    expect(data).toMatchObject({ status: "assembled", uploadKey: `private/projects/t1/ssr/uploads/${SESSION}.zip` });
+    expect(store.get(data.uploadKey)!.equals(body)).toBe(true);
+    expect([...store.keys()].some((key) => key.includes(`/${SESSION}/`))).toBe(false);
   });
 
-  it("refuses a file that isn't a zip, or a missing or oversized size", async () => {
-    expect((await post({ filename: "site.tar", size: 10 })).status).toBe(400);
-    expect((await post({ filename: "site.zip" })).status).toBe(400);
-    expect((await post({ filename: "site.zip", size: 101 * 1024 * 1024 })).status).toBe(400);
-    expect(createProjectUploadPost).not.toHaveBeenCalled();
+  it("holds earlier parts until the last one, then assembles them in order", async () => {
+    expect(await (await part(0, 2, Buffer.from("aaa"))).json()).toEqual({ status: "received", chunkIndex: 0 });
+    const data = await (await part(1, 2, Buffer.from("bbb"))).json();
+    expect(store.get(data.uploadKey)!.toString()).toBe("aaabbb");
+  });
+
+  it("refuses a missing part at assembly, and clears what it has", async () => {
+    await part(1, 2, Buffer.from("bbb"));
+    const res = await part(1, 2, Buffer.from("bbb"));
+    expect(res.status).toBe(400);
+    expect([...store.keys()].length).toBe(0);
+  });
+
+  it("refuses bad headers and oversized parts", async () => {
+    expect((await part(0, 1, Buffer.from("x"), "not-a-uuid")).status).toBe(400);
+    expect((await part(2, 2, Buffer.from("x"))).status).toBe(400);
+    expect((await part(0, 35, Buffer.from("x"))).status).toBe(400);
+    expect((await part(0, 1, Buffer.alloc(3 * MB + 1))).status).toBe(400);
+  });
+
+  it("refuses an assembled zip over 100MB", async () => {
+    const piece = Buffer.alloc(3 * MB);
+    for (let i = 0; i < 33; i++) await part(i, 34, piece);
+    const res = await part(33, 34, piece);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: expect.stringMatching(/100MB limit/) });
   });
 });

@@ -21,8 +21,8 @@ import { isSsrUploadKey } from "@/lib/projects/ssrUpload";
  * SSR build is queued. The build produces the per-customer Lambda `plexo-ssr-<templateId>`.
  *
  * The zip comes in one of two ways:
- *   - JSON { uploadKey }: the browser sent the file straight to storage (ssr-upload). This is what
- *     the dashboard uses, because it has no request-size limit. The staged object is deleted after.
+ *   - JSON { uploadKey }: the zip was sent in parts through ssr-upload/chunk, which assembled it in
+ *     the project bucket. This is what the dashboard uses. The assembled object is deleted after.
  *   - multipart/form-data with a `file` field: for small zips (about 4.5 MB at most, Lambda's limit).
  *
  * Responds 202 with the build to poll; the function isn't live until that build succeeds.

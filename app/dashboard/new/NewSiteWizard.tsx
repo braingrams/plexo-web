@@ -43,15 +43,6 @@ const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
 const SERVER_ZIP_LIMIT_BYTES = 100 * 1024 * 1024;
 
-/** Storage answers a failed POST with an XML error (<Code>, <Message>). Show what it says. */
-async function describeStorageFailure(res: Response): Promise<string> {
-  const xml = await res.text().catch(() => "");
-  const code = /<Code>([^<]+)<\/Code>/.exec(xml)?.[1];
-  if (code === "EntityTooLarge") return `That zip is larger than the ${SERVER_ZIP_LIMIT_BYTES / 1024 / 1024}MB limit.`;
-  if (code === "AccessDenied" || code === "SignatureDoesNotMatch") return "The upload link expired or was refused. Try again.";
-  return `The upload to storage failed (${code ?? `status ${res.status}`}). Try again.`;
-}
-
 function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -433,26 +424,32 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
       }
       const templateId = createdData.template.id as string;
 
-      // 1. Get a direct-to-storage upload slot. The zip then never passes through this app's
-      //    request handler, so Lambda's request-size limit doesn't apply.
-      const slotRes = await fetch(`/api/v1/templates/${templateId}/ssr-upload`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: serverFile.name, size: serverFile.size }),
-      });
-      const slot = await slotRes.json().catch(() => ({}));
-      if (!slotRes.ok) {
-        setError(slot.error ?? `Couldn't start the upload (server responded ${slotRes.status}). Try again.`);
-        return;
+      // 1. Send the zip in 3 MB parts through this app, which stages them in storage. Each part
+      //    stays under Lambda's request limit, and the file never goes to storage from the browser.
+      const CHUNK = 3 * 1024 * 1024;
+      const total = Math.max(1, Math.ceil(serverFile.size / CHUNK));
+      const session = crypto.randomUUID();
+      let uploadKey: string | null = null;
+      for (let index = 0; index < total; index++) {
+        const part = await fetch(`/api/v1/templates/${templateId}/ssr-upload/chunk`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "X-Upload-Session": session,
+            "X-Chunk-Index": String(index),
+            "X-Chunk-Total": String(total),
+          },
+          body: serverFile.slice(index * CHUNK, (index + 1) * CHUNK),
+        });
+        const partData = await part.json().catch(() => ({}));
+        if (!part.ok) {
+          setError(partData.error ?? `The upload stopped at part ${index + 1} of ${total} (server responded ${part.status}). Try again.`);
+          return;
+        }
+        if (partData.status === "assembled") uploadKey = partData.uploadKey as string;
       }
-
-      // 2. Send the file to storage.
-      const body = new FormData();
-      for (const [name, value] of Object.entries(slot.fields as Record<string, string>)) body.append(name, value);
-      body.append("file", serverFile);
-      const stored = await fetch(slot.url as string, { method: "POST", body });
-      if (!stored.ok) {
-        setError(await describeStorageFailure(stored));
+      if (!uploadKey) {
+        setError("The upload didn't finish. Try again.");
         return;
       }
 
@@ -460,7 +457,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
       const res = await fetch(`/api/v1/templates/${templateId}/ssr-deploy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uploadKey: slot.uploadKey }),
+        body: JSON.stringify({ uploadKey }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
