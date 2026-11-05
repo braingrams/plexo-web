@@ -80,6 +80,8 @@ export async function invokeSsrFunction(functionUrl: string, request: NextReques
 
 /** Copies an upstream (function) response back to the visitor. */
 function relay(upstream: Response, app: DeployedSsrShape, rawPath: string): Promise<NextResponse> | NextResponse {
+  // TEMPORARY (debug/upstream-status): the server app's status, to find the 502 on plexo-next.
+  console.log("[pub-debug] upstream", upstream.status, upstream.headers.get("content-type"), upstream.headers.get("x-amzn-errortype") ?? "", upstream.headers.get("x-plexo-hosting-tier") ?? "");
   const headers = new Headers();
   upstream.headers.forEach((value, key) => {
     if (!DROP_FROM_RESPONSE.has(key)) headers.append(key, value);
