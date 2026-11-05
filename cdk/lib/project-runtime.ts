@@ -159,6 +159,37 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
   finalizeFn.addEventSource(new lambdaEventSources.SqsEventSource(ssrControlQueue, { batchSize: 1, reportBatchItemFailures: true }));
   for (const statement of props.sharedStatements) finalizeFn.addToRolePolicy(statement);
 
+  // Each server app gets its own role (lib/appFunctions/ssrExecRole.ts). The finalizer creates them,
+  // and every role is capped by this boundary: logging, plus the app's own page cache in the project bucket.
+  const ssrExecBoundary = new iam.ManagedPolicy(scope, "SsrExecBoundary", {
+    description: "Caps each server app's role: its logs and its own page cache only.",
+    statements: [
+      new iam.PolicyStatement({
+        actions: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+        resources: [`arn:aws:logs:${stack.region}:${stack.account}:log-group:/aws/lambda/plexo-ssr-*`],
+      }),
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+        resources: ["arn:aws:s3:::plexo-user-content*/private/projects/*/ssr/cache/*"],
+      }),
+    ],
+  });
+  const ssrExecRoleArnPattern = `arn:aws:iam::${stack.account}:role/plexo-ssr-exec-*`;
+  finalizeFn.addEnvironment("SSR_EXEC_BOUNDARY_ARN", ssrExecBoundary.managedPolicyArn);
+  finalizeFn.addToRolePolicy(
+    new iam.PolicyStatement({
+      actions: ["iam:CreateRole"],
+      resources: [ssrExecRoleArnPattern],
+      conditions: { StringEquals: { "iam:PermissionsBoundary": ssrExecBoundary.managedPolicyArn } },
+    }),
+  );
+  finalizeFn.addToRolePolicy(
+    new iam.PolicyStatement({
+      actions: ["iam:GetRole", "iam:AttachRolePolicy", "iam:PutRolePolicy", "iam:PassRole"],
+      resources: [ssrExecRoleArnPattern],
+    }),
+  );
+
   // ---------------------------------------------------------------- grants for app code paths
   const appDbFunctionArn = `arn:aws:lambda:${stack.region}:${stack.account}:function:plexo-app-db-${props.envName}`;
   const statements = [

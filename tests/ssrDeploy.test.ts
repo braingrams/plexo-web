@@ -38,6 +38,11 @@ vi.mock("@/lib/db/appEntities", () => ({
   AppSettings: { get: () => ({ go: async () => ({ data: null }) }), create: () => ({ go: async () => ({}) }), patch: () => ({ set: () => ({ go: async () => ({}) }) }) },
   DeployedApp: { patch: () => ({ set: () => ({ go: async () => ({}) }) }) },
 }));
+// Each server app gets its own role; the IAM calls are tested in ssrExecRole.test.ts.
+vi.mock("@/lib/appFunctions/ssrExecRole", () => ({
+  ensureSsrExecRole: async (templateId: string) => `arn:aws:iam::123456789012:role/plexo-ssr-exec-${templateId}`,
+  ssrCachePrefix: (templateId: string) => `private/projects/${templateId}/ssr/cache`,
+}));
 vi.mock("@/lib/appFunctions/ssrVariableStore", () => ({ listSsrVariables: async () => [] }));
 vi.mock("@/lib/appFunctions/secrets", () => ({ listSecrets: async () => [] }));
 vi.mock("@/lib/db/contentEntities", () => ({ Template: { get: () => ({ go: async () => ({ data: { organizationId: "org-1" } }) }) }, PublishedDomain: {} }));
@@ -78,7 +83,7 @@ describe("deploySsrFunction", () => {
     expect(names()).toContain("CreateFunctionCommand");
     expect(names()).not.toContain("UpdateFunctionCodeCommand");
     const create = input("CreateFunctionCommand");
-    expect(create).toMatchObject({ FunctionName: FUNCTION, Runtime: "nodejs24.x", Handler: "index.handler", Architectures: ["x86_64"], Role: process.env.FUNCTIONS_EXECUTION_ROLE_ARN });
+    expect(create).toMatchObject({ FunctionName: FUNCTION, Runtime: "nodejs24.x", Handler: "index.handler", Architectures: ["x86_64"], Role: `arn:aws:iam::123456789012:role/plexo-ssr-exec-${TEMPLATE}` });
     expect(create.Code.ZipFile).toBe(bundleBody);
     expect(input("CreateFunctionUrlConfigCommand")).toMatchObject({ FunctionName: FUNCTION, AuthType: "AWS_IAM" });
   });
@@ -134,7 +139,7 @@ describe("the Next.js image function", () => {
     responses.GetFunctionConfigurationCommand = new (ResourceNotFoundException as any)({ message: "missing", $metadata: {} });
     responses.GetFunctionUrlConfigCommand = { FunctionUrl: "https://abc.lambda-url.us-east-1.on.aws/" };
     await deploySsrFunction({ templateId: TEMPLATE, buildId: "b9", bundleKey: "k" });
-    expect(input("CreateFunctionCommand")).toMatchObject({ Architectures: ["x86_64"], Role: "arn:aws:iam::123456789012:role/plexo-fn-exec" });
+    expect(input("CreateFunctionCommand")).toMatchObject({ Architectures: ["x86_64"], Role: `arn:aws:iam::123456789012:role/plexo-ssr-exec-${TEMPLATE}` });
   });
 });
 

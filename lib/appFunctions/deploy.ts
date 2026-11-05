@@ -19,6 +19,7 @@ import { listSsrVariables } from "@/lib/appFunctions/ssrVariableStore";
 import { runtimeVariablesFor, buildVariablesFor, buildVarsHash, previewOnlySecrets } from "@/lib/appFunctions/ssrVariables";
 import { listSecrets } from "@/lib/appFunctions/secrets";
 import { getObject, projectBucket } from "@/lib/projects/blobStore";
+import { ensureSsrExecRole, ssrCachePrefix } from "@/lib/appFunctions/ssrExecRole";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { previewUrl } from "@/lib/projects/previewHost";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
@@ -255,6 +256,10 @@ async function ssrServerEnvironment(templateId: string, env: AppEnv, functionNam
   return {
     ...variables,
     NODE_ENV: "production",
+    // The page cache (OpenNext's incremental cache) lives in the project bucket, under the app's prefix.
+    CACHE_BUCKET_NAME: projectBucket(),
+    CACHE_BUCKET_REGION: REGION,
+    CACHE_BUCKET_KEY_PREFIX: ssrCachePrefix(templateId),
     PLEXO_SECRETS_URL: `${origin}/api/internal/ssr-secrets/${templateId}?env=${env}`,
     PLEXO_SERVICE_KEY: serviceKey,
     // Secrets are read once per server, at its start. A new build id changes this variable, which
@@ -290,6 +295,21 @@ export async function applySsrVariables(templateId: string, env: AppEnv): Promis
   await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
 }
 
+/** Creates a Lambda with its role. A role made moments ago isn't assumable by Lambda for a short while,
+ * so the create is retried until the role has propagated. */
+async function createWhenRoleReady(lambda: LambdaClient, input: ConstructorParameters<typeof CreateFunctionCommand>[0]): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await lambda.send(new CreateFunctionCommand(input));
+      return;
+    } catch (err) {
+      const notReady = err instanceof Error && /cannot be assumed/i.test(err.message);
+      if (!notReady || attempt >= 12) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+  }
+}
+
 /** Creates or updates the app's SSR function, and makes sure it has an IAM-authenticated
  * Function URL. Only plexo-web may call that URL (lambda:InvokeFunctionUrl, see
  * cdk/lib/project-runtime.ts). */
@@ -305,10 +325,10 @@ export async function deploySsrFunction(input: {
   const part: SsrPart = input.part ?? "server";
   // The server function runs with logging only. The image function reads the site's files from
   // S3, so it gets its own role that can do exactly that (cdk/lib/project-runtime.ts).
-  const role = part === "image" ? process.env.SSR_IMAGE_ROLE_ARN : process.env.FUNCTIONS_EXECUTION_ROLE_ARN;
-  if (!role) {
-    throw new Error(`Server functions aren't available in this environment yet (${part === "image" ? "SSR_IMAGE_ROLE_ARN" : "FUNCTIONS_EXECUTION_ROLE_ARN"} isn't set).`);
-  }
+  // The server function has its own role (lib/appFunctions/ssrExecRole.ts). The image function's
+  // role can read the built site files (cdk/lib/project-runtime.ts).
+  const role = part === "image" ? process.env.SSR_IMAGE_ROLE_ARN : await ensureSsrExecRole(input.templateId);
+  if (!role) throw new Error("The image optimizer's role isn't available in this environment yet (SSR_IMAGE_ROLE_ARN isn't set).");
   if (part === "image" && !input.sitePrefix) throw new Error("The image function needs the site's file location.");
   const bundle = await getObject(input.bundleKey);
   if (!bundle) throw new Error("The server bundle is missing — rebuild the app.");
@@ -332,8 +352,7 @@ export async function deploySsrFunction(input: {
     if (!(err instanceof ResourceNotFoundException)) throw err;
   }
   if (!current) {
-    await lambda.send(
-      new CreateFunctionCommand({
+    await createWhenRoleReady(lambda, {
         FunctionName: functionName,
         Runtime: "nodejs24.x",
         Handler: "index.handler",
@@ -348,13 +367,12 @@ export async function deploySsrFunction(input: {
         Environment: { Variables: environment },
         Description: `Plexo SSR app ${input.templateId} (${part}) — build ${input.buildId}`,
         Tags: { plexoApp: input.templateId, plexoKind: "ssr", plexoPart: part },
-      }),
-    );
+    });
     await waitUntilFunctionActiveV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
   } else {
     // Both functions take their environment from this deploy, so changed variables and the image
     // function's per-build bucket prefix are current after every deploy.
-    await lambda.send(new UpdateFunctionConfigurationCommand({ FunctionName: functionName, Environment: { Variables: environment } }));
+    await lambda.send(new UpdateFunctionConfigurationCommand({ FunctionName: functionName, Role: role, Environment: { Variables: environment } }));
     await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
     if (current.CodeSha256 !== codeSha256) {
       await lambda.send(new UpdateFunctionCodeCommand({ FunctionName: functionName, ZipFile: bundle.body }));
