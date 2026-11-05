@@ -188,7 +188,8 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
   // The finalizer creates each app's tag table (lib/appFunctions/ssrExecRole.ts ensureSsrTagTable).
   finalizeFn.addToRolePolicy(
     new iam.PolicyStatement({
-      actions: ["dynamodb:CreateTable", "dynamodb:DescribeTable"],
+      // dynamodb:TagResource: CreateTable applies the Tags it's given, and needs this as well (publish failed without it).
+      actions: ["dynamodb:CreateTable", "dynamodb:DescribeTable", "dynamodb:TagResource"],
       resources: [`arn:aws:dynamodb:${stack.region}:${stack.account}:table/plexo-ssr-tags-*`],
     }),
   );
