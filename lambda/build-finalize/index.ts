@@ -2,12 +2,17 @@ import type { SQSEvent, SQSBatchResponse } from "aws-lambda";
 import { loadSecretsFromSsm } from "@/lib/ssmEnv";
 import { getBuild } from "@/lib/projects/builds";
 import { finalizeBuild } from "@/lib/projects/pipeline";
+import { parseSsrControlMessage } from "@/lib/appFunctions/ssrControl";
+import { runSsrControl } from "@/lib/appFunctions/ssrControlRun";
 
 // BuildFinalizeFn — runs a finished build's post-build steps (preview/live database
 // migrations, server-function deploys, the live switch for a release) as soon as the build
 // Lambda reports it done, so finishing a build never depends on someone polling for it.
 // finalizeBuild claims the work on the build row, so this and a concurrent poll from the
 // editor can't both run it.
+//
+// It also runs server-app control messages from SSR_CONTROL_QUEUE_URL (publish a preview, apply
+// variables). Those change plexo-ssr-* functions, which only this function's role may do.
 
 let secretsLoaded: Promise<void> | null = null;
 function ensureSecrets(): Promise<void> {
@@ -23,9 +28,15 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
   const failures: SQSBatchResponse["batchItemFailures"] = [];
   for (const record of event.Records) {
     try {
-      const { buildId } = JSON.parse(record.body) as { buildId?: string };
-      if (!buildId) continue;
-      const build = await getBuild(buildId);
+      const body = JSON.parse(record.body) as { buildId?: string; kind?: string };
+      if (body.kind) {
+        const message = parseSsrControlMessage(record.body);
+        if (!message) console.error("Dropping an invalid server app message", record.body.slice(0, 200));
+        else await runSsrControl(message);
+        continue;
+      }
+      if (!body.buildId) continue;
+      const build = await getBuild(body.buildId);
       if (build) await finalizeBuild(build);
     } catch (err) {
       console.error("Finalizing build failed", err);

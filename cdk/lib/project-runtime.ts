@@ -52,6 +52,13 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
     retentionPeriod: cdk.Duration.hours(2),
     deadLetterQueue: { queue: buildDlq, maxReceiveCount: 3 },
   });
+  // Server-app changes (publish a preview, apply variables): queued by the web app, run by BuildFinalizeFn.
+  const ssrControlDlq = new sqs.Queue(scope, "SsrControlDlq", { retentionPeriod: cdk.Duration.days(4) });
+  const ssrControlQueue = new sqs.Queue(scope, "SsrControlQueue", {
+    // Longer than the finalizer's timeout, so a publish is never handed to a second run mid-flight.
+    visibilityTimeout: cdk.Duration.minutes(11),
+    deadLetterQueue: { queue: ssrControlDlq, maxReceiveCount: 5 },
+  });
   const eventsDlq = new sqs.Queue(scope, "BuildEventsDlq", { retentionPeriod: cdk.Duration.days(4) });
   const eventsQueue = new sqs.Queue(scope, "BuildEventsQueue", {
     visibilityTimeout: cdk.Duration.minutes(6),
@@ -142,17 +149,19 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
     depsLockFilePath: path.join(repoRoot, "package-lock.json"),
     bundling: { tsconfig: path.join(repoRoot, "tsconfig.json"), minify: false, sourceMap: true, externalModules: ["pg-native", "playwright-core"] },
     memorySize: 1024,
-    timeout: cdk.Duration.minutes(5),
+    // A publish updates the server and image functions, waiting on each (lib/appFunctions/deploy.ts), so this is longer than a build's post-steps need.
+    timeout: cdk.Duration.minutes(10),
     environment: props.finalizeEnvironment,
     logGroup: buildLogGroup(scope, "BuildFinalizeFn"),
   });
   finalizeFn.addEventSource(new lambdaEventSources.SqsEventSource(eventsQueue, { batchSize: 5, reportBatchItemFailures: true }));
+  finalizeFn.addEventSource(new lambdaEventSources.SqsEventSource(ssrControlQueue, { batchSize: 1, reportBatchItemFailures: true }));
   for (const statement of props.sharedStatements) finalizeFn.addToRolePolicy(statement);
 
   // ---------------------------------------------------------------- grants for app code paths
   const appDbFunctionArn = `arn:aws:lambda:${stack.region}:${stack.account}:function:plexo-app-db-${props.envName}`;
   const statements = [
-    new iam.PolicyStatement({ actions: ["sqs:SendMessage"], resources: [buildQueue.queueArn] }),
+    new iam.PolicyStatement({ actions: ["sqs:SendMessage"], resources: [buildQueue.queueArn, ssrControlQueue.queueArn] }),
     new iam.PolicyStatement({ actions: ["lambda:InvokeFunction"], resources: [appDbFunctionArn] }),
     // Platform administration of the app-database cluster (lib/appData/admin.ts).
     new iam.PolicyStatement({
@@ -191,6 +200,7 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
     // Scopes SSR function names (lib/appFunctions/ssrNames.ts) so PR stacks never touch staging's.
     SSR_FUNCTION_SCOPE: ssrFunctionScope(process.env.STACK_ID ?? ""),
     PROJECT_BUILD_QUEUE_URL: buildQueue.queueUrl,
+    SSR_CONTROL_QUEUE_URL: ssrControlQueue.queueUrl,
     FUNCTIONS_EXECUTION_ROLE_ARN: functionExecutionRole.roleArn,
     FUNCTIONS_SCHEDULER_ROLE_ARN: schedulerRole.roleArn,
     SSR_IMAGE_ROLE_ARN: ssrImageRole.roleArn,
