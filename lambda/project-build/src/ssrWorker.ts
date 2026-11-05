@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, renameSync } from "node:fs";
 import { join, relative } from "node:path";
 import { build as esbuild } from "esbuild";
+import { disableStaticExportInConfig } from "./nextConfig";
 import { planSsrBuild } from "./ssrPlan";
 import { remixShim, astroFunctionShim, SECRETS_LOADER_SOURCE, ENTRY_WRAPPER_SOURCE } from "./ssrShims";
 
@@ -83,7 +84,11 @@ async function main() {
     }
   }
 
-  // 2. The framework's build.
+  // 2. The framework's build. A Next.js config that exports static HTML would hide the server build.
+  if (input.framework === "nextjs") {
+    const changedConfig = disableStaticExportInConfig(input.appDir);
+    if (changedConfig) log.push(`Removed the static HTML export setting from ${changedConfig}: the app is built as a server app.\n`);
+  }
   for (const step of plan.buildSteps) {
     if ((await runNode(npm(step), input.appDir, env, log)) !== 0) {
       errors.push({ kind: "build", message: `The server build failed (${step.join(" ")}).`, snippet: tail(log) });
