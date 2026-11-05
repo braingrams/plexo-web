@@ -285,15 +285,18 @@ export class ComputeStack extends cdk.Stack {
     // ISR tag-cache table — DynamoDB, per open-next's tagCache/dynamodb.js contract
     // (CACHE_DYNAMO_TABLE). Not part of the six bounded-context business-data tables;
     // this is OpenNext's own internal bookkeeping, kept separate on purpose.
+    // Keys as the installed OpenNext reads them (overrides/tagCache/dynamodb-lite.js): items are looked up by
+    // tag (the partition key), and by path through the "revalidate" index. Keys were swapped before, so every
+    // tag read failed with "Query condition missed key schema element: tag".
     const tagCacheTable = new dynamodb.Table(this, "TagCacheTable", {
-      partitionKey: { name: "path", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "tag", type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: "tag", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "path", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy,
     });
     tagCacheTable.addGlobalSecondaryIndex({
       indexName: "revalidate",
-      partitionKey: { name: "tag", type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: "path", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "revalidatedAt", type: dynamodb.AttributeType.NUMBER },
     });
 
