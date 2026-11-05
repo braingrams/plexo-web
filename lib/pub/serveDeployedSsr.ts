@@ -24,7 +24,10 @@ export type DeployedSsrShape = {
 
 // Request headers the app's code may see. Never host or accept-encoding: Node's fetch decodes
 // compressed bodies but would keep the encoding header, so the app is asked for identity bytes.
-const FORWARD = new Set(["accept", "accept-language", "content-type", "cookie", "referer", "user-agent", "x-forwarded-for"]);
+const FORWARD = new Set(["accept", "accept-language", "content-type", "cookie", "referer", "user-agent"]);
+// The client's address travels as x-plexo-client-ip, not x-forwarded-for. The function URL changes
+// x-forwarded-for after the request is signed, so a signed x-forwarded-for makes the call fail with
+// InvalidSignatureException (reproduced: 403 with x-forwarded-for, 200 with any other name).
 // Hop-by-hop and length headers that don't survive re-wrapping the body.
 const DROP_FROM_RESPONSE = new Set(["connection", "keep-alive", "transfer-encoding", "content-encoding", "content-length"]);
 
@@ -54,6 +57,8 @@ export async function invokeSsrFunction(functionUrl: string, request: NextReques
   request.headers.forEach((value, key) => {
     if (FORWARD.has(key)) headers[key] = value;
   });
+  const clientIp = request.headers.get("x-forwarded-for");
+  if (clientIp) headers["x-plexo-client-ip"] = clientIp;
   const forwardedHost = request.headers.get("host");
   if (forwardedHost) headers["x-forwarded-host"] = forwardedHost;
   headers["x-forwarded-proto"] = "https";
