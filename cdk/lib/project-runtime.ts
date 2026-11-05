@@ -212,8 +212,18 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
   }
 
   // SSR: plexo-web may only invoke the customer SSR Lambdas through their Function URLs...
-  const ssrInvokeStatement = new iam.PolicyStatement({ actions: ["lambda:InvokeFunctionUrl"], resources: [ssrFnArnPattern] });
-  for (const fn of props.appFunctions) fn.addToRolePolicy(ssrInvokeStatement);
+  // Since October 2025 a function URL call needs lambda:InvokeFunction as well as lambda:InvokeFunctionUrl
+  // (AWS: "Using the AWS_IAM auth type"). Without it the call fails with 403 AccessDeniedException. The
+  // second statement only covers calls that arrive through the URL (lambda:InvokedViaFunctionUrl).
+  const ssrInvokeStatements = [
+    new iam.PolicyStatement({ actions: ["lambda:InvokeFunctionUrl"], resources: [ssrFnArnPattern] }),
+    new iam.PolicyStatement({
+      actions: ["lambda:InvokeFunction"],
+      resources: [ssrFnArnPattern],
+      conditions: { Bool: { "lambda:InvokedViaFunctionUrl": "true" } },
+    }),
+  ];
+  for (const fn of props.appFunctions) for (const statement of ssrInvokeStatements) fn.addToRolePolicy(statement);
   // ...and only BuildFinalizeFn creates, updates, configures, and deletes them. (Its PassRole for
   // functionExecutionRole already comes from the shared statements above.)
   finalizeFn.addToRolePolicy(
