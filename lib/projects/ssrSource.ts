@@ -19,7 +19,7 @@ export type SsrSourceResult =
  * one off, list it here; its build code stays in lambda/project-build/src/ssrPlan.ts. */
 export const SSR_DISABLED_FRAMEWORKS: SsrFramework[] = [];
 const FRAMEWORK_NAMES: Record<SsrFramework, string> = { nextjs: "Next.js", nuxt: "Nuxt", nitro: "Nitro", remix: "Remix", astro: "Astro" };
-const SUPPORTED_LIST = "Remix, Astro, Nuxt, Nitro";
+const SUPPORTED_LIST = "Next.js, Remix, Astro, Nuxt, Nitro";
 
 const UNSUPPORTED_HINTS: Array<[string, string]> = [
   ["@sveltejs/kit", "SvelteKit"],

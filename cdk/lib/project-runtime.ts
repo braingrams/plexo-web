@@ -89,8 +89,7 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
   });
   workerRole.addToPolicy(
     new iam.PolicyStatement({
-      // DeleteObject: an SSR build removes its uploaded source zip when it ends.
-      actions: ["s3:GetObject", "s3:PutObject", "s3:PutObjectTagging", "s3:DeleteObject"],
+      actions: ["s3:GetObject", "s3:PutObject", "s3:PutObjectTagging"],
       resources: ["arn:aws:s3:::plexo-user-content*/private/projects/*"],
     }),
   );

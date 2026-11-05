@@ -5,11 +5,11 @@
 //
 // Usage: node ssrWorker.mjs <input.json> <result.json>
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, renameSync } from "node:fs";
 import { join, relative } from "node:path";
 import { build as esbuild } from "esbuild";
 import { planSsrBuild } from "./ssrPlan";
-import { remixShim, astroFunctionShim } from "./ssrShims";
+import { remixShim, astroFunctionShim, SECRETS_LOADER_SOURCE, ENTRY_WRAPPER_SOURCE } from "./ssrShims";
 
 export type SsrWorkerInput = {
   appDir: string; // the unpacked source, with package.json at its root
@@ -20,6 +20,8 @@ export type SsrWorkerInput = {
   framework: Parameters<typeof planSsrBuild>[0];
   hasLockfile: boolean;
   imageFnDir?: string; // where the image-optimization function is laid out, when the plan has one
+  /** Build-time variables (never secrets): passed to the build's environment and baked in. */
+  buildEnv?: Record<string, string>;
 };
 
 export type SsrWorkerOutput = {
@@ -59,7 +61,7 @@ async function main() {
   const log: string[] = [];
   const errors: SsrWorkerOutput["errors"] = [];
   const npm = (args: string[]) => [input.npmCli, ...args, "--no-audit", "--no-fund", "--cache", input.cacheDir];
-  const env = { ...plan.env, npm_config_cache: input.cacheDir };
+  const env = { ...plan.env, ...(input.buildEnv ?? {}), npm_config_cache: input.cacheDir };
 
   const finish = (hasClient: boolean) => {
     const output: SsrWorkerOutput = { ok: errors.length === 0, errors, log: log.join(""), hasClient };
@@ -149,6 +151,14 @@ async function main() {
       errors.push({ kind: "bundle", message: "Bundling the server function failed.", snippet: String(err?.message ?? err).slice(0, 2000) });
       return finish(false);
     }
+  }
+
+  // 3b. Secrets are loaded before the server code runs, so the code never sees a secret it can't
+  // read at start. The original entry becomes app.mjs, and a loader becomes index.mjs.
+  if (existsSync(join(input.fnDir, "index.mjs"))) {
+    renameSync(join(input.fnDir, "index.mjs"), join(input.fnDir, "app.mjs"));
+    writeFileSync(join(input.fnDir, "plexo-env.mjs"), SECRETS_LOADER_SOURCE);
+    writeFileSync(join(input.fnDir, "index.mjs"), ENTRY_WRAPPER_SOURCE);
   }
 
   // 4. Static client files.

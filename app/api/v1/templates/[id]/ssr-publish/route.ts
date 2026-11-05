@@ -25,5 +25,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
   const result = await publishSsrPreview(templateId);
   if ("error" in result) return NextResponse.json({ error: result.error }, { status: 409 });
-  return NextResponse.json({ functionName: result.functionName, message: "The preview is now live." });
+  return NextResponse.json({
+    functionName: result.functionName,
+    warnings: result.warnings,
+    message: result.warnings.length ? "The preview is now live, with warnings." : "The preview is now live.",
+  });
 }

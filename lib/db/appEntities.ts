@@ -51,6 +51,11 @@ export const DeployedApp = new Entity(
       previewFunctionUrl: { type: "string" },
       previewBuildId: { type: "string" },
       previewSitePrefix: { type: "string" },
+      // Hash of the build-time variables the preview was built with (see ssrVariables.ts). Publish
+      // compares it with the live values and warns when they differ.
+      previewBuildVarsHash: { type: "string" },
+      // Set when a secret is saved or removed; cleared when a rebuild is queued. Shows the rebuild button.
+      secretsChangedAt: { type: "string" },
       previewBundleKey: { type: "string" },
       // Next.js apps: the image optimizer (/_next/image). "" when the build has none.
       imageFunctionUrl: { type: "string" },
@@ -272,6 +277,30 @@ export const SsrUsage = new Entity(
       primary: {
         pk: { field: "pk", composite: ["organizationId"], template: "ORG#${organizationId}" },
         sk: { field: "sk", composite: ["month"], template: "SSRUSAGE#${month}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+/** A variable for a server-rendered app. Visible in the dashboard, unlike a secret. `buildTime`
+ * passes it to the build (needed for static generation). Public-prefixed names always go to the build. */
+export const SsrVariable = new Entity(
+  {
+    model: { entity: "ssrVariable", version: "1", service: "plexoApps" },
+    attributes: {
+      templateId: { type: "string", required: true },
+      name: { type: "string", required: true },
+      scope: { type: ["all", "dev", "live"] as const, required: true },
+      value: { type: "string", required: true },
+      buildTime: { type: "boolean", default: false },
+      updatedBy: { type: "string" },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "TEMPLATE#${templateId}" },
+        sk: { field: "sk", composite: ["scope", "name"], template: "SSRVAR#${scope}#${name}", casing: "none" },
       },
     },
   },

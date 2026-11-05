@@ -8,6 +8,7 @@ import { Card } from "../../../_components/Card";
 import { CustomSelect } from "../../../../_components/CustomSelect";
 import { SiteAppearancePanel } from "./SiteAppearancePanel";
 import { DeployPanel } from "./DeployPanel";
+import { ServerSettingsPanel } from "./ServerSettingsPanel";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
@@ -1147,6 +1148,8 @@ export function DetailClient({
                 initialDeployedApp={siteData.deployedApp}
                 liveDomain={siteData.domain?.domain ?? null}
               />
+
+              <ServerSettingsPanel templateId={templateId} />
 
               <Card>
                 <div style={ROW}>

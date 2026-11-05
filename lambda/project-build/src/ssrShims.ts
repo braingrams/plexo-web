@@ -79,3 +79,39 @@ export const handler = async (event) => {
 };
 `;
 }
+
+/** The secrets loader that runs before a customer's server code. It fetches the app's secrets from
+ * Plexo (PLEXO_SECRETS_URL, with PLEXO_SERVICE_KEY) and sets them as environment variables, unless the
+ * variable is already set (visible variables win). Failing to load fails the cold start, rather than
+ * running the app without its secrets. Written next to the server code by the build. */
+export const SECRETS_LOADER_SOURCE = `
+let loaded = null;
+
+export function loadSecrets() {
+  loaded ??= fetchSecrets().catch((err) => {
+    loaded = null; // try again on the next cold start, rather than remembering the failure
+    throw err;
+  });
+  return loaded;
+}
+
+async function fetchSecrets() {
+  const url = process.env.PLEXO_SECRETS_URL;
+  const key = process.env.PLEXO_SERVICE_KEY;
+  if (!url || !key) return; // not running on Plexo (a local run): nothing to load
+  const res = await fetch(url, { headers: { "x-plexo-service-key": key } });
+  if (!res.ok) throw new Error("Couldn't load this app's secrets (" + res.status + ").");
+  const body = await res.json();
+  for (const [name, value] of Object.entries(body?.data ?? {})) {
+    if (process.env[name] === undefined) process.env[name] = value;
+  }
+}
+`;
+
+/** The new entry point: load secrets, then load the server code it wraps (app.mjs). */
+export const ENTRY_WRAPPER_SOURCE = `import { loadSecrets } from "./plexo-env.mjs";
+
+await loadSecrets();
+const app = await import("./app.mjs");
+export const handler = app.handler;
+`;

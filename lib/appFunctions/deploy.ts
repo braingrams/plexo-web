@@ -15,8 +15,10 @@ import {
 import { SchedulerClient, CreateScheduleCommand, UpdateScheduleCommand, DeleteScheduleCommand, ResourceNotFoundException as ScheduleNotFound } from "@aws-sdk/client-scheduler";
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
 import { AppFunction, AppSettings, DeployedApp, type AppEnv } from "@/lib/db/appEntities";
+import { listSsrVariables } from "@/lib/appFunctions/ssrVariableStore";
+import { runtimeVariablesFor, buildVariablesFor, buildVarsHash, previewOnlySecrets } from "@/lib/appFunctions/ssrVariables";
+import { listSecrets } from "@/lib/appFunctions/secrets";
 import { getObject, projectBucket } from "@/lib/projects/blobStore";
-import { validateSsrEnvChange, type SsrEnvChange } from "@/lib/appFunctions/ssrEnv";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { previewUrl } from "@/lib/projects/previewHost";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
@@ -240,6 +242,54 @@ export const SSR_MAX_DIRECT_UPLOAD_BYTES = 50 * 1024 * 1024;
 import { ssrFunctionName, type SsrTarget, type SsrPart } from "@/lib/appFunctions/ssrNames";
 export { ssrFunctionName, type SsrTarget };
 
+/** The environment a server-rendered function runs with: Plexo's secrets address and this
+ * environment's service key (secrets are fetched at cold start, not stored here), plus the
+ * variables that apply to this environment. Visible variables are set here; secrets never are. */
+async function ssrServerEnvironment(templateId: string, env: AppEnv, functionName: string, buildId?: string): Promise<Record<string, string>> {
+  const origin = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+  if (!origin) throw new Error("Plexo's public address isn't set (NEXT_PUBLIC_APP_URL), so the server can't load its secrets.");
+  const { data: template } = await Template.get({ id: templateId }).go({ attributes: ["organizationId"] });
+  const { lambda } = await clients();
+  const serviceKey = await serviceKeyFor(lambda, templateId, template!.organizationId, env, functionName);
+  const variables = runtimeVariablesFor(await listSsrVariables(templateId), env);
+  return {
+    ...variables,
+    NODE_ENV: "production",
+    PLEXO_SECRETS_URL: `${origin}/api/internal/ssr-secrets/${templateId}?env=${env}`,
+    PLEXO_SERVICE_KEY: serviceKey,
+    // Secrets are read once per server, at its start. A new build id changes this variable, which
+    // makes Lambda start fresh servers that read the current secrets. Applying variables without a
+    // build keeps the id the function already has.
+    PLEXO_BUILD_ID: buildId ?? (await currentBuildId(lambda, functionName)) ?? "",
+  };
+}
+
+async function currentBuildId(lambda: LambdaClient, functionName: string): Promise<string | undefined> {
+  try {
+    const config = await lambda.send(new GetFunctionConfigurationCommand({ FunctionName: functionName }));
+    return config.Environment?.Variables?.PLEXO_BUILD_ID;
+  } catch (err) {
+    if (err instanceof ResourceNotFoundException) return undefined;
+    throw err;
+  }
+}
+
+/** Re-applies an SSR app's variables to one environment's function without a deploy. Used when a
+ * variable changes; a function that doesn't exist yet gets them on its first deploy. */
+export async function applySsrVariables(templateId: string, env: AppEnv): Promise<void> {
+  const target: SsrTarget = env === "dev" ? "preview" : "live";
+  const functionName = ssrFunctionName(templateId, target, undefined, "server");
+  const { lambda } = await clients();
+  const environment = await ssrServerEnvironment(templateId, env, functionName);
+  try {
+    await lambda.send(new UpdateFunctionConfigurationCommand({ FunctionName: functionName, Environment: { Variables: environment } }));
+  } catch (err) {
+    if (err instanceof ResourceNotFoundException) return;
+    throw err;
+  }
+  await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
+}
+
 /** Creates or updates the app's SSR function, and makes sure it has an IAM-authenticated
  * Function URL. Only plexo-web may call that URL (lambda:InvokeFunctionUrl, see
  * cdk/lib/project-runtime.ts). */
@@ -269,10 +319,11 @@ export async function deploySsrFunction(input: {
   const { lambda } = await clients();
   const functionName = ssrFunctionName(input.templateId, input.target ?? "live", undefined, part);
   // The image function's bucket prefix is per build, so its environment is set on every deploy.
+  const env: AppEnv = input.target === "preview" ? "dev" : "live";
   const environment: Record<string, string> =
     part === "image"
       ? { NODE_ENV: "production", BUCKET_NAME: projectBucket(), BUCKET_KEY_PREFIX: input.sitePrefix!, BUCKET_REGION: REGION }
-      : { NODE_ENV: "production" };
+      : await ssrServerEnvironment(input.templateId, env, functionName, input.buildId);
 
   let current: { CodeSha256?: string } | null = null;
   try {
@@ -301,10 +352,10 @@ export async function deploySsrFunction(input: {
     );
     await waitUntilFunctionActiveV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
   } else {
-    if (part === "image") {
-      await lambda.send(new UpdateFunctionConfigurationCommand({ FunctionName: functionName, Environment: { Variables: environment } }));
-      await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
-    }
+    // Both functions take their environment from this deploy, so changed variables and the image
+    // function's per-build bucket prefix are current after every deploy.
+    await lambda.send(new UpdateFunctionConfigurationCommand({ FunctionName: functionName, Environment: { Variables: environment } }));
+    await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
     if (current.CodeSha256 !== codeSha256) {
       await lambda.send(new UpdateFunctionCodeCommand({ FunctionName: functionName, ZipFile: bundle.body }));
       await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
@@ -368,7 +419,7 @@ export async function deploySsrApp(input: {
 
 /** Publishes the app's latest SSR preview: the live function runs the same bundle, and the live
  * fields point at the preview's build and files. Returns the live function's name and URL. */
-export async function publishSsrPreview(templateId: string): Promise<{ functionName: string; functionUrl: string } | { error: string }> {
+export async function publishSsrPreview(templateId: string): Promise<{ functionName: string; functionUrl: string; warnings: string[] } | { error: string }> {
   const { data: app } = await DeployedApp.get({ templateId }).go();
   if (!app?.previewBundleKey || !app.previewBuildId || !app.previewSitePrefix) {
     return { error: "There's no SSR preview to publish. Upload the server build first." };
@@ -385,6 +436,16 @@ export async function publishSsrPreview(templateId: string): Promise<{ functionN
       sitePrefix: app.previewSitePrefix,
     })).functionUrl;
   }
+  // Warnings don't stop the publish. The owner decides (see the publish route).
+  const warnings: string[] = [];
+  const variables = await listSsrVariables(templateId);
+  if (app.previewBuildVarsHash && app.previewBuildVarsHash !== buildVarsHash(buildVariablesFor(variables, "live"))) {
+    warnings.push("Build-time variables changed since the preview was built. Rebuild the app, then publish again, to apply them.");
+  }
+  for (const name of previewOnlySecrets(await listSecrets(templateId))) {
+    warnings.push(`${name} is set for Preview only. Add a Live value before the live app needs it.`);
+  }
+
   await DeployedApp.patch({ templateId })
     .set({
       type: "SSR",
@@ -395,40 +456,6 @@ export async function publishSsrPreview(templateId: string): Promise<{ functionN
       ssrSitePrefix: app.previewSitePrefix,
     })
     .go();
-  return live;
+  return { ...live, warnings };
 }
 
-/** Variable names on an SSR app's live function (values are never returned). */
-export async function ssrEnvNames(templateId: string, target: SsrTarget = "live"): Promise<string[] | { error: string }> {
-  const { lambda } = await clients();
-  try {
-    const current = await lambda.send(new GetFunctionConfigurationCommand({ FunctionName: ssrFunctionName(templateId, target) }));
-    return Object.keys(current.Environment?.Variables ?? {}).sort();
-  } catch (err) {
-    if (err instanceof ResourceNotFoundException) return { error: "This app has no server function yet. Deploy its server build first." };
-    throw err;
-  }
-}
-
-/** Applies a change to an SSR app's live function environment (UpdateFunctionConfiguration).
- * The values go to Lambda and nowhere else: the caller gets the variable names back. */
-export async function updateSsrEnvironment(templateId: string, change: SsrEnvChange, target: SsrTarget = "live"): Promise<{ names: string[] } | { error: string }> {
-  const { lambda } = await clients();
-  const functionName = ssrFunctionName(templateId, target);
-  let current;
-  try {
-    current = await lambda.send(new GetFunctionConfigurationCommand({ FunctionName: functionName }));
-  } catch (err) {
-    if (err instanceof ResourceNotFoundException) return { error: "This app has no server function yet. Deploy its server build first." };
-    throw err;
-  }
-  const variables: Record<string, string> = { ...(current.Environment?.Variables ?? {}) };
-  const problem = validateSsrEnvChange(change, variables);
-  if (problem) return { error: problem };
-  for (const key of change.unset) delete variables[key];
-  Object.assign(variables, change.set);
-
-  await lambda.send(new UpdateFunctionConfigurationCommand({ FunctionName: functionName, Environment: { Variables: variables } }));
-  await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
-  return { names: Object.keys(variables).sort() };
-}
