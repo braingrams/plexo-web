@@ -185,7 +185,8 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
   );
   finalizeFn.addToRolePolicy(
     new iam.PolicyStatement({
-      actions: ["iam:GetRole", "iam:AttachRolePolicy", "iam:PutRolePolicy", "iam:PassRole"],
+      // iam:TagRole: CreateRole applies the Tags it's given, and needs this as well (publish failed without it).
+      actions: ["iam:GetRole", "iam:AttachRolePolicy", "iam:PutRolePolicy", "iam:PassRole", "iam:TagRole"],
       resources: [ssrExecRoleArnPattern],
     }),
   );
