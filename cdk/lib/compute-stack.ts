@@ -288,7 +288,9 @@ export class ComputeStack extends cdk.Stack {
     // Keys as the installed OpenNext reads them (overrides/tagCache/dynamodb-lite.js): items are looked up by
     // tag (the partition key), and by path through the "revalidate" index. Keys were swapped before, so every
     // tag read failed with "Query condition missed key schema element: tag".
-    const tagCacheTable = new dynamodb.Table(this, "TagCacheTable", {
+    // A new construct id: DynamoDB can't change a table's keys in place (the update failed with "Cannot update
+    // GSI's properties"), so CloudFormation creates this table and removes the old one.
+    const tagCacheTable = new dynamodb.Table(this, "TagCacheTableV2", {
       partitionKey: { name: "tag", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "path", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
