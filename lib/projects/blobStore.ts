@@ -6,8 +6,10 @@ import {
   HeadObjectCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
+  DeleteObjectCommand,
   NoSuchKey,
 } from "@aws-sdk/client-s3";
+import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 
 // Content-addressed storage for project files, version manifests and build output, all in
 // the user-content bucket under private/ (never publicly readable — a preview build of an
@@ -94,6 +96,27 @@ export async function getJson<T>(key: string): Promise<T | null> {
 }
 
 /** Deletes everything under a prefix — used when a project is deleted. */
+/** A presigned POST policy that lets the browser upload one object straight to the project bucket.
+ * The file never passes through the app's request handler, so the Lambda request-size limit
+ * doesn't apply. The policy caps the size, and the object lands at exactly `key`. */
+export async function createProjectUploadPost(
+  key: string,
+  opts: { contentType: string; maxBytes: number },
+): Promise<{ url: string; fields: Record<string, string> }> {
+  const { url, fields } = await createPresignedPost(s3(), {
+    Bucket: projectBucket(),
+    Key: key,
+    Conditions: [["content-length-range", 1, opts.maxBytes]],
+    Fields: { "Content-Type": opts.contentType },
+    Expires: 10 * 60,
+  });
+  return { url, fields };
+}
+
+export async function deleteObject(key: string): Promise<void> {
+  await s3().send(new DeleteObjectCommand({ Bucket: projectBucket(), Key: key }));
+}
+
 export async function deletePrefix(prefix: string): Promise<void> {
   let token: string | undefined;
   do {

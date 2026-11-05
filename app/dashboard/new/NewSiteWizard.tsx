@@ -41,6 +41,17 @@ const hairlineSoft = "rgba(255,255,255,0.055)";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
+const SERVER_ZIP_LIMIT_BYTES = 100 * 1024 * 1024;
+
+/** Storage answers a failed POST with an XML error (<Code>, <Message>). Show what it says. */
+async function describeStorageFailure(res: Response): Promise<string> {
+  const xml = await res.text().catch(() => "");
+  const code = /<Code>([^<]+)<\/Code>/.exec(xml)?.[1];
+  if (code === "EntityTooLarge") return `That zip is larger than the ${SERVER_ZIP_LIMIT_BYTES / 1024 / 1024}MB limit.`;
+  if (code === "AccessDenied" || code === "SignatureDoesNotMatch") return "The upload link expired or was refused. Try again.";
+  return `The upload to storage failed (${code ?? `status ${res.status}`}). Try again.`;
+}
+
 function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -403,6 +414,10 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
   async function handleServerDeploy(event: React.FormEvent) {
     event.preventDefault();
     if (!serverFile || !serverName.trim()) return;
+    if (serverFile.size > SERVER_ZIP_LIMIT_BYTES) {
+      setError(`That zip is ${(serverFile.size / 1024 / 1024).toFixed(1)}MB. The limit is ${SERVER_ZIP_LIMIT_BYTES / 1024 / 1024}MB.`);
+      return;
+    }
     setServerBusy(true);
     setError(null);
     try {
@@ -417,12 +432,39 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
         return;
       }
       const templateId = createdData.template.id as string;
-      const fd = new FormData();
-      fd.append("file", serverFile);
-      const res = await fetch(`/api/v1/templates/${templateId}/ssr-deploy`, { method: "POST", body: fd });
+
+      // 1. Get a direct-to-storage upload slot. The zip then never passes through this app's
+      //    request handler, so Lambda's request-size limit doesn't apply.
+      const slotRes = await fetch(`/api/v1/templates/${templateId}/ssr-upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: serverFile.name, size: serverFile.size }),
+      });
+      const slot = await slotRes.json().catch(() => ({}));
+      if (!slotRes.ok) {
+        setError(slot.error ?? `Couldn't start the upload (server responded ${slotRes.status}). Try again.`);
+        return;
+      }
+
+      // 2. Send the file to storage.
+      const body = new FormData();
+      for (const [name, value] of Object.entries(slot.fields as Record<string, string>)) body.append(name, value);
+      body.append("file", serverFile);
+      const stored = await fetch(slot.url as string, { method: "POST", body });
+      if (!stored.ok) {
+        setError(await describeStorageFailure(stored));
+        return;
+      }
+
+      // 3. Queue the build from the uploaded zip.
+      const res = await fetch(`/api/v1/templates/${templateId}/ssr-deploy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploadKey: slot.uploadKey }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? "The upload failed. Check the zip and try again.");
+        setError(data.error ?? `The server couldn't start the build (server responded ${res.status}). Try again.`);
         return;
       }
       setServerResult({ templateId, buildId: data.buildId, framework: data.framework, warnings: data.warnings ?? [] });
