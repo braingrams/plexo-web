@@ -6,6 +6,7 @@ import { AI_UNREACHABLE } from "@/lib/ai/requestErrors";
 import { checkAiCredits, generateWithProgress, type AiRequestBody } from "@/lib/ai/clientGenerate";
 import type { DragEvent, FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { MarketplaceListItem } from "@/lib/marketplace";
 import { MarketplaceRowExpandGrid } from "@/app/marketplace/MarketplaceRowExpandGrid";
 import { MarketplaceSkeletonGrid } from "@/app/marketplace/MarketplaceBrowse";
@@ -259,7 +260,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
   const [serverFile, setServerFile] = useState<File | null>(null);
   const [serverName, setServerName] = useState("");
   const [serverBusy, setServerBusy] = useState(false);
-  const [serverResult, setServerResult] = useState<{ templateId: string; buildId: string; framework: string; warnings: string[] } | null>(null);
+  const router = useRouter();
 
   const [items, setItems] = useState<MarketplaceItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
@@ -464,7 +465,10 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
         setError(data.error ?? `The server couldn't start the build (server responded ${res.status}). Try again.`);
         return;
       }
-      setServerResult({ templateId, buildId: data.buildId, framework: data.framework, warnings: data.warnings ?? [] });
+      // The build runs in the background. Close the wizard and open the site's settings, where
+      // the build and secrets are shown.
+      onClose?.();
+      router.push(`/dashboard/templates/${templateId}/detail`);
     } finally {
       setServerBusy(false);
     }
@@ -970,22 +974,6 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                       Server apps are available on the ULTRA plan.{" "}
                       <Link href="/dashboard/settings/subscription" style={{ color: "var(--brand)" }}>See plans</Link>
                     </p>
-                  ) : serverResult ? (
-                    <div>
-                      <h3 style={{ margin: "0 0 8px", fontSize: "15px", fontWeight: 700 }}>Build queued</h3>
-                      <p style={{ margin: "0 0 8px", fontSize: "13px", color: "var(--text-muted)" }}>
-                        Framework: {serverResult.framework}. Build ID: <span style={{ fontFamily: "var(--font-mono)" }}>{serverResult.buildId}</span>
-                      </p>
-                      {serverResult.warnings.map((w) => (
-                        <p key={w} style={{ margin: "0 0 8px", fontSize: "13px", color: "#fbbf24" }}>{w}</p>
-                      ))}
-                      <p style={{ margin: "0 0 16px", fontSize: "13px", color: "var(--text-muted)" }}>
-                        The build runs in the background. Preview, environment variables, and publishing are not in the dashboard yet.
-                      </p>
-                      <Link href={`/dashboard/templates/${serverResult.templateId}`} style={{ ...primaryButtonStyle(true), textDecoration: "none", display: "inline-block" }}>
-                        Open the site
-                      </Link>
-                    </div>
                   ) : (
                     <form onSubmit={(e) => void handleServerDeploy(e)} style={{ display: "grid", gap: 14, maxWidth: 480 }}>
                       <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>

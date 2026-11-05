@@ -9,6 +9,7 @@ import { CustomSelect } from "../../../../_components/CustomSelect";
 import { SiteAppearancePanel } from "./SiteAppearancePanel";
 import { DeployPanel } from "./DeployPanel";
 import { ServerSettingsPanel } from "./ServerSettingsPanel";
+import { SsrDeployPanel } from "./SsrDeployPanel";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
 
@@ -29,6 +30,7 @@ type SiteData = {
     updatedAt: string;
     hostingTier: string;
     allowedTiers: string[];
+    ssr: boolean;
   } | null;
 };
 
@@ -1143,11 +1145,15 @@ export function DetailClient({
                 </div>
               </Card>
 
-              <DeployPanel
-                templateId={templateId}
-                initialDeployedApp={siteData.deployedApp}
-                liveDomain={siteData.domain?.domain ?? null}
-              />
+              {siteData.deployedApp?.ssr ? (
+                <SsrDeployPanel templateId={templateId} />
+              ) : (
+                <DeployPanel
+                  templateId={templateId}
+                  initialDeployedApp={siteData.deployedApp}
+                  liveDomain={siteData.domain?.domain ?? null}
+                />
+              )}
 
               <ServerSettingsPanel templateId={templateId} />
 

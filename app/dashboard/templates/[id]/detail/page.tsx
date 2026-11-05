@@ -81,6 +81,7 @@ export default async function TemplateDetailPage(props: {
       updatedAt: string;
       hostingTier: string;
       allowedTiers: string[];
+      ssr: boolean;
     } | null;
   } | null = null;
 
@@ -130,6 +131,7 @@ export default async function TemplateDetailPage(props: {
             updatedAt: deployedAppRow.updatedAt ?? deployedAppRow.createdAt ?? new Date().toISOString(),
             hostingTier: deployedAppRow.hostingTier ?? "LAMBDA",
             allowedTiers: getTierFeatures(ownerPlan).deployedAppHostingTiers,
+            ssr: deployedAppRow.type === "SSR",
           }
         : null,
     };
