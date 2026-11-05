@@ -61,7 +61,8 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
   });
   const eventsDlq = new sqs.Queue(scope, "BuildEventsDlq", { retentionPeriod: cdk.Duration.days(4) });
   const eventsQueue = new sqs.Queue(scope, "BuildEventsQueue", {
-    visibilityTimeout: cdk.Duration.minutes(6),
+    // At least BuildFinalizeFn's timeout (10 min): SQS refuses an event source whose visibility is shorter.
+    visibilityTimeout: cdk.Duration.minutes(11),
     deadLetterQueue: { queue: eventsDlq, maxReceiveCount: 5 },
   });
 
