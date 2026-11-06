@@ -17,15 +17,41 @@ export function withoutStaticExport(source: string): { source: string; changed: 
 
 const CONFIG_FILES = ["next.config.ts", "next.config.mts", "next.config.js", "next.config.mjs", "next.config.cjs", "next.config.cts"];
 
-/** Rewrites the app's Next.js config in its build folder (never the uploaded source). Returns the file it changed, if any. */
-export function disableStaticExportInConfig(appDir: string): string | null {
+/** The path the app's built assets (/_next/...) are served under: the web app's /__plexo/assets route. */
+export const APP_ASSET_PREFIX = "/__plexo/assets";
+
+/** The config source with `assetPrefix` set to `prefix`, unless the app already sets one. */
+export function withAssetPrefix(source: string, prefix: string): { source: string; changed: boolean } {
+  if (/\bassetPrefix\s*:/.test(source)) return { source, changed: false };
+  const opening = /(\bconst\s+\w+\s*(?::\s*[\w.<>]+\s*)?=\s*\{|\bexport\s+default\s*\{|\bmodule\.exports\s*=\s*\{)/;
+  const match = opening.exec(source);
+  if (!match) return { source, changed: false };
+  const at = match.index + match[0].length;
+  return { source: `${source.slice(0, at)}\n  assetPrefix: "${prefix}",${source.slice(at)}`, changed: true };
+}
+
+/**
+ * Prepares the app's Next.js config in its build folder (never the uploaded source): no static HTML export,
+ * and the built assets under APP_ASSET_PREFIX. Returns what changed, one line per change.
+ */
+export function prepareNextConfig(appDir: string): string[] {
   for (const name of CONFIG_FILES) {
     const path = join(appDir, name);
     if (!existsSync(path)) continue;
-    const result = withoutStaticExport(readFileSync(path, "utf8"));
-    if (!result.changed) return null;
-    writeFileSync(path, result.source);
-    return name;
+    let source = readFileSync(path, "utf8");
+    const changes: string[] = [];
+    const exported = withoutStaticExport(source);
+    if (exported.changed) {
+      source = exported.source;
+      changes.push("removed the static HTML export setting");
+    }
+    const prefixed = withAssetPrefix(source, APP_ASSET_PREFIX);
+    if (prefixed.changed) {
+      source = prefixed.source;
+      changes.push(`serves built assets under ${APP_ASSET_PREFIX}`);
+    }
+    if (changes.length) writeFileSync(path, source);
+    return changes.map((change) => `${name}: ${change}`);
   }
-  return null;
+  return [];
 }

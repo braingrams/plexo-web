@@ -98,12 +98,19 @@ function relay(upstream: Response, app: DeployedSsrShape, rawPath: string): Prom
   return upstream.arrayBuffer().then((body) => new NextResponse(new Uint8Array(body), { status: upstream.status, headers }));
 }
 
+/** The app's built assets are addressed under /__plexo/assets/ (the build sets the app's assetPrefix to it).
+ * The app's own paths are what's left after that prefix. */
+function appPath(slugSegments: string[]): string[] {
+  return slugSegments[0] === "__plexo" && slugSegments[1] === "assets" ? slugSegments.slice(2) : slugSegments;
+}
+
 export async function serveDeployedSsr(
   request: NextRequest,
   app: DeployedSsrShape,
-  slugSegments: string[],
+  incomingSegments: string[],
   options: { templateId: string; dailyRequestLimit?: number | null; onNotFound?: () => NextResponse },
 ): Promise<NextResponse> {
+  const slugSegments = appPath(incomingSegments);
   const notFound = options.onNotFound ?? (() => new NextResponse(null, { status: 404 }));
   const rawPath = slugSegments.join("/");
 

@@ -8,7 +8,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, renameSync } from "node:fs";
 import { join, relative } from "node:path";
 import { build as esbuild } from "esbuild";
-import { disableStaticExportInConfig } from "./nextConfig";
+import { prepareNextConfig } from "./nextConfig";
 import { planSsrBuild } from "./ssrPlan";
 import { remixShim, astroFunctionShim, SECRETS_LOADER_SOURCE, ENTRY_WRAPPER_SOURCE } from "./ssrShims";
 
@@ -84,10 +84,10 @@ async function main() {
     }
   }
 
-  // 2. The framework's build. A Next.js config that exports static HTML would hide the server build.
+  // 2. The framework's build. The Next.js config is prepared first: no static HTML export (which would hide the
+  // server build), and built assets under the app asset prefix (served by the web app).
   if (input.framework === "nextjs") {
-    const changedConfig = disableStaticExportInConfig(input.appDir);
-    if (changedConfig) log.push(`Removed the static HTML export setting from ${changedConfig}: the app is built as a server app.\n`);
+    for (const change of prepareNextConfig(input.appDir)) log.push(`Next.js config, ${change}.\n`);
   }
   for (const step of plan.buildSteps) {
     if ((await runNode(npm(step), input.appDir, env, log)) !== 0) {
