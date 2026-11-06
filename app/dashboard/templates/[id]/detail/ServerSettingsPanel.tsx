@@ -124,7 +124,7 @@ export function ServerSettingsPanel({ templateId }: { templateId: string }) {
   if (locked) {
     return (
       <div style={card}>
-        <h3 style={heading}>Server app settings</h3>
+        <h3 style={heading}>Variables and secrets</h3>
         <p style={muted}>{locked}</p>
       </div>
     );
