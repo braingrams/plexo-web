@@ -7,6 +7,7 @@ import type { AwsCredentialIdentity } from "@smithy/types";
 import { getObject } from "@/lib/projects/blobStore";
 import { checkDeployedAppDailyLimit } from "@/lib/pub/deployedAppRateLimit";
 import { cacheControlFor } from "@/lib/pub/serveDeployedStatic";
+import { capCacheControl } from "@/lib/pub/capCacheControl";
 
 // Serves an SSR app (DeployedApp type SSR): static files come straight from S3, and everything
 // else is proxied to the app's own Lambda Function URL, which is IAM-authenticated, so only this
@@ -99,7 +100,9 @@ function relay(upstream: Response, app: DeployedSsrShape, rawPath: string): Prom
   upstream.headers.forEach((value, key) => {
     if (FORWARD_FROM_RESPONSE.has(key)) headers.append(key, value);
   });
-  if (!headers.has("cache-control")) headers.set("Cache-Control", cacheControlFor(rawPath || "index.html", app.hostingTier));
+  const appCacheControl = headers.get("cache-control");
+  if (appCacheControl) headers.set("Cache-Control", capCacheControl(appCacheControl));
+  else headers.set("Cache-Control", cacheControlFor(rawPath || "index.html", app.hostingTier));
   headers.set("X-Plexo-Hosting-Tier", app.hostingTier ?? "LAMBDA");
   // Decoded by fetch above, so the bytes are identity: send them as-is.
   return upstream.arrayBuffer().then((body) => new NextResponse(new Uint8Array(body), { status: upstream.status, headers }));
