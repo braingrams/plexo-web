@@ -11,6 +11,7 @@ import { build as esbuild } from "esbuild";
 import { prepareNextConfig } from "./nextConfig";
 import { planSsrBuild } from "./ssrPlan";
 import { remixShim, astroFunctionShim, SECRETS_LOADER_SOURCE, ENTRY_WRAPPER_SOURCE } from "./ssrShims";
+import { pruneBuildOnlyPackages } from "./ssrPrune";
 
 export type SsrWorkerInput = {
   appDir: string; // the unpacked source, with package.json at its root
@@ -125,6 +126,9 @@ async function main() {
       errors.push({ kind: "build", message: "Pruning development dependencies for the server function failed.", snippet: tail(log, 20) });
       return finish(false);
     }
+    // Build-only packages (Vite, Rolldown, LightningCSS) aren't needed to serve pages, and they push
+    // the bundle past Lambda's 50MB direct-upload limit.
+    pruneBuildOnlyPackages(join(input.appDir, "node_modules"));
     cpSync(join(input.appDir, "node_modules"), join(input.fnDir, "node_modules"), { recursive: true });
     writeFileSync(join(input.fnDir, "index.mjs"), astroFunctionShim("./" + entryRel.split("\\").join("/")));
   } else {
