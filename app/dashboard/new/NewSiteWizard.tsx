@@ -889,7 +889,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                 <div>
                   <h2 style={{ margin: "0 0 4px", fontSize: "17px", fontWeight: 700 }}>Server app</h2>
                   <p style={{ margin: "0 0 20px", fontSize: "13px", color: "var(--text-muted)" }}>
-                    Upload the source of a Next.js, Remix, Astro, Nuxt, or Nitro app. Plexo builds it and runs it on its own server.
+                    Upload the source of a Next.js, Nuxt, Remix, Astro or Nitro app. Plexo builds it and runs it as an app on its own server.
                   </p>
                   {plan !== "ULTRA" ? (
                     <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>
@@ -899,7 +899,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                   ) : (
                     <form onSubmit={(e) => void handleServerDeploy(e)} style={{ display: "grid", gap: 14, maxWidth: 480 }}>
                       <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
-                        Site name
+                        App name
                         <input
                           value={serverName}
                           onChange={(e) => setServerName(e.target.value)}

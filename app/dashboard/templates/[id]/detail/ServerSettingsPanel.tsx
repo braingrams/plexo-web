@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } 
 
 // Settings for a server-rendered app (ULTRA). Two kinds, kept apart on purpose:
 //   Variables: visible settings. Their values are shown here. A variable marked "needed at build"
-//              (or named with a public prefix such as NEXT_PUBLIC_) is baked into the site, so visitors can read it.
+//              (or named with a public prefix such as NEXT_PUBLIC_) is baked into the app, so visitors can read it.
 //   Secrets:   write-only. The value is never shown again, only a short hint. The server fetches
 //              secrets when it starts. Secrets never go to the build.
 
@@ -139,7 +139,7 @@ export function ServerSettingsPanel({ templateId }: { templateId: string }) {
         <h3 style={heading}>Variables</h3>
         <p style={muted}>
           Visible settings, shown in full here. Anything marked "needed at build", or named with a public prefix
-          (NEXT_PUBLIC_, VITE_, …), is baked into the site, so visitors can read it. Changes to build-time
+          (NEXT_PUBLIC_, VITE_, …), is baked into the app, so visitors can read it. Changes to build-time
           variables take effect on the next rebuild.
         </p>
         {variables.length === 0 ? <p style={muted}>No variables yet.</p> : (
@@ -167,7 +167,7 @@ export function ServerSettingsPanel({ templateId }: { templateId: string }) {
           </select>
           <label style={{ fontSize: 13, display: "flex", gap: 8, alignItems: "center" }}>
             <input type="checkbox" checked={vBuild || publicName} disabled={publicName} onChange={(e) => setVBuild(e.target.checked)} />
-            Needed at build (baked into the site)
+            Needed at build (baked into the app)
           </label>
           {publicName ? <p style={warn}>This name is public: browsers can read it, so it's always set at build time.</p> : null}
           {vName && !vNameOk ? <p style={warn}>Use capital letters, numbers and underscores, starting with a letter.</p> : null}
