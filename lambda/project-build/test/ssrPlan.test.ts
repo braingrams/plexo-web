@@ -44,6 +44,7 @@ describe("missingAdapterMessage", () => {
   it("asks for @remix-run/node when Remix is detected without it", () => {
     expect(missingAdapterMessage("remix", { "@remix-run/react": "2" })).toMatch(/@remix-run\/node/);
     expect(missingAdapterMessage("remix", { "@remix-run/node": "2" })).toBeNull();
+    expect(missingAdapterMessage("remix", { "@react-router/node": "8" })).toBeNull();
   });
   it("needs nothing for Next.js or Nitro", () => {
     expect(missingAdapterMessage("nextjs", {})).toBeNull();
@@ -56,6 +57,12 @@ describe("generated shims", () => {
   const parses = (source: string) => {
     expect(() => transformSync(source, { loader: "js", format: "esm" })).not.toThrow();
   };
+
+  it("React Router shim takes its request handler from react-router", () => {
+    const source = remixShim("./../build/server/index.js", "react-router");
+    expect(source).toContain('from "react-router"');
+    expect(source).not.toContain("@remix-run/node");
+  });
 
   it("Remix shim imports the server build and @remix-run/node, and exports handler", () => {
     const source = remixShim("./../build/server/index.js");

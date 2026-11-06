@@ -37,7 +37,8 @@ export function detectSsrFramework(pkg: { dependencies?: Record<string, string>;
   if (has("next")) found.push("nextjs");
   if (has("nuxt")) found.push("nuxt");
   if (has("nitropack") && !has("nuxt")) found.push("nitro");
-  if (Object.keys(deps).some((d) => d.startsWith("@remix-run/"))) found.push("remix");
+  // Remix, and React Router framework mode (the successor to Remix), are both "remix" here.
+  if (Object.keys(deps).some((d) => d.startsWith("@remix-run/") || d.startsWith("@react-router/"))) found.push("remix");
   if (has("astro")) found.push("astro");
 
   const disabled = found.find((f) => SSR_DISABLED_FRAMEWORKS.includes(f));

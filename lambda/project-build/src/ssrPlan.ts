@@ -86,8 +86,8 @@ export function missingAdapterMessage(framework: SsrFramework, deps: Record<stri
   if (framework === "astro" && !("@astrojs/node" in deps)) {
     return "Astro server hosting needs the Node adapter: add @astrojs/node and set `output: 'server'` with `adapter: node({ mode: 'standalone' })`.";
   }
-  if (framework === "remix" && !("@remix-run/node" in deps)) {
-    return "Remix server hosting needs @remix-run/node in package.json.";
+  if (framework === "remix" && !("@remix-run/node" in deps) && !("@react-router/node" in deps)) {
+    return "Remix server hosting needs @remix-run/node (or @react-router/node for React Router framework mode) in package.json.";
   }
   return null;
 }

@@ -33,6 +33,16 @@ export type SsrWorkerOutput = {
 };
 
 /** The child's environment: PATH and HOME only, plus what npm and the build need. No AWS_*. */
+/** The app's dependencies from its package.json. Empty when the file is missing or unreadable. */
+function readAppDependencies(appDir: string): Record<string, string> {
+  try {
+    const pkg = JSON.parse(readFileSync(join(appDir, "package.json"), "utf8")) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+    return { ...(pkg.devDependencies ?? {}), ...(pkg.dependencies ?? {}) };
+  } catch {
+    return {};
+  }
+}
+
 function scrubbedEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
   return {
     PATH: "/var/lang/bin:/usr/local/bin:/usr/bin:/bin",
@@ -137,7 +147,10 @@ async function main() {
     const shimDir = join(input.appDir, ".plexo-ssr");
     mkdirSync(shimDir, { recursive: true });
     const entryImport = "./" + relative(shimDir, join(input.appDir, entryRel)).split("\\").join("/");
-    const shimSource = remixShim(entryImport);
+    // React Router framework mode ships its request handler in `react-router`; Remix in @remix-run/node.
+    const appDeps = readAppDependencies(input.appDir);
+    const requestHandlerPackage = "@react-router/node" in appDeps || "@react-router/dev" in appDeps ? "react-router" : "@remix-run/node";
+    const shimSource = remixShim(entryImport, requestHandlerPackage);
     const shimPath = join(shimDir, "shim.mjs");
     writeFileSync(shimPath, shimSource);
     try {
