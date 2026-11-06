@@ -30,6 +30,12 @@ const FORWARD = new Set(["accept", "accept-language", "content-type", "cookie", 
 // InvalidSignatureException (reproduced: 403 with x-forwarded-for, 200 with any other name).
 // Hop-by-hop and length headers that don't survive re-wrapping the body.
 const DROP_FROM_RESPONSE = new Set(["connection", "keep-alive", "transfer-encoding", "content-encoding", "content-length"]);
+// Next.js's own response headers (x-nextjs-cache, x-nextjs-prerender, x-nextjs-stale-time, …) describe the
+// app's cache to Next itself. Copied onto the web app's response they made the page fail with 502 (reproduced:
+// the app returned 200 HTML carrying them; JSON responses without them passed).
+function isNextInternalHeader(name: string): boolean {
+  return name.startsWith("x-nextjs-") || name === "x-powered-by";
+}
 
 let credentialsProvider: (() => Promise<AwsCredentialIdentity>) | null = null;
 /** plexo-web's own credentials, or — when FUNCTIONS_ACCOUNT_ROLE_ARN is set (functions live in
@@ -84,7 +90,7 @@ function relay(upstream: Response, app: DeployedSsrShape, rawPath: string): Prom
   console.log("[pub-debug] upstream", upstream.status, upstream.headers.get("content-type"), upstream.headers.get("x-amzn-errortype") ?? "", upstream.headers.get("x-plexo-hosting-tier") ?? "");
   const headers = new Headers();
   upstream.headers.forEach((value, key) => {
-    if (!DROP_FROM_RESPONSE.has(key)) headers.append(key, value);
+    if (!DROP_FROM_RESPONSE.has(key) && !isNextInternalHeader(key)) headers.append(key, value);
   });
   if (!headers.has("cache-control")) headers.set("Cache-Control", cacheControlFor(rawPath || "index.html", app.hostingTier));
   headers.set("X-Plexo-Hosting-Tier", app.hostingTier ?? "LAMBDA");
