@@ -75,6 +75,8 @@ export default async function TemplateDetailPage(props: {
     blogEnabled: boolean;
     siteLayoutEnabled: boolean;
     commerceEnabled: boolean;
+    /** The site owner's plan includes server apps (ULTRA). Gates the Server app and Variables & secrets tabs. */
+    ssrEnabled: boolean;
     deployedApp: {
       framework: string;
       spaMode: boolean;
@@ -124,6 +126,7 @@ export default async function TemplateDetailPage(props: {
       blogEnabled: blogSite?.enabled ?? false,
       siteLayoutEnabled: siteLayout?.enabled ?? false,
       commerceEnabled: commerceSettings?.enabled ?? false,
+      ssrEnabled: getTierFeatures(ownerPlan).ssrEnabled,
       deployedApp: deployedAppRow
         ? {
             framework: deployedAppRow.framework ?? "spa",

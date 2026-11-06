@@ -32,6 +32,7 @@ type SiteData = {
   blogEnabled: boolean;
   siteLayoutEnabled: boolean;
   commerceEnabled: boolean;
+  ssrEnabled: boolean;
   deployedApp: {
     framework: string;
     spaMode: boolean;
@@ -631,8 +632,9 @@ export function DetailClient({
       ? [
           { id: "domain" as const, label: "Domain & traffic" },
           { id: "modules" as const, label: "Site modules" },
-          { id: "server" as const, label: siteData.deployedApp?.ssr ? "Server app" : "Deploy" },
-          { id: "variables" as const, label: "Variables & secrets" },
+          // A server app is ULTRA-only. A static site's deploy tab is open to every plan.
+          ...(!siteData.deployedApp?.ssr || siteData.ssrEnabled ? [{ id: "server" as const, label: siteData.deployedApp?.ssr ? "Server app" : "Deploy" }] : []),
+          ...(siteData.ssrEnabled ? [{ id: "variables" as const, label: "Variables & secrets" }] : []),
         ]
       : []),
   ];
@@ -1195,9 +1197,11 @@ export function DetailClient({
               )}
               </Pane>
 
-              <Pane active={tab === "variables"}>
-              <ServerSettingsPanel templateId={templateId} />
-              </Pane>
+              {siteData.ssrEnabled && (
+                <Pane active={tab === "variables"}>
+                <ServerSettingsPanel templateId={templateId} />
+                </Pane>
+              )}
 
               <Pane active={tab === "modules"}>
               <Card>

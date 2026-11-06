@@ -704,23 +704,25 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                 >
                   Upload your own
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setStartTab("server")}
-                  style={{
-                    fontSize: "12.5px",
-                    fontWeight: 650,
-                    padding: "7px 14px",
-                    borderRadius: 999,
-                    border: "none",
-                    cursor: "pointer",
-                    background: startTab === "server" ? "var(--brand)" : "transparent",
-                    color: startTab === "server" ? "#fff" : "var(--text-muted)",
-                    transition: "background 0.15s, color 0.15s",
-                  }}
-                >
-                  Server app
-                </button>
+                {plan === "ULTRA" && (
+                  <button
+                    type="button"
+                    onClick={() => setStartTab("server")}
+                    style={{
+                      fontSize: "12.5px",
+                      fontWeight: 650,
+                      padding: "7px 14px",
+                      borderRadius: 999,
+                      border: "none",
+                      cursor: "pointer",
+                      background: startTab === "server" ? "var(--brand)" : "transparent",
+                      color: startTab === "server" ? "#fff" : "var(--text-muted)",
+                      transition: "background 0.15s, color 0.15s",
+                    }}
+                  >
+                    Server app
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setStartTab("wordpress")}
@@ -891,47 +893,40 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                   <p style={{ margin: "0 0 20px", fontSize: "13px", color: "var(--text-muted)" }}>
                     Upload the source of a Next.js, Nuxt, Remix, Astro or Nitro app. Plexo builds it and runs it as an app on its own server.
                   </p>
-                  {plan !== "ULTRA" ? (
-                    <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-                      Server apps are available on the ULTRA plan.{" "}
-                      <Link href="/dashboard/settings/subscription" style={{ color: "var(--brand)" }}>See plans</Link>
-                    </p>
-                  ) : (
-                    <form onSubmit={(e) => void handleServerDeploy(e)} style={{ display: "grid", gap: 14, maxWidth: 480 }}>
-                      <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
-                        App name
-                        <input
-                          value={serverName}
-                          onChange={(e) => setServerName(e.target.value)}
-                          placeholder="My app"
-                          style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
-                        />
-                      </label>
-                      <div style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
-                        Source (.zip with package.json at its root)
-                        <ZipDropzone file={serverFile} onFile={setServerFile} accept=".zip" hint=".zip, with package.json at its root" disabled={serverBusy} />
-                      </div>
-                      <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.7, cursor: "pointer" }}>
-                        <input type="checkbox" checked={serverAgreed} onChange={(e) => setServerAgreed(e.target.checked)} style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0 }} />
-                        <span>
-                          I agree to the{" "}
-                          <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--brand)" }}>
-                            Acceptable Use Policy
-                          </Link>
-                          . The app's code is built and run on Plexo's servers exactly as uploaded.
-                        </span>
-                      </label>
-                      <div>
-                        <button
-                          type="submit"
-                          disabled={serverBusy || !serverFile || !serverName.trim() || !serverAgreed}
-                          style={primaryButtonStyle(!serverBusy && !!serverFile && !!serverName.trim() && serverAgreed)}
-                        >
-                          {serverBusy ? "Uploading…" : "Upload and build"}
-                        </button>
-                      </div>
-                    </form>
-                  )}
+                <form onSubmit={(e) => void handleServerDeploy(e)} style={{ display: "grid", gap: 14, maxWidth: 480 }}>
+                    <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
+                      App name
+                      <input
+                        value={serverName}
+                        onChange={(e) => setServerName(e.target.value)}
+                        placeholder="My app"
+                        style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                      />
+                    </label>
+                    <div style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
+                      Source (.zip with package.json at its root)
+                      <ZipDropzone file={serverFile} onFile={setServerFile} accept=".zip" hint=".zip, with package.json at its root" disabled={serverBusy} />
+                    </div>
+                    <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.7, cursor: "pointer" }}>
+                      <input type="checkbox" checked={serverAgreed} onChange={(e) => setServerAgreed(e.target.checked)} style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0 }} />
+                      <span>
+                        I agree to the{" "}
+                        <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--brand)" }}>
+                          Acceptable Use Policy
+                        </Link>
+                        . The app's code is built and run on Plexo's servers exactly as uploaded.
+                      </span>
+                    </label>
+                    <div>
+                      <button
+                        type="submit"
+                        disabled={serverBusy || !serverFile || !serverName.trim() || !serverAgreed}
+                        style={primaryButtonStyle(!serverBusy && !!serverFile && !!serverName.trim() && serverAgreed)}
+                      >
+                        {serverBusy ? "Uploading…" : "Upload and build"}
+                      </button>
+                    </div>
+                  </form>
                 </div>
               ) : startTab === "wordpress" ? (
                 <div style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 16, alignItems: "flex-start" }}>
