@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { DeployedApp } from "@/lib/db/appEntities";
 import { serveDeployedStatic } from "@/lib/pub/serveDeployedStatic";
+import { serveDeployedSsr } from "@/lib/pub/serveDeployedSsr";
+import { getTierFeatures } from "@/lib/subscription";
 
 // Single catch-all handler for all /blog/* paths. Sits at a lower specificity than
 // blog/feed.xml/route.ts and blog/sitemap.xml/route.ts, which keep their own handlers.
@@ -28,6 +30,18 @@ export async function GET(
     // Deployed static app owns all routes. Serve directly from S3 — the URL stays at
     // /blog/... without any redirect, so the browser address bar never changes.
     return serveDeployedStatic(request, deployedApp, ["blog", ...blogPath]);
+  }
+
+  if (deployedApp?.type === "SSR") {
+    // A server app owns its /blog pages (they're its own routes), so the app serves them, on the same plan rules
+    // as every other page of a server app.
+    const features = getTierFeatures(siteResult.published.user.subscriptionPlan);
+    if (!features.ssrEnabled) return new NextResponse(null, { status: 404 });
+    return serveDeployedSsr(request, deployedApp, ["blog", ...blogPath], {
+      templateId: siteResult.published.templateId,
+      dailyRequestLimit: features.deployedAppDailyRequestLimit,
+      onNotFound: () => new NextResponse(null, { status: 404 }),
+    });
   }
 
   // Regular Plexo blog site — proxy to the RSC pages that live under /_blog/.
