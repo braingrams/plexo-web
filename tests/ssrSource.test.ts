@@ -23,6 +23,10 @@ describe("detectSsrFramework", () => {
     expect(detectSsrFramework({ dependencies: { "@remix-run/node": "2.0.0" } })).toEqual({ framework: "remix" });
     expect(detectSsrFramework({ devDependencies: { astro: "5.0.0" } })).toEqual({ framework: "astro" });
   });
+  it("detects React Router framework mode (@react-router/*) as remix", () => {
+    expect(detectSsrFramework({ dependencies: { "@react-router/node": "8.5.1", react: "19" } })).toEqual({ framework: "remix" });
+    expect(detectSsrFramework({ devDependencies: { "@react-router/dev": "8.5.1" } })).toEqual({ framework: "remix" });
+  });
   it("rejects two frameworks at once", () => {
     expect("error" in detectSsrFramework({ dependencies: { next: "15", astro: "5" } })).toBe(true);
   });

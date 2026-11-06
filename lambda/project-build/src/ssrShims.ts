@@ -32,10 +32,10 @@ async function toLambdaResponse(response) {
 }
 `;
 
-/** Remix: the server build exports `build`; @remix-run/node turns requests into responses. */
-export function remixShim(serverEntryImport: string): string {
+/** Remix: the server build exports `build`. `requestHandlerPackage` is @remix-run/node for Remix, or react-router for React Router framework mode. */
+export function remixShim(serverEntryImport: string, requestHandlerPackage: string = "@remix-run/node"): string {
   return `import * as build from ${JSON.stringify(serverEntryImport)};
-import { createRequestHandler } from "@remix-run/node";
+import { createRequestHandler } from ${JSON.stringify(requestHandlerPackage)};
 ${LAMBDA_ADAPTER}
 const handleRequest = createRequestHandler(build, process.env.NODE_ENV ?? "production");
 const origin = "https://app.invalid";
