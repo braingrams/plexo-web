@@ -1,10 +1,11 @@
 "use client";
 
+import { ZipDropzone } from "../_components/ZipDropzone";
 import { SolIcon, SolOutOfCredits } from "../_components/sol/SolTopUp";
 import { useEffect, useRef, useState } from "react";
 import { AI_UNREACHABLE } from "@/lib/ai/requestErrors";
 import { checkAiCredits, generateWithProgress, type AiRequestBody } from "@/lib/ai/clientGenerate";
-import type { DragEvent, FormEvent } from "react";
+import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { MarketplaceListItem } from "@/lib/marketplace";
@@ -57,16 +58,6 @@ function IconCheck() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-
-function IconUpload() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 16V4" />
-      <path d="m7 9 5-5 5 5" />
-      <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
     </svg>
   );
 }
@@ -178,76 +169,6 @@ function primaryButtonStyle(enabled: boolean) {
   } as const;
 }
 
-function Dropzone({ file, onFile }: { file: File | null; onFile: (f: File | null) => void }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [dragActive, setDragActive] = useState(false);
-
-  function handleDrop(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setDragActive(false);
-    const dropped = e.dataTransfer.files?.[0];
-    if (dropped) onFile(dropped);
-  }
-
-  return (
-    <div
-      onClick={() => inputRef.current?.click()}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragActive(true);
-      }}
-      onDragLeave={() => setDragActive(false)}
-      onDrop={handleDrop}
-      role="button"
-      tabIndex={0}
-      style={{
-        cursor: "pointer",
-        borderRadius: 14,
-        border: `1.5px dashed ${dragActive ? "var(--brand)" : file ? "var(--success)" : hairline}`,
-        background: dragActive ? "var(--brand-subtle)" : "rgba(255,255,255,0.02)",
-        padding: "36px 20px",
-        textAlign: "center",
-        transition: "border-color 0.15s, background 0.15s",
-      }}
-    >
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".html,.htm,.zip"
-        onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-        style={{ display: "none" }}
-      />
-      <div
-        style={{
-          width: 44,
-          height: 44,
-          margin: "0 auto 14px",
-          borderRadius: 12,
-          background: "var(--brand-subtle)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <IconUpload />
-      </div>
-      {file ? (
-        <>
-          <div style={{ fontSize: "13.5px", fontWeight: 650, color: "var(--text-main)" }}>{file.name}</div>
-          <div style={{ fontSize: "11.5px", color: "var(--text-faint)", marginTop: 4 }}>
-            {(file.size / 1024).toFixed(0)} KB &middot; click or drop to replace
-          </div>
-        </>
-      ) : (
-        <>
-          <div style={{ fontSize: "13.5px", fontWeight: 650, color: "var(--text-main)" }}>Click to upload, or drag and drop</div>
-          <div style={{ fontSize: "11.5px", color: "var(--text-faint)", marginTop: 4 }}>.html, .htm, or .zip</div>
-        </>
-      )}
-    </div>
-  );
-}
-
 /**
  * The "create a site" flow. Works as the /dashboard/new page, and inside the shared modal
  * (NewSiteProvider), where `onClose` is set and the page header is hidden.
@@ -258,6 +179,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
   const [startTab, setStartTab] = useState<"marketplace" | "blank" | "ai" | "upload" | "server" | "wordpress">("marketplace");
   const [creatingBlank, setCreatingBlank] = useState(false);
   const [serverFile, setServerFile] = useState<File | null>(null);
+  const [serverAgreed, setServerAgreed] = useState(false);
   const [serverName, setServerName] = useState("");
   const [serverBusy, setServerBusy] = useState(false);
   const router = useRouter();
@@ -405,7 +327,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
   // If the upload fails, the empty site stays on the account and can be deleted from its page.
   async function handleServerDeploy(event: React.FormEvent) {
     event.preventDefault();
-    if (!serverFile || !serverName.trim()) return;
+    if (!serverFile || !serverName.trim() || !serverAgreed) return;
     if (serverFile.size > SERVER_ZIP_LIMIT_BYTES) {
       setError(`That zip is ${(serverFile.size / 1024 / 1024).toFixed(1)}MB. The limit is ${SERVER_ZIP_LIMIT_BYTES / 1024 / 1024}MB.`);
       return;
@@ -646,8 +568,8 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
           </>
         )}
 
-        {/* Stepper */}
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 32 }}>
+        {/* Stepper (padded on the right in the modal so the close button doesn't cover "Publish") */}
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 32, paddingRight: onClose ? 40 : 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <StepBadge n={1} active={step === 1} done={step > 1} />
             <span style={stepLabelStyle(step === 1, step > 1)}>Start</span>
@@ -967,7 +889,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                 <div>
                   <h2 style={{ margin: "0 0 4px", fontSize: "17px", fontWeight: 700 }}>Server app</h2>
                   <p style={{ margin: "0 0 20px", fontSize: "13px", color: "var(--text-muted)" }}>
-                    Upload the source of a Next.js, Remix, Astro, Nuxt, or Nitro app. Plexo builds it and runs it on its own server.
+                    Upload the source of a Next.js, Nuxt, Remix, Astro or Nitro app. Plexo builds it and runs it as an app on its own server.
                   </p>
                   {plan !== "ULTRA" ? (
                     <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>
@@ -977,7 +899,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                   ) : (
                     <form onSubmit={(e) => void handleServerDeploy(e)} style={{ display: "grid", gap: 14, maxWidth: 480 }}>
                       <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
-                        Site name
+                        App name
                         <input
                           value={serverName}
                           onChange={(e) => setServerName(e.target.value)}
@@ -985,15 +907,25 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                           style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
                         />
                       </label>
-                      <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
+                      <div style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
                         Source (.zip with package.json at its root)
-                        <input type="file" accept=".zip" onChange={(e) => setServerFile(e.target.files?.[0] ?? null)} />
+                        <ZipDropzone file={serverFile} onFile={setServerFile} accept=".zip" hint=".zip, with package.json at its root" disabled={serverBusy} />
+                      </div>
+                      <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.7, cursor: "pointer" }}>
+                        <input type="checkbox" checked={serverAgreed} onChange={(e) => setServerAgreed(e.target.checked)} style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0 }} />
+                        <span>
+                          I agree to the{" "}
+                          <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--brand)" }}>
+                            Acceptable Use Policy
+                          </Link>
+                          . The app's code is built and run on Plexo's servers exactly as uploaded.
+                        </span>
                       </label>
                       <div>
                         <button
                           type="submit"
-                          disabled={serverBusy || !serverFile || !serverName.trim()}
-                          style={primaryButtonStyle(!serverBusy && !!serverFile && !!serverName.trim())}
+                          disabled={serverBusy || !serverFile || !serverName.trim() || !serverAgreed}
+                          style={primaryButtonStyle(!serverBusy && !!serverFile && !!serverName.trim() && serverAgreed)}
                         >
                           {serverBusy ? "Uploading…" : "Upload and build"}
                         </button>
@@ -1023,7 +955,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                 </div>
               ) : (
                 <form onSubmit={handleUpload} style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 22 }}>
-                  <Dropzone file={file} onFile={setFile} />
+                  <ZipDropzone file={file} onFile={setFile} accept=".html,.htm,.zip" hint=".html, .htm, or .zip" />
                   <div>
                     <label style={{ fontSize: "11.5px", fontWeight: 650, color: "var(--text-muted)", display: "block", marginBottom: 8 }}>Site name (optional)</label>
                     <input type="text" value={uploadName} onChange={(e) => setUploadName(e.target.value)} placeholder="My site" style={inputStyle()} />

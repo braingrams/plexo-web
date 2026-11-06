@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { uploadSsrZip, queueSsrBuild } from "@/lib/projects/clientSsrUpload";
+import { ZipDropzone } from "../../../_components/ZipDropzone";
 
 // The deploy section for a server-rendered (SSR) app. Replaces the static-site upload: the zip is a
 // Next.js / Remix / Astro / Nuxt / Nitro project, built on the server, and goes live when published.
@@ -16,6 +18,7 @@ const button = (enabled: boolean): CSSProperties => ({
 
 export function SsrDeployPanel({ templateId }: { templateId: string }) {
   const [file, setFile] = useState<File | null>(null);
+  const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState<null | "upload" | "publish">(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -23,7 +26,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   async function upload() {
-    if (!file) return;
+    if (!file || !agreed) return;
     setBusy("upload"); setError(null); setNotice(null); setWarnings([]);
     const sent = await uploadSsrZip(templateId, file, (done, total) => setProgress(`Uploading ${done} of ${total}…`));
     if (!sent.ok) { setBusy(null); setProgress(null); return setError(sent.error); }
@@ -38,7 +41,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
 
   // Publishing runs in the background. The request returns straight away, then this polls for the outcome.
   async function publish() {
-    if (!window.confirm("Publish the latest preview to the live site? The live site switches to it, and there's no rollback yet.")) return;
+    if (!window.confirm("Publish the latest preview to the live app? The live app switches to it, and there's no rollback yet.")) return;
     setBusy("publish"); setError(null); setNotice(null); setWarnings([]);
     const res = await fetch(`/api/v1/templates/${templateId}/ssr-publish`, { method: "POST" });
     const data = await res.json().catch(() => ({}));
@@ -69,7 +72,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
       <h3 style={heading}>Server app</h3>
       <p style={muted}>
         Upload the app's source as a .zip (package.json at the root, or inside one folder). Leave out node_modules, .git and build output.
-        The server builds it. Publish the preview once the build succeeds to put it on the live site.
+        The server builds it and runs it as an app. Publish the preview once the build succeeds to put it live.
       </p>
 
       {error ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "#f87171" }}>{error}</p> : null}
@@ -79,15 +82,19 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
       ))}
       {progress ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--text-muted)" }}>{progress}</p> : null}
 
+      <div style={{ marginBottom: 14 }}>
+        <ZipDropzone file={file} onFile={setFile} accept=".zip,application/zip" hint=".zip, with package.json at its root" disabled={busy !== null} />
+      </div>
+      <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.6, cursor: "pointer", marginBottom: 14 }}>
+        <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy !== null} style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0 }} />
+        <span>
+          I agree to the{" "}
+          <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--brand)" }}>Acceptable Use Policy</Link>
+          . The app's code is built and run on Plexo's servers exactly as uploaded.
+        </span>
+      </label>
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <input
-          type="file"
-          accept=".zip,application/zip"
-          disabled={busy !== null}
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          style={{ fontSize: 13 }}
-        />
-        <button type="button" onClick={() => void upload()} disabled={!file || busy !== null} style={button(!!file && busy === null)}>
+        <button type="button" onClick={() => void upload()} disabled={!file || !agreed || busy !== null} style={button(!!file && agreed && busy === null)}>
           {busy === "upload" ? "Uploading…" : "Upload and build"}
         </button>
         <button type="button" onClick={() => void publish()} disabled={busy !== null} style={button(busy === null)}>
