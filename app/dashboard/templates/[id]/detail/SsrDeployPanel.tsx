@@ -38,7 +38,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
 
   // Publishing runs in the background. The request returns straight away, then this polls for the outcome.
   async function publish() {
-    if (!window.confirm("Publish the latest preview to the live site? The live site switches to it, and there's no rollback yet.")) return;
+    if (!window.confirm("Publish the latest preview to the live app? The live app switches to it, and there's no rollback yet.")) return;
     setBusy("publish"); setError(null); setNotice(null); setWarnings([]);
     const res = await fetch(`/api/v1/templates/${templateId}/ssr-publish`, { method: "POST" });
     const data = await res.json().catch(() => ({}));
@@ -69,7 +69,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
       <h3 style={heading}>Server app</h3>
       <p style={muted}>
         Upload the app's source as a .zip (package.json at the root, or inside one folder). Leave out node_modules, .git and build output.
-        The server builds it. Publish the preview once the build succeeds to put it on the live site.
+        The server builds it and runs it as an app. Publish the preview once the build succeeds to put it live.
       </p>
 
       {error ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "#f87171" }}>{error}</p> : null}
