@@ -80,6 +80,17 @@ describe("serveDeployedSsr", () => {
     expect(headers.authorization).not.toMatch(/x-forwarded-for/);
   });
 
+  it("does not copy Next.js's own cache headers from the app onto the response", async () => {
+    getObject.mockResolvedValue(null);
+    fetchMock.mockResolvedValue(new Response("<h1>Hi</h1>", { status: 200, headers: { "content-type": "text/html; charset=utf-8", "x-nextjs-cache": "HIT", "x-nextjs-prerender": "1", "x-nextjs-stale-time": "300", "x-powered-by": "Next.js" } }));
+    const res = await serveDeployedSsr(new NextRequest("https://site.test/"), app, [], { templateId: "tmpl1", dailyRequestLimit: 100 });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-nextjs-cache")).toBeNull();
+    expect(res.headers.get("x-nextjs-prerender")).toBeNull();
+    expect(res.headers.get("x-powered-by")).toBeNull();
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  });
+
   it("does not forward accept-encoding, so the app returns bytes that need no decoding", async () => {
     getObject.mockResolvedValue(null);
     fetchMock.mockResolvedValue(new Response("ok", { status: 200 }));
