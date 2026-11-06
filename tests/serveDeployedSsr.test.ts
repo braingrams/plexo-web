@@ -38,6 +38,15 @@ describe("serveDeployedSsr", () => {
     expect(res.headers.get("content-type")).toBe("text/javascript");
   });
 
+  it("serves a built asset requested under /__plexo/assets from the app's own files, without invoking the function", async () => {
+    getObject.mockResolvedValue({ body: Buffer.from("body{}"), contentType: "text/css", etag: '"c1"' });
+    const res = await serveDeployedSsr(new NextRequest("https://site.test/__plexo/assets/_next/static/chunks/a.css"), app, ["__plexo", "assets", "_next", "static", "chunks", "a.css"], { templateId: "tmpl1", dailyRequestLimit: 100 });
+    expect(getObject).toHaveBeenCalledWith(`${SITE_PREFIX}/_next/static/chunks/a.css`);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/css");
+  });
+
   it("proxies a page to the function URL with a SigV4 signature", async () => {
     getObject.mockResolvedValue(null);
     fetchMock.mockResolvedValue(new Response("<h1>Hi</h1>", { status: 200, headers: { "content-type": "text/html; charset=utf-8" } }));
