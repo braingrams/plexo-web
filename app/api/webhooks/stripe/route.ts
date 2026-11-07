@@ -7,6 +7,7 @@ import type { EntityItem } from "electrodb";
 import { grantTopup, grantPlanChangeAllowance } from "@/lib/db/ledgerOperations";
 import { creditsForCompletedTopup } from "@/lib/credits/topupOffer";
 import { getStripe } from "@/lib/stripe";
+import { syncPlanChangeToAlps } from "@/lib/alps";
 import type { SubscriptionPlan } from "@/lib/subscription";
 import { getMarketplaceOwnerUserId } from "@/lib/marketplaceListing";
 import { docClient } from "@/lib/db/client";
@@ -285,6 +286,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // the OLD (smaller) plan's balance for up to a month. Force it immediately here,
       // once, only on an actual change.
       if (previousPlan !== plan) {
+        syncPlanChangeToAlps({ id: plexoUserId, email: userBeforeUpdate.email, name: userBeforeUpdate.name, image: userBeforeUpdate.image }, plan, subscription.id);
         await grantPlanChangeAllowance(plexoUserId, plan);
         // A downgrade can drop the plan's included funnel-slot allotment (only Ultra ships
         // one) — reconcile every org this user owns, same mechanism an addon-slot

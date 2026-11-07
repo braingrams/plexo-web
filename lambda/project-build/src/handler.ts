@@ -69,6 +69,9 @@ async function scopedClients(job: BuildJob) {
       { Effect: "Allow", Action: ["s3:PutObject"], Resource: [`${projectArn}/builds/${job.buildId}/*`, `${projectArn}/deps/*`] },
       // The app's latest uploaded source (kept after builds so a rebuild needs no re-upload).
       { Effect: "Allow", Action: ["s3:GetObject"], Resource: `${projectArn}/ssr/*` },
+      // The saved-dependencies upload is tagged (plexo-cache=deps, for the bucket's expiry rule); a tagged PutObject also
+      // needs this. Without it the first build of any project with extra dependencies crashed AFTER installing them.
+      { Effect: "Allow", Action: ["s3:PutObjectTagging"], Resource: `${projectArn}/deps/*` },
       {
         Effect: "Allow",
         Action: ["dynamodb:UpdateItem"],
