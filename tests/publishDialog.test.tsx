@@ -46,8 +46,9 @@ describe("publishing from the dialog", () => {
     const button = [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Publish")!;
     await act(async () => {
       button.click();
-      await new Promise((r) => setTimeout(r, 20));
     });
+    // Wait for the publish to finish, rather than a fixed delay that a loaded test run can outlast.
+    await vi.waitFor(() => expect(calls.polls).toBe(1), { timeout: 2000 });
     expect(calls.polls).toBe(1);
     expect(onPublished).toHaveBeenCalled();
     expect(container.textContent).toContain("Your app is live");

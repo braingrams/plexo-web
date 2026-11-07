@@ -3,6 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { uploadSsrZip, queueSsrBuild } from "@/lib/projects/clientSsrUpload";
+import { useBuildLog } from "./useBuildLog";
 import { ZipDropzone } from "../../../_components/ZipDropzone";
 
 // The deploy section for a server-rendered (SSR) app. Replaces the static-site upload: the zip is a
@@ -18,6 +19,8 @@ const button = (enabled: boolean): CSSProperties => ({
 
 export function SsrDeployPanel({ templateId }: { templateId: string }) {
   const [file, setFile] = useState<File | null>(null);
+  const [buildId, setBuildId] = useState<string | null>(null);
+  const live = useBuildLog(buildId);
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState<null | "upload" | "publish">(null);
   const [progress, setProgress] = useState<string | null>(null);
@@ -36,6 +39,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
     if (!queued.ok) return setError(queued.error);
     setNotice(queued.data.message);
     setWarnings(queued.data.warnings);
+    setBuildId(queued.data.buildId);
     setFile(null);
   }
 
@@ -81,6 +85,17 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
         <p key={w} style={{ margin: "0 0 8px", fontSize: 12.5, color: "#fbbf24" }}>{w}</p>
       ))}
       {progress ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--text-muted)" }}>{progress}</p> : null}
+      {buildId ? (
+        <div style={{ marginBottom: 14 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 12.5, color: "var(--text-muted)" }}>
+            Build {live.status ? (live.status === "SUCCEEDED" ? "succeeded" : "failed") : "running"}
+            {live.summary ? `: ${live.summary}` : ""}
+          </p>
+          <pre style={{ margin: 0, maxHeight: 280, overflow: "auto", padding: 12, borderRadius: 10, background: "rgba(0,0,0,0.35)", fontSize: 11.5, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+            {live.lines.length ? live.lines.join("\n") : "Waiting for the build to start…"}
+          </pre>
+        </div>
+      ) : null}
 
       <div style={{ marginBottom: 14 }}>
         <ZipDropzone file={file} onFile={setFile} accept=".zip,application/zip" hint=".zip, with package.json at its root" disabled={busy !== null} />

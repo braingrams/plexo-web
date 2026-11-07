@@ -4,6 +4,8 @@ import { getBuild } from "@/lib/projects/builds";
 import { finalizeBuild } from "@/lib/projects/pipeline";
 import { parseSsrControlMessage } from "@/lib/appFunctions/ssrControl";
 import { runSsrControl } from "@/lib/appFunctions/ssrControlRun";
+import { parseLiveBuildMessage } from "@/lib/realtime/buildLog";
+import { publishBuildLog, publishBuildStatus } from "@/lib/realtime/buildLogPublish";
 
 // BuildFinalizeFn — runs a finished build's post-build steps (preview/live database
 // migrations, server-function deploys, the live switch for a release) as soon as the build
@@ -11,7 +13,8 @@ import { runSsrControl } from "@/lib/appFunctions/ssrControlRun";
 // finalizeBuild claims the work on the build row, so this and a concurrent poll from the
 // editor can't both run it.
 //
-// It also runs server-app control messages from SSR_CONTROL_QUEUE_URL (publish a preview, apply
+// It also relays the build worker's live output (build-log and build-status messages) to subscribers,
+// and runs server-app control messages from SSR_CONTROL_QUEUE_URL (publish a preview, apply
 // variables). Those change plexo-ssr-* functions, which only this function's role may do.
 
 let secretsLoaded: Promise<void> | null = null;
@@ -28,6 +31,14 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
   const failures: SQSBatchResponse["batchItemFailures"] = [];
   for (const record of event.Records) {
     try {
+      // Live build output and status come from the build worker. They are relayed to the build's
+      // private channel, and nothing else is done for them.
+      const live = parseLiveBuildMessage(record.body);
+      if (live) {
+        if (live.type === "build-log") await publishBuildLog(live);
+        else await publishBuildStatus(live);
+        continue;
+      }
       const body = JSON.parse(record.body) as { buildId?: string; kind?: string };
       if (body.kind) {
         const message = parseSsrControlMessage(record.body);

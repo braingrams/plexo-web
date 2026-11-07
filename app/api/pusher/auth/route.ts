@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
 import { authorizeChannel } from "@/lib/realtime/pusher";
+import { buildLogChannelName } from "@/lib/realtime/buildLog";
+import { getBuild } from "@/lib/projects/builds";
 
 /**
  * Pusher's private-channel auth endpoint (see lib/realtime/pusherClient.ts's
@@ -40,6 +42,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     const { data: template } = await Template.get({ id: templateId }).go();
     if (!template || template.organizationId !== organizationId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    return NextResponse.json(authorizeChannel(socketId, channel));
+  }
+
+  // A build's live log: any member of the organization that owns the build.
+  const buildMatch = channel.match(/^private-build-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+  if (buildMatch) {
+    const build = await getBuild(buildMatch[1]);
+    if (!build || build.organizationId !== resolved.organizationId || buildLogChannelName(build.id) !== channel) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     return NextResponse.json(authorizeChannel(socketId, channel));
