@@ -4,7 +4,8 @@ import { getBuild } from "@/lib/projects/builds";
 import { finalizeBuild } from "@/lib/projects/pipeline";
 import { parseSsrControlMessage } from "@/lib/appFunctions/ssrControl";
 import { runSsrControl } from "@/lib/appFunctions/ssrControlRun";
-import { parseLiveBuildMessage, publishBuildLog, publishBuildStatus } from "@/lib/realtime/buildLog";
+import { parseLiveBuildMessage } from "@/lib/realtime/buildLog";
+import { publishBuildLog, publishBuildStatus } from "@/lib/realtime/buildLogPublish";
 
 // BuildFinalizeFn — runs a finished build's post-build steps (preview/live database
 // migrations, server-function deploys, the live switch for a release) as soon as the build
