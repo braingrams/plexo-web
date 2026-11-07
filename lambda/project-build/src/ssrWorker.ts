@@ -58,8 +58,14 @@ function scrubbedEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
 function runNode(args: string[], cwd: string, env: Record<string, string>, log: string[]): Promise<number> {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, args, { cwd, env: scrubbedEnv(env), stdio: ["ignore", "pipe", "pipe"] });
-    child.stdout.on("data", (chunk) => log.push(chunk.toString()));
-    child.stderr.on("data", (chunk) => log.push(chunk.toString()));
+    // Output goes to our stdout as it arrives, so the handler can stream it to the live build log.
+    const emit = (chunk: Buffer) => {
+      const text = chunk.toString();
+      log.push(text);
+      process.stdout.write(text);
+    };
+    child.stdout.on("data", emit);
+    child.stderr.on("data", emit);
     child.on("close", (code) => resolve(code ?? 1));
   });
 }
@@ -98,7 +104,11 @@ async function main() {
   // 2. The framework's build. The Next.js config is prepared first: no static HTML export (which would hide the
   // server build), and built assets under the app asset prefix (served by the web app).
   if (input.framework === "nextjs") {
-    for (const change of prepareNextConfig(input.appDir)) log.push(`Next.js config, ${change}.\n`);
+    for (const change of prepareNextConfig(input.appDir)) {
+      const line = `Next.js config, ${change}.\n`;
+      log.push(line);
+      process.stdout.write(line);
+    }
   }
   for (const step of plan.buildSteps) {
     if ((await runNode(npm(step), input.appDir, env, log)) !== 0) {

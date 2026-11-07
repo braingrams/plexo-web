@@ -23,6 +23,8 @@ import { planInstall, InstallPlanError, type BaseVersions } from "./installPlan"
 import { missingAdapterMessage } from "./ssrPlan";
 import type { WorkerInput, WorkerOutput } from "./worker";
 import type { SsrWorkerInput, SsrWorkerOutput } from "./ssrWorker";
+import { createLogStreamer } from "./logStreamer";
+import type { BuildLogMessage, BuildStatusMessage } from "../../../lib/realtime/buildLog";
 import { unzipSync, zipSync } from "fflate";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
@@ -33,6 +35,20 @@ const TMP = "/tmp/plexo";
 const sts = new STSClient({ region: REGION });
 // The function's own role (not the per-build scoped one) may send to this one queue only.
 const sqs = new SQSClient({ region: REGION });
+
+/** Sends one live-log batch to the events queue (relayed to subscribers by BuildFinalizeFn). Best effort:
+ * a dropped batch only costs those lines in the live view, and the full log is still saved to S3. */
+async function sendBuildLog(message: BuildLogMessage): Promise<void> {
+  const queueUrl = process.env.BUILD_EVENTS_QUEUE_URL;
+  if (!queueUrl) return;
+  await sqs.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify(message) })).catch((err) => console.error("live log send failed", err));
+}
+
+async function sendBuildStatus(message: BuildStatusMessage): Promise<void> {
+  const queueUrl = process.env.BUILD_EVENTS_QUEUE_URL;
+  if (!queueUrl) return;
+  await sqs.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify(message) })).catch((err) => console.error("live status send failed", err));
+}
 
 /** Tells the app the build is done, so its post-build steps run right away
  * (lambda/build-finalize). Best effort: a poll from the editor finalizes it too. */
@@ -242,6 +258,8 @@ async function processJob(job: BuildJob): Promise<void> {
       finishedAt: result.finishedAt,
       durationMs,
     });
+    // Subscribers to the live log learn the final state here, for both success and failure.
+    await sendBuildStatus({ type: "build-status", buildId: job.buildId, templateId: job.templateId, status: result.status as "SUCCEEDED" | "FAILED", summary: result.summary });
     if (!failed) await announce(job.buildId);
   };
 
@@ -398,7 +416,7 @@ async function buildSsr(
     imageFnDir: dirs.imgFnOut,
     buildEnv: job.publicEnv,
   };
-  const output = await runSsrWorker(input, join(TMP, "ssr-input.json"), join(TMP, "ssr-result.json"));
+  const output = await runSsrWorker(input, join(TMP, "ssr-input.json"), join(TMP, "ssr-result.json"), { buildId: job.buildId, templateId: job.templateId });
   if (!output.ok) {
     const errors: BuildDiagnostic[] = output.errors.map((e) => ({ kind: e.kind === "bundle" ? "build" : e.kind, message: e.message, snippet: e.snippet }));
     return await finish(errors, [], output.log);
@@ -435,22 +453,31 @@ async function buildSsr(
   await finish([], [], output.log, { server, ...(imageBundle ? { image: imageBundle } : {}) });
 }
 
-function runSsrWorker(input: SsrWorkerInput, inputPath: string, resultPath: string): Promise<SsrWorkerOutput> {
+function runSsrWorker(input: SsrWorkerInput, inputPath: string, resultPath: string, live: { buildId: string; templateId: string }): Promise<SsrWorkerOutput> {
   writeFileSync(inputPath, JSON.stringify(input));
   return new Promise((resolve) => {
     const child = spawn(process.execPath, ["/var/task/ssrWorker.mjs", inputPath, resultPath], {
       cwd: input.appDir,
       // Same isolation as the static build: no AWS credentials reach the child.
       env: { PATH: "/var/lang/bin:/usr/local/bin:/usr/bin:/bin", HOME: join(TMP, "home"), NODE_ENV: "production", npm_config_update_notifier: "false", CI: "1" },
-      stdio: ["ignore", "inherit", "inherit"],
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    // The child's output is streamed to the build's live log as it arrives, and also kept for CloudWatch.
+    const streamer = createLogStreamer((batch) => sendBuildLog({ type: "build-log", ...live, ...batch }));
+    child.stdout.on("data", (chunk: Buffer) => {
+      process.stdout.write(chunk);
+      streamer.push(chunk.toString());
     });
     const timer = setTimeout(() => child.kill("SIGKILL"), 13 * 60 * 1000);
     child.on("close", () => {
       clearTimeout(timer);
-      const output: SsrWorkerOutput = existsSync(resultPath)
-        ? JSON.parse(readFileSync(resultPath, "utf8"))
-        : { ok: false, errors: [{ kind: "build", message: "The server build ran out of time or memory. Large dependencies are the usual cause." }], log: "", hasClient: false };
-      resolve(output);
+      // Send the last lines before reporting the result, so the live log is complete when the build ends.
+      void streamer.close().then(() => {
+        const output: SsrWorkerOutput = existsSync(resultPath)
+          ? JSON.parse(readFileSync(resultPath, "utf8"))
+          : { ok: false, errors: [{ kind: "build", message: "The server build ran out of time or memory. Large dependencies are the usual cause." }], log: "", hasClient: false };
+        resolve(output);
+      });
     });
   });
 }

@@ -28,7 +28,7 @@ export async function uploadSsrZip(templateId: string, file: File, onPart?: (sen
   return { ok: false, error: "The upload didn't finish. Try again." };
 }
 
-export async function queueSsrBuild(templateId: string, uploadKey: string): Promise<Result<{ message: string; warnings: string[] }>> {
+export async function queueSsrBuild(templateId: string, uploadKey: string): Promise<Result<{ buildId: string; message: string; warnings: string[] }>> {
   const res = await fetch(`/api/v1/templates/${templateId}/ssr-deploy`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -36,5 +36,5 @@ export async function queueSsrBuild(templateId: string, uploadKey: string): Prom
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) return { ok: false, error: data.error ?? `The server couldn't start the build (server responded ${res.status}). Try again.` };
-  return { ok: true, data: { message: data.message as string, warnings: (data.warnings ?? []) as string[] } };
+  return { ok: true, data: { buildId: data.buildId as string, message: data.message as string, warnings: (data.warnings ?? []) as string[] } };
 }
