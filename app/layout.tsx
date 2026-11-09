@@ -54,6 +54,17 @@ export default function RootLayout({
       <head>
         {/* Every colour variable the site uses, generated from lib/theme.ts: change the theme there and it changes everywhere. */}
         <style id="plexo-theme" dangerouslySetInnerHTML={{ __html: themeCss() }} />
+        {/* Microsoft Clarity (For the app) */}
+        <script
+          type="text/javascript"
+          dangerouslySetInnerHTML={{
+            __html: `(function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "zawu6g4f6x");`,
+          }}
+        />
       </head>
       <body>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
