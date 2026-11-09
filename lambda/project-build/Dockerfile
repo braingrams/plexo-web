@@ -6,7 +6,7 @@ WORKDIR /build
 COPY lambda/project-build/package.json lambda/project-build/package-lock.json ./lambda/project-build/
 RUN cd lambda/project-build && npm ci --no-audit --no-fund
 COPY lambda/project-build ./lambda/project-build
-COPY lib/projects/buildJob.ts lib/projects/diagnostics.ts ./lib/projects/
+COPY lib/projects/buildJob.ts lib/projects/diagnostics.ts lib/projects/envFileNames.ts ./lib/projects/
 RUN cd lambda/project-build && node build.mjs
 
 # The pre-installed dependency set: the project scaffold's own package.json, installed the
