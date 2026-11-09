@@ -22,6 +22,8 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
   const [file, setFile] = useState<File | null>(null);
   const [buildId, setBuildId] = useState<string | null>(null);
   const live = useBuildLog(buildId);
+  // A build is running while it has been queued and hasn't reported a final status. Hide the controls then.
+  const building = buildId !== null && live.status === null;
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState<null | "upload" | "publish">(null);
   const [progress, setProgress] = useState<string | null>(null);
@@ -99,25 +101,29 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
         </div>
       ) : null}
 
-      <div style={{ marginBottom: 14 }}>
-        <ZipDropzone file={file} onFile={setFile} accept=".zip,application/zip" hint=".zip, with package.json at its root" disabled={busy !== null} />
-      </div>
-      <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.6, cursor: "pointer", marginBottom: 14 }}>
-        <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy !== null} style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0 }} />
-        <span>
-          I agree to the{" "}
-          <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--brand)" }}>Acceptable Use Policy</Link>
-          . The app's code is built and run on Plexo's servers exactly as uploaded.
-        </span>
-      </label>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <button type="button" onClick={() => void upload()} disabled={!file || !agreed || busy !== null} style={button(!!file && agreed && busy === null)}>
-          {busy === "upload" ? "Uploading…" : "Upload and build"}
-        </button>
-        <button type="button" onClick={() => void publish()} disabled={busy !== null} style={button(busy === null)}>
-          {busy === "publish" ? "Publishing…" : "Publish preview"}
-        </button>
-      </div>
+      {!building ? (
+        <>
+        <div style={{ marginBottom: 14 }}>
+          <ZipDropzone file={file} onFile={setFile} accept=".zip,application/zip" hint=".zip, with package.json at its root" disabled={busy !== null} />
+        </div>
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.6, cursor: "pointer", marginBottom: 14 }}>
+          <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy !== null} style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0 }} />
+          <span>
+            I agree to the{" "}
+            <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--brand)" }}>Acceptable Use Policy</Link>
+            . The app's code is built and run on Plexo's servers exactly as uploaded.
+          </span>
+        </label>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <button type="button" onClick={() => void upload()} disabled={!file || !agreed || busy !== null} style={button(!!file && agreed && busy === null)}>
+            {busy === "upload" ? "Uploading…" : "Upload and build"}
+          </button>
+          <button type="button" onClick={() => void publish()} disabled={busy !== null} style={button(busy === null)}>
+            {busy === "publish" ? "Publishing…" : "Publish preview"}
+          </button>
+        </div>
+        </>
+      ) : null}
     </div>
   );
 }
