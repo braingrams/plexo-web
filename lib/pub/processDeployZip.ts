@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { isEnvFilePath } from "@/lib/projects/envFileNames";
 import mime from "mime";
 import { DeployedApp, type RedirectRule } from "@/lib/db/appEntities";
 import { uploadObject } from "@/lib/storage";
@@ -101,6 +102,8 @@ export async function processDeployZip(
       : entry.name;
     normalized = normalized.replace(/^\.?\//, "");
     if (!normalized) continue;
+    // Environment files never reach the site (see lib/projects/envFiles.ts).
+    if (isEnvFilePath(normalized)) continue;
 
     if (normalized.includes("..") || normalized.startsWith("/") || /^[a-zA-Z]:/.test(normalized)) {
       throw new DeployError(`Unsafe path in zip: "${entry.name}".`, 400);

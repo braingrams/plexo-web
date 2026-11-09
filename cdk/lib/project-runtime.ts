@@ -72,7 +72,7 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
       file: "lambda/project-build/Dockerfile",
       platform: cdk.aws_ecr_assets.Platform.LINUX_AMD64,
       // The build context is the repo root, but the image only needs these.
-      exclude: ["**", "!lambda/project-build/**", "lambda/project-build/node_modules", "lambda/project-build/dist", "!lib/projects/buildJob.ts", "!lib/projects/diagnostics.ts", "!lib/projects/scaffold/template/package.json"],
+      exclude: ["**", "!lambda/project-build/**", "lambda/project-build/node_modules", "lambda/project-build/dist", "!lib/projects/buildJob.ts", "!lib/projects/diagnostics.ts", "!lib/projects/envFileNames.ts", "!lib/projects/scaffold/template/package.json"],
     }),
     architecture: lambda.Architecture.X86_64,
     memorySize: 4096,

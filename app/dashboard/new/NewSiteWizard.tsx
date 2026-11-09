@@ -1,6 +1,7 @@
 "use client";
 
 import { ZipDropzone } from "../_components/ZipDropzone";
+import { stripEnvFilesInBrowser } from "@/lib/projects/clientSsrUpload";
 import { SolIcon, SolOutOfCredits } from "../_components/sol/SolTopUp";
 import { useEffect, useRef, useState } from "react";
 import { AI_UNREACHABLE } from "@/lib/ai/requestErrors";
@@ -349,8 +350,10 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
 
       // 1. Send the zip in 3 MB parts through this app, which stages them in storage. Each part
       //    stays under Lambda's request limit, and the file never goes to storage from the browser.
+      // Environment files are removed in the browser, so their bytes are never sent.
+      const { file: uploadFile } = await stripEnvFilesInBrowser(serverFile);
       const CHUNK = 3 * 1024 * 1024;
-      const total = Math.max(1, Math.ceil(serverFile.size / CHUNK));
+      const total = Math.max(1, Math.ceil(uploadFile.size / CHUNK));
       const session = crypto.randomUUID();
       let uploadKey: string | null = null;
       for (let index = 0; index < total; index++) {
@@ -362,7 +365,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
             "X-Chunk-Index": String(index),
             "X-Chunk-Total": String(total),
           },
-          body: serverFile.slice(index * CHUNK, (index + 1) * CHUNK),
+          body: uploadFile.slice(index * CHUNK, (index + 1) * CHUNK),
         });
         const partData = await part.json().catch(() => ({}));
         if (!part.ok) {

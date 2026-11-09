@@ -2,11 +2,21 @@
 // stages and assembles it server-side. Then ssr-deploy queues the build from the assembled zip.
 // Nothing is sent from the browser straight to storage.
 
+import { removeEnvFilesFromZip } from "./envFiles";
+
 const PART_BYTES = 3 * 1024 * 1024;
+
+/** Removes environment files from the zip in the browser, so their bytes are never sent. */
+export async function stripEnvFilesInBrowser(file: File): Promise<{ file: File; dropped: string[] }> {
+  const { bytes, dropped } = await removeEnvFilesFromZip(new Uint8Array(await file.arrayBuffer()));
+  if (!dropped.length) return { file, dropped };
+  return { file: new File([bytes.slice().buffer], file.name, { type: "application/zip" }), dropped };
+}
 
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
-export async function uploadSsrZip(templateId: string, file: File, onPart?: (sent: number, total: number) => void): Promise<Result<{ uploadKey: string }>> {
+export async function uploadSsrZip(templateId: string, original: File, onPart?: (sent: number, total: number) => void): Promise<Result<{ uploadKey: string; dropped: string[] }>> {
+  const { file, dropped } = await stripEnvFilesInBrowser(original);
   const total = Math.max(1, Math.ceil(file.size / PART_BYTES));
   const session = crypto.randomUUID();
   for (let index = 0; index < total; index++) {
@@ -23,7 +33,7 @@ export async function uploadSsrZip(templateId: string, file: File, onPart?: (sen
     const data = await res.json().catch(() => ({}));
     if (!res.ok) return { ok: false, error: data.error ?? `The upload stopped at part ${index + 1} of ${total} (server responded ${res.status}). Try again.` };
     onPart?.(index + 1, total);
-    if (data.status === "assembled") return { ok: true, data: { uploadKey: data.uploadKey as string } };
+    if (data.status === "assembled") return { ok: true, data: { uploadKey: data.uploadKey as string, dropped } };
   }
   return { ok: false, error: "The upload didn't finish. Try again." };
 }

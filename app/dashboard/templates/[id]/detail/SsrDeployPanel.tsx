@@ -4,6 +4,7 @@ import { useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { uploadSsrZip, queueSsrBuild } from "@/lib/projects/clientSsrUpload";
 import { useBuildLog } from "./useBuildLog";
+import { envFilesDroppedMessage } from "@/lib/projects/envFileNames";
 import { ZipDropzone } from "../../../_components/ZipDropzone";
 
 // The deploy section for a server-rendered (SSR) app. Replaces the static-site upload: the zip is a
@@ -33,6 +34,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
     setBusy("upload"); setError(null); setNotice(null); setWarnings([]);
     const sent = await uploadSsrZip(templateId, file, (done, total) => setProgress(`Uploading ${done} of ${total}…`));
     if (!sent.ok) { setBusy(null); setProgress(null); return setError(sent.error); }
+    if (sent.data.dropped.length) setNotice(envFilesDroppedMessage(sent.data.dropped));
     setProgress("Queuing the build…");
     const queued = await queueSsrBuild(templateId, sent.data.uploadKey);
     setBusy(null); setProgress(null);
