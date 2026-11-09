@@ -24,6 +24,7 @@ import { missingAdapterMessage } from "./ssrPlan";
 import type { WorkerInput, WorkerOutput } from "./worker";
 import type { SsrWorkerInput, SsrWorkerOutput } from "./ssrWorker";
 import { createLogStreamer } from "./logStreamer";
+import { isEnvFilePath } from "../../../lib/projects/envFileNames";
 import type { BuildLogMessage, BuildStatusMessage } from "../../../lib/realtime/buildLog";
 import { unzipSync, zipSync } from "fflate";
 
@@ -387,6 +388,8 @@ async function buildSsr(
     if (name.endsWith("/") || !name.startsWith(root)) continue;
     const rel = name.slice(root.length);
     if (rel.startsWith("node_modules/")) continue;
+    // Environment files never reach the build (see lib/projects/envFileNames.ts).
+    if (isEnvFilePath(rel)) continue;
     const target = join(dirs.workDir, rel);
     if (relative(dirs.workDir, target).startsWith("..")) continue;
     mkdirSync(dirname(target), { recursive: true });

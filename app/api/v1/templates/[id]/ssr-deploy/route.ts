@@ -127,7 +127,7 @@ async function queueBuild(
       templateId,
       organizationId: resolved.organizationId,
       requestedBy: resolved.userId,
-      sourceZip,
+      sourceZip: inspected.source,
       framework: inspected.framework,
       root: inspected.root,
       publicEnv: buildVars,

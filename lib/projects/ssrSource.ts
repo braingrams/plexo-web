@@ -3,6 +3,8 @@
 // Pure apart from JSZip, so it runs in the app (route) and in tests without AWS.
 
 import JSZip from "jszip";
+import { removeEnvFilesFromZip } from "./envFiles";
+import { envFilesDroppedMessage } from "./envFileNames";
 
 export const SSR_MAX_ZIP_BYTES = 100 * 1024 * 1024;
 export const SSR_MAX_FILE_COUNT = 10_000;
@@ -12,7 +14,7 @@ export const SSR_MAX_FILE_COUNT = 10_000;
 export type SsrFramework = "nextjs" | "nuxt" | "nitro" | "remix" | "astro";
 
 export type SsrSourceResult =
-  | { ok: true; framework: SsrFramework; root: string; packageJson: Record<string, unknown>; warnings: string[] }
+  | { ok: true; framework: SsrFramework; root: string; packageJson: Record<string, unknown>; warnings: string[]; source: Uint8Array }
   | { ok: false; error: string };
 
 /** Frameworks that are switched off at upload. Empty: every supported framework is on. To switch
@@ -64,10 +66,18 @@ function findRoot(names: string[]): string | null {
   return sameWrapper && names.includes(`${first}/package.json`) ? `${first}/` : null;
 }
 
-export async function inspectSsrSource(buffer: Uint8Array): Promise<SsrSourceResult> {
-  if (buffer.byteLength > SSR_MAX_ZIP_BYTES) {
+export async function inspectSsrSource(upload: Uint8Array): Promise<SsrSourceResult> {
+  if (upload.byteLength > SSR_MAX_ZIP_BYTES) {
     return { ok: false, error: `Source zip exceeds the ${SSR_MAX_ZIP_BYTES / 1024 / 1024}MB limit.` };
   }
+  // Environment files are removed first, so the stored source and the build never see them.
+  let cleaned: { bytes: Uint8Array; dropped: string[] };
+  try {
+    cleaned = await removeEnvFilesFromZip(upload);
+  } catch {
+    return { ok: false, error: "Could not read the uploaded file as a zip archive." };
+  }
+  const buffer = cleaned.bytes;
   let zip: JSZip;
   try {
     zip = await JSZip.loadAsync(buffer);
@@ -99,5 +109,6 @@ export async function inspectSsrSource(buffer: Uint8Array): Promise<SsrSourceRes
   if (names.some((name) => name.startsWith(`${root}node_modules/`))) {
     warnings.push("node_modules in this upload will be dropped. The build installs dependencies from package.json and package-lock.json.");
   }
-  return { ok: true, framework: detected.framework, root, packageJson, warnings };
+  if (cleaned.dropped.length) warnings.push(envFilesDroppedMessage(cleaned.dropped));
+  return { ok: true, framework: detected.framework, root, packageJson, warnings, source: buffer };
 }
