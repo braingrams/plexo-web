@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PageContainer } from "../../../_components/PageContainer";
@@ -8,8 +8,18 @@ import { Card } from "../../../_components/Card";
 import { CustomSelect } from "../../../../_components/CustomSelect";
 import { SiteAppearancePanel } from "./SiteAppearancePanel";
 import { DeployPanel } from "./DeployPanel";
+import { ServerSettingsPanel } from "./ServerSettingsPanel";
+import { SsrDeployPanel } from "./SsrDeployPanel";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
+
+// The sections of this page, one per tab in the left nav. Each section shows only its own cards.
+type DetailTab = "preview" | "properties" | "domain" | "modules" | "server" | "variables";
+
+/** Keeps its children mounted and only hides them, so a section's form input survives a tab switch. */
+function Pane({ active, children }: { active: boolean; children: ReactNode }) {
+  return <div hidden={!active}>{children}</div>;
+}
 
 type SiteData = {
   domain: {
@@ -22,10 +32,14 @@ type SiteData = {
   blogEnabled: boolean;
   siteLayoutEnabled: boolean;
   commerceEnabled: boolean;
+  ssrEnabled: boolean;
   deployedApp: {
     framework: string;
     spaMode: boolean;
     updatedAt: string;
+    hostingTier: string;
+    allowedTiers: string[];
+    ssr: boolean;
   } | null;
 };
 
@@ -445,6 +459,7 @@ export function DetailClient({
   const [sourceTab, setSourceTab] = useState<"json" | "html" | "text">("html");
   const [copied, setCopied] = useState(false);
   const [showSource, setShowSource] = useState(false);
+  const [tab, setTab] = useState<DetailTab>("preview");
 
   // Preview: the page this Detail route already has HTML for is seeded straight into the
   // cache — switching to any other page in the site fetches it on demand. Two fields per
@@ -609,6 +624,21 @@ export function DetailClient({
           )
         : selectedPreviewHtml;
 
+  // Only the sections this site has. Domain, modules, server and variables need a LANDING_PAGE site.
+  const tabs: Array<{ id: DetailTab; label: string }> = [
+    { id: "preview", label: "Preview" },
+    { id: "properties", label: "Properties" },
+    ...(siteData
+      ? [
+          { id: "domain" as const, label: "Domain & traffic" },
+          { id: "modules" as const, label: "Site modules" },
+          // A server app is ULTRA-only. A static site's deploy tab is open to every plan.
+          ...(!siteData.deployedApp?.ssr || siteData.ssrEnabled ? [{ id: "server" as const, label: siteData.deployedApp?.ssr ? "Server app" : "Deploy" }] : []),
+          ...(siteData.ssrEnabled ? [{ id: "variables" as const, label: "Variables & secrets" }] : []),
+        ]
+      : []),
+  ];
+
   return (
     <PageContainer>
       <Link
@@ -756,17 +786,26 @@ export function DetailClient({
         </button>
       </div>
 
-      <div className="detail-grid">
-        {/* Preview, Sidebar, and the "bottom group" (View Source + Danger Zone) are three
-            explicit named grid areas (see the <style jsx> block) rather than relying on
-            plain auto-placement — auto-placement put Sidebar entirely in the same row as
-            Preview, so row 1's height became whichever of the two was taller, leaving a
-            gap before Bottom (row 2) started whenever Sidebar was the taller one. Named
-            areas with Sidebar spanning both rows size Preview/Bottom's own column purely
-            from their own content, independent of Sidebar's height — any leftover
-            difference becomes ordinary trailing space at the bottom of whichever column is
-            shorter, not a gap in the middle of one. */}
-        <div className="detail-grid-preview" style={{ minWidth: 0 }}>
+      <div className="detail-shell">
+        <nav className="detail-nav" aria-label="Site sections">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className="detail-nav-item"
+              data-active={tab === t.id}
+              aria-current={tab === t.id ? "page" : undefined}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="detail-content">
+        {/* Preview tab: the live preview. View Source sits here too (see the bottom group). */}
+        <Pane active={tab === "preview"}>
+        <div style={{ minWidth: 0 }}>
           <Card>
             <div style={CARD_HEADER}>
               <div>
@@ -862,10 +901,10 @@ export function DetailClient({
             </div>
           </Card>
         </div>
+        </Pane>
 
-        {/* Sidebar column */}
+        {/* Sidebar: each card belongs to one tab, and the Panes below decide which one shows. */}
         <div
-          className="detail-grid-sidebar"
           style={{
             display: "flex",
             flexDirection: "column",
@@ -873,6 +912,7 @@ export function DetailClient({
             minWidth: 0,
           }}
         >
+          <Pane active={tab === "properties"}>
           <Card>
             <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>
               Properties
@@ -1006,9 +1046,11 @@ export function DetailClient({
               </div>
             )}
           </Card>
+          </Pane>
 
           {siteData && (
             <>
+              <Pane active={tab === "domain"}>
               <Card>
                 <div style={CARD_HEADER}>
                   <h2 style={CARD_TITLE}>Domain &amp; Traffic</h2>
@@ -1050,7 +1092,9 @@ export function DetailClient({
                   </Link>
                 </div>
               </Card>
+              </Pane>
 
+              <Pane active={tab === "modules"}>
               <Card>
                 <h2 style={{ ...CARD_TITLE, marginBottom: "0.9rem" }}>
                   Site Modules
@@ -1139,13 +1183,27 @@ export function DetailClient({
                   </div>
                 </div>
               </Card>
+              </Pane>
 
-              <DeployPanel
-                templateId={templateId}
-                initialDeployedApp={siteData.deployedApp}
-                liveDomain={siteData.domain?.domain ?? null}
-              />
+              <Pane active={tab === "server"}>
+              {siteData.deployedApp?.ssr ? (
+                <SsrDeployPanel templateId={templateId} />
+              ) : (
+                <DeployPanel
+                  templateId={templateId}
+                  initialDeployedApp={siteData.deployedApp}
+                  liveDomain={siteData.domain?.domain ?? null}
+                />
+              )}
+              </Pane>
 
+              {siteData.ssrEnabled && (
+                <Pane active={tab === "variables"}>
+                <ServerSettingsPanel templateId={templateId} />
+                </Pane>
+              )}
+
+              <Pane active={tab === "modules"}>
               <Card>
                 <div style={ROW}>
                   <span style={LABEL}>Pages</span>
@@ -1240,14 +1298,13 @@ export function DetailClient({
                   </Link>
                 </div>
               </Card>
+              </Pane>
             </>
           )}
         </div>
 
-        {/* Bottom group — named grid area "bottom" (see the <style jsx> block): sits under
-            Preview in the same column on desktop, and last on mobile's single column. */}
+        {/* Bottom group: appearance and danger zone (Properties), and View Source (Preview). */}
         <div
-          className="detail-grid-bottom"
           style={{
             display: "flex",
             flexDirection: "column",
@@ -1255,10 +1312,13 @@ export function DetailClient({
             minWidth: 0,
           }}
         >
+          <Pane active={tab === "properties"}>
           {siteData && <SiteAppearancePanel templateId={templateId} />}
+          </Pane>
 
           {/* View Source — collapsed by default; a debugging/inspection aid, not something
               most visits to this page need open. */}
+          <Pane active={tab === "preview"}>
           <Card padded={false}>
             <button
               type="button"
@@ -1369,8 +1429,10 @@ export function DetailClient({
               </div>
             )}
           </Card>
+          </Pane>
 
-          {/* Danger zone — last item on the page, both breakpoints. */}
+          <Pane active={tab === "properties"}>
+          {/* Danger zone. */}
           <Card style={{ border: "1px solid rgba(239,68,68,0.2)" }}>
             <h2
               style={{
@@ -1406,6 +1468,8 @@ export function DetailClient({
               </button>
             </div>
           </Card>
+          </Pane>
+        </div>
         </div>
       </div>
 
@@ -1900,23 +1964,46 @@ export function DetailClient({
       )}
 
       <style jsx>{`
-        .detail-grid {
-          display: grid;
-          grid-template-columns: 1fr 380px;
-          grid-template-areas:
-            "preview sidebar"
-            "bottom  sidebar";
+        .detail-shell {
+          display: flex;
+          gap: 2rem;
+          align-items: flex-start;
+        }
+        .detail-nav {
+          position: sticky;
+          top: 1.5rem;
+          width: 200px;
+          flex-shrink: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .detail-nav-item {
+          text-align: left;
+          background: none;
+          border: none;
+          border-radius: 10px;
+          padding: 0.6rem 0.85rem;
+          color: rgba(240, 242, 255, 0.5);
+          font: inherit;
+          font-size: 0.9rem;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .detail-nav-item:hover {
+          color: #f0f2ff;
+          background: rgba(255, 255, 255, 0.04);
+        }
+        .detail-nav-item[data-active="true"] {
+          color: #f0f2ff;
+          background: rgba(255, 255, 255, 0.08);
+        }
+        .detail-content {
+          flex: 1;
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
           gap: 1.5rem;
-          align-items: start;
-        }
-        .detail-grid-preview {
-          grid-area: preview;
-        }
-        .detail-grid-sidebar {
-          grid-area: sidebar;
-        }
-        .detail-grid-bottom {
-          grid-area: bottom;
         }
         .spinner {
           border: 2px solid rgba(0, 0, 0, 0.1);
@@ -1930,12 +2017,19 @@ export function DetailClient({
           }
         }
         @media (max-width: 1000px) {
-          .detail-grid {
-            grid-template-columns: 1fr;
-            grid-template-areas:
-              "preview"
-              "sidebar"
-              "bottom";
+          .detail-shell {
+            flex-direction: column;
+            gap: 1rem;
+          }
+          .detail-nav {
+            position: static;
+            width: auto;
+            flex-direction: row;
+            overflow-x: auto;
+            padding-bottom: 4px;
+          }
+          .detail-nav-item {
+            white-space: nowrap;
           }
         }
         @media (max-width: 640px) {

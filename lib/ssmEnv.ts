@@ -29,6 +29,9 @@ const APP_SECRET_KEYS = [
   // Strata's Cognito app client id(s), comma-separated: Charisol sign-ins issued to them are accepted by
   // the Strata publish routes (server/charisolVerifier.ts getCharisolPartnerVerifier).
   "CHARISOL_TRUSTED_CLIENT_IDS",
+  // Staging only: the internal admin-grant endpoint (app/api/internal/admins) checks this token.
+  // Unset everywhere else, so the endpoint stays closed. Stored as a SecureString.
+  "INTERNAL_ADMIN_TOKEN",
   "AI_KEY_ENCRYPTION_SECRET",
   "PAYSTACK_KEY_ENCRYPTION_SECRET",
   "COMMERCE_DIGITAL_ACCESS_ENCRYPTION_SECRET",

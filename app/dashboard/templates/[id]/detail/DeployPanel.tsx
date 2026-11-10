@@ -2,16 +2,22 @@
 
 import { useRef, useState } from "react";
 import { Card } from "../../../_components/Card";
+import { BRAND } from "@/lib/theme";
+
+type HostingTier = "STATIC" | "LAMBDA" | "PROVISIONED";
 
 type DeployedAppInfo = {
   framework: string;
   spaMode: boolean;
   updatedAt: string;
+  hostingTier: string;
+  allowedTiers: string[];
 } | null;
 
 type DeployResult = {
   framework: string;
   spaMode: boolean;
+  hostingTier: string;
   fileCount: number;
   redirectRules: number;
   message: string;
@@ -34,6 +40,24 @@ const ROW: React.CSSProperties = {
   gap: "0.5rem 1rem",
   padding: "0.7rem 0",
   borderBottom: "1px solid rgba(255,255,255,0.06)",
+};
+
+const TIER_META: Record<HostingTier, { label: string; description: string; color: string }> = {
+  STATIC: {
+    label: "Static",
+    description: "Served directly from S3. Cheapest — best for low-traffic sites.",
+    color: "#60a5fa",
+  },
+  LAMBDA: {
+    label: "Lambda",
+    description: "On-demand compute. Occasional cold starts; good for most sites.",
+    color: BRAND[400],
+  },
+  PROVISIONED: {
+    label: "Provisioned",
+    description: "Always-warm Lambda. No cold starts — consistent performance.",
+    color: "#34d399",
+  },
 };
 
 function frameworkLabel(fw: string): string {
@@ -73,6 +97,8 @@ export function DeployPanel({
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<DeployResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tierChanging, setTierChanging] = useState(false);
+  const [tierError, setTierError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [chunkProgress, setChunkProgress] = useState<{ current: number; total: number } | null>(null);
 
@@ -108,6 +134,7 @@ export function DeployPanel({
     setResult(null);
     setChunkProgress(null);
     try {
+      const currentTier = deployedApp?.hostingTier ?? "LAMBDA";
       const CHUNK_SIZE = 3 * 1024 * 1024; // 3 MB → base64 ≈ 4 MB → under Lambda's 6 MB limit
       const chunkTotal = Math.ceil(selectedFile.size / CHUNK_SIZE);
       const uploadSession = crypto.randomUUID();
@@ -117,7 +144,7 @@ export function DeployPanel({
         setChunkProgress({ current: i + 1, total: chunkTotal });
         const start = i * CHUNK_SIZE;
         const chunk = selectedFile.slice(start, start + CHUNK_SIZE);
-        const res = await fetch(`/api/v1/templates/${templateId}/deploy/chunk`, {
+        const res = await fetch(`/api/v1/templates/${templateId}/deploy/chunk?hostingTier=${currentTier}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/octet-stream",
@@ -138,17 +165,42 @@ export function DeployPanel({
       if (finalData) {
         setResult(finalData);
         setSelectedFile(null);
-        setDeployedApp({
+        setDeployedApp((prev) => ({
           framework: finalData.framework,
           spaMode: finalData.spaMode,
           updatedAt: new Date().toISOString(),
-        });
+          hostingTier: finalData.hostingTier,
+          allowedTiers: prev?.allowedTiers ?? ["STATIC", "LAMBDA"],
+        }));
       }
     } catch {
       setError("Network error. Check your connection and try again.");
     } finally {
       setUploading(false);
       setChunkProgress(null);
+    }
+  }
+
+  async function handleTierChange(tier: HostingTier) {
+    if (!deployedApp || tier === deployedApp.hostingTier) return;
+    setTierChanging(true);
+    setTierError(null);
+    try {
+      const res = await fetch(`/api/v1/templates/${templateId}/deploy`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostingTier: tier }),
+      });
+      const data = await res.json().catch(() => ({})) as { ok?: boolean; error?: string };
+      if (!res.ok) {
+        setTierError(data.error ?? "Failed to change hosting tier.");
+        return;
+      }
+      setDeployedApp((prev) => prev ? { ...prev, hostingTier: tier } : prev);
+    } catch {
+      setTierError("Network error. Check your connection and try again.");
+    } finally {
+      setTierChanging(false);
     }
   }
 
@@ -162,6 +214,10 @@ export function DeployPanel({
     transition: "border-color 0.15s, background 0.15s",
     marginTop: "1rem",
   };
+
+  const currentTier = (deployedApp?.hostingTier ?? "LAMBDA") as HostingTier;
+  const allowedTiers = (deployedApp?.allowedTiers ?? ["STATIC", "LAMBDA"]) as HostingTier[];
+  const allTiers: HostingTier[] = ["STATIC", "LAMBDA", "PROVISIONED"];
 
   return (
     <Card>
@@ -201,7 +257,6 @@ export function DeployPanel({
         <code style={{ fontSize: "0.75rem", color: "#818cf8" }}>out/</code> folder.
       </p>
 
-      {/* Current deployment state */}
       {deployedApp && (
         <>
           <div style={{ ...ROW }}>
@@ -218,10 +273,93 @@ export function DeployPanel({
             <span style={LABEL}>Last deployed</span>
             <span style={VALUE}>{formatRelative(deployedApp.updatedAt)}</span>
           </div>
+
+          <div style={{ padding: "0.9rem 0 0.4rem" }}>
+            <span style={{ ...LABEL, display: "block", marginBottom: "0.6rem" }}>Hosting tier</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.45rem" }}>
+              {allTiers.map((tier) => {
+                const meta = TIER_META[tier];
+                const isActive = tier === currentTier;
+                const isAllowed = allowedTiers.includes(tier);
+                return (
+                  <button
+                    key={tier}
+                    type="button"
+                    disabled={!isAllowed || isActive || tierChanging}
+                    onClick={() => void handleTierChange(tier)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.75rem",
+                      padding: "0.6rem 0.85rem",
+                      borderRadius: 8,
+                      border: isActive
+                        ? `1.5px solid ${meta.color}`
+                        : "1.5px solid rgba(255,255,255,0.08)",
+                      background: isActive
+                        ? `${meta.color}14`
+                        : isAllowed
+                        ? "transparent"
+                        : "rgba(255,255,255,0.02)",
+                      cursor: isActive || !isAllowed || tierChanging ? "default" : "pointer",
+                      textAlign: "left",
+                      opacity: !isAllowed ? 0.45 : 1,
+                      transition: "border-color 0.15s, background 0.15s",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        background: isActive ? meta.color : "rgba(255,255,255,0.2)",
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span
+                        style={{
+                          display: "block",
+                          fontSize: "0.8rem",
+                          fontWeight: 700,
+                          color: isActive ? meta.color : "rgba(240,242,255,0.8)",
+                        }}
+                      >
+                        {meta.label}
+                        {!isAllowed && (
+                          <span style={{ marginLeft: "0.4rem", fontSize: "0.68rem", fontWeight: 600, color: "rgba(240,242,255,0.3)" }}>
+                            Upgrade required
+                          </span>
+                        )}
+                      </span>
+                      <span style={{ display: "block", fontSize: "0.73rem", color: "rgba(240,242,255,0.38)", marginTop: "0.1rem" }}>
+                        {meta.description}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {tierError && (
+              <div
+                style={{
+                  marginTop: "0.6rem",
+                  fontSize: "0.78rem",
+                  color: "#f87171",
+                  padding: "0.5rem 0.75rem",
+                  background: "rgba(248,113,113,0.08)",
+                  border: "1px solid rgba(248,113,113,0.2)",
+                  borderRadius: 8,
+                }}
+              >
+                {tierError}
+              </div>
+            )}
+          </div>
         </>
       )}
 
-      {/* Success banner */}
       {result && (
         <div
           style={{
@@ -240,7 +378,6 @@ export function DeployPanel({
         </div>
       )}
 
-      {/* Drop zone */}
       <label
         style={dropZoneStyle}
         onDragOver={onDragOver}
@@ -275,7 +412,6 @@ export function DeployPanel({
         )}
       </label>
 
-      {/* Error */}
       {error && (
         <div
           style={{
@@ -292,7 +428,6 @@ export function DeployPanel({
         </div>
       )}
 
-      {/* Deploy button */}
       {selectedFile && (
         <button
           type="button"

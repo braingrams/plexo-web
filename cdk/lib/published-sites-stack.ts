@@ -100,7 +100,10 @@ export class PublishedSitesStack extends cdk.Stack {
     // own comment on why: this app's cdk/bin/app.ts deploys one STACK_KIND per invocation,
     // never multiple stacks in one synthesis pass). ---
     const serverFnArn = cdk.Fn.importValue(`${computeStackName}-ServerFnArn`);
-    const serverFnUrlValue = cdk.Fn.importValue(`${computeStackName}-ServerFnUrl`);
+    // The alias URL, not the bare-function ServerFnUrl: provisioned concurrency is set on the
+    // "live" alias, so only traffic through this URL can use the warm instances (PR 173).
+    // compute-stack deploys first in the staging and production workflows, so the export exists.
+    const serverFnUrlValue = cdk.Fn.importValue(`${computeStackName}-ServerFnAliasUrl`);
     const imageFnArn = cdk.Fn.importValue(`${computeStackName}-ImageFnArn`);
     const imageFnUrlValue = cdk.Fn.importValue(`${computeStackName}-ImageFnUrl`);
     const assetsBucketName = cdk.Fn.importValue(`${computeStackName}-AssetsBucketName`);
@@ -199,7 +202,11 @@ export class PublishedSitesStack extends cdk.Stack {
       comment: "Short-TTL cache for published page HTML — see published-sites-stack.ts's own comment at this resource",
       defaultTtl: cdk.Duration.seconds(10),
       minTtl: cdk.Duration.seconds(0),
-      maxTtl: cdk.Duration.seconds(60),
+      // Raised from 60s to 3600s: STATIC-tier apps return Cache-Control: s-maxage=3600 for
+      // HTML (serveDeployedStatic.ts cacheControlFor), so CloudFront can cache them for up
+      // to an hour. LAMBDA/PROVISIONED tiers still return no-cache, which CloudFront treats
+      // as defaultTtl (10s) — behaviour unchanged for those tiers.
+      maxTtl: cdk.Duration.seconds(3600),
       cookieBehavior: cloudfront.CacheCookieBehavior.none(),
       queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("p", "page_id"),
       // The CloudFront-Viewer-* headers are how the app learns where a visit came from (the analytics

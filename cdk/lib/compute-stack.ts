@@ -285,15 +285,20 @@ export class ComputeStack extends cdk.Stack {
     // ISR tag-cache table — DynamoDB, per open-next's tagCache/dynamodb.js contract
     // (CACHE_DYNAMO_TABLE). Not part of the six bounded-context business-data tables;
     // this is OpenNext's own internal bookkeeping, kept separate on purpose.
-    const tagCacheTable = new dynamodb.Table(this, "TagCacheTable", {
-      partitionKey: { name: "path", type: dynamodb.AttributeType.STRING },
-      sortKey: { name: "tag", type: dynamodb.AttributeType.STRING },
+    // Keys as the installed OpenNext reads them (overrides/tagCache/dynamodb-lite.js): items are looked up by
+    // tag (the partition key), and by path through the "revalidate" index. Keys were swapped before, so every
+    // tag read failed with "Query condition missed key schema element: tag".
+    // A new construct id: DynamoDB can't change a table's keys in place (the update failed with "Cannot update
+    // GSI's properties"), so CloudFormation creates this table and removes the old one.
+    const tagCacheTable = new dynamodb.Table(this, "TagCacheTableV2", {
+      partitionKey: { name: "tag", type: dynamodb.AttributeType.STRING },
+      sortKey: { name: "path", type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy,
     });
     tagCacheTable.addGlobalSecondaryIndex({
       indexName: "revalidate",
-      partitionKey: { name: "tag", type: dynamodb.AttributeType.STRING },
+      partitionKey: { name: "path", type: dynamodb.AttributeType.STRING },
       sortKey: { name: "revalidatedAt", type: dynamodb.AttributeType.NUMBER },
     });
 
@@ -511,12 +516,32 @@ export class ComputeStack extends cdk.Stack {
         ]),
       }),
     );
+    // PROVISIONED concurrency — Lambda only supports PC on a version alias, not on
+    // $LATEST. Route all CloudFront traffic through the "live" alias so that any
+    // PROVISIONED-tier DeployedApp benefits from warm instances without a code re-deploy.
+    // PROVISIONED_CONCURRENCY_COUNT is set by CI at deploy time when at least one
+    // PROVISIONED-tier app exists; lib/pub/updateProvisionedConcurrency.ts also calls the
+    // Lambda API directly at runtime when a customer upgrades/downgrades their tier, so PC
+    // self-heals without a full CDK re-deploy (which would be impractical for a per-customer
+    // change). When unset (zero PROVISIONED apps), no CfnProvisionedConcurrencyConfig is
+    // created and existing PC is left to whatever runtime last set (or none).
+    const serverFnAlias = new lambda.Alias(this, "ServerFnLiveAlias", {
+      aliasName: "live",
+      version: serverFn.currentVersion,
+      ...(process.env.PROVISIONED_CONCURRENCY_COUNT
+        ? { provisionedConcurrentExecutions: parseInt(process.env.PROVISIONED_CONCURRENCY_COUNT, 10) }
+        : {}),
+    });
     // RESPONSE_STREAM removes the 6 MB buffered-response ceiling — large static assets
     // served via serveDeployedStatic (lib/pub/serveDeployedStatic.ts) would otherwise
     // hit "payload is too large for the RequestResponse invocation type". The handler
     // uses OpenNext's aws-lambda-streaming wrapper (open-next.config.ts) which wraps
     // the export in awslambda.streamifyResponse — Lambda streams response bytes to
     // CloudFront instead of buffering the whole payload in memory first.
+    //
+    // serverFnUrl stays on the bare function, exactly as deployed before the alias work. It is
+    // exported as ServerFnUrl, and published-sites-stack imports that export. CloudFormation won't
+    // change an export another stack uses, so changing its value broke the staging deploy.
     const serverFnUrl = serverFn.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.NONE,
       invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
@@ -528,6 +553,55 @@ export class ComputeStack extends cdk.Stack {
       action: "lambda:InvokeFunctionUrl",
       functionUrlAuthType: lambda.FunctionUrlAuthType.NONE,
     });
+    // The live alias gets its own URL. Provisioned concurrency is set on the alias, so this is
+    // the URL that can use warm instances. Nothing consumes it yet; exported as ServerFnAliasUrl.
+    const serverFnAliasUrl = serverFnAlias.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.NONE,
+      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
+    });
+    serverFnAlias.addPermission("AllowPublicInvokeServerFnAliasUrl", {
+      principal: new iam.AnyPrincipal(),
+      action: "lambda:InvokeFunctionUrl",
+      functionUrlAuthType: lambda.FunctionUrlAuthType.NONE,
+    });
+    // Changing the warm-copy count (PROVISIONED tier) runs in a separate function that alone
+    // holds the permission. The server function can only invoke it, so a bug or compromise in
+    // app code can't change how many copies stay warm (cost). lib/pub/updateProvisionedConcurrency.ts
+    // calls it when a customer changes hosting tier, with no full CDK re-deploy needed.
+    // The scaler's name is a fixed string, not a token, so the server function doesn't depend on
+    // the scaler and the two don't form a dependency loop.
+    const pcScalerName = `${this.stackName}-pc-scaler`;
+    const pcScaler = new lambda.Function(this, "PcScalerFn", {
+      functionName: pcScalerName,
+      runtime: lambda.Runtime.NODEJS_24_X,
+      handler: "index.handler",
+      code: lambda.Code.fromAsset(path.join(__dirname, "..", "..", "lambda", "pc-scaler")),
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(30),
+      environment: { TARGET_FUNCTION_NAME: serverFn.functionName, TARGET_ALIAS: "live" },
+    });
+    pcScaler.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          "lambda:PutProvisionedConcurrencyConfig",
+          "lambda:DeleteProvisionedConcurrencyConfig",
+        ],
+        resources: [serverFnAlias.functionArn],
+      }),
+    );
+    // Resource-policy grant: the server function's role may invoke the scaler. Granting it here
+    // (not in the server function's own role policy) keeps the dependency one-way.
+    pcScaler.addPermission("AllowServerFnRoleInvoke", {
+      principal: new iam.ArnPrincipal(serverFn.role!.roleArn),
+      action: "lambda:InvokeFunction",
+    });
+    serverFn.addEnvironment("PC_SCALER_FUNCTION_NAME", pcScalerName);
+    // Injected so updateProvisionedConcurrency.ts can construct the alias ARN at runtime
+    // (function name + ":live" suffix) without a separate SSM lookup.
+    serverFn.addEnvironment("PLEXO_ACCOUNT_ID", this.account);
+    // Internal admin-grant endpoint (app/api/internal/admins): on the staging stack only. PR
+    // previews share staging's data but are a different stack, so PLEXO_ENV alone isn't enough.
+    serverFn.addEnvironment("ADMIN_ENDPOINTS_ENABLED", stackID === "staging-plexo" ? "true" : "false");
 
     const imageFn = new lambda.Function(this, "ImageOptimizationFn", {
       runtime: lambda.Runtime.NODEJS_24_X,
@@ -1123,6 +1197,10 @@ export class ComputeStack extends cdk.Stack {
     // of cross-stack reference (see cdk/bin/app.ts — one STACK_KIND per invocation).
     new cdk.CfnOutput(this, "ServerFnArn", { value: serverFn.functionArn, exportName: `${this.stackName}-ServerFnArn` });
     new cdk.CfnOutput(this, "ServerFnUrl", { value: serverFnUrl.url, exportName: `${this.stackName}-ServerFnUrl` });
+    new cdk.CfnOutput(this, "ServerFnAliasUrl", { value: serverFnAliasUrl.url, exportName: `${this.stackName}-ServerFnAliasUrl` });
+    // Alias ARN — consumed by lib/pub/updateProvisionedConcurrency.ts at runtime and by
+    // the deploy CI to call PutProvisionedConcurrencyConfig without a full CDK re-deploy.
+    new cdk.CfnOutput(this, "ServerFnAliasArn", { value: serverFnAlias.functionArn, exportName: `${this.stackName}-ServerFnAliasArn` });
     new cdk.CfnOutput(this, "ImageFnArn", { value: imageFn.functionArn, exportName: `${this.stackName}-ImageFnArn` });
     new cdk.CfnOutput(this, "ImageFnUrl", { value: imageFnUrl.url, exportName: `${this.stackName}-ImageFnUrl` });
     new cdk.CfnOutput(this, "AssetsBucketName", { value: assetsBucket.bucketName, exportName: `${this.stackName}-AssetsBucketName` });

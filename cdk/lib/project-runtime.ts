@@ -7,9 +7,11 @@ import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "node:path";
 import { buildLogGroup } from "./conventions";
+import { ssrFunctionScope } from "./ssrScope";
 
 /** A PR's throwaway preview stack (STACK_ID "pr-<number>-plexo"), not staging or production. */
 const IS_PR_PREVIEW = /^pr-\d+/.test(process.env.STACK_ID ?? "");
+
 
 // Infrastructure for apps built on Plexo (docs/plexo-projects/ARCHITECTURE.md), added to the
 // compute stack (so every environment, PR previews included, gets its own build pipeline):
@@ -50,9 +52,17 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
     retentionPeriod: cdk.Duration.hours(2),
     deadLetterQueue: { queue: buildDlq, maxReceiveCount: 3 },
   });
+  // Server-app changes (publish a preview, apply variables): queued by the web app, run by BuildFinalizeFn.
+  const ssrControlDlq = new sqs.Queue(scope, "SsrControlDlq", { retentionPeriod: cdk.Duration.days(4) });
+  const ssrControlQueue = new sqs.Queue(scope, "SsrControlQueue", {
+    // Longer than the finalizer's timeout, so a publish is never handed to a second run mid-flight.
+    visibilityTimeout: cdk.Duration.minutes(11),
+    deadLetterQueue: { queue: ssrControlDlq, maxReceiveCount: 5 },
+  });
   const eventsDlq = new sqs.Queue(scope, "BuildEventsDlq", { retentionPeriod: cdk.Duration.days(4) });
   const eventsQueue = new sqs.Queue(scope, "BuildEventsQueue", {
-    visibilityTimeout: cdk.Duration.minutes(6),
+    // At least BuildFinalizeFn's timeout (10 min): SQS refuses an event source whose visibility is shorter.
+    visibilityTimeout: cdk.Duration.minutes(11),
     deadLetterQueue: { queue: eventsDlq, maxReceiveCount: 5 },
   });
 
@@ -62,7 +72,7 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
       file: "lambda/project-build/Dockerfile",
       platform: cdk.aws_ecr_assets.Platform.LINUX_AMD64,
       // The build context is the repo root, but the image only needs these.
-      exclude: ["**", "!lambda/project-build/**", "lambda/project-build/node_modules", "lambda/project-build/dist", "!lib/projects/buildJob.ts", "!lib/projects/diagnostics.ts", "!lib/projects/scaffold/template/package.json"],
+      exclude: ["**", "!lambda/project-build/**", "lambda/project-build/node_modules", "lambda/project-build/dist", "!lib/projects/buildJob.ts", "!lib/projects/diagnostics.ts", "!lib/projects/envFileNames.ts", "!lib/projects/scaffold/template/package.json"],
     }),
     architecture: lambda.Architecture.X86_64,
     memorySize: 4096,
@@ -108,11 +118,28 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
     managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole")],
   });
   const fnArnPattern = `arn:aws:lambda:${stack.region}:${stack.account}:function:plexo-fn-*`;
+  // Per-customer SSR Lambdas (plexo-ssr-<templateId>), created by BuildFinalizeFn and reached
+  // only through their IAM-authenticated Function URLs from plexo-web.
+  const ssrFnArnPattern = `arn:aws:lambda:${stack.region}:${stack.account}:function:plexo-ssr-*`;
   const schedulerRole = new iam.Role(scope, "AppFunctionSchedulerRole", {
     assumedBy: new iam.ServicePrincipal("scheduler.amazonaws.com"),
     description: "Lets EventBridge Scheduler run app server functions on their schedules.",
   });
   schedulerRole.addToPolicy(new iam.PolicyStatement({ actions: ["lambda:InvokeFunction"], resources: [fnArnPattern] }));
+
+  // The next/image optimizer of a customer's Next.js app. It reads that app's built site files from
+  // S3 and nothing else; it gets this role instead of the logging-only one the server functions use.
+  const ssrImageRole = new iam.Role(scope, "SsrImageRole", {
+    assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+    description: "A customer app's image optimizer: reads that app's built site files from S3.",
+    managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName("service-role/AWSLambdaBasicExecutionRole")],
+  });
+  ssrImageRole.addToPolicy(
+    new iam.PolicyStatement({
+      actions: ["s3:GetObject"],
+      resources: ["arn:aws:s3:::plexo-user-content*/private/projects/*/builds/*/site/*"],
+    }),
+  );
 
   // ---------------------------------------------------------------- finalizer
   const finalizeFn = new NodejsFunction(scope, "BuildFinalizeFn", {
@@ -123,17 +150,68 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
     depsLockFilePath: path.join(repoRoot, "package-lock.json"),
     bundling: { tsconfig: path.join(repoRoot, "tsconfig.json"), minify: false, sourceMap: true, externalModules: ["pg-native", "playwright-core"] },
     memorySize: 1024,
-    timeout: cdk.Duration.minutes(5),
+    // A publish updates the server and image functions, waiting on each (lib/appFunctions/deploy.ts), so this is longer than a build's post-steps need.
+    timeout: cdk.Duration.minutes(10),
     environment: props.finalizeEnvironment,
     logGroup: buildLogGroup(scope, "BuildFinalizeFn"),
   });
   finalizeFn.addEventSource(new lambdaEventSources.SqsEventSource(eventsQueue, { batchSize: 5, reportBatchItemFailures: true }));
+  finalizeFn.addEventSource(new lambdaEventSources.SqsEventSource(ssrControlQueue, { batchSize: 1, reportBatchItemFailures: true }));
   for (const statement of props.sharedStatements) finalizeFn.addToRolePolicy(statement);
+
+  // Each server app gets its own role (lib/appFunctions/ssrExecRole.ts). The finalizer creates them,
+  // and every role is capped by this boundary: logging, plus the app's own page cache in the project bucket.
+  const ssrExecBoundary = new iam.ManagedPolicy(scope, "SsrExecBoundary", {
+    description: "Caps each server app's role: its logs and its own page cache only.",
+    statements: [
+      new iam.PolicyStatement({
+        actions: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+        resources: [`arn:aws:logs:${stack.region}:${stack.account}:log-group:/aws/lambda/plexo-ssr-*`],
+      }),
+      new iam.PolicyStatement({
+        actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+        resources: ["arn:aws:s3:::plexo-user-content*/private/projects/*/ssr/cache/*"],
+      }),
+      new iam.PolicyStatement({
+        actions: ["s3:ListBucket"],
+        resources: ["arn:aws:s3:::plexo-user-content*"],
+        conditions: { StringLike: { "s3:prefix": ["private/projects/*/ssr/cache", "private/projects/*/ssr/cache/*"] } },
+      }),
+      new iam.PolicyStatement({
+        actions: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:DeleteItem", "dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:BatchWriteItem"],
+        resources: [`arn:aws:dynamodb:${stack.region}:${stack.account}:table/plexo-ssr-tags-*`, `arn:aws:dynamodb:${stack.region}:${stack.account}:table/plexo-ssr-tags-*/index/*`],
+      }),
+    ],
+  });
+  const ssrExecRoleArnPattern = `arn:aws:iam::${stack.account}:role/plexo-ssr-exec-*`;
+  finalizeFn.addEnvironment("SSR_EXEC_BOUNDARY_ARN", ssrExecBoundary.managedPolicyArn);
+  // The finalizer creates each app's tag table (lib/appFunctions/ssrExecRole.ts ensureSsrTagTable).
+  finalizeFn.addToRolePolicy(
+    new iam.PolicyStatement({
+      // dynamodb:TagResource: CreateTable applies the Tags it's given, and needs this as well (publish failed without it).
+      actions: ["dynamodb:CreateTable", "dynamodb:DescribeTable", "dynamodb:TagResource"],
+      resources: [`arn:aws:dynamodb:${stack.region}:${stack.account}:table/plexo-ssr-tags-*`],
+    }),
+  );
+  finalizeFn.addToRolePolicy(
+    new iam.PolicyStatement({
+      actions: ["iam:CreateRole"],
+      resources: [ssrExecRoleArnPattern],
+      conditions: { StringEquals: { "iam:PermissionsBoundary": ssrExecBoundary.managedPolicyArn } },
+    }),
+  );
+  finalizeFn.addToRolePolicy(
+    new iam.PolicyStatement({
+      // iam:TagRole: CreateRole applies the Tags it's given, and needs this as well (publish failed without it).
+      actions: ["iam:GetRole", "iam:AttachRolePolicy", "iam:PutRolePolicy", "iam:PassRole", "iam:TagRole"],
+      resources: [ssrExecRoleArnPattern],
+    }),
+  );
 
   // ---------------------------------------------------------------- grants for app code paths
   const appDbFunctionArn = `arn:aws:lambda:${stack.region}:${stack.account}:function:plexo-app-db-${props.envName}`;
   const statements = [
-    new iam.PolicyStatement({ actions: ["sqs:SendMessage"], resources: [buildQueue.queueArn] }),
+    new iam.PolicyStatement({ actions: ["sqs:SendMessage"], resources: [buildQueue.queueArn, ssrControlQueue.queueArn] }),
     new iam.PolicyStatement({ actions: ["lambda:InvokeFunction"], resources: [appDbFunctionArn] }),
     // Platform administration of the app-database cluster (lib/appData/admin.ts).
     new iam.PolicyStatement({
@@ -159,7 +237,7 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
       ],
       resources: [fnArnPattern],
     }),
-    new iam.PolicyStatement({ actions: ["iam:PassRole"], resources: [functionExecutionRole.roleArn, schedulerRole.roleArn] }),
+    new iam.PolicyStatement({ actions: ["iam:PassRole"], resources: [functionExecutionRole.roleArn, schedulerRole.roleArn, ssrImageRole.roleArn] }),
     new iam.PolicyStatement({
       actions: ["scheduler:CreateSchedule", "scheduler:UpdateSchedule", "scheduler:DeleteSchedule", "scheduler:GetSchedule"],
       resources: [`arn:aws:scheduler:${stack.region}:${stack.account}:schedule/default/plexo-fn-*`],
@@ -169,15 +247,53 @@ export function addProjectRuntime(scope: Construct, props: ProjectRuntimeProps) 
     new iam.PolicyStatement({ actions: ["logs:FilterLogEvents"], resources: [`arn:aws:logs:${stack.region}:${stack.account}:log-group:/aws/lambda/plexo-fn-*`] }),
   ];
   const env: Record<string, string> = {
+    // Scopes SSR function names (lib/appFunctions/ssrNames.ts) so PR stacks never touch staging's.
+    SSR_FUNCTION_SCOPE: ssrFunctionScope(process.env.STACK_ID ?? ""),
     PROJECT_BUILD_QUEUE_URL: buildQueue.queueUrl,
+    SSR_CONTROL_QUEUE_URL: ssrControlQueue.queueUrl,
     FUNCTIONS_EXECUTION_ROLE_ARN: functionExecutionRole.roleArn,
     FUNCTIONS_SCHEDULER_ROLE_ARN: schedulerRole.roleArn,
+    SSR_IMAGE_ROLE_ARN: ssrImageRole.roleArn,
     APP_DB_FUNCTION_NAME: `plexo-app-db-${props.envName}`,
   };
   for (const fn of [...props.appFunctions, finalizeFn]) {
     for (const statement of statements) fn.addToRolePolicy(statement);
     for (const [k, v] of Object.entries(env)) fn.addEnvironment(k, v);
   }
+
+  // SSR: plexo-web may only invoke the customer SSR Lambdas through their Function URLs...
+  // Since October 2025 a function URL call needs lambda:InvokeFunction as well as lambda:InvokeFunctionUrl
+  // (AWS: "Using the AWS_IAM auth type"). Without it the call fails with 403 AccessDeniedException. The
+  // second statement only covers calls that arrive through the URL (lambda:InvokedViaFunctionUrl).
+  const ssrInvokeStatements = [
+    new iam.PolicyStatement({ actions: ["lambda:InvokeFunctionUrl"], resources: [ssrFnArnPattern] }),
+    new iam.PolicyStatement({
+      actions: ["lambda:InvokeFunction"],
+      resources: [ssrFnArnPattern],
+      conditions: { Bool: { "lambda:InvokedViaFunctionUrl": "true" } },
+    }),
+  ];
+  for (const fn of props.appFunctions) for (const statement of ssrInvokeStatements) fn.addToRolePolicy(statement);
+  // ...and only BuildFinalizeFn creates, updates, configures, and deletes them. (Its PassRole for
+  // functionExecutionRole already comes from the shared statements above.)
+  finalizeFn.addToRolePolicy(
+    new iam.PolicyStatement({
+      actions: [
+        "lambda:CreateFunction",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:GetFunction",
+        "lambda:GetFunctionConfiguration",
+        "lambda:DeleteFunction",
+        "lambda:CreateFunctionUrlConfig",
+        "lambda:UpdateFunctionUrlConfig",
+        "lambda:GetFunctionUrlConfig",
+        "lambda:DeleteFunctionUrlConfig",
+        "lambda:TagResource",
+      ],
+      resources: [ssrFnArnPattern],
+    }),
+  );
 
   return { buildQueue, eventsQueue, buildFn, finalizeFn, functionExecutionRole, schedulerRole };
 }

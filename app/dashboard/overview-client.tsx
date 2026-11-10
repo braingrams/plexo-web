@@ -1,5 +1,6 @@
 "use client";
 
+import { useNewSite } from "./_components/NewSiteModal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
@@ -130,7 +131,7 @@ function EmptyStateCard({
   icon: React.ReactNode;
   title: string;
   subtitle: string;
-  action?: { label: string; href: string };
+  action?: { label: string; href?: string; onClick?: () => void };
   compact?: boolean;
 }) {
   return (
@@ -162,7 +163,7 @@ function EmptyStateCard({
       </div>
       <p style={{ margin: 0, fontSize: "13.5px", fontWeight: 650, color: "var(--text-main)" }}>{title}</p>
       <p style={{ margin: 0, fontSize: "12.5px", color: "var(--text-muted)", maxWidth: 280, lineHeight: 1.5 }}>{subtitle}</p>
-      {action && (
+      {action && action.href && (
         <Link
           href={action.href}
           style={{
@@ -175,6 +176,18 @@ function EmptyStateCard({
         >
           {action.label} &rarr;
         </Link>
+      )}
+      {action && action.onClick && (
+        <button
+          type="button"
+          onClick={action.onClick}
+          style={{
+            marginTop: 6, background: "none", border: "none", padding: 0, cursor: "pointer",
+            fontSize: "12.5px", fontWeight: 700, color: "var(--brand)", fontFamily: "inherit",
+          }}
+        >
+          {action.label} &rarr;
+        </button>
       )}
     </div>
   );
@@ -312,6 +325,7 @@ function kindLabel(kind: TemplateKind): string {
 }
 
 export function OverviewClient(props: Props) {
+  const { openNewSite } = useNewSite();
   const {
     organizationName,
     plan,
@@ -371,8 +385,9 @@ export function OverviewClient(props: Props) {
             {organizationName} &middot; {plan} plan
           </p>
         </div>
-        <Link
-          href="/dashboard/new"
+        <button
+          type="button"
+          onClick={openNewSite}
           style={{
             fontSize: "13px",
             fontWeight: 650,
@@ -380,11 +395,13 @@ export function OverviewClient(props: Props) {
             background: "var(--text-main)",
             padding: "9px 16px",
             borderRadius: 7,
-            textDecoration: "none",
+            border: "none",
+            cursor: "pointer",
+            fontFamily: "inherit",
           }}
         >
           Host a site
-        </Link>
+        </button>
       </div>
 
       {/* Stat strip */}
@@ -610,7 +627,7 @@ export function OverviewClient(props: Props) {
               icon={<IconFilePlus />}
               title="Create your first template"
               subtitle="Landing pages and emails you build will show up here, ready to publish."
-              action={{ label: "Start building", href: "/dashboard/new" }}
+              action={{ label: "Start building", onClick: openNewSite }}
             />
           ) : (
             <>

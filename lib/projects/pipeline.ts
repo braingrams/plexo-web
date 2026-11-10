@@ -8,7 +8,7 @@ import { settle } from "./settle";
 import { upgradeAppClient } from "./clientUpgrade";
 import { previewUrl } from "./previewHost";
 import { applyMigrations, migrationFilesFrom, type MigrationOutcome } from "@/lib/appData/migrations";
-import { deployFunctions, type DeployOutcome, type FunctionBundle } from "@/lib/appFunctions/deploy";
+import { deployFunctions, deploySsrApp, type DeployOutcome, type FunctionBundle } from "@/lib/appFunctions/deploy";
 import { forgetAppContext } from "@/lib/appRuntime/context";
 import { forgetSchemaVersion } from "@/lib/appRuntime/data";
 import { databaseName } from "@/lib/appData/db";
@@ -81,6 +81,12 @@ export function describeDiff(diff: FileDiff): string {
   return text ? text[0].toUpperCase() + text.slice(1) : "Update";
 }
 
+async function siteTemplate(templateId: string) {
+  const { data: template } = await Template.get({ id: templateId }).go();
+  if (!template) throw new Error("That site no longer exists.");
+  return template;
+}
+
 async function appTemplate(templateId: string) {
   const { data: template } = await Template.get({ id: templateId }).go();
   if (!template || template.sourceType !== "REACT_PROJECT") throw new Error("That isn't an app project.");
@@ -134,13 +140,15 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
   if (build.status !== "SUCCEEDED" || build.postStatus === "DONE") return build;
   if (!(await claimPostSteps(build))) return (await getBuild(build.id)) ?? build;
 
-  const template = await appTemplate(build.templateId);
+  // An SSR build's source is a zip uploaded to a site, so the site needn't be a React app project.
+  const template = build.kind === "ssr" ? await siteTemplate(build.templateId) : await appTemplate(build.templateId);
   const env = build.mode === "release" ? "live" : "dev";
   let migrationResult: MigrationOutcome | null = null;
   let functionResult: DeployOutcome | null = null;
   let publishResult: { liveUrl: string | null; domains: string[]; switched: boolean; error?: string } | null = null;
   try {
-    const files = await migrationFilesOf(build.templateId, build.versionId);
+    // SSR builds carry no version manifest and no migrations yet (their versionId is synthetic).
+    const files = build.kind === "ssr" ? [] : await migrationFilesOf(build.templateId, build.versionId);
     migrationResult = files.length ? await applyMigrations({ templateId: build.templateId, organizationId: template.organizationId, env, files }) : null;
     if (migrationResult?.applied.length) forgetSchemaVersion(databaseName(build.templateId, env));
 
@@ -163,11 +171,28 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
         }
       }
       const bundles = (build.functionBundles ?? {}) as Record<string, FunctionBundle>;
-      functionResult = await deployFunctions({ templateId: build.templateId, organizationId: template.organizationId, env, buildId: build.id, bundles }).catch((err) => ({
+      const failedOutcome = (err: unknown): DeployOutcome => ({
         deployed: [],
         removed: [],
         failed: [{ name: "*", message: err instanceof Error ? err.message : String(err) }],
-      }));
+      });
+      if (build.kind === "ssr") {
+        // An SSR build deploys the app's preview server function (plexo-ssr-<templateId>-pv) from the
+        // "server" bundle; its static files are already at the site prefix (outputPrefix). Publishing
+        // promotes it to the live function (publishSsrPreview).
+        functionResult = bundles.server
+          ? await deploySsrApp({
+              templateId: build.templateId,
+              buildId: build.id,
+              bundleKey: bundles.server.key,
+              sitePrefix: build.outputPrefix,
+              target: "preview",
+              imageBundleKey: bundles.image?.key,
+            }).catch(failedOutcome)
+          : failedOutcome(new Error("The SSR build didn't produce a server function."));
+      } else {
+        functionResult = await deployFunctions({ templateId: build.templateId, organizationId: template.organizationId, env, buildId: build.id, bundles }).catch(failedOutcome);
+      }
     }
 
     if (build.mode === "release") {

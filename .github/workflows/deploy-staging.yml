@@ -58,9 +58,6 @@ jobs:
         with:
           path: .next/cache
           key: nextjs-staging-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
-          restore-keys: |
-            nextjs-staging-${{ hashFiles('package-lock.json') }}-
-            nextjs-staging-
 
       - name: Install app dependencies
         run: npm ci

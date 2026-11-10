@@ -1,7 +1,10 @@
 import JSZip from "jszip";
+import { isEnvFilePath } from "@/lib/projects/envFileNames";
 import mime from "mime";
 import { DeployedApp, type RedirectRule } from "@/lib/db/appEntities";
 import { uploadObject } from "@/lib/storage";
+import { updateProvisionedConcurrency } from "@/lib/pub/updateProvisionedConcurrency";
+import type { HostingTier } from "@/lib/pub/hostingTier";
 
 export class DeployError extends Error {
   constructor(
@@ -18,6 +21,7 @@ export type DeployZipResult = {
   spaMode: boolean;
   fileCount: number;
   redirectRules: number;
+  hostingTier: HostingTier;
 };
 
 const ALLOWED_EXTENSIONS = new Set([
@@ -72,7 +76,12 @@ function parseRedirects(content: string): RedirectRule[] {
  * Throws DeployError (with an HTTP status) on any user-facing validation failure.
  * All other throws should be treated as 500s by the caller.
  */
-export async function processDeployZip(buffer: Buffer, templateId: string): Promise<DeployZipResult> {
+export async function processDeployZip(
+  buffer: Buffer,
+  templateId: string,
+  options: { hostingTier?: HostingTier } = {},
+): Promise<DeployZipResult> {
+  const hostingTier: HostingTier = options.hostingTier ?? "LAMBDA";
   let zip: JSZip;
   try {
     zip = await JSZip.loadAsync(buffer);
@@ -93,6 +102,8 @@ export async function processDeployZip(buffer: Buffer, templateId: string): Prom
       : entry.name;
     normalized = normalized.replace(/^\.?\//, "");
     if (!normalized) continue;
+    // Environment files never reach the site (see lib/projects/envFiles.ts).
+    if (isEnvFilePath(normalized)) continue;
 
     if (normalized.includes("..") || normalized.startsWith("/") || /^[a-zA-Z]:/.test(normalized)) {
       throw new DeployError(`Unsafe path in zip: "${entry.name}".`, 400);
@@ -158,6 +169,7 @@ export async function processDeployZip(buffer: Buffer, templateId: string): Prom
         type: "STATIC",
         s3Prefix,
         spaMode,
+        hostingTier,
         redirectRules: redirectRules.length ? redirectRules : undefined,
         framework,
       })
@@ -168,10 +180,15 @@ export async function processDeployZip(buffer: Buffer, templateId: string): Prom
       type: "STATIC",
       s3Prefix,
       spaMode,
+      hostingTier,
       redirectRules: redirectRules.length ? redirectRules : undefined,
       framework,
     }).go();
   }
 
-  return { framework, spaMode, fileCount: files.size, redirectRules: redirectRules.length };
+  if (hostingTier === "PROVISIONED") {
+    void updateProvisionedConcurrency().catch(console.error);
+  }
+
+  return { framework, spaMode, fileCount: files.size, redirectRules: redirectRules.length, hostingTier };
 }

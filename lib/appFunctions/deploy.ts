@@ -5,6 +5,8 @@ import {
   UpdateFunctionCodeCommand,
   UpdateFunctionConfigurationCommand,
   GetFunctionConfigurationCommand,
+  GetFunctionUrlConfigCommand,
+  CreateFunctionUrlConfigCommand,
   DeleteFunctionCommand,
   waitUntilFunctionUpdatedV2,
   waitUntilFunctionActiveV2,
@@ -12,8 +14,12 @@ import {
 } from "@aws-sdk/client-lambda";
 import { SchedulerClient, CreateScheduleCommand, UpdateScheduleCommand, DeleteScheduleCommand, ResourceNotFoundException as ScheduleNotFound } from "@aws-sdk/client-scheduler";
 import { STSClient, AssumeRoleCommand } from "@aws-sdk/client-sts";
-import { AppFunction, AppSettings, type AppEnv } from "@/lib/db/appEntities";
-import { getObject } from "@/lib/projects/blobStore";
+import { AppFunction, AppSettings, DeployedApp, type AppEnv } from "@/lib/db/appEntities";
+import { listSsrVariables } from "@/lib/appFunctions/ssrVariableStore";
+import { runtimeVariablesFor, buildVariablesFor, buildVarsHash, previewOnlySecrets } from "@/lib/appFunctions/ssrVariables";
+import { listSecrets } from "@/lib/appFunctions/secrets";
+import { getObject, projectBucket } from "@/lib/projects/blobStore";
+import { ensureSsrExecRole, ensureSsrTagTable, ssrCachePrefix } from "@/lib/appFunctions/ssrExecRole";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { previewUrl } from "@/lib/projects/previewHost";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
@@ -226,3 +232,250 @@ export async function deleteAllFunctions(templateId: string): Promise<void> {
     await AppFunction.delete({ templateId, env: f.env, name: f.name }).go();
   }
 }
+
+// ---------------------------------------------------------------- SSR apps
+
+/** Lambda's direct-upload limit for a zipped function. Bigger bundles need S3 code deployment. */
+export const SSR_MAX_DIRECT_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+/** One server-rendered function per app (plexo-ssr-<templateId>), not per environment: SSR
+ * apps deploy straight to live for now. */
+import { ssrFunctionName, type SsrTarget, type SsrPart } from "@/lib/appFunctions/ssrNames";
+export { ssrFunctionName, type SsrTarget };
+
+/** The environment a server-rendered function runs with: Plexo's secrets address and this
+ * environment's service key (secrets are fetched at cold start, not stored here), plus the
+ * variables that apply to this environment. Visible variables are set here; secrets never are. */
+async function ssrServerEnvironment(templateId: string, env: AppEnv, functionName: string, buildId?: string): Promise<Record<string, string>> {
+  const origin = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
+  if (!origin) throw new Error("Plexo's public address isn't set (NEXT_PUBLIC_APP_URL), so the server can't load its secrets.");
+  const { data: template } = await Template.get({ id: templateId }).go({ attributes: ["organizationId"] });
+  const { lambda } = await clients();
+  const serviceKey = await serviceKeyFor(lambda, templateId, template!.organizationId, env, functionName);
+  const variables = runtimeVariablesFor(await listSsrVariables(templateId), env);
+  return {
+    ...variables,
+    NODE_ENV: "production",
+    // The page cache (OpenNext's incremental cache) lives in the project bucket, under the app's prefix.
+    CACHE_BUCKET_NAME: projectBucket(),
+    CACHE_BUCKET_REGION: REGION,
+    CACHE_BUCKET_KEY_PREFIX: ssrCachePrefix(templateId),
+    // OpenNext's DynamoDB tag cache (revalidation): the app's own table.
+    CACHE_DYNAMO_TABLE: await ensureSsrTagTable(templateId),
+    PLEXO_SECRETS_URL: `${origin}/api/internal/ssr-secrets/${templateId}?env=${env}`,
+    PLEXO_SERVICE_KEY: serviceKey,
+    // Secrets are read once per server, at its start. A new build id changes this variable, which
+    // makes Lambda start fresh servers that read the current secrets. Applying variables without a
+    // build keeps the id the function already has.
+    PLEXO_BUILD_ID: buildId ?? (await currentBuildId(lambda, functionName)) ?? "",
+  };
+}
+
+async function currentBuildId(lambda: LambdaClient, functionName: string): Promise<string | undefined> {
+  try {
+    const config = await lambda.send(new GetFunctionConfigurationCommand({ FunctionName: functionName }));
+    return config.Environment?.Variables?.PLEXO_BUILD_ID;
+  } catch (err) {
+    if (err instanceof ResourceNotFoundException) return undefined;
+    throw err;
+  }
+}
+
+/** Re-applies an SSR app's variables to one environment's function without a deploy. Used when a
+ * variable changes; a function that doesn't exist yet gets them on its first deploy. */
+export async function applySsrVariables(templateId: string, env: AppEnv): Promise<void> {
+  const target: SsrTarget = env === "dev" ? "preview" : "live";
+  const functionName = ssrFunctionName(templateId, target, undefined, "server");
+  const { lambda } = await clients();
+  const environment = await ssrServerEnvironment(templateId, env, functionName);
+  try {
+    await lambda.send(new UpdateFunctionConfigurationCommand({ FunctionName: functionName, Environment: { Variables: environment } }));
+  } catch (err) {
+    if (err instanceof ResourceNotFoundException) return;
+    throw err;
+  }
+  await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
+}
+
+/** Creates a Lambda with its role. A role made moments ago isn't assumable by Lambda for a short while,
+ * so the create is retried until the role has propagated. */
+async function createWhenRoleReady(lambda: LambdaClient, input: ConstructorParameters<typeof CreateFunctionCommand>[0]): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await lambda.send(new CreateFunctionCommand(input));
+      return;
+    } catch (err) {
+      const notReady = err instanceof Error && /cannot be assumed/i.test(err.message);
+      if (!notReady || attempt >= 12) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+  }
+}
+
+/** Creates or updates the app's SSR function, and makes sure it has an IAM-authenticated
+ * Function URL. Only plexo-web may call that URL (lambda:InvokeFunctionUrl, see
+ * cdk/lib/project-runtime.ts). */
+export async function deploySsrFunction(input: {
+  templateId: string;
+  buildId: string;
+  bundleKey: string;
+  target?: SsrTarget;
+  part?: SsrPart;
+  /** Where the built static files live (the image function reads them from here). */
+  sitePrefix?: string;
+}): Promise<{ functionName: string; functionUrl: string }> {
+  const part: SsrPart = input.part ?? "server";
+  // The server function runs with logging only. The image function reads the site's files from
+  // S3, so it gets its own role that can do exactly that (cdk/lib/project-runtime.ts).
+  // The server function has its own role (lib/appFunctions/ssrExecRole.ts). The image function's
+  // role can read the built site files (cdk/lib/project-runtime.ts).
+  const role = part === "image" ? process.env.SSR_IMAGE_ROLE_ARN : await ensureSsrExecRole(input.templateId);
+  if (!role) throw new Error("The image optimizer's role isn't available in this environment yet (SSR_IMAGE_ROLE_ARN isn't set).");
+  if (part === "image" && !input.sitePrefix) throw new Error("The image function needs the site's file location.");
+  const bundle = await getObject(input.bundleKey);
+  if (!bundle) throw new Error("The server bundle is missing — rebuild the app.");
+  if (bundle.body.byteLength > SSR_MAX_DIRECT_UPLOAD_BYTES) {
+    throw new Error(`The server bundle is ${(bundle.body.byteLength / 1024 / 1024).toFixed(1)}MB, over Lambda's 50MB direct-upload limit.`);
+  }
+  const codeSha256 = createHash("sha256").update(bundle.body).digest("base64");
+  const { lambda } = await clients();
+  const functionName = ssrFunctionName(input.templateId, input.target ?? "live", undefined, part);
+  // The image function's bucket prefix is per build, so its environment is set on every deploy.
+  const env: AppEnv = input.target === "preview" ? "dev" : "live";
+  const environment: Record<string, string> =
+    part === "image"
+      ? { NODE_ENV: "production", BUCKET_NAME: projectBucket(), BUCKET_KEY_PREFIX: input.sitePrefix!, BUCKET_REGION: REGION }
+      : await ssrServerEnvironment(input.templateId, env, functionName, input.buildId);
+
+  let current: { CodeSha256?: string } | null = null;
+  try {
+    current = await lambda.send(new GetFunctionConfigurationCommand({ FunctionName: functionName }));
+  } catch (err) {
+    if (!(err instanceof ResourceNotFoundException)) throw err;
+  }
+  if (!current) {
+    await createWhenRoleReady(lambda, {
+        FunctionName: functionName,
+        Runtime: "nodejs24.x",
+        Handler: "index.handler",
+        Role: role,
+        Code: { ZipFile: bundle.body },
+        // The image function is sized like Plexo's own (OpenNext recommends 1536 MB for it).
+        MemorySize: part === "image" ? 1536 : 1024,
+        Timeout: part === "image" ? 25 : 30,
+        // The server bundle is x86_64 to match the build machine. The image optimizer's sharp
+        // binary is arm64 (OpenNext installs it for arm64), so that function is arm64.
+        Architectures: [part === "image" ? "arm64" : "x86_64"],
+        Environment: { Variables: environment },
+        Description: `Plexo SSR app ${input.templateId} (${part}) — build ${input.buildId}`,
+        Tags: { plexoApp: input.templateId, plexoKind: "ssr", plexoPart: part },
+    });
+    await waitUntilFunctionActiveV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
+  } else {
+    // Both functions take their environment from this deploy, so changed variables and the image
+    // function's per-build bucket prefix are current after every deploy.
+    await lambda.send(new UpdateFunctionConfigurationCommand({ FunctionName: functionName, Role: role, Environment: { Variables: environment } }));
+    await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
+    if (current.CodeSha256 !== codeSha256) {
+      await lambda.send(new UpdateFunctionCodeCommand({ FunctionName: functionName, ZipFile: bundle.body }));
+      await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 120 }, { FunctionName: functionName });
+    }
+  }
+
+  let functionUrl: string | undefined;
+  try {
+    functionUrl = (await lambda.send(new GetFunctionUrlConfigCommand({ FunctionName: functionName }))).FunctionUrl;
+  } catch (err) {
+    if (!(err instanceof ResourceNotFoundException)) throw err;
+    functionUrl = (await lambda.send(new CreateFunctionUrlConfigCommand({ FunctionName: functionName, AuthType: "AWS_IAM", InvokeMode: "BUFFERED" }))).FunctionUrl;
+  }
+  if (!functionUrl) throw new Error("Lambda didn't return a Function URL for the SSR app.");
+  return { functionName, functionUrl };
+}
+
+/** Deploys a finished SSR build. A preview build goes to the preview function and is recorded as
+ * the preview; it's only served to the public after publishSsrPreview promotes it. */
+export async function deploySsrApp(input: {
+  templateId: string;
+  buildId: string;
+  bundleKey: string;
+  sitePrefix: string;
+  target: SsrTarget;
+  /** The image optimizer's bundle, for frameworks that have one (Next.js). */
+  imageBundleKey?: string;
+}): Promise<DeployOutcome> {
+  const { functionName, functionUrl } = await deploySsrFunction({ ...input, target: input.target, part: "server" });
+  let imageUrl = "";
+  if (input.imageBundleKey) {
+    imageUrl = (await deploySsrFunction({
+      templateId: input.templateId,
+      buildId: input.buildId,
+      bundleKey: input.imageBundleKey,
+      target: input.target,
+      part: "image",
+      sitePrefix: input.sitePrefix,
+    })).functionUrl;
+  }
+  if (input.target === "preview") {
+    await DeployedApp.patch({ templateId: input.templateId })
+      .set({
+        previewFunctionName: functionName,
+        previewFunctionUrl: functionUrl,
+        previewBuildId: input.buildId,
+        previewSitePrefix: input.sitePrefix,
+        previewBundleKey: input.bundleKey,
+        // "" means this build has no image function, so an old one is never served.
+        previewImageFunctionUrl: imageUrl,
+        previewImageBundleKey: input.imageBundleKey ?? "",
+      })
+      .go();
+  } else {
+    await DeployedApp.patch({ templateId: input.templateId })
+      .set({ type: "SSR", functionName, functionUrl, buildId: input.buildId, ssrSitePrefix: input.sitePrefix })
+      .go();
+  }
+  return { deployed: [functionName], removed: [], failed: [] };
+}
+
+/** Publishes the app's latest SSR preview: the live function runs the same bundle, and the live
+ * fields point at the preview's build and files. Returns the live function's name and URL. */
+export async function publishSsrPreview(templateId: string): Promise<{ functionName: string; functionUrl: string; warnings: string[] } | { error: string }> {
+  const { data: app } = await DeployedApp.get({ templateId }).go();
+  if (!app?.previewBundleKey || !app.previewBuildId || !app.previewSitePrefix) {
+    return { error: "There's no SSR preview to publish. Upload the server build first." };
+  }
+  const live = await deploySsrFunction({ templateId, buildId: app.previewBuildId, bundleKey: app.previewBundleKey, target: "live", part: "server" });
+  let liveImageUrl = "";
+  if (app.previewImageBundleKey) {
+    liveImageUrl = (await deploySsrFunction({
+      templateId,
+      buildId: app.previewBuildId,
+      bundleKey: app.previewImageBundleKey,
+      target: "live",
+      part: "image",
+      sitePrefix: app.previewSitePrefix,
+    })).functionUrl;
+  }
+  // Warnings don't stop the publish. The owner decides (see the publish route).
+  const warnings: string[] = [];
+  const variables = await listSsrVariables(templateId);
+  if (app.previewBuildVarsHash && app.previewBuildVarsHash !== buildVarsHash(buildVariablesFor(variables, "live"))) {
+    warnings.push("Build-time variables changed since the preview was built. Rebuild the app, then publish again, to apply them.");
+  }
+  for (const name of previewOnlySecrets(await listSecrets(templateId))) {
+    warnings.push(`${name} is set for Preview only. Add a Live value before the live app needs it.`);
+  }
+
+  await DeployedApp.patch({ templateId })
+    .set({
+      type: "SSR",
+      functionName: live.functionName,
+      functionUrl: live.functionUrl,
+      imageFunctionUrl: liveImageUrl,
+      buildId: app.previewBuildId,
+      ssrSitePrefix: app.previewSitePrefix,
+    })
+    .go();
+  return { ...live, warnings };
+}
+

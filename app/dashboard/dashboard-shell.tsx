@@ -1,6 +1,7 @@
 "use client";
 
 import { LayoutModeProvider, useLayoutMode, type LayoutMode } from "./layout-mode-context";
+import { NewSiteProvider } from "./_components/NewSiteModal";
 import { DashboardShellClassic } from "./dashboard-shell-classic";
 import { DashboardShellModern } from "./dashboard-shell-modern";
 
@@ -15,14 +16,17 @@ type Props = {
   initialLayoutMode: LayoutMode;
   organizationName: string;
   orgBranding?: OrgBranding;
+  plan: "FREE" | "PRO" | "ULTRA";
 };
 
-export function DashboardShell({ children, userName, userEmail, initialLayoutMode, organizationName, orgBranding }: Props) {
+export function DashboardShell({ children, userName, userEmail, initialLayoutMode, organizationName, orgBranding, plan }: Props) {
   return (
     <LayoutModeProvider initialMode={initialLayoutMode}>
-      <ShellSwitcher userName={userName} userEmail={userEmail} organizationName={organizationName} orgBranding={orgBranding}>
-        {children}
-      </ShellSwitcher>
+      <NewSiteProvider plan={plan}>
+        <ShellSwitcher userName={userName} userEmail={userEmail} organizationName={organizationName} orgBranding={orgBranding}>
+          {children}
+        </ShellSwitcher>
+      </NewSiteProvider>
     </LayoutModeProvider>
   );
 }

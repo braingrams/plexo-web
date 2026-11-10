@@ -15,6 +15,8 @@ import { DeployedApp } from "@/lib/db/appEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
 import { PageView, FormSubmission } from "@/lib/db/opsEntities";
 import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
+import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
+import { getTierFeatures } from "@/lib/subscription";
 
 import { DetailClient } from "./detail-client";
 
@@ -73,10 +75,15 @@ export default async function TemplateDetailPage(props: {
     blogEnabled: boolean;
     siteLayoutEnabled: boolean;
     commerceEnabled: boolean;
+    /** The site owner's plan includes server apps (ULTRA). Gates the Server app and Variables & secrets tabs. */
+    ssrEnabled: boolean;
     deployedApp: {
       framework: string;
       spaMode: boolean;
       updatedAt: string;
+      hostingTier: string;
+      allowedTiers: string[];
+      ssr: boolean;
     } | null;
   } | null = null;
 
@@ -90,6 +97,7 @@ export default async function TemplateDetailPage(props: {
       { data: siteLayout },
       { data: commerceSettings },
       { data: deployedAppRow },
+      ownerPlan,
     ] = await Promise.all([
       PublishedDomain.query.primary({ templateId: template.id }).go({ pages: "all" }),
       PageView.query
@@ -100,6 +108,7 @@ export default async function TemplateDetailPage(props: {
       SiteLayout.get({ templateId: template.id }).go(),
       CommerceSettings.get({ templateId: template.id }).go(),
       DeployedApp.get({ templateId: template.id }).go(),
+      getOrganizationOwnerPlanDynamo(orgResolution.organizationId),
     ]);
 
     const domain = pickPrimaryDomain(domains);
@@ -117,11 +126,15 @@ export default async function TemplateDetailPage(props: {
       blogEnabled: blogSite?.enabled ?? false,
       siteLayoutEnabled: siteLayout?.enabled ?? false,
       commerceEnabled: commerceSettings?.enabled ?? false,
+      ssrEnabled: getTierFeatures(ownerPlan).ssrEnabled,
       deployedApp: deployedAppRow
         ? {
             framework: deployedAppRow.framework ?? "spa",
             spaMode: deployedAppRow.spaMode ?? false,
             updatedAt: deployedAppRow.updatedAt ?? deployedAppRow.createdAt ?? new Date().toISOString(),
+            hostingTier: deployedAppRow.hostingTier ?? "LAMBDA",
+            allowedTiers: getTierFeatures(ownerPlan).deployedAppHostingTiers,
+            ssr: deployedAppRow.type === "SSR",
           }
         : null,
     };

@@ -7,7 +7,7 @@ const common = { bundle: true, platform: "node", target: "node24", format: "esm"
 
 await build({
   ...common,
-  entryPoints: { index: "src/handler.ts", worker: "src/worker.ts" },
+  entryPoints: { index: "src/handler.ts", worker: "src/worker.ts", ssrWorker: "src/ssrWorker.ts" },
   outdir: "dist",
   outExtension: { ".js": ".mjs" },
   external: ["esbuild"],

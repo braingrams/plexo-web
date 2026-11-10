@@ -34,6 +34,8 @@ export default async function DashboardLayout({
   }
   const initialLayoutMode = dbUser?.layoutMode ?? "CLASSIC";
   const planBanner = dbUser ? planBannerState(dbUser) : null;
+  // The plan decides which creation options are usable (the Server app tab is ULTRA-only).
+  const plan = effectivePlan(dbUser);
 
   // Org-scoped login: makes sure this session always has an active organization before
   // rendering the dashboard shell (auto-picks a single membership, restores/creates one
@@ -59,6 +61,7 @@ export default async function DashboardLayout({
         initialLayoutMode={initialLayoutMode}
         organizationName={orgResolution.organizationName}
         orgBranding={orgBranding}
+        plan={plan}
       >
         {/* A WordPress site moving in the background: progress on every page, not just the migration tab. */}
         <MigrationBanner />

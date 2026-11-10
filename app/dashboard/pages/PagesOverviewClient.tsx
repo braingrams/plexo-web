@@ -1,11 +1,11 @@
 "use client";
 
+import { useNewSite } from "../_components/NewSiteModal";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PageHeader } from "../_components/PageHeader";
 import { formatDate } from "../templates/TemplateCard";
-import { SiteImportPanel } from "../templates/[id]/site-import/SiteImportPanel";
 
 export type PublishedPageSummary = {
   id: string;
@@ -43,13 +43,6 @@ function IconExternal() {
   );
 }
 
-function IconPlus() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  );
-}
 
 function IconPages({ size = 24 }: { size?: number }) {
   return (
@@ -169,104 +162,25 @@ function PublishedPageCard({ page }: { page: PublishedPageSummary }) {
   );
 }
 
-/**
- * "Add new" on this overview creates a brand-new root site on the spot and immediately opens
- * the import panel for it — there's nothing to import INTO yet otherwise, since this page only
- * ever lists templates that already have sub-pages (see page.tsx's `pages: { some: {} }`
- * filter). Cancelling before a job is ever started deletes that placeholder site again, so
- * backing out doesn't litter the account with empty untitled sites.
- */
-function AddNewSiteFlow({ onDone }: { onDone: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [templateId, setTemplateId] = useState<string | null>(null);
-  const [jobStarted, setJobStarted] = useState(false);
-
-  async function start() {
-    setCreating(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "New Site", kind: "LANDING_PAGE" }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Unable to create a new site.");
-      setTemplateId(data.template.id);
-      setOpen(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create a new site.");
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function close() {
-    const idToClean = !jobStarted ? templateId : null;
-    setOpen(false);
-    setTemplateId(null);
-    setJobStarted(false);
-    if (idToClean) {
-      await fetch(`/api/templates/${idToClean}`, { method: "DELETE" }).catch(() => {});
-    }
-    onDone();
-  }
-
+/** "Add new" opens the shared site wizard (the same one as every other create button). */
+function AddNewSiteButton() {
+  const { openNewSite } = useNewSite();
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => void start()}
-        disabled={creating}
-        style={{
-          display: "inline-flex", alignItems: "center", gap: "0.5rem",
-          padding: "0.65rem 1.2rem",
-          borderRadius: 10, fontWeight: 700, fontSize: "0.875rem",
-          background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-          color: "#fff", border: "none", cursor: creating ? "default" : "pointer",
-          boxShadow: "0 4px 20px var(--brand-glow)",
-          fontFamily: "inherit", opacity: creating ? 0.7 : 1,
-        }}
-      >
-        <IconPlus />
-        {creating ? "Creating…" : "Add new"}
-      </button>
-      {error && <p style={{ color: "#f87171", fontSize: "0.78rem", marginTop: "0.5rem" }}>{error}</p>}
-
-      {open && templateId && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", padding: "1rem" }}
-          onClick={(e) => { if (e.target === e.currentTarget) void close(); }}
-        >
-          <div style={{ width: "min(100%,560px)", maxHeight: "80vh", overflowY: "auto", background: "#0d0f1a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 18, boxShadow: "0 30px 100px rgba(0,0,0,0.7)", padding: "1.25rem" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
-              <div>
-                <p style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.2rem" }}>New multi-page site</p>
-                <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.1rem", fontWeight: 800, color: "#f0f2ff" }}>Import a website</h2>
-              </div>
-              <button type="button" onClick={() => void close()} aria-label="Close" style={{ background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 8, padding: "0.4rem", color: "rgba(240,242,255,0.5)", cursor: "pointer" }}>
-                ✕
-              </button>
-            </div>
-            <SiteImportPanel
-              templateId={templateId}
-              onImported={() => { setJobStarted(true); onDone(); }}
-              onClose={() => void close()}
-            />
-          </div>
-        </div>
-      )}
-    </>
+    <button
+      type="button"
+      onClick={openNewSite}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: "0.5rem",
+        padding: "0.6rem 1.1rem", borderRadius: 10, fontSize: "0.85rem", fontWeight: 700,
+        background: "rgba(var(--brand-rgb),0.15)", color: "var(--brand)", border: "none", cursor: "pointer",
+      }}
+    >
+      Add new
+    </button>
   );
 }
 
 export function PagesOverviewClient({ pages, isUltra }: { pages: PublishedPageSummary[]; isUltra: boolean }) {
-  const router = useRouter();
-  const refresh = () => router.refresh();
 
   return (
     <>
@@ -274,7 +188,7 @@ export function PagesOverviewClient({ pages, isUltra }: { pages: PublishedPageSu
         eyebrow="Content"
         title="Pages"
         subtitle="Every multi-page site you've built, published or not."
-        action={isUltra ? <AddNewSiteFlow onDone={refresh} /> : undefined}
+        action={isUltra ? <AddNewSiteButton /> : undefined}
       />
 
       {pages.length === 0 ? (

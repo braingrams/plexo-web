@@ -1,11 +1,14 @@
 "use client";
 
+import { ZipDropzone } from "../_components/ZipDropzone";
+import { stripEnvFilesInBrowser } from "@/lib/projects/clientSsrUpload";
 import { SolIcon, SolOutOfCredits } from "../_components/sol/SolTopUp";
 import { useEffect, useRef, useState } from "react";
 import { AI_UNREACHABLE } from "@/lib/ai/requestErrors";
 import { checkAiCredits, generateWithProgress, type AiRequestBody } from "@/lib/ai/clientGenerate";
-import type { DragEvent, FormEvent } from "react";
+import type { FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { MarketplaceListItem } from "@/lib/marketplace";
 import { MarketplaceRowExpandGrid } from "@/app/marketplace/MarketplaceRowExpandGrid";
 import { MarketplaceSkeletonGrid } from "@/app/marketplace/MarketplaceBrowse";
@@ -41,6 +44,8 @@ const hairlineSoft = "rgba(255,255,255,0.055)";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
+const SERVER_ZIP_LIMIT_BYTES = 100 * 1024 * 1024;
+
 function slugify(input: string): string {
   return input
     .toLowerCase()
@@ -54,16 +59,6 @@ function IconCheck() {
   return (
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="20 6 9 17 4 12" />
-    </svg>
-  );
-}
-
-function IconUpload() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 16V4" />
-      <path d="m7 9 5-5 5 5" />
-      <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
     </svg>
   );
 }
@@ -175,79 +170,20 @@ function primaryButtonStyle(enabled: boolean) {
   } as const;
 }
 
-function Dropzone({ file, onFile }: { file: File | null; onFile: (f: File | null) => void }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [dragActive, setDragActive] = useState(false);
-
-  function handleDrop(e: DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setDragActive(false);
-    const dropped = e.dataTransfer.files?.[0];
-    if (dropped) onFile(dropped);
-  }
-
-  return (
-    <div
-      onClick={() => inputRef.current?.click()}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setDragActive(true);
-      }}
-      onDragLeave={() => setDragActive(false)}
-      onDrop={handleDrop}
-      role="button"
-      tabIndex={0}
-      style={{
-        cursor: "pointer",
-        borderRadius: 14,
-        border: `1.5px dashed ${dragActive ? "var(--brand)" : file ? "var(--success)" : hairline}`,
-        background: dragActive ? "var(--brand-subtle)" : "rgba(255,255,255,0.02)",
-        padding: "36px 20px",
-        textAlign: "center",
-        transition: "border-color 0.15s, background 0.15s",
-      }}
-    >
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".html,.htm,.zip"
-        onChange={(e) => onFile(e.target.files?.[0] ?? null)}
-        style={{ display: "none" }}
-      />
-      <div
-        style={{
-          width: 44,
-          height: 44,
-          margin: "0 auto 14px",
-          borderRadius: 12,
-          background: "var(--brand-subtle)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <IconUpload />
-      </div>
-      {file ? (
-        <>
-          <div style={{ fontSize: "13.5px", fontWeight: 650, color: "var(--text-main)" }}>{file.name}</div>
-          <div style={{ fontSize: "11.5px", color: "var(--text-faint)", marginTop: 4 }}>
-            {(file.size / 1024).toFixed(0)} KB &middot; click or drop to replace
-          </div>
-        </>
-      ) : (
-        <>
-          <div style={{ fontSize: "13.5px", fontWeight: 650, color: "var(--text-main)" }}>Click to upload, or drag and drop</div>
-          <div style={{ fontSize: "11.5px", color: "var(--text-faint)", marginTop: 4 }}>.html, .htm, or .zip</div>
-        </>
-      )}
-    </div>
-  );
-}
-
-export function NewSiteWizard() {
+/**
+ * The "create a site" flow. Works as the /dashboard/new page, and inside the shared modal
+ * (NewSiteProvider), where `onClose` is set and the page header is hidden.
+ * `plan` decides whether the Server app tab is usable.
+ */
+export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void; plan?: "FREE" | "PRO" | "ULTRA" } = {}) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [startTab, setStartTab] = useState<"marketplace" | "ai" | "upload" | "wordpress">("marketplace");
+  const [startTab, setStartTab] = useState<"marketplace" | "blank" | "ai" | "upload" | "server" | "wordpress">("marketplace");
+  const [creatingBlank, setCreatingBlank] = useState(false);
+  const [serverFile, setServerFile] = useState<File | null>(null);
+  const [serverAgreed, setServerAgreed] = useState(false);
+  const [serverName, setServerName] = useState("");
+  const [serverBusy, setServerBusy] = useState(false);
+  const router = useRouter();
 
   const [items, setItems] = useState<MarketplaceItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
@@ -366,6 +302,101 @@ export function NewSiteWizard() {
     setTemplate(created);
     if (!slugTouched) setSlug(slugify(created.name));
     setStep(2);
+  }
+
+  async function handleStartBlank() {
+    setCreatingBlank(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "New Site", kind: "LANDING_PAGE" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? "Couldn't create the site. Please try again.");
+        return;
+      }
+      advanceToConnect(data.template);
+    } finally {
+      setCreatingBlank(false);
+    }
+  }
+
+  // The site record is created first (ssr-deploy needs a template), then the source is uploaded.
+  // If the upload fails, the empty site stays on the account and can be deleted from its page.
+  async function handleServerDeploy(event: React.FormEvent) {
+    event.preventDefault();
+    if (!serverFile || !serverName.trim() || !serverAgreed) return;
+    if (serverFile.size > SERVER_ZIP_LIMIT_BYTES) {
+      setError(`That zip is ${(serverFile.size / 1024 / 1024).toFixed(1)}MB. The limit is ${SERVER_ZIP_LIMIT_BYTES / 1024 / 1024}MB.`);
+      return;
+    }
+    setServerBusy(true);
+    setError(null);
+    try {
+      const created = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: serverName.trim(), kind: "LANDING_PAGE" }),
+      });
+      const createdData = await created.json().catch(() => ({}));
+      if (!created.ok) {
+        setError(createdData.error ?? "Couldn't create the site. Please try again.");
+        return;
+      }
+      const templateId = createdData.template.id as string;
+
+      // 1. Send the zip in 3 MB parts through this app, which stages them in storage. Each part
+      //    stays under Lambda's request limit, and the file never goes to storage from the browser.
+      // Environment files are removed in the browser, so their bytes are never sent.
+      const { file: uploadFile } = await stripEnvFilesInBrowser(serverFile);
+      const CHUNK = 3 * 1024 * 1024;
+      const total = Math.max(1, Math.ceil(uploadFile.size / CHUNK));
+      const session = crypto.randomUUID();
+      let uploadKey: string | null = null;
+      for (let index = 0; index < total; index++) {
+        const part = await fetch(`/api/v1/templates/${templateId}/ssr-upload/chunk`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "X-Upload-Session": session,
+            "X-Chunk-Index": String(index),
+            "X-Chunk-Total": String(total),
+          },
+          body: uploadFile.slice(index * CHUNK, (index + 1) * CHUNK),
+        });
+        const partData = await part.json().catch(() => ({}));
+        if (!part.ok) {
+          setError(partData.error ?? `The upload stopped at part ${index + 1} of ${total} (server responded ${part.status}). Try again.`);
+          return;
+        }
+        if (partData.status === "assembled") uploadKey = partData.uploadKey as string;
+      }
+      if (!uploadKey) {
+        setError("The upload didn't finish. Try again.");
+        return;
+      }
+
+      // 3. Queue the build from the uploaded zip.
+      const res = await fetch(`/api/v1/templates/${templateId}/ssr-deploy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploadKey }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? `The server couldn't start the build (server responded ${res.status}). Try again.`);
+        return;
+      }
+      // The build runs in the background. Close the wizard and open the site's settings, where
+      // the build and secrets are shown.
+      onClose?.();
+      router.push(`/dashboard/templates/${templateId}/detail`);
+    } finally {
+      setServerBusy(false);
+    }
   }
 
   async function handleUseMarketplace(item: MarketplaceItem) {
@@ -519,20 +550,29 @@ export function NewSiteWizard() {
 
   return (
     <div style={{ color: "var(--text-main)", minHeight: "calc(100vh - 180px)", display: "flex", flexDirection: "column", alignItems: "center" }}>
-      <div style={{ width: "100%", maxWidth: cardWidth, transition: "max-width 0.25s ease" }}>
-        <Link href="/dashboard" style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-muted)", textDecoration: "none" }}>
-          &larr; Overview
-        </Link>
+      <div style={{ width: "100%", maxWidth: cardWidth, transition: "max-width 0.25s ease", position: "relative" }}>
+        {onClose && (
+          <button type="button" onClick={onClose} aria-label="Close" style={{ position: "absolute", top: 0, right: 0, background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 22, lineHeight: 1, padding: 8 }}>
+            &times;
+          </button>
+        )}
+        {!onClose && (
+          <>
+          <Link href="/dashboard" style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-muted)", textDecoration: "none" }}>
+            &larr; Overview
+          </Link>
 
-        <div style={{ margin: "18px 0 2.5rem" }}>
-          <h1 style={{ margin: "0 0 8px", fontSize: "30px", fontWeight: 700, letterSpacing: "-0.02em" }}>Host a site</h1>
-          <p style={{ margin: 0, fontSize: "14px", color: "var(--text-muted)" }}>
-            Pick a starting point, choose a web address, and publish — no experience needed.
-          </p>
-        </div>
+          <div style={{ margin: "18px 0 2.5rem" }}>
+            <h1 style={{ margin: "0 0 8px", fontSize: "30px", fontWeight: 700, letterSpacing: "-0.02em" }}>Host a site</h1>
+            <p style={{ margin: 0, fontSize: "14px", color: "var(--text-muted)" }}>
+              Pick a starting point, choose a web address, and publish — no experience needed.
+            </p>
+          </div>
+          </>
+        )}
 
-        {/* Stepper */}
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 32 }}>
+        {/* Stepper (padded on the right in the modal so the close button doesn't cover "Publish") */}
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 32, paddingRight: onClose ? 40 : 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <StepBadge n={1} active={step === 1} done={step > 1} />
             <span style={stepLabelStyle(step === 1, step > 1)}>Start</span>
@@ -618,6 +658,23 @@ export function NewSiteWizard() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setStartTab("blank")}
+                  style={{
+                    fontSize: "12.5px",
+                    fontWeight: 650,
+                    padding: "7px 14px",
+                    borderRadius: 999,
+                    border: "none",
+                    cursor: "pointer",
+                    background: startTab === "blank" ? "var(--brand)" : "transparent",
+                    color: startTab === "blank" ? "#fff" : "var(--text-muted)",
+                    transition: "background 0.15s, color 0.15s",
+                  }}
+                >
+                  Blank canvas
+                </button>
+                <button
+                  type="button"
                   onClick={() => setStartTab("ai")}
                   style={{
                     fontSize: "12.5px",
@@ -650,6 +707,25 @@ export function NewSiteWizard() {
                 >
                   Upload your own
                 </button>
+                {plan === "ULTRA" && (
+                  <button
+                    type="button"
+                    onClick={() => setStartTab("server")}
+                    style={{
+                      fontSize: "12.5px",
+                      fontWeight: 650,
+                      padding: "7px 14px",
+                      borderRadius: 999,
+                      border: "none",
+                      cursor: "pointer",
+                      background: startTab === "server" ? "var(--brand)" : "transparent",
+                      color: startTab === "server" ? "#fff" : "var(--text-muted)",
+                      transition: "background 0.15s, color 0.15s",
+                    }}
+                  >
+                    Server app
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setStartTab("wordpress")}
@@ -687,6 +763,16 @@ export function NewSiteWizard() {
                 ) : (
                   <MarketplaceRowExpandGrid templates={items} busyId={busyId} onSelect={(t) => void handleUseMarketplace(t)} />
                 )
+              ) : startTab === "blank" ? (
+                <div>
+                  <h2 style={{ margin: "0 0 4px", fontSize: "17px", fontWeight: 700 }}>Start with a blank canvas</h2>
+                  <p style={{ margin: "0 0 20px", fontSize: "13px", color: "var(--text-muted)" }}>
+                    Build the page yourself in the visual editor, then choose an address.
+                  </p>
+                  <button type="button" disabled={creatingBlank} onClick={() => void handleStartBlank()} style={primaryButtonStyle(!creatingBlank)}>
+                    {creatingBlank ? "Creating…" : "Create blank site"}
+                  </button>
+                </div>
               ) : startTab === "ai" ? (
                 <div style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 18 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -804,6 +890,47 @@ export function NewSiteWizard() {
                     </>
                   )}
                 </div>
+              ) : startTab === "server" ? (
+                <div>
+                  <h2 style={{ margin: "0 0 4px", fontSize: "17px", fontWeight: 700 }}>Server app</h2>
+                  <p style={{ margin: "0 0 20px", fontSize: "13px", color: "var(--text-muted)" }}>
+                    Upload the source of a Next.js, Nuxt, Remix, Astro or Nitro app. Plexo builds it and runs it as an app on its own server.
+                  </p>
+                <form onSubmit={(e) => void handleServerDeploy(e)} style={{ display: "grid", gap: 14, maxWidth: 480 }}>
+                    <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
+                      App name
+                      <input
+                        value={serverName}
+                        onChange={(e) => setServerName(e.target.value)}
+                        placeholder="My app"
+                        style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                      />
+                    </label>
+                    <div style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
+                      Source (.zip with package.json at its root)
+                      <ZipDropzone file={serverFile} onFile={setServerFile} accept=".zip" hint=".zip, with package.json at its root" disabled={serverBusy} />
+                    </div>
+                    <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.7, cursor: "pointer" }}>
+                      <input type="checkbox" checked={serverAgreed} onChange={(e) => setServerAgreed(e.target.checked)} style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0 }} />
+                      <span>
+                        I agree to the{" "}
+                        <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--brand)" }}>
+                          Acceptable Use Policy
+                        </Link>
+                        . The app's code is built and run on Plexo's servers exactly as uploaded.
+                      </span>
+                    </label>
+                    <div>
+                      <button
+                        type="submit"
+                        disabled={serverBusy || !serverFile || !serverName.trim() || !serverAgreed}
+                        style={primaryButtonStyle(!serverBusy && !!serverFile && !!serverName.trim() && serverAgreed)}
+                      >
+                        {serverBusy ? "Uploading…" : "Upload and build"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
               ) : startTab === "wordpress" ? (
                 <div style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 16, alignItems: "flex-start" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -826,7 +953,7 @@ export function NewSiteWizard() {
                 </div>
               ) : (
                 <form onSubmit={handleUpload} style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 22 }}>
-                  <Dropzone file={file} onFile={setFile} />
+                  <ZipDropzone file={file} onFile={setFile} accept=".html,.htm,.zip" hint=".html, .htm, or .zip" />
                   <div>
                     <label style={{ fontSize: "11.5px", fontWeight: 650, color: "var(--text-muted)", display: "block", marginBottom: 8 }}>Site name (optional)</label>
                     <input type="text" value={uploadName} onChange={(e) => setUploadName(e.target.value)} placeholder="My site" style={inputStyle()} />

@@ -20,7 +20,13 @@ import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import type { SQSEvent, SQSBatchResponse } from "aws-lambda";
 import { BUILD_JOB_VERSION, type BuildJob, type BuildResult, type BuildDiagnostic } from "../../../lib/projects/buildJob";
 import { planInstall, InstallPlanError, type BaseVersions } from "./installPlan";
+import { missingAdapterMessage } from "./ssrPlan";
 import type { WorkerInput, WorkerOutput } from "./worker";
+import type { SsrWorkerInput, SsrWorkerOutput } from "./ssrWorker";
+import { createLogStreamer } from "./logStreamer";
+import { isEnvFilePath } from "../../../lib/projects/envFileNames";
+import type { BuildLogMessage, BuildStatusMessage } from "../../../lib/realtime/buildLog";
+import { unzipSync, zipSync } from "fflate";
 
 const REGION = process.env.AWS_REGION || "us-east-1";
 const WORKER_ROLE_ARN = process.env.BUILD_WORKER_ROLE_ARN!;
@@ -30,6 +36,20 @@ const TMP = "/tmp/plexo";
 const sts = new STSClient({ region: REGION });
 // The function's own role (not the per-build scoped one) may send to this one queue only.
 const sqs = new SQSClient({ region: REGION });
+
+/** Sends one live-log batch to the events queue (relayed to subscribers by BuildFinalizeFn). Best effort:
+ * a dropped batch only costs those lines in the live view, and the full log is still saved to S3. */
+async function sendBuildLog(message: BuildLogMessage): Promise<void> {
+  const queueUrl = process.env.BUILD_EVENTS_QUEUE_URL;
+  if (!queueUrl) return;
+  await sqs.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify(message) })).catch((err) => console.error("live log send failed", err));
+}
+
+async function sendBuildStatus(message: BuildStatusMessage): Promise<void> {
+  const queueUrl = process.env.BUILD_EVENTS_QUEUE_URL;
+  if (!queueUrl) return;
+  await sqs.send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify(message) })).catch((err) => console.error("live status send failed", err));
+}
 
 /** Tells the app the build is done, so its post-build steps run right away
  * (lambda/build-finalize). Best effort: a poll from the editor finalizes it too. */
@@ -62,8 +82,10 @@ async function scopedClients(job: BuildJob) {
   const policy = {
     Version: "2012-10-17",
     Statement: [
-      { Effect: "Allow", Action: ["s3:GetObject"], Resource: [`${projectArn}/blobs/*`, `${projectArn}/versions/*`, `${projectArn}/deps/*`] },
+      { Effect: "Allow", Action: ["s3:GetObject"], Resource: [`${projectArn}/blobs/*`, `${projectArn}/versions/*`, `${projectArn}/deps/*`, `${projectArn}/builds/${job.buildId}/*`] },
       { Effect: "Allow", Action: ["s3:PutObject"], Resource: [`${projectArn}/builds/${job.buildId}/*`, `${projectArn}/deps/*`] },
+      // The app's latest uploaded source (kept after builds so a rebuild needs no re-upload).
+      { Effect: "Allow", Action: ["s3:GetObject"], Resource: `${projectArn}/ssr/*` },
       // The saved-dependencies upload is tagged (plexo-cache=deps, for the bucket's expiry rule); a tagged PutObject also
       // needs this. Without it the first build of any project with extra dependencies crashed AFTER installing them.
       { Effect: "Allow", Action: ["s3:PutObjectTagging"], Resource: `${projectArn}/deps/*` },
@@ -206,9 +228,11 @@ async function processJob(job: BuildJob): Promise<void> {
   const outDir = join(TMP, "out");
   const fnOutDir = join(TMP, "fn");
   const cacheDir = join(TMP, "cache");
-  for (const d of [workDir, outDir, fnOutDir, cacheDir, join(TMP, "home")]) mkdirSync(d, { recursive: true });
+  const imgFnOut = join(TMP, "imgfn");
+  for (const d of [workDir, outDir, fnOutDir, imgFnOut, cacheDir, join(TMP, "home")]) mkdirSync(d, { recursive: true });
 
-  const finish = async (errors: BuildDiagnostic[], warnings: BuildDiagnostic[], log: string, functionBundles: BuildResult["functionBundles"] = {}) => {
+  type FinishFn = (errors: BuildDiagnostic[], warnings: BuildDiagnostic[], log: string, functionBundles?: BuildResult["functionBundles"]) => Promise<void>;
+  const finish: FinishFn = async (errors, warnings, log, functionBundles = {}) => {
     const durationMs = Date.now() - started;
     const failed = errors.length > 0;
     const result: BuildResult = {
@@ -235,10 +259,13 @@ async function processJob(job: BuildJob): Promise<void> {
       finishedAt: result.finishedAt,
       durationMs,
     });
+    // Subscribers to the live log learn the final state here, for both success and failure.
+    await sendBuildStatus({ type: "build-status", buildId: job.buildId, templateId: job.templateId, status: result.status as "SUCCEEDED" | "FAILED", summary: result.summary });
     if (!failed) await announce(job.buildId);
   };
 
   try {
+    if (job.kind === "ssr") return await buildSsr(job, s3, finish, { workDir, outDir, fnOutDir, imgFnOut, cacheDir });
     const manifestBytes = await getBytes(s3, job.bucket, job.manifestKey);
     if (!manifestBytes) return await finish([{ kind: "build", message: "This version's file list is missing — save the project again and rebuild." }], [], "");
     const manifest = JSON.parse(manifestBytes.toString("utf8")) as { files: Array<{ path: string; sha: string }> };
@@ -336,6 +363,126 @@ async function processJob(job: BuildJob): Promise<void> {
   } finally {
     rmSync(TMP, { recursive: true, force: true });
   }
+}
+
+/** An SSR build: unpack the uploaded source, run the framework's build in a child process,
+ * upload the server function as builds/<id>/functions/server.zip and the static files to the site prefix.
+ * The source zip is only read; it stays so the app can be rebuilt without uploading again. */
+async function buildSsr(
+  job: BuildJob,
+  s3: S3Client,
+  finish: (errors: BuildDiagnostic[], warnings: BuildDiagnostic[], log: string, functionBundles?: BuildResult["functionBundles"]) => Promise<void>,
+  dirs: { workDir: string; outDir: string; fnOutDir: string; imgFnOut: string; cacheDir: string },
+): Promise<void> {
+  if (!job.ssrSourceKey || !job.ssrFramework) {
+    return await finish([{ kind: "build", message: "This SSR build is missing its source or framework. Upload the project again." }], [], "");
+  }
+  const sourceBytes = await getBytes(s3, job.bucket, job.ssrSourceKey);
+  if (!sourceBytes) return await finish([{ kind: "build", message: "The uploaded source is missing. Upload the project again." }], [], "");
+
+  // Unpack the app root (the folder with package.json) into the work directory. node_modules
+  // from the upload is dropped: the build installs its own, so an upload can't pre-seed it.
+  const root = job.ssrRoot ?? "";
+  const entries = unzipSync(new Uint8Array(sourceBytes));
+  for (const [name, body] of Object.entries(entries)) {
+    if (name.endsWith("/") || !name.startsWith(root)) continue;
+    const rel = name.slice(root.length);
+    if (rel.startsWith("node_modules/")) continue;
+    // Environment files never reach the build (see lib/projects/envFileNames.ts).
+    if (isEnvFilePath(rel)) continue;
+    const target = join(dirs.workDir, rel);
+    if (relative(dirs.workDir, target).startsWith("..")) continue;
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, body);
+  }
+
+  const pkgPath = join(dirs.workDir, "package.json");
+  if (!existsSync(pkgPath)) return await finish([{ kind: "build", file: "package.json", message: "No package.json was found in the uploaded source." }], [], "");
+  let pkg: { dependencies?: Record<string, unknown>; devDependencies?: Record<string, unknown> };
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+  } catch {
+    return await finish([{ kind: "install", file: "package.json", message: "package.json isn't valid JSON." }], [], "");
+  }
+  const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
+  const adapterProblem = missingAdapterMessage(job.ssrFramework, deps);
+  if (adapterProblem) return await finish([{ kind: "install", file: "package.json", message: adapterProblem }], [], "");
+
+  const input: SsrWorkerInput = {
+    appDir: dirs.workDir,
+    fnDir: dirs.fnOutDir,
+    clientOut: dirs.outDir,
+    npmCli: NPM_CLI,
+    cacheDir: dirs.cacheDir,
+    framework: job.ssrFramework,
+    hasLockfile: existsSync(join(dirs.workDir, "package-lock.json")),
+    imageFnDir: dirs.imgFnOut,
+    buildEnv: job.publicEnv,
+  };
+  const output = await runSsrWorker(input, join(TMP, "ssr-input.json"), join(TMP, "ssr-result.json"), { buildId: job.buildId, templateId: job.templateId });
+  if (!output.ok) {
+    const errors: BuildDiagnostic[] = output.errors.map((e) => ({ kind: e.kind === "bundle" ? "build" : e.kind, message: e.message, snippet: e.snippet }));
+    return await finish(errors, [], output.log);
+  }
+
+  // Each function is one zip with index.mjs at its root: the server, and the image optimizer when the plan has one.
+  const zipFolder = async (dir: string, key: string) => {
+    const files: Record<string, Uint8Array> = {};
+    for (const file of walk(dir)) files[relative(dir, file).split("\\").join("/")] = readFileSync(file);
+    const body = zipSync(files, { level: 6 });
+    await s3.send(new PutObjectCommand({ Bucket: job.bucket, Key: key, Body: body, ContentType: "application/zip", Metadata: { sha256: createHash("sha256").update(body).digest("hex") } }));
+    return { key, bytes: body.byteLength };
+  };
+  const server = await zipFolder(dirs.fnOutDir, `${job.functionsPrefix}/server.zip`);
+  const imageBundle = existsSync(join(dirs.imgFnOut, "index.mjs"))
+    ? await zipFolder(dirs.imgFnOut, `${job.functionsPrefix}/image.zip`)
+    : null;
+
+  // Static files: served from the site prefix, never through the function.
+  if (output.hasClient) {
+    await mapLimit(walk(dirs.outDir), 24, async (file) => {
+      const rel = relative(dirs.outDir, file).split("\\").join("/");
+      const ext = rel.split(".").pop()!.toLowerCase();
+      await s3.send(new PutObjectCommand({
+        Bucket: job.bucket,
+        Key: `${job.sitePrefix}/${rel}`,
+        Body: readFileSync(file),
+        ContentType: CONTENT_TYPES[ext] ?? "application/octet-stream",
+        CacheControl: rel.startsWith("_next/static/") || rel.startsWith("assets/") ? "public, max-age=31536000, immutable" : "public, max-age=0, must-revalidate",
+      }));
+    });
+  }
+
+  await finish([], [], output.log, { server, ...(imageBundle ? { image: imageBundle } : {}) });
+}
+
+function runSsrWorker(input: SsrWorkerInput, inputPath: string, resultPath: string, live: { buildId: string; templateId: string }): Promise<SsrWorkerOutput> {
+  writeFileSync(inputPath, JSON.stringify(input));
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, ["/var/task/ssrWorker.mjs", inputPath, resultPath], {
+      cwd: input.appDir,
+      // Same isolation as the static build: no AWS credentials reach the child.
+      env: { PATH: "/var/lang/bin:/usr/local/bin:/usr/bin:/bin", HOME: join(TMP, "home"), NODE_ENV: "production", npm_config_update_notifier: "false", CI: "1" },
+      stdio: ["ignore", "pipe", "inherit"],
+    });
+    // The child's output is streamed to the build's live log as it arrives, and also kept for CloudWatch.
+    const streamer = createLogStreamer((batch) => sendBuildLog({ type: "build-log", ...live, ...batch }));
+    child.stdout.on("data", (chunk: Buffer) => {
+      process.stdout.write(chunk);
+      streamer.push(chunk.toString());
+    });
+    const timer = setTimeout(() => child.kill("SIGKILL"), 13 * 60 * 1000);
+    child.on("close", () => {
+      clearTimeout(timer);
+      // Send the last lines before reporting the result, so the live log is complete when the build ends.
+      void streamer.close().then(() => {
+        const output: SsrWorkerOutput = existsSync(resultPath)
+          ? JSON.parse(readFileSync(resultPath, "utf8"))
+          : { ok: false, errors: [{ kind: "build", message: "The server build ran out of time or memory. Large dependencies are the usual cause." }], log: "", hasClient: false };
+        resolve(output);
+      });
+    });
+  });
 }
 
 function exec(cmd: string, args: string[]): Promise<void> {
