@@ -253,8 +253,15 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(returnTo ? { ...body, returnTo } : body),
       });
-      const data = (await res.json()) as { clientSecret?: string; error?: string };
-      if (!res.ok || !data.clientSecret) throw new Error(data.error ?? "Could not start checkout.");
+      const data = (await res.json()) as { clientSecret?: string; changed?: boolean; message?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Could not start checkout.");
+      if (data.changed) {
+        // Already subscribed: the plan was changed in place, no card form needed.
+        setCheckoutStatus({ kind: "success", text: data.message ?? "Your plan is updating now." });
+        setTimeout(() => (returnTo && isSafeReturnTo(returnTo) ? router.push(returnTo) : router.refresh()), 2000);
+        return;
+      }
+      if (!data.clientSecret) throw new Error(data.error ?? "Could not start checkout.");
       setCheckoutSecret(data.clientSecret);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start checkout.");

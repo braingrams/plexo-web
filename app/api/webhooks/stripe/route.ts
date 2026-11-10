@@ -18,6 +18,7 @@ import { handleLmsAddonSlotSubscriptionUpdate, handleLmsAddonSlotSubscriptionDel
 import { reconcileFunnelSlotsForOrg } from "@/lib/lms/funnelSlots";
 import { mapStripeStatus, syncPlanLifecycle } from "@/lib/plan/lifecycle";
 import { isSettled, recordStripeCharge, sendReceiptEmail } from "@/lib/billing/payments";
+import { retireSupersededPlanSubscriptions } from "@/lib/billing/planChange";
 
 // DynamoDB-stack port of this file — Plexo's own SaaS-billing Stripe webhook (distinct
 // from app/api/webhooks/stripe/commerce/route.ts, which handles Plexo-hosted Commerce
@@ -256,6 +257,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         break;
       }
 
+      // Safety net against double billing: one customer, one live plan subscription. If a
+      // second one exists (two checkouts at once, an old client, a manual Stripe edit) the
+      // older is cancelled with its unused time credited. If THIS event is for the one that
+      // was just cancelled it must not touch the account — it would overwrite the plan the
+      // newer subscription already set (an old Pro renewing once reset an Ultra account to Pro).
+      const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id;
+      if (customerId) {
+        const retired = await retireSupersededPlanSubscriptions(stripe, customerId).catch((err) => {
+          console.error(`superseded-subscription check failed for ${customerId}`, err);
+          return [] as string[];
+        });
+        if (retired.includes(subscription.id)) break;
+      }
+
       // Read the plan as it stood BEFORE this update, so an allowance refresh only fires
       // on a genuine plan change — not on every unrelated "customer.subscription.updated"
       // (a payment method swap, a metadata edit, etc.) that happens to match this same
@@ -313,8 +328,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const plexoUserId = subscription.metadata?.plexoUserId;
       if (!plexoUserId) break;
 
-      // An upgrade (Pro → Ultra) creates a new subscription and ends the old one — that
-      // old one ending must not drop the account to Free. Only the current one counts.
+      // A superseded plan subscription being cancelled (retireSupersededPlanSubscriptions)
+      // must not drop the account to Free. Only the current one counts.
       const { data: current } = await User.get({ id: plexoUserId }).go();
       if (!current || (current.stripeSubscriptionId && current.stripeSubscriptionId !== subscription.id)) break;
 
