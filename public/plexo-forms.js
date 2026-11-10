@@ -40,11 +40,33 @@
     return v === null ? null : v.trim();
   }
 
+  // Forms that belong to the shop — checkout, order tracking, donations — already have their own
+  // working handler that creates the order or payment. Taking one over would swallow the real
+  // submit and show "message sent" while NO order is made (the buyer has paid, the owner sees
+  // nothing). So on a commerce site the connector never auto-connects a form on the storefront or
+  // checkout pages, nor one carrying another Plexo runtime's marker. data-plexo-form still wins.
+  function isShopForm(form) {
+    var i, attrs = form.attributes;
+    for (i = 0; i < attrs.length; i++) {
+      var a = attrs[i].name;
+      if (a.indexOf("data-plexo-") === 0 && a !== "data-plexo-form" && a !== "data-plexo-success" && a !== "data-plexo-redirect" && a !== "data-plexo-ignore") return true;
+    }
+    var cfg = window.__PLEXO_COMMERCE__;
+    if (!cfg) return false;
+    var path = location.pathname.replace(/\/+$/, "") || "/";
+    var norm = function (p) { return typeof p === "string" && p ? "/" + p.replace(/^\/+|\/+$/g, "") : null; };
+    var checkout = norm(cfg.checkoutPath), store = norm(cfg.storefrontPath);
+    if (checkout && path === checkout) return true;
+    if (store && (path === store || path.indexOf(store + "/") === 0)) return true;
+    return /\/checkout$/.test(path);
+  }
+
   function isClaimed(form) {
     var m = marker(form);
     if (m === "off") return false;
     if (m !== null) return true; // explicitly connected
     if (!AUTO) return false;
+    if (isShopForm(form)) return false;
     if (form.hasAttribute("data-plexo-ignore")) return false;
     // Already posts somewhere real (another service, or Plexo's own native form action)?
     var action = (form.getAttribute("action") || "").trim();
