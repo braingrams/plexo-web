@@ -730,7 +730,6 @@ export function BlogPostEditor({
           />
         </div>
 
-        <SeoToggleRow on={seoOn} onChange={setSeoPreference} />
         {seoOn && (
         <div style={PANEL}>
           <CollapseHeader label="SEO" open={seoOpen} onToggle={() => setSeoOpen(!seoOpen)} />
@@ -880,6 +879,7 @@ export function BlogPostEditor({
               }}
             />
           </div>
+          <SeoToggleRow on={seoOn} onChange={setSeoPreference} />
           {status === "SCHEDULED" && (
             <input
               type="datetime-local"
