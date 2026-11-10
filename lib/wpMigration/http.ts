@@ -7,6 +7,13 @@ const USER_AGENT = "Mozilla/5.0 (compatible; PlexoMigrator/1.0; +https://plexopa
 
 const MAX_RETRIES = 2;
 
+/**
+ * Longest any single request (headers and body) may take. Without it a server that accepts the
+ * connection and never answers hangs the whole migration step until the serverless function is
+ * killed — and since the step never gets to save its progress, it would hang again on every retry.
+ */
+export const MIGRATION_REQUEST_TIMEOUT_MS = 25_000;
+
 /** safeFetch (SSRF-guarded) plus a browser-like UA and a short retry on 429/5xx — every migration fetch goes through here. */
 export async function migrationFetch(url: string, init: SafeFetchOptions = {}): Promise<Response> {
   const headers = new Headers(init.headers);
@@ -14,7 +21,7 @@ export async function migrationFetch(url: string, init: SafeFetchOptions = {}): 
   let lastError: unknown;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const res = await safeFetch(url, { ...init, headers });
+      const res = await safeFetch(url, { ...init, headers, signal: init.signal ?? AbortSignal.timeout(MIGRATION_REQUEST_TIMEOUT_MS) });
       if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES) {
         const retryAfter = Number.parseInt(res.headers.get("retry-after") || "", 10);
         await new Promise((r) => setTimeout(r, Number.isFinite(retryAfter) ? Math.min(retryAfter, 10) * 1000 : 1500 * (attempt + 1)));
@@ -24,6 +31,8 @@ export async function migrationFetch(url: string, init: SafeFetchOptions = {}): 
     } catch (err) {
       lastError = err;
       if (err instanceof Error && err.name === "SsrfBlockedError") throw err;
+      // A server that stalled once will stall again; the caller decides when to try later, not this loop.
+      if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) throw err;
       if (attempt < MAX_RETRIES) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
     }
   }

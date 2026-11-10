@@ -101,6 +101,12 @@ async function fetchSameFile(url: string): Promise<Response> {
 export async function fetchSourceAsset(origin: string, segments: string[]): Promise<AssetFetchResult> {
   const path = segments.join("/");
   const ext = extensionOf(path);
+  // Cloudflare injects these into the pages it proxies (bot checks, analytics); they aren't part of
+  // the WordPress site, they stall or refuse non-browser requests, and the new host's own
+  // Cloudflare serves them anyway.
+  if (segments[0] === "cdn-cgi") {
+    return { ok: false, skipped: true, reason: "Added by Cloudflare, not part of your WordPress site" };
+  }
   if (!MIGRATION_ASSET_EXTENSIONS.has(ext)) {
     return { ok: false, skipped: true, reason: `File type ".${ext || "none"}" isn't something a website loads directly` };
   }
