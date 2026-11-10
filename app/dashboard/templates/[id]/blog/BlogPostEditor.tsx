@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { BlogRichTextEditor } from "./BlogRichTextEditor";
 import { AiWriteAssistant, type AiBlogPostResult } from "./AiWriteAssistant";
 import { computeSeoChecklist } from "./seoChecklist";
+import { SEO_TOOLS_STORAGE_KEY, seoToolsEnabledFrom } from "./seoPreference";
 import { PageContainer } from "../../../_components/PageContainer";
 import { CustomSelect } from "../../../../_components/CustomSelect";
 import { UpgradeModal } from "../../../_components/UpgradeModal";
@@ -70,6 +71,54 @@ function slugifyClient(input: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
+}
+
+/** A section heading that opens and closes its body. */
+function CollapseHeader({ label, open, onToggle }: { label: string; open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      style={{
+        ...FIELD_LABEL,
+        display: "flex",
+        width: "100%",
+        justifyContent: "space-between",
+        alignItems: "center",
+        background: "none",
+        border: "none",
+        padding: 0,
+        cursor: "pointer",
+        textAlign: "left",
+      }}
+    >
+      <span>{label}</span>
+      <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+    </button>
+  );
+}
+
+/** Turns the SEO tools on or off for this browser. Turning them off keeps every value already entered. */
+function SeoToggleRow({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <label
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.5rem",
+        marginBottom: "0.75rem",
+        fontSize: "0.8rem",
+        color: "rgba(240,242,255,0.7)",
+      }}
+    >
+      <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} />
+      SEO tools {on ? "on" : "off"}
+      <span style={{ color: "rgba(240,242,255,0.4)" }}>
+        {on ? "· turn off for plain writing" : "· turn on for search previews and the checklist"}
+      </span>
+    </label>
+  );
 }
 
 function IconCheck() {
@@ -175,6 +224,17 @@ export function BlogPostEditor({
     initialPost?.metaDescription ?? "",
   );
   const [noindex, setNoindex] = useState(initialPost?.noindex ?? false);
+  // SEO tools: shown unless the writer turned them off, and each section can be collapsed.
+  const [seoOn, setSeoOn] = useState(true);
+  const [seoOpen, setSeoOpen] = useState(true);
+  const [checklistOpen, setChecklistOpen] = useState(true);
+  useEffect(() => {
+    setSeoOn(seoToolsEnabledFrom(window.localStorage.getItem(SEO_TOOLS_STORAGE_KEY)));
+  }, []);
+  const setSeoPreference = (on: boolean) => {
+    setSeoOn(on);
+    window.localStorage.setItem(SEO_TOOLS_STORAGE_KEY, on ? "on" : "off");
+  };
   const [authorId, setAuthorId] = useState(
     initialPost?.authorId || currentUserAuthorId || "",
   );
@@ -670,8 +730,11 @@ export function BlogPostEditor({
           />
         </div>
 
+        {seoOn && (
         <div style={PANEL}>
-          <label style={FIELD_LABEL}>SEO</label>
+          <CollapseHeader label="SEO" open={seoOpen} onToggle={() => setSeoOpen(!seoOpen)} />
+          {seoOpen && (
+          <>
           <div style={{ marginBottom: "0.75rem" }}>
             <input
               value={metaTitle}
@@ -754,10 +817,15 @@ export function BlogPostEditor({
             />
             Hide from search engines (noindex)
           </label>
+          </>
+          )}
         </div>
+        )}
 
+        {seoOn && (
         <div style={PANEL}>
-          <label style={FIELD_LABEL}>SEO Checklist</label>
+          <CollapseHeader label="SEO Checklist" open={checklistOpen} onToggle={() => setChecklistOpen(!checklistOpen)} />
+          {checklistOpen && (
           <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
             {computeSeoChecklist({
               title,
@@ -788,7 +856,9 @@ export function BlogPostEditor({
               </li>
             ))}
           </ul>
+          )}
         </div>
+        )}
       </div>
 
       <div>
@@ -809,6 +879,7 @@ export function BlogPostEditor({
               }}
             />
           </div>
+          <SeoToggleRow on={seoOn} onChange={setSeoPreference} />
           {status === "SCHEDULED" && (
             <input
               type="datetime-local"
