@@ -7,6 +7,7 @@ import { ChevronRight } from "lucide-react";
 import { Toggle } from "@/app/dashboard/_components/Toggle";
 import { CustomSelect } from "@/app/_components/CustomSelect";
 import { SolSubpageHeader } from "../_components/SolSubpageHeader";
+import { WhatsAppConnect } from "./WhatsAppConnect";
 import type { SolPreferencesData, SolTonePreset, SolModelTier, SolResponseLength } from "./page";
 
 const TONE_OPTIONS: Array<{ value: SolTonePreset; label: string }> = [
@@ -241,6 +242,13 @@ export function SolSettingsPageClient({ initialPreferences }: { initialPreferenc
               title="Remember things about you"
               description="Preferences, recurring facts, and tone cues, across conversations."
               control={<Toggle checked={memoryEnabled} onChange={(next) => { setMemoryEnabled(next); setDirty(true); }} label="Let Sol remember things about you across conversations" />}
+            />
+
+            <Row
+              title="Chat with Sol on WhatsApp"
+              description="Message Sol from your phone — it works on your account and replies right in the chat. Anything risky still asks you first."
+              tall
+              control={<WhatsAppConnect />}
             />
 
             <Row

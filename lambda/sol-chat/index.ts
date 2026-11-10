@@ -4,6 +4,8 @@ import { prepareMessagesTurn, prepareConfirmTurn, type StreamFrame, type TurnEmi
 import { prepareAssist, type AssistFrame } from "@/lib/ai/pageAssist";
 import { prepareStreamedGeneration, type GenerationFrame } from "@/lib/ai/streamGeneration";
 import { loadSecretsFromSsm } from "@/lib/ssmEnv";
+import { processInboundMessage } from "@/lib/whatsapp/inbound";
+import type { InboundWhatsAppMessage } from "@/lib/whatsapp/cloudApi";
 import { resolveSessionUser, parseCookies } from "./sessionAuth";
 
 // App secrets (e.g. the key that decrypts an account's own stored AI provider key) come
@@ -130,6 +132,17 @@ const AI_ASSIST_RE = /^\/api\/v1\/ai\/stream\/assist\/?$/;
 const CONFIRM_RE = /^\/api\/v1\/sol\/chat\/conversations\/([^/]+)\/messages\/([^/]+)\/confirm\/?$/;
 
 export const handler = awslambda.streamifyResponse(async (event: APIGatewayProxyEventV2, responseStream: awslambda.HttpResponseStream) => {
+  // WhatsApp messages (lib/whatsapp): the webhook route hands each one over as an asynchronous Invoke
+  // with `{ whatsappJob }` at the top level — only IAM-authorised callers can put keys there (a Function
+  // URL request's attacker-controlled data all lives inside `body`/`headers`), so this needs no header check.
+  const whatsappJob = (event as unknown as { whatsappJob?: InboundWhatsAppMessage }).whatsappJob;
+  if (whatsappJob) {
+    await ensureSecrets().catch((err) => console.error("[whatsapp] couldn't load app settings from SSM:", err));
+    await processInboundMessage(whatsappJob);
+    responseStream.end();
+    return;
+  }
+
   // Closes compute-stack.ts's own TODO(security): reject anything that reaches this
   // Function URL directly (bypassing CloudFront, which is the only party that attaches this
   // header — see that stack's originVerifySecret comment) before any app logic, session

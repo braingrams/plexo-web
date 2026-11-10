@@ -75,6 +75,14 @@ const APP_SECRET_KEYS = [
   "ALPS_API_KEY",
   "ALPS_LEAD_STAGE",
   "ALPS_CUSTOMER_STAGE",
+  // SOL on WhatsApp (lib/whatsapp/config.ts). Swapping Meta's test number for the verified one is just
+  // changing these GitHub secrets and redeploying. All five must be set for the feature to switch on.
+  "WHATSAPP_ACCESS_TOKEN",
+  "WHATSAPP_PHONE_NUMBER_ID",
+  "WHATSAPP_APP_SECRET",
+  "WHATSAPP_VERIFY_TOKEN",
+  "WHATSAPP_BUSINESS_NUMBER",
+  "WHATSAPP_GRAPH_VERSION",
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
   // Plexo's platform-hosted Commerce Stripe account (app/api/webhooks/stripe/commerce,
