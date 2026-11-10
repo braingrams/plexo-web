@@ -8,6 +8,7 @@ import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { LmsFunnelAddonSlot } from "@/lib/db/contentEntities";
+import { PlanChangeError, changePlanInPlace } from "@/lib/billing/planChange";
 
 type CheckoutRequest =
   | { kind: "subscription"; plan: "PRO" | "ULTRA" }
@@ -77,6 +78,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     if (body.kind === "subscription") {
+      // Already paying for a plan? Change that subscription in place (prorated) — a new
+      // Checkout here would open a SECOND subscription and bill them for both every month.
+      const changed = await changePlanInPlace(stripe, customerId, body.plan);
+      if (changed) return NextResponse.json(changed);
+
       const priceId = resolvePriceId(PLAN_PRICE_ENV[body.plan]);
       const checkoutSession = await stripe.checkout.sessions.create({
         ui_mode: "embedded_page",
@@ -153,6 +159,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
     return NextResponse.json({ clientSecret: checkoutSession.client_secret });
   } catch (err) {
+    if (err instanceof PlanChangeError) return NextResponse.json({ error: err.message }, { status: err.status });
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Could not start checkout." },
       { status: 503 },

@@ -373,7 +373,11 @@ export class PublishedSitesStack extends cdk.Stack {
           // The rest of the scripts the platform injects into published pages (public/plexo-content.js + .css and
           // plexo-forms.js, the funnel sign-up, the newsletter popup). Without a behavior they fall through to the server
           // function, which doesn't carry public/ — a 404, and the feature silently does nothing on the live site.
-          { pathPattern: "plexo-*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
+          // Named files, NOT "plexo-*": that also matched /plexo-inline/… (the CSS/JS a WordPress migration moves out of an
+          // oversized page, served by the app from the site's own files) and sent it to this bucket — a 403, so migrated
+          // pages with big inline styles (maildrip.io) rendered with no CSS.
+          { pathPattern: "plexo-content.*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
+          { pathPattern: "plexo-forms.js", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "lms-signup.js", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "newsletter-popup.js", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
           { pathPattern: "uploads/*", targetOriginId: "AssetsBucket", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_OPTIMIZED, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },

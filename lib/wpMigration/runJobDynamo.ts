@@ -1174,10 +1174,14 @@ async function runAssetsStep(job: JobItem): Promise<string> {
 
   if (throttled) await new Promise((r) => setTimeout(r, THROTTLE_BACKOFF_MS));
 
-  const { data: remaining } = await WpMigrationAsset.query
-    .primary({ jobId: job.id })
-    .where((attr, op) => op.eq(attr.status, "PENDING"))
-    .go({ pages: "all" });
+  // Counts come from the rows themselves, so a step that is cut short (or an earlier one that
+  // was) never leaves the dashboard showing progress the job has actually made.
+  const { data: all } = await WpMigrationAsset.query.primary({ jobId: job.id }).go({ pages: "all" });
+  const remaining = all.filter((a) => a.status === "PENDING");
+  counts.assets = all.length;
+  counts.assetsDone = all.filter((a) => a.status === "DONE").length;
+  counts.assetsFailed = all.filter((a) => a.status === "FAILED").length;
+  counts.assetsSkipped = all.filter((a) => a.status === "SKIPPED").length;
   const next = remaining.length === 0 ? "FINALIZING" : "ASSETS";
   await WpMigrationJob.patch({ templateId: job.templateId, id: job.id }).set({ counts, phase: next as "ASSETS" }).go();
   return next;

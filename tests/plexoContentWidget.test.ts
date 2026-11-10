@@ -123,6 +123,45 @@ describe("form connector", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("never takes over a shop form — a checkout that is swallowed makes no order", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const cases: Array<[string, string, Record<string, unknown> | undefined]> = [
+      ["/aso-ebi/checkout", `<form id="f" novalidate><input name="name"></form>`, { storefrontPath: "/aso-ebi", checkoutPath: "/aso-ebi/checkout" }],
+      ["/aso-ebi/track", `<form id="f"><input name="order"></form>`, { storefrontPath: "aso-ebi", checkoutPath: null }],
+      ["/pay", `<form id="f"><input name="n"></form>`, { storefrontPath: "/store", checkoutPath: "/pay/" }],
+      ["/give", `<form id="f" data-plexo-donation="c1"><input name="amount"></form>`, undefined],
+    ];
+    for (const [path, html, cfg] of cases) {
+      history.replaceState({}, "", path);
+      (window as any).__PLEXO_COMMERCE__ = cfg;
+      document.body.innerHTML = html;
+      load(formsJs, { "data-template-id": "tpl_1", "data-auto": "true" });
+      const ev = new Event("submit", { bubbles: true, cancelable: true });
+      document.getElementById("f")!.dispatchEvent(ev);
+      expect(ev.defaultPrevented, path).toBe(false);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("still connects an ordinary contact form on a commerce site, and an explicitly marked one anywhere", async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    (window as any).__PLEXO_COMMERCE__ = { storefrontPath: "/aso-ebi", checkoutPath: "/aso-ebi/checkout" };
+    history.replaceState({}, "", "/contact");
+    document.body.innerHTML = `<form id="a"><input name="m" value="hi"></form>`;
+    load(formsJs, { "data-template-id": "tpl_1", "data-auto": "true" });
+    submit(document.getElementById("a") as HTMLFormElement);
+    await flush();
+    history.replaceState({}, "", "/aso-ebi/checkout");
+    document.body.innerHTML = `<form id="b" data-plexo-form="Questions"><input name="m" value="hi"></form>`;
+    submit(document.getElementById("b") as HTMLFormElement);
+    await flush();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    delete (window as any).__PLEXO_COMMERCE__;
+    history.replaceState({}, "", "/");
+  });
+
   it("React mode connects only forms marked data-plexo-form", async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }));
     vi.stubGlobal("fetch", fetchMock);
