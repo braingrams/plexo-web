@@ -122,6 +122,13 @@ export function WhatsAppConnect() {
           <img src={pairing.qr} alt={`QR code that opens WhatsApp with LINK ${pairing.code} ready to send`} width={132} height={132} style={{ borderRadius: 12, background: "#fff", padding: 6, flexShrink: 0 }} />
         </div>
       )}
+      <span style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.4)" }}>
+        Your messages are handled as described in our{" "}
+        <a href="https://www.plexopages.com/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand)" }}>
+          Privacy Policy
+        </a>
+        .
+      </span>
       {error && <span style={{ fontSize: "0.76rem", color: "#f87171" }}>{error}</span>}
     </div>
   );
