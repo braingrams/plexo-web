@@ -26,6 +26,13 @@ permissions:
   id-token: write # required for OIDC — no static AWS keys anywhere in this workflow
   contents: read
 
+# One production deploy at a time. Two overlapping runs both update the same CloudFormation
+# stacks, and the second fails with "UPDATE_IN_PROGRESS". A newer run waits for the running one
+# (cancel-in-progress is false, so a deploy that's already running is never cut short).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     if: github.repository == 'Challaris/plexo-web'
