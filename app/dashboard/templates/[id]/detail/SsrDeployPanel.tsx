@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { uploadSsrZip, queueSsrBuild } from "@/lib/projects/clientSsrUpload";
 import { useBuildLog } from "./useBuildLog";
@@ -30,6 +30,12 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Keep the build log pinned to its last line as lines arrive, so a quiet stretch never looks stuck.
+  const logRef = useRef<HTMLPreElement>(null);
+  useEffect(() => {
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [live.lines.length]);
 
   async function upload() {
     if (!file || !agreed) return;
@@ -95,7 +101,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
             Build {live.status ? (live.status === "SUCCEEDED" ? "succeeded" : "failed") : "running"}
             {live.summary ? `: ${live.summary}` : ""}
           </p>
-          <pre style={{ margin: 0, maxHeight: 280, overflow: "auto", padding: 12, borderRadius: 10, background: "rgba(0,0,0,0.35)", fontSize: 11.5, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+          <pre ref={logRef} style={{ margin: 0, maxHeight: 280, overflow: "auto", padding: 12, borderRadius: 10, background: "rgba(0,0,0,0.35)", fontSize: 11.5, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
             {live.lines.length ? live.lines.join("\n") : "Waiting for the build to start…"}
           </pre>
         </div>
