@@ -15,7 +15,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (bounce) return NextResponse.redirect(bounce);
   const state = verifyInstallState(q.get("state"));
   const back = (appId: string | null, result: string) =>
-    NextResponse.redirect(new URL(appId ? `/dashboard/apps/${appId}?panel=settings&github=${result}` : `/dashboard/apps?github=${result}`, request.url));
+    NextResponse.redirect(new URL(appId ? `/dashboard/apps/${appId}?panel=github&github=${result}` : `/dashboard/apps?github=${result}`, request.url));
 
   const resolved = await resolveUser(request);
   if (!state || !resolved || resolved.userId !== state.userId || resolved.organizationId !== state.organizationId) return back(state?.appId ?? null, "expired");
