@@ -2,12 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Mulish } from "next/font/google";
+import { mulish } from "@/lib/mulish";
 import { Check, Globe, Layers, LayoutTemplate, MessageSquare, ShoppingBag, Rocket, CreditCard } from "lucide-react";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { planMonthlyCredits } from "@/lib/credits/value";
-
-const mulish = Mulish({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800", "900"], display: "swap" });
 
 type TrialPlan = "PRO" | "ULTRA";
 

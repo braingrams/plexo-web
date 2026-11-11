@@ -5,16 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
 import { ArrowLeft, Sparkles, ShieldCheck, CheckCircle2, Lock, Eye, EyeOff } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
-import { Mulish } from "next/font/google";
+import { mulish } from "@/lib/mulish";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
 import { DashboardSkeleton } from "@/app/auth/charisol/callback/dashboard-skeleton";
-
-const mulish = Mulish({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800", "900"],
-  display: "swap",
-});
 
 function LoginForm() {
   const router = useRouter();
