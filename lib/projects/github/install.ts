@@ -16,13 +16,19 @@ function secret(): string {
   return s;
 }
 
-export function signInstallState(input: { appId: string; organizationId: string; userId: string }): string {
-  const payload = Buffer.from(JSON.stringify({ ...input, origin: selfOrigin(), exp: Date.now() + STATE_TTL_MS })).toString("base64url");
+// appId is set when an app's GitHub tab starts the install. The site wizard starts installs
+// before any app exists, so it passes returnTo (an in-app /dashboard/ path) instead.
+export type InstallStateInput = { appId?: string | null; organizationId: string; userId: string; returnTo?: string | null };
+
+export function signInstallState(input: InstallStateInput): string {
+  const payload = Buffer.from(JSON.stringify({ appId: input.appId ?? null, organizationId: input.organizationId, userId: input.userId, returnTo: input.returnTo ?? null, origin: selfOrigin(), exp: Date.now() + STATE_TTL_MS })).toString("base64url");
   const sig = createHmac("sha256", secret()).update(payload).digest("base64url");
   return `${payload}.${sig}`;
 }
 
-export function verifyInstallState(state: string | null): { appId: string; organizationId: string; userId: string } | null {
+export type VerifiedInstallState = { appId: string | null; organizationId: string; userId: string; returnTo: string | null };
+
+export function verifyInstallState(state: string | null): VerifiedInstallState | null {
   if (!state) return null;
   const [payload, sig] = state.split(".");
   if (!payload || !sig) return null;
@@ -30,7 +36,7 @@ export function verifyInstallState(state: string | null): { appId: string; organ
   if (expected.length !== sig.length || !timingSafeEqual(Buffer.from(expected), Buffer.from(sig))) return null;
   try {
     const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-    return data.exp > Date.now() ? { appId: data.appId, organizationId: data.organizationId, userId: data.userId } : null;
+    return data.exp > Date.now() ? { appId: data.appId ?? null, organizationId: data.organizationId, userId: data.userId, returnTo: data.returnTo ?? null } : null;
   } catch {
     return null;
   }

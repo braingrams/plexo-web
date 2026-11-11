@@ -30,6 +30,7 @@ flowchart LR
 - The zip is sent in 3 MB parts through plexo-web and staged in the project bucket. The browser never uploads to S3 directly.
 - Limits: 100 MB zip, 10,000 files (`lib/projects/ssrSource.ts`).
 - Only ULTRA-plan accounts can use server apps (`app/api/v1/templates/[id]/ssr-deploy/route.ts`).
+- Alternative source: a GitHub repo branch. `ssr-deploy` with `{ github: { installationId, repo, ref } }` downloads that branch as a zip through the organization's GitHub installation (`lib/projects/github/archive.ts`). From there it follows the same stages as an upload. The repo is not linked, so later pushes don't rebuild the app.
 
 ### 2. Inspect and gate — `lib/projects/ssrSource.ts`, `lib/projects/ssrBudget.ts`
 

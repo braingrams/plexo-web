@@ -12,6 +12,10 @@ import { DeployedApp } from "@/lib/db/appEntities";
 import { markBuildQueued } from "@/lib/projects/ssrRebuild";
 import { getObject, deleteObject } from "@/lib/projects/blobStore";
 import { isSsrUploadKey } from "@/lib/projects/ssrUpload";
+import { assertOrgInstallation } from "@/lib/projects/github/install";
+import { downloadRepoZip } from "@/lib/projects/github/archive";
+import { GitHubError } from "@/lib/projects/github/client";
+import { isValidGitRef, isValidRepoFullName } from "@/lib/projects/github/validate";
 
 /**
  * POST /api/v1/templates/:id/ssr-deploy
@@ -56,7 +60,7 @@ export async function POST(
     return NextResponse.json({ error: "Server-rendered apps are available on the ULTRA plan." }, { status: 403 });
   }
 
-  const source = await readSource(request, templateId);
+  const source = await readSource(request, templateId, resolved.organizationId);
   if ("error" in source) return NextResponse.json({ error: source.error }, { status: source.status });
   try {
     return await queueBuild(resolved, templateId, plan.ssrMonthlyBudgetUsd, source.zip);
@@ -66,9 +70,10 @@ export async function POST(
   }
 }
 
-async function readSource(request: NextRequest, templateId: string): Promise<Source> {
+async function readSource(request: NextRequest, templateId: string, organizationId: string): Promise<Source> {
   if ((request.headers.get("content-type") ?? "").includes("application/json")) {
     const body = await request.json().catch(() => null);
+    if (body?.github !== undefined) return readGithubSource(body.github, organizationId);
     const uploadKey = typeof body?.uploadKey === "string" ? body.uploadKey : "";
     if (!isSsrUploadKey(templateId, uploadKey)) {
       return { error: "That upload isn't valid for this app. Start the upload again.", status: 400 };
@@ -99,6 +104,25 @@ async function readSource(request: NextRequest, templateId: string): Promise<Sou
     return { error: `Zip exceeds the ${SSR_MAX_ZIP_BYTES / 1024 / 1024}MB limit.`, status: 400 };
   }
   return { zip: new Uint8Array(await file.arrayBuffer()) };
+}
+
+/** A repo the account connected to Plexo's GitHub app: its branch is downloaded as a zip and built
+ * exactly like an uploaded one. The installation must belong to this organization. */
+async function readGithubSource(input: unknown, organizationId: string): Promise<Source> {
+  const g = (input ?? {}) as { installationId?: unknown; repo?: unknown; ref?: unknown };
+  const installationId = Number(g.installationId);
+  const repo = typeof g.repo === "string" ? g.repo.trim() : "";
+  const ref = typeof g.ref === "string" && g.ref.trim() ? g.ref.trim() : null;
+  if (!installationId || !isValidRepoFullName(repo) || (ref !== null && !isValidGitRef(ref))) {
+    return { error: "Pick a GitHub repository and branch from the list.", status: 400 };
+  }
+  try {
+    await assertOrgInstallation(organizationId, installationId);
+    return { zip: await downloadRepoZip(installationId, repo, ref) };
+  } catch (err) {
+    if (err instanceof GitHubError) return { error: err.message, status: err.status >= 400 && err.status < 500 ? err.status : 502 };
+    throw err;
+  }
 }
 
 async function queueBuild(
