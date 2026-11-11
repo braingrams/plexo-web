@@ -18,6 +18,7 @@ type TableSpec = {
   pointInTimeRecovery?: boolean;
   stream?: boolean;
   secondGsi?: boolean;
+  thirdGsi?: boolean;
 };
 
 // One table per bounded context (not one single-table for the whole app) — see the
@@ -47,7 +48,10 @@ const TABLES: TableSpec[] = [
   // Template needs two real lookups beyond its own id: org-wide dashboard listing
   // (GSI1) and parent/child page-tree traversal for multipage sites (GSI2) — both
   // genuine, not speculative.
-  { id: "Content", tableName: "plexo-content", secondGsi: true, pointInTimeRecovery: true },
+  // GSI3 = "everything this user owns": their templates/pages (byUser) and published
+  // domains (byUser) — lets the admin panel and any per-user screen Query instead of
+  // Scanning the whole table (lib/db/contentEntities.ts).
+  { id: "Content", tableName: "plexo-content", secondGsi: true, thirdGsi: true, pointInTimeRecovery: true },
   { id: "Ops", tableName: "plexo-ops", ttlAttribute: "ttl" },
   { id: "Import", tableName: "plexo-import", ttlAttribute: "ttl" },
   // SOL (the AI agent chat feature) stores real user-authored content — conversation
@@ -107,6 +111,14 @@ export class DataStack extends cdk.Stack {
           indexName: "GSI2",
           partitionKey: { name: "GSI2PK", type: dynamodb.AttributeType.STRING },
           sortKey: { name: "GSI2SK", type: dynamodb.AttributeType.STRING },
+        });
+      }
+
+      if (spec.thirdGsi) {
+        table.addGlobalSecondaryIndex({
+          indexName: "GSI3",
+          partitionKey: { name: "GSI3PK", type: dynamodb.AttributeType.STRING },
+          sortKey: { name: "GSI3SK", type: dynamodb.AttributeType.STRING },
         });
       }
 

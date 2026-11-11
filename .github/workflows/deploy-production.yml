@@ -244,6 +244,36 @@ jobs:
         working-directory: ./cdk
         run: npm install
 
+      - name: Deploy the data stack (only when it changed)
+        # The DynamoDB tables + indexes (cdk/lib/data-stack.ts). Skipped outright when `cdk diff`
+        # finds nothing, so ordinary pushes pay only the diff. Runs BEFORE app-data/compute so a
+        # new index exists before code that queries it ships. SAFETY: if the diff would REPLACE or
+        # REMOVE anything (a table replacement destroys live data), the job stops here and a
+        # human has to deploy that change deliberately.
+        working-directory: ./cdk
+        env:
+          STACK_KIND: data
+          # Loading the CDK app imports compute-stack, which refuses to load without these —
+          # the data stack never uses them, so placeholders are fine for diff/deploy here.
+          ORIGIN_VERIFY_SECRET: unused-by-data-stack
+          CRON_SECRET: unused-by-data-stack
+          AUTH_SECRET: unused-by-data-stack
+        run: |
+          set +e
+          DIFF=$(npx aws-cdk diff "${STACK_ID}-data-stack" --exclusively --no-color 2>&1)
+          STATUS=$?
+          set -e
+          if ! echo "$DIFF" | grep -qE '^\[[-+~]\]|requires replacement'; then
+            echo "Data stack unchanged — skipping."
+            exit 0
+          fi
+          echo "$DIFF"
+          if echo "$DIFF" | grep -qE 'requires replacement|^\[-\]'; then
+            echo "::error::The data stack change would replace or remove a resource. Not deploying automatically — review and deploy it by hand."
+            exit 1
+          fi
+          npx aws-cdk deploy "${STACK_ID}-data-stack" --require-approval never --exclusively
+
       - name: Deploy the app-data stack
         # Databases for apps built on Plexo: Aurora Serverless v2 (auto-pauses to 0 ACU) +
         # AppDbFn (cdk/lib/app-data-stack.ts). A no-op when nothing in it changed; the very
