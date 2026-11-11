@@ -899,6 +899,22 @@ export class ComputeStack extends cdk.Stack {
       fn.addEnvironment("SCREENSHOT_FUNCTION_NAME", browserFn.functionName);
     }
 
+    // Voice notes → text (lib/ai/transcribeAudio.ts): the dashboard's mic button runs on serverFn, WhatsApp voice
+    // notes on SolChatFn. Transcribe reads the audio from the user-content bucket with the caller's own S3 grant.
+    const transcribePolicy = new iam.PolicyStatement({
+      actions: ["transcribe:StartTranscriptionJob", "transcribe:GetTranscriptionJob"],
+      resources: [`arn:aws:transcribe:${this.region}:${this.account}:transcription-job/*`],
+    });
+    serverFn.addToRolePolicy(transcribePolicy);
+    solChatFn.addToRolePolicy(transcribePolicy);
+
+    // SOL on WhatsApp (lib/whatsapp): the webhook route (serverFn) answers Meta immediately and hands each
+    // message to SolChatFn as an asynchronous invoke, so the turn gets SOL's 15-minute limit, its tools and
+    // its permissions. No automatic retry: a turn that fails midway must not run its actions a second time.
+    solChatFn.grantInvoke(serverFn);
+    serverFn.addEnvironment("SOL_CHAT_FUNCTION_NAME", solChatFn.functionName);
+    solChatFn.configureAsyncInvoke({ retryAttempts: 0 });
+
     const revalidationFn = new lambda.Function(this, "RevalidationFn", {
       runtime: lambda.Runtime.NODEJS_24_X,
       handler: "index.handler",

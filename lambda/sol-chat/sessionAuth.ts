@@ -1,9 +1,7 @@
 import { decode } from "next-auth/jwt";
 
-import { User } from "@/lib/db/coreEntities";
-import { membershipsForUser, ensurePersonalWorkspace, ACTIVE_ORG_COOKIE } from "@/server/orgMemberships";
-import { resolveManageLandingPagePublishing } from "@/lib/subscription";
-import type { OrgRole } from "@/server/accessControl";
+import { ACTIVE_ORG_COOKIE } from "@/server/orgMemberships";
+import { resolveUserById, type LambdaResolvedUser } from "@/lib/auth/resolveUserById";
 
 // Resolves a NextAuth v5 (Auth.js) session cookie into the same shape
 // lib/auth/resolveUser.ts's session branch produces, WITHOUT using Next.js's `auth()`
@@ -58,14 +56,7 @@ import type { OrgRole } from "@/server/accessControl";
 //     cookies. Flagged loudly here (and in this task's final report) rather than silently
 //     guessed around.
 
-export interface LambdaResolvedUser {
-  userId: string;
-  organizationId: string;
-  role: OrgRole | null;
-  subscriptionPlan: string;
-  customDomainLimit: number | null;
-  manageLandingPagePublishing: boolean;
-}
+export type { LambdaResolvedUser };
 
 const SESSION_COOKIE_NAMES = ["__Secure-authjs.session-token", "authjs.session-token"];
 
@@ -134,53 +125,5 @@ export async function resolveSessionUser(cookies: Record<string, string>): Promi
   const payload = await decodeSessionCookie(cookies);
   const userId = payload?.sub;
   if (!userId) return null;
-
-  const { data: user } = await User.get({ id: userId }).go();
-  if (!user) return null;
-
-  const activeOrgId = cookies[ACTIVE_ORG_COOKIE];
-  const memberships = await membershipsForUser(userId);
-
-  let organizationId: string | null = null;
-  let role: OrgRole | null = null;
-
-  if (activeOrgId) {
-    const active = memberships.find((m) => m.organizationId === activeOrgId);
-    if (active) {
-      organizationId = active.organizationId;
-      role = active.role;
-    }
-  }
-
-  if (!organizationId) {
-    if (memberships.length === 0) {
-      // Same auto-provisioning ensureActiveOrganization itself does for a brand-new
-      // user — reused verbatim (see ensurePersonalWorkspace's own export comment) so a
-      // user whose very first SOL interaction happens to hit this Lambda before ever
-      // loading the dashboard still gets a workspace instead of a confusing 401.
-      const org = await ensurePersonalWorkspace(userId, `${user.name ?? "My"}'s Workspace`);
-      organizationId = org.id;
-      role = "owner";
-    } else if (memberships.length === 1) {
-      organizationId = memberships[0].organizationId;
-      role = memberships[0].role;
-    } else {
-      // Multiple orgs, no (valid) active-org cookie — same "needs-choice, treat as
-      // unauthenticated" outcome resolveUser.ts's session branch has via
-      // ensureActiveOrganization's `status === "needs-choice"` check.
-      return null;
-    }
-  }
-
-  return {
-    userId: user.id,
-    organizationId,
-    role,
-    subscriptionPlan: user.subscriptionPlan ?? "FREE",
-    customDomainLimit: user.customDomainLimit ?? null,
-    manageLandingPagePublishing: resolveManageLandingPagePublishing(
-      user.subscriptionPlan ?? "FREE",
-      user.manageLandingPagePublishing ?? false,
-    ),
-  };
+  return resolveUserById(userId, { organizationId: cookies[ACTIVE_ORG_COOKIE] });
 }
