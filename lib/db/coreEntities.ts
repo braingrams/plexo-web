@@ -119,6 +119,9 @@ export const User = new Entity(
       trialOfferSeenAt: { type: "string" },
       // The "your access ends in a few days" email for the current planAccessUntil was sent.
       planAccessReminderSentAt: { type: "string" },
+      // The latest "your plan ends" reminder sent, as "<end date>#WEEK|DAY|TODAY" (lib/plan/reminders.ts):
+      // one email per stage per end date, so a week/day/today reminder never repeats.
+      planExpiryReminderKey: { type: "string" },
       // The admin console's "Keep on plan" switch: this account keeps subscriptionPlan
       // indefinitely, with no payment, and is never downgraded automatically.
       planKeptByAdmin: { type: "boolean", default: false },

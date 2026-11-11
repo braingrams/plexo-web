@@ -5,7 +5,7 @@ import { NextRequest } from "next/server";
 // in-memory database (tests/helpers/planFakeDb.ts). Only the edges are faked: Stripe's
 // signature check, email, credits and funnel-slot bookkeeping.
 
-const sent = vi.hoisted(() => ({ emails: [] as { to: string; subject: string }[], claimed: new Set<string>() }));
+const sent = vi.hoisted(() => ({ emails: [] as { to: string; subject: string; html?: string }[], claimed: new Set<string>(), subs: {} as Record<string, unknown> }));
 
 vi.mock("@/lib/db/client", async () => {
   const { fakeDb } = await import("./helpers/planFakeDb");
@@ -30,7 +30,7 @@ vi.mock("@/lib/db/ledgerEntities", () => ({
     }),
   },
 }));
-vi.mock("@/lib/stripe", () => ({ getStripe: () => ({ webhooks: { constructEvent: (body: string) => JSON.parse(body) } }) }));
+vi.mock("@/lib/stripe", () => ({ getStripe: () => ({ webhooks: { constructEvent: (body: string) => JSON.parse(body) }, subscriptions: { retrieve: async (id: string) => { if (!sent.subs[id]) throw new Error("no such subscription"); return sent.subs[id]; }, list: async function* () {} } }) }));
 vi.mock("@/lib/db/ledgerOperations", () => ({ grantTopup: vi.fn(), grantPlanChangeAllowance: vi.fn(async () => {}) }));
 vi.mock("@/lib/credits/topupOffer", () => ({ creditsForCompletedTopup: () => null }));
 vi.mock("@/lib/marketplaceListing", () => ({ getMarketplaceOwnerUserId: async () => null }));
@@ -38,7 +38,7 @@ vi.mock("@/lib/lms/activateFunnelAddonSlot", () => ({ handleLmsAddonSlotSubscrip
 vi.mock("@/lib/lms/funnelSlots", () => ({ reconcileFunnelSlotsForOrg: vi.fn(async () => {}) }));
 vi.mock("@/lib/mail/maildrip", () => ({
   emailShell: ({ bodyHtml }: { bodyHtml: string }) => bodyHtml,
-  sendMaildripEmail: vi.fn(async (m: { to: string; subject: string }) => void sent.emails.push(m)),
+  sendMaildripEmail: vi.fn(async (m: { to: string; subject: string; html?: string }) => void sent.emails.push(m)),
 }));
 vi.mock("@/lib/mail/logEmail", () => ({ logEmailDelivery: vi.fn() }));
 vi.mock("@/server/pagesDomain", () => ({ getPagesDomain: () => "plexopages.com" }));
@@ -49,6 +49,7 @@ import { syncPlanLifecycle, startTrial, makeSiteLive } from "@/lib/plan/lifecycl
 import { fakeDb, resetFakeDb } from "./helpers/planFakeDb";
 
 process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
+process.env.STRIPE_SECRET_KEY = "sk_test_x";
 
 let eventSeq = 0;
 function stripeEvent(type: string, subscription: Record<string, unknown>) {
@@ -189,6 +190,94 @@ describe("the 14-day trial", () => {
     // Day 15: the trial is over.
     expect(await syncPlanLifecycle("u1", new Date("2026-10-25T12:00:00.000Z"))).toEqual(["downgrade"]);
     expect(user()).toMatchObject({ subscriptionPlan: "FREE", planDowngradeReason: "TRIAL_ENDED", planBeforeDowngrade: "ULTRA" });
+    expect(page("about").isPublished).toBe(false);
+  });
+});
+
+describe("plan-ending reminders through the sweep", () => {
+  beforeEach(() => seed({ subscriptionPlan: "PRO", stripeSubscriptionId: undefined, subscriptionStatus: undefined, planAccessSource: "TRIAL", planAccessUntil: "2026-11-14T15:00:00.000Z" }));
+
+  it("emails a trial user a week out, a day out and on the day — once each — then the plan-ended email", async () => {
+    const { runPlanSweep } = await import("@/lib/plan/sweep");
+    const run = async (iso: string) => (await runPlanSweep({ now: new Date(iso) })).reminded;
+    expect(await run("2026-11-05T00:00:00Z")).toBe(0); // 9 days out
+    expect(await run("2026-11-08T00:00:00Z")).toBe(1);
+    expect(await run("2026-11-08T01:00:00Z")).toBe(0); // the next hourly run doesn't repeat it
+    expect(await run("2026-11-13T16:00:00Z")).toBe(1);
+    expect(await run("2026-11-14T08:00:00Z")).toBe(1);
+    expect(sent.emails.map((e) => e.subject)).toEqual([
+      "Your Pro trial ends in 7 days — Plexo",
+      "Your Pro trial ends in 1 day — Plexo",
+      "Your Pro trial ends today — Plexo",
+    ]);
+    expect(sent.emails.every((e) => e.to === "owner@example.com")).toBe(true);
+
+    await run("2026-11-14T16:00:00Z"); // it has ended → the account moves to Free and is told
+    expect(sent.emails.at(-1)!.subject).toMatch(/ended — nothing was deleted|follow the Free plan/);
+    expect(user().subscriptionPlan).toBe("FREE");
+  });
+
+  it("tells a subscriber who cancelled that their plan ends", async () => {
+    const { runPlanSweep } = await import("@/lib/plan/sweep");
+    seed({ subscriptionPeriodEnd: "2026-11-14T15:00:00.000Z", subscriptionCancelAtPeriodEnd: true });
+    expect((await runPlanSweep({ now: new Date("2026-11-08T00:00:00Z") })).reminded).toBe(1);
+    expect(sent.emails[0].subject).toBe("Your Pro plan ends in 7 days — Plexo");
+  });
+
+  it("tells a renewing subscriber, once, a week ahead — with the amount — that it renews", async () => {
+    const { runPlanSweep } = await import("@/lib/plan/sweep");
+    seed({ subscriptionPeriodEnd: "2026-11-14T15:00:00.000Z", subscriptionCancelAtPeriodEnd: false });
+    sent.subs["sub_1"] = { id: "sub_1", items: { data: [{ price: { unit_amount: 1900, currency: "usd" } }] } };
+    expect((await runPlanSweep({ now: new Date("2026-11-06T00:00:00Z") })).reminded).toBe(0); // 8 days out
+    expect((await runPlanSweep({ now: new Date("2026-11-08T00:00:00Z") })).reminded).toBe(1);
+    expect((await runPlanSweep({ now: new Date("2026-11-08T01:00:00Z") })).reminded).toBe(0);
+    expect((await runPlanSweep({ now: new Date("2026-11-13T16:00:00Z") })).reminded).toBe(0); // no countdown for a renewal
+    expect(sent.emails).toHaveLength(1);
+    expect(sent.emails[0].subject).toBe("Your Pro plan renews on November 14 — Plexo");
+    expect(sent.emails[0].html).toContain("$19.00");
+    expect(user().subscriptionPlan).toBe("PRO"); // still on the plan — nothing was downgraded
+  });
+});
+
+describe("a declined renewal (Stripe invoice.payment_failed)", () => {
+  const invoice = (extra: Record<string, unknown> = {}) => ({ id: "in_1", billing_reason: "subscription_cycle", attempt_count: 1, amount_due: 1900, currency: "usd", next_payment_attempt: Date.parse("2026-11-17T09:00:00Z") / 1000, parent: { subscription_details: { subscription: "sub_1" } }, ...extra });
+  beforeEach(() => {
+    seed();
+    sent.subs["sub_1"] = { id: "sub_1", metadata: { plexoUserId: "u1", plan: "PRO" } };
+  });
+
+  it("emails the owner that the payment was declined, while the plan stays fully active", async () => {
+    const res = await stripeEvent("invoice.payment_failed", invoice());
+    expect(res.status).toBe(200);
+    expect(sent.emails).toHaveLength(1);
+    expect(sent.emails[0]).toMatchObject({ to: "owner@example.com", subject: "Your payment didn't go through — update your card to keep Pro" });
+    expect(sent.emails[0].html).toContain("November 17");
+    expect(user().subscriptionPlan).toBe("PRO");
+    expect(page("about").isPublished).toBeUndefined(); // nothing taken offline yet — Stripe is still retrying
+  });
+
+  it("emails only on the first failed attempt, not on Stripe's later retries", async () => {
+    const first = invoice();
+    await stripeEvent("invoice.payment_failed", first);
+    await stripeEvent("invoice.payment_failed", invoice({ attempt_count: 2 }));
+    await stripeEvent("invoice.payment_failed", invoice({ attempt_count: 3 }));
+    expect(sent.emails).toHaveLength(1);
+  });
+
+  it("ignores a failed first payment, a superseded subscription and a funnel add-on slot", async () => {
+    await stripeEvent("invoice.payment_failed", invoice({ billing_reason: "subscription_create" }));
+    sent.subs["sub_old"] = { id: "sub_old", metadata: { plexoUserId: "u1", plan: "PRO" } };
+    await stripeEvent("invoice.payment_failed", invoice({ parent: { subscription_details: { subscription: "sub_old" } } }));
+    sent.subs["sub_slot"] = { id: "sub_slot", metadata: { plexoUserId: "u1", kind: "lms_addon_slot" } };
+    await stripeEvent("invoice.payment_failed", invoice({ parent: { subscription_details: { subscription: "sub_slot" } } }));
+    expect(sent.emails).toHaveLength(0);
+  });
+
+  it("if every retry fails, the plan-ended email says what went offline and how to get it back", async () => {
+    await stripeEvent("invoice.payment_failed", invoice());
+    await stripeEvent("customer.subscription.deleted", sub("sub_1", "canceled"));
+    expect(sent.emails).toHaveLength(2);
+    expect(sent.emails[1].subject).toMatch(/ended — nothing was deleted/);
     expect(page("about").isPublished).toBe(false);
   });
 });

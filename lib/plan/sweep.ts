@@ -19,7 +19,7 @@ export type SweepReport = {
  * The backstop for everything the instant paths (Stripe webhooks, dashboard loads, site
  * visits) don't reach on their own: a trial or admin grant that ran out for someone who
  * hasn't been back, a subscription from before statuses were tracked (checked with Stripe),
- * "ends in 3 days" reminders, and an account an admin changed directly.
+ * "your plan ends" reminders (a week, a day, and the day itself), and an account an admin changed directly.
  *
  * Idempotent, so a run cut short by the time budget is simply finished by the next one.
  * Reads the whole core table once per run (DynamoDB on-demand: a scan costs about $0.25

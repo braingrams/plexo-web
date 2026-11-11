@@ -16,7 +16,7 @@ import { TemplatePurchase } from "@/lib/db/contentEntities";
 import { SellerLedgerEntry, StripeEvent } from "@/lib/db/ledgerEntities";
 import { handleLmsAddonSlotSubscriptionUpdate, handleLmsAddonSlotSubscriptionDeleted } from "@/lib/lms/activateFunnelAddonSlot";
 import { reconcileFunnelSlotsForOrg } from "@/lib/lms/funnelSlots";
-import { mapStripeStatus, syncPlanLifecycle } from "@/lib/plan/lifecycle";
+import { mapStripeStatus, sendPaymentDeclinedEmail, syncPlanLifecycle } from "@/lib/plan/lifecycle";
 import { isSettled, recordStripeCharge, sendReceiptEmail } from "@/lib/billing/payments";
 import { retireSupersededPlanSubscriptions } from "@/lib/billing/planChange";
 
@@ -312,6 +312,42 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // Coming back from Free: every page, site and custom domain the downgrade took
       // offline is restored right now, exactly as it was.
       await syncAfterWebhook(plexoUserId);
+      break;
+    }
+
+    // A monthly renewal was declined: tell the owner right away, once (the first failed attempt),
+    // so they can fix their card. The plan stays fully active while Stripe retries; if every retry
+    // fails the subscription ends and the plan-ended email explains what went offline.
+    case "invoice.payment_failed": {
+      if (!(await claimStripeEvent(event.id))) break;
+      const invoice = event.data.object as unknown as {
+        billing_reason?: string;
+        attempt_count?: number;
+        amount_due?: number;
+        currency?: string;
+        next_payment_attempt?: number | null;
+        subscription?: string | { id: string } | null;
+        parent?: { subscription_details?: { subscription?: string | { id: string } | null } | null } | null;
+      };
+      if (invoice.billing_reason !== "subscription_cycle" || (invoice.attempt_count ?? 1) > 1) break;
+      try {
+        const ref = invoice.subscription ?? invoice.parent?.subscription_details?.subscription;
+        const subscriptionId = typeof ref === "string" ? ref : ref?.id;
+        if (!subscriptionId) break;
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const plexoUserId = subscription.metadata?.plexoUserId;
+        if (!plexoUserId || subscription.metadata?.kind === "lms_addon_slot" || !subscription.metadata?.plan) break;
+        const { data: user } = await User.get({ id: plexoUserId }).go();
+        // Only the account's current subscription speaks for it (an old one being retired doesn't).
+        if (!user || user.stripeSubscriptionId !== subscription.id) break;
+        await sendPaymentDeclinedEmail(user, {
+          amountMinor: invoice.amount_due,
+          currency: invoice.currency,
+          retryAt: invoice.next_payment_attempt ? new Date(invoice.next_payment_attempt * 1000).toISOString() : null,
+        });
+      } catch (err) {
+        console.error("declined-payment email failed", err); // best effort — never fail the webhook after claiming the event
+      }
       break;
     }
 

@@ -760,23 +760,112 @@ export function buildWpMigrationPausedEmail(input: { siteName: string; reason: s
 
 const PLAN_NAME: Record<string, string> = { PRO: "Pro", ULTRA: "Ultra", FREE: "Free" };
 
-export function buildPlanEndingSoonEmail(input: { plan: string; endsAt: string; isTrial: boolean; upgradeUrl: string }): string {
+export function buildPlanEndingSoonEmail(input: {
+  plan: string;
+  endsAt: string;
+  kind: "TRIAL" | "GRANT" | "CANCELLING";
+  stage: "WEEK" | "DAY" | "TODAY";
+  upgradeUrl: string;
+}): { subject: string; html: string } {
   const plan = PLAN_NAME[input.plan] ?? input.plan;
-  const date = new Date(input.endsAt).toLocaleDateString("en-US", { day: "numeric", month: "long" });
-  return emailShell({
-    title: input.isTrial ? `Your ${plan} trial ends ${date}` : `Your ${plan} access ends ${date}`,
+  const date = new Date(input.endsAt).toLocaleDateString("en-US", { day: "numeric", month: "long", timeZone: "UTC" });
+  const what = input.kind === "TRIAL" ? `Your ${plan} trial` : `Your ${plan} plan`;
+  const when = input.stage === "TODAY" ? "ends today" : input.stage === "DAY" ? "ends in 1 day" : "ends in 7 days";
+  const headline = `${what} ${when}`;
+  const intro =
+    input.kind === "CANCELLING"
+      ? `You've chosen to cancel, so ${what.toLowerCase()} runs until ${date} and then stops.`
+      : `${what} runs until ${date} and then stops.`;
+  const cta = `Keep ${plan}`;
+  const html = emailShell({
+    title: headline,
     bodyHtml: `
       <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">
-        ${input.isTrial ? `Your ${plan} trial ends on ${date}` : `Your ${plan} access ends on ${date}`}
+        ${headline}
       </h1>
+      <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">${intro}</p>
       <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
         Keep everything working exactly as it is by choosing a plan before then. If you don't, your account moves to Free:
         one site stays live with just its homepage, on a Plexo address. Nothing is deleted — upgrading later brings it all back.
       </p>
-      ${CTA_BUTTON(input.upgradeUrl, `Keep ${plan}`)}
+      ${CTA_BUTTON(input.upgradeUrl, cta)}
       ${FALLBACK_LINK(input.upgradeUrl)}
     `,
   });
+  return { subject: `${headline} — Plexo`, html };
+}
+
+function planMoney(amountMinor: number | null | undefined, currency: string | null | undefined): string | null {
+  if (typeof amountMinor !== "number" || !currency) return null;
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: currency.toUpperCase() }).format(amountMinor / 100);
+  } catch {
+    return null;
+  }
+}
+
+const utcDate = (iso: string) => new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "long", timeZone: "UTC" });
+
+/** A week before a subscription renews: when, how much, and a chance to make sure the card can cover it. */
+export function buildPlanRenewalSoonEmail(input: {
+  plan: string;
+  renewsAt: string;
+  amountMinor?: number | null;
+  currency?: string | null;
+  manageUrl: string;
+}): { subject: string; html: string } {
+  const plan = PLAN_NAME[input.plan] ?? input.plan;
+  const date = utcDate(input.renewsAt);
+  const amount = planMoney(input.amountMinor, input.currency);
+  const headline = `Your ${plan} plan renews on ${date}`;
+  const html = emailShell({
+    title: headline,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">${headline}</h1>
+      <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Your monthly ${plan} subscription renews on <strong>${date}</strong>${amount ? ` and we'll charge <strong>${amount}</strong> to your card on file` : ""}. There's nothing you need to do if your card is ready.
+      </p>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        If your card has changed, expired or may be short on funds, update it now so your sites stay fully live. If a payment can't be taken,
+        your account moves to Free — one site stays live with just its homepage — until it's paid. Nothing is ever deleted.
+      </p>
+      ${CTA_BUTTON(input.manageUrl, "Check my card")}
+      ${FALLBACK_LINK(input.manageUrl)}
+    `,
+  });
+  return { subject: `${headline} — Plexo`, html };
+}
+
+/** A renewal charge was declined: say so plainly, what still works, what happens if it isn't fixed, and how to fix it. */
+export function buildPaymentDeclinedEmail(input: {
+  plan: string;
+  amountMinor?: number | null;
+  currency?: string | null;
+  retryAt?: string | null;
+  manageUrl: string;
+}): { subject: string; html: string } {
+  const plan = PLAN_NAME[input.plan] ?? input.plan;
+  const amount = planMoney(input.amountMinor, input.currency);
+  const retry = input.retryAt ? utcDate(input.retryAt) : null;
+  const headline = "Your payment didn't go through";
+  const html = emailShell({
+    title: headline,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">${headline}</h1>
+      <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        Your card was declined when we tried to renew your ${plan} plan${amount ? ` (${amount})` : ""}.
+        Your plan and sites are still fully active for now${retry ? ` — we'll try again on <strong>${retry}</strong>` : " while we try again"}.
+      </p>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        If it still can't be taken, your account moves to Free and your site becomes partially inactive: one site stays live with just its homepage,
+        and your other pages, sites and custom domain go offline. Nothing is deleted — renew and everything comes straight back.
+        Updating your card now keeps full access.
+      </p>
+      ${CTA_BUTTON(input.manageUrl, "Update my card")}
+      ${FALLBACK_LINK(input.manageUrl)}
+    `,
+  });
+  return { subject: `${headline} — update your card to keep ${plan}`, html };
 }
 
 export function buildPlanEndedEmail(input: {
