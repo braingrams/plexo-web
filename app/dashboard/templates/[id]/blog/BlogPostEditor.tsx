@@ -11,6 +11,7 @@ import { PageContainer } from "../../../_components/PageContainer";
 import { CustomSelect } from "../../../../_components/CustomSelect";
 import { UpgradeModal } from "../../../_components/UpgradeModal";
 import { formatPublishedQuotaLabel } from "@/lib/blog/publishQuotaLabel";
+import { BRAND } from "@/lib/theme";
 
 type Status = "DRAFT" | "SCHEDULED" | "PUBLISHED" | "ARCHIVED";
 
@@ -102,22 +103,54 @@ function CollapseHeader({ label, open, onToggle }: { label: string; open: boolea
 /** Turns the SEO tools on or off for this browser. Turning them off keeps every value already entered. */
 function SeoToggleRow({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
   return (
-    <label
+    <div
       style={{
         display: "flex",
         alignItems: "center",
-        gap: "0.5rem",
+        justifyContent: "space-between",
+        gap: "0.75rem",
         marginBottom: "0.75rem",
-        fontSize: "0.8rem",
-        color: "rgba(240,242,255,0.7)",
       }}
     >
-      <input type="checkbox" checked={on} onChange={(e) => onChange(e.target.checked)} />
-      SEO tools {on ? "on" : "off"}
-      <span style={{ color: "rgba(240,242,255,0.4)" }}>
-        {on ? "· turn off for plain writing" : "· turn on for search previews and the checklist"}
-      </span>
-    </label>
+      <div>
+        <p style={{ margin: 0, fontSize: "0.8rem", color: "rgba(240,242,255,0.85)" }}>SEO Tools</p>
+        <p style={{ margin: "0.2rem 0 0", fontSize: "0.7rem", color: "rgba(240,242,255,0.45)" }}>
+          Show or hide SEO enhancement tools for this blog post
+        </p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={on}
+        aria-label="SEO Tools"
+        onClick={() => onChange(!on)}
+        style={{
+          position: "relative",
+          flexShrink: 0,
+          width: 36,
+          height: 20,
+          padding: 0,
+          border: "none",
+          borderRadius: 999,
+          cursor: "pointer",
+          background: on ? BRAND[600] : "rgba(240,242,255,0.2)",
+          transition: "background 150ms",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 2,
+            left: on ? 18 : 2,
+            width: 16,
+            height: 16,
+            borderRadius: 999,
+            background: "#fff",
+            transition: "left 150ms",
+          }}
+        />
+      </button>
+    </div>
   );
 }
 
