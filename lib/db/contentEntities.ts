@@ -170,6 +170,15 @@ export const Template = new Entity(
           template: "TEMPLATE#${order}#${id}",
         },
       },
+      // "Everything this user owns" — their sites AND those sites' pages (children carry the
+      // same userId). GSI3 is shared with PublishedDomain.byUser below, so one partition per
+      // user holds both; callers filter roots with `parentId` not set. casing:"none" keeps
+      // the key exactly USER#<userId> so scripts/backfill-user-index.ts can write it raw.
+      byUser: {
+        index: "GSI3",
+        pk: { field: "GSI3PK", composite: ["userId"], template: "USER#${userId}", casing: "none" },
+        sk: { field: "GSI3SK", composite: ["id"], template: "TEMPLATE#${id}", casing: "none" },
+      },
     },
   },
   { table, client: docClient },
@@ -178,7 +187,7 @@ export const Template = new Entity(
 // platform-wide) has no dedicated index — Template already spent both its GSI slots on
 // the two core authenticated-dashboard patterns (org list, page tree), which carry more
 // load than the public marketplace browse page. Candidate for the Athena/export path or
-// a future GSI3 if real traffic proves it needs one.
+// a future GSI4 if real traffic proves it needs one. (GSI3 is spoken for: byUser.)
 
 export const TemplateRevision = new Entity(
   {
@@ -390,6 +399,12 @@ export const PublishedDomain = new Entity(
           template: "DOMAIN#${domain}",
         },
         sk: { field: "GSI1SK", composite: ["id"], template: "DOMAIN#${id}" },
+      },
+      // Every domain a user has published — pairs with Template.byUser (same GSI3 partition).
+      byUser: {
+        index: "GSI3",
+        pk: { field: "GSI3PK", composite: ["userId"], template: "USER#${userId}", casing: "none" },
+        sk: { field: "GSI3SK", composite: ["id"], template: "DOMAIN#${id}", casing: "none" },
       },
     },
   },

@@ -3,13 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Star, Sparkles, Send, CheckCircle2, ArrowLeft, Heart, MessageSquare } from "lucide-react";
-import { Mulish } from "next/font/google";
-
-const mulish = Mulish({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800", "900"],
-  display: "swap",
-});
+import { mulish } from "@/lib/mulish";
 
 export default function TestimonialSubmitPage() {
   const [formData, setFormData] = useState({

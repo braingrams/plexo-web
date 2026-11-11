@@ -9,7 +9,8 @@ import { slugify } from "@/lib/slugUtils";
 import { RESERVED_SUBDOMAINS, SUBDOMAIN_REGEX } from "@/lib/sites/linkDomain";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
-import { buildPlanEndedEmail, buildPlanEndingSoonEmail } from "@/lib/mail/templates";
+import { buildPaymentDeclinedEmail, buildPlanEndedEmail, buildPlanEndingSoonEmail, buildPlanRenewalSoonEmail } from "@/lib/mail/templates";
+import { dueReminder } from "./reminders";
 import { logEmailDelivery } from "@/lib/mail/logEmail";
 import { getStripe } from "@/lib/stripe";
 import {
@@ -312,33 +313,64 @@ export async function verifyStripeSubscription(user: UserItem, now: Date = new D
 
 // ── reminders & notices ───────────────────────────────────────────────────────────────
 
-const REMINDER_WINDOW_MS = 3 * 86_400_000;
-
-/** "Your trial ends on …" — once per end date, three days before. */
+/**
+ * "Your plan ends …" — a week before, a day before and on the day itself, once each per end date
+ * (rules in reminders.ts). Covers free trials, admin grants with an end date, and subscribers who
+ * have cancelled. Returns whether an email went out.
+ */
 export async function sendAccessEndingReminder(user: UserItem, now: Date = new Date()): Promise<boolean> {
-  if (!user.planAccessUntil || !isPaidPlan(user.subscriptionPlan)) return false;
-  const access = paidAccess(user, now);
-  if (!access.entitled || (access.basis !== "TRIAL" && access.basis !== "GRANT")) return false;
-  const msLeft = Date.parse(user.planAccessUntil) - now.getTime();
-  if (msLeft <= 0 || msLeft > REMINDER_WINDOW_MS || user.planAccessReminderSentAt === user.planAccessUntil) return false;
-  // Claimed first so two sweeps never both send it.
+  const due = dueReminder(user, now);
+  if (!due) return false;
+  // Claimed first, only if nothing else was recorded since we read the account, so two sweeps never both send it.
   try {
     await User.patch({ id: user.id })
-      .set({ planAccessReminderSentAt: user.planAccessUntil })
-      .where((attr, op) => `${op.notExists(attr.planAccessReminderSentAt)} OR ${op.ne(attr.planAccessReminderSentAt, user.planAccessUntil!)}`)
+      .set({ planExpiryReminderKey: due.key })
+      .where((attr, op) => (user.planExpiryReminderKey ? op.eq(attr.planExpiryReminderKey, user.planExpiryReminderKey) : op.notExists(attr.planExpiryReminderKey)))
       .go();
   } catch (err) {
     if (isConditionalCheckFailure(err)) return false;
     throw err;
   }
-  const subject = access.basis === "TRIAL" ? "Your Plexo trial ends soon" : "Your Plexo plan access ends soon";
-  await sendEmail(user.email, subject, buildPlanEndingSoonEmail({
-    plan: user.subscriptionPlan ?? "PRO",
-    endsAt: user.planAccessUntil,
-    isTrial: access.basis === "TRIAL",
-    upgradeUrl: `${appUrl()}/dashboard/settings/subscription?upgrade=${user.subscriptionPlan ?? "PRO"}`,
-  }));
+  const plan = user.subscriptionPlan ?? "PRO";
+  if (due.kind === "RENEWING") {
+    const price = await currentSubscriptionPrice(user.stripeSubscriptionId);
+    const { subject, html } = buildPlanRenewalSoonEmail({ plan, renewsAt: due.endsAt, ...price, manageUrl: `${appUrl()}/dashboard/settings/subscription` });
+    await sendEmail(user.email, subject, html);
+    return true;
+  }
+  const { subject, html } = buildPlanEndingSoonEmail({
+    plan,
+    endsAt: due.endsAt,
+    kind: due.kind,
+    stage: due.stage,
+    upgradeUrl: due.kind === "CANCELLING" ? `${appUrl()}/dashboard/settings/subscription` : `${appUrl()}/dashboard/settings/subscription?upgrade=${plan}`,
+  });
+  await sendEmail(user.email, subject, html);
   return true;
+}
+
+/** What the next renewal will charge — best effort; the email simply leaves the amount out if Stripe can't be reached. */
+async function currentSubscriptionPrice(subscriptionId: string | null | undefined): Promise<{ amountMinor?: number; currency?: string }> {
+  if (!subscriptionId || !process.env.STRIPE_SECRET_KEY) return {};
+  try {
+    const price = (await getStripe().subscriptions.retrieve(subscriptionId)).items.data[0]?.price;
+    return price?.unit_amount != null ? { amountMinor: price.unit_amount, currency: price.currency } : {};
+  } catch {
+    return {};
+  }
+}
+
+/** A renewal charge was declined (Stripe webhook). Plan and sites stay fully active while Stripe retries. */
+export async function sendPaymentDeclinedEmail(
+  user: Pick<UserItem, "email" | "subscriptionPlan">,
+  invoice: { amountMinor?: number | null; currency?: string | null; retryAt?: string | null },
+): Promise<void> {
+  const { subject, html } = buildPaymentDeclinedEmail({
+    plan: user.subscriptionPlan ?? "PRO",
+    ...invoice,
+    manageUrl: `${appUrl()}/dashboard/settings/subscription`,
+  });
+  await sendEmail(user.email, subject, html);
 }
 
 async function notifyPlanEnded(user: UserItem, previousPlan: string, reason: DowngradeReason, summary: FreeLimitsSummary): Promise<void> {
