@@ -9,6 +9,8 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
   const [status, setStatus] = useState<GitHubStatus | null>(null);
   const [installationId, setInstallationId] = useState<number | null>(null);
   const [repos, setRepos] = useState<RepoOption[]>([]);
+  const [reposLoading, setReposLoading] = useState(false);
+  const [reposError, setReposError] = useState<string | null>(null);
   const [repo, setRepo] = useState("");
   const [branch, setBranch] = useState("");
   const [agreed, setAgreed] = useState(false);
@@ -42,17 +44,28 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
     const first = installationId ?? status.installations[0]?.id ?? null;
     if (first !== installationId) setInstallationId(first);
     if (first === null) return;
+    setReposLoading(true);
+    setReposError(null);
     fetch(`${base}?installationId=${first}&returnTo=${encodeURIComponent(returnTo)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: GitHubStatus | null) => {
-        const list = (data?.repos ?? []).filter((r) => !r.empty);
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error ?? `GitHub answered ${r.status}.`);
+        return data as GitHubStatus;
+      })
+      .then((data) => {
+        const list = (data.repos ?? []).filter((r) => !r.empty);
         setRepos(list);
+        setReposLoading(false);
         if (list.length && !list.some((r) => r.fullName === repo)) {
           setRepo(list[0].fullName);
           setBranch(list[0].defaultBranch);
         }
       })
-      .catch(() => setRepos([]));
+      .catch((err: Error) => {
+        setRepos([]);
+        setReposError(err.message);
+        setReposLoading(false);
+      });
     // Only when the account list or the chosen account changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, installationId]);
@@ -144,13 +157,24 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
         <>
           <p style={hint}>Pick a repository and branch. Connecting replaces the app&apos;s files with the repository&apos;s files, and each push to that branch rebuilds the app.</p>
           <div style={row}>
-            <select value={repo} onChange={(e) => { setRepo(e.target.value); setBranch(repos.find((r) => r.fullName === e.target.value)?.defaultBranch ?? ""); }} style={input} aria-label="Repository">
+            <select value={repo} onChange={(e) => { setRepo(e.target.value); setBranch(repos.find((r) => r.fullName === e.target.value)?.defaultBranch ?? ""); }} style={input} aria-label="Repository" disabled={reposLoading || repos.length === 0}>
+              {repos.length === 0 ? <option value="">{reposLoading ? "Loading repositories…" : "No repositories"}</option> : null}
               {repos.map((r) => (
                 <option key={r.fullName} value={r.fullName}>{r.fullName}</option>
               ))}
             </select>
             <input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" style={input} aria-label="Branch" />
           </div>
+          {reposError ? <p style={{ margin: 0, fontSize: 12.5, color: "#f87171" }}>Couldn&apos;t list repositories: {reposError}</p> : null}
+          {!reposLoading && !reposError && repos.length === 0 ? (
+            <p style={hint}>
+              No repositories are shared with Plexo on {status.installations.find((i) => i.id === installationId)?.account ?? "this account"}.{" "}
+              <a href={installationSettingsUrl(installationId, status.installations)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand)" }}>
+                Choose repositories on GitHub
+              </a>
+              , then reload this page.
+            </p>
+          ) : null}
           <label style={consent}>
             <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
             Connecting replaces the app&apos;s files with the repository&apos;s files on that branch.
@@ -219,4 +243,13 @@ function secondary(enabled: boolean): CSSProperties {
     background: "transparent",
     color: "var(--text-main)",
   };
+}
+
+/** GitHub's page where the owner chooses which repositories Plexo can read. */
+function installationSettingsUrl(installationId: number | null, installations: GitHubStatus["installations"]): string {
+  const account = installations.find((i) => i.id === installationId);
+  if (!account || installationId === null) return "https://github.com/settings/installations";
+  return account.type === "Organization"
+    ? `https://github.com/organizations/${account.account}/settings/installations/${installationId}`
+    : `https://github.com/settings/installations/${installationId}`;
 }

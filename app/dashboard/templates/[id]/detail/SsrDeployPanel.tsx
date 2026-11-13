@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { uploadSsrZip, queueSsrBuild } from "@/lib/projects/clientSsrUpload";
 import { useBuildLog } from "./useBuildLog";
@@ -40,22 +40,31 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
   const live = useBuildLog(buildId);
   // The GitHub connection, how the latest push went, and whether a build is running. Polled while the page is open.
   const [git, setGit] = useState<GitConnection | null>(null);
-  useEffect(() => {
-    let current = true;
-    const check = () =>
+  const refreshGit = useCallback(
+    () =>
       fetch(`/api/v1/templates/${templateId}/ssr-git`)
         .then((r) => (r.ok ? (r.json() as Promise<GitConnection>) : null))
         .then((data) => {
-          if (current && data) setGit(data);
+          if (data) setGit(data);
         })
-        .catch(() => undefined);
-    void check();
-    const timer = setInterval(check, STATUS_POLL_MS);
-    return () => {
-      current = false;
-      clearInterval(timer);
-    };
-  }, [templateId]);
+        .catch(() => undefined),
+    [templateId],
+  );
+  // One read when the page opens. Polling only runs while a repo is linked, since a push is the only
+  // build that starts without this page (see activeBuildId).
+  useEffect(() => {
+    void refreshGit();
+  }, [refreshGit]);
+  useEffect(() => {
+    if (!git?.linked) return;
+    const timer = setInterval(() => void refreshGit(), STATUS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [git?.linked, refreshGit]);
+  // One source at a time: a repo that's already linked opens on GitHub, otherwise the zip upload.
+  const [source, setSource] = useState<"zip" | "github">("zip");
+  useEffect(() => {
+    if (git?.linked) setSource("github");
+  }, [git?.linked]);
   // Always-on: the owner asks, Plexo approves by hand. Loaded once; the request itself is posted on click.
   const [alwaysOn, setAlwaysOn] = useState<{ request: "NONE" | "REQUESTED" | "APPROVED" | "DECLINED" } | null>(null);
   const [alwaysOnBusy, setAlwaysOnBusy] = useState(false);
@@ -197,7 +206,32 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
         <p key={w} style={{ margin: "0 0 8px", fontSize: 12.5, color: "#fbbf24" }}>{w}</p>
       ))}
       {progress ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--text-muted)" }}>{progress}</p> : null}
-      {!building ? <SsrGitHubConnection templateId={templateId} /> : null}
+      {!building ? (
+        <div role="tablist" aria-label="Source" style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          {(["zip", "github"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              role="tab"
+              aria-selected={source === option}
+              onClick={() => setSource(option)}
+              style={{
+                padding: "7px 14px",
+                borderRadius: 9,
+                border: `1px solid ${source === option ? "var(--brand)" : "var(--surface-border)"}`,
+                background: source === option ? "var(--brand-subtle)" : "transparent",
+                color: source === option ? "var(--text-main)" : "var(--text-muted)",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {option === "zip" ? "Upload a .zip" : "Connect GitHub"}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {!building && source === "github" ? <SsrGitHubConnection templateId={templateId} /> : null}
 
       {buildId ? (
         <div style={{ marginBottom: 14 }}>
@@ -211,7 +245,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
         </div>
       ) : null}
 
-      {!building ? (
+      {!building && source === "zip" ? (
         <>
         <div style={{ marginBottom: 14 }}>
           <ZipDropzone file={file} onFile={setFile} accept=".zip,application/zip" hint=".zip, with package.json at its root" disabled={busy !== null} />
@@ -228,11 +262,15 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
           <button type="button" onClick={() => void upload()} disabled={!file || !agreed || busy !== null} style={button(!!file && agreed && busy === null)}>
             {busy === "upload" ? "Uploading…" : "Upload and build"}
           </button>
+        </div>
+        </>
+      ) : null}
+      {!building ? (
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 14 }}>
           <button type="button" onClick={() => void publish()} disabled={busy !== null} style={button(busy === null)}>
             {busy === "publish" ? "Publishing…" : "Publish preview"}
           </button>
         </div>
-        </>
       ) : null}
     </div>
   );
