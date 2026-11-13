@@ -3,13 +3,15 @@ import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
 import { getTierFeatures } from "@/lib/subscription";
 import { gitLinkFor } from "@/lib/projects/github/ssrPush";
+import { isFinished, recentBuilds } from "@/lib/projects/builds";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 /**
  * GET /api/v1/templates/:id/ssr-git
  *   The GitHub connection of a server app, and how its last push went:
- *   { linked: false } or { linked, repo, branch, commitSha, status, statusMessage, publishOnPush }.
+ *   { linked: false, activeBuildId } or { linked, repo, branch, commitSha, status, statusMessage, publishOnPush, activeBuildId }.
+ *   activeBuildId is the server build that is queued or running now (null when none), so the panel can show its log.
  *   status is "ERROR" when the latest push wasn't built or published (statusMessage says why).
  *
  * ULTRA plan only, like the rest of the server app routes.
@@ -25,8 +27,10 @@ export async function GET(request: NextRequest, { params }: Ctx): Promise<NextRe
   if (!getTierFeatures(resolved.subscriptionPlan).ssrEnabled) {
     return NextResponse.json({ error: "Server-rendered apps are available on the ULTRA plan." }, { status: 403 });
   }
+  // The server build that is queued or running right now, if any. The dashboard attaches to it to show the log.
+  const activeBuild = (await recentBuilds(templateId, 5)).find((b) => b.kind === "ssr" && !isFinished(b)) ?? null;
   const link = await gitLinkFor(templateId);
-  if (!link) return NextResponse.json({ linked: false });
+  if (!link) return NextResponse.json({ linked: false, activeBuildId: activeBuild?.id ?? null });
   return NextResponse.json({
     linked: true,
     repo: link.repoFullName,
@@ -35,5 +39,6 @@ export async function GET(request: NextRequest, { params }: Ctx): Promise<NextRe
     status: link.status,
     statusMessage: link.statusMessage ?? "",
     publishOnPush: link.publishOnPush !== false,
+    activeBuildId: activeBuild?.id ?? null,
   });
 }

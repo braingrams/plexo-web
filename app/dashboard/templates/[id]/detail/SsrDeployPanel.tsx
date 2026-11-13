@@ -18,30 +18,55 @@ const button = (enabled: boolean): CSSProperties => ({
   cursor: enabled ? "pointer" : "not-allowed", background: enabled ? "var(--brand)" : "rgba(255,255,255,0.08)", color: enabled ? "#fff" : "var(--text-muted)",
 });
 
-type GitConnection =
-  | { linked: false }
-  | { linked: true; repo: string; branch: string; commitSha: string | null; status: "OK" | "ERROR"; statusMessage: string; publishOnPush: boolean };
+type GitConnection = {
+  linked: boolean;
+  repo?: string;
+  branch?: string;
+  commitSha?: string | null;
+  status?: "OK" | "ERROR";
+  statusMessage?: string;
+  publishOnPush?: boolean;
+  /** The server build queued or running right now, from a push or a manual build. */
+  activeBuildId: string | null;
+};
+
+// How often the panel asks the server whether a build is running. Cheap, so it stays on while the page is open.
+const STATUS_POLL_MS = 3000;
 
 export function SsrDeployPanel({ templateId }: { templateId: string }) {
   const [file, setFile] = useState<File | null>(null);
   const [buildId, setBuildId] = useState<string | null>(null);
   const live = useBuildLog(buildId);
-  // The GitHub connection and how the latest push went. Read again whenever a build reports its result.
+  // The GitHub connection, how the latest push went, and whether a build is running. Polled while the page is open.
   const [git, setGit] = useState<GitConnection | null>(null);
   useEffect(() => {
     let current = true;
-    fetch(`/api/v1/templates/${templateId}/ssr-git`)
-      .then((r) => (r.ok ? (r.json() as Promise<GitConnection>) : null))
-      .then((data) => {
-        if (current && data) setGit(data);
-      })
-      .catch(() => undefined);
+    const check = () =>
+      fetch(`/api/v1/templates/${templateId}/ssr-git`)
+        .then((r) => (r.ok ? (r.json() as Promise<GitConnection>) : null))
+        .then((data) => {
+          if (current && data) setGit(data);
+        })
+        .catch(() => undefined);
+    void check();
+    const timer = setInterval(check, STATUS_POLL_MS);
     return () => {
       current = false;
+      clearInterval(timer);
     };
-  }, [templateId, live.status]);
-  // A build is running while it has been queued and hasn't reported a final status. Hide the controls then.
-  const building = buildId !== null && live.status === null;
+  }, [templateId]);
+  // A build started from this page (upload or rebuild) is watched until it reports a final status.
+  // A build started by a push is attached to as soon as the server reports it as running.
+  const pageBuildRef = useRef(false);
+  useEffect(() => {
+    const running = git?.activeBuildId ?? null;
+    if (running && !pageBuildRef.current && running !== buildId) setBuildId(running);
+  }, [git?.activeBuildId, buildId]);
+  // Building: the page's own build still hasn't reported a final status, or the server says a build is running.
+  // While it runs the controls are hidden and the log streams.
+  const building =
+    (buildId !== null && live.status === null && (pageBuildRef.current || git?.activeBuildId === buildId)) ||
+    (git?.activeBuildId != null && git.activeBuildId === buildId);
   const [agreed, setAgreed] = useState(false);
   const [busy, setBusy] = useState<null | "upload" | "publish">(null);
   const [progress, setProgress] = useState<string | null>(null);
@@ -67,6 +92,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
     if (!queued.ok) return setError(queued.error);
     setNotice(queued.data.message);
     setWarnings(queued.data.warnings);
+    pageBuildRef.current = true;
     setBuildId(queued.data.buildId);
     setFile(null);
   }
