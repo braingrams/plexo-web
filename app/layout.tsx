@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 
 import "./globals.css";
 import { themeCss } from "@/lib/theme";
+import { GtmHeadScript, GtmNoScript } from "./gtm";
 
 // Figtree is the site's typeface (headings and body); Geist Mono stays for code. globals.css
 // maps --font-figtree/--font-geist-mono onto the --font-heading/--font-body/--font-mono
@@ -52,6 +53,7 @@ export default function RootLayout({
     // to the system font.
     <html lang="en" suppressHydrationWarning className={`${figtree.variable} ${GeistMono.variable}`}>
       <head>
+        <GtmHeadScript />
         {/* Every colour variable the site uses, generated from lib/theme.ts: change the theme there and it changes everywhere. */}
         <style id="plexo-theme" dangerouslySetInnerHTML={{ __html: themeCss() }} />
         {/* Microsoft Clarity (For the app) */}
@@ -67,6 +69,7 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <GtmNoScript />
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
           {children}
         </ThemeProvider>
