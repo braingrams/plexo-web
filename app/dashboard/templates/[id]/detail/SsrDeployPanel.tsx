@@ -103,7 +103,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
     (buildId !== null && live.status === null && (pageBuildRef.current || git?.activeBuildId === buildId)) ||
     (git?.activeBuildId != null && git.activeBuildId === buildId);
   const [agreed, setAgreed] = useState(false);
-  const [busy, setBusy] = useState<null | "upload" | "publish">(null);
+  const [busy, setBusy] = useState<null | "upload">(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -132,40 +132,13 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
     setFile(null);
   }
 
-  // Publishing runs in the background. The request returns straight away, then this polls for the outcome.
-  async function publish() {
-    if (!window.confirm("Publish the latest preview to the live app? The live app switches to it, and there's no rollback yet.")) return;
-    setBusy("publish"); setError(null); setNotice(null); setWarnings([]);
-    const res = await fetch(`/api/v1/templates/${templateId}/ssr-publish`, { method: "POST" });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setBusy(null);
-      return setError(data.error ?? `Publishing failed (server responded ${res.status}).`);
-    }
-    setNotice(data.message ?? "Publishing started.");
-    for (let attempt = 0; attempt < 200; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      const status = await fetch(`/api/v1/templates/${templateId}/ssr-publish`).then((r) => r.json()).catch(() => null);
-      if (!status || status.publishing) continue;
-      setBusy(null);
-      if (status.error) {
-        setNotice(null);
-        return setError(status.error);
-      }
-      setNotice(status.warnings?.length ? "The preview is now live, with warnings." : "The preview is now live.");
-      setWarnings(status.warnings ?? []);
-      return;
-    }
-    setBusy(null);
-    setNotice("Publishing is still running. Reload this page to see the result.");
-  }
 
   return (
     <div style={card}>
       <h3 style={heading}>Server app</h3>
       <p style={muted}>
         Upload the app's source as a .zip (package.json at the root, or inside one folder). Leave out node_modules, .git and build output.
-        The server builds it and runs it as an app. Publish the preview once the build succeeds to put it live.
+        The server builds it and puts it live as soon as the build succeeds.
       </p>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
@@ -231,7 +204,17 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
           ))}
         </div>
       ) : null}
-      {!building && source === "github" ? <SsrGitHubConnection templateId={templateId} /> : null}
+      {!building && source === "github" ? (
+        <SsrGitHubConnection
+          templateId={templateId}
+          onBuildStarted={(id) => {
+            // The build runs from this page: show its log, and read the status now that a repo is linked.
+            pageBuildRef.current = true;
+            setBuildId(id);
+            void refreshGit();
+          }}
+        />
+      ) : null}
 
       {buildId ? (
         <div style={{ marginBottom: 14 }}>
@@ -260,17 +243,10 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
         </label>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button type="button" onClick={() => void upload()} disabled={!file || !agreed || busy !== null} style={button(!!file && agreed && busy === null)}>
-            {busy === "upload" ? "Uploading…" : "Upload and build"}
+            {busy === "upload" ? "Uploading…" : "Upload and publish"}
           </button>
         </div>
         </>
-      ) : null}
-      {!building ? (
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginTop: 14 }}>
-          <button type="button" onClick={() => void publish()} disabled={busy !== null} style={button(busy === null)}>
-            {busy === "publish" ? "Publishing…" : "Publish preview"}
-          </button>
-        </div>
       ) : null}
     </div>
   );

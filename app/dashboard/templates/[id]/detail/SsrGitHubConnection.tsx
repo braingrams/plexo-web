@@ -5,7 +5,14 @@ import { useEffect, useState, type CSSProperties } from "react";
 // The GitHub connection controls on a server app's detail page: connect a repository and branch, change the
 // branch, or disconnect. Connecting or changing the branch copies that branch's files into the app, so both
 // need the owner to confirm. Colours come from the theme variables (lib/theme.ts).
-export function SsrGitHubConnection({ templateId }: { templateId: string }) {
+export function SsrGitHubConnection({
+  templateId,
+  onBuildStarted,
+}: {
+  templateId: string;
+  /** Called with the new build's id, so the detail page can show its log. */
+  onBuildStarted?: (buildId: string) => void;
+}) {
   const [status, setStatus] = useState<GitHubStatus | null>(null);
   const [installationId, setInstallationId] = useState<number | null>(null);
   const [repos, setRepos] = useState<RepoOption[]>([]);
@@ -84,6 +91,7 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
     setBusy(false);
     if (!res.ok) return setError(data.error ?? `That didn't work (server responded ${res.status}).`);
     setNotice(data.message ?? "Connected. The build has started.");
+    if (data.buildId) onBuildStarted?.(data.buildId);
     await load();
   }
 
