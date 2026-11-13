@@ -9,6 +9,9 @@ vi.mock("@/lib/projects/ssrBudget", () => ({ reserveSsrBuild: async () => ({ ok:
 vi.mock("@/lib/appFunctions/ssrVariableStore", () => ({ listSsrVariables: async () => [] }));
 vi.mock("@/lib/appFunctions/ssrNames", () => ({ ssrFunctionName: () => "plexo-ssr-t1-preview" }));
 vi.mock("@/lib/db/appEntities", () => ({ DeployedApp: { get: () => ({ go: async () => ({ data: null }) }), create: () => ({ go: async () => ({}) }) } }));
+// The route imports the GitHub link and queue modules, which load the project tables at import time.
+vi.mock("@/lib/db/projectEntities", () => ({ ProjectBuild: {}, ProjectGitLink: {} }));
+vi.mock("@/lib/db/coreEntities", () => ({ User: {} }));
 vi.mock("@/lib/projects/ssrRebuild", () => ({ markBuildQueued: async () => {} }));
 // The route imports the GitHub install check, which loads the database tables at import time.
 // Uploads never reach it, so a no-op stand-in keeps this test independent of those settings.

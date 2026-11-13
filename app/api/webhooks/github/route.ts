@@ -4,10 +4,13 @@ import { verifyWebhookSignature } from "@/lib/projects/github/client";
 import { importPush } from "@/lib/projects/github/sync";
 import { startPreview } from "@/lib/projects/pipeline";
 import { forwardWebhook } from "@/lib/projects/github/relay";
+import { queueSsrPushBuild } from "@/lib/projects/github/ssrPush";
+import { DeployedApp } from "@/lib/db/appEntities";
 
 /**
  * POST /api/webhooks/github — events from the Plexo GitHub App. A push to a linked branch is
- * imported into the app and its preview rebuilt; a removed installation or repository marks
+ * imported into the app and its preview rebuilt; a server (SSR) app builds the pushed commit and
+ * publishes it (lib/projects/github/ssrPush.ts). A removed installation or repository marks
  * the link so the owner sees why syncing stopped. GitHub gives webhooks 10 seconds, so the
  * work runs after the response (Next's after()). Production also relays each event to staging
  * (lib/projects/github/relay.ts).
@@ -30,6 +33,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       after(async () => {
         for (const link of targets) {
           try {
+            const { data: app } = await DeployedApp.get({ templateId: link.templateId }).go({ attributes: ["type"] });
+            if (app?.type === "SSR") {
+              await queueSsrPushBuild(link, { after: payload.after });
+              continue;
+            }
             const imported = await importPush(link.templateId, {
               after: payload.after,
               ref: payload.ref,

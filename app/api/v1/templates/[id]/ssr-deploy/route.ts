@@ -1,20 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
-import { inspectSsrSource, SSR_MAX_ZIP_BYTES } from "@/lib/projects/ssrSource";
-import { startSsrBuild, BuildUnavailableError } from "@/lib/projects/builds";
+import { SSR_MAX_ZIP_BYTES } from "@/lib/projects/ssrSource";
 import { getTierFeatures } from "@/lib/subscription";
-import { reserveSsrBuild, releaseSsrBuild } from "@/lib/projects/ssrBudget";
-import { ssrFunctionName } from "@/lib/appFunctions/ssrNames";
-import { listSsrVariables } from "@/lib/appFunctions/ssrVariableStore";
-import { buildVariablesFor, buildVarsHash } from "@/lib/appFunctions/ssrVariables";
-import { DeployedApp } from "@/lib/db/appEntities";
-import { markBuildQueued } from "@/lib/projects/ssrRebuild";
 import { getObject, deleteObject } from "@/lib/projects/blobStore";
 import { isSsrUploadKey } from "@/lib/projects/ssrUpload";
 import { assertOrgInstallation } from "@/lib/projects/github/install";
 import { downloadRepoZip } from "@/lib/projects/github/archive";
-import { GitHubError } from "@/lib/projects/github/client";
+import { GitHubError, gh } from "@/lib/projects/github/client";
+import { linkSsrRepo, unlinkSsrRepo, type GitSource } from "@/lib/projects/github/ssrPush";
+import { queueSsrBuildFromZip } from "@/lib/projects/ssrBuildQueue";
 import { isValidGitRef, isValidRepoFullName } from "@/lib/projects/github/validate";
 
 /**
@@ -36,7 +31,7 @@ import { isValidGitRef, isValidRepoFullName } from "@/lib/projects/github/valida
 const TEMPLATE_ID_PATTERN = /^[A-Za-z0-9_-]{1,50}$/;
 
 type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
-type Source = { zip: Uint8Array; stagedKey?: string } | { error: string; status: number };
+type Source = { zip: Uint8Array; stagedKey?: string; github?: GitSource } | { error: string; status: number };
 
 export async function POST(
   request: NextRequest,
@@ -63,7 +58,7 @@ export async function POST(
   const source = await readSource(request, templateId, resolved.organizationId);
   if ("error" in source) return NextResponse.json({ error: source.error }, { status: source.status });
   try {
-    return await queueBuild(resolved, templateId, plan.ssrMonthlyBudgetUsd, source.zip);
+    return await queueBuild(resolved, templateId, plan.ssrMonthlyBudgetUsd, source);
   } finally {
     // The staged upload is only needed until it's read; the build keeps its own copy (ssr/latest.zip).
     if (source.stagedKey) await deleteObject(source.stagedKey).catch(() => undefined);
@@ -107,7 +102,8 @@ async function readSource(request: NextRequest, templateId: string, organization
 }
 
 /** A repo the account connected to Plexo's GitHub app: its branch is downloaded as a zip and built
- * exactly like an uploaded one. The installation must belong to this organization. */
+ * exactly like an uploaded one. The branch is pinned to the commit it points at now, so the build and
+ * the app's GitHub link record the same commit. The installation must belong to this organization. */
 async function readGithubSource(input: unknown, organizationId: string): Promise<Source> {
   const g = (input ?? {}) as { installationId?: unknown; repo?: unknown; ref?: unknown };
   const installationId = Number(g.installationId);
@@ -118,7 +114,15 @@ async function readGithubSource(input: unknown, organizationId: string): Promise
   }
   try {
     await assertOrgInstallation(organizationId, installationId);
-    return { zip: await downloadRepoZip(installationId, repo, ref) };
+    const info = await gh<{ id: number; full_name: string; default_branch: string }>(installationId, `/repos/${repo}`);
+    const branch = ref ?? info.default_branch;
+    const head = await gh<{ object: { sha: string } } | null>(installationId, `/repos/${info.full_name}/git/ref/heads/${encodeURIComponent(branch)}`, { allow404: true });
+    if (!head) return { error: "Couldn't find that branch on GitHub, or the repository is empty. Check the branch, then try again.", status: 404 };
+    const sha = head.object.sha;
+    return {
+      zip: await downloadRepoZip(installationId, info.full_name, sha),
+      github: { installationId, repoFullName: info.full_name.toLowerCase(), repoId: info.id, branch, sha },
+    };
   } catch (err) {
     if (err instanceof GitHubError) return { error: err.message, status: err.status >= 400 && err.status < 500 ? err.status : 502 };
     throw err;
@@ -129,53 +133,37 @@ async function queueBuild(
   resolved: ResolvedUser,
   templateId: string,
   budgetUsd: number,
-  sourceZip: Uint8Array,
+  source: { zip: Uint8Array; github?: GitSource },
 ): Promise<NextResponse> {
-  const inspected = await inspectSsrSource(sourceZip);
-  if (!inspected.ok) {
-    return NextResponse.json({ error: inspected.error }, { status: 400 });
-  }
-
-  // Reserve this build's projected cost first, so concurrent uploads can't overspend the month.
-  const reservation = await reserveSsrBuild({ organizationId: resolved.organizationId, budgetUsd });
-  if (!reservation.ok) {
-    return NextResponse.json({
-      error: `This month's server build budget is used up ($${reservation.usedUsd.toFixed(2)} of $${reservation.budgetUsd.toFixed(2)} projected). It resets on the first of next month.`,
-    }, { status: 429 });
-  }
-
+  // A repo's link is recorded before the build is queued, so the build can write its status to it.
+  if (source.github) await linkSsrRepo(templateId, resolved.organizationId, resolved.userId, source.github);
+  let outcome;
   try {
-    // Build-time variables for the preview. The build bakes them in, so publish compares against this.
-    const buildVars = buildVariablesFor(await listSsrVariables(templateId), "dev");
-    const build = await startSsrBuild({
-      templateId,
+    outcome = await queueSsrBuildFromZip({
       organizationId: resolved.organizationId,
+      templateId,
       requestedBy: resolved.userId,
-      sourceZip: inspected.source,
-      framework: inspected.framework,
-      root: inspected.root,
-      publicEnv: buildVars,
+      budgetUsd,
+      sourceZip: source.zip,
+      sourceCommitSha: source.github?.sha,
     });
-    const hash = buildVarsHash(buildVars);
-    const { data: existing } = await DeployedApp.get({ templateId }).go();
-    if (existing) await markBuildQueued(templateId, hash);
-    else await DeployedApp.create({ templateId, type: "SSR", previewBuildVarsHash: hash }).go();
-    return NextResponse.json(
-      {
-        buildId: build.id,
-        status: build.status,
-        framework: inspected.framework,
-        functionName: ssrFunctionName(templateId, "preview"),
-        warnings: inspected.warnings,
-        message: "Source received. The server build is queued; the app goes live when it succeeds.",
-      },
-      { status: 202 },
-    );
   } catch (err) {
-    await releaseSsrBuild({ organizationId: resolved.organizationId });
-    if (err instanceof BuildUnavailableError) {
-      return NextResponse.json({ error: err.message }, { status: 503 });
-    }
+    if (source.github) await unlinkSsrRepo(templateId);
     throw err;
   }
+  if (!outcome.ok) {
+    if (source.github) await unlinkSsrRepo(templateId);
+    return NextResponse.json({ error: outcome.error }, { status: outcome.status });
+  }
+  return NextResponse.json(
+    {
+      buildId: outcome.buildId,
+      status: outcome.status,
+      framework: outcome.framework,
+      functionName: outcome.functionName,
+      warnings: outcome.warnings,
+      message: "Source received. The server build is queued; the app goes live when it succeeds.",
+    },
+    { status: 202 },
+  );
 }

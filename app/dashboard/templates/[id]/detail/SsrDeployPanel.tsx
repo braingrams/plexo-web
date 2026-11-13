@@ -18,10 +18,28 @@ const button = (enabled: boolean): CSSProperties => ({
   cursor: enabled ? "pointer" : "not-allowed", background: enabled ? "var(--brand)" : "rgba(255,255,255,0.08)", color: enabled ? "#fff" : "var(--text-muted)",
 });
 
+type GitConnection =
+  | { linked: false }
+  | { linked: true; repo: string; branch: string; commitSha: string | null; status: "OK" | "ERROR"; statusMessage: string; publishOnPush: boolean };
+
 export function SsrDeployPanel({ templateId }: { templateId: string }) {
   const [file, setFile] = useState<File | null>(null);
   const [buildId, setBuildId] = useState<string | null>(null);
   const live = useBuildLog(buildId);
+  // The GitHub connection and how the latest push went. Read again whenever a build reports its result.
+  const [git, setGit] = useState<GitConnection | null>(null);
+  useEffect(() => {
+    let current = true;
+    fetch(`/api/v1/templates/${templateId}/ssr-git`)
+      .then((r) => (r.ok ? (r.json() as Promise<GitConnection>) : null))
+      .then((data) => {
+        if (current && data) setGit(data);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [templateId, live.status]);
   // A build is running while it has been queued and hasn't reported a final status. Hide the controls then.
   const building = buildId !== null && live.status === null;
   const [agreed, setAgreed] = useState(false);
@@ -88,6 +106,17 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
         Upload the app's source as a .zip (package.json at the root, or inside one folder). Leave out node_modules, .git and build output.
         The server builds it and runs it as an app. Publish the preview once the build succeeds to put it live.
       </p>
+
+      {git?.linked ? (
+        <div style={{ marginBottom: 14 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 12.5, color: "var(--text-muted)" }}>
+            Connected to {git.repo} on {git.branch}. {git.publishOnPush ? "Each push to that branch builds and goes live on its own." : "Each push to that branch builds. You publish it yourself."}
+          </p>
+          {git.statusMessage ? (
+            <p style={{ margin: 0, fontSize: 12.5, color: git.status === "ERROR" ? "#f87171" : "var(--text-muted)" }}>{git.statusMessage}</p>
+          ) : null}
+        </div>
+      ) : null}
 
       {error ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "#f87171" }}>{error}</p> : null}
       {notice ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--brand)" }}>{notice}</p> : null}

@@ -1,6 +1,7 @@
 "use client";
 
 import { ZipDropzone } from "../_components/ZipDropzone";
+import { ServerBuildProgress } from "./ServerBuildProgress";
 import { stripEnvFilesInBrowser } from "@/lib/projects/clientSsrUpload";
 import { SolIcon, SolOutOfCredits } from "../_components/sol/SolTopUp";
 import { useEffect, useRef, useState } from "react";
@@ -183,6 +184,8 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
   const [serverAgreed, setServerAgreed] = useState(false);
   const [serverName, setServerName] = useState("");
   const [serverBusy, setServerBusy] = useState(false);
+  // Set once a server build is queued: the tab then shows the build log and the success dialog.
+  const [serverBuild, setServerBuild] = useState<{ templateId: string; buildId: string } | null>(null);
   // Server app source: an uploaded .zip, or a repo from the organization's connected GitHub account.
   const [serverSource, setServerSource] = useState<"zip" | "github">("zip");
   const [ghConn, setGhConn] = useState<{ configured: boolean; installations: Array<{ id: number; account: string }>; installUrl: string | null } | null>(null);
@@ -460,10 +463,8 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
         setError(data.error ?? `The server couldn't start the build (server responded ${res.status}). Try again.`);
         return;
       }
-      // The build runs in the background. Close the wizard and open the site's settings, where
-      // the build and secrets are shown.
-      onClose?.();
-      router.push(`/dashboard/templates/${templateId}/detail`);
+      // Stay here: the build log streams in place of the form, then the app goes live.
+      setServerBuild({ templateId, buildId: data.buildId as string });
     } finally {
       setServerBusy(false);
     }
@@ -499,8 +500,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
         setError(data.error ?? `The server couldn't start the build (server responded ${res.status}). Try again.`);
         return;
       }
-      onClose?.();
-      router.push(`/dashboard/templates/${templateId}/detail`);
+      setServerBuild({ templateId, buildId: data.buildId as string });
     } finally {
       setServerBusy(false);
     }
@@ -998,6 +998,14 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                   )}
                 </div>
               ) : startTab === "server" ? (
+                serverBuild ? (
+                  <ServerBuildProgress
+                    templateId={serverBuild.templateId}
+                    buildId={serverBuild.buildId}
+                    detailUrl={`/dashboard/templates/${serverBuild.templateId}/detail`}
+                    onTryAgain={() => setServerBuild(null)}
+                  />
+                ) : (
                 <div>
                   <h2 style={{ margin: "0 0 4px", fontSize: "17px", fontWeight: 700 }}>Server app</h2>
                   <p style={{ margin: "0 0 20px", fontSize: "13px", color: "var(--text-muted)" }}>
@@ -1164,6 +1172,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                   </form>
                 )}
                 </div>
+                )
               ) : startTab === "wordpress" ? (
                 <div style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 16, alignItems: "flex-start" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
