@@ -22,7 +22,8 @@ permissions:
 
 jobs:
   deploy:
-    if: github.repository == 'Challaris/plexo-web'
+    # Explicit branch check: only a feature PR into staging gets a compute-stack preview. Not main -> staging, not staging -> main.
+    if: github.repository == 'Challaris/plexo-web' && github.event.pull_request.base.ref == 'staging' && github.event.pull_request.head.ref != 'main' && github.event.pull_request.head.ref != 'staging'
     runs-on: ubuntu-latest
     env:
       PR_NUMBER: ${{ github.event.number }}
