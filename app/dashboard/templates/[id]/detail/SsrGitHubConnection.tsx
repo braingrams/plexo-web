@@ -104,6 +104,11 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
 
   const link = status.link;
   const hasAccount = status.installations.length > 0;
+  const addAccount = status.installUrl ? (
+    <a href={status.installUrl} style={{ fontSize: 12.5, color: "var(--brand)", justifySelf: "start" }}>
+      {hasAccount ? "Connect another GitHub account" : "Connect GitHub"}
+    </a>
+  ) : null;
 
   return (
     <div style={{ borderTop: "1px solid var(--surface-border)", paddingTop: 14, marginTop: 14, display: "grid", gap: 10 }}>
@@ -143,6 +148,7 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
             <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
             Changing the branch replaces the app&apos;s files with that branch&apos;s files.
           </label>
+          {addAccount}
         </>
       ) : !hasAccount ? (
         <>
@@ -155,7 +161,14 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
         </>
       ) : (
         <>
-          <p style={hint}>Pick a repository and branch. Connecting replaces the app&apos;s files with the repository&apos;s files, and each push to that branch rebuilds the app.</p>
+          <p style={hint}>Pick an account, then a repository and branch. Connecting replaces the app&apos;s files with the repository&apos;s files, and each push to that branch rebuilds the app.</p>
+          {status.installations.length > 1 ? (
+            <select value={installationId ?? ""} onChange={(e) => { setRepos([]); setRepo(""); setInstallationId(Number(e.target.value)); }} style={input} aria-label="GitHub account">
+              {status.installations.map((i) => (
+                <option key={i.id} value={i.id}>{i.account}</option>
+              ))}
+            </select>
+          ) : null}
           <div style={row}>
             <select value={repo} onChange={(e) => { setRepo(e.target.value); setBranch(repos.find((r) => r.fullName === e.target.value)?.defaultBranch ?? ""); }} style={input} aria-label="Repository" disabled={reposLoading || repos.length === 0}>
               {repos.length === 0 ? <option value="">{reposLoading ? "Loading repositories…" : "No repositories"}</option> : null}
@@ -179,6 +192,7 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
             <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
             Connecting replaces the app&apos;s files with the repository&apos;s files on that branch.
           </label>
+          {addAccount}
           <button
             type="button"
             disabled={busy || !repo || !branch.trim() || !agreed || installationId === null}

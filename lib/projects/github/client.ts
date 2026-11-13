@@ -50,6 +50,17 @@ export async function installationToken(installationId: number): Promise<string>
   return data.token;
 }
 
+/** Removes the Plexo App from a GitHub account, so Plexo loses access to every repository there.
+ * A 404 means it was already removed on GitHub, which counts as done. */
+export async function uninstallGitHubApp(installationId: number): Promise<void> {
+  const res = await fetch(`${API}/app/installations/${installationId}`, {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${await appToken()}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" },
+  });
+  if (res.status === 404) return;
+  if (!res.ok) throw new GitHubError(`GitHub didn't remove the app from that account (${res.status}). Nothing was disconnected in Plexo; try again.`, res.status >= 500 ? 502 : res.status);
+}
+
 export async function gh<T = any>(installationId: number, path: string, init: { method?: string; body?: unknown; allow404?: boolean } = {}): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     method: init.method ?? "GET",
