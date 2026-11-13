@@ -7,6 +7,7 @@ import { ensureActiveOrganization, getOrgBrandDynamo } from "@/server/orgDynamo"
 import { DashboardShell } from "./dashboard-shell";
 import { MigrationBanner } from "./migrate/wordpress/MigrationBanner";
 import { PlanBanner, type PlanBannerState } from "./_components/PlanBanner";
+import { AppLiveDialog } from "./_components/AppLiveDialog";
 import { TRIAL_DAYS, accessDaysLeft, canStartTrial, effectivePlan, paidAccess, planSyncAction } from "@/lib/plan/entitlement";
 import { syncPlanLifecycle } from "@/lib/plan/lifecycle";
 
@@ -67,6 +68,8 @@ export default async function DashboardLayout({
         <MigrationBanner />
         {planBanner ? <PlanBanner state={planBanner} /> : null}
         {children}
+        {/* "Your app is live", opened from any page once a server app goes live. */}
+        <AppLiveDialog />
       </DashboardShell>
     </ThemeProvider>
   );

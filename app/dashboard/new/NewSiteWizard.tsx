@@ -1004,6 +1004,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                     buildId={serverBuild.buildId}
                     detailUrl={`/dashboard/templates/${serverBuild.templateId}/detail`}
                     onTryAgain={() => setServerBuild(null)}
+                    onLive={() => onClose?.()}
                   />
                 ) : (
                 <div>

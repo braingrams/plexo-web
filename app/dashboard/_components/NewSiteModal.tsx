@@ -40,7 +40,7 @@ export function NewSiteProvider({ plan, children }: { plan: Plan; children: Reac
           onClick={close}
           style={{
             position: "fixed", inset: 0, zIndex: 1000,
-            background: "rgba(0,0,0,0.85)",
+            background: "color-mix(in srgb, var(--bg) 85%, transparent)",
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
             display: "flex", alignItems: "flex-start", justifyContent: "center",
@@ -51,11 +51,11 @@ export function NewSiteProvider({ plan, children }: { plan: Plan; children: Reac
             onClick={(event) => event.stopPropagation()}
             style={{
               width: "100%", maxWidth: 1080,
-              background: "#0d0f1a",
-              border: "1px solid rgba(255,255,255,0.08)",
+              background: "var(--surface)",
+              border: "1px solid var(--surface-border)",
               borderRadius: 18,
               padding: "28px 32px",
-              boxShadow: "0 30px 80px rgba(0,0,0,0.6)",
+              boxShadow: "var(--shadow-card)",
             }}
           >
             <NewSiteWizard onClose={close} plan={plan} />

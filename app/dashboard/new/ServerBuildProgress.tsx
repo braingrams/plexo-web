@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import Link from "next/link";
 import { useBuildLog } from "../templates/[id]/detail/useBuildLog";
+import { announceAppLive } from "../_components/AppLiveDialog";
 
 // Shown in the Server app tab in place of the upload form. It streams the build log, which carries the
-// address and publish steps too (the finalizer writes them to the same log), then shows a success dialog
-// with the live address and a link to the app's detail page.
+// address and publish steps too (the finalizer writes them to the same log). When the app is live it
+// closes the modal (onLive) and opens the "Your app is live" dialog, which the dashboard layout shows.
 
 type PublishStatus = { publishing: boolean; error: string | null; liveUrl: string | null; previewReady: boolean };
 
@@ -15,11 +15,13 @@ export function ServerBuildProgress({
   buildId,
   detailUrl,
   onTryAgain,
+  onLive,
 }: {
   templateId: string;
   buildId: string;
   detailUrl: string;
   onTryAgain: () => void;
+  onLive?: () => void;
 }) {
   const live = useBuildLog(buildId);
   const logRef = useRef<HTMLPreElement>(null);
@@ -55,6 +57,15 @@ export function ServerBuildProgress({
   const liveUrl = publish?.liveUrl ?? null;
   const publishError = publish?.error ?? null;
 
+  // Live: close the modal first, then show the dialog from the dashboard layout, so it isn't drawn inside the modal.
+  const announced = useRef(false);
+  useEffect(() => {
+    if (!liveUrl || announced.current) return;
+    announced.current = true;
+    announceAppLive({ liveUrl, detailUrl });
+    onLive?.();
+  }, [liveUrl, detailUrl, onLive]);
+
   let heading = "Building your app…";
   let detail = "Plexo is building the app on its servers. The log streams below.";
   if (buildFailed) {
@@ -87,24 +98,6 @@ export function ServerBuildProgress({
         </div>
       )}
 
-      {liveUrl && (
-        <div role="dialog" aria-modal="true" aria-label="Your app is live" style={overlayStyle}>
-          <div style={dialogStyle}>
-            <h3 style={{ margin: "0 0 6px", fontSize: "18px", fontWeight: 700 }}>Your app is live</h3>
-            <p style={{ margin: "0 0 20px", fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.5 }}>
-              It&apos;s running at its own address now. You can manage its builds, domains and settings from the app&apos;s page.
-            </p>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <a href={liveUrl} target="_blank" rel="noopener noreferrer" style={primaryButton}>
-                Open site
-              </a>
-              <Link href={detailUrl} style={secondaryButton}>
-                Open app details
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -115,32 +108,19 @@ const logStyle: CSSProperties = {
   overflow: "auto",
   padding: 12,
   borderRadius: 10,
-  background: "rgba(0,0,0,0.35)",
+  background: "color-mix(in srgb, var(--bg) 35%, transparent)",
   fontSize: 11.5,
   lineHeight: 1.5,
   whiteSpace: "pre-wrap",
 };
 
-const primaryButton: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "9px 16px",
-  borderRadius: 9,
-  border: "none",
-  fontWeight: 650,
-  fontSize: 13,
-  textDecoration: "none",
-  cursor: "pointer",
-  background: "var(--brand)",
-  color: "#fff",
-};
 
 const secondaryButton: CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   padding: "9px 16px",
   borderRadius: 9,
-  border: "1px solid rgba(255,255,255,0.14)",
+  border: "1px solid var(--surface-border)",
   fontWeight: 650,
   fontSize: 13,
   textDecoration: "none",
@@ -149,21 +129,4 @@ const secondaryButton: CSSProperties = {
   color: "inherit",
 };
 
-const overlayStyle: CSSProperties = {
-  position: "fixed",
-  inset: 0,
-  zIndex: 1000,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  background: "rgba(0,0,0,0.55)",
-  padding: 20,
-};
 
-const dialogStyle: CSSProperties = {
-  width: "min(440px, 100%)",
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "var(--surface, #111)",
-  padding: "24px 26px",
-};
