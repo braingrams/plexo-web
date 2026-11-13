@@ -6,6 +6,7 @@ import { parseSsrControlMessage } from "@/lib/appFunctions/ssrControl";
 import { runSsrControl } from "@/lib/appFunctions/ssrControlRun";
 import { parseLiveBuildMessage } from "@/lib/realtime/buildLog";
 import { publishBuildLog, publishBuildStatus } from "@/lib/realtime/buildLogPublish";
+import { reportGitBuildFailed } from "@/lib/projects/github/ssrPush";
 
 // BuildFinalizeFn — runs a finished build's post-build steps (preview/live database
 // migrations, server-function deploys, the live switch for a release) as soon as the build
@@ -36,7 +37,11 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
       const live = parseLiveBuildMessage(record.body);
       if (live) {
         if (live.type === "build-log") await publishBuildLog(live);
-        else await publishBuildStatus(live);
+        else {
+          await publishBuildStatus(live);
+          // A failed build doesn't reach finalizeBuild, so a GitHub push's build reports its failure here.
+          if (live.status === "FAILED") await reportGitBuildFailed(live.buildId).catch((err) => console.error("reporting a failed GitHub build failed", err));
+        }
         continue;
       }
       const body = JSON.parse(record.body) as { buildId?: string; kind?: string };

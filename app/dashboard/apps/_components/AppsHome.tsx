@@ -9,6 +9,7 @@ import { timeAgo } from "./ui";
 import { PageContainer } from "../../_components/PageContainer";
 import { AttachFiles, MoreDetails, NotesField, QualityChoice, useStartContext } from "./StartContext";
 import { saveHandoff } from "./startHandoff";
+import { GitHubStart } from "./GitHubStart";
 import type { ModelTier } from "../../sol/_components/types";
 
 // The Apps home (wireframe "D"): pick up where you left off, or answer three quick questions —
@@ -97,6 +98,8 @@ export function AppsHome(props: { lockedModelTier?: { tier: "BASIC"; note: strin
   const [other, setOther] = useState("");
   const [name, setName] = useState("");
   const [describing, setDescribing] = useState(false);
+  // "Connect a GitHub project" path: name the app, then pick the repo (see GitHubStart).
+  const [connecting, setConnecting] = useState(false);
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -219,7 +222,9 @@ export function AppsHome(props: { lockedModelTier?: { tier: "BASIC"; note: strin
           </div>
         )}
 
-        {!composing ? (
+        {connecting ? (
+          <GitHubStart onCancel={() => setConnecting(false)} />
+        ) : !composing ? (
           <button type="button" onClick={() => setComposing(true)} className="ah-create" style={{ minHeight: 420, fontFamily: "inherit", color: ink, cursor: "pointer", border: `2px dashed ${tint(accent, 40)}`, borderRadius: 22, background: `radial-gradient(50% 70% at 20% 0%, ${tint(BRAND[300], 10)}, transparent 70%), radial-gradient(60% 80% at 85% 100%, ${tint(accent, 16)}, transparent 70%), ${surface}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
             <span style={{ width: 64, height: 64, borderRadius: 18, background: brandGradient, color: "#fff", display: "grid", placeItems: "center", boxShadow: "0 12px 32px var(--brand-glow)" }}><Plus size={30} /></span>
             <span style={{ fontSize: "clamp(19px, 5vw, 24px)", fontWeight: 800, letterSpacing: "-0.01em" }}>Create a new app</span>
@@ -356,7 +361,13 @@ export function AppsHome(props: { lockedModelTier?: { tier: "BASIC"; note: strin
         </section>
         )}
 
-        {!hasApps && (
+        {!composing && !connecting && (
+          <button type="button" onClick={() => setConnecting(true)} style={{ ...linkButton, alignSelf: "center", fontSize: 15, fontWeight: 600 }}>
+            Or connect a GitHub project →
+          </button>
+        )}
+
+        {!hasApps && !connecting && (
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 13.5, color: muted }}>
             Or start from an example:
             {STARTERS.map((s) => (

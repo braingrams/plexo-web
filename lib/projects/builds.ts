@@ -90,6 +90,11 @@ export function ssrLatestSourceKey(templateId: string): string {
   return `${projectPrefix(templateId)}/ssr/latest.zip`;
 }
 
+/** One build's own copy of a GitHub-sourced SSR source (see startSsrBuild). Deleted once the build is done. */
+export function ssrBuildSourceKey(templateId: string, buildId: string): string {
+  return `${projectPrefix(templateId)}/ssr/builds/${buildId}.zip`;
+}
+
 /** Queues a server-rendered (SSR) build: stores the source zip, then enqueues a job the
  * build Lambda runs down its SSR path (lambda/project-build). Finalizing an SSR build deploys
  * the per-customer plexo-ssr-<templateId> function instead of switching a static site live. */
@@ -103,14 +108,21 @@ export async function startSsrBuild(input: {
   root: string;
   /** Build-time variables (never secrets). They're baked into the build. */
   publicEnv?: Record<string, string>;
+  /** The GitHub commit the source came from. Such a build reads its own copy of the source
+   * (ssrBuildSourceKey), so a newer push that overwrites the app's latest source can't change it. */
+  sourceCommitSha?: string;
 }): Promise<ProjectBuildItem> {
   const queueUrl = process.env.PROJECT_BUILD_QUEUE_URL;
   if (!queueUrl) throw new BuildUnavailableError("App builds aren't available in this environment yet (PROJECT_BUILD_QUEUE_URL isn't set).");
 
   const id = randomUUID();
   const bucket = projectBucket();
-  const sourceKey = ssrLatestSourceKey(input.templateId);
-  if (input.sourceZip) await putObject(sourceKey, input.sourceZip, "application/zip");
+  const sourceKey = input.sourceCommitSha ? ssrBuildSourceKey(input.templateId, id) : ssrLatestSourceKey(input.templateId);
+  if (input.sourceZip) {
+    if (input.sourceCommitSha) await putObject(sourceKey, input.sourceZip, "application/zip");
+    // The latest source is always updated: a rebuild from the stored source (secrets changed) uses it.
+    await putObject(ssrLatestSourceKey(input.templateId), input.sourceZip, "application/zip");
+  }
 
   const job: BuildJob = {
     v: BUILD_JOB_VERSION,
@@ -145,6 +157,7 @@ export async function startSsrBuild(input: {
     outputPrefix: job.sitePrefix,
     requestedBy: input.requestedBy,
     postStatus: "PENDING",
+    sourceCommitSha: input.sourceCommitSha,
   }).go();
 
   await queue().send(new SendMessageCommand({ QueueUrl: queueUrl, MessageBody: JSON.stringify(job) }));

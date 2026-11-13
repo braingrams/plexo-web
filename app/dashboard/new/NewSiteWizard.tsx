@@ -1,6 +1,7 @@
 "use client";
 
 import { ZipDropzone } from "../_components/ZipDropzone";
+import { ServerBuildProgress } from "./ServerBuildProgress";
 import { stripEnvFilesInBrowser } from "@/lib/projects/clientSsrUpload";
 import { SolIcon, SolOutOfCredits } from "../_components/sol/SolTopUp";
 import { useEffect, useRef, useState } from "react";
@@ -183,6 +184,18 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
   const [serverAgreed, setServerAgreed] = useState(false);
   const [serverName, setServerName] = useState("");
   const [serverBusy, setServerBusy] = useState(false);
+  // Set once a server build is queued: the tab then shows the build log and the success dialog.
+  const [serverBuild, setServerBuild] = useState<{ templateId: string; buildId: string } | null>(null);
+  // Server app source: an uploaded .zip, or a repo from the organization's connected GitHub account.
+  const [serverSource, setServerSource] = useState<"zip" | "github">("zip");
+  const [ghConn, setGhConn] = useState<{ configured: boolean; installations: Array<{ id: number; account: string }>; installUrl: string | null } | null>(null);
+  const [ghConnLoading, setGhConnLoading] = useState(false);
+  const [ghInstallation, setGhInstallation] = useState<number | null>(null);
+  const [ghRepos, setGhRepos] = useState<Array<{ fullName: string; defaultBranch: string; private: boolean }>>([]);
+  const [ghRepoLoading, setGhRepoLoading] = useState(false);
+  const [ghRepo, setGhRepo] = useState("");
+  const [ghBranch, setGhBranch] = useState("");
+  const [ghFilter, setGhFilter] = useState("");
   const router = useRouter();
 
   const [items, setItems] = useState<MarketplaceItem[]>([]);
@@ -227,6 +240,66 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
 
   const [publishing, setPublishing] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+
+  // Back from GitHub's install page: reopen the server tab on the GitHub option and say how it went.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("github");
+    if (!result) return;
+    setStartTab("server");
+    setServerSource("github");
+    const messages: Record<string, string> = {
+      denied: "Your GitHub account doesn't have access to that account. Try connecting again.",
+      expired: "That GitHub connection link expired. Try connecting again.",
+      requested: "GitHub sent your request to the organization's owners. Once they approve, come back and try again.",
+      missing: "GitHub didn't finish connecting. Try again.",
+    };
+    if (messages[result]) setError(messages[result]);
+    params.delete("github");
+    window.history.replaceState(null, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
+  }, []);
+
+  // Load the organization's GitHub connection the first time the GitHub option is opened.
+  useEffect(() => {
+    if (startTab !== "server" || serverSource !== "github" || ghConn) return;
+    setGhConnLoading(true);
+    fetch("/api/v1/github/connection?returnTo=/dashboard/new")
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) return setError(data.error ?? "Couldn't check GitHub. Try again.");
+        setGhConn(data);
+        if (data.installations?.length) setGhInstallation((current) => current ?? data.installations[0].id);
+      })
+      .catch(() => setError("Couldn't check GitHub. Try again."))
+      .finally(() => setGhConnLoading(false));
+    // Runs when the option is opened; the check itself is skipped once a result is in.
+  }, [startTab, serverSource]);
+
+  // Repositories for the chosen GitHub account.
+  useEffect(() => {
+    if (ghInstallation === null) return;
+    let cancelled = false;
+    setGhRepoLoading(true);
+    setGhRepos([]);
+    setGhRepo("");
+    setGhBranch("");
+    fetch(`/api/v1/github/repos?installationId=${ghInstallation}`)
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (cancelled) return;
+        if (!ok) return setError(data.error ?? "Couldn't load your repositories.");
+        setGhRepos(data.repos ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Couldn't load your repositories.");
+      })
+      .finally(() => {
+        if (!cancelled) setGhRepoLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ghInstallation]);
 
   useEffect(() => {
     fetch("/api/v1/marketplace/templates?sort=popular&free=true&kind=LANDING_PAGE")
@@ -390,10 +463,44 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
         setError(data.error ?? `The server couldn't start the build (server responded ${res.status}). Try again.`);
         return;
       }
-      // The build runs in the background. Close the wizard and open the site's settings, where
-      // the build and secrets are shown.
-      onClose?.();
-      router.push(`/dashboard/templates/${templateId}/detail`);
+      // Stay here: the build log streams in place of the form, then the app goes live.
+      setServerBuild({ templateId, buildId: data.buildId as string });
+    } finally {
+      setServerBusy(false);
+    }
+  }
+
+  // Same flow as the zip upload, except the source is a repo's branch: the server downloads it
+  // (ssr-deploy with a github source) and runs the same build, budget check, and publish steps.
+  async function handleServerFromGitHub(event: React.FormEvent) {
+    event.preventDefault();
+    if (!ghInstallation || !ghRepo || !ghBranch.trim() || !serverName.trim() || !serverAgreed) return;
+    setServerBusy(true);
+    setError(null);
+    try {
+      const created = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: serverName.trim(), kind: "LANDING_PAGE" }),
+      });
+      const createdData = await created.json().catch(() => ({}));
+      if (!created.ok) {
+        setError(createdData.error ?? "Couldn't create the site. Please try again.");
+        return;
+      }
+      const templateId = createdData.template.id as string;
+
+      const res = await fetch(`/api/v1/templates/${templateId}/ssr-deploy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ github: { installationId: ghInstallation, repo: ghRepo, ref: ghBranch.trim() } }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? `The server couldn't start the build (server responded ${res.status}). Try again.`);
+        return;
+      }
+      setServerBuild({ templateId, buildId: data.buildId as string });
     } finally {
       setServerBusy(false);
     }
@@ -891,11 +998,36 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                   )}
                 </div>
               ) : startTab === "server" ? (
+                serverBuild ? (
+                  <ServerBuildProgress
+                    templateId={serverBuild.templateId}
+                    buildId={serverBuild.buildId}
+                    detailUrl={`/dashboard/templates/${serverBuild.templateId}/detail`}
+                    onTryAgain={() => setServerBuild(null)}
+                    onLive={() => onClose?.()}
+                  />
+                ) : (
                 <div>
                   <h2 style={{ margin: "0 0 4px", fontSize: "17px", fontWeight: 700 }}>Server app</h2>
                   <p style={{ margin: "0 0 20px", fontSize: "13px", color: "var(--text-muted)" }}>
-                    Upload the source of a Next.js, Nuxt, Remix, Astro or Nitro app. Plexo builds it and runs it as an app on its own server.
+                    Use the source of a Next.js, Nuxt, Remix, Astro or Nitro app, from a .zip or a GitHub repository. Plexo builds it and runs it as an app on its own server.
                   </p>
+                <div role="tablist" aria-label="Where the code comes from" style={{ display: "inline-flex", gap: 6, padding: 4, borderRadius: 12, border: `1px solid ${hairline}`, marginBottom: 18 }}>
+                  {(["zip", "github"] as const).map((source) => (
+                    <button
+                      key={source}
+                      type="button"
+                      role="tab"
+                      aria-selected={serverSource === source}
+                      onClick={() => setServerSource(source)}
+                      disabled={serverBusy}
+                      style={{ padding: "8px 14px", borderRadius: 9, border: "none", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", background: serverSource === source ? "var(--brand)" : "transparent", color: serverSource === source ? "#fff" : "var(--text-muted)" }}
+                    >
+                      {source === "zip" ? "Upload a .zip" : "Connect GitHub repository"}
+                    </button>
+                  ))}
+                </div>
+                {serverSource === "zip" ? (
                 <form onSubmit={(e) => void handleServerDeploy(e)} style={{ display: "grid", gap: 14, maxWidth: 480 }}>
                     <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
                       App name
@@ -930,7 +1062,118 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                       </button>
                     </div>
                   </form>
+                ) : (
+                  <form onSubmit={(e) => void handleServerFromGitHub(e)} style={{ display: "grid", gap: 14, maxWidth: 480 }}>
+                    <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
+                      App name
+                      <input
+                        value={serverName}
+                        onChange={(e) => setServerName(e.target.value)}
+                        placeholder="My app"
+                        style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                      />
+                    </label>
+                    {!ghConn ? (
+                      <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)" }}>
+                        {ghConnLoading ? "Checking your GitHub connection…" : "Couldn't reach GitHub. Switch tabs and back to try again."}
+                      </p>
+                    ) : !ghConn.configured ? (
+                      <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)" }}>GitHub isn&apos;t set up on this Plexo yet. Upload a .zip instead.</p>
+                    ) : ghConn.installations.length === 0 ? (
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <p style={{ margin: 0, fontSize: "13px", color: "var(--text-muted)", lineHeight: 1.6 }}>
+                          Connect the GitHub account or organization that owns the repository. You&apos;ll approve Plexo on GitHub, then come back here.
+                        </p>
+                        <div>
+                          <button
+                            type="button"
+                            disabled={!ghConn.installUrl}
+                            onClick={() => window.location.assign(ghConn.installUrl as string)}
+                            style={{ padding: "10px 14px", borderRadius: 10, border: `1px solid ${hairline}`, background: "transparent", color: "var(--text-main)", fontFamily: "inherit", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}
+                          >
+                            Connect GitHub
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {ghConn.installations.length > 1 && (
+                          <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
+                            GitHub account
+                            <select
+                              value={ghInstallation ?? ""}
+                              onChange={(e) => setGhInstallation(Number(e.target.value))}
+                              style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                            >
+                              {ghConn.installations.map((i) => (
+                                <option key={i.id} value={i.id}>{i.account}</option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        <div style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
+                          Repository
+                          <input
+                            value={ghFilter}
+                            onChange={(e) => setGhFilter(e.target.value)}
+                            placeholder="Search repositories"
+                            style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                          />
+                          <select
+                            value={ghRepo}
+                            disabled={ghRepoLoading}
+                            onChange={(e) => {
+                              const picked = ghRepos.find((r) => r.fullName === e.target.value);
+                              setGhRepo(e.target.value);
+                              setGhBranch(picked?.defaultBranch ?? "");
+                            }}
+                            style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                          >
+                            <option value="">{ghRepoLoading ? "Loading repositories…" : "Choose a repository"}</option>
+                            {ghRepos
+                              .filter((r) => r.fullName.toLowerCase().includes(ghFilter.trim().toLowerCase()))
+                              .map((r) => (
+                                <option key={r.fullName} value={r.fullName}>
+                                  {r.fullName}{r.private ? " (private)" : ""}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+                        <label style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
+                          Branch
+                          <input
+                            value={ghBranch}
+                            onChange={(e) => setGhBranch(e.target.value)}
+                            placeholder="main"
+                            disabled={!ghRepo}
+                            style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                          />
+                        </label>
+                      </>
+                    )}
+                    <label style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: "12.5px", color: "var(--text-muted)", lineHeight: 1.7, cursor: "pointer" }}>
+                      <input type="checkbox" checked={serverAgreed} onChange={(e) => setServerAgreed(e.target.checked)} style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0 }} />
+                      <span>
+                        I agree to the{" "}
+                        <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--brand)" }}>
+                          Acceptable Use Policy
+                        </Link>
+                        . The app&apos;s code is built and run on Plexo&apos;s servers exactly as it is in the repository.
+                      </span>
+                    </label>
+                    <div>
+                      <button
+                        type="submit"
+                        disabled={serverBusy || !ghInstallation || !ghRepo || !ghBranch.trim() || !serverName.trim() || !serverAgreed}
+                        style={primaryButtonStyle(!serverBusy && !!ghInstallation && !!ghRepo && !!ghBranch.trim() && !!serverName.trim() && serverAgreed)}
+                      >
+                        {serverBusy ? "Starting…" : "Build from GitHub"}
+                      </button>
+                    </div>
+                  </form>
+                )}
                 </div>
+                )
               ) : startTab === "wordpress" ? (
                 <div style={{ maxWidth: 680, display: "flex", flexDirection: "column", gap: 16, alignItems: "flex-start" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

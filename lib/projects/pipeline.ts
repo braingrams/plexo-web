@@ -5,10 +5,13 @@ import { listFiles, snapshotVersion, getVersionManifest, diffManifests, type Ver
 import { getBlob } from "./blobStore";
 import { startBuild, getBuild, waitForBuild, isFinished, recordLatestBuild, type ProjectBuildItem } from "./builds";
 import { settle } from "./settle";
+import { isSupersededBuild, publishesOnPush, publishPushedPreview, releaseGitBuildSource, reportGitBuild } from "./github/ssrPush";
 import { upgradeAppClient } from "./clientUpgrade";
 import { previewUrl } from "./previewHost";
 import { applyMigrations, migrationFilesFrom, type MigrationOutcome } from "@/lib/appData/migrations";
-import { deployFunctions, deploySsrApp, type DeployOutcome, type FunctionBundle } from "@/lib/appFunctions/deploy";
+import { deployFunctions, deploySsrApp, publishSsrPreview, type DeployOutcome, type FunctionBundle } from "@/lib/appFunctions/deploy";
+import { DeployedApp } from "@/lib/db/appEntities";
+import { publishBuildLog } from "@/lib/realtime/buildLogPublish";
 import { forgetAppContext } from "@/lib/appRuntime/context";
 import { forgetSchemaVersion } from "@/lib/appRuntime/data";
 import { databaseName } from "@/lib/appData/db";
@@ -146,6 +149,10 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
   let migrationResult: MigrationOutcome | null = null;
   let functionResult: DeployOutcome | null = null;
   let publishResult: { liveUrl: string | null; domains: string[]; switched: boolean; error?: string } | null = null;
+  // An SSR build made from a GitHub commit. A newer server build that's already queued or done makes this one
+  // stale: it neither deploys nor publishes, so the newer commit is never overwritten by this one.
+  const commitSha = build.kind === "ssr" && build.sourceCommitSha ? build.sourceCommitSha : null;
+  const superseded = commitSha ? await isSupersededBuild(build) : false;
   try {
     // SSR builds carry no version manifest and no migrations yet (their versionId is synthetic).
     const files = build.kind === "ssr" ? [] : await migrationFilesOf(build.templateId, build.versionId);
@@ -176,7 +183,10 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
         removed: [],
         failed: [{ name: "*", message: err instanceof Error ? err.message : String(err) }],
       });
-      if (build.kind === "ssr") {
+      if (superseded) {
+        functionResult = { deployed: [], removed: [], failed: [] };
+        await ProjectBuild.patch({ id: build.id }).set({ summary: "Superseded by a newer build. Not deployed." }).go().catch(() => undefined);
+      } else if (build.kind === "ssr") {
         // An SSR build deploys the app's preview server function (plexo-ssr-<templateId>-pv) from the
         // "server" bundle; its static files are already at the site prefix (outputPrefix). Publishing
         // promotes it to the live function (publishSsrPreview).
@@ -193,6 +203,26 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
       } else {
         functionResult = await deployFunctions({ templateId: build.templateId, organizationId: template.organizationId, env, buildId: build.id, bundles }).catch(failedOutcome);
       }
+    }
+
+    // An SSR app's first good preview goes live straight away, at a random address unless one was chosen,
+    // so creating the app ends with a live URL and no second step. Later previews still wait for "Publish".
+    if (build.kind === "ssr" && build.mode !== "release" && !superseded && functionResult && functionResult.failed.length === 0 && !(await hasLiveSsr(build.templateId))) {
+      publishResult = await publishFirstSsr(build, template);
+    } else if (commitSha && !superseded && functionResult && functionResult.failed.length === 0 && (await publishesOnPush(build.templateId))) {
+      // A GitHub push's build goes live the same way the Publish button does, once it has deployed.
+      const error = await publishPushedPreview(build.templateId);
+      publishResult = { liveUrl: null, domains: [], switched: !error, error: error ?? undefined };
+    }
+    if (commitSha) {
+      const deployError = functionResult?.failed[0]?.message;
+      await reportGitBuild(build.templateId, commitSha, {
+        superseded,
+        deployError: deployError || undefined,
+        publishError: publishResult?.error,
+        live: publishResult?.switched === true,
+      }).catch((err) => console.error("writing the GitHub status failed", err));
+      await releaseGitBuildSource(build.templateId, build.id);
     }
 
     if (build.mode === "release") {
@@ -214,6 +244,59 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
       .go();
   }
   return { ...build, postStatus: "DONE", migrationResult, functionResult, publishResult };
+}
+
+/** True once the SSR app has a live server function (it has been published at least once). */
+async function hasLiveSsr(templateId: string): Promise<boolean> {
+  const { data: app } = await DeployedApp.get({ templateId }).go({ attributes: ["functionUrl"] });
+  return Boolean(app?.functionUrl);
+}
+
+/**
+ * Gives an SSR app its address and publishes the preview that was just built. Used for the first preview
+ * only. The address is the app's name with a random suffix if the name is taken (see ensureDomain).
+ */
+async function publishFirstSsr(
+  build: ProjectBuildItem,
+  template: { name: string; userId: string; organizationId: string },
+): Promise<{ liveUrl: string | null; domains: string[]; switched: boolean; error?: string }> {
+  // The steps are also written to the build's live log, so the wizard can show them as they happen.
+  // Sequence numbers start after the build's own output and keep going in the order they're sent.
+  const base = Date.now() * 1000;
+  let sent = 0;
+  const say = (line: string) =>
+    publishBuildLog({ type: "build-log", buildId: build.id, templateId: build.templateId, seq: base + sent++, lines: [line] }).catch(() => undefined);
+
+  await say("Creating your address…");
+  let domains: string[];
+  try {
+    domains = await ensureDomain(build.templateId, template.name, build.requestedBy ?? template.userId, template.organizationId, build.publishSubdomain);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await say(`Couldn't create an address: ${message}`);
+    await recordFirstPublish(build.templateId, message);
+    return { liveUrl: null, domains: [], switched: false, error: message };
+  }
+  await say(`Address ready: ${domains[0]}`);
+  await say("Publishing the preview…");
+  const live = await publishSsrPreview(build.templateId);
+  if ("error" in live) {
+    await say(`Publishing failed: ${live.error}`);
+    await recordFirstPublish(build.templateId, live.error);
+    return { liveUrl: null, domains, switched: false, error: live.error };
+  }
+  const liveUrl = domains[0] ? `https://${domains[0]}` : null;
+  await say(`Live at ${liveUrl ?? "your app"}`);
+  await recordFirstPublish(build.templateId, null);
+  return { liveUrl, domains, switched: true };
+}
+
+/** Records the outcome of the automatic first publish, so the publish status endpoint can report it. */
+async function recordFirstPublish(templateId: string, error: string | null): Promise<void> {
+  await DeployedApp.patch({ templateId })
+    .set({ publishError: error ?? "", publishFinishedAt: new Date().toISOString() })
+    .go()
+    .catch(() => undefined);
 }
 
 /** An app gets a working address on first publish without the owner having to pick one. */

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
-import { Template } from "@/lib/db/contentEntities";
+import { PublishedDomain, Template } from "@/lib/db/contentEntities";
 import { DeployedApp } from "@/lib/db/appEntities";
+import { isDomainLive } from "@/lib/plan/siteLimits";
 import { queueSsrControl } from "@/lib/appFunctions/ssrControl";
 import { getTierFeatures } from "@/lib/subscription";
 
@@ -66,5 +67,20 @@ export async function GET(request: NextRequest, { params }: Ctx): Promise<NextRe
   } catch {
     warnings = [];
   }
-  return NextResponse.json({ publishing, requestedAt, finishedAt, error: app?.publishError || null, warnings });
+  // The live address, once the app is live. The wizard uses it for its success screen.
+  let liveUrl: string | null = null;
+  if (app?.functionUrl) {
+    const { data: domains } = await PublishedDomain.query.primary({ templateId }).go({ pages: "all" });
+    const live = domains.find(isDomainLive);
+    if (live) liveUrl = `https://${live.domain}`;
+  }
+  return NextResponse.json({
+    publishing,
+    requestedAt,
+    finishedAt,
+    error: app?.publishError || null,
+    warnings,
+    previewReady: Boolean(app?.previewBundleKey),
+    liveUrl,
+  });
 }

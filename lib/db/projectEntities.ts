@@ -126,6 +126,9 @@ export const ProjectBuild = new Entity(
       postClaimedAt: { type: "string" },
       migrationResult: { type: "any" },
       functionResult: { type: "any" },
+      // The GitHub commit an SSR build was made from (a push, or a repo picked in the wizard).
+      // Only these builds are checked for being superseded (lib/projects/github/ssrPush.ts).
+      sourceCommitSha: { type: "string" },
       // Release builds: the subdomain asked for at publish time, and the outcome.
       publishSubdomain: { type: "string" },
       publishResult: { type: "any" },
@@ -194,6 +197,9 @@ export const ProjectGitLink = new Entity(
       status: { type: ["OK", "CONFLICT", "ERROR"] as const, default: "OK" },
       statusMessage: { type: "string" },
       conflictPullRequestUrl: { type: "string" },
+      // Server apps only: a successful build of a pushed commit is published live automatically.
+      // Read as "on unless false" (rows written before this existed have no value).
+      publishOnPush: { type: "boolean", default: true },
       linkedBy: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
