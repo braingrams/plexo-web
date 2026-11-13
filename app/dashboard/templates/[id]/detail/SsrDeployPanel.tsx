@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { uploadSsrZip, queueSsrBuild } from "@/lib/projects/clientSsrUpload";
 import { useBuildLog } from "./useBuildLog";
+import { SsrGitHubConnection } from "./SsrGitHubConnection";
 import { envFilesDroppedMessage } from "@/lib/projects/envFileNames";
 import { ZipDropzone } from "../../../_components/ZipDropzone";
 
@@ -55,6 +56,31 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
       clearInterval(timer);
     };
   }, [templateId]);
+  // Always-on: the owner asks, Plexo approves by hand. Loaded once; the request itself is posted on click.
+  const [alwaysOn, setAlwaysOn] = useState<{ request: "NONE" | "REQUESTED" | "APPROVED" | "DECLINED" } | null>(null);
+  const [alwaysOnBusy, setAlwaysOnBusy] = useState(false);
+  const [alwaysOnError, setAlwaysOnError] = useState<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    fetch(`/api/v1/templates/${templateId}/ssr-always-on`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (current && data) setAlwaysOn({ request: data.request });
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [templateId]);
+  async function requestAlwaysOn() {
+    setAlwaysOnBusy(true);
+    setAlwaysOnError(null);
+    const res = await fetch(`/api/v1/templates/${templateId}/ssr-always-on`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    setAlwaysOnBusy(false);
+    if (!res.ok) return setAlwaysOnError(data.error ?? `The request failed (server responded ${res.status}).`);
+    setAlwaysOn({ request: data.request });
+  }
   // A build started from this page (upload or rebuild) is watched until it reports a final status.
   // A build started by a push is attached to as soon as the server reports it as running.
   const pageBuildRef = useRef(false);
@@ -133,6 +159,27 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
         The server builds it and runs it as an app. Publish the preview once the build succeeds to put it live.
       </p>
 
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
+        <div>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Always on</p>
+          <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
+            {alwaysOn?.request === "APPROVED"
+              ? "Approved. One warm copy keeps the app responding without a cold start."
+              : alwaysOn?.request === "REQUESTED"
+                ? "Requested. Plexo reviews these by hand, then turns it on."
+                : alwaysOn?.request === "DECLINED"
+                  ? "Not approved for this app. Ask Plexo support if you need it."
+                  : "Keep one warm copy running so visitors never wait for a cold start. Plexo reviews each request by hand."}
+          </p>
+          {alwaysOnError ? <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#f87171" }}>{alwaysOnError}</p> : null}
+        </div>
+        {alwaysOn && (alwaysOn.request === "NONE" || alwaysOn.request === "DECLINED") ? (
+          <button type="button" onClick={() => void requestAlwaysOn()} disabled={alwaysOnBusy || building} style={button(!alwaysOnBusy && !building)}>
+            {alwaysOnBusy ? "Requesting…" : "Request always on"}
+          </button>
+        ) : null}
+      </div>
+
       {git?.linked ? (
         <div style={{ marginBottom: 14 }}>
           <p style={{ margin: "0 0 6px", fontSize: 12.5, color: "var(--text-muted)" }}>
@@ -150,6 +197,8 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
         <p key={w} style={{ margin: "0 0 8px", fontSize: 12.5, color: "#fbbf24" }}>{w}</p>
       ))}
       {progress ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--text-muted)" }}>{progress}</p> : null}
+      {!building ? <SsrGitHubConnection templateId={templateId} /> : null}
+
       {buildId ? (
         <div style={{ marginBottom: 14 }}>
           <p style={{ margin: "0 0 6px", fontSize: 12.5, color: "var(--text-muted)" }}>

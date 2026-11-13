@@ -28,6 +28,11 @@ export const DeployedApp = new Entity(
       // concurrency, no cold starts, fixed monthly cost. Gated by the owner's plan
       // (lib/subscription.ts deployedAppHostingTiers).
       hostingTier: { type: ["STATIC", "LAMBDA", "PROVISIONED"] as const, default: "LAMBDA" },
+      // Always-on (provisioned) requests. The owner asks; Plexo approves before it's switched on, because
+      // a warm copy costs about $11 a month, more than the plan's SSR budget. NONE = never asked.
+      alwaysOnRequest: { type: ["NONE", "REQUESTED", "APPROVED", "DECLINED"] as const, default: "NONE" },
+      alwaysOnRequestedAt: { type: "string" },
+      alwaysOnDecidedAt: { type: "string" },
       // Path prefix within the USER_CONTENT_BUCKET (without the "public/" prefix that
       // uploadObject adds). Stored without leading/trailing slashes. Example:
       // "deployedApps/tmpl_abc123" → actual S3 key "public/deployedApps/tmpl_abc123/index.html"

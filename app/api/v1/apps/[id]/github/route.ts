@@ -3,6 +3,7 @@ import { loadApp, appError, readBody } from "@/lib/projects/appAccess";
 import { githubConfigured, installUrl, gh, GitHubError } from "@/lib/projects/github/client";
 import { signInstallState, orgInstallations, assertOrgInstallation } from "@/lib/projects/github/install";
 import { getLink, linkRepo, unlinkRepo, pushVersion } from "@/lib/projects/github/sync";
+import { isSafeReturnPath } from "@/lib/projects/github/validate";
 import { startPreview } from "@/lib/projects/pipeline";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -36,10 +37,16 @@ export async function GET(request: NextRequest, { params }: Ctx): Promise<NextRe
     return NextResponse.json({
       configured: true,
       link: link
-        ? { repo: link.repoFullName, branch: link.branch, status: link.status, statusMessage: link.statusMessage ?? null, conflictPullRequestUrl: link.conflictPullRequestUrl ?? null, lastSyncedCommitSha: link.lastSyncedCommitSha ?? null, lastSyncedAt: link.lastSyncedAt ?? null }
+        ? { installationId: link.installationId, repo: link.repoFullName, branch: link.branch, status: link.status, statusMessage: link.statusMessage ?? null, conflictPullRequestUrl: link.conflictPullRequestUrl ?? null, lastSyncedCommitSha: link.lastSyncedCommitSha ?? null, lastSyncedAt: link.lastSyncedAt ?? null }
         : null,
       installations: installations.map((i) => ({ id: i.installationId, account: i.accountLogin, type: i.accountType ?? null })),
-      installUrl: installUrl(signInstallState({ appId: id, organizationId: loaded.resolved.organizationId, userId: loaded.resolved.userId })),
+      // The install comes back to the page that asked for it (the detail page), when that path is safe.
+      installUrl: installUrl(signInstallState({
+        appId: id,
+        organizationId: loaded.resolved.organizationId,
+        userId: loaded.resolved.userId,
+        returnTo: isSafeReturnPath(request.nextUrl.searchParams.get("returnTo")) ? request.nextUrl.searchParams.get("returnTo") : null,
+      })),
       repos,
     });
   } catch (err) {
