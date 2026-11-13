@@ -15,12 +15,20 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const base = `/api/v1/apps/${templateId}/github`;
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const base = `/api/v1/templates/${templateId}/ssr-github`;
+  const deployUrl = `/api/v1/templates/${templateId}/ssr-deploy`;
   const returnTo = `/dashboard/templates/${templateId}/detail`;
 
   async function load() {
     const res = await fetch(`${base}?returnTo=${encodeURIComponent(returnTo)}`);
-    if (res.ok) setStatus(await res.json());
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setLoadError(data.error ?? `GitHub couldn't be loaded (server responded ${res.status}).`);
+      return;
+    }
+    setLoadError(null);
+    setStatus(await res.json());
   }
   useEffect(() => {
     void load();
@@ -49,22 +57,36 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, installationId]);
 
-  async function send(method: "POST" | "DELETE", body?: object) {
+  // Connect or change the branch: the server downloads the repo branch and builds it, like an uploaded zip.
+  async function connect(installation: number, repoName: string, branchName: string) {
     setBusy(true);
     setError(null);
     setNotice(null);
-    const res = await fetch(base, {
-      method,
-      headers: body ? { "Content-Type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
+    const res = await fetch(deployUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ github: { installationId: installation, repo: repoName, ref: branchName } }),
     });
     const data = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) return setError(data.error ?? `That didn't work (server responded ${res.status}).`);
-    setNotice(method === "DELETE" ? "Disconnected. Pushes to the repository no longer build this app." : "Connected. The repository's files are now the app's files.");
+    setNotice(data.message ?? "Connected. The build has started.");
     await load();
   }
 
+  async function disconnect() {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    const res = await fetch(base, { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) return setError(data.error ?? `That didn't work (server responded ${res.status}).`);
+    setNotice("Disconnected. Pushes to the repository no longer build this app.");
+    await load();
+  }
+
+  if (loadError) return <p style={{ margin: "14px 0 0", fontSize: 12.5, color: "#f87171" }}>GitHub: {loadError}</p>;
   if (!status || !status.configured) return null;
 
   const link = status.link;
@@ -86,7 +108,7 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
               disabled={busy || !branch.trim() || !agreed}
               onClick={() => {
                 if (!window.confirm(`Build from ${branch.trim()} on ${link.repo}? The app's files will be replaced with that branch's files.`)) return;
-                void send("POST", { installationId: link.installationId, repo: link.repo, branch: branch.trim(), prefer: "github" });
+                void connect(link.installationId, link.repo, branch.trim());
               }}
               style={button(!busy && !!branch.trim() && agreed)}
             >
@@ -97,7 +119,7 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
               disabled={busy}
               onClick={() => {
                 if (!window.confirm(`Disconnect ${link.repo}? Pushes will stop building this app. Its current files stay.`)) return;
-                void send("DELETE");
+                void disconnect();
               }}
               style={secondary(!busy)}
             >
@@ -136,7 +158,7 @@ export function SsrGitHubConnection({ templateId }: { templateId: string }) {
           <button
             type="button"
             disabled={busy || !repo || !branch.trim() || !agreed || installationId === null}
-            onClick={() => void send("POST", { installationId, repo, branch: branch.trim(), prefer: "github" })}
+            onClick={() => void connect(installationId!, repo, branch.trim())}
             style={button(!busy && !!repo && !!branch.trim() && agreed && installationId !== null)}
             >
             {busy ? "Connecting…" : "Connect repository"}
