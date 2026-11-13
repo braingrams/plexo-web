@@ -21,7 +21,8 @@ permissions:
 
 jobs:
   destroy:
-    if: github.repository == 'Challaris/plexo-web'
+    # Same branch rule as the deploy: only feature PRs into staging ever had a stack to tear down.
+    if: github.repository == 'Challaris/plexo-web' && (github.event_name == 'workflow_dispatch' || (github.event.pull_request.base.ref == 'staging' && github.event.pull_request.head.ref != 'main' && github.event.pull_request.head.ref != 'staging'))
     runs-on: ubuntu-latest
     env:
       PR_NUMBER: ${{ inputs.pr_number || github.event.number }}
