@@ -3,6 +3,7 @@ import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
 import { DeployedApp } from "@/lib/db/appEntities";
 import { getTierFeatures } from "@/lib/subscription";
+import { queueSsrControl } from "@/lib/appFunctions/ssrControl";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -39,6 +40,8 @@ export async function GET(request: NextRequest, { params }: Ctx): Promise<NextRe
     request: check.app.alwaysOnRequest ?? "NONE",
     requestedAt: check.app.alwaysOnRequestedAt ?? null,
     decidedAt: check.app.alwaysOnDecidedAt ?? null,
+    status: check.app.alwaysOnStatus ?? "OFF",
+    error: check.app.alwaysOnError || null,
   });
 }
 
@@ -46,6 +49,15 @@ export async function POST(request: NextRequest, { params }: Ctx): Promise<NextR
   const { id: templateId } = await params;
   const check = await ownedSsrApp(request, templateId);
   if (check.error) return check.error;
+  const body = await request.json().catch(() => ({}));
+  // Turning off an approved always-on copy. The finalizer releases it and returns the app to cold starts.
+  if (body.action === "turnOff") {
+    if (check.app.alwaysOnRequest !== "APPROVED") {
+      return NextResponse.json({ error: "Always-on isn't on for this app." }, { status: 400 });
+    }
+    await queueSsrControl({ kind: "alwaysOn", templateId, enabled: false });
+    return NextResponse.json({ request: "APPROVED", message: "Turning off. The app goes back to cold starts shortly." }, { status: 202 });
+  }
   // Already decided or already waiting: nothing new to record.
   if (check.app.alwaysOnRequest === "REQUESTED" || check.app.alwaysOnRequest === "APPROVED") {
     return NextResponse.json({ request: check.app.alwaysOnRequest, message: check.app.alwaysOnRequest === "APPROVED" ? "Always-on is approved for this app." : "Already requested. Plexo will review it." });

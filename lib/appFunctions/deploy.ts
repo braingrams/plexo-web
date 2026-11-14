@@ -43,6 +43,11 @@ async function clients(): Promise<{ lambda: LambdaClient; scheduler: SchedulerCl
   return { lambda: new LambdaClient({ region: REGION, credentials }), scheduler: new SchedulerClient({ region: REGION, credentials }) };
 }
 
+/** The Lambda client the SSR functions are changed with. Shared with the always-on steps (alwaysOn.ts). */
+export async function functionsLambda(): Promise<LambdaClient> {
+  return (await clients()).lambda;
+}
+
 export function functionLambdaName(templateId: string, env: AppEnv, name: string): string {
   // Lambda names max 64 chars: keep it readable but bounded.
   const id = templateId.replace(/-/g, "").slice(0, 20);
