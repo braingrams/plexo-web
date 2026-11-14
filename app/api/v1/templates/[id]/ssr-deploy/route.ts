@@ -8,7 +8,8 @@ import { isSsrUploadKey } from "@/lib/projects/ssrUpload";
 import { assertOrgInstallation } from "@/lib/projects/github/install";
 import { downloadRepoZip } from "@/lib/projects/github/archive";
 import { GitHubError, gh } from "@/lib/projects/github/client";
-import { linkSsrRepo, unlinkSsrRepo, type GitSource } from "@/lib/projects/github/ssrPush";
+import { gitLinkFor, linkSsrRepo, unlinkSsrRepo, type GitSource } from "@/lib/projects/github/ssrPush";
+import { DeployedApp } from "@/lib/db/appEntities";
 import { queueSsrBuildFromZip } from "@/lib/projects/ssrBuildQueue";
 import { isValidGitRef, isValidRepoFullName } from "@/lib/projects/github/validate";
 
@@ -68,7 +69,7 @@ export async function POST(
 async function readSource(request: NextRequest, templateId: string, organizationId: string): Promise<Source> {
   if ((request.headers.get("content-type") ?? "").includes("application/json")) {
     const body = await request.json().catch(() => null);
-    if (body?.github !== undefined) return readGithubSource(body.github, organizationId);
+    if (body?.github !== undefined) return readGithubSource(body.github, templateId, organizationId);
     const uploadKey = typeof body?.uploadKey === "string" ? body.uploadKey : "";
     if (!isSsrUploadKey(templateId, uploadKey)) {
       return { error: "That upload isn't valid for this app. Start the upload again.", status: 400 };
@@ -104,7 +105,7 @@ async function readSource(request: NextRequest, templateId: string, organization
 /** A repo the account connected to Plexo's GitHub app: its branch is downloaded as a zip and built
  * exactly like an uploaded one. The branch is pinned to the commit it points at now, so the build and
  * the app's GitHub link record the same commit. The installation must belong to this organization. */
-async function readGithubSource(input: unknown, organizationId: string): Promise<Source> {
+async function readGithubSource(input: unknown, templateId: string, organizationId: string): Promise<Source> {
   const g = (input ?? {}) as { installationId?: unknown; repo?: unknown; ref?: unknown };
   const installationId = Number(g.installationId);
   const repo = typeof g.repo === "string" ? g.repo.trim() : "";
@@ -119,6 +120,12 @@ async function readGithubSource(input: unknown, organizationId: string): Promise
     const head = await gh<{ object: { sha: string } } | null>(installationId, `/repos/${info.full_name}/git/ref/heads/${encodeURIComponent(branch)}`, { allow404: true });
     if (!head) return { error: "Couldn't find that branch on GitHub, or the repository is empty. Check the branch, then try again.", status: 404 };
     const sha = head.object.sha;
+    // A server app is locked to the repository it was first connected to. Any other repo is refused.
+    const { data: app } = await DeployedApp.get({ templateId }).go({ attributes: ["gitRepo"] });
+    const locked = app?.gitRepo ?? (await gitLinkFor(templateId))?.repoFullName ?? null;
+    if (locked && locked.toLowerCase() !== info.full_name.toLowerCase()) {
+      return { error: `This app is locked to ${locked}. Connect that repository to build it.`, status: 409 };
+    }
     return {
       zip: await downloadRepoZip(installationId, info.full_name, sha),
       github: { installationId, repoFullName: info.full_name.toLowerCase(), repoId: info.id, branch, sha },
@@ -146,6 +153,7 @@ async function queueBuild(
       budgetUsd,
       sourceZip: source.zip,
       sourceCommitSha: source.github?.sha,
+      gitRepo: source.github?.repoFullName,
     });
   } catch (err) {
     if (source.github) await unlinkSsrRepo(templateId);

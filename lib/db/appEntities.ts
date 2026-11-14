@@ -28,6 +28,9 @@ export const DeployedApp = new Entity(
       // concurrency, no cold starts, fixed monthly cost. Gated by the owner's plan
       // (lib/subscription.ts deployedAppHostingTiers).
       hostingTier: { type: ["STATIC", "LAMBDA", "PROVISIONED"] as const, default: "LAMBDA" },
+      // The GitHub repository this app was first connected to (lowercase owner/name). Set once and kept
+      // when the connection is removed: the app can only ever connect to this repository again.
+      gitRepo: { type: "string" },
       // Always-on (provisioned) requests. The owner asks; Plexo approves before it's switched on, because
       // a warm copy costs about $11 a month, more than the plan's SSR budget. NONE = never asked.
       alwaysOnRequest: { type: ["NONE", "REQUESTED", "APPROVED", "DECLINED"] as const, default: "NONE" },

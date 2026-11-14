@@ -7,6 +7,7 @@ import { githubConfigured, installUrl, gh, GitHubError } from "@/lib/projects/gi
 import { signInstallState, orgInstallations, assertOrgInstallation } from "@/lib/projects/github/install";
 import { isSafeReturnPath } from "@/lib/projects/github/validate";
 import { gitLinkFor, unlinkSsrRepo } from "@/lib/projects/github/ssrPush";
+import { DeployedApp } from "@/lib/db/appEntities";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -40,7 +41,13 @@ export async function GET(request: NextRequest, { params }: Ctx): Promise<NextRe
   const { resolved } = check;
   if (!githubConfigured()) return NextResponse.json({ configured: false });
   try {
-    const [link, installations] = await Promise.all([gitLinkFor(templateId), orgInstallations(resolved.organizationId)]);
+    const [link, installations, { data: app }] = await Promise.all([
+      gitLinkFor(templateId),
+      orgInstallations(resolved.organizationId),
+      DeployedApp.get({ templateId }).go({ attributes: ["gitRepo"] }),
+    ]);
+    // The repository this app is locked to. Once set, the app only connects to that repository.
+    const lockedRepo = app?.gitRepo ?? link?.repoFullName ?? null;
     const installationId = Number(request.nextUrl.searchParams.get("installationId")) || null;
     let repos: Array<{ id: number; fullName: string; defaultBranch: string; private: boolean; empty: boolean }> | undefined;
     if (installationId) {
@@ -58,6 +65,7 @@ export async function GET(request: NextRequest, { params }: Ctx): Promise<NextRe
     const returnTo = request.nextUrl.searchParams.get("returnTo");
     return NextResponse.json({
       configured: true,
+      lockedRepo,
       link: link
         ? { installationId: link.installationId, repo: link.repoFullName, branch: link.branch, status: link.status, statusMessage: link.statusMessage ?? null }
         : null,

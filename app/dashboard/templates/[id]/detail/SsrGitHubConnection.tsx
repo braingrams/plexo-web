@@ -60,7 +60,9 @@ export function SsrGitHubConnection({
         return data as GitHubStatus;
       })
       .then((data) => {
-        const list = (data.repos ?? []).filter((r) => !r.empty);
+        const list = (data.repos ?? [])
+          .filter((r) => !r.empty)
+          .filter((r) => !data.lockedRepo || r.fullName.toLowerCase() === data.lockedRepo.toLowerCase());
         setRepos(list);
         setReposLoading(false);
         if (list.length && !list.some((r) => r.fullName === repo)) {
@@ -112,7 +114,10 @@ export function SsrGitHubConnection({
 
   const link = status.link;
   const hasAccount = status.installations.length > 0;
-  const addAccount = status.installUrl ? (
+  // Once this app has been connected to a repository it stays locked to it, so there's no "connect another
+  // account" link. Before that, an app with no account yet gets "Connect GitHub".
+  const locked = Boolean(status.lockedRepo);
+  const addAccount = status.installUrl && !locked ? (
     <a href={status.installUrl} style={{ fontSize: 12.5, color: "var(--brand)", justifySelf: "start" }}>
       {hasAccount ? "Connect another GitHub account" : "Connect GitHub"}
     </a>
@@ -170,6 +175,7 @@ export function SsrGitHubConnection({
       ) : (
         <>
           <p style={hint}>Pick an account, then a repository and branch. Connecting replaces the app&apos;s files with the repository&apos;s files, and each push to that branch rebuilds the app.</p>
+          {locked ? <p style={hint}>This app is locked to {status.lockedRepo}. It can only connect to that repository.</p> : null}
           {status.installations.length > 1 ? (
             <select value={installationId ?? ""} onChange={(e) => { setRepos([]); setRepo(""); setInstallationId(Number(e.target.value)); }} style={input} aria-label="GitHub account">
               {status.installations.map((i) => (
@@ -222,6 +228,8 @@ type RepoOption = { fullName: string; defaultBranch: string; private: boolean; e
 
 type GitHubStatus = {
   configured: boolean;
+  /** The repository this app is locked to, once it has been connected. Null before that. */
+  lockedRepo?: string | null;
   link: { installationId: number; repo: string; branch: string; status: string } | null;
   installations: Array<{ id: number; account: string; type: string | null }>;
   installUrl: string | null;
