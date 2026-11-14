@@ -27,6 +27,7 @@ const GROUPS: SubNavGroup[] = [
       { href: "/dashboard/settings/api-keys", label: "API Keys" },
       { href: "/dashboard/settings/ai", label: "AI" },
       { href: "/dashboard/integrations", label: "Integrations" },
+      { href: "/dashboard/settings/github", label: "GitHub" },
       { href: "/dashboard/settings/email-log", label: "Email Log" },
     ],
   },

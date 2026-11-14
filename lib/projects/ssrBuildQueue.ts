@@ -30,6 +30,8 @@ export async function queueSsrBuildFromZip(input: {
   sourceZip: Uint8Array;
   /** Set when the source is a GitHub commit (see startSsrBuild). */
   sourceCommitSha?: string;
+  /** The GitHub repository (lowercase owner/name) when the source is a repo. Locks the app to it. */
+  gitRepo?: string;
 }): Promise<SsrQueueResult> {
   const inspected = await inspectSsrSource(input.sourceZip);
   if (!inspected.ok) return { ok: false, status: 400, error: inspected.error };
@@ -55,6 +57,7 @@ export async function queueSsrBuildFromZip(input: {
     const { data: existing } = await DeployedApp.get({ templateId: input.templateId }).go();
     if (existing) await markBuildQueued(input.templateId, hash);
     else await DeployedApp.create({ templateId: input.templateId, type: "SSR", previewBuildVarsHash: hash }).go();
+    if (input.gitRepo) await DeployedApp.patch({ templateId: input.templateId }).set({ gitRepo: input.gitRepo }).go();
     if (input.sourceCommitSha) await cancelOlderQueuedGitBuilds(input.templateId, build.id, input.organizationId).catch((err) => console.error("cancelling older builds failed", err));
     return {
       ok: true,

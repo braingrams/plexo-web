@@ -205,10 +205,10 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
       }
     }
 
-    // An SSR app's first good preview goes live straight away, at a random address unless one was chosen,
-    // so creating the app ends with a live URL and no second step. Later previews still wait for "Publish".
-    if (build.kind === "ssr" && build.mode !== "release" && !superseded && functionResult && functionResult.failed.length === 0 && !(await hasLiveSsr(build.templateId))) {
-      publishResult = await publishFirstSsr(build, template);
+    // An uploaded (or rebuilt) server app goes live as soon as its build deploys. The first publish also gives
+    // the app its address, at a random name unless one was chosen. Pushes from GitHub follow publish-on-push below.
+    if (build.kind === "ssr" && build.mode !== "release" && !commitSha && !superseded && functionResult && functionResult.failed.length === 0) {
+      publishResult = await publishUploadedSsr(build, template);
     } else if (commitSha && !superseded && functionResult && functionResult.failed.length === 0 && (await publishesOnPush(build.templateId))) {
       // A GitHub push's build goes live the same way the Publish button does, once it has deployed.
       const error = await publishPushedPreview(build.templateId);
@@ -246,17 +246,11 @@ export async function finalizeBuild(build: ProjectBuildItem): Promise<ProjectBui
   return { ...build, postStatus: "DONE", migrationResult, functionResult, publishResult };
 }
 
-/** True once the SSR app has a live server function (it has been published at least once). */
-async function hasLiveSsr(templateId: string): Promise<boolean> {
-  const { data: app } = await DeployedApp.get({ templateId }).go({ attributes: ["functionUrl"] });
-  return Boolean(app?.functionUrl);
-}
-
 /**
- * Gives an SSR app its address and publishes the preview that was just built. Used for the first preview
- * only. The address is the app's name with a random suffix if the name is taken (see ensureDomain).
+ * Publishes an uploaded server app's build: gives the app its address if it has none yet, then makes the
+ * new build live. The address is the app's name with a random suffix if the name is taken (see ensureDomain).
  */
-async function publishFirstSsr(
+async function publishUploadedSsr(
   build: ProjectBuildItem,
   template: { name: string; userId: string; organizationId: string },
 ): Promise<{ liveUrl: string | null; domains: string[]; switched: boolean; error?: string }> {

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { uploadSsrZip, queueSsrBuild } from "@/lib/projects/clientSsrUpload";
 import { useBuildLog } from "./useBuildLog";
+import { SsrGitHubConnection } from "./SsrGitHubConnection";
 import { envFilesDroppedMessage } from "@/lib/projects/envFileNames";
 import { ZipDropzone } from "../../../_components/ZipDropzone";
 
@@ -39,22 +40,56 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
   const live = useBuildLog(buildId);
   // The GitHub connection, how the latest push went, and whether a build is running. Polled while the page is open.
   const [git, setGit] = useState<GitConnection | null>(null);
-  useEffect(() => {
-    let current = true;
-    const check = () =>
+  const refreshGit = useCallback(
+    () =>
       fetch(`/api/v1/templates/${templateId}/ssr-git`)
         .then((r) => (r.ok ? (r.json() as Promise<GitConnection>) : null))
         .then((data) => {
-          if (current && data) setGit(data);
+          if (data) setGit(data);
         })
-        .catch(() => undefined);
-    void check();
-    const timer = setInterval(check, STATUS_POLL_MS);
+        .catch(() => undefined),
+    [templateId],
+  );
+  // One read when the page opens. Polling only runs while a repo is linked, since a push is the only
+  // build that starts without this page (see activeBuildId).
+  useEffect(() => {
+    void refreshGit();
+  }, [refreshGit]);
+  useEffect(() => {
+    if (!git?.linked) return;
+    const timer = setInterval(() => void refreshGit(), STATUS_POLL_MS);
+    return () => clearInterval(timer);
+  }, [git?.linked, refreshGit]);
+  // One source at a time: a repo that's already linked opens on GitHub, otherwise the zip upload.
+  const [source, setSource] = useState<"zip" | "github">("zip");
+  useEffect(() => {
+    if (git?.linked) setSource("github");
+  }, [git?.linked]);
+  // Always-on: the owner asks, Plexo approves by hand. Loaded once; the request itself is posted on click.
+  const [alwaysOn, setAlwaysOn] = useState<{ request: "NONE" | "REQUESTED" | "APPROVED" | "DECLINED" } | null>(null);
+  const [alwaysOnBusy, setAlwaysOnBusy] = useState(false);
+  const [alwaysOnError, setAlwaysOnError] = useState<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    fetch(`/api/v1/templates/${templateId}/ssr-always-on`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (current && data) setAlwaysOn({ request: data.request });
+      })
+      .catch(() => undefined);
     return () => {
       current = false;
-      clearInterval(timer);
     };
   }, [templateId]);
+  async function requestAlwaysOn() {
+    setAlwaysOnBusy(true);
+    setAlwaysOnError(null);
+    const res = await fetch(`/api/v1/templates/${templateId}/ssr-always-on`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    setAlwaysOnBusy(false);
+    if (!res.ok) return setAlwaysOnError(data.error ?? `The request failed (server responded ${res.status}).`);
+    setAlwaysOn({ request: data.request });
+  }
   // A build started from this page (upload or rebuild) is watched until it reports a final status.
   // A build started by a push is attached to as soon as the server reports it as running.
   const pageBuildRef = useRef(false);
@@ -68,7 +103,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
     (buildId !== null && live.status === null && (pageBuildRef.current || git?.activeBuildId === buildId)) ||
     (git?.activeBuildId != null && git.activeBuildId === buildId);
   const [agreed, setAgreed] = useState(false);
-  const [busy, setBusy] = useState<null | "upload" | "publish">(null);
+  const [busy, setBusy] = useState<null | "upload">(null);
   const [progress, setProgress] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -97,41 +132,35 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
     setFile(null);
   }
 
-  // Publishing runs in the background. The request returns straight away, then this polls for the outcome.
-  async function publish() {
-    if (!window.confirm("Publish the latest preview to the live app? The live app switches to it, and there's no rollback yet.")) return;
-    setBusy("publish"); setError(null); setNotice(null); setWarnings([]);
-    const res = await fetch(`/api/v1/templates/${templateId}/ssr-publish`, { method: "POST" });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setBusy(null);
-      return setError(data.error ?? `Publishing failed (server responded ${res.status}).`);
-    }
-    setNotice(data.message ?? "Publishing started.");
-    for (let attempt = 0; attempt < 200; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      const status = await fetch(`/api/v1/templates/${templateId}/ssr-publish`).then((r) => r.json()).catch(() => null);
-      if (!status || status.publishing) continue;
-      setBusy(null);
-      if (status.error) {
-        setNotice(null);
-        return setError(status.error);
-      }
-      setNotice(status.warnings?.length ? "The preview is now live, with warnings." : "The preview is now live.");
-      setWarnings(status.warnings ?? []);
-      return;
-    }
-    setBusy(null);
-    setNotice("Publishing is still running. Reload this page to see the result.");
-  }
 
   return (
     <div style={card}>
       <h3 style={heading}>Server app</h3>
       <p style={muted}>
         Upload the app's source as a .zip (package.json at the root, or inside one folder). Leave out node_modules, .git and build output.
-        The server builds it and runs it as an app. Publish the preview once the build succeeds to put it live.
+        The server builds it and puts it live as soon as the build succeeds.
       </p>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
+        <div>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Always on</p>
+          <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
+            {alwaysOn?.request === "APPROVED"
+              ? "Approved. One warm copy keeps the app responding without a cold start."
+              : alwaysOn?.request === "REQUESTED"
+                ? "Requested. Plexo reviews these by hand, then turns it on."
+                : alwaysOn?.request === "DECLINED"
+                  ? "Not approved for this app. Ask Plexo support if you need it."
+                  : "Keep one warm copy running so visitors never wait for a cold start. Plexo reviews each request by hand."}
+          </p>
+          {alwaysOnError ? <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#f87171" }}>{alwaysOnError}</p> : null}
+        </div>
+        {alwaysOn && (alwaysOn.request === "NONE" || alwaysOn.request === "DECLINED") ? (
+          <button type="button" onClick={() => void requestAlwaysOn()} disabled={alwaysOnBusy || building} style={button(!alwaysOnBusy && !building)}>
+            {alwaysOnBusy ? "Requesting…" : "Request always on"}
+          </button>
+        ) : null}
+      </div>
 
       {git?.linked ? (
         <div style={{ marginBottom: 14 }}>
@@ -150,6 +179,43 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
         <p key={w} style={{ margin: "0 0 8px", fontSize: 12.5, color: "#fbbf24" }}>{w}</p>
       ))}
       {progress ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--text-muted)" }}>{progress}</p> : null}
+      {!building ? (
+        <div role="tablist" aria-label="Source" style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          {(["zip", "github"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              role="tab"
+              aria-selected={source === option}
+              onClick={() => setSource(option)}
+              style={{
+                padding: "7px 14px",
+                borderRadius: 9,
+                border: `1px solid ${source === option ? "var(--brand)" : "var(--surface-border)"}`,
+                background: source === option ? "var(--brand-subtle)" : "transparent",
+                color: source === option ? "var(--text-main)" : "var(--text-muted)",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {option === "zip" ? "Upload a .zip" : "Connect GitHub"}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {!building && source === "github" ? (
+        <SsrGitHubConnection
+          templateId={templateId}
+          onBuildStarted={(id) => {
+            // The build runs from this page: show its log, and read the status now that a repo is linked.
+            pageBuildRef.current = true;
+            setBuildId(id);
+            void refreshGit();
+          }}
+        />
+      ) : null}
+
       {buildId ? (
         <div style={{ marginBottom: 14 }}>
           <p style={{ margin: "0 0 6px", fontSize: 12.5, color: "var(--text-muted)" }}>
@@ -162,7 +228,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
         </div>
       ) : null}
 
-      {!building ? (
+      {!building && source === "zip" ? (
         <>
         <div style={{ marginBottom: 14 }}>
           <ZipDropzone file={file} onFile={setFile} accept=".zip,application/zip" hint=".zip, with package.json at its root" disabled={busy !== null} />
@@ -177,10 +243,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
         </label>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button type="button" onClick={() => void upload()} disabled={!file || !agreed || busy !== null} style={button(!!file && agreed && busy === null)}>
-            {busy === "upload" ? "Uploading…" : "Upload and build"}
-          </button>
-          <button type="button" onClick={() => void publish()} disabled={busy !== null} style={button(busy === null)}>
-            {busy === "publish" ? "Publishing…" : "Publish preview"}
+            {busy === "upload" ? "Uploading…" : "Upload and publish"}
           </button>
         </div>
         </>
