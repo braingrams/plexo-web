@@ -93,9 +93,14 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
   // A build started from this page (upload or rebuild) is watched until it reports a final status.
   // A build started by a push is attached to as soon as the server reports it as running.
   const pageBuildRef = useRef(false);
+  // Whenever the server reports a running build that isn't the one on screen (a push, or a build from another
+  // tab), show that one. The page's own build is no longer the one on screen once another build starts.
   useEffect(() => {
     const running = git?.activeBuildId ?? null;
-    if (running && !pageBuildRef.current && running !== buildId) setBuildId(running);
+    if (running && running !== buildId) {
+      pageBuildRef.current = false;
+      setBuildId(running);
+    }
   }, [git?.activeBuildId, buildId]);
   // Building: the page's own build still hasn't reported a final status, or the server says a build is running.
   // While it runs the controls are hidden and the log streams.

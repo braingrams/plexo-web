@@ -31,6 +31,8 @@ export const DeployedApp = new Entity(
       // The GitHub repository this app was first connected to (lowercase owner/name). Set once and kept
       // when the connection is removed: the app can only ever connect to this repository again.
       gitRepo: { type: "string" },
+      // The always-on (warm) copy's function URL, set when always-on is switched on. Used while hostingTier is PROVISIONED.
+      alwaysOnFunctionUrl: { type: "string" },
       // Always-on (provisioned) requests. The owner asks; Plexo approves before it's switched on, because
       // a warm copy costs about $11 a month, more than the plan's SSR budget. NONE = never asked.
       alwaysOnRequest: { type: ["NONE", "REQUESTED", "APPROVED", "DECLINED"] as const, default: "NONE" },

@@ -20,6 +20,8 @@ const APP_SECRET_KEYS = [
   // cdk/lib/published-sites-stack.ts's own comment), not read from a request header the
   // way GOOGLE_CLIENT_ID etc. below are.
   "CRON_SECRET",
+  // Shared with the admin app: approving an always-on request switches on a warm copy (see app/api/internal/always-on).
+  "ALWAYS_ON_SECRET",
   // Server-side only — checked against every Charisol/Cognito ID token's signature by
   // server/authDynamo.ts's charisolVerifier. Not a NEXT_PUBLIC_ var (unlike the client ID
   // it pairs with, which the browser needs and is instead baked in at build time — see

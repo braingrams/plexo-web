@@ -17,6 +17,8 @@ const REGION = process.env.AWS_REGION || "us-east-1";
 
 export type DeployedSsrShape = {
   functionUrl?: string | null;
+  /** The warm copy's URL. Used instead of functionUrl while hostingTier is PROVISIONED. */
+  alwaysOnFunctionUrl?: string | null;
   /** The image optimizer, for apps that use next/image. Empty or missing means no image function. */
   imageFunctionUrl?: string | null;
   ssrSitePrefix?: string | null;
@@ -140,7 +142,8 @@ export async function serveDeployedSsr(
     }
   }
 
-  if (!app.functionUrl) return notFound();
+  const targetUrl = app.hostingTier === "PROVISIONED" && app.alwaysOnFunctionUrl ? app.alwaysOnFunctionUrl : app.functionUrl;
+  if (!targetUrl) return notFound();
 
   // Everything else runs the app's code (or its image optimizer), so it's charged against the
   // owner's daily cap. Image requests count too, so a busy image page can't bypass the cap.
@@ -163,5 +166,5 @@ export async function serveDeployedSsr(
     return relay(await invokeSsrFunction(app.imageFunctionUrl, request, slugSegments), app, rawPath);
   }
 
-  return relay(await invokeSsrFunction(app.functionUrl, request, slugSegments), app, rawPath);
+  return relay(await invokeSsrFunction(targetUrl, request, slugSegments), app, rawPath);
 }
