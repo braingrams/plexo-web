@@ -45,6 +45,7 @@ async function publishLiveVersion(lambda: LambdaClient, functionName: string): P
 
 /** Turns always-on on: a warm copy of the live code, its own function URL, and the app served from it. */
 export async function enableAlwaysOn(templateId: string): Promise<void> {
+  await DeployedApp.patch({ templateId }).set({ alwaysOnStatus: "STARTING", alwaysOnError: "" }).go();
   const { functionName } = await liveFunction(templateId);
   const lambda = await functionsLambda();
   const version = await publishLiveVersion(lambda, functionName);
@@ -58,7 +59,7 @@ export async function enableAlwaysOn(templateId: string): Promise<void> {
     url = (await lambda.send(new CreateFunctionUrlConfigCommand({ FunctionName: functionName, Qualifier: WARM_ALIAS, AuthType: "AWS_IAM", InvokeMode: "BUFFERED" }))).FunctionUrl;
   }
   if (!url) throw new Error("Lambda didn't return a URL for the always-on copy.");
-  await DeployedApp.patch({ templateId }).set({ hostingTier: "PROVISIONED", alwaysOnFunctionUrl: url }).go();
+  await DeployedApp.patch({ templateId }).set({ hostingTier: "PROVISIONED", alwaysOnFunctionUrl: url, alwaysOnStatus: "ON", alwaysOnError: "" }).go();
 }
 
 /** Turns always-on off: the warm copies are released and the app goes back to cold starts. */
@@ -70,7 +71,8 @@ export async function disableAlwaysOn(templateId: string): Promise<void> {
   } catch (err) {
     if (!(err instanceof ResourceNotFoundException)) throw err;
   }
-  await DeployedApp.patch({ templateId }).set({ hostingTier: "LAMBDA" }).remove(["alwaysOnFunctionUrl"]).go();
+  // The request goes back to NONE, so the owner can ask again later.
+  await DeployedApp.patch({ templateId }).set({ hostingTier: "LAMBDA", alwaysOnStatus: "OFF", alwaysOnError: "", alwaysOnRequest: "NONE" }).remove(["alwaysOnFunctionUrl"]).go();
 }
 
 /** After a publish, an always-on app's warm copy must run the new live code: publish it and move the alias. */

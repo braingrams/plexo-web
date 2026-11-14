@@ -45,7 +45,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // Approve: record it, then queue the switch-on. The finalizer does the work and retries on failure.
-  await DeployedApp.patch({ templateId }).set({ alwaysOnRequest: "APPROVED", alwaysOnDecidedAt: now }).go();
+  await DeployedApp.patch({ templateId }).set({ alwaysOnRequest: "APPROVED", alwaysOnDecidedAt: now, alwaysOnStatus: "STARTING", alwaysOnError: "" }).go();
   await queueSsrControl({ kind: "alwaysOn", templateId, enabled: true });
   return NextResponse.json({ alwaysOnRequest: "APPROVED", message: "Approved. The warm copy is being switched on." }, { status: 202 });
 }

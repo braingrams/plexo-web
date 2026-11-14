@@ -28,7 +28,16 @@ export async function runSsrControl(message: SsrControlMessage): Promise<void> {
   if (message.kind === "publish") return runPublish(message.templateId);
   if (message.kind === "alwaysOn") {
     // Retried by the queue on failure; both steps are safe to repeat.
-    return message.enabled ? enableAlwaysOn(message.templateId) : disableAlwaysOn(message.templateId);
+    try {
+      return await (message.enabled ? enableAlwaysOn(message.templateId) : disableAlwaysOn(message.templateId));
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      await DeployedApp.patch({ templateId: message.templateId })
+        .set({ alwaysOnStatus: "FAILED", alwaysOnError: `Couldn't switch always-on ${message.enabled ? "on" : "off"}: ${detail}. Plexo will retry.`.slice(0, 400) })
+        .go()
+        .catch(() => undefined);
+      throw err;
+    }
   }
   // Variables are re-applied from the stored values, so a retry is harmless. A failure is rethrown
   // so the queue retries it.

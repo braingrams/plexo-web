@@ -38,6 +38,9 @@ export const DeployedApp = new Entity(
       alwaysOnRequest: { type: ["NONE", "REQUESTED", "APPROVED", "DECLINED"] as const, default: "NONE" },
       alwaysOnRequestedAt: { type: "string" },
       alwaysOnDecidedAt: { type: "string" },
+      // The warm copy's state, written by the finalizer: OFF, STARTING (switching on), ON, or FAILED (with alwaysOnError).
+      alwaysOnStatus: { type: ["OFF", "STARTING", "ON", "FAILED"] as const, default: "OFF" },
+      alwaysOnError: { type: "string" },
       // Path prefix within the USER_CONTENT_BUCKET (without the "public/" prefix that
       // uploadObject adds). Stored without leading/trailing slashes. Example:
       // "deployedApps/tmpl_abc123" → actual S3 key "public/deployedApps/tmpl_abc123/index.html"

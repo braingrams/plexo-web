@@ -65,22 +65,36 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
   useEffect(() => {
     if (git?.linked) setSource("github");
   }, [git?.linked]);
-  // Always-on: the owner asks, Plexo approves by hand. Loaded once; the request itself is posted on click.
-  const [alwaysOn, setAlwaysOn] = useState<{ request: "NONE" | "REQUESTED" | "APPROVED" | "DECLINED" } | null>(null);
+  // Always-on: the owner asks, Plexo approves by hand. Once approved, the owner can turn it off. The
+  // server reports whether the warm copy is starting, on, or failed (and why).
+  type AlwaysOnState = { request: "NONE" | "REQUESTED" | "APPROVED" | "DECLINED"; status: "OFF" | "STARTING" | "ON" | "FAILED"; error: string | null };
+  const [alwaysOn, setAlwaysOn] = useState<AlwaysOnState | null>(null);
   const [alwaysOnBusy, setAlwaysOnBusy] = useState(false);
+  const [alwaysOnTurningOff, setAlwaysOnTurningOff] = useState(false);
   const [alwaysOnError, setAlwaysOnError] = useState<string | null>(null);
+  const refreshAlwaysOn = useCallback(
+    () =>
+      fetch(`/api/v1/templates/${templateId}/ssr-always-on`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (!data) return;
+          setAlwaysOn({ request: data.request, status: data.status ?? "OFF", error: data.error ?? null });
+          // Turning off is done once the server no longer reports the request as approved.
+          if (data.request !== "APPROVED") setAlwaysOnTurningOff(false);
+        })
+        .catch(() => undefined),
+    [templateId],
+  );
   useEffect(() => {
-    let current = true;
-    fetch(`/api/v1/templates/${templateId}/ssr-always-on`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (current && data) setAlwaysOn({ request: data.request });
-      })
-      .catch(() => undefined);
-    return () => {
-      current = false;
-    };
-  }, [templateId]);
+    void refreshAlwaysOn();
+  }, [refreshAlwaysOn]);
+  // Poll while the warm copy is starting, or while it's being turned off.
+  useEffect(() => {
+    const busy = alwaysOn?.status === "STARTING" || alwaysOnTurningOff;
+    if (!busy) return;
+    const timer = setInterval(() => void refreshAlwaysOn(), 5000);
+    return () => clearInterval(timer);
+  }, [alwaysOn?.status, alwaysOnTurningOff, refreshAlwaysOn]);
   async function requestAlwaysOn() {
     setAlwaysOnBusy(true);
     setAlwaysOnError(null);
@@ -88,7 +102,22 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
     const data = await res.json().catch(() => ({}));
     setAlwaysOnBusy(false);
     if (!res.ok) return setAlwaysOnError(data.error ?? `The request failed (server responded ${res.status}).`);
-    setAlwaysOn({ request: data.request });
+    await refreshAlwaysOn();
+  }
+  async function turnOffAlwaysOn() {
+    if (!window.confirm("Turn off always on? The app goes back to cold starts. You'll need to request it again to turn it back on.")) return;
+    setAlwaysOnBusy(true);
+    setAlwaysOnError(null);
+    const res = await fetch(`/api/v1/templates/${templateId}/ssr-always-on`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "turnOff" }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setAlwaysOnBusy(false);
+    if (!res.ok) return setAlwaysOnError(data.error ?? `Turning off failed (server responded ${res.status}).`);
+    setAlwaysOnTurningOff(true);
+    await refreshAlwaysOn();
   }
   // A build started from this page (upload or rebuild) is watched until it reports a final status.
   // A build started by a push is attached to as soon as the server reports it as running.
@@ -150,17 +179,32 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
         <div>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>Always on</p>
           <p style={{ margin: "2px 0 0", fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
-            {alwaysOn?.request === "APPROVED"
-              ? "Approved. One warm copy keeps the app responding without a cold start."
-              : alwaysOn?.request === "REQUESTED"
-                ? "Requested. Plexo reviews these by hand, then turns it on."
-                : alwaysOn?.request === "DECLINED"
-                  ? "Not approved for this app. Ask Plexo support if you need it."
-                  : "Keep one warm copy running so visitors never wait for a cold start. Plexo reviews each request by hand."}
+            {alwaysOnTurningOff
+              ? "Turning off. The app goes back to cold starts shortly."
+              : alwaysOn?.request === "APPROVED" && alwaysOn.status === "STARTING"
+                ? "Approved. Starting the warm copy. This takes a few minutes."
+                : alwaysOn?.request === "APPROVED" && alwaysOn.status === "ON"
+                  ? "On. One warm copy keeps the app responding without a cold start."
+                  : alwaysOn?.request === "APPROVED" && alwaysOn.status === "FAILED"
+                    ? "Approved, but the warm copy isn't on yet."
+                    : alwaysOn?.request === "APPROVED"
+                      ? "Approved. The warm copy is being set up."
+                      : alwaysOn?.request === "REQUESTED"
+                        ? "Requested. Plexo reviews these by hand, then turns it on."
+                        : alwaysOn?.request === "DECLINED"
+                          ? "Not approved for this app. Ask Plexo support if you need it."
+                          : "Keep one warm copy running so visitors never wait for a cold start. Plexo reviews each request by hand."}
           </p>
+          {alwaysOn?.request === "APPROVED" && alwaysOn.status === "FAILED" && alwaysOn.error ? (
+            <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#f87171" }}>{alwaysOn.error}</p>
+          ) : null}
           {alwaysOnError ? <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#f87171" }}>{alwaysOnError}</p> : null}
         </div>
-        {alwaysOn && (alwaysOn.request === "NONE" || alwaysOn.request === "DECLINED") ? (
+        {alwaysOn?.request === "APPROVED" ? (
+          <button type="button" onClick={() => void turnOffAlwaysOn()} disabled={alwaysOnBusy || alwaysOnTurningOff || building} style={button(!alwaysOnBusy && !alwaysOnTurningOff && !building)}>
+            {alwaysOnTurningOff ? "Turning off…" : "Turn off always on"}
+          </button>
+        ) : alwaysOn && (alwaysOn.request === "NONE" || alwaysOn.request === "DECLINED") ? (
           <button type="button" onClick={() => void requestAlwaysOn()} disabled={alwaysOnBusy || building} style={button(!alwaysOnBusy && !building)}>
             {alwaysOnBusy ? "Requesting…" : "Request always on"}
           </button>
