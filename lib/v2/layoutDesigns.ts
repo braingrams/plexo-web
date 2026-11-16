@@ -1,4 +1,4 @@
-import { applyCommands, blankPages, createDefaultDesignSystem, type PageDefinition } from "@charisol/plexo-sdk/v2/compile";
+import { applyCommands, blankPages, createDefaultDesignSystem, type DesignSystem, type PageDefinition } from "@charisol/plexo-sdk/v2/compile";
 
 import { V2_FORMAT, type V2Design } from "@/lib/v2/design";
 
@@ -52,13 +52,13 @@ function emptyPage(name: string, slug: string): PageDefinition {
   };
 }
 
-/** One-page V2 design from section commands (throws if the SDK rejects one — a bug here, never user input). */
-export function buildV2Page(name: string, slug: string, commands: Command[]): V2Design {
+/** One-page V2 design from section commands (throws if the SDK rejects one — a bug here, never user input). Pass the site's brand to keep it. */
+export function buildV2Page(name: string, slug: string, commands: Command[], designSystem?: DesignSystem): V2Design {
   const page = emptyPage(name, slug);
-  const out = applyCommands([page], createDefaultDesignSystem(), commands.map((c) => ({ ...c, pageId: page.id })));
+  const out = applyCommands([page], designSystem ?? createDefaultDesignSystem(), commands.map((c) => ({ ...c, pageId: page.id })));
   const failed = out.results.find((r) => !r.ok);
   if (failed) throw new Error(`Couldn't build the "${name}" page: ${failed.message}`);
-  return { format: V2_FORMAT, pages: out.pages };
+  return { format: V2_FORMAT, pages: out.pages, ...(designSystem ? { designSystem } : {}) };
 }
 
 const SHOP_CHROME_LINKS = (siteName: string, links: StoreLinks) => ({

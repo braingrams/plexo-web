@@ -84,6 +84,14 @@ async function scanPublishedTemplates(): Promise<EntityItem<typeof Template>[]> 
   return all;
 }
 
+/** Every published site (landing page) template, without its HTML — for SOL's list_site_templates. */
+export async function listPublishedSiteTemplates(): Promise<Array<{ id: string; name: string; category: string | null; description: string | null; priceCents: number; designFormat: string; publishedAt: string | null }>> {
+  const published = await scanPublishedTemplates();
+  return published
+    .filter((t) => t.kind === "LANDING_PAGE")
+    .map((t) => ({ id: t.id, name: t.name, category: t.marketplaceCategory ?? null, description: t.marketplaceDescription ?? null, priceCents: t.priceCents ?? 0, designFormat: t.designFormat ?? "v1", publishedAt: t.marketplacePublishedAt ?? null }));
+}
+
 /**
  * Shared by app/api/v1/marketplace/templates (external/API consumers) and
  * app/marketplace (the browse page itself, called directly as a Server Component —

@@ -19,8 +19,10 @@ import {
   type AgentTurnDeps,
   type ResumeAgentTurnDeps,
   type AskUserAnswer,
+  type SolPromptPreferences,
 } from "./solAgent";
 import { ASK_USER_QUESTION_TOOL_NAME } from "./solToolSchema";
+import type { SolBuildProfile } from "./solBuildContext";
 import { maybeExtractMemoryFact } from "./memoryExtraction";
 import { maybeGenerateConversationTitle } from "./titleGeneration";
 import { recordSolUsageEvent, type SolToolCallRecord } from "@/lib/solAnalytics";
@@ -95,12 +97,20 @@ async function loadOwnedConversation(userId: string, conversationId: string) {
  * `facts` array, so callers that need to gate something else on the *setting itself* (e.g.
  * whether to attempt automatic memory extraction after this turn) can't infer it from `facts`
  * alone and need `memoryEnabled` explicitly. */
-async function loadMemoryContext(userId: string): Promise<{ memoryEnabled: boolean; facts: string[] }> {
+async function loadMemoryContext(userId: string): Promise<{ memoryEnabled: boolean; facts: string[]; preferences: SolPromptPreferences }> {
   const { data: prefs } = await SolPreferences.get({ userId }).go();
+  // The owner's tone / length / custom instructions from Settings → SOL, fed into the system prompt.
+  const preferences: SolPromptPreferences = { tonePreset: prefs?.tonePreset ?? null, responseLength: prefs?.responseLength ?? null, customInstructions: prefs?.customInstructions ?? null };
   const memoryEnabled = prefs?.memoryEnabled !== false;
-  if (!memoryEnabled) return { memoryEnabled: false, facts: [] };
+  if (!memoryEnabled) return { memoryEnabled: false, facts: [], preferences };
   const { data: facts } = await SolMemoryFact.query.primary({ userId }).go({ pages: "all" });
-  return { memoryEnabled: true, facts: facts.map((f) => f.text) };
+  return { memoryEnabled: true, facts: facts.map((f) => f.text), preferences };
+}
+
+/** What the owner is building, from onboarding. TODO: read it from the user record once the
+ *  onboarding workstream stores it there (SolBuildProfile in lib/ai/solBuildContext.ts). */
+async function loadBuildProfile(_userId: string): Promise<SolBuildProfile | undefined> {
+  return undefined;
 }
 
 interface SolAiRouting {
@@ -556,7 +566,8 @@ export async function prepareMessagesTurn(
     }
   }
 
-  const { memoryEnabled, facts: memoryFacts } = await loadMemoryContext(resolved.userId);
+  const { memoryEnabled, facts: memoryFacts, preferences } = await loadMemoryContext(resolved.userId);
+  const buildProfile = await loadBuildProfile(resolved.userId);
   const turnStartedAt = new Date().toISOString();
   // Started here, immediately, NOT inside `run` below — this needs to begin running in
   // parallel with the main turn as early as possible, using only `text` (the user's own
@@ -597,6 +608,8 @@ export async function prepareMessagesTurn(
         apiKey: routing.apiKey,
         userMessageContent,
         memoryFacts,
+        preferences,
+        buildProfile,
         appContext: conversation.appId ? await buildSolAppContext(conversation.appId, resolved).catch(() => undefined) : undefined,
         boundAppId: conversation.appId ?? undefined,
         ...callbacks,
@@ -701,7 +714,8 @@ export async function prepareConfirmTurn(
   if ("error" in routing) return { ok: false, status: routing.status, body: { error: routing.error } };
   const modelTier = tierFor(routing.route, routing.plan, ((conversation.modelTier as ModelTier) ?? "BASIC") as ConcreteTier) as ModelTier;
   await ensureCreditPeriod(resolved.userId);
-  const { memoryEnabled, facts: memoryFacts } = await loadMemoryContext(resolved.userId);
+  const { memoryEnabled, facts: memoryFacts, preferences } = await loadMemoryContext(resolved.userId);
+  const buildProfile = await loadBuildProfile(resolved.userId);
   const userTextForMemory = findPrecedingUserText(messages, pendingMessage.createdAt);
   const turnStartedAt = new Date().toISOString();
   // Almost always a no-op by the time a resume happens — the first turn's own
@@ -733,6 +747,8 @@ export async function prepareConfirmTurn(
         decision,
         answers,
         memoryFacts,
+        preferences,
+        buildProfile,
         appContext: conversation.appId ? await buildSolAppContext(conversation.appId, resolved).catch(() => undefined) : undefined,
         boundAppId: conversation.appId ?? undefined,
         ...callbacks,

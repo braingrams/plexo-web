@@ -47,7 +47,7 @@ beforeEach(() => {
 
 describe("page templates in the new-page flow", () => {
   it("offers every SDK template, with plain names", () => {
-    expect(templates().map((t) => t.id)).toEqual(["blank", "home", "landing", "about", "services", "contact", "pricing"]);
+    expect(templates().map((t) => t.id)).toEqual(["blank", "home", "landing", "about", "services", "contact", "pricing", "faq", "gallery", "team", "menu"]);
     expect(defaultPageName("about")).toBe("About us");
     expect(defaultPageName(BLANK_TEMPLATE)).toBe("New page");
   });
@@ -89,7 +89,7 @@ describe("page templates in the new-page flow", () => {
       expect(parsePages([page]).ok).toBe(true);
       await saveDesign("app1", t.id, { name: t.name, route: `/${t.id}`, page });
     }
-    expect((await listDesigns("app1")).designs).toHaveLength(6);
+    expect((await listDesigns("app1")).designs).toHaveLength(10);
   });
 });
 

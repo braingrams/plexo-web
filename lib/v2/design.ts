@@ -179,11 +179,20 @@ export function starterV2EmailDesign(): V2Design {
 }
 
 /** A page started from one of the SDK's page templates ("home", "pricing", ...). `seed` (the new row's id) keeps node ids unique across a site's pages. */
-export function v2DesignFromTemplate(templateId: string, opts: { name: string; slug?: string; seed?: string }): V2Design {
-  return {
-    format: V2_FORMAT,
-    pages: [buildPageFromTemplate(templateId, { name: opts.name, slug: opts.slug, seed: opts.seed ? `${templateSeed(templateId)}-${opts.seed}` : undefined, designSystem: createDefaultDesignSystem() })],
-  };
+export function v2DesignFromTemplate(
+  templateId: string,
+  opts: { name: string; slug?: string; seed?: string; designSystem?: DesignSystem; chrome?: boolean; chromeContent?: { header?: Record<string, unknown>; footer?: Record<string, unknown> } },
+): V2Design {
+  const page = buildPageFromTemplate(templateId, {
+    name: opts.name,
+    slug: opts.slug,
+    seed: opts.seed ? `${templateSeed(templateId)}-${opts.seed}` : undefined,
+    designSystem: opts.designSystem ?? createDefaultDesignSystem(),
+    chrome: opts.chrome,
+    chromeContent: opts.chromeContent,
+  });
+  // A page added to a branded site keeps the site's brand instead of starting on the default one.
+  return { format: V2_FORMAT, pages: [page], ...(opts.designSystem ? { designSystem: opts.designSystem } : {}) };
 }
 
 /**

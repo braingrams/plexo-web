@@ -1,6 +1,6 @@
 // Starting points for a new designed page, shared by the Design tab (browser) and SOL's design
 // tools (server). Only the React-free SDK entry is imported, so it's safe in both places.
-import { buildPageFromTemplate, getPageTemplate, listPageTemplates, templateSeed, type DesignSystem, type PageDefinition, type PageTemplateSummary } from "@charisol/plexo-sdk/v2/compile";
+import { SITE_ONLY_TEMPLATE_IDS, buildPageFromTemplate, getPageTemplate, listPageTemplates, templateSeed, type DesignSystem, type PageDefinition, type PageTemplateSummary } from "@charisol/plexo-sdk/v2/compile";
 
 export const BLANK_TEMPLATE = "blank";
 
@@ -30,8 +30,9 @@ export function routeFromName(name: string): string {
   return `/${slug || "page"}`;
 }
 
+/** The page templates an app can use — not the shop/blog/product ones, which show a Plexo site's own store or blog. */
 export function templates(): PageTemplateSummary[] {
-  return listPageTemplates();
+  return listPageTemplates().filter((t) => !SITE_ONLY_TEMPLATE_IDS.has(t.id));
 }
 
 /** The name a page made from this template starts with ("About us", "Pricing"…). */

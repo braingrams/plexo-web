@@ -79,13 +79,13 @@ export const PAGE_MCP_TOOLS = [
     title: "Create Page From Template",
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description:
-      "Creates a visual page that is already complete: header, sections and footer all filled in with starting wording. Without siteId it starts a NEW SITE (this is its home page); with siteId it adds a page to that site (any plan can build and preview a multi-page site; Free publishes only the home page). templateId is a page template: blank, home, landing, about, services, contact or pricing (home for a first page, landing for a one-page sales site). " +
+      "Creates a visual page that is already complete: header, sections and footer all filled in with starting wording. Without siteId it starts a NEW single-page SITE (for a whole multi-page site use site_create instead); with siteId it adds a page to that site — it takes the site's brand and menu, and joins the site's shared menu (any plan can build and preview a multi-page site; Free publishes only the home page). templateId is a page template: blank, home, landing, about, services, contact, pricing, store, blog, product, faq, gallery, team or menu, or any layout id from list_site_templates (home for a first page, landing for a one-page sales site). " +
       "Pass content — the same commands as page_edit — to personalise it in the same call (headline, copy, brand colours with setBrand), so the owner sees a finished page for their business straight away; any wording you don't change stays as the template's sample text, so replace the key copy. It isn't published: call page_publish with a domain when the owner is ready. Never ask the owner for a name or address first — name the page yourself from what it's about.",
     inputSchema: {
       type: "object",
       properties: {
         name: { type: "string", description: "Page name, e.g. \"Home\", \"Pricing\" or the business's name for a new site." },
-        templateId: { type: "string", enum: ["blank", "home", "landing", "about", "services", "contact", "pricing"], description: "Which ready-made page to start from. Default home." },
+        templateId: { type: "string", description: "Which ready-made page to start from: blank, home, landing, about, services, contact, pricing, store, blog, product, faq, gallery, team or menu — or a layout id from list_site_templates (e.g. home-editorial). Default home." },
         siteId: { type: "string", description: "Add the page to this existing visual site (its home page id). Omit to start a new site." },
         content: { type: "array", maxItems: MAX_COMMANDS, items: { type: "object", properties: { op: { type: "string" } }, required: ["op"], additionalProperties: true }, description: "Optional page_edit commands applied right after creating the page. " + "Section ids don't exist yet, so use addSection / setBrand, or call page_describe first to get ids for updateSection." },
       },

@@ -26,6 +26,7 @@ import { FORM_MCP_TOOLS, FORM_TOOL_NAMES, handleFormTool } from "./formTools";
 import { CONTENT_MCP_TOOLS, CONTENT_TOOL_NAMES, handleContentTool } from "./contentTools";
 import { APP_MCP_TOOLS, APP_TOOL_NAMES, handleAppTool } from "./appTools";
 import { PAGE_MCP_TOOLS, PAGE_TOOL_NAMES, handlePageTool } from "./pageTools";
+import { SITE_MCP_TOOLS, SITE_TOOL_NAMES, handleSiteTool } from "./siteTools";
 import { PageToolError, convertLegacyDesign, createV2Page, editableUrlFor, publishPage, summarizeSections } from "./v2Pages";
 import { deprecationNotice, isDeprecatedTool, markDeprecated, v2TargetMessage } from "./deprecation";
 import { coerceToolArgs } from "./coerceArgs";
@@ -777,6 +778,7 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   ...CONTENT_MCP_TOOLS,
   ...APP_MCP_TOOLS,
   ...PAGE_MCP_TOOLS,
+  ...SITE_MCP_TOOLS,
 ].map(markDeprecated);
 
 /**
@@ -1774,6 +1776,10 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       }
       if (PAGE_TOOL_NAMES.has(toolName)) {
         toolResult = await handlePageTool(toolName, args, resolved);
+        break;
+      }
+      if (SITE_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleSiteTool(toolName, args, resolved);
         break;
       }
       throw new Error(`Unknown tool: ${toolName}`);

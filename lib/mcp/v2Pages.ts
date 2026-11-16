@@ -7,6 +7,7 @@ import {
   describeCommand,
   describeDesign,
   describeSection,
+  isPageTemplateId,
   listPageTemplates,
   solCommandSchema,
   type CommandResult,
@@ -26,6 +27,9 @@ import { assertCanPublishPage } from "@/lib/plan/publishGuard";
 import { setPagePublishFlags } from "@/lib/plan/sitesStore";
 import { linkDomainToTemplate } from "@/lib/sites/linkDomain";
 import { User } from "@/lib/db/coreEntities";
+import { chromeFor } from "@/lib/v2/siteFormat";
+import { addPageToSiteMenu } from "@/lib/sites/siteNav";
+import { htmlOutline } from "@/lib/sites/htmlOutline";
 import type { resolveUser } from "@/lib/auth/resolveUser";
 
 // The V2 page workflow behind page_describe / page_edit / page_create_from_template /
@@ -151,10 +155,14 @@ export async function describePages(resolved: ResolvedUser, args: { templateId?:
       hasUnpublishedChanges: !!row.draftJson,
     };
   } else {
+    // No sections to list, but SOL can still read what's on it.
+    const outline = htmlOutline(String(row.draftHtml || row.compiledHtml || ""));
     page = {
       templateId: row.id,
       name: row.name,
+      route: pathForPage(row.id, siteRows),
       designFormat: target,
+      outline: outline || "(This page has no readable text yet.)",
       note:
         target === "raw-html"
           ? "This page is hand-written HTML, so it has no sections to edit visually. Replace it with update_raw_landing_page, or build a visual page with page_create_from_template."
@@ -352,14 +360,14 @@ export type CreatedPage = {
 export async function createV2Page(
   resolved: ResolvedUser,
   args: CreateArgs,
-  opts: { design?: V2Design; fallbackName?: string } = {},
+  opts: { design?: V2Design; fallbackName?: string; slug?: string; skipMenu?: boolean } = {},
 ): Promise<CreatedPage> {
   const name = str(args.name) || opts.fallbackName || "";
   if (!name) throw new PageToolError("Give the page a name, for example \"Home\" or \"Pricing\".");
 
   const templateId = str(args.templateId) || "home";
-  if (!opts.design && !pageTemplateIds().includes(templateId)) {
-    throw new PageToolError(`There's no page template "${templateId}". Pick one of: ${pageTemplateIds().join(", ")}.`);
+  if (!opts.design && !isPageTemplateId(templateId)) {
+    throw new PageToolError(`There's no page template "${templateId}". Pick one of: ${pageTemplateIds().join(", ")} (or a layout id from list_site_templates).`);
   }
 
   const features = getTierFeatures(resolved.subscriptionPlan);
@@ -381,8 +389,15 @@ export async function createV2Page(
   }
 
   const id = randomUUID();
-  const slug = parent ? await ensureUniqueSlug(parent.id, name) : null;
+  const slug = parent ? await ensureUniqueSlug(parent.id, opts.slug ?? name) : null;
   let design: V2Design = opts.design ?? v2DesignFromTemplate(templateId, { name, slug: slug ?? undefined, seed: id });
+  // A page added to an existing site looks like the rest of it: the site's brand, its menu, and
+  // no second header/footer when the site shares one.
+  let shared: SiteChrome | null = null;
+  if (parent && !opts.design) {
+    shared = await siteChromeFor(resolved, parent);
+    design = fitPageToSite(v2DesignFromTemplate(templateId, { name, slug: slug ?? undefined, seed: id, designSystem: shared.designSystem }), shared);
+  }
 
   let reports: CommandReport[] = [];
   if (args.content !== undefined && args.content !== null) {
@@ -427,7 +442,56 @@ export async function createV2Page(
   if (!row) throw new Error(`Template ${id} vanished immediately after being created`);
 
   const siteRows = parent ? await loadSiteRows(resolved, await findRootTemplateId(parent.id, parent.parentId ?? null)) : [row];
-  return { row, design, results: reports, slug, route: pathForPage(row.id, siteRows), siteId: parent ? siteRows[0]?.id ?? parent.id : row.id };
+  const route = pathForPage(row.id, siteRows);
+  // A shared menu learns about the new page (only a top-level one, and only when there's room).
+  if (shared?.sharedHeader && parent && !parent.parentId && !opts.skipMenu) {
+    await addPageToSiteMenu(siteRows[0]?.id ?? parent.id, name, route).catch(() => undefined);
+  }
+  return { row, design, results: reports, slug, route, siteId: parent ? siteRows[0]?.id ?? parent.id : row.id };
+}
+
+type SiteChrome = { designSystem?: DesignSystem; sharedHeader: boolean; sharedFooter: boolean; header?: Record<string, unknown>; footer?: Record<string, unknown> };
+
+/** The site's brand, whether it shares a header/footer, and (when pages carry their own) the home page's menu and footer words. */
+async function siteChromeFor(resolved: ResolvedUser, parent: Row): Promise<SiteChrome> {
+  const rootId = await findRootTemplateId(parent.id, parent.parentId ?? null);
+  const { data: root } = await Template.get({ id: rootId }).go();
+  if (!root || root.organizationId !== resolved.organizationId || formatLabel(root) !== "v2") return { sharedHeader: false, sharedFooter: false };
+  const chrome = await chromeFor(rootId, root.name ?? "");
+  const rootDesign = await currentDesign(root).catch(() => null);
+  const blocks = (rootDesign?.pages[0]?.rootNode.children ?? []).map((c) => (c.props as { block?: { kind?: string; content?: Record<string, unknown> } } | undefined)?.block);
+  return {
+    designSystem: rootDesign?.designSystem,
+    sharedHeader: !chrome.header,
+    sharedFooter: !chrome.footer,
+    header: blocks.find((b) => b?.kind === "header")?.content,
+    footer: blocks.find((b) => b?.kind === "footer")?.content,
+  };
+}
+
+/** Drops the header/footer a shared layout already provides, and copies the home page's menu/footer words onto the new page's own. */
+export function fitPageToSite(design: V2Design, site: SiteChrome): V2Design {
+  const page = design.pages[0];
+  if (!page) return design;
+  const children = (page.rootNode.children ?? []).flatMap((node) => {
+    const block = (node.props as { block?: { kind?: string; content?: Record<string, unknown> } } | undefined)?.block;
+    if (block?.kind === "header" && site.sharedHeader) return [];
+    if (block?.kind === "footer" && site.sharedFooter) return [];
+    return [node];
+  });
+  let next: V2Design = { ...design, pages: [{ ...page, rootNode: { ...page.rootNode, children } }] };
+  const copy = [
+    ...(site.header && !site.sharedHeader ? [{ kind: "header", content: site.header }] : []),
+    ...(site.footer && !site.sharedFooter ? [{ kind: "footer", content: site.footer }] : []),
+  ];
+  if (copy.length) {
+    const commands = copy.flatMap(({ kind, content }) => {
+      const section = children.find((n) => (n.props as { block?: { kind?: string } } | undefined)?.block?.kind === kind);
+      return section ? [{ op: "updateSection", sectionId: section.id, content }] : [];
+    });
+    if (commands.length) next = applyToDesign(next, commands).design;
+  }
+  return next;
 }
 
 /** An old client's classic (V1-shaped) design → a V2 design, with the SDK's plain-language warnings. */
@@ -525,7 +589,7 @@ export async function publishPage(resolved: ResolvedUser, args: { templateId?: u
     domain: siteDomain,
     editableUrl: editableUrlFor(row.id),
     ...(linked ? { routingEndpoint: linked.routingEndpoint, certificateValidationName: linked.certificateValidationName, certificateValidationValue: linked.certificateValidationValue } : {}),
-    ...(siteDomain || row.parentId
+    ...(siteDomain || row.parentId || row.isSiteLayoutFragment || row.isBlogLayout || row.isCommerceLayout
       ? {}
       : {
           needsDomain: true,
