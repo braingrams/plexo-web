@@ -7,6 +7,7 @@ import { PageContainer } from "../../../_components/PageContainer";
 import { Card } from "../../../_components/Card";
 import { CustomSelect } from "../../../../_components/CustomSelect";
 import { SiteAppearancePanel } from "./SiteAppearancePanel";
+import { SiteBrandPanel } from "./SiteBrandPanel";
 import { DeployPanel } from "./DeployPanel";
 import { ServerSettingsPanel } from "./ServerSettingsPanel";
 import { SsrDeployPanel } from "./SsrDeployPanel";
@@ -1313,6 +1314,7 @@ export function DetailClient({
           }}
         >
           <Pane active={tab === "properties"}>
+          {siteData && <SiteBrandPanel templateId={templateId} sourceType={sourceType} />}
           {siteData && <SiteAppearancePanel templateId={templateId} />}
           </Pane>
 

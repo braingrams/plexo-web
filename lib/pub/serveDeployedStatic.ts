@@ -113,6 +113,13 @@ export async function serveDeployedStatic(
       "X-Content-Type-Options": "nosniff",
       "X-Plexo-Hosting-Tier": app.hostingTier ?? "LAMBDA",
     });
+    // HTML only: the site's brand sheet, linked at a STABLE address (no ?v=) because a STATIC-tier page is cached at the edge for
+    // an hour — the sheet's own short cache carries a brand change instead. Every other file is streamed untouched.
+    if (options.templateId && /\.html?$/i.test(candidate) && /text\/html/i.test(headers.get("Content-Type") ?? "text/html")) {
+      const html = await s3Res.text();
+      const { applySiteBrandToHtml } = await import("@/lib/brand/inject");
+      return new NextResponse(await applySiteBrandToHtml(html, options.templateId, "deployed-static"), { headers });
+    }
     const etag = s3Res.headers.get("etag");
     if (etag) headers.set("ETag", etag);
     const lastModified = s3Res.headers.get("last-modified");

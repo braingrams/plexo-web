@@ -8,11 +8,9 @@ import { loadStrataToken } from "./session";
 // a Strata client acting as that person, and Strata's errors turned into plain-language
 // responses the editor can show (and, for an ended session, answer with "Reconnect").
 
-/** Strata's API root including the version (STRATA_API_URL, e.g. https://api.strata.charisol.io/v1). */
-export function strataApiUrl(): string | null {
-  const url = process.env.STRATA_API_URL?.trim().replace(/\/+$/, "");
-  return url || null;
-}
+import { strataApiUrl } from "./apiUrl";
+
+export { strataApiUrl };
 
 const STATUS_FOR_KIND: Record<StrataErrorKind, number> = {
   expired: 401,

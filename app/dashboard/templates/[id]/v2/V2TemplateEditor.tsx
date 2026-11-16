@@ -83,7 +83,8 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
   // Read at save time, so a save never sends the script or details from an older render.
   const extras = useRef({ meta, customJs });
   extras.current = { meta, customJs };
-  const strata = useMemo(() => createStrataAdapter(), []);
+  // The site (not this one page) is what's linked to Strata: the switch keeps every page of the site on brand.
+  const strata = useMemo(() => createStrataAdapter(rootId ? { siteId: rootId } : {}), [rootId]);
   // "Which product to sell" lists this site's products (the Sell a product section and the product block).
   const products = useMemo(
     () => ({

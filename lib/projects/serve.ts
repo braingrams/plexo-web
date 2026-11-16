@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applySiteBrandToHtml } from "@/lib/brand/inject";
 import type { EntityItem } from "electrodb";
 import { Template } from "@/lib/db/contentEntities";
 import { ProjectBuild } from "@/lib/db/projectEntities";
@@ -204,6 +205,9 @@ async function htmlResponse(source: string, url: URL, ctx: ServeContext): Promis
     html = html.replace(/<head[^>]*>/i, (m) => `${m}<script>${HOME_ONLY_GUARD_JS}</script>`);
   }
   html = insertBeforeBodyEnd(html, `<script>${ANALYTICS_BEACON_JS}</script>`);
+  // The site's brand sheet (lib/brand): canvas pages read brand variables, so a brand published in Strata shows here without a
+  // rebuild. Hand-written code can use the same variables (var(--color-brand-primary-500)) and .plx-brand-* classes.
+  html = await applySiteBrandToHtml(html, ctx.template.id, "app");
   // Plexo content blocks and form collection for apps: both watch the page, so they also pick up
   // what the app renders after load. Forms are connected only when marked data-plexo-form.
   html = injectContentScript(html);

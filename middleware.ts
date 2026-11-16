@@ -191,6 +191,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return NextResponse.rewrite(new URL(`/api/runtime/${lookupDomain}${rest}${request.nextUrl.search}`, request.url));
     }
 
+    // The site's hosted brand sheet (lib/brand): /__plexo/brand/<siteId>.css on the site's own domain. Behind CloudFront this
+    // path has its own short-cache behaviour; the route reads the sheet from storage.
+    if (pathname.startsWith("/__plexo/brand/")) {
+      return NextResponse.rewrite(new URL(`/api/public/brand/${pathname.slice("/__plexo/brand/".length)}${request.nextUrl.search}`, request.url));
+    }
+
     // The blog's own routes keep Next's default URL style; every other path keeps its
     // trailing slash so the page serve route can apply the page's own URL style.
     if (hasTrailingSlash && (pathname === "/blog/" || pathname.startsWith("/blog/"))) return stripTrailingSlash();

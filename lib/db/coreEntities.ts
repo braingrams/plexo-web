@@ -299,6 +299,111 @@ export const StrataAutoUpdate = new Entity(
   { table, client: docClient },
 );
 
+// A site's brand, linked from Strata (lib/brand/siteBrand.ts): ONE Strata project per site
+// (siteId = the site's root Template id — builder, raw upload, WordPress-migrated, React app,
+// deployed static or server app alike). The brand itself is written as a hosted stylesheet
+// (/__plexo/brand/<siteId>.css) every page of the site links to, so a change in Strata reaches
+// every page without recompiling. Holds a read-only Strata integration key (scope
+// design-system:read, the one project only), stored ENCRYPTED and never sent to a browser, so the
+// webhook receiver and the scheduled sweep can pull the published design system with nobody
+// signed in. `revision` is the sheet's own version (what ?v= carries); `strataRevision` is the
+// Strata revision it was made from. runningAt is the per-site lock.
+//
+// byStrataProject (GSI1, no new index needed): "every site linked to this Strata project" — how a
+// webhook for one project finds the sites to update.
+export const SiteBrand = new Entity(
+  {
+    model: { entity: "siteBrand", version: "1", service: "plexoCore" },
+    attributes: {
+      siteId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      // Who linked it: their name goes on rebuilds the sync starts, and their Strata session is
+      // used (when still signed in) to tidy up in Strata on unlink.
+      userId: { type: "string", required: true },
+      strataProjectId: { type: "string", required: true },
+      projectName: { type: "string" },
+      keyId: { type: "string", required: true },
+      ciphertext: { type: "string", required: true },
+      // "Keep in sync with Strata": publishes in Strata go live on their own.
+      autoSync: { type: "boolean", default: true },
+      status: { type: ["active", "needs-reconnect"] as const, required: true, default: "active" },
+      revision: { type: "string" },
+      strataRevision: { type: "string" },
+      sheetUpdatedAt: { type: "string" },
+      lastCheckedAt: { type: "string" },
+      // "updated" | "up-to-date" | "needs-review" | "error" | "reconnect" — and the plain-language note.
+      lastResultKind: { type: "string" },
+      lastResult: { type: "string" },
+      lastSource: { type: ["webhook", "schedule", "owner"] as const },
+      runningAt: { type: "string" },
+      createdAt: { type: "string", required: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["siteId"], template: "SITE#${siteId}" },
+        sk: { field: "sk", composite: [], template: "SITEBRAND" },
+      },
+      byStrataProject: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["strataProjectId"], template: "STRATAPROJECT#${strataProjectId}", casing: "none" },
+        sk: { field: "GSI1SK", composite: ["siteId"], template: "SITEBRAND#${siteId}", casing: "none" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Plexo's webhook subscription in Strata for one project (shared by every site linked to it):
+// Strata signs each delivery with `secret` (HMAC-SHA256), stored ENCRYPTED. `createdWith` says
+// which credential made it — a person's session ("session") or a site's integration key (its
+// keyId): a key-made subscription stops when that key is revoked, so unlinking that site moves it.
+export const StrataProjectWebhook = new Entity(
+  {
+    model: { entity: "strataProjectWebhook", version: "1", service: "plexoCore" },
+    attributes: {
+      strataProjectId: { type: "string", required: true },
+      webhookId: { type: "string", required: true },
+      secretCiphertext: { type: "string", required: true },
+      createdWith: { type: "string", required: true },
+      createdAt: { type: "string", required: true },
+      lastDeliveryId: { type: "string" },
+      lastDeliveryAt: { type: "string" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["strataProjectId"], template: "STRATAPROJECT#${strataProjectId}", casing: "none" },
+        sk: { field: "sk", composite: [], template: "WEBHOOK" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// How a raw-HTML or WordPress-migrated site's own colours and fonts map onto brand variables
+// (lib/brand/mapping.ts). Worked out on import and on "Apply my brand"; applied at serve time
+// (the stored pages and files are never changed), so turning "Use my brand on this site" off puts
+// the original look straight back. `colors`: normalised literal -> token key; `fonts`: lower-case
+// family -> token key.
+export const SiteBrandMapping = new Entity(
+  {
+    model: { entity: "siteBrandMapping", version: "1", service: "plexoCore" },
+    attributes: {
+      siteId: { type: "string", required: true },
+      colors: { type: "any", required: true },
+      fonts: { type: "any", required: true },
+      enabled: { type: "boolean", default: true },
+      computedAt: { type: "string", required: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["siteId"], template: "SITE#${siteId}" },
+        sk: { field: "sk", composite: [], template: "BRANDMAPPING" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const Organization = new Entity(
   {
     model: { entity: "organization", version: "1", service: "plexoCore" },

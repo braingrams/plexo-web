@@ -270,6 +270,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // Match the site's own colours and fonts to brand roles (lib/brand/mapping.ts), so a Strata brand linked to it later shows
+  // straight away. Best effort: the upload has already succeeded.
+  await import("@/lib/brand/siteBrand").then((m) => m.refreshBrandMapping(template.id)).catch((err) => console.warn(`[upload-raw] ${template.id}: brand matching skipped`, err));
+
   return NextResponse.json({
     success: true,
     templateId: template.id,
