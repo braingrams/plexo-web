@@ -46,7 +46,10 @@ export async function GET(
 
   // Regular Plexo blog site — proxy to the RSC pages that live under /_blog/.
   // Middleware rewrites /_blog/... on a tenant domain to /pub/{domain}/_blog/..., which
-  // resolves to app/pub/[domain]/_blog/**/ page.tsx. Self-fetching via the public URL
+  // resolves to app/pub/[domain]/%5Fblog/**/page.tsx. The folder MUST be spelled %5Fblog,
+  // not _blog: Next treats any folder starting with "_" as private and never routes it,
+  // which made every /blog URL on every Plexo site 404 (see tests/blogRoutable.test.ts).
+  // %5F is Next's documented way to get a URL segment that starts with "_". Self-fetching via the public URL
   // (rather than a direct import) is the same technique [[...slug]] already uses for the
   // "blog on homepage" feature — it keeps the RSC rendering pipeline intact and avoids
   // the React-in-a-route-handler problem. Content-Encoding and Content-Length must be
