@@ -1,0 +1,74 @@
+{
+ "project": {
+  "projectId": "01a1e54e-ab9a-779c-be4f-dba969d7bb45",
+  "logo": "https://dx2nhw7wqn4nn.cloudfront.net/projects/01a1e54e-ab9a-779c-be4f-dba969d7bb45/assets/2fd257b9-12e1-4a77-9f40-695b96a0baff/logo-dark.svg",
+  "updatedAt": "2026-11-16T22:47:55.595Z",
+  "designSystemData": {
+   "assets": [
+    {
+     "type": "LOGO",
+     "name": "Plexo wordmark PNG (for light backgrounds)",
+     "cdnUrl": "https://dx2nhw7wqn4nn.cloudfront.net/projects/01a1e54e-ab9a-779c-be4f-dba969d7bb45/assets/007ec383-f604-434b-bcdd-685afc4f0e8d/plexo-wordmark-dark.png",
+     "mimeType": "image/png",
+     "metadata": {
+      "background": "light",
+      "format": "png",
+      "usage": "email"
+     }
+    },
+    {
+     "type": "LOGO",
+     "role": "MONO_LIGHT",
+     "name": "Plexo wordmark (for dark backgrounds)",
+     "cdnUrl": "https://dx2nhw7wqn4nn.cloudfront.net/projects/01a1e54e-ab9a-779c-be4f-dba969d7bb45/assets/22211424-9d8f-4948-b743-6dad298a95b6/logo-light.svg",
+     "mimeType": "image/svg+xml",
+     "metadata": {
+      "background": "dark",
+      "format": "svg"
+     }
+    },
+    {
+     "type": "LOGO",
+     "role": "PRIMARY",
+     "name": "Plexo wordmark (for light backgrounds)",
+     "cdnUrl": "https://dx2nhw7wqn4nn.cloudfront.net/projects/01a1e54e-ab9a-779c-be4f-dba969d7bb45/assets/2fd257b9-12e1-4a77-9f40-695b96a0baff/logo-dark.svg",
+     "mimeType": "image/svg+xml",
+     "metadata": {}
+    },
+    {
+     "type": "LOGO",
+     "name": "Plexo wordmark PNG (for dark backgrounds)",
+     "cdnUrl": "https://dx2nhw7wqn4nn.cloudfront.net/projects/01a1e54e-ab9a-779c-be4f-dba969d7bb45/assets/74a81a08-7249-4ffd-8d00-2a29f3885a8a/plexo-wordmark-light.png",
+     "mimeType": "image/png",
+     "metadata": {
+      "background": "dark",
+      "format": "png",
+      "usage": "email"
+     }
+    },
+    {
+     "type": "LOGO",
+     "role": "FAVICON",
+     "name": "Plexo icon",
+     "cdnUrl": "https://dx2nhw7wqn4nn.cloudfront.net/projects/01a1e54e-ab9a-779c-be4f-dba969d7bb45/assets/8944d1ee-0155-44b9-a7e9-8be535fb6aef/plexo-mark.png",
+     "mimeType": "image/png",
+     "metadata": {
+      "format": "png",
+      "usage": "icon"
+     }
+    },
+    {
+     "type": "LOGO",
+     "role": "SOCIAL_AVATAR",
+     "name": "Plexo app icon tile",
+     "cdnUrl": "https://dx2nhw7wqn4nn.cloudfront.net/projects/01a1e54e-ab9a-779c-be4f-dba969d7bb45/assets/bb33d07a-3565-45a7-94a8-a0a8d1e6aa4e/plexo-mark-tile.png",
+     "mimeType": "image/png",
+     "metadata": {
+      "format": "png",
+      "usage": "app-icon"
+     }
+    }
+   ]
+  }
+ }
+}

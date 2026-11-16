@@ -29,6 +29,8 @@ export const SHARED_TOKENS: TokenSet = {
   "radius-pill": "999px",
   "space-gutter": "32px",
   "control-height": "44px",
+  // Strata's --font-family-base. The default points at the sans next/font loads for v3.
+  "font-family-base": 'var(--font-v3-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
   "font-weight-heading": "800",
   "letter-spacing-heading": "-0.02em",
   // The logo's letters on a light / dark background (docs/redesign/logo-dark.svg, logo-light.svg).

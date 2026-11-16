@@ -51,6 +51,12 @@ const APP_SECRET_KEYS = [
   // that encrypts their Strata session at rest, and Strata's API root (incl. /v1).
   "STRATA_TOKEN_ENCRYPTION_SECRET",
   "STRATA_API_URL",
+  // Optional: Plexo's own brand read live from Strata (docs/PLEXO_BRAND_FROM_STRATA.md). All have
+  // working defaults; set PLEXO_BRAND_STRATA=off to use only the bundled brand.
+  "PLEXO_BRAND_STRATA",
+  "PLEXO_BRAND_STRATA_PROJECT_ID",
+  "STRATA_PUBLIC_API",
+  "STRATA_SNAPSHOT_BASE",
   "APP_SIGNIN_COGNITO_CLIENT_ID",
   "APP_SIGNIN_COGNITO_USER_POOL_ID",
   "APP_SIGNIN_COGNITO_DOMAIN",

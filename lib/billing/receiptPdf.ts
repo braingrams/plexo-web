@@ -1,6 +1,9 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+
+import { getPlexoBrand } from "@/lib/brand/plexoBrand";
+import { getPlexoLogo } from "@/lib/brand/plexoLogos";
+import { emailColorsFromTokens } from "@/lib/brand/emailBrand";
+import { parseColor } from "@/lib/brand/strataTokens";
 
 import type { PaymentItem } from "./payments";
 
@@ -9,12 +12,10 @@ import type { PaymentItem } from "./payments";
 // that comes from a customer is stripped of characters those fonts can't draw.
 
 // New Plexo brand: lime #B8F34A accent bar, deep green #517A12 title, ink #121212, muted #5B5B58, border #E8E8E4.
-const LIME = rgb(0.722, 0.953, 0.29);
-const GREEN = rgb(0.318, 0.478, 0.071);
-const INK = rgb(0.071, 0.071, 0.071);
-const MUTED = rgb(0.357, 0.357, 0.345);
-const LINE = rgb(0.91, 0.91, 0.894);
-const TINT = rgb(0.957, 0.961, 0.941);
+const hexRgb = (hex: string) => {
+  const c = parseColor(hex) ?? [0, 0, 0];
+  return rgb(c[0] / 255, c[1] / 255, c[2] / 255);
+};
 
 const CARD_BRANDS: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "Amex", discover: "Discover", jcb: "JCB", diners: "Diners", unionpay: "UnionPay" };
 
@@ -53,6 +54,14 @@ export async function buildReceiptPdf(payment: PaymentItem, customer: { name: st
   pdf.setTitle(`Plexo receipt ${payment.receiptNumber ?? ""}`.trim());
   pdf.setProducer("Plexo");
   pdf.setCreator("Plexo");
+  // The live Plexo brand (bundled colours when Strata is off/unreachable).
+  const brandColors = emailColorsFromTokens((await getPlexoBrand()).tokens);
+  const LIME = hexRgb(brandColors.brand);
+  const GREEN = hexRgb(brandColors.brandDeep);
+  const INK = hexRgb(brandColors.ink);
+  const MUTED = hexRgb(brandColors.muted);
+  const LINE = hexRgb(brandColors.border);
+  const TINT = hexRgb(brandColors.elevated);
   const page = pdf.addPage([595, 842]); // A4
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -72,7 +81,7 @@ export async function buildReceiptPdf(payment: PaymentItem, customer: { name: st
   page.drawRectangle({ x: 0, y: height - 10, width, height: 10, color: LIME });
   try {
     // The real wordmark (public/brand) — falls back to plain text if the file isn't on disk (e.g. a bundled runtime).
-    const png = await pdf.embedPng(await readFile(path.join(process.cwd(), "public/brand/plexo-wordmark-dark.png")));
+    const png = await pdf.embedPng((await getPlexoLogo("email-on-light")).bytes);
     page.drawImage(png, { x: (width - 108) / 2, y: logoY, width: 108, height: 28 });
   } catch {
     text("Plexo", (width - bold.widthOfTextAtSize("Plexo", 18)) / 2, logoY + 8, { size: 18, font: bold });

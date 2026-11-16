@@ -5,7 +5,7 @@
  */
 
 [data-plexo-v3] {
-  font-family: var(--font-v3-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-family-base, var(--font-v3-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
   color: var(--plx-text);
   background: var(--plx-bg);
   -webkit-font-smoothing: antialiased;
@@ -369,3 +369,12 @@ html[data-theme] body { background: var(--color-bg-canvas); }
 }
 /* globals.css sets overflow-x:hidden on html/body, which turns them into scroll containers and breaks the sticky top bar. clip keeps the no-sideways-scroll without that. */
 html[data-theme], html[data-theme] body { overflow-x: clip; }
+
+/* The theme-following Plexo wordmark (brand/PlexoLogo.tsx "auto"): both files are in the page, the theme picks one. */
+[data-plexo-v3] .plx-logo-on-dark { display: none !important; }
+:root[data-theme="dark"] .plx-logo-on-light, [data-plexo-v3][data-theme="dark"] .plx-logo-on-light { display: none !important; }
+:root[data-theme="dark"] .plx-logo-on-dark, [data-plexo-v3][data-theme="dark"] .plx-logo-on-dark { display: block !important; }
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .plx-logo-on-light, [data-plexo-v3][data-theme="system"] .plx-logo-on-light { display: none !important; }
+  :root[data-theme="system"] .plx-logo-on-dark, [data-plexo-v3][data-theme="system"] .plx-logo-on-dark { display: block !important; }
+}

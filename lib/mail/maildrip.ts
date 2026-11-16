@@ -1,4 +1,5 @@
 import { EMAIL_COLORS } from "@/lib/theme";
+import { primeEmailBrand } from "@/lib/brand/plexoBrand";
 import { decryptMaildripKey } from "@/lib/crypto";
 import { logEmailDelivery, type EmailDeliveryContext } from "./logEmail";
 
@@ -106,8 +107,16 @@ export type EmailBrand = {
 /** Public base URL emails use for hosted images (Gmail can't show SVG, so logos are PNGs). */
 export const EMAIL_SITE_URL = SITE_URL;
 
-/** The two Plexo wordmark PNGs in public/brand — dark ink for light mode, light ink for dark mode. */
-export const EMAIL_LOGO = { onLight: `${SITE_URL}/brand/plexo-wordmark-dark.png`, onDark: `${SITE_URL}/brand/plexo-wordmark-light.png` };
+/**
+ * The Plexo wordmark as PNGs (Gmail can't show SVG), through our own stable, public URL: it serves
+ * whatever logo is current in Strata (replace it there and every email follows) and falls back to
+ * the bundled PNGs. See app/api/brand/logo/[kind] and docs/PLEXO_BRAND_FROM_STRATA.md.
+ */
+export const EMAIL_LOGO = { onLight: `${SITE_URL}/api/brand/logo/email-on-light`, onDark: `${SITE_URL}/api/brand/logo/email-on-dark` };
+
+// Warm the live brand as soon as the mail code loads (the first email after a cold start still
+// goes out with the bundled colours; every later one has Strata's).
+primeEmailBrand();
 
 /**
  * Dark-mode overrides. Colours are inline everywhere (the only thing every mail client keeps), so
@@ -115,25 +124,28 @@ export const EMAIL_LOGO = { onLight: `${SITE_URL}/brand/plexo-wordmark-dark.png`
  * prefers-color-scheme (Outlook desktop, Gmail) simply keep the light design, which is fully
  * legible on its own. Text on the lime button uses #111111 (not #121212) so it is never swapped.
  */
-const DARK_CSS = `
+const darkCss = () => {
+  const c = EMAIL_COLORS;
+  return `
   :root { color-scheme: light dark; supported-color-schemes: light dark; }
   @media (prefers-color-scheme: dark) {
     html, body, .em-outer { background:#0B0B12 !important; }
     .em-card { background:#15161C !important; border-color:#2C2E35 !important; }
     .logo-l { display:none !important; } .logo-d { display:block !important; max-height:none !important; }
-    [style*="color:#121212"] { color:#F4F5F0 !important; }
+    [style*="color:${c.ink}"] { color:#F4F5F0 !important; }
     [style*="color:#3F3F3C"] { color:#D6D7D1 !important; }
-    [style*="color:#5B5B58"], [style*="color:#76766F"] { color:#A6A7A2 !important; }
-    [style*="color:#517A12"] { color:#B8F34A !important; }
+    [style*="color:${c.muted}"], [style*="color:#76766F"] { color:#A6A7A2 !important; }
+    [style*="color:${c.brandDeep}"] { color:${c.brand} !important; }
     [style*="color:#B42318"] { color:#FF8A7A !important; }
-    [style*="color:#8A5A00"], [style*="color:#7A4B00"] { color:#F5AC05 !important; }
-    [style*="background:#F4F5F0"] { background:#1D1F26 !important; }
-    [style*="background:#F0F6DF"] { background:#1F2614 !important; }
-    [style*="background:#F7F8F3"]:not(.em-outer) { background:#1D1F26 !important; }
+    [style*="color:#8A5A00"], [style*="color:#7A4B00"] { color:${c.amber} !important; }
+    [style*="background:${c.elevated}"] { background:#1D1F26 !important; }
+    [style*="background:${c.brandTint}"] { background:#1F2614 !important; }
+    [style*="background:${c.canvas}"]:not(.em-outer) { background:#1D1F26 !important; }
     [style*="background:#FDF0CC"], [style*="background:#FFF8E6"] { background:#2B2310 !important; }
-    [style*="#E8E8E4"] { border-color:#2C2E35 !important; }
-    .em-card a:not(.em-btn) { color:#B8F34A !important; }
+    [style*="${c.border}"] { border-color:#2C2E35 !important; }
+    .em-card a:not(.em-btn) { color:${c.brand} !important; }
   }`;
+};
 
 const escAttr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
@@ -152,6 +164,8 @@ export function emailShell(input: {
   /** Marketing-style emails link a one-click unsubscribe/preferences page in the footer. */
   unsubscribeUrl?: string;
 }): string {
+  primeEmailBrand();
+  const C = EMAIL_COLORS;
   const brandName = escAttr(input.brand?.name ?? "Plexo");
   const accent = input.brand?.color ?? EMAIL_COLORS.brandDeep;
   const isPlexo = !input.brand;
@@ -162,14 +176,14 @@ export function emailShell(input: {
          <img class="logo-d" src="${EMAIL_LOGO.onDark}" width="124" height="32" alt="" style="display:none;max-height:0;overflow:hidden;margin:0 auto;width:124px;height:32px;border:0;" />`
       : `<table align="center" cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto;"><tr>
            <td width="36" height="36" align="center" style="width:36px;height:36px;background:${accent};border-radius:10px;color:#ffffff;font-size:18px;font-weight:800;line-height:36px;font-family:Arial,sans-serif;">${brandName.charAt(0).toUpperCase()}</td>
-           <td style="padding-left:10px;font-size:18px;font-weight:800;color:#121212;letter-spacing:-0.3px;">${brandName}</td>
+           <td style="padding-left:10px;font-size:18px;font-weight:800;color:${C.ink};letter-spacing:-0.3px;">${brandName}</td>
          </tr></table>`;
 
   const help = isPlexo
     ? `Need a hand? Just reply to this email &mdash; a real person reads it.<br/>`
     : "";
   const unsub = input.unsubscribeUrl
-    ? `<a href="${input.unsubscribeUrl}" style="color:#5B5B58;text-decoration:underline;">Unsubscribe or change which emails you get</a><br/>`
+    ? `<a href="${input.unsubscribeUrl}" style="color:${C.muted};text-decoration:underline;">Unsubscribe or change which emails you get</a><br/>`
     : "";
 
   return `<!DOCTYPE html>
@@ -182,22 +196,22 @@ export function emailShell(input: {
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>${input.title}</title>
   <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
-  <style>${DARK_CSS}</style>
+  <style>${darkCss()}</style>
 </head>
-<body style="margin:0;padding:0;background:#F7F8F3;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-text-size-adjust:100%;">
+<body style="margin:0;padding:0;background:${C.canvas};font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-text-size-adjust:100%;">
   ${input.preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">${input.preheader}${"&nbsp;&zwnj;".repeat(40)}</div>` : ""}
-  <table class="em-outer" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F8F3;">
+  <table class="em-outer" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.canvas};">
     <tr>
       <td align="center" style="padding:48px 16px 40px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
           <tr><td align="center" style="padding:0 8px 28px;text-align:center;">${logoMarkup}</td></tr>
           <tr>
-            <td class="em-card" style="background:#FFFFFF;border:1px solid #E8E8E4;border-radius:20px;padding:44px 40px;text-align:left;color:#121212;">
+            <td class="em-card" style="background:#FFFFFF;border:1px solid ${C.border};border-radius:20px;padding:44px 40px;text-align:left;color:${C.ink};">
               ${input.bodyHtml}
             </td>
           </tr>
           <tr>
-            <td align="left" style="padding:24px 8px 0;font-size:12px;line-height:1.7;color:#5B5B58;">
+            <td align="left" style="padding:24px 8px 0;font-size:12px;line-height:1.7;color:${C.muted};">
               ${input.footerHtml ?? ""}
               ${help}${unsub}
               &copy; ${new Date().getFullYear()} ${brandName}${isPlexo ? " &middot; Made by Charisol &middot; plexopages.com" : ""}

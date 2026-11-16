@@ -91,7 +91,7 @@ describe("transactional emails use the new Plexo brand", () => {
 
   it("every email has a logo, dark-mode support, and no purple", () => {
     for (const [name, html] of Object.entries(rendered)) {
-      if (!/no-logo|^app-auth/.test(name)) expect(html, name).toMatch(/<img [^>]*src="https?:\/\/[^"]+\.(png|jpg|jpeg|webp)"/i);
+      if (!/no-logo|^app-auth/.test(name)) expect(html, name).toMatch(/<img [^>]*src="https?:\/\/[^"]+(\.(png|jpg|jpeg|webp)|\/api\/brand\/logo\/email-on-light)"/i);
       expect(html, name).toContain("prefers-color-scheme: dark");
       expect(html, name).toContain('name="color-scheme"');
       expect(html, name).not.toMatch(PURPLE);
@@ -106,8 +106,8 @@ describe("transactional emails use the new Plexo brand", () => {
   });
 
   it("Plexo emails show the Plexo wordmark PNG; white-label emails keep the org logo", () => {
-    expect(rendered["verification"]).toContain("/brand/plexo-wordmark-dark.png");
-    expect(rendered["verification"]).toContain("/brand/plexo-wordmark-light.png");
+    expect(rendered["verification"]).toContain("/api/brand/logo/email-on-light");
+    expect(rendered["verification"]).toContain("/api/brand/logo/email-on-dark");
     expect(rendered["invite-whitelabel"]).toContain("https://cdn.example.com/acme.png");
     expect(rendered["invite-whitelabel"]).not.toContain("plexo-wordmark");
   });
