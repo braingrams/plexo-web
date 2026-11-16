@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { User } from "@/lib/db/coreEntities";
 import { countryFromHeaders, pricingViewFor } from "@/lib/billing/region";
-import { currencyChoices, pricingView, resolvePriceRegion } from "@/lib/billing/pricing";
+import { currencyChoices, effectiveCountry, pricingView, resolvePriceRegion } from "@/lib/billing/pricing";
 import { loadPriceBook } from "@/lib/billing/priceBook";
+import { normalizeCountryCode } from "@/lib/countries";
 import { auth } from "@/server/authDynamo";
 
 /**
@@ -15,8 +16,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const headers = { "Cache-Control": "no-store" };
   const book = await loadPriceBook();
   if (!session?.user) {
-    const input = { headerCountry: countryFromHeaders(request.headers) };
-    return NextResponse.json(pricingView(resolvePriceRegion(book, input), { choices: currencyChoices(book, input) }), { headers });
+    // ?country= is the sign-up form's pick; without it, a guess from where the request comes from.
+    const input = { userCountry: normalizeCountryCode(request.nextUrl.searchParams.get("country")), headerCountry: countryFromHeaders(request.headers) };
+    return NextResponse.json(pricingView(resolvePriceRegion(book, input), { choices: currencyChoices(book, input), country: effectiveCountry(input) }), { headers });
   }
   const { data: user } = await User.get({ id: session.user.id }).go();
   return NextResponse.json(pricingViewFor(book, user, request.headers), { headers });

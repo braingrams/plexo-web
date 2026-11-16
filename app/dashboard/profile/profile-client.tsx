@@ -3,6 +3,7 @@
 import { getTierFeatures } from "@/lib/subscription";
 import { planLabel, toPlanId } from "@/lib/plan/plans";
 import { FormEvent, useState } from "react";
+import { CountryField } from "@/app/_components/country/CountryField";
 import { Card } from "../_components/Card";
 import { PageHeader } from "../_components/PageHeader";
 import { useLayoutMode, type LayoutMode } from "../layout-mode-context";
@@ -21,6 +22,8 @@ type Props = {
   subscriptionPlan: string;
   memberSince: string;
   initialHideBranding: boolean;
+  initialCountry: string | null;
+  countryGuess: string | null;
 };
 
 const PLAN_COLORS: Record<string, { bg: string; color: string; border: string }> = {
@@ -66,7 +69,7 @@ function IconCheck() {
   );
 }
 
-export function ProfileClient({ userId: _userId, initialName, email, subscriptionPlan, memberSince, initialHideBranding }: Props) {
+export function ProfileClient({ userId: _userId, initialName, email, subscriptionPlan, memberSince, initialHideBranding, initialCountry, countryGuess }: Props) {
   const [name, setName] = useState(initialName);
   const [draft, setDraft] = useState(initialName);
   const [saving, setSaving] = useState(false);
@@ -309,6 +312,11 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
             </div>
           </div>
         </form>
+      </Card>
+
+      {/* Country — decides the currency prices are shown in */}
+      <Card style={{ marginTop: "1.5rem" }}>
+        <CountryField initialCountry={initialCountry} guess={countryGuess} />
       </Card>
 
       {/* Plexo branding */}

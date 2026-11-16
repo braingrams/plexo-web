@@ -29,6 +29,7 @@ export type LegacyUser = {
   planBeforeDowngrade?: string | null;
   stripeSubscriptionId?: string | null;
   subscriptionStatus?: string | null;
+  country?: string | null;
   billingCountry?: string | null;
   billingCurrency?: string | null;
 };
@@ -137,7 +138,7 @@ async function scheduleStripeMove(
     return null;
   }
   const interval: BillingInterval = item.price?.recurring?.interval === "year" ? "yearly" : "monthly";
-  let country = user.billingCountry ?? null;
+  let country = user.billingCountry ?? user.country ?? null;
   if (!country && typeof sub.customer === "string") {
     const customer = await stripe.customers.retrieve(sub.customer);
     country = customer.deleted ? null : (customer.address?.country ?? null);

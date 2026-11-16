@@ -25,8 +25,15 @@ export function usePricing(): {
     shared ??= fetchPricing();
     let live = true;
     void shared.then((p) => live && setPricing(p));
+    // The owner just told us their country (CountryPrompt): prices change with it.
+    const refresh = () => {
+      shared = fetchPricing();
+      void shared.then((p) => live && setPricing(p));
+    };
+    window.addEventListener("plexo:country-saved", refresh);
     return () => {
       live = false;
+      window.removeEventListener("plexo:country-saved", refresh);
     };
   }, []);
 

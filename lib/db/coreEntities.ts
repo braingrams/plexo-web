@@ -52,6 +52,12 @@ export const User = new Entity(
       // Where this account pays from (lib/billing/pricing.ts). Fixed at the first checkout so
       // prices can't flip with a VPN or a trip; billingCurrency "USD" also records "pay in USD instead".
       billingCountry: { type: "string" },
+      // The country the owner says they're based in (ISO-3166 alpha-2) — decides the price list
+      // they see (lib/billing/region.ts) ahead of billingCountry and the visitor's IP.
+      country: { type: "string" },
+      countrySetAt: { type: "string" },
+      // When we last asked an existing account for its country and they chose "Later".
+      countryAskedAt: { type: "string" },
       billingCurrency: { type: ["USD", "NGN", "GHS", "KES", "ZAR"] as const },
       billingRegion: { type: "string" },
       billingRegionLockedAt: { type: "string" },

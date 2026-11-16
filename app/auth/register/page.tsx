@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { ArrowLeft, ShieldCheck, CheckCircle2, Eye, EyeOff, Zap } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { trackEvent } from "@/lib/analytics";
@@ -12,6 +12,8 @@ import { PlexoLogo } from "@/app/plexo-logo";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
 
 import { PLAN_LABELS, type PlanId } from "@/lib/plan/plans";
+import { CountrySelect } from "@/app/_components/country/CountrySelect";
+import type { PricingView } from "@/lib/billing/pricing";
 import { usePricing } from "@/app/dashboard/_components/usePricing";
 
 type Plan = PlanId;
@@ -25,7 +27,26 @@ function RegisterForm() {
     requestedPlan === "ULTRA" ? "PRO" : requestedPlan === "STARTER" || requestedPlan === "PRO" || requestedPlan === "ENTERPRISE" ? requestedPlan : "FREE";
   // The picked plan's price in the visitor's own currency (worked out from where they are).
   const { pricing } = usePricing();
-  const planPrice = plan !== "FREE" && pricing ? pricing.plans[plan] : null;
+  const [country, setCountry] = useState<string | null>(null);
+  const [countryTouched, setCountryTouched] = useState(false);
+  const [countryError, setCountryError] = useState(false);
+  // The IP-guessed country is only a starting point; once they pick, prices follow their pick.
+  const [priced, setPriced] = useState<PricingView | null>(null);
+  useEffect(() => {
+    if (pricing?.country && !countryTouched) setCountry((c) => c ?? pricing.country);
+  }, [pricing, countryTouched]);
+  useEffect(() => {
+    if (!countryTouched || !country || plan === "FREE") return;
+    let live = true;
+    fetch(`/api/billing/pricing?country=${country}`, { cache: "no-store" })
+      .then((r) => (r.ok ? (r.json() as Promise<PricingView>) : null))
+      .then((p) => live && setPriced(p))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [country, countryTouched, plan]);
+  const planPrice = plan !== "FREE" && (priced ?? pricing) ? (priced ?? pricing)!.plans[plan] : null;
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -50,6 +71,12 @@ function RegisterForm() {
       return;
     }
 
+    if (!country) {
+      setCountryError(true);
+      setError("Choose the country you're based in.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -57,6 +84,7 @@ function RegisterForm() {
         name: name.trim() || email.split("@")[0] || "Plexo User",
         email,
         password,
+        country,
         callbackURL: "/dashboard",
         ...(plan !== "FREE" ? { pendingPlan: plan } : {}),
       });
@@ -215,6 +243,24 @@ function RegisterForm() {
               {showConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
+        </div>
+
+        {/* Country — decides the currency prices are shown in */}
+        <div className="space-y-1.5">
+          <label htmlFor="register-country" className="text-xs font-extrabold uppercase tracking-wider text-slate-300 block">
+            Which country are you in?
+          </label>
+          <CountrySelect
+            id="register-country"
+            value={country}
+            invalid={countryError}
+            onChange={(c) => {
+              setCountry(c);
+              setCountryTouched(true);
+              setCountryError(false);
+            }}
+          />
+          <p className="text-[11px] font-medium text-slate-500">So we show prices in your currency.</p>
         </div>
 
         {/* Submit */}

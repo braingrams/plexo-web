@@ -104,6 +104,12 @@ describe("region resolution", () => {
   it("the country saved at first checkout wins over the request", () => {
     expect(resolvePriceRegion(book, { headerCountry: "US", billingCountry: "NG" }).id).toBe("NG");
   });
+  it("the country the owner chose beats the saved billing country and the request's IP", () => {
+    expect(resolvePriceRegion(book, { userCountry: "NG", billingCountry: "US", headerCountry: "US" }).id).toBe("NG");
+    expect(resolvePriceRegion(book, { userCountry: "us", headerCountry: "NG" }).id).toBe("WORLD");
+    expect(resolvePriceRegion(book, { userCountry: "XX", billingCountry: "GH", headerCountry: "US" }).id).toBe("GH");
+    expect(resolvePriceRegion(book, { headerCountry: "KE" }).id).toBe("KE"); // IP is only the fallback
+  });
   it("'pay in USD instead' switches to the USD list; Africans get the African USD prices", () => {
     expect(resolvePriceRegion(book, { headerCountry: "NG", billingCurrency: "USD" }).id).toBe("AFRICA");
     expect(resolvePriceRegion(book, { headerCountry: "GH", billingCurrency: "USD" }).id).toBe("AFRICA");
@@ -133,10 +139,20 @@ describe("region resolution", () => {
     expect(billingRegionFor(book, { stripeSubscriptionId: "sub_1", subscriptionStatus: "ACTIVE" }, h).currency).toBe("USD");
     expect(pricingViewFor(book, null, h).currency).toBe("NGN");
   });
+  it("an owner's country decides prices, but a running subscription keeps its paid currency", () => {
+    const h = new Headers({ "cloudfront-viewer-country": "US" });
+    expect(billingRegionFor(book, { country: "NG" }, h).id).toBe("NG");
+    expect(pricingViewFor(book, { country: "NG" }, h)).toMatchObject({ currency: "NGN", country: "NG" });
+    const paying = { country: "NG", billingCountry: "US", billingCurrency: "USD", subscriptionId: "sub_1", subscriptionStatus: "ACTIVE" };
+    expect(billingRegionFor(book, paying, h).id).toBe("WORLD");
+    expect(billingRegionFor(book, { country: "NG", billingCountry: "US", subscriptionId: "sub_1", subscriptionStatus: "CANCELED" }, h).id).toBe("NG");
+  });
   it("the first checkout locks country and currency; later ones don't rewrite them", () => {
     const h = new Headers({ "cloudfront-viewer-country": "gh" });
     const region = groupForCountry(DEFAULT_PRICE_BOOK, "GH");
     expect(regionLockFields({}, region, h, new Date("2026-11-01T00:00:00Z"))).toMatchObject({ billingCountry: "GH", billingCurrency: "GHS", billingRegion: "GH" });
     expect(regionLockFields({ billingCountry: "GH", billingRegionLockedAt: "x" }, region, h)).toBeNull();
+    // The owner's own country is what gets saved, not the IP guess.
+    expect(regionLockFields({ country: "NG" }, region, h)).toMatchObject({ billingCountry: "NG" });
   });
 });

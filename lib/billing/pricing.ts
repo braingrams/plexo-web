@@ -162,17 +162,24 @@ export function usdAlternative(book: PriceBook, country: string | null | undefin
 }
 
 export type RegionInput = {
-  /** Country from the request (CloudFront-Viewer-Country). */
+  /** The country the owner chose themselves — wins over everything else. */
+  userCountry?: string | null;
+  /** Country guessed from the request (CloudFront-Viewer-Country) — only a fallback for people who haven't chosen one. */
   headerCountry?: string | null;
-  /** Saved on the account at first checkout — wins over the request, so prices can't flip later. */
+  /** Saved on the account at first checkout; used when no country was chosen, and kept for a running subscription. */
   billingCountry?: string | null;
   /** "USD" also records "pay in USD instead". */
   billingCurrency?: string | null;
 };
 
+/** The country that decides prices: chosen by the owner → saved at first checkout → guessed from the request. */
+export function effectiveCountry(input: RegionInput): string | null {
+  return normalizeCountry(input.userCountry) ?? normalizeCountry(input.billingCountry) ?? normalizeCountry(input.headerCountry);
+}
+
 /** Which price list a person sees and pays. */
 export function resolvePriceRegion(book: PriceBook, input: RegionInput): PriceGroup {
-  const country = normalizeCountry(input.billingCountry) ?? normalizeCountry(input.headerCountry);
+  const country = effectiveCountry(input);
   const own = groupForCountry(book, country);
   if ((input.billingCurrency ?? "").toUpperCase() === "USD" && own.currency !== "USD") return usdAlternative(book, country) ?? own;
   return own;
@@ -180,7 +187,7 @@ export function resolvePriceRegion(book: PriceBook, input: RegionInput): PriceGr
 
 /** The two choices offered by the currency switch, when there are two. */
 export function currencyChoices(book: PriceBook, input: RegionInput): { local: PriceGroup; usd: PriceGroup } | null {
-  const country = normalizeCountry(input.billingCountry) ?? normalizeCountry(input.headerCountry);
+  const country = effectiveCountry(input);
   const local = groupForCountry(book, country);
   const usd = usdAlternative(book, country);
   return usd ? { local, usd } : null;
@@ -275,12 +282,15 @@ export type PricingView = {
   topup: { per1000: number; per1000Label: string; packs: TopupPackView[] };
   /** Offered when a local currency is available: switch between it and USD. */
   currencyChoice: { localCurrency: BillingCurrency; payingInUsd: boolean } | null;
+  /** The country these prices are for (null when nothing is known yet). */
+  country: string | null;
   /** True once the account's currency is fixed by a running subscription (the switch is hidden). */
   locked: boolean;
 };
 
-export function pricingView(region: PriceGroup, opts: { choices?: { local: PriceGroup; usd: PriceGroup } | null; locked?: boolean } = {}): PricingView {
+export function pricingView(region: PriceGroup, opts: { choices?: { local: PriceGroup; usd: PriceGroup } | null; locked?: boolean; country?: string | null } = {}): PricingView {
   return {
+    country: opts.country ?? null,
     regionId: region.id,
     regionName: region.name,
     currency: region.currency,

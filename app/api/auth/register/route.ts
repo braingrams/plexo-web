@@ -6,6 +6,7 @@ import { hashPassword } from "@better-auth/utils/password";
 import { dynamoAdapter } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { createUserWithEmailLock, EmailAlreadyInUseError } from "@/lib/db/coreOperations";
+import { normalizeCountryCode } from "@/lib/countries";
 import { syncSignupToAlps } from "@/lib/alps";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildVerificationEmail } from "@/lib/mail/templates";
@@ -45,6 +46,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: { message: "Enter a valid email address." } }, { status: 400 });
   }
+  const country = normalizeCountryCode(body.country);
+  if (!country) {
+    return NextResponse.json({ error: { message: "Choose the country you're based in." } }, { status: 400 });
+  }
   const problem = passwordProblem(password, email);
   if (problem) {
     return NextResponse.json({ error: { message: problem } }, { status: 400 });
@@ -58,7 +63,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const passwordHash = await hashPassword(password);
   const id = randomUUID();
   try {
-    await createUserWithEmailLock({ id, email, name, passwordHash, isConfirmed: false, pendingPlan });
+    await createUserWithEmailLock({ id, email, name, passwordHash, isConfirmed: false, pendingPlan, country, countrySetAt: new Date().toISOString() });
   } catch (err) {
     if (err instanceof EmailAlreadyInUseError) {
       // Lost the race the pre-check above couldn't catch (two concurrent submissions for

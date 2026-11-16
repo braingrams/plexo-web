@@ -7,6 +7,7 @@ import { ensureActiveOrganization, getOrgBrandDynamo, getOrganizationOwnerEntitl
 import { DashboardShell } from "./dashboard-shell";
 import { MigrationBanner } from "./migrate/wordpress/MigrationBanner";
 import { PlanBanner, type PlanBannerState } from "./_components/PlanBanner";
+import { CountryPrompt } from "@/app/_components/country/CountryPrompt";
 import { AppLiveDialog } from "./_components/AppLiveDialog";
 import { FeedbackNudge } from "./_components/FeedbackNudge";
 import { TRIAL_DAYS, accessDaysLeft, canStartTrial, effectivePlan, paidAccess, planSyncAction, storedPlan } from "@/lib/plan/entitlement";
@@ -101,6 +102,8 @@ export default async function DashboardLayout({
         {/* "Your app is live", opened from any page once a server app goes live. */}
         <AppLiveDialog />
         <FeedbackNudge userId={session.user.id} />
+        {/* One question for owners who haven't set their country yet (prices follow it). */}
+        <CountryPrompt />
       </DashboardShell>
       </VersionProvider>
     </ThemeProvider>
