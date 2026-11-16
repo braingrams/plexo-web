@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Alert, Button } from "@/app/auth/_kit/ui";
 
 export function AcceptInviteClient({ invitationId }: { invitationId: string }) {
   const router = useRouter();
@@ -44,24 +45,16 @@ export function AcceptInviteClient({ invitationId }: { invitationId: string }) {
   }
 
   return (
-    <div>
-      <div className="flex gap-3 justify-center">
-        <button
-          onClick={handleAccept}
-          disabled={pending !== null}
-          className="bg-gradient-to-br from-purple-500 to-purple-700 text-white font-bold text-sm px-6 py-3 rounded-xl disabled:opacity-50"
-        >
+    <div className="ax-stack">
+      {error && <Alert tone="error">{error}</Alert>}
+      <div className="ax-row">
+        <Button type="button" onClick={handleAccept} loading={pending === "accept"} disabled={pending !== null}>
           {pending === "accept" ? "Joining…" : "Accept invitation"}
-        </button>
-        <button
-          onClick={handleDecline}
-          disabled={pending !== null}
-          className="bg-transparent border border-slate-700 text-slate-300 font-medium text-sm px-6 py-3 rounded-xl disabled:opacity-50"
-        >
+        </Button>
+        <Button type="button" variant="secondary" onClick={handleDecline} loading={pending === "decline"} disabled={pending !== null}>
           {pending === "decline" ? "Declining…" : "Decline"}
-        </button>
+        </Button>
       </div>
-      {error && <p className="text-xs text-red-400 mt-4">{error}</p>}
     </div>
   );
 }

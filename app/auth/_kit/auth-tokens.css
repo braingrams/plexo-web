@@ -1,0 +1,158 @@
+/*
+ * Auth tokens: the ONLY place colour values live for the sign-in screens. Names follow Strata
+ * (same as the dashboard's lib/brandTokens.ts). Components and auth-kit.css read these variables.
+ * Light is the base; dark applies when the system is dark (and no explicit light choice) or when
+ * the page is set to dark (data-ax-theme="dark").
+ */
+.ax-root {
+  --radius-control: 12px;
+  --radius-card: 18px;
+  --radius-card-lg: 28px;
+  --radius-pill: 999px;
+  --control-height: 48px;
+
+  --color-bg-page: #F7F8F3;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-elevated: #F4F5F0;
+  --color-bg-tint: #F0F6DF;
+  --color-border-default: #E8E8E4;
+  --color-border-strong: #CFCFC9;
+  --color-text-primary: #121212;
+  --color-text-secondary: #5B5B58;
+  --color-text-link: #517A12;
+
+  --color-action-primary-bg: #B8F34A;
+  --color-action-primary-text: #121212;
+  --color-action-primary-hover: #A7E536;
+  --color-action-primary-active: #96D426;
+  --color-action-secondary-bg: #FFFFFF;
+  --color-action-secondary-border: #DCDCD6;
+  --color-action-secondary-hover: #F4F5F0;
+
+  --color-status-success: #3F6310;
+  --color-status-success-subtle: #E8F3D2;
+  --color-status-danger: #B42318;
+  --color-status-danger-subtle: #FDE8E5;
+  --color-status-warning: #8A5A00;
+  --color-status-warning-subtle: #FDF0D2;
+  --color-status-info: #5545D6;
+  --color-status-info-subtle: #EEECFF;
+  --color-focus-ring: #517A12;
+  --color-focus-glow: rgba(184, 243, 74, 0.55);
+
+  --shadow-card: 0 1px 2px rgba(18, 18, 18, 0.04), 0 8px 24px rgba(18, 18, 18, 0.05);
+  --shadow-raised: 0 18px 44px rgba(18, 18, 18, 0.12);
+
+  /* Brand panel */
+  --aside-bg: linear-gradient(155deg, #E6F7B8 0%, #B8F34A 48%, #8EC72A 100%);
+  --aside-text: #121212;
+  --aside-text-muted: rgba(18, 18, 18, 0.68);
+  --aside-card-bg: #FFFFFF;
+  --aside-card-border: rgba(18, 18, 18, 0.08);
+  --aside-skeleton: #EEEFE9;
+  --aside-accent: #517A12;
+  --aside-amber: #F5AC05;
+  --aside-violet: #8A7BFF;
+
+  /* Which theme icon shows (the one you'd switch TO) */
+  --icon-moon-display: block;
+  --icon-sun-display: none;
+  --logo-on-light-display: block;
+  --logo-on-dark-display: none;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  .ax-root:not([data-ax-theme="light"]) {
+    --color-bg-page: #0B0B12;
+    --color-bg-surface: #15161C;
+    --color-bg-elevated: #1D1F26;
+    --color-bg-tint: #1F2614;
+    --color-border-default: #2C2E35;
+    --color-border-strong: #3E4048;
+    --color-text-primary: #F4F5F0;
+    --color-text-secondary: #A6A7A2;
+    --color-text-link: #B8F34A;
+
+    --color-action-primary-hover: #C6F76A;
+    --color-action-primary-active: #A7E536;
+    --color-action-secondary-bg: #15161C;
+    --color-action-secondary-border: #34363E;
+    --color-action-secondary-hover: #1D1F26;
+
+    --color-status-success: #B8F34A;
+    --color-status-success-subtle: #1F2614;
+    --color-status-danger: #FF8A7A;
+    --color-status-danger-subtle: #2E1716;
+    --color-status-warning: #F5C451;
+    --color-status-warning-subtle: #2B2312;
+    --color-status-info: #A99FFF;
+    --color-status-info-subtle: #22203A;
+    --color-focus-ring: #B8F34A;
+    --color-focus-glow: rgba(184, 243, 74, 0.28);
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-raised: 0 18px 44px rgba(0, 0, 0, 0.5);
+
+    --aside-bg: radial-gradient(120% 90% at 85% 0%, #2A3A12 0%, transparent 60%), radial-gradient(90% 70% at 0% 100%, #1B2A0A 0%, transparent 65%), #101118;
+    --aside-text: #F4F5F0;
+    --aside-text-muted: #A6A7A2;
+    --aside-card-bg: #1D1F26;
+    --aside-card-border: #2C2E35;
+    --aside-skeleton: #2C2E35;
+    --aside-accent: #B8F34A;
+
+    --icon-moon-display: none;
+    --icon-sun-display: block;
+    --logo-on-light-display: none;
+    --logo-on-dark-display: block;
+    color-scheme: dark;
+  }
+}
+
+.ax-root[data-ax-theme="dark"] {
+  --color-bg-page: #0B0B12;
+  --color-bg-surface: #15161C;
+  --color-bg-elevated: #1D1F26;
+  --color-bg-tint: #1F2614;
+  --color-border-default: #2C2E35;
+  --color-border-strong: #3E4048;
+  --color-text-primary: #F4F5F0;
+  --color-text-secondary: #A6A7A2;
+  --color-text-link: #B8F34A;
+
+  --color-action-primary-hover: #C6F76A;
+  --color-action-primary-active: #A7E536;
+  --color-action-secondary-bg: #15161C;
+  --color-action-secondary-border: #34363E;
+  --color-action-secondary-hover: #1D1F26;
+
+  --color-status-success: #B8F34A;
+  --color-status-success-subtle: #1F2614;
+  --color-status-danger: #FF8A7A;
+  --color-status-danger-subtle: #2E1716;
+  --color-status-warning: #F5C451;
+  --color-status-warning-subtle: #2B2312;
+  --color-status-info: #A99FFF;
+  --color-status-info-subtle: #22203A;
+  --color-focus-ring: #B8F34A;
+  --color-focus-glow: rgba(184, 243, 74, 0.28);
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-raised: 0 18px 44px rgba(0, 0, 0, 0.5);
+
+  --aside-bg: radial-gradient(120% 90% at 85% 0%, #2A3A12 0%, transparent 60%), radial-gradient(90% 70% at 0% 100%, #1B2A0A 0%, transparent 65%), #101118;
+  --aside-text: #F4F5F0;
+  --aside-text-muted: #A6A7A2;
+  --aside-card-bg: #1D1F26;
+  --aside-card-border: #2C2E35;
+  --aside-skeleton: #2C2E35;
+  --aside-accent: #B8F34A;
+
+  --icon-moon-display: none;
+  --icon-sun-display: block;
+  --logo-on-light-display: none;
+  --logo-on-dark-display: block;
+  color-scheme: dark;
+}

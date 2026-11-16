@@ -2,8 +2,11 @@
 
 import { FormEvent, Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, Eye, EyeOff, Loader2, Lock } from "lucide-react";
-import { PlexoLogo } from "@/app/plexo-logo";
+import { CheckCircle2, Lock } from "lucide-react";
+import { AuthShell } from "@/app/auth/_kit/AuthShell";
+import { Alert, Button, Divider, PageHead } from "@/app/auth/_kit/ui";
+import { PasswordField, TextField } from "@/app/auth/_kit/fields";
+import { GoogleButton } from "@/app/auth/GoogleAuthButton";
 import { CharisolAuth, silentCharisolSignIn } from "@/lib/charisolAuth";
 import { STRATA_CONNECTED_MESSAGE, STRATA_FAILED_MESSAGE, markStrataConnect } from "@/lib/strataConnect";
 
@@ -19,7 +22,6 @@ function ConnectStrata() {
   const [plexoEmail, setPlexoEmail] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [who, setWho] = useState<string | null>(null);
@@ -82,67 +84,45 @@ function ConnectStrata() {
     }
   }
 
-  const input = "w-full rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] px-3.5 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] outline-none focus:border-[var(--brand)] focus:ring-2 focus:ring-[var(--brand-glow)]";
-
   return (
-    <main className="min-h-screen bg-[var(--bg)] text-[var(--text-main)] flex items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <div className="flex items-center justify-center gap-3 mb-7" aria-hidden="true">
-          <PlexoLogo size={36} showText={false} href={null} />
-          <span className="text-[var(--text-faint)] tracking-widest">···</span>
-          <div className="w-9 h-9 rounded-[10px] bg-[var(--brand)] text-white grid place-items-center font-extrabold text-sm">S</div>
-        </div>
-
-        {phase === "connecting" && (
-          <div role="status" className="text-center space-y-3">
-            <Loader2 className="w-6 h-6 animate-spin mx-auto text-[var(--brand)]" />
-            <h1 className="text-lg font-bold">Connecting to Strata…</h1>
-            <p className="text-sm text-[var(--text-muted)]">Using your Charisol account. This only takes a moment.</p>
-          </div>
-        )}
-
-        {phase === "done" && (
-          <div role="status" className="text-center space-y-3">
-            <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500" />
-            <h1 className="text-lg font-bold">Strata is connected</h1>
-            <p className="text-sm text-[var(--text-muted)]">{who ? `Signed in as ${who}.` : ""} You can close this window.</p>
-          </div>
-        )}
-
-        {phase === "form" && (
-          <form onSubmit={submit} className="space-y-4">
-            <div className="text-center space-y-1">
-              <h1 className="text-xl font-bold">{switching ? "Use another Strata account" : "Sign in to Strata"}</h1>
-              <p className="text-sm text-[var(--text-muted)]">
-                {switching ? "Sign in with the Strata account you want to use in Plexo." : "We couldn't connect you automatically. Sign in to bring your brand in."}
-              </p>
-            </div>
-            {error && <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">{error}</div>}
-            <label className="block space-y-1.5">
-              <span className="text-xs font-semibold text-[var(--text-muted)]">Email</span>
-              <input type="email" autoComplete="username" required autoFocus={!email} value={email} onChange={(e) => setEmail(e.target.value)} placeholder={plexoEmail || "you@example.com"} className={input} />
-            </label>
-            <label className="block space-y-1.5">
-              <span className="text-xs font-semibold text-[var(--text-muted)]">Password</span>
-              <div className="relative">
-                <input type={showPw ? "text" : "password"} autoComplete="current-password" required autoFocus={!!email} value={password} onChange={(e) => setPassword(e.target.value)} className={`${input} pr-10`} />
-                <button type="button" onClick={() => setShowPw((v) => !v)} aria-label={showPw ? "Hide password" : "Show password"} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-main)]">
-                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </label>
-            <button type="submit" disabled={busy || !email || !password} style={{ color: "#fff" }} className="w-full rounded-xl bg-[var(--brand)] py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50 transition-opacity">
-              {busy ? "Connecting…" : "Connect Strata"}
-            </button>
-            <div className="flex items-center gap-3 text-[11px] text-[var(--text-faint)]"><span className="h-px flex-1 bg-[var(--surface-border)]" />or<span className="h-px flex-1 bg-[var(--surface-border)]" /></div>
-            <button type="button" onClick={google} disabled={busy} className="w-full rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] py-2.5 text-sm font-semibold hover:border-[var(--brand-glow)] disabled:opacity-50 transition-colors">
-              Continue with Google
-            </button>
-            <p className="flex items-center justify-center gap-1.5 text-[11px] text-[var(--text-faint)]"><Lock className="w-3 h-3" />Your password goes straight to Strata. Plexo never keeps it.</p>
-          </form>
-        )}
+    <AuthShell layout="center">
+      <div className="ax-pair" aria-hidden="true">
+        <span className="ax-tile">P</span>
+        <span>···</span>
+        <span className="ax-tile">S</span>
       </div>
-    </main>
+
+      {phase === "connecting" && (
+        <div role="status" className="ax-center-text">
+          <span className="ax-spinner" style={{ margin: "0 auto 16px", display: "block", width: 26, height: 26 }} aria-hidden="true" />
+          <PageHead title="Connecting to Strata…">Using your Charisol account. This only takes a moment.</PageHead>
+        </div>
+      )}
+
+      {phase === "done" && (
+        <div role="status" className="ax-center-text">
+          <div className="ax-badge-icon ax-lime"><CheckCircle2 size={30} aria-hidden="true" /></div>
+          <PageHead title="Strata is connected">{who ? `Signed in as ${who}. ` : ""}You can close this window.</PageHead>
+        </div>
+      )}
+
+      {phase === "form" && (
+        <>
+          <PageHead title={switching ? "Use another Strata account" : "Sign in to Strata"}>
+            {switching ? "Sign in with the Strata account you want to use in Plexo." : "We couldn't connect you automatically. Sign in to bring your brand in."}
+          </PageHead>
+          <form onSubmit={submit} className="ax-stack">
+            {error && <Alert tone="error">{error}</Alert>}
+            <TextField label="Email" type="email" autoComplete="username" inputMode="email" required autoFocus={!email} value={email} onChange={(e) => setEmail(e.target.value)} placeholder={plexoEmail || "you@example.com"} />
+            <PasswordField label="Password" autoComplete="current-password" required autoFocus={!!email} value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Button type="submit" loading={busy} disabled={!email || !password}>{busy ? "Connecting…" : "Connect Strata"}</Button>
+          </form>
+          <Divider />
+          <GoogleButton onClick={google} disabled={busy} />
+          <p className="ax-hint ax-center-text" style={{ marginTop: 20 }}><Lock size={12} style={{ display: "inline", verticalAlign: "-1px", marginRight: 6 }} aria-hidden="true" />Your password goes straight to Strata. Plexo never keeps it.</p>
+        </>
+      )}
+    </AuthShell>
   );
 }
 

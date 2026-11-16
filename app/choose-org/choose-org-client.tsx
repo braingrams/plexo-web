@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { ChevronRight } from "lucide-react";
+import { Alert } from "@/app/auth/_kit/ui";
 import { authClient } from "@/lib/auth-client";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -38,19 +40,18 @@ export function ChooseOrgClient({
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      {organizations.map((org) => (
-        <button
-          key={org.id}
-          onClick={() => handleSelect(org.id)}
-          disabled={pendingId !== null}
-          className="w-full flex items-center justify-between bg-[#090d16] border border-slate-800 hover:border-purple-500 rounded-xl px-4 py-3.5 text-left transition-all disabled:opacity-50"
-        >
-          <span className="text-sm font-medium text-white">{org.name}</span>
-          <span className="text-xs text-slate-500">{ROLE_LABELS[org.role] ?? org.role}</span>
-        </button>
-      ))}
-      {error && <p className="text-xs text-red-400 mt-2 text-center">{error}</p>}
+    <div className="ax-stack">
+      <div className="ax-org-list">
+        {organizations.map((org) => (
+          <button key={org.id} type="button" onClick={() => handleSelect(org.id)} disabled={pendingId !== null} className="ax-org" aria-busy={pendingId === org.id || undefined}>
+            <span className="ax-org-avatar" aria-hidden="true">{org.name.trim().charAt(0).toUpperCase() || "?"}</span>
+            <span className="ax-org-name">{org.name}</span>
+            <span className="ax-org-role">{pendingId === org.id ? "Opening…" : (ROLE_LABELS[org.role] ?? org.role)}</span>
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
+        ))}
+      </div>
+      {error && <Alert tone="error">{error}</Alert>}
     </div>
   );
 }

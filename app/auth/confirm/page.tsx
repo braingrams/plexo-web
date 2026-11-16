@@ -1,4 +1,5 @@
-import Link from "next/link";
+import { AuthShell } from "@/app/auth/_kit/AuthShell";
+import { ConfirmView } from "./ConfirmClient";
 import { redirect } from "next/navigation";
 
 export default async function ConfirmPage({
@@ -16,20 +17,8 @@ export default async function ConfirmPage({
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-card">
-        <h1 className="auth-title">Confirm Your Email</h1>
-        <p className="auth-subtitle">
-          We sent a verification link to your inbox. Open it to activate your account.
-        </p>
-
-        <p className="auth-meta">
-          Need a fresh attempt?{" "}
-          <Link href="/auth/login" className="auth-link">
-            Return to login
-          </Link>
-        </p>
-      </section>
-    </main>
+    <AuthShell>
+      <ConfirmView email={email} />
+    </AuthShell>
   );
 }

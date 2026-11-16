@@ -5,20 +5,10 @@ import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { OAuthClient } from "@/lib/db/coreEntities";
 import { OAuthAuthorizationCode } from "@/lib/db/opsEntities";
 import { rotateMcpApiKey } from "@/lib/mcp/issueApiKey";
-import { CheckCircle2, Bot, Sparkles, ArrowRight, ShieldAlert } from "lucide-react";
+import { ConnectErrorView, ConnectKeyView } from "./views";
 
 function errorPage(message: string) {
-  return (
-    <div className="min-h-screen bg-[#08090f] text-[#f0f2ff] flex flex-col items-center justify-center p-6 font-sans">
-      <div className="max-w-md w-full bg-[#111827]/90 border border-white/10 rounded-3xl p-8 shadow-2xl backdrop-blur-xl flex items-start gap-3">
-        <ShieldAlert className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-semibold text-red-400">Can't complete this request</p>
-          <p className="text-xs text-white/70 mt-1">{message}</p>
-        </div>
-      </div>
-    </div>
-  );
+  return <ConnectErrorView message={message} />;
 }
 
 export default async function McpLoginPage(props: {
@@ -79,14 +69,14 @@ export default async function McpLoginPage(props: {
   // back in.
   if (callbackUrl) {
     if (!clientId) {
-      return errorPage("Missing client_id for this sign-in request.");
+      return errorPage("This link is incomplete. Go back to your AI tool and start the connection again.");
     }
     const { data: client } = await OAuthClient.get({ clientId }).go();
     if (!client) {
-      return errorPage("Unrecognized client. This integration may need to reconnect from scratch.");
+      return errorPage("We don’t recognise this app. Remove it from your AI tool and add it again.");
     }
     if (!client.redirectUris.includes(callbackUrl)) {
-      return errorPage("This app's redirect URL doesn't match what was registered. Reconnect the integration to try again.");
+      return errorPage("This connection link doesn’t look right. Remove the app from your AI tool and add it again.");
     }
 
     // Mint a short-lived, single-use, PKCE-bound authorization code — NOT a real
@@ -120,56 +110,5 @@ export default async function McpLoginPage(props: {
   // immediately-usable credential here is fine — nothing is being redirected anywhere.
   const rawKey = await rotateMcpApiKey(session.user.id, organizationId);
 
-  return (
-    <div className="min-h-screen bg-[#08090f] text-[#f0f2ff] flex flex-col items-center justify-center p-6 font-sans">
-      <div className="max-w-md w-full bg-[#111827]/90 border border-white/10 rounded-3xl p-8 shadow-2xl backdrop-blur-xl relative overflow-hidden">
-        <div className={`absolute -top-24 -right-24 w-48 h-48 bg-[color:var(--brand)]/10 rounded-full blur-3xl`} />
-        <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-[#34d399]/10 rounded-full blur-3xl" />
-
-        <div className="flex items-center gap-3 mb-6">
-          <div className={`w-12 h-12 rounded-2xl bg-gradient-to-tr from-[color:var(--brand)] to-[color:var(--brand-deep)] flex items-center justify-center shadow-lg shadow-[color:var(--brand)]/30`}>
-            <Bot className="w-6 h-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-              Plexo AI Integration
-              <Sparkles className={`w-4 h-4 text-[color:var(--brand-400)]`} />
-            </h1>
-            <p className="text-xs text-white/50">Model Context Protocol & Custom Actions</p>
-          </div>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-[#34d399]/10 border border-[#34d399]/20 mb-6 flex items-start gap-3">
-          <CheckCircle2 className="w-5 h-5 text-[#34d399] shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-[#34d399]">Successfully Authenticated</p>
-            <p className="text-xs text-[#34d399]/80 mt-0.5">
-              Logged in as <span className="font-medium text-white">{session.user.email}</span>
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-4 text-xs text-white/70 mb-8">
-          <p className="leading-relaxed">
-            Your AI assistant on Claude, ChatGPT, or Cursor is now authorized to create landing pages, view email templates, and read analytics on your Plexo account.
-          </p>
-
-          <div className={`p-4 rounded-xl bg-[#090d16] border border-white/10 text-xs font-mono text-[color:var(--brand-400)] break-all select-all`}>
-            <span className="text-white/40 block mb-1 font-sans text-[11px] font-semibold">YOUR AUTHORIZATION TOKEN:</span>
-            {rawKey}
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          <a
-            href="/dashboard/integrations"
-            className={`w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[color:var(--brand)] to-[color:var(--brand-deep)] hover:from-[color:var(--brand-deep)] hover:to-[color:var(--brand-700)] text-white font-medium text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-[color:var(--brand)]/25`}
-          >
-            Go to Integration Dashboard
-            <ArrowRight className="w-4 h-4" />
-          </a>
-        </div>
-      </div>
-    </div>
-  );
+  return <ConnectKeyView email={session.user.email} rawKey={rawKey} />;
 }

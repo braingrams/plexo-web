@@ -2,6 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Rocket } from "lucide-react";
+import { AuthShell } from "@/app/auth/_kit/AuthShell";
+import { Alert, Button, PageHead } from "@/app/auth/_kit/ui";
 import { PLAN_LABELS, type PaidPlanId } from "@/lib/plan/plans";
 import { usePricing } from "@/app/dashboard/_components/usePricing";
 
@@ -72,55 +75,36 @@ export function CompleteSubscriptionClient({ plan, canTrial, trialDays }: Props)
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-card">
-        <h1 className="auth-title">{canTrial ? `Try ${PLAN_LABEL[plan]} free for ${trialDays} days` : `Finish setting up ${PLAN_LABEL[plan]}`}</h1>
-        <p className="auth-subtitle">
+    <AuthShell layout="center">
+      <div className="ax-center-text">
+        <div className="ax-badge-icon ax-lime"><Rocket size={30} aria-hidden="true" /></div>
+        <PageHead title={canTrial ? `Try ${PLAN_LABEL[plan]} free for ${trialDays} days` : `Finish setting up ${PLAN_LABEL[plan]}`}>
           {canTrial
             ? `Your account is ready. Start with ${PLAN_LABEL[plan]} unlocked — no card needed. Custom domains, taking real payments and your own branding switch on once you subscribe. We'll remind you before the trial ends, and nothing you build is ever deleted.`
             : `Your account is created — complete payment to activate your ${PLAN_LABEL[plan]} plan${priceText ? ` (${priceText})` : ""} and unlock its features.`}
-        </p>
+        </PageHead>
 
-        {error ? (
-          <p className="auth-error" role="alert">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            {error}
-          </p>
-        ) : null}
+        <div className="ax-stack" style={{ textAlign: "left" }}>
+          {error ? <Alert tone="error">{error}</Alert> : null}
 
-        {canTrial ? (
-          <button className="auth-button" type="button" disabled={loading !== null} onClick={() => void startTrial()}>
-            {loading === "trial" ? <span className="auth-spinner" aria-hidden="true" /> : null}
-            {loading === "trial" ? "Starting your trial…" : `Start my free ${PLAN_LABEL[plan]} trial`}
-          </button>
-        ) : null}
+          {canTrial ? (
+            <Button type="button" loading={loading === "trial"} disabled={loading !== null} onClick={() => void startTrial()}>
+              {loading === "trial" ? "Starting your trial…" : `Start my free ${PLAN_LABEL[plan]} trial`}
+            </Button>
+          ) : null}
 
-        <button
-          className={canTrial ? "auth-button auth-button-secondary" : "auth-button"}
-          type="button"
-          disabled={loading !== null}
-          onClick={() => void continueToPayment()}
-          style={canTrial ? { marginTop: "0.75rem", background: "transparent", border: "1px solid var(--surface-border)", color: "var(--text-main)" } : undefined}
-        >
-          {loading === "pay" ? <span className="auth-spinner" aria-hidden="true" /> : null}
-          {loading === "pay" ? "Redirecting…" : canTrial ? `Pay now${priceText ? ` (${priceText})` : ""} and skip the trial` : `Continue to payment for ${PLAN_LABEL[plan]}`}
-        </button>
+          <Button type="button" variant={canTrial ? "secondary" : "primary"} loading={loading === "pay"} disabled={loading !== null} onClick={() => void continueToPayment()}>
+            {loading === "pay" ? "Redirecting…" : canTrial ? `Pay now${priceText ? ` (${priceText})` : ""} and skip the trial` : `Continue to payment for ${PLAN_LABEL[plan]}`}
+          </Button>
+        </div>
 
-        <p className="auth-meta">
+        <p className="ax-foot">
           Changed your mind?{" "}
-          <button
-            type="button"
-            className="auth-link"
-            style={{ background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit" }}
-            disabled={loading !== null}
-            onClick={() => void continueOnFree()}
-          >
+          <button type="button" className="ax-link" disabled={loading !== null} onClick={() => void continueOnFree()}>
             {loading === "free" ? "Switching…" : "Continue on Free instead"}
           </button>
         </p>
-      </section>
-    </main>
+      </div>
+    </AuthShell>
   );
 }

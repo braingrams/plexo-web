@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/charisolAuth", () => ({ CharisolAuth: { getSession: mocks.getSession }, POST_LOGIN_REDIRECT_KEY: "plexo_post_login_redirect", get initialAuthError() { return mocks.authError; } }));
 vi.mock("@/lib/auth-client", () => ({ authClient: { signIn: { charisol: mocks.signInCharisol } } }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push, replace: mocks.replace }) }));
-vi.mock("@/app/auth/charisol/callback/dashboard-skeleton", () => ({ DashboardSkeleton: () => null }));
+vi.mock("@/app/auth/_kit/SigningIn", () => ({ SigningIn: () => null }));
 
 async function renderPage() {
   // The page decides "Connect Strata or normal?" once per page load, so each test is a fresh load.

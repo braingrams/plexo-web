@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CharisolAuth, POST_LOGIN_REDIRECT_KEY, initialAuthError } from "@/lib/charisolAuth";
 import { authClient } from "@/lib/auth-client";
 import { clearStrataConnect, finishStrataConnect, isAnotherStrataAccount, takeStrataConnect } from "@/lib/strataConnect";
-import { DashboardSkeleton } from "./dashboard-skeleton";
+import { SigningIn } from "@/app/auth/_kit/SigningIn";
 
 // redirectUri target registered for Plexo's Charisol app client (Developer Portal) and
 // passed to CharisolAuth.init() in lib/charisolAuth.ts. CharisolAuth.init() already saw
@@ -24,6 +24,8 @@ let strataConnectRun: Promise<boolean> | undefined;
 
 export default function CharisolCallbackPage() {
   const router = useRouter();
+  const [crashed, setCrashed] = useState(false);
+  const tryAgain = useCallback(() => router.replace("/auth/login"), [router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,11 +91,12 @@ export default function CharisolCallbackPage() {
       router.push(redirectTo);
     }
 
-    void completeSignIn();
+    // Anything unexpected (network drop, server hiccup): show a friendly retry rather than spinning forever.
+    completeSignIn().catch(() => { if (!cancelled) setCrashed(true); });
     return () => {
       cancelled = true;
     };
   }, [router]);
 
-  return <DashboardSkeleton />;
+  return <SigningIn error={crashed ? "We couldn’t finish signing you in. Check your connection and try again." : null} onRetry={tryAgain} />;
 }

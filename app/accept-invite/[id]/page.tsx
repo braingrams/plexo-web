@@ -2,7 +2,10 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
 import { getInvitation } from "@/server/orgDynamo";
-import { PlexoLogo } from "@/app/plexo-logo";
+import Link from "next/link";
+import { MailX, Users } from "lucide-react";
+import { AuthShell } from "@/app/auth/_kit/AuthShell";
+import { PageHead } from "@/app/auth/_kit/ui";
 import { AcceptInviteClient } from "./accept-invite-client";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -15,17 +18,13 @@ const ROLE_LABELS: Record<string, string> = {
 
 function ErrorCard({ title, message }: { title: string; message: string }) {
   return (
-    <main className="min-h-screen bg-[#0b0f19] text-white flex items-center justify-center px-6">
-      <div className="w-full max-w-md text-center">
-        <div className="flex justify-center mb-8">
-          <PlexoLogo size={32} textStyle={{ color: "#ffffff" }} />
-        </div>
-        <div className="bg-[#0d0f1a] border border-white/10 rounded-2xl p-8">
-          <h1 className="text-lg font-bold mb-2">{title}</h1>
-          <p className="text-sm text-slate-400">{message}</p>
-        </div>
+    <AuthShell layout="center">
+      <div className="ax-center-text">
+        <div className="ax-badge-icon ax-warn"><MailX size={30} aria-hidden="true" /></div>
+        <PageHead title={title}>{message}</PageHead>
+        <Link href="/dashboard" className="ax-btn ax-btn-secondary">Go to my dashboard</Link>
       </div>
-    </main>
+    </AuthShell>
   );
 }
 
@@ -58,22 +57,15 @@ export default async function AcceptInvitePage({ params }: { params: Promise<{ i
   }
 
   return (
-    <main className="min-h-screen bg-[#0b0f19] text-white flex items-center justify-center px-6">
-      <div className="w-full max-w-md">
-        <div className="flex justify-center mb-8">
-          <PlexoLogo size={32} textStyle={{ color: "#ffffff" }} />
-        </div>
-        <div className="bg-[#0d0f1a] border border-white/10 rounded-2xl p-8 text-center">
-          <h1 className="text-xl font-bold mb-2">Join {invitation.organizationName}</h1>
-          <p className="text-sm text-slate-400 mb-4">
-            {invitation.inviterEmail} invited you to collaborate as
-          </p>
-          <span className="inline-block bg-purple-500/15 text-purple-400 text-xs font-bold px-3 py-1.5 rounded-full mb-6">
-            {ROLE_LABELS[invitation.role] ?? invitation.role}
-          </span>
-          <AcceptInviteClient invitationId={id} />
-        </div>
+    <AuthShell layout="center">
+      <div className="ax-card ax-center-text">
+        <div className="ax-badge-icon"><Users size={30} aria-hidden="true" /></div>
+        <PageHead title={`Join ${invitation.organizationName}`}>
+          {invitation.inviterEmail} invited you to collaborate as
+        </PageHead>
+        <p style={{ marginBottom: 24 }}><span className="ax-pill-role">{ROLE_LABELS[invitation.role] ?? invitation.role}</span></p>
+        <AcceptInviteClient invitationId={id} />
       </div>
-    </main>
+    </AuthShell>
   );
 }

@@ -4,8 +4,15 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 
+import { Link2 as LinkIcon, ShieldCheck } from "lucide-react";
+
 import { authClient } from "@/lib/auth-client";
-import { PASSWORD_MIN_LENGTH, PASSWORD_RULES_TEXT, passwordProblem } from "@/lib/passwordPolicy";
+import { AuthShell } from "@/app/auth/_kit/AuthShell";
+import { Alert, Button, PageHead } from "@/app/auth/_kit/ui";
+import { PasswordField, TextField } from "@/app/auth/_kit/fields";
+import { ResendButton } from "@/app/auth/_kit/ResendButton";
+import { useCountdown } from "@/app/auth/_kit/countdown";
+import { PASSWORD_MIN_LENGTH, passwordProblem } from "@/lib/passwordPolicy";
 
 // Two ways in:
 //  - ?token=…&email=…  — the emailed reset LINK (accounts whose password Plexo still holds);
@@ -27,6 +34,8 @@ function ResetPasswordForm() {
   const [resending, setResending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A code was just emailed, so "send a new one" waits a minute.
+  const { left, restart } = useCountdown(60);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -75,109 +84,105 @@ function ResetPasswordForm() {
     try {
       const result = await authClient.forgetPassword({ email });
       if (result?.error) setError(result.error.message ?? "Couldn't send a new code.");
-      else setNotice("We've sent a new code. It can take a minute to arrive — check your spam folder too.");
+      else {
+        restart();
+        setNotice("We've sent a new code. It can take a minute to arrive — check your spam folder too.");
+      }
     } finally {
       setResending(false);
     }
   }
 
-  return (
-    <section className="auth-card">
-      <h1 className="auth-title">{securityReset ? "Choose a new password" : "Reset Password"}</h1>
-      <p className="auth-subtitle">
-        {securityReset
-          ? "Your Charisol password may have been set in another app, or needs to be stronger. We've emailed you a 6-digit code so you can set one password for every Charisol app."
-          : codeMode
-            ? `Enter the 6-digit code we emailed to ${email || "you"} and choose a new password.`
-            : "Create a fresh credential for your account."}
-      </p>
+  // A link missing its token or email can't work. Say so up front instead of after they've typed a password.
+  if (!email || (!codeMode && !token)) {
+    return (
+      <div className="ax-center-text">
+        <div className="ax-badge-icon ax-warn"><LinkIcon size={30} aria-hidden="true" /></div>
+        <PageHead title="This link doesn’t look right">
+          It may be cut off or already used.
+        </PageHead>
+        <Link href="/auth/forgot-password" className="ax-btn ax-btn-primary">Get a new link</Link>
+        <p className="ax-foot"><Link href="/auth/login" className="ax-link">Back to sign in</Link></p>
+      </div>
+    );
+  }
 
-      <form onSubmit={onSubmit}>
+  const confirmMismatch = confirmPassword.length > 0 && password !== confirmPassword;
+  return (
+    <>
+      {securityReset ? (
+        <div className="ax-badge-icon ax-warn"><ShieldCheck size={30} aria-hidden="true" /></div>
+      ) : null}
+      <PageHead title={securityReset ? "Choose a new password" : codeMode ? "Enter your code" : "Choose a new password"}>
+        {securityReset
+          ? "For your security, set a new password. We emailed you a 6-digit code."
+          : codeMode
+            ? <>We emailed a code to <strong>{email || "you"}</strong>.</>
+            : "Choose something strong."}
+      </PageHead>
+
+      <form onSubmit={onSubmit} noValidate className="ax-stack">
+        {notice ? <Alert tone="success">{notice}</Alert> : null}
+        {error ? <Alert tone="error">{error}</Alert> : null}
+
         {codeMode ? (
-          <label className="auth-field">
-            <span className="auth-label">Code from your email</span>
-            <input
-              className="auth-input"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              required
-              maxLength={6}
-              value={code}
-              onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
-            />
-          </label>
+          <TextField
+            label="6-digit code"
+            className="ax-code"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            required
+            maxLength={6}
+            autoFocus
+            placeholder="000000"
+            value={code}
+            onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
+          />
         ) : null}
 
-        <label className="auth-field">
-          <span className="auth-label">New Password</span>
-          <input
-            className="auth-input"
-            type="password"
-            required
-            autoComplete="new-password"
-            minLength={PASSWORD_MIN_LENGTH}
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-          />
-          <span className="auth-meta" style={{ textAlign: "left", marginTop: 4 }}>{PASSWORD_RULES_TEXT}</span>
-        </label>
+        <PasswordField
+          label="New password"
+          required
+          autoComplete="new-password"
+          minLength={PASSWORD_MIN_LENGTH}
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          showRules
+        />
+        <PasswordField
+          label="Confirm new password"
+          required
+          autoComplete="new-password"
+          minLength={PASSWORD_MIN_LENGTH}
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+          error={confirmMismatch ? "Passwords don’t match yet." : null}
+          okNote={confirmPassword && !confirmMismatch ? "Passwords match" : null}
+        />
 
-        <label className="auth-field">
-          <span className="auth-label">Confirm New Password</span>
-          <input
-            className="auth-input"
-            type="password"
-            required
-            autoComplete="new-password"
-            minLength={PASSWORD_MIN_LENGTH}
-            value={confirmPassword}
-            onChange={(event) => setConfirmPassword(event.target.value)}
-          />
-        </label>
-
-        {notice ? <p className="auth-meta">{notice}</p> : null}
-        {error ? <p className="auth-error">{error}</p> : null}
-
-        <button className="auth-button" type="submit" disabled={loading}>
-          {loading ? <span className="auth-spinner" aria-hidden="true" /> : null}
-          {loading ? "Updating..." : "Save new password"}
-        </button>
+        <Button type="submit" loading={loading}>{loading ? "Saving…" : "Save new password"}</Button>
       </form>
 
-      <p className="auth-meta">
+      <p className="ax-foot">
         {codeMode && email ? (
           <>
-            Didn&apos;t get it?{" "}
-            <button type="button" className="auth-link" onClick={() => void resendCode()} disabled={resending}>
-              {resending ? "Sending…" : "Send a new code"}
-            </button>
-            {" · "}
+            Didn’t get it?{" "}
+            <ResendButton left={left} busy={resending} onResend={() => void resendCode()} label="Send a new code" />
+            <br />
           </>
         ) : null}
-        <Link href="/auth/login" className="auth-link">
-          Back to login
-        </Link>
+        <Link href="/auth/login" className="ax-link">Back to sign in</Link>
       </p>
-    </section>
+    </>
   );
 }
 
 export default function ResetPasswordPage() {
   return (
-    <main className="auth-shell">
-      <Suspense
-        fallback={
-          <section className="auth-card">
-            <h1 className="auth-title">Reset Password</h1>
-            <button className="auth-button" type="button" disabled>
-              <span className="auth-spinner" aria-hidden="true" />
-              Loading…
-            </button>
-          </section>
-        }
-      >
+    <AuthShell>
+      <Suspense fallback={null}>
         <ResetPasswordForm />
       </Suspense>
-    </main>
+    </AuthShell>
   );
 }

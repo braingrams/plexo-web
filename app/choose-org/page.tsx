@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
 import { Member, Organization } from "@/lib/db/coreEntities";
-import { PlexoLogo } from "@/app/plexo-logo";
+import { AuthShell } from "@/app/auth/_kit/AuthShell";
+import { PageHead } from "@/app/auth/_kit/ui";
 import { ChooseOrgClient } from "./choose-org-client";
 
 export default async function ChooseOrgPage() {
@@ -26,25 +27,15 @@ export default async function ChooseOrgPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0b0f19] text-white flex items-center justify-center px-6">
-      <div className="w-full max-w-md">
-        <div className="flex justify-center mb-8">
-          <PlexoLogo size={32} textStyle={{ color: "#ffffff" }} />
-        </div>
-        <div className="bg-[#0d0f1a] border border-white/10 rounded-2xl p-8 shadow-2xl">
-          <h1 className="text-xl font-bold text-center mb-1">Choose an organization</h1>
-          <p className="text-sm text-slate-400 text-center mb-6">
-            You're a member of more than one workspace. Pick one to continue.
-          </p>
-          <ChooseOrgClient
-            organizations={memberships.map((m) => ({
-              id: m.organizationId,
-              name: m.organization.name,
-              role: m.role,
-            }))}
-          />
-        </div>
-      </div>
-    </main>
+    <AuthShell layout="center">
+      <PageHead title="Choose a workspace">You’re a member of more than one. Pick the one you want to open.</PageHead>
+      <ChooseOrgClient
+        organizations={memberships.map((m) => ({
+          id: m.organizationId,
+          name: m.organization.name,
+          role: m.role,
+        }))}
+      />
+    </AuthShell>
   );
 }

@@ -1,6 +1,9 @@
 import { cookies } from "next/headers";
 import { Template, LmsFunnel, LmsEnrollment } from "@/lib/db/contentEntities";
 import { lmsSessionCookieName, verifyLmsSession } from "@/lib/lms/session";
+import { BookX } from "lucide-react";
+import { AuthShell } from "@/app/auth/_kit/AuthShell";
+import { PageHead } from "@/app/auth/_kit/ui";
 import { SignupClient } from "./SignupClient";
 import { PortalClient } from "./PortalClient";
 
@@ -23,9 +26,12 @@ export default async function LearnPage({
 
   if (!site || !funnel || !funnel.enabled) {
     return (
-      <CenteredShell>
-        <p style={{ color: "rgba(240,242,255,0.6)" }}>This funnel isn't available right now.</p>
-      </CenteredShell>
+      <AuthShell layout="center">
+        <div className="ax-center-text">
+          <div className="ax-badge-icon ax-warn"><BookX size={30} aria-hidden="true" /></div>
+          <PageHead title="This course isn’t open right now">Please check back soon, or ask whoever sent you this link.</PageHead>
+        </div>
+      </AuthShell>
     );
   }
 
@@ -41,12 +47,4 @@ export default async function LearnPage({
   }
 
   return <SignupClient templateId={templateId} funnelName={site.name} errorMessage={error ?? null} paidReturn={paidReturn === "1"} />;
-}
-
-function CenteredShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#0b0d16", padding: "1.5rem" }}>
-      {children}
-    </div>
-  );
 }
