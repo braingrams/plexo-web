@@ -1192,6 +1192,14 @@ export const Feedback = new Entity(
       userName: { type: "string", required: true },
       message: { type: "string", required: true },
       pageUrl: { type: "string" },
+      // "feedback" (owner-initiated) or "struggle" (the dashboard noticed they were stuck and offered help).
+      type: { type: "string" },
+      category: { type: "string" },
+      // Comma-separated names of the signals that made the nudge appear (e.g. "rage_click,failed_requests").
+      signals: { type: "string" },
+      browser: { type: "string" },
+      // Private storage URL of an optional screenshot the owner attached.
+      screenshotUrl: { type: "string" },
       status: {
         type: ["NEW", "REVIEWED", "ARCHIVED"] as const,
         default: "NEW",

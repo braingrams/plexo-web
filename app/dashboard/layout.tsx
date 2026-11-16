@@ -8,6 +8,7 @@ import { DashboardShell } from "./dashboard-shell";
 import { MigrationBanner } from "./migrate/wordpress/MigrationBanner";
 import { PlanBanner, type PlanBannerState } from "./_components/PlanBanner";
 import { AppLiveDialog } from "./_components/AppLiveDialog";
+import { FeedbackNudge } from "./_components/FeedbackNudge";
 import { TRIAL_DAYS, accessDaysLeft, canStartTrial, effectivePlan, paidAccess, planSyncAction, storedPlan } from "@/lib/plan/entitlement";
 import { syncPlanLifecycle } from "@/lib/plan/lifecycle";
 import { getDashboardVersionState } from "@/lib/dashboardVersions/state";
@@ -99,6 +100,7 @@ export default async function DashboardLayout({
         {children}
         {/* "Your app is live", opened from any page once a server app goes live. */}
         <AppLiveDialog />
+        <FeedbackNudge userId={session.user.id} />
       </DashboardShell>
       </VersionProvider>
     </ThemeProvider>

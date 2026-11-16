@@ -181,6 +181,9 @@ export type SendFeedbackEmailParams = {
   userEmail: string;
   message: string;
   pageUrl?: string | null;
+  /** Set when the dashboard offered help because the owner seemed stuck. */
+  signals?: string | null;
+  category?: string | null;
 };
 
 /**
@@ -199,6 +202,8 @@ export async function sendFeedbackNotificationEmail(feedback: SendFeedbackEmailP
       ${detailsBlock([
         detailRow("From", `${escapeHtml(feedback.userName)} (${escapeHtml(feedback.userEmail)})`),
         feedback.pageUrl ? detailRow("Page", escapeHtml(feedback.pageUrl)) : "",
+        feedback.category ? detailRow("Category", escapeHtml(feedback.category)) : "",
+        feedback.signals ? detailRow("Why it was offered", escapeHtml(feedback.signals)) : "",
       ].filter(Boolean).join(""))}
       <p style="margin:0;font-size:14px;color:#3F3F3C;line-height:1.6;white-space:pre-wrap;background:#F4F5F0;border-radius:10px;padding:16px 20px;text-align:left;">${escapeHtml(feedback.message)}</p>
     `,
